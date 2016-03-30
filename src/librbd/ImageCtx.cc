@@ -15,11 +15,13 @@
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/StandardPolicy.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
@@ -187,6 +189,9 @@ struct C_InvalidateCache : public Context {
     op_work_queue = new ContextWQ("librbd::op_work_queue",
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
+
+    exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    journal_policy = new journal::StandardPolicy(this);
   }
 
   ImageCtx::~ImageCtx() {
@@ -218,6 +223,8 @@ struct C_InvalidateCache : public Context {
     op_work_queue->drain();
     aio_work_queue->drain();
 
+    delete journal_policy;
+    delete exclusive_lock_policy;
     delete op_work_queue;
     delete aio_work_queue;
     delete operations;
@@ -1045,5 +1052,31 @@ struct C_InvalidateCache : public Context {
   void ImageCtx::notify_update(Context *on_finish) {
     state->handle_update_notification();
     image_watcher->notify_header_update(on_finish);
+  }
+
+  exclusive_lock::Policy *ImageCtx::get_exclusive_lock_policy() const {
+    assert(owner_lock.is_locked());
+    assert(exclusive_lock_policy != nullptr);
+    return exclusive_lock_policy;
+  }
+
+  void ImageCtx::set_exclusive_lock_policy(exclusive_lock::Policy *policy) {
+    assert(owner_lock.is_wlocked());
+    assert(policy != nullptr);
+    delete exclusive_lock_policy;
+    exclusive_lock_policy = policy;
+  }
+
+  journal::Policy *ImageCtx::get_journal_policy() const {
+    assert(snap_lock.is_locked());
+    assert(journal_policy != nullptr);
+    return journal_policy;
+  }
+
+  void ImageCtx::set_journal_policy(journal::Policy *policy) {
+    assert(snap_lock.is_wlocked());
+    assert(policy != nullptr);
+    delete journal_policy;
+    journal_policy = policy;
   }
 }

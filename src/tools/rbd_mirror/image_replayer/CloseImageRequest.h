@@ -20,12 +20,13 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class CloseImageRequest {
 public:
   static CloseImageRequest* create(ImageCtxT **image_ctx, ContextWQ *work_queue,
-                                   Context *on_finish) {
-    return new CloseImageRequest(image_ctx, work_queue, on_finish);
+                                   bool destroy_only, Context *on_finish) {
+    return new CloseImageRequest(image_ctx, work_queue, destroy_only,
+                                 on_finish);
   }
 
   CloseImageRequest(ImageCtxT **image_ctx, ContextWQ *work_queue,
-                    Context *on_finish);
+                    bool destroy_only, Context *on_finish);
 
   void send();
 
@@ -36,7 +37,7 @@ private:
    * <start>
    *    |
    *    v
-   * CLOSE_IMAGE
+   * CLOSE_IMAGE (skip if not needed)
    *    |
    *    v
    * SWITCH_CONTEXT
@@ -48,6 +49,7 @@ private:
    */
   ImageCtxT **m_image_ctx;
   ContextWQ *m_work_queue;
+  bool m_destroy_only;
   Context *m_on_finish;
 
   void close_image();

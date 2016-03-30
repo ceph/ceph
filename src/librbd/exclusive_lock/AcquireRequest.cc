@@ -14,6 +14,7 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -151,7 +152,7 @@ Context *AcquireRequest<I>::send_open_journal() {
     this);
   m_journal = m_image_ctx.create_journal();
 
-  // journal playback required object map (if enabled) and itself
+  // journal playback requires object map (if enabled) and itself
   apply();
 
   m_journal->open(ctx);
@@ -179,17 +180,11 @@ void AcquireRequest<I>::send_allocate_journal_tag() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
-  if (!m_journal->is_tag_owner()) {
-    lderr(cct) << "local image not promoted" << dendl;
-    m_error_result = -EPERM;
-    send_close_journal();
-    return;
-  }
-
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_allocate_journal_tag>(this);
-  m_journal->allocate_tag(Journal<I>::LOCAL_MIRROR_UUID, ctx);
+  m_image_ctx.get_journal_policy()->allocate_tag_on_lock(ctx);
 }
 
 template <typename I>
@@ -198,6 +193,8 @@ Context *AcquireRequest<I>::handle_allocate_journal_tag(int *ret_val) {
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
   if (*ret_val < 0) {
+    lderr(cct) << "failed to allocate journal tag: " << cpp_strerror(*ret_val)
+               << dendl;
     m_error_result = *ret_val;
     send_close_journal();
     return nullptr;

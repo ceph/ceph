@@ -5,6 +5,7 @@
 #define CEPH_TEST_LIBRBD_MOCK_OPERATIONS_H
 
 #include "include/int_types.h"
+#include "include/rbd/librbd.hpp"
 #include "gmock/gmock.h"
 
 class Context;

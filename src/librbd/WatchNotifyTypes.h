@@ -123,9 +123,12 @@ struct RequestLockPayload {
   static const bool CHECK_FOR_REFRESH = true;
 
   ClientId client_id;
+  bool force = false;
 
   RequestLockPayload() {}
-  RequestLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+  RequestLockPayload(const ClientId &client_id_, bool force_)
+    : client_id(client_id_), force(force_) {
+  }
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);

@@ -35,7 +35,7 @@
 #
 #   cd /tmp/tmp.rbd_mirror
 #   ls
-#   less rbd-mirror.local.<pid>.log
+#   less rbd-mirror.local.local.<pid>.log
 #   ceph --cluster remote -s
 #   ceph --cluster local -s
 #   rbd --cluster remote -p mirror ls
@@ -49,18 +49,32 @@
 #   ../qa/workunits/rbd/rbd_mirror.sh cleanup /tmp/tmp.rbd_mirror
 #
 
+LOC_DAEMON=local
+RMT_DAEMON=remote
 LOC_CLUSTER=local
 RMT_CLUSTER=remote
 POOL=mirror
-RBD_MIRROR_PID_FILE=
-RBD_MIRROR_LOC_ASOK=
-RBD_MIRROR_RMT_ASOK=
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
 
 #
 # Functions
 #
+
+daemon_asok_file()
+{
+    local daemon=$1
+    local cluster=$2
+
+    echo "${TEMPDIR}/rbd-mirror.${daemon}.${cluster}.asok"
+}
+
+daemon_pid_file()
+{
+    local daemon=$1
+
+    echo "${TEMPDIR}/rbd-mirror.${daemon}.pid"
+}
 
 setup()
 {
@@ -85,7 +99,7 @@ setup()
 
     cd ${TEMPDIR}
 
-    start_mirror
+    start_mirror ${LOC_DAEMON} ${LOC_CLUSTER}
 
     ceph --cluster ${LOC_CLUSTER} osd pool create ${POOL} 64 64
     ceph --cluster ${RMT_CLUSTER} osd pool create ${POOL} 64 64
@@ -103,7 +117,8 @@ cleanup()
 
     set +e
 
-    stop_mirror
+    stop_mirror ${LOC_DAEMON}
+    stop_mirror ${RMT_DAEMON}
 
     cd ${SRC_DIR}
 
@@ -115,15 +130,14 @@ cleanup()
 
 start_mirror()
 {
-    RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
-    RBD_MIRROR_LOC_ASOK=${TEMPDIR}/rbd-mirror.${LOC_CLUSTER}.asok
-    RBD_MIRROR_RMT_ASOK=${TEMPDIR}/rbd-mirror.${RMT_CLUSTER}.asok
+    local daemon=$1
+    local cluster=$2
 
     rbd-mirror \
-	--cluster ${LOC_CLUSTER} \
-	--pid-file=${RBD_MIRROR_PID_FILE} \
-	--log-file=${TEMPDIR}/rbd-mirror.\$cluster.\$pid.log \
-	--admin-socket=${TEMPDIR}/rbd-mirror.\$cluster.asok \
+	--cluster ${cluster} \
+	--pid-file=$(daemon_pid_file "${daemon}") \
+	--log-file=${TEMPDIR}/rbd-mirror.${daemon}.\$cluster.\$pid.log \
+	--admin-socket=${TEMPDIR}/rbd-mirror.${daemon}.\$cluster.asok \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true
@@ -131,13 +145,10 @@ start_mirror()
 
 stop_mirror()
 {
-    if [ -z "${RBD_MIRROR_PID_FILE}" ]
-    then
-	return 0
-    fi
+    local daemon=$1
 
     local pid
-    pid=$(cat ${RBD_MIRROR_PID_FILE} 2>/dev/null) || :
+    pid=$(cat $(daemon_pid_file "${daemon}") 2>/dev/null) || :
     if [ -n "${pid}" ]
     then
 	kill ${pid}
@@ -147,74 +158,84 @@ stop_mirror()
 	done
 	ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}'
     fi
-    rm -f ${RBD_MIRROR_LOC_ASOK} ${RBD_MIRROR_RMT_ASOK} ${RBD_MIRROR_PID_FILE}
-    RBD_MIRROR_PID_FILE=
-    RBD_MIRROR_LOC_ASOK=
-    RBD_MIRROR_RMT_ASOK=
+    rm -f $(daemon_asok_file "${daemon}" "${LOC_CLUSTER}")
+    rm -f $(daemon_asok_file "${daemon}" "${RMT_CLUSTER}")
+    rm -f $(daemon_pid_file "${daemon}")
 }
 
 flush()
 {
-    local image=$1
-    local image_id cmd
+    local daemon=$1
+    local image=$2
 
-    test -n "${RBD_MIRROR_LOC_ASOK}"
+    local asok_file=$(daemon_asok_file "${daemon}" "${daemon}")
+    test -n "${asok_file}"
 
-    ceph --admin-daemon ${RBD_MIRROR_LOC_ASOK} \
+    ceph --admin-daemon ${asok_file} \
 	 rbd mirror flush ${POOL}/${image}
 }
 
 test_image_replay_state()
 {
-    local image=$1
-    local test_state=$2
+    local daemon=$1
+    local cluster=$2
+    local image=$3
+    local test_state=$4
     local current_state=stopped
 
-    test -n "${RBD_MIRROR_LOC_ASOK}"
+    local asok_file=$(daemon_asok_file "${daemon}" "${cluster}")
+    test -n "${asok_file}"
 
-    ceph --admin-daemon ${RBD_MIRROR_LOC_ASOK} help |
-	fgrep "rbd mirror status ${POOL}/${image}" && current_state=started
+    ceph --admin-daemon ${asok_file} help |
+	fgrep "\"rbd mirror status ${POOL}/${image}\"" && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
 wait_for_image_replay_state()
 {
-    local image=$1
-    local state=$2
+    local daemon=$1
+    local cluster=$2
+    local image=$3
+    local state=$4
     local s
 
     # TODO: add a way to force rbd-mirror to update replayers
-    for s in 1 2 4 8 8 8 8 8 8 8 8; do
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
 	sleep ${s}
-	test_image_replay_state "${image}" "${state}" && return 0
+	test_image_replay_state "${daemon}" "${cluster}" "${image}" "${state}" && return 0
     done
     return 1
 }
 
 wait_for_image_replay_started()
 {
-    local image=$1
+    local daemon=$1
+    local cluster=$2
+    local image=$3
 
-    wait_for_image_replay_state ${image} started
+    wait_for_image_replay_state "${daemon}" "${cluster}" "${image}" started
 }
 
 wait_for_image_replay_stopped()
 {
-    local image=$1
+    local daemon=$1
+    local cluster=$2
+    local image=$3
 
-    wait_for_image_replay_state ${image} stopped
+    wait_for_image_replay_state "${daemon}" "${cluster}" "${image}" stopped
 }
 
 get_position()
 {
-    local image=$1
-    local id_regexp=$2
+    local cluster=$1
+    local image=$2
+    local id_regexp=$3
 
     # Parse line like below, looking for the first position
     # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
 
     local status_log=${TEMPDIR}/${RMT_CLUSTER}-${POOL}-${image}.status
-    rbd --cluster ${RMT_CLUSTER} -p ${POOL} journal status --image ${image} |
+    rbd --cluster ${cluster} -p ${POOL} journal status --image ${image} |
 	tee ${status_log} >&2
     sed -nEe 's/^.*\[id='"${id_regexp}"',.*positions=\[\[([^]]*)\],.*$/\1/p' \
 	${status_log}
@@ -222,28 +243,32 @@ get_position()
 
 get_master_position()
 {
-    local image=$1
+    local cluster=$1
+    local image=$2
 
-    get_position ${image} ''
+    get_position "${cluster}" "${image}" ''
 }
 
 get_mirror_position()
 {
-    local image=$1
+    local cluster=$1
+    local image=$2
 
-    get_position ${image} '..*'
+    get_position "${cluster}" "${image}" '..*'
 }
 
 wait_for_replay_complete()
 {
-    local image=$1
+    local daemon=$1
+    local cluster=$2
+    local image=$3
     local s master_pos mirror_pos
 
     for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16; do
 	sleep ${s}
-	flush ${image}
-	master_pos=$(get_master_position ${image})
-	mirror_pos=$(get_mirror_position ${image})
+	flush "${daemon}" "${image}"
+	master_pos=$(get_master_position "${cluster}" "${image}")
+	mirror_pos=$(get_mirror_position "${cluster}" "${image}")
 	test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
     done
     return 1
@@ -274,10 +299,11 @@ create_local_image()
 
 write_image()
 {
-    local image=$1
-    local count=$2
+    local cluster=$1
+    local image=$2
+    local count=$3
 
-    rbd --cluster ${RMT_CLUSTER} -p ${POOL} bench-write ${image} \
+    rbd --cluster ${cluster} -p ${POOL} bench-write ${image} \
 	--io-size 4096 --io-threads 1 --io-total $((4096 * count)) \
 	--io-pattern rand
 }
@@ -295,6 +321,22 @@ compare_images()
     cmp ${rmt_export} ${loc_export}
 }
 
+demote_image()
+{
+    local cluster=$1
+    local image=$2
+
+    rbd --cluster=${cluster} mirror image demote ${POOL}/${image}
+}
+
+promote_image()
+{
+    local cluster=$1
+    local image=$2
+
+    rbd --cluster=${cluster} mirror image promote ${POOL}/${image}
+}
+
 #
 # Main
 #
@@ -308,7 +350,6 @@ if [ "$1" = clean ]; then
 
     test -n "${TEMPDIR}"
 
-    RBD_MIRROR_PID_FILE=${TEMPDIR}/rbd-mirror.pid
     RBD_MIRROR_NOCLEANUP=
 
     cleanup
@@ -322,24 +363,45 @@ setup
 echo "TEST: add image and test replay"
 image=test
 create_remote_image ${image}
-wait_for_image_replay_started ${image}
-write_image ${image} 100
-wait_for_replay_complete ${image}
+wait_for_image_replay_started ${LOC_DAEMON} ${LOC_CLUSTER} ${image}
+write_image ${RMT_CLUSTER} ${image} 100
+wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
 compare_images ${image}
 
 echo "TEST: stop mirror, add image, start mirror and test replay"
-stop_mirror
+stop_mirror ${LOC_DAEMON}
 image1=test1
 create_remote_image ${image1}
-write_image ${image1} 100
-start_mirror
-wait_for_image_replay_started ${image1}
-wait_for_replay_complete ${image1}
+write_image ${RMT_CLUSTER} ${image1} 100
+start_mirror ${LOC_DAEMON} ${LOC_CLUSTER}
+wait_for_image_replay_started ${LOC_DAEMON} ${LOC_CLUSTER} ${image1}
+wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image1}
 compare_images ${image1}
 
 echo "TEST: test the first image is replaying after restart"
-write_image ${image} 100
-wait_for_replay_complete ${image}
+write_image ${RMT_CLUSTER} ${image} 100
+wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
+compare_images ${image}
+
+echo "TEST: failover and failback"
+start_mirror ${RMT_DAEMON} ${RMT_CLUSTER}
+
+# failover
+demote_image ${RMT_CLUSTER} ${image}
+wait_for_image_replay_stopped ${LOC_DAEMON} ${LOC_CLUSTER} ${image}
+promote_image ${LOC_CLUSTER} ${image}
+wait_for_image_replay_started ${RMT_DAEMON} ${RMT_CLUSTER} ${image}
+write_image ${LOC_CLUSTER} ${image} 100
+wait_for_replay_complete ${RMT_DAEMON} ${LOC_CLUSTER} ${image}
+compare_images ${image}
+
+# failback
+demote_image ${LOC_CLUSTER} ${image}
+wait_for_image_replay_stopped ${RMT_DAEMON} ${RMT_CLUSTER} ${image}
+promote_image ${RMT_CLUSTER} ${image}
+wait_for_image_replay_started ${LOC_DAEMON} ${LOC_CLUSTER} ${image}
+write_image ${RMT_CLUSTER} ${image} 100
+wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
 compare_images ${image}
 
 echo OK

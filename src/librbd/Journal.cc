@@ -162,6 +162,7 @@ public:
 
 template <typename I, typename J>
 int open_journaler(I *image_ctx, J *journaler, bool *initialized,
+                   cls::journal::Client *client,
                    journal::ImageClientMeta *client_meta,
                    journal::TagData *tag_data) {
   C_SaferCond init_ctx;
@@ -172,14 +173,13 @@ int open_journaler(I *image_ctx, J *journaler, bool *initialized,
     return r;
   }
 
-  cls::journal::Client client;
-  r = journaler->get_cached_client(Journal<ImageCtx>::IMAGE_CLIENT_ID, &client);
+  r = journaler->get_cached_client(Journal<ImageCtx>::IMAGE_CLIENT_ID, client);
   if (r < 0) {
     return r;
   }
 
   librbd::journal::ClientData client_data;
-  bufferlist::iterator bl_it = client.data.begin();
+  bufferlist::iterator bl_it = client->data.begin();
   try {
     ::decode(client_data, bl_it);
   } catch (const buffer::error &err) {
@@ -202,6 +202,37 @@ int open_journaler(I *image_ctx, J *journaler, bool *initialized,
 
   r = get_tags_ctx.wait();
   if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+template <typename J>
+int allocate_journaler_tag(CephContext *cct, J *journaler,
+                           const cls::journal::Client &client,
+                           uint64_t tag_class,
+                           const journal::TagData &prev_tag_data,
+                           const std::string &mirror_uuid,
+                           cls::journal::Tag *new_tag) {
+  journal::TagData tag_data;
+  if (!client.commit_position.object_positions.empty()) {
+    auto position = client.commit_position.object_positions.front();
+    tag_data.predecessor_commit_valid = true;
+    tag_data.predecessor_tag_tid = position.tag_tid;
+    tag_data.predecessor_entry_tid = position.entry_tid;
+  }
+  tag_data.predecessor_mirror_uuid = prev_tag_data.mirror_uuid;
+  tag_data.mirror_uuid = mirror_uuid;
+
+  bufferlist tag_bl;
+  ::encode(tag_data, tag_bl);
+
+  C_SaferCond allocate_tag_ctx;
+  journaler->allocate_tag(tag_class, tag_bl, new_tag, &allocate_tag_ctx);
+
+  int r = allocate_tag_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to allocate tag: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -313,7 +344,8 @@ bool Journal<I>::is_journal_supported(I &image_ctx) {
 template <typename I>
 int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
 		       uint8_t order, uint8_t splay_width,
-		       const std::string &object_pool) {
+		       const std::string &object_pool, bool non_primary,
+                       const std::string &primary_mirror_uuid) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
@@ -340,19 +372,16 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     return r;
   }
 
-  // create tag class for this image's journal events
-  bufferlist tag_data;
-  ::encode(journal::TagData(), tag_data);
-
-  C_SaferCond tag_ctx;
+  cls::journal::Client client;
   cls::journal::Tag tag;
-  journaler.allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, tag_data,
-                         &tag, &tag_ctx);
-  r = tag_ctx.wait();
-  if (r < 0) {
-    lderr(cct) << "failed to allocate journal tag: " << cpp_strerror(r)
-               << dendl;
-  }
+  journal::TagData tag_data;
+
+  assert(non_primary ^ primary_mirror_uuid.empty());
+  std::string mirror_uuid = (non_primary ? primary_mirror_uuid :
+                                           LOCAL_MIRROR_UUID);
+  r = allocate_journaler_tag(cct, &journaler, client,
+                             cls::journal::Tag::TAG_CLASS_NEW,
+                             tag_data, mirror_uuid, &tag);
 
   bufferlist client_data;
   ::encode(journal::ClientData{journal::ImageClientMeta{tag.tag_class}},
@@ -425,19 +454,25 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   int64_t pool_id;
   journaler.get_metadata(&order, &splay_width, &pool_id);
 
+  std::string pool_name;
+  if (pool_id != -1) {
+    librados::Rados rados(io_ctx);
+    r = rados.pool_reverse_lookup(pool_id, &pool_name);
+    if (r < 0) {
+      lderr(cct) << "failed to lookup data pool: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
   r = journaler.remove(true);
   if (r < 0) {
     lderr(cct) << "failed to reset journal: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = journaler.create(order, splay_width, pool_id);
+
+  r = create(io_ctx, image_id, order, splay_width, pool_name, false, "");
   if (r < 0) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  r = journaler.register_client(bufferlist());
-  if (r < 0) {
-    lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -464,10 +499,11 @@ int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
                       image_ctx->cct->_conf->rbd_journal_commit_age);
 
   bool initialized;
+  cls::journal::Client client;
   journal::ImageClientMeta client_meta;
   journal::TagData tag_data;
-  int r = open_journaler(image_ctx, &journaler, &initialized, &client_meta,
-                         &tag_data);
+  int r = open_journaler(image_ctx, &journaler, &initialized, &client,
+                         &client_meta, &tag_data);
   if (r >= 0) {
     *mirror_uuid = tag_data.mirror_uuid;
   }
@@ -479,50 +515,6 @@ int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
 }
 
 template <typename I>
-int Journal<I>::allocate_tag(I *image_ctx, const std::string &mirror_uuid) {
-  CephContext *cct = image_ctx->cct;
-  ldout(cct, 20) << __func__ << ": mirror_uuid=" << mirror_uuid << dendl;
-
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
-
-  bool initialized;
-  journal::ImageClientMeta client_meta;
-  journal::TagData tag_data;
-  int r = open_journaler(image_ctx, &journaler, &initialized, &client_meta,
-                         &tag_data);
-  BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
-    if (initialized) {
-      journaler.shut_down();
-    }
-  };
-
-  if (r < 0) {
-    return r;
-  }
-
-  // TODO: inject current commit position into tag data
-  tag_data.mirror_uuid = mirror_uuid;
-  tag_data.predecessor_mirror_uuid = mirror_uuid;
-
-  bufferlist tag_bl;
-  ::encode(tag_data, tag_bl);
-
-  C_SaferCond allocate_tag_ctx;
-  cls::journal::Tag tag;
-  journaler.allocate_tag(client_meta.tag_class, tag_bl, &tag,
-                         &allocate_tag_ctx);
-
-  r = allocate_tag_ctx.wait();
-  if (r < 0) {
-    lderr(cct) << "failed to allocate tag: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  return 0;
-}
-
-template <typename I>
 int Journal<I>::request_resync(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
@@ -531,10 +523,11 @@ int Journal<I>::request_resync(I *image_ctx) {
                       image_ctx->cct->_conf->rbd_journal_commit_age);
 
   bool initialized;
+  cls::journal::Client client;
   journal::ImageClientMeta client_meta;
   journal::TagData tag_data;
-  int r = open_journaler(image_ctx, &journaler, &initialized, &client_meta,
-                         &tag_data);
+  int r = open_journaler(image_ctx, &journaler, &initialized, &client,
+                         &client_meta, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
     if (initialized) {
       journaler.shut_down();
@@ -559,6 +552,40 @@ int Journal<I>::request_resync(I *image_ctx) {
     lderr(cct) << "failed to update client: " << cpp_strerror(r) << dendl;
     return r;
   }
+  return 0;
+}
+
+template <typename I>
+int Journal<I>::promote(I *image_ctx) {
+  CephContext *cct = image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
+                      image_ctx->cct->_conf->rbd_journal_commit_age);
+
+  bool initialized;
+  cls::journal::Client client;
+  journal::ImageClientMeta client_meta;
+  journal::TagData tag_data;
+  int r = open_journaler(image_ctx, &journaler, &initialized, &client,
+                         &client_meta, &tag_data);
+  BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
+    if (initialized) {
+      journaler.shut_down();
+    }
+  };
+
+  if (r < 0) {
+    return r;
+  }
+
+  cls::journal::Tag new_tag;
+  r = allocate_journaler_tag(cct, &journaler, client, client_meta.tag_class,
+                             tag_data, LOCAL_MIRROR_UUID, &new_tag);
+  if (r < 0) {
+    return r;
+  }
+
   return 0;
 }
 
@@ -629,22 +656,124 @@ bool Journal<I>::is_tag_owner() const {
 }
 
 template <typename I>
+journal::TagData Journal<I>::get_tag_data() const {
+  return m_tag_data;
+}
+
+template <typename I>
+int Journal<I>::demote() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_journaler != nullptr && is_tag_owner());
+
+  cls::journal::Client client;
+  int r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  cls::journal::Tag new_tag;
+  r = allocate_journaler_tag(cct, m_journaler, client, m_tag_class,
+                             m_tag_data, ORPHAN_MIRROR_UUID, &new_tag);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist::iterator tag_data_bl_it = new_tag.data.begin();
+  r = C_DecodeTag::decode(&tag_data_bl_it, &m_tag_data);
+  if (r < 0) {
+    lderr(cct) << "failed to decode newly allocated tag" << dendl;
+    return r;
+  }
+
+  journal::EventEntry event_entry{journal::DemoteEvent{}};
+  bufferlist event_entry_bl;
+  ::encode(event_entry, event_entry_bl);
+
+  m_tag_tid = new_tag.tid;
+  Future future = m_journaler->append(m_tag_tid, event_entry_bl);
+  C_SaferCond ctx;
+  future.flush(&ctx);
+
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to append demotion journal event: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  m_journaler->committed(future);
+  C_SaferCond flush_ctx;
+  m_journaler->flush_commit_position(&flush_ctx);
+
+  r = flush_ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to flush demotion commit position: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+void Journal<I>::allocate_local_tag(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  bool predecessor_commit_valid = false;
+  uint64_t predecessor_tag_tid = 0;
+  uint64_t predecessor_entry_tid = 0;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_journaler != nullptr && is_tag_owner());
+
+    cls::journal::Client client;
+    int r = m_journaler->get_cached_client(IMAGE_CLIENT_ID, &client);
+    if (r < 0) {
+      lderr(cct) << "failed to retrieve client: " << cpp_strerror(r) << dendl;
+      m_image_ctx.op_work_queue->queue(on_finish, r);
+      return;
+    }
+
+    // since we are primary, populate the predecessor with our known commit
+    // position
+    assert(m_tag_data.mirror_uuid == LOCAL_MIRROR_UUID);
+    if (!client.commit_position.object_positions.empty()) {
+      auto position = client.commit_position.object_positions.front();
+      predecessor_commit_valid = true;
+      predecessor_tag_tid = position.tag_tid;
+      predecessor_entry_tid = position.entry_tid;
+    }
+  }
+
+  allocate_tag(LOCAL_MIRROR_UUID, LOCAL_MIRROR_UUID, predecessor_commit_valid,
+               predecessor_tag_tid, predecessor_entry_tid, on_finish);
+}
+
+template <typename I>
 void Journal<I>::allocate_tag(const std::string &mirror_uuid,
+                              const std::string &predecessor_mirror_uuid,
+                              bool predecessor_commit_valid,
+                              uint64_t predecessor_tag_tid,
+                              uint64_t predecessor_entry_tid,
                               Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ":  mirror_uuid=" << mirror_uuid
                  << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_journaler != nullptr && is_tag_owner());
+  assert(m_journaler != nullptr);
 
-  // NOTE: currently responsibility of caller to provide local mirror
-  // uuid constant or remote peer uuid
   journal::TagData tag_data;
   tag_data.mirror_uuid = mirror_uuid;
-
-  // TODO: inject current commit position into tag data (need updated journaler PR)
-  tag_data.predecessor_mirror_uuid = m_tag_data.mirror_uuid;
+  tag_data.predecessor_mirror_uuid = predecessor_mirror_uuid;
+  tag_data.predecessor_commit_valid = predecessor_commit_valid;
+  tag_data.predecessor_tag_tid = predecessor_tag_tid;
+  tag_data.predecessor_entry_tid = predecessor_entry_tid;
 
   bufferlist tag_bl;
   ::encode(tag_data, tag_bl);

@@ -197,6 +197,7 @@ TEST_F(TestClsJournal, GetClient) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   Client client;
   ASSERT_EQ(-ENOENT, client::get_client(ioctx, oid, "id", &client));
@@ -215,6 +216,7 @@ TEST_F(TestClsJournal, ClientRegister) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
 
@@ -230,6 +232,7 @@ TEST_F(TestClsJournal, ClientRegisterDuplicate) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(-EEXIST, client::client_register(ioctx, oid, "id1", bufferlist()));
@@ -240,6 +243,7 @@ TEST_F(TestClsJournal, ClientUpdateData) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(-ENOENT, client::client_update_data(ioctx, oid, "id1",
                                                 bufferlist()));
@@ -261,6 +265,7 @@ TEST_F(TestClsJournal, ClientUpdateState) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(-ENOENT, client::client_update_state(ioctx, oid, "id1",
                                                  CLIENT_STATE_DISCONNECTED));
@@ -285,6 +290,7 @@ TEST_F(TestClsJournal, ClientUnregister) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id1"));
@@ -295,6 +301,7 @@ TEST_F(TestClsJournal, ClientUnregisterDNE) {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   std::string oid = get_temp_image_name();
+  ASSERT_EQ(0, client::create(ioctx, oid, 2, 4, ioctx.get_id()));
 
   ASSERT_EQ(0, client::client_register(ioctx, oid, "id1", bufferlist()));
   ASSERT_EQ(0, client::client_unregister(ioctx, oid, "id1"));

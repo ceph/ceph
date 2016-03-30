@@ -73,7 +73,7 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
                      [](const std::pair<librados::snap_t, librbd::SnapInfo>& pair) {
             return pair.second.parent.spec.pool_id != -1;
           }) != m_remote_image_ctx->snap_info.end()) {
-      lderr(cct) << "cloned images are not currentl supported" << dendl;
+      lderr(cct) << ": cloned images are not currently supported" << dendl;
       finish(-EINVAL);
       return;
     }
@@ -118,7 +118,7 @@ void SnapshotCopyRequest<I>::handle_snap_remove(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to remove snapshot '" << m_snap_name << "': "
+    lderr(cct) << ": failed to remove snapshot '" << m_snap_name << "': "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -168,7 +168,7 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to create snapshot '" << m_snap_name << "': "
+    lderr(cct) << ": failed to create snapshot '" << m_snap_name << "': "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -215,7 +215,8 @@ void SnapshotCopyRequest<I>::handle_update_client(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to update client data: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+               << dendl;
     finish(r);
     return;
   }

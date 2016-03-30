@@ -200,6 +200,46 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
   return 0;
 }
 
+int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
+                        const std::string &id,
+                        const std::string &global_image_id) {
+  cls::rbd::MirrorImage mirror_image_internal;
+  int r = cls_client::mirror_image_get(&io_ctx, id, &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (mirror_image_internal.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    // mirroring is already enabled
+    return 0;
+  } else if (r != -ENOENT) {
+    lderr(cct) << "cannot enable mirroring: currently disabling" << dendl;
+    return -EINVAL;
+  }
+
+  mirror_image_internal.state =
+    cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
+  if (global_image_id.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    mirror_image_internal.global_image_id = uuid_gen.to_string();
+  } else {
+    mirror_image_internal.global_image_id = global_image_id;
+  }
+
+  r = cls_client::mirror_image_set(&io_ctx, id, mirror_image_internal);
+  if (r < 0) {
+    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
+    mirror_image_internal.global_image_id << dendl;
+
+  return 0;
+}
+
 int mirror_image_enable_internal(ImageCtx *ictx) {
   CephContext *cct = ictx->cct;
 
@@ -224,41 +264,10 @@ int mirror_image_enable_internal(ImageCtx *ictx) {
     return -EINVAL;
   }
 
-  cls::rbd::MirrorImage mirror_image_internal;
-  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
-      &mirror_image_internal);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  if (mirror_image_internal.state ==
-      cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED) {
-    // mirroring is already enabled
-    return 0;
-  }
-  else if (r != -ENOENT) {
-    lderr(cct) << "cannot enable mirroring: mirroring image is in "
-      "disabling state" << dendl;
-    return -EINVAL;
-  }
-
-  mirror_image_internal.state =
-    cls::rbd::MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
-
-  uuid_d uuid_gen;
-  uuid_gen.generate_random();
-  mirror_image_internal.global_image_id = uuid_gen.to_string();
-
-  r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
-      mirror_image_internal);
+  r = mirror_image_enable(cct, ictx->md_ctx, ictx->id, "");
   if (r < 0) {
-    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
     return r;
   }
-
-  ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
-    mirror_image_internal.global_image_id << dendl;
 
   return 0;
 }
@@ -969,8 +978,9 @@ remove_mirroring_image:
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
 		int order, uint64_t features, uint64_t stripe_unit,
 		uint64_t stripe_count, uint8_t journal_order,
-		uint8_t journal_splay_width,
-		const std::string &journal_pool)
+                uint8_t journal_splay_width, const std::string &journal_pool,
+                const std::string &non_primary_global_image_id,
+                const std::string &primary_mirror_uuid)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -980,6 +990,7 @@ remove_mirroring_image:
     CephContext *cct = (CephContext *)io_ctx.cct();
 
     file_layout_t layout;
+    bool force_non_primary = !non_primary_global_image_id.empty();
 
     int r = validate_pool(io_ctx, cct);
     if (r < 0) {
@@ -1069,43 +1080,46 @@ remove_mirroring_image:
         goto err_remove_object_map;
       }
 
+      rbd_mirror_mode_t mirror_mode;
+      r = librbd::mirror_mode_get(io_ctx, &mirror_mode);
+      if (r < 0) {
+        lderr(cct) << "error in retrieving pool mirroring status: "
+                   << cpp_strerror(r) << dendl;
+        goto err_remove_object_map;
+      }
+
       r = Journal<>::create(io_ctx, id, journal_order, journal_splay_width,
-			    journal_pool);
+			    journal_pool, force_non_primary,
+                            primary_mirror_uuid);
       if (r < 0) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
       }
 
-      rbd_mirror_mode_t mirror_mode;
-      r = librbd::mirror_mode_get(io_ctx, &mirror_mode);
-      if (r < 0) {
-        lderr(cct) << "error in retrieving pool mirroring status: "
-          << cpp_strerror(r) << dendl;
-        goto err_remove_object_map;
-      }
-
-      if (mirror_mode == RBD_MIRROR_MODE_POOL) {
-        ImageCtx *img_ctx = new ImageCtx("", id, nullptr, io_ctx, false);
-        r = img_ctx->state->open();
-        if (r < 0) {
-          lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
-          delete img_ctx;
-          goto err_remove_object_map;
-        }
-        r = mirror_image_enable_internal(img_ctx);
+      if (mirror_mode == RBD_MIRROR_MODE_POOL || force_non_primary) {
+        r = mirror_image_enable(cct, io_ctx, id, non_primary_global_image_id);
         if (r < 0) {
           lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
-            << dendl;
-          img_ctx->state->close();
-          goto err_remove_object_map;
+                     << dendl;
+          goto err_remove_journal;
         }
-        img_ctx->state->close();
       }
-
+    } else if (force_non_primary) {
+      // journaling should have been enabled
+      assert(false);
     }
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
+
+  err_remove_journal:
+    if ((features & RBD_FEATURE_JOURNALING) != 0) {
+      remove_r = Journal<>::remove(io_ctx, id);
+      if (remove_r < 0) {
+        lderr(cct) << "error cleaning up journal after creation failed: "
+                   << cpp_strerror(remove_r) << dendl;
+      }
+    }
 
   err_remove_object_map:
     if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
@@ -1274,7 +1288,8 @@ remove_mirroring_image:
       opts.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &journal_pool);
 
       r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
-		    stripe_count, journal_order, journal_splay_width, journal_pool);
+		    stripe_count, journal_order, journal_splay_width,
+                    journal_pool, "", "");
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1617,7 +1632,7 @@ remove_mirroring_image:
 
           r = Journal<>::create(ictx->md_ctx, ictx->id, ictx->journal_order,
   			        ictx->journal_splay_width,
-  			        ictx->journal_pool);
+  			        ictx->journal_pool, false, "");
           if (r < 0) {
             lderr(cct) << "error creating image journal: " << cpp_strerror(r)
                        << dendl;
@@ -2673,7 +2688,7 @@ remove_mirroring_image:
     // TODO: need interlock with local rbd-mirror daemon to ensure it has stopped
     //       replay
 
-    r = Journal<>::allocate_tag(ictx, Journal<>::LOCAL_MIRROR_UUID);
+    r = Journal<>::promote(ictx);
     if (r < 0) {
       lderr(cct) << "failed to promote image: " << cpp_strerror(r)
                  << dendl;
@@ -2705,16 +2720,32 @@ remove_mirroring_image:
     }
 
     RWLock::RLocker owner_lock(ictx->owner_lock);
+    if (ictx->exclusive_lock == nullptr) {
+      lderr(cct) << "exclusive lock is not active" << dendl;
+      return -EINVAL;
+    }
+
     C_SaferCond lock_ctx;
     ictx->exclusive_lock->request_lock(&lock_ctx);
     r = lock_ctx.wait();
     if (r < 0) {
       lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
+      return r;
     } else if (!ictx->exclusive_lock->is_lock_owner()) {
       lderr(cct) << "failed to acquire exclusive lock" << dendl;
+      return -EROFS;
     }
 
-    r = Journal<>::allocate_tag(ictx, Journal<>::ORPHAN_MIRROR_UUID);
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    if (ictx->journal == nullptr) {
+      lderr(cct) << "journal is not active" << dendl;
+      return -EINVAL;
+    } else if (!ictx->journal->is_tag_owner()) {
+      lderr(cct) << "image is not currently the primary" << dendl;
+      return -EINVAL;
+    }
+
+    r = ictx->journal->demote();
     if (r < 0) {
       lderr(cct) << "failed to demote image: " << cpp_strerror(r)
                  << dendl;

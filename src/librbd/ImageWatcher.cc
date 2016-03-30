@@ -11,6 +11,7 @@
 #include "librbd/Operations.h"
 #include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image_watcher/Notifier.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
 #include "include/encoding.h"
@@ -407,7 +408,7 @@ void ImageWatcher::notify_request_lock() {
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
 
   bufferlist bl;
-  ::encode(NotifyMessage(RequestLockPayload(get_client_id())), bl);
+  ::encode(NotifyMessage(RequestLockPayload(get_client_id(), false)), bl);
   notify_lock_owner(std::move(bl), create_context_callback<
     ImageWatcher, &ImageWatcher::handle_request_lock>(this));
 }
@@ -615,7 +616,7 @@ bool ImageWatcher::handle_payload(const RequestLockPayload &payload,
 
     ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
                                << dendl;
-    m_image_ctx.exclusive_lock->release_lock(nullptr);
+    m_image_ctx.get_exclusive_lock_policy()->lock_requested(payload.force);
   }
   return true;
 }

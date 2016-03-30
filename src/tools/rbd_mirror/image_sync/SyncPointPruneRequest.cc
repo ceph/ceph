@@ -113,7 +113,7 @@ void SyncPointPruneRequest<I>::handle_remove_snap(int r) {
     r = 0;
   }
   if (r < 0) {
-    lderr(cct) << "failed to remove snapshot '" << snap_name << "': "
+    lderr(cct) << ": failed to remove snapshot '" << snap_name << "': "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -139,7 +139,7 @@ void SyncPointPruneRequest<I>::handle_refresh_image(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "remote image refresh failed: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -154,6 +154,9 @@ void SyncPointPruneRequest<I>::send_update_client() {
 
   if (m_sync_complete) {
     m_client_meta_copy.sync_points.pop_front();
+    if (m_client_meta_copy.sync_points.empty()) {
+      m_client_meta_copy.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+    }
   } else {
     while (m_client_meta_copy.sync_points.size() > 1) {
       m_client_meta_copy.sync_points.pop_back();
@@ -176,7 +179,8 @@ void SyncPointPruneRequest<I>::handle_update_client(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to update client data: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+               << dendl;
     finish(r);
     return;
   }

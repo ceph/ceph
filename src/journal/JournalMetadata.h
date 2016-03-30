@@ -68,9 +68,12 @@ public:
   void register_client(const bufferlist &data, Context *on_finish);
   void update_client(const bufferlist &data, Context *on_finish);
   void unregister_client(Context *on_finish);
+  void get_client(const std::string &client_id, cls::journal::Client *client,
+                  Context *on_finish);
 
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
                     Tag *tag, Context *on_finish);
+  void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
   void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 

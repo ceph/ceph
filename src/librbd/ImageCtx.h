@@ -52,6 +52,9 @@ namespace librbd {
   class ObjectMap;
   template <typename> class Operations;
 
+  namespace exclusive_lock { struct Policy; }
+  namespace journal { struct Policy; }
+
   namespace operation {
   template <typename> class ResizeRequest;
   }
@@ -185,8 +188,21 @@ namespace librbd {
 
     LibrbdAdminSocketHook *asok_hook;
 
+    exclusive_lock::Policy *exclusive_lock_policy = nullptr;
+    journal::Policy *journal_policy = nullptr;
+
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res);
+
+    // unit test mock helpers
+    static ImageCtx* create(const std::string &image_name,
+                            const std::string &image_id,
+                            const char *snap, IoCtx& p, bool read_only) {
+      return new ImageCtx(image_name, image_id, snap, p, read_only);
+    }
+    void destroy() {
+      delete this;
+    }
 
     /**
      * Either image_name or image_id must be set.
@@ -281,6 +297,12 @@ namespace librbd {
 
     void notify_update();
     void notify_update(Context *on_finish);
+
+    exclusive_lock::Policy *get_exclusive_lock_policy() const;
+    void set_exclusive_lock_policy(exclusive_lock::Policy *policy);
+
+    journal::Policy *get_journal_policy() const;
+    void set_journal_policy(journal::Policy *policy);
   };
 }
 

@@ -203,7 +203,7 @@ void Replayer::run()
   }
 
   // Stopping
-  map<int64_t, set<string> > empty_sources;
+  PoolImageIds empty_sources;
   while (true) {
     Mutex::Locker l(m_lock);
     set_sources(empty_sources);
@@ -260,7 +260,7 @@ void Replayer::flush()
   }
 }
 
-void Replayer::set_sources(const map<int64_t, set<string> > &images)
+void Replayer::set_sources(const PoolImageIds &pool_image_ids)
 {
   dout(20) << "enter" << dendl;
 
@@ -268,7 +268,9 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
   for (auto it = m_images.begin(); it != m_images.end();) {
     int64_t pool_id = it->first;
     auto &pool_images = it->second;
-    if (images.find(pool_id) == images.end()) {
+
+    // pool has no mirrored images
+    if (pool_image_ids.find(pool_id) == pool_image_ids.end()) {
       for (auto images_it = pool_images.begin();
 	   images_it != pool_images.end();) {
 	if (stop_image_replayer(images_it->second)) {
@@ -280,10 +282,12 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
       }
       continue;
     }
+
+    // shut down replayers for non-mirrored images
     for (auto images_it = pool_images.begin();
 	 images_it != pool_images.end();) {
-      if (images.at(pool_id).find(images_it->first) ==
-	  images.at(pool_id).end()) {
+      auto &image_ids = pool_image_ids.at(pool_id);
+      if (image_ids.find(ImageIds(images_it->first)) == image_ids.end()) {
 	if (stop_image_replayer(images_it->second)) {
 	  pool_images.erase(images_it++);
 	}
@@ -294,7 +298,8 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
     ++it;
   }
 
-  for (const auto &kv : images) {
+  // (re)start new image replayers
+  for (const auto &kv : pool_image_ids) {
     int64_t pool_id = kv.first;
 
     // TODO: clean up once remote peer -> image replayer refactored
@@ -314,35 +319,39 @@ void Replayer::set_sources(const map<int64_t, set<string> > &images)
       continue;
     }
 
-    std::string mirror_uuid;
-    r = librbd::cls_client::mirror_uuid_get(&local_ioctx, &mirror_uuid);
+    std::string local_mirror_uuid;
+    r = librbd::cls_client::mirror_uuid_get(&local_ioctx, &local_mirror_uuid);
     if (r < 0) {
-      derr << "failed to retrieve mirror uuid from pool "
+      derr << "failed to retrieve local mirror uuid from pool "
         << local_ioctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
+      continue;
+    }
+
+    std::string remote_mirror_uuid;
+    r = librbd::cls_client::mirror_uuid_get(&remote_ioctx, &remote_mirror_uuid);
+    if (r < 0) {
+      derr << "failed to retrieve remote mirror uuid from pool "
+        << remote_ioctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
       continue;
     }
 
     // create entry for pool if it doesn't exist
     auto &pool_replayers = m_images[pool_id];
     for (const auto &image_id : kv.second) {
-      auto it = pool_replayers.find(image_id);
+      auto it = pool_replayers.find(image_id.id);
       if (it == pool_replayers.end()) {
-	unique_ptr<ImageReplayer> image_replayer(new ImageReplayer(m_threads,
-								   m_local,
-								   m_remote,
-								   mirror_uuid,
-								   local_ioctx.get_id(),
-								   pool_id,
-								   image_id));
+	unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
+          m_threads, m_local, m_remote, local_mirror_uuid, remote_mirror_uuid,
+          local_ioctx.get_id(), pool_id, image_id.id, image_id.global_id));
 	it = pool_replayers.insert(
-	  std::make_pair(image_id, std::move(image_replayer))).first;
+	  std::make_pair(image_id.id, std::move(image_replayer))).first;
       }
       start_image_replayer(it->second);
     }
   }
 }
 
-void Replayer::start_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
+void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
   if (!image_replayer->is_stopped()) {
     return;
@@ -351,7 +360,7 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
   image_replayer->start();
 }
 
-bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer> &image_replayer)
+bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
   if (image_replayer->is_stopped()) {
     return true;

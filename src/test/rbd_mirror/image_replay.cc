@@ -19,7 +19,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd-mirror-image-replay: "
 
-rbd::mirror::ImageReplayer *replayer = nullptr;
+rbd::mirror::ImageReplayer<> *replayer = nullptr;
 
 void usage() {
   std::cout << "usage: ceph_test_rbd_mirror_image_replay [options...] \\" << std::endl;
@@ -103,8 +103,7 @@ int main(int argc, const char **argv)
 	  << local_pool_name << ", remote_pool_name=" << remote_pool_name
 	  << ", image_name=" << image_name << dendl;
 
-  rbd::mirror::ImageReplayer::BootstrapParams bootstap_params(local_pool_name,
-							      image_name);
+  rbd::mirror::ImageReplayer<>::BootstrapParams bootstap_params(image_name);
   int64_t local_pool_id;
   int64_t remote_pool_id;
   std::string remote_image_id;
@@ -185,9 +184,10 @@ int main(int argc, const char **argv)
 
   threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
     local->cct()));
-  replayer = new rbd::mirror::ImageReplayer(threads, local, remote, client_id,
-					    local_pool_id, remote_pool_id,
-					    remote_image_id);
+  replayer = new rbd::mirror::ImageReplayer<>(threads, local, remote, client_id,
+					      "", local_pool_id, remote_pool_id,
+					      remote_image_id,
+                                              "global image id");
 
   replayer->start(&start_cond, &bootstap_params);
   r = start_cond.wait();

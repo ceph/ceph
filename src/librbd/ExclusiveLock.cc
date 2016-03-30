@@ -373,7 +373,8 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
 
     Action action = get_active_action();
     assert(action == ACTION_TRY_LOCK || action == ACTION_REQUEST_LOCK);
-    if (action == ACTION_REQUEST_LOCK && r < 0 && r != -EBLACKLISTED) {
+    if (action == ACTION_REQUEST_LOCK && r < 0 && r != -EBLACKLISTED &&
+        r != -EPERM) {
       m_state = STATE_WAITING_FOR_PEER;
       m_lock.Unlock();
 

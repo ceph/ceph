@@ -4,8 +4,8 @@
 #ifndef RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_PRUNE_REQUEST_H
 #define RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_PRUNE_REQUEST_H
 
-#include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include <list>
 #include <string>
 
