@@ -5038,7 +5038,7 @@ void OSD::send_pg_stats(const utime_t &now)
       pg->pg_stats_publish_lock.Unlock();
     }
 
-    if (!outstanding_pg_stats.empty()) {
+    if (last_pg_stats_ack == utime_t() || !outstanding_pg_stats.empty()) {
       last_pg_stats_ack = ceph_clock_now(cct);
     }
     outstanding_pg_stats.insert(tid);
