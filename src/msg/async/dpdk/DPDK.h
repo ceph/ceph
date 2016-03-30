@@ -690,10 +690,12 @@ class DPDKQueuePair {
    *
    * @param m mbuf to update
    */
-  static bool refill_rx_mbuf(rte_mbuf* m, size_t size) {
-    void* data = rte_malloc(NULL, size, size);
-    if (!data)
+  static bool refill_rx_mbuf(rte_mbuf* m, size_t size,
+                             std::vector<void*> &datas) {
+    if (_alloc_bufs.empty())
       return false;
+    void *data = datas.back();
+    datas.pop_back();
 
     //
     // Set the mbuf to point to our data.
@@ -761,6 +763,7 @@ class DPDKQueuePair {
   circular_buffer<Packet> _proxy_packetq;
   stream<Packet> _rx_stream;
   circular_buffer<Packet> _tx_packetq;
+  std::vector<void*> _alloc_bufs;
 
   qp_stats _stats;
   PerfCounters *perf_logger;

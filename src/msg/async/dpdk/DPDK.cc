@@ -533,8 +533,14 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
       _rx_free_bufs.push_back(m);
     }
 
+    for (int i = 0; i < cct->_conf->ms_dpdk_rx_buffer_count_per_core; i++) {
+      void* m = rte_malloc(NULL, mbuf_data_size, mbuf_data_size);
+      assert(m);
+      _alloc_bufs.push_back(m);
+    }
+
     for (auto&& m : _rx_free_bufs) {
-      if (!init_noninline_rx_mbuf(m, mbuf_data_size)) {
+      if (!init_noninline_rx_mbuf(m, mbuf_data_size, _alloc_bufs)) {
         lderr(cct) << __func__ << " Failed to allocate data buffers for Rx ring. "
                    "Consider increasing the amount of memory." << dendl;
         return false;
@@ -687,8 +693,8 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
   }
 
   auto del = std::bind(
-          [](std::vector<char*> &bufs) {
-            for (auto&& b : bufs) { rte_free(b); }
+          [this](std::vector<char*> &bufs) {
+            for (auto&& b : bufs) { _alloc_bufs.push_back(b); }
           }, std::move(_bufs));
   return Packet(
       _frags.begin(), _frags.end(), make_deleter(std::move(del)));
@@ -703,7 +709,7 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
     char* data = rte_pktmbuf_mtod(m, char*);
 
     return Packet(fragment{data, rte_pktmbuf_data_len(m)},
-                  make_deleter([data] { rte_free(data); }));
+                  make_deleter([this, data] { _alloc_bufs.push_back(data); }));
   } else {
     return from_mbuf_lro(m);
   }
@@ -712,7 +718,7 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
 inline bool DPDKQueuePair::refill_one_cluster(rte_mbuf* head)
 {
   for (; head != nullptr; head = head->next) {
-    if (!refill_rx_mbuf(head, mbuf_data_size)) {
+    if (!refill_rx_mbuf(head, mbuf_data_size, _alloc_bufs)) {
       //
       // If we failed to allocate a new buffer - push the rest of the
       // cluster back to the free_packets list for a later retry.
