@@ -30,8 +30,8 @@
 #endif
 
 #if defined(RTE_MBUF_REFCNT_ATOMIC)
-#warning "CONFIG_RTE_MBUF_REFCNT_ATOMIC should be disabled in DPDK's " \
-         "config/common_linuxapp"
+#error "CONFIG_RTE_MBUF_REFCNT_ATOMIC should be disabled in DPDK's " \
+       "config/common_linuxapp"
 #endif
 /******************************************************************************/
 

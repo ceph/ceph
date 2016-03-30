@@ -692,7 +692,7 @@ class DPDKQueuePair {
    */
   static bool refill_rx_mbuf(rte_mbuf* m, size_t size,
                              std::vector<void*> &datas) {
-    if (_alloc_bufs.empty())
+    if (datas.empty())
       return false;
     void *data = datas.back();
     datas.pop_back();
@@ -709,8 +709,9 @@ class DPDKQueuePair {
     return true;
   }
 
-  static bool init_noninline_rx_mbuf(rte_mbuf* m, size_t size) {
-    if (!refill_rx_mbuf(m, size)) {
+  static bool init_noninline_rx_mbuf(rte_mbuf* m, size_t size,
+                                     std::vector<void*> &datas) {
+    if (!refill_rx_mbuf(m, size, datas)) {
       return false;
     }
     // The below fields stay constant during the execution.
