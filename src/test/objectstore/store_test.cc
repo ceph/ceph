@@ -1242,7 +1242,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
   }
   {
     bufferlist final;
@@ -1271,7 +1271,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
   }
   {
     bufferlist final;
@@ -1303,7 +1303,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
   }
   {
     bufferlist final;
@@ -1324,7 +1324,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     al.append(a);
     final.append(a);
     t.write(cid, hoid, 17000, a.length(), al);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     ASSERT_EQ((int)final.length(),
 	      store->read(cid, hoid, 0, final.length(), rl));
@@ -1338,7 +1338,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
   }
   {
     bufferptr p(1048576);
@@ -1353,7 +1353,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist al;
     al.append(a);
     t.write(cid, hoid, a.length(), a.length(), al);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     bufferlist final;
     final.substr_of(pl, 0, al.length());
@@ -1373,7 +1373,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
   }
   {
     bufferptr p(65536);
@@ -1388,7 +1388,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist al;
     al.append(a);
     t.write(cid, hoid, 32768, a.length(), al);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     bufferlist final;
     final.substr_of(pl, 0, 32768);
@@ -1408,7 +1408,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
   }
   {
     bufferptr p(65536);
@@ -1423,7 +1423,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist al;
     al.append(a);
     t.write(cid, hoid, 33768, a.length(), al);
-    ASSERT_EQ(0u, apply_transaction(store, &osr, std::move(t)));
+    ASSERT_EQ(0, apply_transaction(store, &osr, std::move(t)));
     bufferlist rl;
     bufferlist final;
     final.substr_of(pl, 0, 33768);
