@@ -2262,6 +2262,7 @@ public:
   void queue_snap_trim();
   bool requeue_scrub();
   bool queue_scrub();
+  unsigned get_scrub_priority();
 
   /// share pg info after a pg is active
   void share_pg_info();
