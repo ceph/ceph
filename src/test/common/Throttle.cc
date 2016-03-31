@@ -61,47 +61,41 @@ protected:
 };
 
 TEST_F(ThrottleTest, Throttle) {
-  ASSERT_DEATH({
-      Throttle throttle(g_ceph_context, "throttle", -1);
-    }, "");
-
-  int64_t throttle_max = 10;
+  uint64_t throttle_max = 10;
   Throttle throttle(g_ceph_context, "throttle", throttle_max);
   ASSERT_EQ(throttle.get_max(), throttle_max);
-  ASSERT_EQ(throttle.get_current(), 0);
+  ASSERT_EQ(throttle.get_current(), (uint64_t)0);
 }
 
 TEST_F(ThrottleTest, take) {
-  int64_t throttle_max = 10;
+  uint64_t throttle_max = 10;
   Throttle throttle(g_ceph_context, "throttle", throttle_max);
-  ASSERT_DEATH(throttle.take(-1), "");
   ASSERT_EQ(throttle.take(throttle_max), throttle_max);
   ASSERT_EQ(throttle.take(throttle_max), throttle_max * 2);
 }
 
 TEST_F(ThrottleTest, get) {
-  int64_t throttle_max = 10;
+  uint64_t throttle_max = 10;
   Throttle throttle(g_ceph_context, "throttle");
 
   // test increasing max from 0 to throttle_max
   {
     ASSERT_FALSE(throttle.get(throttle_max, throttle_max));
     ASSERT_EQ(throttle.get_max(), throttle_max);
-    ASSERT_EQ(throttle.put(throttle_max), 0);
+    ASSERT_EQ(throttle.put(throttle_max), (uint64_t)0);
   }
 
-  ASSERT_DEATH(throttle.get(-1), "");
   ASSERT_FALSE(throttle.get(5));
-  ASSERT_EQ(throttle.put(5), 0);
+  ASSERT_EQ(throttle.put(5), (uint64_t)0);
 
   ASSERT_FALSE(throttle.get(throttle_max));
   ASSERT_FALSE(throttle.get_or_fail(1));
   ASSERT_FALSE(throttle.get(1, throttle_max + 1));
-  ASSERT_EQ(throttle.put(throttle_max + 1), 0);
+  ASSERT_EQ(throttle.put(throttle_max + 1), (uint64_t)0);
   ASSERT_FALSE(throttle.get(0, throttle_max));
   ASSERT_FALSE(throttle.get(throttle_max));
   ASSERT_FALSE(throttle.get_or_fail(1));
-  ASSERT_EQ(throttle.put(throttle_max), 0);
+  ASSERT_EQ(throttle.put(throttle_max), (uint64_t)0);
 
   useconds_t delay = 1;
 
@@ -116,7 +110,7 @@ TEST_F(ThrottleTest, get) {
     Thread_get t(throttle, 7);
     t.create("t_throttle_1");
     usleep(delay);
-    ASSERT_EQ(throttle.put(throttle_max), 0);
+    ASSERT_EQ(throttle.put(throttle_max), (uint64_t)0);
     t.join();
 
     if (!(waited = t.waited))
@@ -157,25 +151,25 @@ TEST_F(ThrottleTest, get_or_fail) {
   }
 
   {
-    int64_t throttle_max = 10;
+    uint64_t throttle_max = 10;
     Throttle throttle(g_ceph_context, "throttle", throttle_max);
 
     ASSERT_TRUE(throttle.get_or_fail(throttle_max));
-    ASSERT_EQ(throttle.put(throttle_max), 0);
+    ASSERT_EQ(throttle.put(throttle_max), (uint64_t)0);
 
     ASSERT_TRUE(throttle.get_or_fail(throttle_max * 2));
     ASSERT_FALSE(throttle.get_or_fail(1));
     ASSERT_FALSE(throttle.get_or_fail(throttle_max * 2));
-    ASSERT_EQ(throttle.put(throttle_max * 2), 0);
+    ASSERT_EQ(throttle.put(throttle_max * 2), (uint64_t)0);
 
     ASSERT_TRUE(throttle.get_or_fail(throttle_max));
     ASSERT_FALSE(throttle.get_or_fail(1));
-    ASSERT_EQ(throttle.put(throttle_max), 0);
+    ASSERT_EQ(throttle.put(throttle_max), (uint64_t)0);
   }
 }
 
 TEST_F(ThrottleTest, wait) {
-  int64_t throttle_max = 10;
+  uint64_t throttle_max = 10;
   Throttle throttle(g_ceph_context, "throttle");
 
   // test increasing max from 0 to throttle_max
@@ -224,7 +218,7 @@ TEST_F(ThrottleTest, wait) {
 TEST_F(ThrottleTest, destructor) {
   Thread_get *t;
   {
-    int64_t throttle_max = 10;
+    uint64_t throttle_max = 10;
     Throttle *throttle = new Throttle(g_ceph_context, "throttle", throttle_max);
 
     ASSERT_FALSE(throttle->get(5));
