@@ -1135,7 +1135,7 @@ protected:
   };
 
   Cond dispatch_cond;
-  int dispatch_running;
+  bool dispatch_running;
 
   void create_logger();
   void create_recoverystate_perf();
