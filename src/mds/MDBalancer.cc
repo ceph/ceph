@@ -333,6 +333,7 @@ double MDBalancer::try_match(mds_rank_t ex, double& maxex,
 
 void MDBalancer::queue_split(CDir *dir)
 {
+  assert(mds->mdsmap->allows_dirfrags());
   split_queue.insert(dir->dirfrag());
 }
 
@@ -984,6 +985,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 
     // split
     if (g_conf->mds_bal_split_size > 0 &&
+	mds->mdsmap->allows_dirfrags() &&
 	(dir->should_split() ||
 	 (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
 	 (v > g_conf->mds_bal_split_wr && type == META_POP_IWR)) &&
