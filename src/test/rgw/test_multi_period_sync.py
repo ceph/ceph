@@ -55,7 +55,7 @@ def test_multi_period_incremental_sync():
             k.set_contents_from_string('zxczxc')
 
     # restart zone 3 gateway and wait for sync
-    z3.cluster.start_rgw()
+    z3.cluster.start_rgw(z3.zone_name)
     realm.meta_checkpoint()
 
     # verify that we end up with the same objects

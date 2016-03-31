@@ -113,8 +113,9 @@ class RGWCluster:
     def stop(self):
         mstop(self.cluster_id)
 
-    def start_rgw(self):
-        mrgw(self.cluster_id, self.port, '--debug-rgw=20 --debug-ms=1')
+    def start_rgw(self, zone):
+        args = '--debug-rgw=20 --debug-ms=1 --rgw-zone=' + zone
+        mrgw(self.cluster_id, self.port, args)
 
     def stop_rgw(self):
         mstop(self.cluster_id, 'radosgw')
