@@ -6,7 +6,7 @@ overrides:
 tasks:
 - radosbench:
     clients: [client.0]
-    time: 180
+    time: 150
 - admin_socket:
     client.0:
       objecter_requests:
