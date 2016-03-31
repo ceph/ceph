@@ -174,9 +174,22 @@ stop_mirror()
     rm -f $(daemon_pid_file "${daemon}")
 }
 
+daemon_local_cluster()
+{
+    local daemon=$1
+    local pid_file=$(daemon_pid_file $daemon)
+
+    pid=$(cat $(daemon_pid_file "${daemon}"))
+
+    test -n "${pid}"
+
+    ps auxww | awk -v pid=${pid} '$2 == pid' |
+	sed -nEe 's/^.*--cluster +([^ ]+).*$/\1/p'
+}
+
 status()
 {
-    local cluster d daemon image
+    local cluster daemon image
 
     for cluster in ${LOC_CLUSTER} ${RMT_CLUSTER}
     do
@@ -198,11 +211,8 @@ status()
 
     local ret
 
-    for d in "${LOC_DAEMON}@${LOC_CLUSTER}" "${RMT_DAEMON}@${RMT_CLUSTER}"
+    for daemon in "${LOC_DAEMON}" "${RMT_DAEMON}"
     do
-	daemon=${d%%@*}
-	cluster=${d#*@}
-
 	local pid_file=$(daemon_pid_file ${daemon})
 	if [ ! -e ${pid_file} ]
 	then
@@ -233,6 +243,8 @@ status()
 	fi
 	echo
 
+	cluster=$(daemon_local_cluster ${daemon})
+
 	local asok_file=$(daemon_asok_file ${daemon} ${cluster})
 	if [ ! -S "${asok_file}" ]
 	then
@@ -260,7 +272,8 @@ flush()
        cmd="${cmd} ${POOL}/${image}"
     fi
 
-    local asok_file=$(daemon_asok_file "${daemon}" "${daemon}")
+    local cluster=$(daemon_local_cluster "${daemon}")
+    local asok_file=$(daemon_asok_file "${daemon}" "${cluster}")
     test -S "${asok_file}"
 
     ceph --admin-daemon ${asok_file} ${cmd}
@@ -269,11 +282,11 @@ flush()
 test_image_replay_state()
 {
     local daemon=$1
-    local cluster=$2
-    local image=$3
-    local test_state=$4
+    local image=$2
+    local test_state=$3
     local current_state=stopped
 
+    local cluster=$(daemon_local_cluster "${daemon}")
     local asok_file=$(daemon_asok_file "${daemon}" "${cluster}")
     test -S "${asok_file}"
 
@@ -285,15 +298,14 @@ test_image_replay_state()
 wait_for_image_replay_state()
 {
     local daemon=$1
-    local cluster=$2
-    local image=$3
-    local state=$4
+    local image=$2
+    local state=$3
     local s
 
     # TODO: add a way to force rbd-mirror to update replayers
     for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
 	sleep ${s}
-	test_image_replay_state "${daemon}" "${cluster}" "${image}" "${state}" && return 0
+	test_image_replay_state "${daemon}" "${image}" "${state}" && return 0
     done
     return 1
 }
@@ -301,19 +313,17 @@ wait_for_image_replay_state()
 wait_for_image_replay_started()
 {
     local daemon=$1
-    local cluster=$2
-    local image=$3
+    local image=$2
 
-    wait_for_image_replay_state "${daemon}" "${cluster}" "${image}" started
+    wait_for_image_replay_state "${daemon}" "${image}" started
 }
 
 wait_for_image_replay_stopped()
 {
     local daemon=$1
-    local cluster=$2
-    local image=$3
+    local image=$2
 
-    wait_for_image_replay_state "${daemon}" "${cluster}" "${image}" stopped
+    wait_for_image_replay_state "${daemon}" "${image}" stopped
 }
 
 get_position()
@@ -453,7 +463,7 @@ setup
 echo "TEST: add image and test replay"
 image=test
 create_remote_image ${image}
-wait_for_image_replay_started ${LOC_DAEMON} ${LOC_CLUSTER} ${image}
+wait_for_image_replay_started ${LOC_DAEMON} ${image}
 write_image ${RMT_CLUSTER} ${image} 100
 wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
 compare_images ${image}
@@ -464,7 +474,7 @@ image1=test1
 create_remote_image ${image1}
 write_image ${RMT_CLUSTER} ${image1} 100
 start_mirror ${LOC_DAEMON} ${LOC_CLUSTER}
-wait_for_image_replay_started ${LOC_DAEMON} ${LOC_CLUSTER} ${image1}
+wait_for_image_replay_started ${LOC_DAEMON} ${image1}
 wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image1}
 compare_images ${image1}
 
@@ -478,18 +488,18 @@ start_mirror ${RMT_DAEMON} ${RMT_CLUSTER}
 
 # failover
 demote_image ${RMT_CLUSTER} ${image}
-wait_for_image_replay_stopped ${LOC_DAEMON} ${LOC_CLUSTER} ${image}
+wait_for_image_replay_stopped ${LOC_DAEMON} ${image}
 promote_image ${LOC_CLUSTER} ${image}
-wait_for_image_replay_started ${RMT_DAEMON} ${RMT_CLUSTER} ${image}
+wait_for_image_replay_started ${RMT_DAEMON} ${image}
 write_image ${LOC_CLUSTER} ${image} 100
 wait_for_replay_complete ${RMT_DAEMON} ${LOC_CLUSTER} ${image}
 compare_images ${image}
 
 # failback
 demote_image ${LOC_CLUSTER} ${image}
-wait_for_image_replay_stopped ${RMT_DAEMON} ${RMT_CLUSTER} ${image}
+wait_for_image_replay_stopped ${RMT_DAEMON} ${image}
 promote_image ${RMT_CLUSTER} ${image}
-wait_for_image_replay_started ${LOC_DAEMON} ${LOC_CLUSTER} ${image}
+wait_for_image_replay_started ${LOC_DAEMON} ${image}
 write_image ${RMT_CLUSTER} ${image} 100
 wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
 compare_images ${image}
