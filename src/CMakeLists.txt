@@ -1018,7 +1018,9 @@ if(${WITH_RBD})
     librbd/librbd.cc
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
+    librbd/MirroringWatcher.cc
     librbd/ObjectMap.cc
+    librbd/ObjectWatcher.cc
     librbd/Operations.cc
     librbd/Utils.cc
     librbd/exclusive_lock/AcquireRequest.cc
@@ -1034,6 +1036,7 @@ if(${WITH_RBD})
     librbd/journal/Replay.cc
     librbd/journal/StandardPolicy.cc
     librbd/journal/Types.cc
+    librbd/mirroring_watcher/Types.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc
