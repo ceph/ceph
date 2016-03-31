@@ -40,13 +40,24 @@
 #   ceph --cluster local -s
 #   rbd --cluster remote -p mirror ls
 #   rbd --cluster remote -p mirror journal status --image test
-#   ceph --admin-daemon rbd-mirror.asok help
+#   ceph --admin-daemon rbd-mirror.local.local.asok help
+#   ...
+#
+# Also you can execute commands (functions) from the script:
+#
+#   cd $CEPH_SRC_PATH
+#   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
+#   ../qa/workunits/rbd/rbd_mirror.sh status
+#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror local
+#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror remote remote
+#   ../qa/workunits/rbd/rbd_mirror.sh flush remote
 #   ...
 #
 # Eventually, run the cleanup:
 #
 #   cd $CEPH_SRC_PATH
-#   ../qa/workunits/rbd/rbd_mirror.sh cleanup /tmp/tmp.rbd_mirror
+#   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
+#     ../qa/workunits/rbd/rbd_mirror.sh cleanup
 #
 
 LOC_DAEMON=local
@@ -163,16 +174,96 @@ stop_mirror()
     rm -f $(daemon_pid_file "${daemon}")
 }
 
+status()
+{
+    local cluster d daemon image
+
+    for cluster in ${LOC_CLUSTER} ${RMT_CLUSTER}
+    do
+	echo "${cluster} status"
+	ceph --cluster ${cluster} -s
+	echo
+
+	echo "${cluster} ${POOL} images"
+	rbd --cluster ${cluster} -p ${POOL} ls
+	echo
+
+	for image in `rbd --cluster ${cluster} -p ${POOL} ls 2>/dev/null`
+	do
+	    echo "image ${image} journal status"
+	    rbd --cluster ${cluster} -p ${POOL} journal status --image ${image}
+	    echo
+	done
+    done
+
+    local ret
+
+    for d in "${LOC_DAEMON}@${LOC_CLUSTER}" "${RMT_DAEMON}@${RMT_CLUSTER}"
+    do
+	daemon=${d%%@*}
+	cluster=${d#*@}
+
+	local pid_file=$(daemon_pid_file ${daemon})
+	if [ ! -e ${pid_file} ]
+	then
+	    echo "${daemon} rbd-mirror not running or unknown" \
+		 "(${pid_file} not exist)"
+	    continue
+	fi
+
+	local pid
+	pid=$(cat ${pid_file} 2>/dev/null) || :
+	if [ -z "${pid}" ]
+	then
+	    echo "${daemon} rbd-mirror not running or unknown" \
+		 "(can't find pid using ${pid_file})"
+	    ret=1
+	    continue
+	fi
+
+	echo "${daemon} rbd-mirror process in ps output:"
+	if ps auxww |
+		awk -v pid=${pid} 'NR == 1 {print} $2 == pid {print; exit 1}'
+	then
+	    echo
+	    echo "${daemon} rbd-mirror not running" \
+		 "(can't find pid $pid in ps output)"
+	    ret=1
+	    continue
+	fi
+	echo
+
+	local asok_file=$(daemon_asok_file ${daemon} ${cluster})
+	if [ ! -S "${asok_file}" ]
+	then
+	    echo "${daemon} rbd-mirror asok is unknown (${asok_file} not exits)"
+	    ret=1
+	    continue
+	fi
+
+	echo "${daemon} rbd-mirror status"
+	ceph --admin-daemon ${asok_file} rbd mirror status
+	echo
+    done
+
+    return ${ret}
+}
+
 flush()
 {
     local daemon=$1
     local image=$2
+    local cmd="rbd mirror flush"
+
+    if [ -n "${image}" ]
+    then
+       cmd="${cmd} ${POOL}/${image}"
+    fi
 
     local asok_file=$(daemon_asok_file "${daemon}" "${daemon}")
-    test -n "${asok_file}"
+    test -S "${asok_file}"
 
-    ceph --admin-daemon ${asok_file} \
-	 rbd mirror flush ${POOL}/${image}
+    ceph --admin-daemon ${asok_file} ${cmd}
 }
 
 test_image_replay_state()
@@ -184,7 +275,7 @@ test_image_replay_state()
     local current_state=stopped
 
     local asok_file=$(daemon_asok_file "${daemon}" "${cluster}")
-    test -n "${asok_file}"
+    test -S "${asok_file}"
 
     ceph --admin-daemon ${asok_file} help |
 	fgrep "\"rbd mirror status ${POOL}/${image}\"" && current_state=started
@@ -341,19 +432,18 @@ promote_image()
 # Main
 #
 
-if [ "$1" = clean ]; then
-    TEMPDIR=$2
-
-    if [ -z "${TEMPDIR}" -a -n "${RBD_MIRROR_TEMDIR}" ]; then
-	TEMPDIR="${RBD_MIRROR_TEMDIR}"
+if [ "$#" -gt 0 ]
+then
+    if [ -z "${RBD_MIRROR_TEMDIR}" ]
+    then
+       echo "RBD_MIRROR_TEMDIR is not set" >&2
+       exit 1
     fi
 
-    test -n "${TEMPDIR}"
-
-    RBD_MIRROR_NOCLEANUP=
-
-    cleanup
-    exit
+    TEMPDIR="${RBD_MIRROR_TEMDIR}"
+    cd ${TEMPDIR}
+    $@
+    exit $?
 fi
 
 set -xe
