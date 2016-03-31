@@ -2074,28 +2074,30 @@ protected:
   void flush_pg_stats();
 
   void pg_stat_queue_enqueue(PG *pg) {
-    pg_stat_queue_lock.Lock();
-    if (pg->is_primary() && !pg->stat_queue_item.is_on_list()) {
-      pg->get("pg_stat_queue");
-      pg_stat_queue.push_back(&pg->stat_queue_item);
-    }
-    osd_stat_updated = true;
-    pg_stat_queue_lock.Unlock();
-  }
-  void pg_stat_queue_dequeue(PG *pg) {
-    pg_stat_queue_lock.Lock();
+    Mutex lock(pg_stat_queue_lock);
+    if (!pg->is_primary())
+      return;
+
     if (pg->stat_queue_item.remove_myself())
       pg->put("pg_stat_queue");
-    pg_stat_queue_lock.Unlock();
+
+    assert(!pg->stat_queue_item.is_on_list());
+    pg->get("pg_stat_queue");
+    pg_stat_queue.push_back(&pg->stat_queue_item);
+    osd_stat_updated = true;
+  }
+  void pg_stat_queue_dequeue(PG *pg) {
+    Mutex lock(pg_stat_queue_lock);
+    if (pg->stat_queue_item.remove_myself())
+      pg->put("pg_stat_queue");
   }
   void clear_pg_stat_queue() {
-    pg_stat_queue_lock.Lock();
+    Mutex lock(pg_stat_queue_lock);
     while (!pg_stat_queue.empty()) {
       PG *pg = pg_stat_queue.front();
       pg_stat_queue.pop_front();
       pg->put("pg_stat_queue");
     }
-    pg_stat_queue_lock.Unlock();
   }
 
   ceph_tid_t get_tid() {
