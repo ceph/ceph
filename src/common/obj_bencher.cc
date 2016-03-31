@@ -33,12 +33,18 @@ const std::string BENCH_PREFIX = "benchmark_data";
 static char cached_hostname[30] = {0};
 int cached_pid = 0;
 
-static std::string generate_object_prefix(int pid = 0) {
+static std::string generate_object_prefix_nopid() {
   if (cached_hostname[0] == 0) {
     gethostname(cached_hostname, sizeof(cached_hostname)-1);
     cached_hostname[sizeof(cached_hostname)-1] = 0;
   }
 
+  std::ostringstream oss;
+  oss << BENCH_PREFIX << "_" << cached_hostname;
+  return oss.str();
+}
+
+static std::string generate_object_prefix(int pid = 0) {
   if (!cached_pid) {
     if (!pid)
       pid = getpid();
@@ -46,7 +52,7 @@ static std::string generate_object_prefix(int pid = 0) {
   }
 
   std::ostringstream oss;
-  oss << BENCH_PREFIX << "_" << cached_hostname << "_" << cached_pid;
+  oss << generate_object_prefix_nopid() << "_" << cached_pid;
   return oss.str();
 }
 
@@ -1084,11 +1090,12 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   return r;
 }
 
-int ObjBencher::clean_up(const std::string& prefix, int concurrentios, const std::string& run_name) {
+int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, const std::string& run_name) {
   int r = 0;
   size_t op_size, object_size;
   int num_objects;
   int prevPid;
+  std::string prefix = orig_prefix;
 
   // default meta object if user does not specify one
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
@@ -1096,7 +1103,9 @@ int ObjBencher::clean_up(const std::string& prefix, int concurrentios, const std
   r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &prevPid);
   if (r < 0) {
     // if the metadata file is not found we should try to do a linear search on the prefix
-    if (r == -ENOENT && prefix != "") {
+    if (r == -ENOENT) {
+      if (prefix == "")
+	prefix = generate_object_prefix_nopid();
       return clean_up_slow(prefix, concurrentios);
     }
     else {
