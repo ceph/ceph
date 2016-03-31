@@ -28,7 +28,7 @@ public:
   map<client_t,entity_inst_t> client_map;
   bool old_style_encode;
 
-  ESessions() : LogEvent(EVENT_SESSIONS), old_style_encode(false) { }
+  ESessions() : LogEvent(EVENT_SESSIONS), cmapv(0), old_style_encode(false) { }
   ESessions(version_t pv, map<client_t,entity_inst_t>& cm) :
     LogEvent(EVENT_SESSIONS),
     cmapv(pv),
