@@ -3669,6 +3669,71 @@ TEST_F(TestLibRBD, RebuildNewObjectMap)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, CheckObjectMap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 18;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  PrintProgress prog_ctx;
+  bufferlist bl1;
+  bufferlist bl2;
+  bl1.append("foo");
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    uint64_t features;
+    ASSERT_EQ(0, image.features(&features));
+
+    ASSERT_EQ(bl1.length(), image.write(0, bl1.length(), bl1));
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(bl1.length(), image.write(1<<order, bl1.length(), bl1));
+  }
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  std::string image_id;
+  ASSERT_EQ(0, get_image_id(image1, &image_id));
+
+  std::string object_map_oid = RBD_OBJECT_MAP_PREFIX + image_id;
+
+  ASSERT_LT(0, ioctx.read(object_map_oid, bl2, 1024, 0));
+
+  bool lock_owner;
+  ASSERT_EQ(bl1.length(), image1.write(3 * (1 << 18), bl1.length(), bl1));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  //reopen image to reread now corrupt object map from disk
+  image1.close();
+
+  bl1.clear();
+  ASSERT_LT(0, ioctx.read(object_map_oid, bl1, 1024, 0));
+  ASSERT_FALSE(bl1.contents_equal(bl2));
+
+  ASSERT_EQ(0, ioctx.write_full(object_map_oid, bl2));
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  uint64_t flags;
+  ASSERT_EQ(0, image1.get_flags(&flags));
+  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) == 0);
+
+  ASSERT_EQ(0, image1.check_object_map(prog_ctx));
+
+  ASSERT_EQ(0, image1.get_flags(&flags));
+  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
+}
+
 TEST_F(TestLibRBD, BlockingAIO)
 {
   librados::IoCtx ioctx;

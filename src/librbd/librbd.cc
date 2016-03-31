@@ -713,6 +713,12 @@ namespace librbd {
     return ictx->operations->rebuild_object_map(prog_ctx);
   }
 
+  int Image::check_object_map(ProgressContext &prog_ctx)
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx*>(ctx);
+    return ictx->operations->check_object_map(prog_ctx);
+  }
+
   int Image::copy(IoCtx& dest_io_ctx, const char *destname)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

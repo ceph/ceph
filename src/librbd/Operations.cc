@@ -13,6 +13,7 @@
 #include "librbd/Utils.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
+#include "librbd/operation/ObjectMapIterate.h"
 #include "librbd/operation/RenameRequest.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
@@ -274,6 +275,18 @@ struct C_InvokeAsyncRequest : public Context {
   }
 };
 
+template <typename I>
+bool needs_invalidate(I& image_ctx, uint64_t object_no,
+		     uint8_t current_state, uint8_t new_state) {
+  if ( (current_state == OBJECT_EXISTS ||
+	current_state == OBJECT_EXISTS_CLEAN) &&
+       (new_state == OBJECT_NONEXISTENT ||
+	new_state == OBJECT_PENDING)) {
+    return false;
+  }
+  return true;
+}
+
 } // anonymous namespace
 
 template <typename I>
@@ -421,6 +434,48 @@ void Operations<I>::execute_rebuild_object_map(ProgressContext &prog_ctx,
     new operation::RebuildObjectMapRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), prog_ctx);
   req->send();
+}
+
+template <typename I>
+int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  r = invoke_async_request("check object map", true,
+                           boost::bind(&Operations<I>::check_object_map, this,
+                                       boost::ref(prog_ctx), _1),
+			   [] (Context *c) { c->complete(-EOPNOTSUPP); });
+
+  return r;
+}
+
+template <typename I>
+void Operations<I>::object_map_iterate(ProgressContext &prog_ctx,
+				       operation::ObjectIterateWork<I> handle_mismatch,
+				       Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  operation::ObjectMapIterateRequest<I> *req =
+    new operation::ObjectMapIterateRequest<I>(m_image_ctx, on_finish,
+					      prog_ctx, handle_mismatch);
+  req->send();
+}
+
+template <typename I>
+void Operations<I>::check_object_map(ProgressContext &prog_ctx,
+				     Context *on_finish) {
+  object_map_iterate(prog_ctx, needs_invalidate, on_finish);
 }
 
 template <typename I>

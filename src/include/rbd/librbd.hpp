@@ -204,6 +204,8 @@ public:
   /* object map feature */
   int rebuild_object_map(ProgressContext &prog_ctx);
 
+  int check_object_map(ProgressContext &prog_ctx);
+
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
   int copy3(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
