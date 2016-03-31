@@ -362,6 +362,7 @@ librbd_test_la_SOURCES = \
 	test/librbd/test_ImageWatcher.cc \
 	test/librbd/test_internal.cc \
 	test/librbd/test_mirroring.cc \
+	test/librbd/test_MirroringWatcher.cc \
 	test/librbd/test_ObjectMap.cc \
 	test/librbd/journal/test_Entries.cc \
 	test/librbd/journal/test_Replay.cc
@@ -378,6 +379,7 @@ unittest_librbd_SOURCES = \
 	test/librbd/test_mock_fixture.cc \
 	test/librbd/test_mock_ExclusiveLock.cc \
 	test/librbd/test_mock_Journal.cc \
+	test/librbd/test_mock_ObjectWatcher.cc \
 	test/librbd/exclusive_lock/test_mock_AcquireRequest.cc \
 	test/librbd/exclusive_lock/test_mock_ReleaseRequest.cc \
 	test/librbd/image/test_mock_RefreshRequest.cc \
