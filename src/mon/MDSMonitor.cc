@@ -1740,6 +1740,17 @@ int MDSMonitor::management_command(
     // Persist the new FSMap
     pending_fsmap.filesystems[new_fs->fscid] = new_fs;
     return 0;
+  } else if (prefix == "fs set_default") {
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    auto fs = pending_fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+        ss << "filesystem '" << fs_name << "' does not exist";
+        return -ENOENT;
+    }
+
+    pending_fsmap.legacy_client_fscid = fs->fscid;
+    return 0;
   } else {
     return -ENOSYS;
   }
