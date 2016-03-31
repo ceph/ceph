@@ -1301,7 +1301,7 @@ class RGWRealm : public RGWSystemMetaObj
   string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
-  int create_control();
+  int create_control(bool exclusive);
   int delete_control();
 public:
   RGWRealm() {}
