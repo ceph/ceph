@@ -85,6 +85,11 @@ class EventDriver {
   virtual bool wakeup_support() { return true; }
 };
 
+extern thread_local EventCenter* local_center;
+
+inline EventCenter* center() {
+    return local_center;
+}
 
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
@@ -92,6 +97,8 @@ class EventDriver {
 class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
   thread_local static unsigned local_id;
+  // should be enough;
+  static EventCenter *centers[24];
 
   struct FileEvent {
     int mask;
@@ -206,7 +213,7 @@ class EventCenter {
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
   inline bool in_thread() const {
-    return local_id == id;
+    return local_center == this;
   }
  private:
   template <typename func>
@@ -235,26 +242,21 @@ class EventCenter {
   };
  public:
   template <typename func>
-  void submit_event(func &&f, bool nowait = false) {
-    if (in_thread()) {
+  static void submit_to(int id, func &&f, bool nowait = false) {
+    EventCenter *c = centers[id];
+    if (c->in_thread()) {
       f();
       return ;
     }
     if (nowait) {
       C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
-      dispatch_event_external(event);
+      c->dispatch_event_external(event);
     } else {
       C_submit_event<func> event(std::move(f), false);
-      dispatch_event_external(&event);
+      c->dispatch_event_external(&event);
       event.wait();
     }
   };
 };
-
-extern thread_local EventCenter* local_center;
-
-inline EventCenter& center() {
-    return *local_center;
-}
 
 #endif

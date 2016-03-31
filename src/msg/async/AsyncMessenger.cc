@@ -82,7 +82,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     }
 
     if (listen_addr.get_port()) {
-      worker->center.submit_event([this, &listen_addr, &opts, &r]() {
+      EventCenter::submit_to(worker->center.get_id(), [this, &listen_addr, &opts, &r]() {
         r = worker->listen(listen_addr, opts, &listen_socket);
       });
       if (r < 0) {
@@ -97,7 +97,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
           continue;
 
         listen_addr.set_port(port);
-        worker->center.submit_event([this, &listen_addr, &opts, &r]() {
+        EventCenter::submit_to(worker->center.get_id(), [this, &listen_addr, &opts, &r]() {
           r = worker->listen(listen_addr, opts, &listen_socket);
         });
         if (r == 0)
@@ -167,7 +167,7 @@ int Processor::start()
 
   // start thread
   if (listen_socket) {
-    worker->center.submit_event([this]() {
+    EventCenter::submit_to(worker->center.get_id(), [this]() {
       worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE, listen_handler); });
   }
 
@@ -210,7 +210,7 @@ void Processor::stop()
   ldout(msgr->cct,10) << __func__ << dendl;
 
   if (listen_socket) {
-    worker->center.submit_event([this]() {
+    EventCenter::submit_to(worker->center.get_id(), [this]() {
       worker->center.delete_file_event(listen_socket.fd(), EVENT_READABLE);
       listen_socket.abort_accept();
     });

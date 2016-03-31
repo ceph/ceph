@@ -1860,7 +1860,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     // existing->sd now isn't register any event while it's new,
     // previous existing->sd now is closed, no event will notify
     // existing(EventCenter*) from now.
-    center->submit_event([this, existing, connect, reply, authorizer_reply]() mutable {
+    EventCenter::submit_to(center->get_id(), [this, existing, connect, reply, authorizer_reply]() mutable {
       if (cs)
         center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
       assert(existing->delay_cleanup && delay_cleanup);
@@ -1881,7 +1881,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       // Before changing existing->center, it may already exists some events in existing->center's queue.
       // Then if we mark down `existing`, it will execute in another thread and clean up connection.
       // Previous event will result in segment fault
-      existing->center->submit_event([existing, connect, reply, authorizer_reply]() mutable {
+      EventCenter::submit_to(existing->center->get_id(), [existing, connect, reply, authorizer_reply]() mutable {
         Mutex::Locker l(existing->lock);
         assert(existing->delay_cleanup && existing->cleanup_handler);
         existing->delay_cleanup = false;
