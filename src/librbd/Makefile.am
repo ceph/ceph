@@ -1,5 +1,6 @@
 librbd_types_la_SOURCES = \
 	librbd/journal/Types.cc \
+	librbd/mirroring_watcher/Types.cc \
 	librbd/WatchNotifyTypes.cc
 noinst_LTLIBRARIES += librbd_types.la
 
@@ -25,7 +26,9 @@ librbd_internal_la_SOURCES = \
 	librbd/Journal.cc \
 	librbd/LibrbdAdminSocketHook.cc \
 	librbd/LibrbdWriteback.cc \
+	librbd/MirroringWatcher.cc \
 	librbd/ObjectMap.cc \
+	librbd/ObjectWatcher.cc \
 	librbd/Operations.cc \
 	librbd/Utils.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
@@ -104,7 +107,9 @@ noinst_HEADERS += \
 	librbd/Journal.h \
 	librbd/LibrbdAdminSocketHook.h \
 	librbd/LibrbdWriteback.h \
+	librbd/MirroringWatcher.h \
 	librbd/ObjectMap.h \
+	librbd/ObjectWatcher.h \
 	librbd/Operations.h \
 	librbd/parent_types.h \
 	librbd/SnapInfo.h \
@@ -127,6 +132,7 @@ noinst_HEADERS += \
 	librbd/journal/StandardPolicy.h \
 	librbd/journal/Types.h \
 	librbd/journal/TypeTraits.h \
+	librbd/mirroring_watcher/Types.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/LockRequest.h \
 	librbd/object_map/Request.h \
