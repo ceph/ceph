@@ -345,16 +345,24 @@ void FSMap::decode(bufferlist::iterator& p)
 	// previously this was a bool about snaps, not a flag map
 	bool flag;
 	::decode(flag, p);
-	legacy_mds_map.ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+	legacy_mds_map.ever_allowed_features = flag ?
+	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
 	::decode(flag, p);
-	legacy_mds_map.explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+	legacy_mds_map.explicitly_allowed_features = flag ?
+	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
+	if (legacy_mds_map.max_mds > 1) {
+	  legacy_mds_map.set_multimds_allowed();
+	}
       } else {
 	::decode(legacy_mds_map.ever_allowed_features, p);
 	::decode(legacy_mds_map.explicitly_allowed_features, p);
       }
     } else {
-      legacy_mds_map.ever_allowed_features = CEPH_MDSMAP_ALLOW_SNAPS;
+      legacy_mds_map.ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
       legacy_mds_map.explicitly_allowed_features = 0;
+      if (legacy_mds_map.max_mds > 1) {
+	legacy_mds_map.set_multimds_allowed();
+      }
     }
     if (ev >= 7)
       ::decode(legacy_mds_map.inline_data_enabled, p);
