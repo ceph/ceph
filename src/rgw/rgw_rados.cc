@@ -4075,6 +4075,10 @@ int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
     }
 
     obj.key.set((*state)->get_oid());
+    if (obj.key.name[0] == '_') {
+      obj.key.name = obj.key.name.substr(1);
+    }
+
     (*state)++;
   } while (obj.key.name[0] == '.'); /* skip all entries starting with '.' */
 
