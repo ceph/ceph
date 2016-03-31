@@ -534,6 +534,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (ret == 0) {
     if (state != MC_STATE_HAVE_SESSION) {
       state = MC_STATE_HAVE_SESSION;
+      last_rotating_renew_sent = utime_t();
       while (!waiting_for_session.empty()) {
 	_send_mon_message(waiting_for_session.front());
 	waiting_for_session.pop_front();
@@ -831,8 +832,11 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  utime_t cutoff = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now(cct);
+  utime_t cutoff = now;
   cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  utime_t issued_at_lower_bound = now;
+  issued_at_lower_bound -= cct->_conf->auth_service_ticket_ttl;
   if (!rotating_secrets->need_new_secrets(cutoff)) {
     ldout(cct, 10) << "_check_auth_rotating have uptodate secrets (they expire after " << cutoff << ")" << dendl;
     rotating_secrets->dump_rotating();
@@ -840,9 +844,22 @@ int MonClient::_check_auth_rotating()
   }
 
   ldout(cct, 10) << "_check_auth_rotating renewing rotating keys (they expired before " << cutoff << ")" << dendl;
+  if (!rotating_secrets->need_new_secrets() &&
+      rotating_secrets->need_new_secrets(issued_at_lower_bound)) {
+    // the key has expired before it has been issued?
+    lderr(cct) << __func__ << " possible clock skew, rotating keys expired way too early"
+               << " (before " << issued_at_lower_bound << ")" << dendl;
+  }
+  if ((now > last_rotating_renew_sent) &&
+      double(now - last_rotating_renew_sent) < 1) {
+    ldout(cct, 10) << __func__ << " called too often (last: "
+                   << last_rotating_renew_sent << "), skipping refresh" << dendl;
+    return 0;
+  }
   MAuth *m = new MAuth;
   m->protocol = auth->get_protocol();
   if (auth->build_rotating_request(m->auth_payload)) {
+    last_rotating_renew_sent = now;
     _send_mon_message(m);
   } else {
     m->put();
@@ -853,7 +870,8 @@ int MonClient::_check_auth_rotating()
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-  utime_t until = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now(cct);
+  utime_t until = now;
   until += timeout;
 
   if (auth->get_protocol() == CEPH_AUTH_NONE)
@@ -863,14 +881,14 @@ int MonClient::wait_auth_rotating(double timeout)
     return 0;
 
   while (auth_principal_needs_rotating_keys(entity_name) &&
-	 rotating_secrets->need_new_secrets()) {
-    utime_t now = ceph_clock_now(cct);
+	 rotating_secrets->need_new_secrets(now)) {
     if (now >= until) {
       ldout(cct, 0) << "wait_auth_rotating timed out after " << timeout << dendl;
       return -ETIMEDOUT;
     }
     ldout(cct, 10) << "wait_auth_rotating waiting (until " << until << ")" << dendl;
     auth_cond.WaitUntil(monc_lock, until);
+    now = ceph_clock_now(cct);
   }
   ldout(cct, 10) << "wait_auth_rotating done" << dendl;
   return 0;
