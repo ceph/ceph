@@ -688,6 +688,9 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
 openstack security group create teuthology
 openstack security group rule create --dst-port 1:65535 teuthology
 openstack security group rule create --proto udp --dst-port 53 teuthology # dns
+openstack security group rule create --proto udp --dst-port 111 teuthology # for nfs
+openstack security group rule create --proto udp --dst-port 2049 teuthology # for nfs
+openstack security group rule create --proto udp --dst-port 16000:65535 teuthology # for nfs
         """)
 
     @staticmethod
