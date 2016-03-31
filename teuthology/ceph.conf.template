@@ -1,6 +1,6 @@
 [global]
 	chdir = ""
-	pid file = $name.pid
+	pid file = /var/run/ceph/$cluster-$name.pid
         auth supported = cephx
 
 	filestore xattr use omap = true
@@ -67,8 +67,8 @@
         rgw cache enabled = true
 	rgw enable ops log = true
 	rgw enable usage log = true
-	log file = /var/log/ceph/ceph-$name.$pid.log
-	admin socket = /var/run/ceph/ceph-$name.$pid.asok
+	log file = /var/log/ceph/$cluster-$name.$pid.log
+	admin socket = /var/run/ceph/$cluster-$name.$pid.asok
 
 
 	client mount timeout = 600
