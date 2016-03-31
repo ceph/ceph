@@ -2428,7 +2428,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
       dump_time(s, "LastModified", &info.modified);
 
       s->formatter->dump_unsigned("PartNumber", info.num);
-      s->formatter->dump_string("ETag", info.etag);
+      s->formatter->dump_format("ETag", "\"%s\"", info->etag.c_str());
       s->formatter->dump_unsigned("Size", info.size);
       s->formatter->close_section();
     }
