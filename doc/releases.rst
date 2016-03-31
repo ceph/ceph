@@ -24,7 +24,7 @@ Timeline
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |Stable        |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+
 | March     2016 |`10.1.0`_  |           |           |           |           |           |              |
-|                |`10.0.4`_  |           |           |           |           |           |              |
+|                |`10.0.5`_  |           |           |           |           |           |              |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+
 | February  2016 |`10.0.3`_  |           |           |           |           |`0.94.6`_  |`9.2.1`_      |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+
@@ -123,7 +123,7 @@ Timeline
 |                |           |`0.67`_    |           |           |           |           |              |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+
 
-.. _10.0.4: ../release-notes#v10-0-4
+.. _10.0.5: ../release-notes#v10-0-5
 .. _10.0.3: ../release-notes#v10-0-3
 .. _10.0.2: ../release-notes#v10-0-2
 .. _10.0.1: ../release-notes#v10-0-1
@@ -225,23 +225,23 @@ backport fixes; developer focus in on the next development release
 which is usually only a few weeks away.
 
 There are three to four stable releases a year.  Each stable release
-will receive a name (e.g., 'Firefly') and bug fix backports at least
+will receive a name (e.g., 'Jewel') and bug fix backports at least
 until the next stable release is out.
 
 Every other stable releases is a LTS (Long Term Stable) and will
 receive updates until two LTS are published. For instance Dumpling is
 retired when Hammer is published, Firefly is retired when Jewel is
-published etc. The rationale is that backports to a LTS (Dumpling for
+published etc. The rationale is that backports to a LTS (Firefly for
 instance) are expected to happen until the next LTS is published
-(Firefly is the LTS following Dumpling), to fix bugs and possibly
-backport important features. After the next LTS is published, there
+(Jewel is the LTS following Hammer), to fix bugs and possibly
+backport important features. After the next LTS is published,
 backports are still expected to fix bugs with a focus on whatever can
 prevent upgrades to the next LTS (in our example, fixes to Dumpling
 were published after Firefly was released and until Hammer was
 published, primarily to ensure Dumpling cluster can smoothly migrate
 to Firefly).
 
-* LTS : until the next two LTS are published
+* Long Term Stable : until the next two LTS are published
 * Stable release : until the next stable release is published
 * Development / testing release : no backports
 
@@ -252,13 +252,12 @@ For each stable release:
   and `their results <http://pulpito.ceph.com/>`_ analyzed by Ceph
   developers.
 * `Issues <http://tracker.ceph.com/projects/ceph/issues?query_id=27>`_
-  fixed in the development branch is scheduled to be backported to the
-  release.
-* When an issue found in the release is `reported
-  <http://tracker.ceph.com/projects/ceph/issues/new>`_ it will be
+  fixed in the development branch (master) are scheduled to be backported.
+* When an issue found in the stable release is `reported
+  <http://tracker.ceph.com/projects/ceph/issues/new>`_, it is
   triaged by Ceph developers.
 * The `stable releases and backport team <http://tracker.ceph.com/projects/ceph-releases>`_
-  publishes ``point releases`` including fixes that have been backported to the release.
+  publishes ``point releases`` including fixes that have been backported to the stable release.
 
 In the timeline, the life time of a LTS is calculated to be
 approximately 18 months after the month of the first release. For
