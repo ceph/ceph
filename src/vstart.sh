@@ -625,7 +625,7 @@ fi
 
 if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
     if [ "$CEPH_NUM_FS" -gt "1" ] ; then
-        $CEPH_ADM fs flag set enable_multiple true
+        $CEPH_ADM fs flag set enable_multiple true --yes-i-really-mean-it
     fi
 
     fs=0

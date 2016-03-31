@@ -183,6 +183,7 @@ if __name__ == '__main__':
     expect('mds/remove_data_pool?pool={0}'.format(poolnum), 'PUT', 200, '')
     expect('osd/pool/delete?pool=data2&pool2=data2'
            '&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
+    expect('mds/set?var=allow_multimds&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
     expect('mds/set_max_mds?maxmds=4', 'PUT', 200, '')
     expect('mds/set?var=max_mds&val=4', 'PUT', 200, '')
     expect('mds/set?var=max_file_size&val=1048576', 'PUT', 200, '')
