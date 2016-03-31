@@ -703,7 +703,7 @@ int RGWRealm::create(bool exclusive)
     return ret;
   }
   // create the control object for watch/notify
-  ret = create_control();
+  ret = create_control(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating control for new realm " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -753,12 +753,12 @@ int RGWRealm::delete_obj()
   return delete_control();
 }
 
-int RGWRealm::create_control()
+int RGWRealm::create_control(bool exclusive)
 {
   auto pool_name = get_pool_name(cct);
   auto pool = rgw_bucket{pool_name.c_str()};
   auto oid = get_control_oid();
-  return rgw_put_system_obj(store, pool, oid, nullptr, 0, true,
+  return rgw_put_system_obj(store, pool, oid, nullptr, 0, exclusive,
                             nullptr, real_time(), nullptr);
 }
 
