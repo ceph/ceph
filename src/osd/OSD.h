@@ -2122,7 +2122,6 @@ protected:
   void do_infos(map<int,
 		    vector<pair<pg_notify_t, pg_interval_map_t> > >& info_map,
 		OSDMapRef map);
-  void repeer(PG *pg, map< int, map<spg_t,pg_query_t> >& query_map);
 
   bool require_mon_peer(Message *m);
   bool require_osd_peer(Message *m);
