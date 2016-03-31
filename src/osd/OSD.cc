@@ -4182,15 +4182,11 @@ void OSD::tick()
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
 
   if (is_active() || is_waiting_for_healthy()) {
-    map_lock.get_read();
-
     maybe_update_heartbeat_peers();
 
     heartbeat_lock.Lock();
     heartbeat_check();
     heartbeat_lock.Unlock();
-
-    map_lock.put_read();
   }
 
   if (is_waiting_for_healthy()) {
