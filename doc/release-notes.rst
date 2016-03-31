@@ -1942,10 +1942,15 @@ Notable Changes since Hammer
 * upstart: throttle restarts (#11798 Sage Weil, Greg Farnum)
 
 
+v10.0.5
+=======
+
+This is identical to v10.0.4 and was only created because of a git tagging mistake.
+
 v10.0.4
 =======
 
-This is the fourth and last development release before Jewel.  The next release
+This is the fifth and last development release before Jewel.  The next release
 will be a release candidate with the final set of features.  Big items include
 RGW static website support, librbd journal framework, fixed mon sync of config-key
 data, C++11 updates, and bluestore/kstore.
