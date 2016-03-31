@@ -2,29 +2,35 @@ tasks:
 - full_sequential:
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
   - radosbench:
       clients: [client.0]
-      time: 180
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
 - print: "**** done radosbench 7-workload"
