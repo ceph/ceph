@@ -35,12 +35,12 @@
 #
 #   cd /tmp/tmp.rbd_mirror
 #   ls
-#   less rbd-mirror.local.local.<pid>.log
-#   ceph --cluster remote -s
-#   ceph --cluster local -s
-#   rbd --cluster remote -p mirror ls
-#   rbd --cluster remote -p mirror journal status --image test
-#   ceph --admin-daemon rbd-mirror.local.local.asok help
+#   less rbd-mirror.cluster1_daemon.cluster1.log
+#   ceph --cluster cluster1 -s
+#   ceph --cluster cluster1 -s
+#   rbd --cluster cluster2 -p mirror ls
+#   rbd --cluster cluster2 -p mirror journal status --image test
+#   ceph --admin-daemon rbd-mirror.cluster1_daemon.cluster1.asok help
 #   ...
 #
 # Also you can execute commands (functions) from the script:
@@ -48,9 +48,9 @@
 #   cd $CEPH_SRC_PATH
 #   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
 #   ../qa/workunits/rbd/rbd_mirror.sh status
-#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror local
-#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror remote remote
-#   ../qa/workunits/rbd/rbd_mirror.sh flush remote
+#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror cluster1_daemon
+#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror cluster2_daemon cluster2
+#   ../qa/workunits/rbd/rbd_mirror.sh flush cluster2_daemon
 #   ...
 #
 # Eventually, run the cleanup:
@@ -60,10 +60,10 @@
 #     ../qa/workunits/rbd/rbd_mirror.sh cleanup
 #
 
-LOC_DAEMON=local
-RMT_DAEMON=remote
-LOC_CLUSTER=local
-RMT_CLUSTER=remote
+CLUSTER1=cluster1
+CLUSTER2=cluster2
+CLUSTER1_DAEMON=${CLUSTER1}_daemon
+CLUSTER2_DAEMON=${CLUSTER2}_daemon
 POOL=mirror
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
@@ -100,26 +100,24 @@ setup()
     fi
 
     cd ${SRC_DIR}
-    ./mstart.sh ${LOC_CLUSTER} -n
-    ./mstart.sh ${RMT_CLUSTER} -n
+    ./mstart.sh ${CLUSTER1} -n
+    ./mstart.sh ${CLUSTER2} -n
 
-    ln -s $(readlink -f run/${LOC_CLUSTER}/ceph.conf) \
-       ${TEMPDIR}/${LOC_CLUSTER}.conf
-    ln -s $(readlink -f run/${RMT_CLUSTER}/ceph.conf) \
-       ${TEMPDIR}/${RMT_CLUSTER}.conf
+    ln -s $(readlink -f run/${CLUSTER1}/ceph.conf) \
+       ${TEMPDIR}/${CLUSTER1}.conf
+    ln -s $(readlink -f run/${CLUSTER2}/ceph.conf) \
+       ${TEMPDIR}/${CLUSTER2}.conf
 
     cd ${TEMPDIR}
 
-    start_mirror ${LOC_DAEMON} ${LOC_CLUSTER}
+    ceph --cluster ${CLUSTER1} osd pool create ${POOL} 64 64
+    ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
 
-    ceph --cluster ${LOC_CLUSTER} osd pool create ${POOL} 64 64
-    ceph --cluster ${RMT_CLUSTER} osd pool create ${POOL} 64 64
+    rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} pool
+    rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} pool
 
-    rbd --cluster ${LOC_CLUSTER} mirror pool enable ${POOL} pool
-    rbd --cluster ${RMT_CLUSTER} mirror pool enable ${POOL} pool
-
-    rbd --cluster ${LOC_CLUSTER} mirror pool peer add ${POOL} ${RMT_CLUSTER}
-    rbd --cluster ${RMT_CLUSTER} mirror pool peer add ${POOL} ${LOC_CLUSTER}
+    rbd --cluster ${CLUSTER1} mirror pool peer add ${POOL} ${CLUSTER2}
+    rbd --cluster ${CLUSTER2} mirror pool peer add ${POOL} ${CLUSTER1}
 }
 
 cleanup()
@@ -128,13 +126,13 @@ cleanup()
 
     set +e
 
-    stop_mirror ${LOC_DAEMON}
-    stop_mirror ${RMT_DAEMON}
+    stop_mirror ${CLUSTER1_DAEMON}
+    stop_mirror ${CLUSTER2_DAEMON}
 
     cd ${SRC_DIR}
 
-    ./mstop.sh ${LOC_CLUSTER}
-    ./mstop.sh ${RMT_CLUSTER}
+    ./mstop.sh ${CLUSTER1}
+    ./mstop.sh ${CLUSTER2}
 
     rm -Rf ${TEMPDIR}
 }
@@ -169,8 +167,8 @@ stop_mirror()
 	done
 	ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}'
     fi
-    rm -f $(daemon_asok_file "${daemon}" "${LOC_CLUSTER}")
-    rm -f $(daemon_asok_file "${daemon}" "${RMT_CLUSTER}")
+    rm -f $(daemon_asok_file "${daemon}" "${CLUSTER1}")
+    rm -f $(daemon_asok_file "${daemon}" "${CLUSTER2}")
     rm -f $(daemon_pid_file "${daemon}")
 }
 
@@ -191,7 +189,7 @@ status()
 {
     local cluster daemon image
 
-    for cluster in ${LOC_CLUSTER} ${RMT_CLUSTER}
+    for cluster in ${CLUSTER1} ${CLUSTER2}
     do
 	echo "${cluster} status"
 	ceph --cluster ${cluster} -s
@@ -211,7 +209,7 @@ status()
 
     local ret
 
-    for daemon in "${LOC_DAEMON}" "${RMT_DAEMON}"
+    for daemon in "${CLUSTER1_DAEMON}" "${CLUSTER2_DAEMON}"
     do
 	local pid_file=$(daemon_pid_file ${daemon})
 	if [ ! -e ${pid_file} ]
@@ -335,7 +333,7 @@ get_position()
     # Parse line like below, looking for the first position
     # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
 
-    local status_log=${TEMPDIR}/${RMT_CLUSTER}-${POOL}-${image}.status
+    local status_log=${TEMPDIR}/${CLUSTER2}-${POOL}-${image}.status
     rbd --cluster ${cluster} -p ${POOL} journal status --image ${image} |
 	tee ${status_log} >&2
     sed -nEe 's/^.*\[id='"${id_regexp}"',.*positions=\[\[([^]]*)\],.*$/\1/p' \
@@ -384,20 +382,6 @@ create_image()
 	--image-feature exclusive-lock --image-feature journaling ${image}
 }
 
-create_remote_image()
-{
-    local image=$1
-
-    create_image ${RMT_CLUSTER} ${image}
-}
-
-create_local_image()
-{
-    local image=$1
-
-    create_image ${LOC_CLUSTER} ${image}
-}
-
 write_image()
 {
     local cluster=$1
@@ -413,12 +397,12 @@ compare_images()
 {
     local image=$1
 
-    local rmt_export=${TEMPDIR}/${RMT_CLUSTER}-${POOL}-${image}.export
-    local loc_export=${TEMPDIR}/${LOC_CLUSTER}-${POOL}-${image}.export
+    local rmt_export=${TEMPDIR}/${CLUSTER2}-${POOL}-${image}.export
+    local loc_export=${TEMPDIR}/${CLUSTER1}-${POOL}-${image}.export
 
     rm -f ${rmt_export} ${loc_export}
-    rbd --cluster ${RMT_CLUSTER} -p ${POOL} export ${image} ${rmt_export}
-    rbd --cluster ${LOC_CLUSTER} -p ${POOL} export ${image} ${loc_export}
+    rbd --cluster ${CLUSTER2} -p ${POOL} export ${image} ${rmt_export}
+    rbd --cluster ${CLUSTER1} -p ${POOL} export ${image} ${loc_export}
     cmp ${rmt_export} ${loc_export}
 }
 
@@ -461,47 +445,48 @@ set -xe
 setup
 
 echo "TEST: add image and test replay"
+start_mirror ${CLUSTER1_DAEMON} ${CLUSTER1}
 image=test
-create_remote_image ${image}
-wait_for_image_replay_started ${LOC_DAEMON} ${image}
-write_image ${RMT_CLUSTER} ${image} 100
-wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
+create_image ${CLUSTER2} ${image}
+wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image}
+write_image ${CLUSTER2} ${image} 100
+wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
 compare_images ${image}
 
 echo "TEST: stop mirror, add image, start mirror and test replay"
-stop_mirror ${LOC_DAEMON}
+stop_mirror ${CLUSTER1_DAEMON}
 image1=test1
-create_remote_image ${image1}
-write_image ${RMT_CLUSTER} ${image1} 100
-start_mirror ${LOC_DAEMON} ${LOC_CLUSTER}
-wait_for_image_replay_started ${LOC_DAEMON} ${image1}
-wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image1}
+create_image ${CLUSTER2} ${image1}
+write_image ${CLUSTER2} ${image1} 100
+start_mirror ${CLUSTER1_DAEMON} ${CLUSTER1}
+wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image1}
+wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image1}
 compare_images ${image1}
 
 echo "TEST: test the first image is replaying after restart"
-write_image ${RMT_CLUSTER} ${image} 100
-wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
+write_image ${CLUSTER2} ${image} 100
+wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
 compare_images ${image}
 
 echo "TEST: failover and failback"
-start_mirror ${RMT_DAEMON} ${RMT_CLUSTER}
+start_mirror ${CLUSTER2_DAEMON} ${CLUSTER2}
 
 # failover
-demote_image ${RMT_CLUSTER} ${image}
-wait_for_image_replay_stopped ${LOC_DAEMON} ${image}
-promote_image ${LOC_CLUSTER} ${image}
-wait_for_image_replay_started ${RMT_DAEMON} ${image}
-write_image ${LOC_CLUSTER} ${image} 100
-wait_for_replay_complete ${RMT_DAEMON} ${LOC_CLUSTER} ${image}
+demote_image ${CLUSTER2} ${image}
+wait_for_image_replay_stopped ${CLUSTER1_DAEMON} ${image}
+promote_image ${CLUSTER1} ${image}
+wait_for_image_replay_started ${CLUSTER2_DAEMON} ${image}
+write_image ${CLUSTER1} ${image} 100
+wait_for_replay_complete ${CLUSTER2_DAEMON} ${CLUSTER1} ${image}
 compare_images ${image}
 
 # failback
-demote_image ${LOC_CLUSTER} ${image}
-wait_for_image_replay_stopped ${RMT_DAEMON} ${image}
-promote_image ${RMT_CLUSTER} ${image}
-wait_for_image_replay_started ${LOC_DAEMON} ${image}
-write_image ${RMT_CLUSTER} ${image} 100
-wait_for_replay_complete ${LOC_DAEMON} ${RMT_CLUSTER} ${image}
+demote_image ${CLUSTER1} ${image}
+wait_for_image_replay_stopped ${CLUSTER2_DAEMON} ${image}
+promote_image ${CLUSTER2} ${image}
+wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image}
+write_image ${CLUSTER2} ${image} 100
+wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
 compare_images ${image}
 
 echo OK
