@@ -59,6 +59,8 @@ class C_handle_notify : public EventCallback {
 #undef dout_prefix
 #define dout_prefix _event_prefix(_dout)
 
+thread_local EventCenter* local_center;
+
 /**
  * Construct a Poller.
  *
@@ -109,6 +111,7 @@ int EventCenter::init(int n, unsigned idx)
   assert(nevent == 0);
 
   local_id = id = idx;
+  local_center = this;
 
   driver = nullptr;
   if (cct->_conf->ms_async_transport_type == "dpdk") {

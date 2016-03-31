@@ -251,5 +251,10 @@ class EventCenter {
   };
 };
 
+extern thread_local EventCenter* local_center;
+
+inline EventCenter& center() {
+    return *local_center;
+}
 
 #endif
