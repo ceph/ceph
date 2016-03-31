@@ -2019,6 +2019,9 @@ int OSD::init()
     daily_loadavg = 1.0;
   }
 
+  int rotating_auth_attempts = 0;
+  const int max_rotating_auth_attempts = 10;
+
   // read superblock
   r = read_superblock();
   if (r < 0) {
@@ -2168,6 +2171,14 @@ int OSD::init()
 
   while (monc->wait_auth_rotating(30.0) < 0) {
     derr << "unable to obtain rotating service keys; retrying" << dendl;
+    ++rotating_auth_attempts;
+    if (rotating_auth_attempts > max_rotating_auth_attempts) {
+        osd_lock.Lock(); // make locker happy
+        if (!is_stopping()) {
+            r = - ETIMEDOUT;
+        }
+        goto monout;
+    }
   }
 
   osd_lock.Lock();
