@@ -2440,9 +2440,6 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_push,      "push", "Push messages sent");       // push messages
   osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes", "Pushed size");  // pushed bytes
 
-  osd_plb.add_u64_counter(l_osd_push_in,    "push_in", "Inbound push messages");        // inbound push messages
-  osd_plb.add_u64_counter(l_osd_push_inb,   "push_in_bytes", "Inbound pushed size");  // inbound pushed bytes
-
   osd_plb.add_u64_counter(l_osd_rop, "recovery_ops",
       "Started recovery operations", "recop");       // recovery ops (started)
 

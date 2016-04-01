@@ -106,9 +106,6 @@ enum {
   l_osd_push,
   l_osd_push_outb,
 
-  l_osd_push_in,
-  l_osd_push_inb,
-
   l_osd_rop,
 
   l_osd_loadavg,
