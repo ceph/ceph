@@ -783,7 +783,7 @@ public:
   }
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
   virtual int read_default_id(string& default_id, bool old_format = false);
-  virtual int set_as_default();
+  virtual int set_as_default(bool exclusive = false);
   int delete_default();
   virtual int create(bool exclusive = true);
   int delete_obj(bool old_format = false);
@@ -884,7 +884,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
   int read_default_id(string& default_id, bool old_format = false);
-  int set_as_default();
+  int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
   int create(bool exclusive = true);
   int fix_pool_names();
@@ -1151,7 +1151,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   }
 
   int read_default_id(string& default_id, bool old_format = false);
-  int set_as_default();
+  int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints);
@@ -1301,7 +1301,7 @@ class RGWRealm : public RGWSystemMetaObj
   string current_period;
   epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
-  int create_control();
+  int create_control(bool exclusive);
   int delete_control();
 public:
   RGWRealm() {}
