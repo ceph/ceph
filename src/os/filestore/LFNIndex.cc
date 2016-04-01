@@ -529,9 +529,10 @@ int LFNIndex::add_attr_path(const vector<string> &path,
 {
   string full_path = get_full_path_subdir(path);
   maybe_inject_failure();
-  return chain_setxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
-		     reinterpret_cast<void *>(attr_value.c_str()),
-		     attr_value.length());
+  return chain_setxattr<false, true>(
+    full_path.c_str(), mangle_attr_name(attr_name).c_str(),
+    reinterpret_cast<void *>(attr_value.c_str()),
+    attr_value.length());
 }
 
 int LFNIndex::get_attr_path(const vector<string> &path,
@@ -853,14 +854,16 @@ int LFNIndex::lfn_created(const vector<string> &path,
 	     << " moving old name to alt attr "
 	     << string(buf, r)
 	     << ", new name is " << full_name << dendl;
-    r = chain_setxattr(full_path.c_str(), get_alt_lfn_attr().c_str(),
-		       buf, r);
+    r = chain_setxattr<false, true>(
+      full_path.c_str(), get_alt_lfn_attr().c_str(),
+      buf, r);
     if (r < 0)
       return r;
   }
 
-  return chain_setxattr(full_path.c_str(), get_lfn_attr().c_str(),
-		     full_name.c_str(), full_name.size());
+  return chain_setxattr<false, true>(
+    full_path.c_str(), get_lfn_attr().c_str(),
+    full_name.c_str(), full_name.size());
 }
 
 int LFNIndex::lfn_unlink(const vector<string> &path,
