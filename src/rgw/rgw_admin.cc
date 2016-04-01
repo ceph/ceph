@@ -112,7 +112,7 @@ void _usage()
   cerr << "  replicalog get             get replica metadata log entry\n";
   cerr << "  replicalog update          update replica metadata log entry\n";
   cerr << "  replicalog delete          delete replica metadata log entry\n";
-  cerr << "  orphans find               init and run search for leaked rados objects\n";
+  cerr << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cerr << "  orphans finish             clean up search for leaked rados objects\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
@@ -183,6 +183,8 @@ void _usage()
   cerr << "\nOrphans search options:\n";
   cerr << "   --pool                    data pool to scan for leaked rados objects in\n";
   cerr << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cerr << "   --job-id                  set the job id (for orphans find)\n";
+  cerr << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cerr << "\n";
   generic_client_usage();
 }
