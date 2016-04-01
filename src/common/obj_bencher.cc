@@ -45,11 +45,10 @@ static std::string generate_object_prefix_nopid() {
 }
 
 static std::string generate_object_prefix(int pid = 0) {
-  if (!cached_pid) {
-    if (!pid)
-      pid = getpid();
+  if (pid)
     cached_pid = pid;
-  }
+  else if (!cached_pid)
+    cached_pid = getpid();
 
   std::ostringstream oss;
   oss << generate_object_prefix_nopid() << "_" << cached_pid;
@@ -58,19 +57,9 @@ static std::string generate_object_prefix(int pid = 0) {
 
 static std::string generate_object_name(int objnum, int pid = 0)
 {
-  if (cached_hostname[0] == 0) {
-    gethostname(cached_hostname, sizeof(cached_hostname)-1);
-    cached_hostname[sizeof(cached_hostname)-1] = 0;
-  }
-  if (!cached_pid) {
-    if (!pid)
-      pid = getpid();
-    cached_pid = pid;
-  }
-
-  char name[1024];
-  size_t l = sprintf(&name[0], "%s_%s_%d_object%d", BENCH_PREFIX.c_str(), cached_hostname, cached_pid, objnum);
-  return string(&name[0], l);
+  std::ostringstream oss;
+  oss << generate_object_prefix(pid) << "_object" << objnum;
+  return oss.str();
 }
 
 static void sanitize_object_contents (bench_data *data, size_t length) {
@@ -1095,29 +1084,57 @@ int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, cons
   size_t op_size, object_size;
   int num_objects;
   int prevPid;
-  std::string prefix = orig_prefix;
 
   // default meta object if user does not specify one
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
+  const std::string prefix = (orig_prefix.empty() ? generate_object_prefix_nopid() : orig_prefix);
 
-  r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &prevPid);
-  if (r < 0) {
-    // if the metadata file is not found we should try to do a linear search on the prefix
-    if (r == -ENOENT) {
-      if (prefix == "")
-	prefix = generate_object_prefix_nopid();
-      return clean_up_slow(prefix, concurrentios);
-    }
-    else {
-      return r;
+  std::list<Object> unfiltered_objects;
+  std::set<std::string> meta_namespaces, all_namespaces;
+
+  // If caller set all_nspaces this will be searching
+  // across multiple namespaces.
+  while (true) {
+    bool objects_remain = get_objects(&unfiltered_objects, 20);
+    if (!objects_remain)
+      break;
+
+    std::list<Object>::const_iterator i = unfiltered_objects.begin();
+    for ( ; i != unfiltered_objects.end(); ++i) {
+      if (i->first == run_name_meta) {
+        meta_namespaces.insert(i->second);
+      }
+      if (i->first.substr(0, prefix.length()) == prefix) {
+        all_namespaces.insert(i->second);
+      }
     }
   }
 
-  r = clean_up(num_objects, prevPid, concurrentios);
-  if (r != 0) return r;
+  std::set<std::string>::const_iterator i = all_namespaces.begin();
+  for ( ; i != all_namespaces.end(); ++i) {
+    set_namespace(*i);
 
-  r = sync_remove(run_name_meta);
-  if (r != 0) return r;
+    // if no metadata file found we should try to do a linear search on the prefix
+    if (meta_namespaces.find(*i) == meta_namespaces.end()) {
+      int r = clean_up_slow(prefix, concurrentios);
+      if (r < 0) {
+        cerr << "clean_up_slow error r= " << r << std::endl;
+        return r;
+      }
+      continue;
+    }
+
+    r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &prevPid);
+    if (r < 0) {
+      return r;
+    }
+
+    r = clean_up(num_objects, prevPid, concurrentios);
+    if (r != 0) return r;
+
+    r = sync_remove(run_name_meta);
+    if (r != 0) return r;
+  }
 
   return 0;
 }
@@ -1240,6 +1257,8 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   lock.Unlock();
 
   completions_done();
+
+  out(cout) << "Removed " << data.finished << " object" << (data.finished != 1 ? "s" : "") << std::endl;
 
   return 0;
 
