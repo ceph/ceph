@@ -1245,6 +1245,7 @@ bool MDSDaemon::handle_core_message(Message *m)
     if (mds_rank) {
       mds_rank->handle_osd_map();
     }
+    m->put();
     break;
 
   default:
