@@ -8,6 +8,13 @@
 
 #define DEBUGGER
 
+/*
+ * The prop_heap does not seem to be necessary. The only thing it
+ * would help with is quickly finding the mininum proportion/prioity
+ * when an idle client became active
+ */
+// #define USE_PROP_HEAP 
+
 #pragma once
 
 
@@ -281,7 +288,7 @@ namespace crimson {
 
       // specifies which queue next request will get popped from
       enum class HeapId { reservation, ready
-#if REMOVE_2
+#if USE_PROP_HEAP
 	  , proportional
 #endif
 	  };
@@ -377,27 +384,27 @@ namespace crimson {
 		      &ClientRec::reserv_heap_data,
 		      ClientCompare<&RequestTag::reservation,
 				    ReadyOption::ignore,
-				    false>> reserv_q;
-#if REMOVE_2
+				    false>> resv_heap;
+#if USE_PROP_HEAP
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::prop_heap_data,
 		      ClientCompare<&RequestTag::proportion,
 				    ReadyOption::ignore,
-				    true>> prop_q;
+				    true>> prop_heap;
 #endif
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::lim_heap_data,
 		      ClientCompare<&RequestTag::limit,
 				    ReadyOption::lowers,
-				    false>> limit_q;
+				    false>> limit_heap;
       c::IndIntruHeap<ClientRecRef,
 		      ClientRec,
 		      &ClientRec::ready_heap_data,
 		      ClientCompare<&RequestTag::proportion,
 				    ReadyOption::raises,
-				    true>> ready_q;
+				    true>> ready_heap;
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
@@ -545,14 +552,6 @@ namespace crimson {
       }
 
 
-      void mark_as_idle(const C& client_id) {
-	auto client_it = client_map.find(client_id);
-	if (client_map.end() != client_it) {
-	  client_it->second.idle = true;
-	}
-      }
-
-
       void add_request(const R& request,
 		       const ReqParams<C>& req_params,
 		       const Time& time) {
@@ -578,12 +577,12 @@ namespace crimson {
 	  ClientInfo info = client_info_f(client_id);
 	  ClientRecRef client_rec =
 	    std::make_shared<ClientRec>(client_id, info, tick);
-	  reserv_q.push(client_rec);
-#if REMOVE_2
-	  prop_q.push(client_rec);
+	  resv_heap.push(client_rec);
+#if USE_PROP_HEAP
+	  prop_heap.push(client_rec);
 #endif
-	  limit_q.push(client_rec);
-	  ready_q.push(client_rec);
+	  limit_heap.push(client_rec);
+	  ready_heap.push(client_rec);
 	  client_map[client_id] = client_rec;
 	  temp_client = &(*client_rec); // address of obj of shared_ptr
 	}
@@ -623,20 +622,17 @@ namespace crimson {
 	  client.idle = false;
 	} // if this client was idle
 
-	RequestTag tag(client.get_req_tag(),
-		       client.info,
-		       req_params,
-		       time);
+	RequestTag tag(client.get_req_tag(), client.info, req_params, time);
 	client.add_request(tag, std::move(request));
 
 	// copy tag to previous tag for client
 	client.update_req_tag(tag, tick);
 
-	reserv_q.adjust(client);
-	limit_q.adjust(client);
-	ready_q.adjust(client);
-#if REMOVE_2
-	prop_q.adjust(client);
+	resv_heap.adjust(client);
+	limit_heap.adjust(client);
+	ready_heap.adjust(client);
+#if USE_PROP_HEAP
+	prop_heap.adjust(client);
 #endif
 
 	if (Mechanism::push == mechanism) {
@@ -690,18 +686,18 @@ namespace crimson {
 
 	switch(next.heap_id) {
 	case HeapId::reservation:
-	  pop_process_request(reserv_q,
+	  pop_process_request(resv_heap,
 			      process_f(result, PhaseType::reservation));
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pop_process_request(ready_q, process_f(result, PhaseType::priority));
+	  pop_process_request(ready_heap, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
-#if REMOVE_2
+#if USE_PROP_HEAP
 	case HeapId::proportional:
-	  pop_process_request(prop_q, process_f(result, PhaseType::priority));
+	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
@@ -727,12 +723,12 @@ namespace crimson {
 
 	// pop request and adjust heaps
 	top.pop_request();
-	reserv_q.demote(top);
-	limit_q.demote(top);
-#if REMOVE_2
-	prop_q.demote(top);
+	resv_heap.demote(top);
+	limit_heap.demote(top);
+#if USE_PROP_HEAP
+	prop_heap.demote(top);
 #endif
-	ready_q.demote(top);
+	ready_heap.demote(top);
 
 	// process
 	process(top.client, request);
@@ -764,17 +760,17 @@ namespace crimson {
 			  bool show_prop = true) {
 	auto filter = [](const ClientRecRef& e)->bool { return !e->handled; };
 	if (show_res) {
-	  reserv_q.display_sorted(std::cout << "RESER:", filter) << std::endl;
+	  resv_heap.display_sorted(std::cout << "RESER:", filter) << std::endl;
 	}
 	if (show_lim) {
-	  limit_q.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
+	  limit_heap.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
 	}
 	if (show_ready) {
-	  ready_q.display_sorted(std::cout << "READY:", filter) << std::endl;
+	  ready_heap.display_sorted(std::cout << "READY:", filter) << std::endl;
 	}
-#if REMOVE_2
+#if USE_PROP_HEAP
 	if (show_prop) {
-	  prop_q.display_sorted(std::cout << "PROPO:", filter) << std::endl;
+	  prop_heap.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
 #endif
       }
@@ -787,7 +783,7 @@ namespace crimson {
 	}
 	// don't forget to update previous tag
 	client.prev_tag.reservation -= client.info.reservation_inv;
-	reserv_q.promote(client);
+	resv_heap.promote(client);
       }
 
 
@@ -826,19 +822,19 @@ namespace crimson {
 	switch(heap_id) {
 	case HeapId::reservation:
 	  // don't need to note client
-	  (void) submit_top_request(reserv_q, PhaseType::reservation);
+	  (void) submit_top_request(resv_heap, PhaseType::reservation);
 	  // unlike the other two cases, we do not reduce reservation
 	  // tags here
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  client = submit_top_request(ready_q, PhaseType::priority);
+	  client = submit_top_request(ready_heap, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++prop_sched_count;
 	  break;
-#if REMOVE_2
+#if USE_PROP_HEAP
 	case HeapId::proportional:
-	  client = submit_top_request(prop_q, PhaseType::priority);
+	  client = submit_top_request(prop_heap, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++limit_break_sched_count;
 	  break;
@@ -859,7 +855,7 @@ namespace crimson {
 	}
 
 	// if reservation queue is empty, all are empty (i.e., no active clients)
-	if(reserv_q.empty()) {
+	if(resv_heap.empty()) {
 	  result.type = NextReqType::none;
 	  return result;
 	}
@@ -868,7 +864,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-	auto& reserv = reserv_q.top();
+	auto& reserv = resv_heap.top();
 	if (reserv.has_request() &&
 	    reserv.next_request().tag.reservation <= now) {
 	  result.type = NextReqType::returning;
@@ -881,18 +877,18 @@ namespace crimson {
 
 	// all items that are within limit are eligible based on
 	// priority
-	auto limits = &limit_q.top();
+	auto limits = &limit_heap.top();
 	while (limits->has_request() &&
 	       !limits->next_request().tag.ready &&
 	       limits->next_request().tag.limit <= now) {
 	  limits->next_request().tag.ready = true;
-	  ready_q.promote(*limits);
-	  limit_q.demote(*limits);
+	  ready_heap.promote(*limits);
+	  limit_heap.demote(*limits);
 
-	  limits = &limit_q.top();
+	  limits = &limit_heap.top();
 	}
 
-	auto readys = &ready_q.top();
+	auto readys = &ready_heap.top();
 	if (readys->has_request() &&
 	    (readys->next_request().tag.ready || allow_limit_break)) {
 	  result.type = NextReqType::returning;
@@ -904,13 +900,13 @@ namespace crimson {
 	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
-	if (reserv_q.top().has_request()) {
+	if (resv_heap.top().has_request()) {
 	  next_call =
 	    min_not_0_time(next_call,
-			   reserv_q.top().next_request().tag.reservation);
+			   resv_heap.top().next_request().tag.reservation);
 	}
-	if (limit_q.top().has_request()) {
-	  const auto& next = limit_q.top().next_request();
+	if (limit_heap.top().has_request()) {
+	  const auto& next = limit_heap.top().next_request();
 	  assert(!next.tag.ready);
 	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
@@ -1030,12 +1026,12 @@ namespace crimson {
 
 
       void delete_from_heaps(ClientRecRef& client) {
-	delete_from_heap(client, reserv_q);
-#if REMOVE_2
-	delete_from_heap(client, prop_q);
+	delete_from_heap(client, resv_heap);
+#if USE_PROP_HEAP
+	delete_from_heap(client, prop_heap);
 #endif
-	delete_from_heap(client, limit_q);
-	delete_from_heap(client, ready_q);
+	delete_from_heap(client, limit_heap);
+	delete_from_heap(client, ready_heap);
       }
     }; // class PriorityQueue
   } // namespace dmclock
