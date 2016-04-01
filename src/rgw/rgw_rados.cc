@@ -350,7 +350,7 @@ int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
   return RGWSystemMetaObj::read_default_id(default_id, old_format);
 }
 
-int RGWZoneGroup::set_as_default()
+int RGWZoneGroup::set_as_default(bool exclusive)
 {
   if (realm_id.empty()) {
     /* try using default realm */
@@ -363,7 +363,7 @@ int RGWZoneGroup::set_as_default()
     realm_id = realm.get_id();
   }
 
-  return RGWSystemMetaObj::set_as_default();
+  return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
 int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, bool old_format)
@@ -441,7 +441,7 @@ int RGWSystemMetaObj::use_default(bool old_format)
   return read_default_id(id, old_format);
 }
 
-int RGWSystemMetaObj::set_as_default()
+int RGWSystemMetaObj::set_as_default(bool exclusive)
 {
   string pool_name = get_pool_name(cct);
   string oid  = get_default_oid();
@@ -454,7 +454,8 @@ int RGWSystemMetaObj::set_as_default()
 
   ::encode(default_info, bl);
 
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, real_time(), NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(),
+                               exclusive, NULL, real_time(), NULL);
   if (ret < 0)
     return ret;
 
@@ -688,22 +689,13 @@ const string& RGWRealm::get_predefined_name(CephContext *cct) {
 
 int RGWRealm::create(bool exclusive)
 {
-  list<string> realms;
-  int ret = store->list_realms(realms);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "ERROR: listing realms, ret=" << ret << dendl;
-    return ret;
-  }
-
-  bool first_realm = realms.empty();
-
-  ret = RGWSystemMetaObj::create(exclusive);
+  int ret = RGWSystemMetaObj::create(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   // create the control object for watch/notify
-  ret = create_control();
+  ret = create_control(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating control for new realm " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -733,12 +725,11 @@ int RGWRealm::create(bool exclusive)
     ldout(cct, 0) << "ERROR: failed set current period " << current_period << dendl;
     return ret;
   }
-
-  if (first_realm) { /* this is racy, but it's fine */
-    ret = set_as_default();
-    if (ret < 0) {
-      ldout(cct, 0) << "WARNING: failed to set realm as default realm, ret=" << ret << dendl;
-    }
+  // try to set as default. may race with another create, so pass exclusive=true
+  // so we don't override an existing default
+  ret = set_as_default(true);
+  if (ret < 0 && ret != -EEXIST) {
+    ldout(cct, 0) << "WARNING: failed to set realm as default realm, ret=" << ret << dendl;
   }
 
   return 0;
@@ -753,12 +744,12 @@ int RGWRealm::delete_obj()
   return delete_control();
 }
 
-int RGWRealm::create_control()
+int RGWRealm::create_control(bool exclusive)
 {
   auto pool_name = get_pool_name(cct);
   auto pool = rgw_bucket{pool_name.c_str()};
   auto oid = get_control_oid();
-  return rgw_put_system_obj(store, pool, oid, nullptr, 0, true,
+  return rgw_put_system_obj(store, pool, oid, nullptr, 0, exclusive,
                             nullptr, real_time(), nullptr);
 }
 
@@ -1485,15 +1476,9 @@ int RGWZoneParams::fix_pool_names()
 
 int RGWZoneParams::create(bool exclusive)
 {
-  list<string> zones;
-  int r = store->list_zones(zones);
-  if (r < 0) {
-    ldout(cct, 10) << "WARNING: store->list_zones() returned r=" << r << dendl;
-  }
-
   /* check for old pools config */
   rgw_obj obj(domain_root, avail_pools);
-  r = store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  int r = store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
   if (r < 0) {
     ldout(store->ctx(), 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
@@ -1516,11 +1501,11 @@ int RGWZoneParams::create(bool exclusive)
     return r;
   }
 
-  if (zones.empty()) { /* first zone? maybe, it's a racy check */
-    r = set_as_default();
-    if (r < 0) {
-      ldout(cct, 10) << "WARNING: failed to set zone as default, r=" << r << dendl;
-    }
+  // try to set as default. may race with another create, so pass exclusive=true
+  // so we don't override an existing default
+  r = set_as_default(true);
+  if (r < 0 && r != -EEXIST) {
+    ldout(cct, 10) << "WARNING: failed to set zone as default, r=" << r << dendl;
   }
 
   return 0;
@@ -1589,7 +1574,7 @@ int RGWZoneParams::read_default_id(string& default_id, bool old_format)
 }
 
 
-int RGWZoneParams::set_as_default()
+int RGWZoneParams::set_as_default(bool exclusive)
 {
   if (realm_id.empty()) {
     /* try using default realm */
@@ -1602,7 +1587,7 @@ int RGWZoneParams::set_as_default()
     realm_id = realm.get_id();
   }
 
-  return RGWSystemMetaObj::set_as_default();
+  return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
 void RGWPeriodMap::encode(bufferlist& bl) const {
