@@ -151,7 +151,7 @@ void _usage()
   cout << "  replicalog get             get replica metadata log entry\n";
   cout << "  replicalog update          update replica metadata log entry\n";
   cout << "  replicalog delete          delete replica metadata log entry\n";
-  cout << "  orphans find               init and run search for leaked rados objects\n";
+  cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
@@ -238,6 +238,8 @@ void _usage()
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cout << "   --job-id                  set the job id (for orphans find)\n";
+  cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\n";
   generic_client_usage();
 }
