@@ -15,6 +15,7 @@
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "objclass/objclass.h"
+#include "osd/osd_types.h"
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
 #include <deque>
@@ -1157,6 +1158,29 @@ int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->write_full(ctx->oid, *inbl, ctx->snapc);
+}
+
+int cls_cxx_list_watchers(cls_method_context_t hctx,
+			  obj_list_watch_response_t *watchers) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+
+  std::list<obj_watch_t> obj_watchers;
+  int r = ctx->io_ctx_impl->list_watchers(ctx->oid, &obj_watchers);
+  if (r < 0) {
+    return r;
+  }
+
+  for (auto &w : obj_watchers) {
+    watch_item_t watcher;
+    watcher.name = entity_name_t::CLIENT(w.watcher_id);
+    watcher.cookie = w.cookie;
+    watcher.timeout_seconds = w.timeout_seconds;
+    watcher.addr.parse(w.addr, 0);
+    watchers->entries.push_back(watcher);
+  }
+
+  return 0;
 }
 
 int cls_log(int level, const char *format, ...) {
