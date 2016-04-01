@@ -51,7 +51,7 @@ build-stamp: configure-stamp
 
 	$(MAKE)
 
-	cp src/init-ceph debian/ceph-base.init
+	cp src/init-ceph debian/ceph-base.ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
 
@@ -67,7 +67,7 @@ clean:
 	  ltmain.sh missing
 	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
 	rm -f src/acconfig.h.in
-	rm -f debian/ceph-base.init debian/radosgw.init debian/ceph.logrotate debian/radosgw.logrotate
+	rm -f debian/ceph-base.ceph.init debian/radosgw.init debian/ceph.logrotate debian/radosgw.logrotate
 
 	dh_clean
 
@@ -117,7 +117,8 @@ binary-arch: build install
 	dh_install -a --sourcedir=$(DESTDIR) --list-missing
 	install -d -m0755 debian/ceph-base/etc/logrotate.d
 	install -m0644 debian/ceph.logrotate debian/ceph-base/etc/logrotate.d
-	dh_installinit -a --no-start
+	dh_installinit -p ceph-base --name ceph --no-start
+	dh_installinit -p radosgw --no-start
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph-base/etc/init
