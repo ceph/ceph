@@ -7096,7 +7096,17 @@ void OSD::handle_pg_create(OpRequestRef op)
      * cannot be on the other side of a map gap
      */
     assert(valid_history);
-    
+
+    // The mon won't resend unless the primary changed, so
+    // we ignore same_interval_since.
+    if (history.same_primary_since > m->epoch) {
+      dout(10) << __func__ << ": got obsolete pg create on pgid "
+               << pgid << " from epoch " << m->epoch
+               << ", primary changed in " << history.same_primary_since
+               << dendl;
+      continue;
+    }
+
     // register.
     creating_pgs[pgid].history = history;
     creating_pgs[pgid].parent = parent;
