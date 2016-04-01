@@ -801,6 +801,7 @@ int MDSDaemon::_handle_command(
     if (mds_rank == NULL) {
       r = -EINVAL;
       ss << "MDS not active";
+      goto out;
     }
     // FIXME harmonize `session kill` with admin socket session evict
     int64_t session_id = 0;
