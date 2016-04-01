@@ -553,15 +553,27 @@ namespace crimson {
 
 
       void add_request(const R& request,
+		       const ReqParams<C>& req_params) {
+	add_request(RequestRef(new R(request)), req_params, get_time());
+      }
+
+      
+      void add_request(RequestRef&& request,
+		       const ReqParams<C>& req_params) {
+	add_request(request, req_params, get_time());
+      }
+
+      
+      void add_request(const R& request,
 		       const ReqParams<C>& req_params,
-		       const Time& time) {
+		       const Time time) {
 	add_request(RequestRef(new R(request)), req_params, time);
       }
 
 
       void add_request(RequestRef&& request,
 		       const ReqParams<C>& req_params,
-		       const Time& time) {
+		       const Time time) {
 	const C& client_id = req_params.client;
 	DataGuard g(data_mtx);
 	++tick;
@@ -847,6 +859,12 @@ namespace crimson {
 
       // data_mtx should be held when called
       NextReq next_request() {
+	return next_request(get_time());
+      }
+
+      
+      // data_mtx should be held when called
+      NextReq next_request(Time now) {
 	NextReq result;
 	
 	if (Mechanism::push == mechanism && !can_handle_f()) {
@@ -859,8 +877,6 @@ namespace crimson {
 	  result.type = NextReqType::none;
 	  return result;
 	}
-
-	Time now = get_time();
 
 	// try constraint (reservation) based scheduling
 
