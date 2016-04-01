@@ -12,3 +12,7 @@ overrides:
   ceph:
     log-whitelist:
     - failed to encode map
+    conf:
+      client:
+        rbd default format: 1
+        rbd default features: 1
