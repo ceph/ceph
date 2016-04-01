@@ -51,7 +51,7 @@ def shutdown_daemons(ctx):
     ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
                           'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
                           'sudo', 'systemctl', 'stop', 'ceph.target'],
-                    check_status=False)
+                    check_status=False, timeout=180)
     ctx.cluster.run(
             args=[
                 'if', 'grep', '-q', 'ceph-fuse', '/etc/mtab', run.Raw(';'),
@@ -86,6 +86,7 @@ def shutdown_daemons(ctx):
                 run.Raw('||'),
                 'true',  # ignore errors from ceph binaries not being found
             ],
+            timeout=120,
         )
 
 
@@ -96,7 +97,7 @@ def kill_hadoop(ctx):
             run.Raw("|"), "grep", "-v", "grep",
             run.Raw("|"), 'awk', '{print $2}',
             run.Raw("|"), 'xargs', 'kill', '-9',
-            ], check_status=False)
+            ], check_status=False, timeout=60)
 
 
 def remove_kernel_mounts(ctx):
@@ -115,6 +116,7 @@ def remove_kernel_mounts(ctx):
                 'fi'
             ],
             check_status=False,
+            timeout=60
         )
 
 
@@ -133,6 +135,7 @@ def remove_osd_mounts(ctx):
             'sudo', 'umount', run.Raw(';'),
             'true'
         ],
+        timeout=120
     )
 
 
@@ -148,6 +151,7 @@ def remove_osd_tmpfs(ctx):
             'sudo', 'umount', run.Raw(';'),
             'true'
         ],
+        timeout=120
     )
 
 
@@ -194,6 +198,7 @@ def reset_syslog_dir(ctx):
                 'fi',
                 run.Raw(';'),
             ],
+            timeout=60,
         )
         nodes[remote.name] = proc
 
@@ -217,6 +222,7 @@ def dpkg_configure(ctx):
                 run.Raw('||'),
                 ':',
             ],
+            timeout=180,
             check_status=False,
         )
 
@@ -229,7 +235,7 @@ def remove_yum_timedhosts(ctx):
             continue
         remote.run(
             args="sudo find /var/cache/yum -name 'timedhosts' -exec rm {} \;",
-            check_status=False
+            check_status=False, timeout=180
         )
 
 
@@ -346,6 +352,7 @@ def remove_configuration_files(ctx):
             args=[
                 'rm', '-f', '/home/ubuntu/.cephdeploy.conf'
             ],
+            timeout=30
         )
 
 
@@ -360,7 +367,8 @@ def undo_multipath(ctx):
             args=[
                 'sudo', 'multipath', '-F',
             ],
-            check_status=False
+            check_status=False,
+            timeout=60
         )
 
 
@@ -378,6 +386,7 @@ def synch_clocks(remotes):
                 run.Raw('||'),
                 'true',    # ignore errors; we may be racing with ntpd startup
             ],
+            timeout=60,
         )
 
 
