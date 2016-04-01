@@ -5,6 +5,9 @@
 #define __CEPH_OSD_CHAIN_XATTR_H
 
 #include "common/xattr.h"
+#include "include/assert.h"
+#include <string.h>
+#include <stdio.h>
 
 #include <errno.h>
 
@@ -78,8 +81,98 @@ static inline int sys_fremovexattr(int fd, const char *name)
 
 int chain_getxattr(const char *fn, const char *name, void *val, size_t size);
 int chain_fgetxattr(int fd, const char *name, void *val, size_t size);
-int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, bool onechunk=false);
-int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool onechunk=false);
+
+int get_xattr_block_size(size_t size);
+void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len);
+
+template <bool skip_chain_cleanup=false, bool ensure_single_attr=false>
+int chain_setxattr(
+  const char *fn, const char *name, const void *val, size_t size)
+{
+  int i = 0, pos = 0;
+  char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  size_t max_chunk_size =
+    ensure_single_attr ? size : get_xattr_block_size(size);
+
+  static_assert(
+    !skip_chain_cleanup || ensure_single_attr,
+    "skip_chain_cleanup must imply ensure_single_attr");
+
+  do {
+    size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    int r = sys_setxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+    pos  += chunk_size;
+    ret = pos;
+    i++;
+    assert(size == 0 || !ensure_single_attr);
+  } while (size);
+
+  if (ret >= 0 && !skip_chain_cleanup) {
+    int r;
+    do {
+      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+      r = sys_removexattr(fn, raw_name);
+      if (r < 0 && r != -ENODATA)
+	ret = r;
+      i++;
+    } while (r != -ENODATA);
+  }
+
+  return ret;
+}
+
+template <bool skip_chain_cleanup=false, bool ensure_single_attr=false>
+int chain_fsetxattr(
+  int fd, const char *name, const void *val, size_t size)
+{
+  int i = 0, pos = 0;
+  char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
+  int ret = 0;
+  size_t max_chunk_size =
+    ensure_single_attr ? size : get_xattr_block_size(size);
+
+  static_assert(
+    !skip_chain_cleanup || ensure_single_attr,
+    "skip_chain_cleanup must imply ensure_single_attr");
+
+  do {
+    size_t chunk_size = (size < max_chunk_size ? size : max_chunk_size);
+    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+    size -= chunk_size;
+
+    int r = sys_fsetxattr(fd, raw_name, (char *)val + pos, chunk_size);
+    if (r < 0) {
+      ret = r;
+      break;
+    }
+    pos  += chunk_size;
+    ret = pos;
+    i++;
+    assert(size == 0 || !ensure_single_attr);
+  } while (size);
+
+  if (ret >= 0 && !skip_chain_cleanup) {
+    int r;
+    do {
+      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+      r = sys_fremovexattr(fd, raw_name);
+      if (r < 0 && r != -ENODATA)
+	ret = r;
+      i++;
+    } while (r != -ENODATA);
+  }
+
+  return ret;
+}
+
 int chain_listxattr(const char *fn, char *names, size_t len);
 int chain_flistxattr(int fd, char *names, size_t len);
 int chain_removexattr(const char *fn, const char *name);
