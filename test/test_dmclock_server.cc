@@ -95,14 +95,14 @@ namespace crimson {
 
       lock_pq([&] () {
 	  EXPECT_EQ(1, pq.client_map.size()) << "client map has 1 after 1 client";
-	  EXPECT_FALSE(pq.client_map.at(client).idle) <<
+	  EXPECT_FALSE(pq.client_map.at(client)->idle) <<
 	    "initially client map entry shows not idle.";
 	});
 
       std::this_thread::sleep_for(std::chrono::seconds(6));
 
       lock_pq([&] () {
-	  EXPECT_TRUE(pq.client_map.at(client).idle) <<
+	  EXPECT_TRUE(pq.client_map.at(client)->idle) <<
 	    "after idle age client map entry shows idle.";
 	});
 

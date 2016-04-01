@@ -24,7 +24,7 @@ namespace crimson {
     using Lock      = std::unique_lock<std::mutex>;
     using Guard     = std::lock_guard<std::mutex>;
     using TimePoint = std::chrono::steady_clock::time_point;
-        
+
     bool                      finishing = false;
     std::chrono::milliseconds wait_period;
     std::function<void()>     body;

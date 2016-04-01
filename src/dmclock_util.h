@@ -14,6 +14,7 @@
 #include <sys/time.h>
 
 #include <limits>
+#include <cmath>
 
 
 namespace crimson {
@@ -24,6 +25,7 @@ namespace crimson {
     using Time = double;
     static const Time TimeZero = 0.0;
     static const Time TimeMax = std::numeric_limits<Time>::max();
+    static const double NaN = nan("");
 
 
     inline Time get_time() {

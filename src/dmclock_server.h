@@ -8,12 +8,19 @@
 
 #define DEBUGGER
 
+/*
+ * The prop_heap does not seem to be necessary. The only thing it
+ * would help with is quickly finding the mininum proportion/prioity
+ * when an idle client became active
+ */
+// #define USE_PROP_HEAP 
 
 #pragma once
 
 
 #include <assert.h>
 
+#include <cmath>
 #include <memory>
 #include <map>
 #include <deque>
@@ -24,8 +31,10 @@
 #include <thread>
 #include <iostream>
 
-#include "crimson/heap.h"
-#include "crimson/run_every.h"
+#include "boost/variant.hpp"
+
+#include "indirect_intrusive_heap.h"
+#include "run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
@@ -71,6 +80,7 @@ namespace crimson {
       double reservation;
       double proportion;
       double limit;
+      bool   ready; // true when within limit
 
       template<typename I>
       RequestTag(const RequestTag& prev_tag,
@@ -88,7 +98,8 @@ namespace crimson {
 	limit(tag_calc(time,
 		       prev_tag.limit,
 		       client.limit_inv,
-		       req_params.delta))
+		       req_params.delta)),
+	ready(false)
       {
 	// empty
       }
@@ -96,7 +107,8 @@ namespace crimson {
       RequestTag(double _res, double _prop, double _lim) :
 	reservation(_res),
 	proportion(_prop),
-	limit(_lim)
+	limit(_lim),
+	ready(false)
       {
 	// empty
       }
@@ -104,7 +116,8 @@ namespace crimson {
       RequestTag(const RequestTag& other) :
 	reservation(other.reservation),
 	proportion(other.proportion),
-	limit(other.limit)
+	limit(other.limit),
+	ready(other.ready)
       {
 	// empty
       }
@@ -148,19 +161,62 @@ namespace crimson {
       using Duration = std::chrono::milliseconds;
       using MarkPoint = std::pair<TimePoint,Counter>;
 
+      enum class ReadyOption {ignore, lowers, raises};
 
-      class ClientRec {
-	// we're keeping this private to force callers to use
-	// update_req_tag, to make sure the tick gets updated
-	RequestTag         prev_tag;
+      // forward decl for friend decls
+      template<double RequestTag::*, ReadyOption, bool>
+      struct ClientCompare;
+
+
+      class ClientReq {
+	friend PriorityQueue;
+
+	RequestTag          tag;
+	RequestRef          request;
 
       public:
 
-	ClientInfo         info;
-	bool               idle;
-	Counter            last_tick;
+	ClientReq(const RequestTag& _tag,
+		  RequestRef&&      _request) :
+	  tag(_tag),
+	  request(std::move(_request))
+	{
+	  // empty
+	}
 
-	ClientRec(const ClientInfo& _info, Counter current_tick) :
+	friend std::ostream& operator<<(std::ostream& out, const ClientReq& c) {
+	  out << c.tag;
+	  return out;
+	}
+      }; // class ClientReq
+
+
+      class ClientRec {
+	friend PriorityQueue<C,R>;
+
+	C                     client;
+	RequestTag            prev_tag;
+	std::deque<ClientReq> requests;
+
+	// amount added from the proportion tag as a result of
+	// an idle client becoming unidle
+	double                prop_delta = 0.0;
+
+	c::IndIntruHeapData   reserv_heap_data;
+	c::IndIntruHeapData   lim_heap_data;
+	c::IndIntruHeapData   ready_heap_data;
+	c::IndIntruHeapData   prop_heap_data;
+
+      public:
+
+	ClientInfo            info;
+	bool                  idle;
+	Counter               last_tick;
+
+	ClientRec(C _client,
+		  const ClientInfo& _info,
+		  Counter current_tick) :
+	  client(_client),
 	  prev_tag(0.0, 0.0, 0.0),
 	  info(_info),
 	  idle(true),
@@ -187,50 +243,39 @@ namespace crimson {
 				      bool adjust_by_inc = false) {
 	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
 	}
+
+	inline void add_request(const RequestTag& tag, RequestRef&& request) {
+	  requests.emplace_back(ClientReq(tag, std::move(request)));
+	}
+
+	inline const ClientReq& next_request() const {
+	  return requests.front();
+	}
+
+	inline ClientReq& next_request() {
+	  return requests.front();
+	}
+
+	inline void pop_request() {
+	  requests.pop_front();
+	}
+
+	inline bool has_request() const {
+	  return !requests.empty();
+	}
+
+	friend std::ostream&
+	operator<<(std::ostream& out,
+		   const typename PriorityQueue<C,R>::ClientRec& e) {
+	  out << "{ client:" << e.client << " top req: " <<
+	    (e.has_request() ? e.next_request() : "none") << " }";
+	  return out;
+	}
       }; // class ClientRec
 
 
-      class Entry {
-	friend PriorityQueue<C,R>;
+      using ClientRecRef = std::shared_ptr<ClientRec>;
 
-	C          client;
-	RequestTag tag;
-	RequestRef request;
-	bool       handled;
-
-      public:
-
-	Entry(C _client, RequestTag _tag, RequestRef&& _request) :
-	  client(_client),
-	  tag(_tag),
-	  request(std::move(_request)),
-	  handled(false)
-	{
-	  // empty
-	}
-
-	friend
-	std::ostream& operator<<(std::ostream& out,
-				 const typename PriorityQueue<C,R>::Entry& e) {
-	  out << "{ client:" << e.client <<
-	    ", tag:" << e.tag <<
-	    ", handled:" << (e.handled ? "T" : "f") << " }";
-	  return out;
-	}
-      }; // struct Entry
-
-
-      using EntryRef = std::shared_ptr<Entry>;
-
-      // if you try to display an EntryRef (shared pointer to an
-      // Entry), dereference the shared pointer so we get data, not
-      // addresses
-      friend
-      std::ostream& operator<<(std::ostream& out,
-			       const typename PriorityQueue<C,R>::EntryRef& e) {
-	out << *e;
-	return out;
-      }
 
     public:
 
@@ -239,19 +284,38 @@ namespace crimson {
       // when we try to get the next request, we'll be in one of three
       // situations -- we'll have one to return, have one that can
       // fire in the future, or not have any
-      enum class NextReqStat { returning, future, none };
+      enum class NextReqType { returning, future, none };
 
+      // specifies which queue next request will get popped from
+      enum class HeapId { reservation, ready
+#if USE_PROP_HEAP
+	  , proportional
+#endif
+	  };
+
+
+      // When a request is pulled, this is the return type.
       struct PullReq {
-	NextReqStat status;
+	struct Retn {
+	  C           client;
+	  RequestRef  request;
+	  PhaseType   phase;
+	};
+
+	NextReqType               type;
+	boost::variant<Retn,Time> data;
+      };
+
+      
+      // this is returned from next_req to tell the caller the situation
+      struct NextReq {
+	NextReqType type;
 	union {
-	  struct {
-	    C&         client;
-	    RequestRef request;
-	    PhaseType  phase;
-	  } retn;
-	  Time when_next;
+	  HeapId    heap_id;
+	  Time      when_ready;
 	};
       };
+
 
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
@@ -262,41 +326,45 @@ namespace crimson {
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
       using HandleRequestFunc =
-	       std::function<void(const C&,RequestRef,PhaseType)>;
+	std::function<void(const C&,RequestRef,PhaseType)>;
 
     protected:
 
-      struct ReservationCompare {
-	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
-	  assert(n1->tag.reservation > 0 && n2->tag.reservation > 0);
-	  return n1->tag.reservation < n2->tag.reservation;
+      template<double RequestTag::*tag_field,
+	       ReadyOption ready_opt,
+	       bool use_prop_delta>
+      struct ClientCompare {
+	bool operator()(const ClientRec& n1, const ClientRec& n2) const {
+	  if (n1.has_request()) {
+	    if (n2.has_request()) {
+	      const auto& t1 = n1.next_request().tag;
+	      const auto& t2 = n2.next_request().tag;
+	      if (ReadyOption::ignore == ready_opt || t1.ready == t2.ready) {
+		// if we don't care about ready or the ready values are the same
+		if (use_prop_delta) {
+		  return (t1.*tag_field + n1.prop_delta) <
+		    (t2.*tag_field + n2.prop_delta);
+		} else {
+		  return t1.*tag_field < t2.*tag_field;
+		}
+	      } else if (ReadyOption::raises == ready_opt) {
+		// use_ready == true && the ready fields are different
+		return t1.ready;
+	      } else {
+		return t2.ready;
+	      }
+	    } else {
+	      // n1 has request but n2 does not
+	      return true;
+	    }
+	  } else if (n2.has_request()) {
+	    // n2 has request but n1 does not
+	    return false;
+	  } else {
+	    // both have none; keep stable w false
+	    return false;
+	  }
 	}
-      };
-
-      struct ProportionCompare {
-	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
-	  assert(n1->tag.proportion > 0 && n2->tag.proportion > 0);
-	  return n1->tag.proportion < n2->tag.proportion;
-	}
-      };
-
-      struct LimitCompare {
-	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
-	  assert(n1->tag.limit > 0 && n2->tag.limit > 0);
-	  return n1->tag.limit < n2->tag.limit;
-	}
-      };
-
-      // specifies which queue next request will get popped from
-      enum class HeapId { reservation, ready, proportional };
-
-      // this is returned from next_req to tell the caller the situation
-      struct NextReq {
-	NextReqStat status;
-	union {
-	  HeapId heap_id;
-	  Time when_ready;
-	};
       };
 
 
@@ -308,24 +376,40 @@ namespace crimson {
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
 
       // stable mappiing between client ids and client queues
-      std::map<C,ClientRec> client_map;
+      std::map<C,ClientRecRef> client_map;
 
-      // four heaps that maintain the earliest request by each of the
-      // tag components
-      c::Heap<EntryRef, ReservationCompare> reserv_q;
-      c::Heap<EntryRef, ProportionCompare> prop_q;
 
-      // AKA not-ready queue
-      c::Heap<EntryRef, LimitCompare> lim_q;
-
-      // for entries whose limit is passed and that'll be sorted by
-      // their proportion tag
-      c::Heap<EntryRef, ProportionCompare> ready_q;
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::reserv_heap_data,
+		      ClientCompare<&RequestTag::reservation,
+				    ReadyOption::ignore,
+				    false>> resv_heap;
+#if USE_PROP_HEAP
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::prop_heap_data,
+		      ClientCompare<&RequestTag::proportion,
+				    ReadyOption::ignore,
+				    true>> prop_heap;
+#endif
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::lim_heap_data,
+		      ClientCompare<&RequestTag::limit,
+				    ReadyOption::lowers,
+				    false>> limit_heap;
+      c::IndIntruHeap<ClientRecRef,
+		      ClientRec,
+		      &ClientRec::ready_heap_data,
+		      ClientCompare<&RequestTag::proportion,
+				    ReadyOption::raises,
+				    true>> ready_heap;
 
       // if all reservations are met and all other requestes are under
       // limit, this will allow the request next in terms of
       // proportion to still get issued
-      bool             allowLimitBreak;
+      bool             allow_limit_break;
       Mechanism        mechanism;
 
       std::atomic_bool finishing;
@@ -364,7 +448,7 @@ namespace crimson {
 		    bool _allow_limit_break,
 		    Mechanism _mechanism) :
 	client_info_f(_client_info_f),
-	allowLimitBreak(_allow_limit_break),
+	allow_limit_break(_allow_limit_break),
 	mechanism(_mechanism),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
@@ -468,120 +552,105 @@ namespace crimson {
       }
 
 
-      void mark_as_idle(const C& client_id) {
-	auto client_it = client_map.find(client_id);
-	if (client_map.end() != client_it) {
-	  client_it->second.idle = true;
-	}
+      void add_request(const R& request,
+		       const ReqParams<C>& req_params) {
+	add_request(RequestRef(new R(request)), req_params, get_time());
       }
 
+      
+      void add_request(RequestRef&& request,
+		       const ReqParams<C>& req_params) {
+	add_request(request, req_params, get_time());
+      }
 
+      
       void add_request(const R& request,
 		       const ReqParams<C>& req_params,
-		       const Time& time) {
+		       const Time time) {
 	add_request(RequestRef(new R(request)), req_params, time);
       }
 
 
       void add_request(RequestRef&& request,
 		       const ReqParams<C>& req_params,
-		       const Time& time) {
-#if 0
-	{
-	  static std::atomic_ulong counter(0);
-	  ++counter;
-	  uint32_t counter2 = counter.load();
-	  if (counter2 >= 200 && counter2 < 220) {
-	    std::cout << req_params << std::endl;
-	  }
-	}
-#endif
+		       const Time time) {
 	const C& client_id = req_params.client;
 	DataGuard g(data_mtx);
 	++tick;
 
+	// this pointer will help us create a reference to a shared
+	// pointer, no matter which of two codepaths we take
+	ClientRec* temp_client;
+	
 	auto client_it = client_map.find(client_id);
-	if (client_map.end() == client_it) {
-	  ClientInfo ci = client_info_f(client_id);
-	  client_map.emplace(client_id, ClientRec(ci, tick));
-	  client_it = client_map.find(client_id);
+	if (client_map.end() != client_it) {
+	  temp_client = &(*client_it->second); // address of obj of shared_ptr
+	} else {
+	  ClientInfo info = client_info_f(client_id);
+	  ClientRecRef client_rec =
+	    std::make_shared<ClientRec>(client_id, info, tick);
+	  resv_heap.push(client_rec);
+#if USE_PROP_HEAP
+	  prop_heap.push(client_rec);
+#endif
+	  limit_heap.push(client_rec);
+	  ready_heap.push(client_rec);
+	  client_map[client_id] = client_rec;
+	  temp_client = &(*client_rec); // address of obj of shared_ptr
 	}
 
-	if (client_it->second.idle) {
-	  // remove all handled requests from proportional queue
-	  while (!prop_q.empty() && prop_q.top()->handled) {
-	    prop_q.pop();
-	  }
+	// for convenience, we'll create a reference to the shared pointer
+	ClientRec& client = *temp_client;
 
+	if (client.idle) {
 	  // We need to do an adjustment so that idle clients compete
 	  // fairly on proportional tags since those tags may have
 	  // drifted from real-time. Either use the lowest existing
 	  // proportion tag -- O(1) -- or the client with the lowest
 	  // previous proportion tag -- O(n) where n = # clients.
-	  if (!prop_q.empty()) {
-	    double min_prop_tag = prop_q.top()->tag.proportion;
-	    client_it->second.set_prev_prop_tag(min_prop_tag, true);
-	  } else {
-	    double lowest_prop_tag = -1.0;
-	    for (auto const &c : client_map) {
-	      // don't use ourselves since we're now in the map
-	      if (c.first != client_it->first) {
-		auto p = c.second.get_prev_prop_tag();
-		if (0.0 != p && (lowest_prop_tag < 0 || p < lowest_prop_tag)) {
-		    lowest_prop_tag = p;
+	  //
+	  // So we don't have to maintain a propotional queue that
+	  // keeps the minimum on proportional tag alone (we're
+	  // instead using a ready queue), we'll have to check each
+	  // client.
+	  double lowest_prop_tag = NaN; // mark unset value as NaN
+	  for (auto const &c : client_map) {
+	    // don't use ourselves (or anything else that might be
+	    // listed as idle) since we're now in the map
+	    if (!c.second->idle) {
+	      // use either lowest proportion tag or previous proportion tag
+	      if (c.second->has_request()) {
+		double p = c.second->next_request().tag.proportion +
+		  c.second->prop_delta;
+		if (isnan(lowest_prop_tag) || p < lowest_prop_tag) {
+		  lowest_prop_tag = p;
 		}
 	      }
 	    }
-	    if (lowest_prop_tag > 0.0) {
-	      client_it->second.set_prev_prop_tag(lowest_prop_tag);
-	    }
 	  }
-	  client_it->second.idle = false;
-	}
+	  if (!isnan(lowest_prop_tag)) {
+	    client.prop_delta = lowest_prop_tag - time;
+	  }
+	  client.idle = false;
+	} // if this client was idle
 
-	EntryRef entry =
-	  std::make_shared<Entry>(client_id,
-				  RequestTag(client_it->second.get_req_tag(),
-					     client_it->second.info,
-					     req_params,
-					     time),
-				  std::move(request));
+	RequestTag tag(client.get_req_tag(), client.info, req_params, time);
+	client.add_request(tag, std::move(request));
 
 	// copy tag to previous tag for client
-	client_it->second.update_req_tag(entry->tag, tick);
+	client.update_req_tag(tag, tick);
 
-	if (0.0 != entry->tag.reservation) {
-	  reserv_q.push(entry);
-	}
-
-	if (0.0 != entry->tag.proportion) {
-	  prop_q.push(entry);
-
-	  if (0.0 == entry->tag.limit) {
-	    ready_q.push(entry);
-	  } else {
-	    lim_q.push(entry);
-	  }
-	}
-
-#if 0
-	{
-	  static uint count = 0;
-	  ++count;
-	  if (50 <= count && count < 55) {
-	    std::cout << "add_request:" << std::endl;
-	    std::cout << "time:" << format_time(time) << std::endl;
-	    displayQueues();
-	    std::cout << std::endl;
-	    debugger();
-	  }
-	}
+	resv_heap.adjust(client);
+	limit_heap.adjust(client);
+	ready_heap.adjust(client);
+#if USE_PROP_HEAP
+	prop_heap.adjust(client);
 #endif
 
 	if (Mechanism::push == mechanism) {
 	  schedule_request();
 	}
-      }
+      } // add_request
 
 
       void request_completed() {
@@ -597,18 +666,19 @@ namespace crimson {
 
 	PullReq result;
 	DataGuard g(data_mtx);
-	
+
 	NextReq next = next_request();
-	result.status = next.status;
+	result.type = next.type;
 	switch(next.status) {
-	case NextReqStat::none:
+	case NextReqType::none:
 	  return result;
 	  break;
-	case NextReqStat::future:
-	  result.when_next = next.when_ready;
+	case NextReqType::future:
+	  result.data = next.when_ready;
 	  return result;
 	  break;
-	case NextReqStat::returning:
+	case NextReqType::returning:
+	  // to avoid nesting, break out and let code below handle this case
 	  break;
 	default:
 	  assert(false);
@@ -616,21 +686,34 @@ namespace crimson {
 
 	// we'll only get here if we're returning an entry
 
+	auto process_f =
+	  [&] (PullReq& pull_result, PhaseType phase) ->
+	  std::function<void(const C&,
+			     RequestRef&)> {
+	  return [&](const C& client, RequestRef& request) {
+	    pull_result.data =
+	    typename PullReq::Retn{client, std::move(request), phase};
+	  };
+	};
+
 	switch(next.heap_id) {
 	case HeapId::reservation:
-	  pull_request_help(result, reserv_q, PhaseType::reservation);
+	  pop_process_request(resv_heap,
+			      process_f(result, PhaseType::reservation));
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pull_request_help(result, ready_q, PhaseType::priority);
+	  pop_process_request(ready_heap, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++prop_sched_count;
 	  break;
+#if USE_PROP_HEAP
 	case HeapId::proportional:
-	  pull_request_help(result, prop_q, PhaseType::priority);
+	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
 	  reduce_reservation_tags(result.client);
 	  ++limit_break_sched_count;
 	  break;
+#endif
 	default:
 	  assert(false);
 	}
@@ -639,17 +722,46 @@ namespace crimson {
       }
 
 
-      template<typename K>
-      void pull_request_help(PullReq& result,
-			     Heap<EntryRef, K>& heap,
-			     PhaseType phase) {
-	EntryRef& top = heap.top();
-	top->handled = true;
-	result.retn.client = top->client;
-	result.retn.request = std::move(top->request);
-	result.retn.phase = phase;
-	heap.pop();
+      // data_mtx should be held when called; top of heap should have
+      // a ready request
+      template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
+      void pop_process_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
+			       std::function<void(const C& client,
+						  RequestRef& request)> process) {
+	// gain access to data
+	ClientRec& top = heap.top();
+	ClientReq& first = top.next_request();
+	RequestRef request = std::move(first.request);
+
+	// pop request and adjust heaps
+	top.pop_request();
+	resv_heap.demote(top);
+	limit_heap.demote(top);
+#if USE_PROP_HEAP
+	prop_heap.demote(top);
+#endif
+	ready_heap.demote(top);
+
+	// process
+	process(top.client, request);
+      } // pop_process_request
+
+
+      // data_mtx should be held when called; furthermore, the heap
+      // should not be empty and the top element of the heap should
+      // not be already handled
+      template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
+      C submit_top_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
+			   PhaseType phase) {
+	C client_result;
+	pop_process_request(heap,
+			    [&] (const C& client, RequestRef& request) {
+			      client_result = client;
+			      handle_f(client, std::move(request), phase);
+			    });
+	return client_result;
       }
+
 
     protected:
 
@@ -658,73 +770,56 @@ namespace crimson {
 			  bool show_lim = true,
 			  bool show_ready = true,
 			  bool show_prop = true) {
-	auto filter = [](const EntryRef& e)->bool { return !e->handled; };
+	auto filter = [](const ClientRecRef& e)->bool { return !e->handled; };
 	if (show_res) {
-	  reserv_q.displaySorted(std::cout << "RESER:", filter) << std::endl;
+	  resv_heap.display_sorted(std::cout << "RESER:", filter) << std::endl;
 	}
 	if (show_lim) {
-	  lim_q.displaySorted(std::cout << "LIMIT:", filter) << std::endl;
+	  limit_heap.display_sorted(std::cout << "LIMIT:", filter) << std::endl;
 	}
 	if (show_ready) {
-	  ready_q.displaySorted(std::cout << "READY:", filter) << std::endl;
+	  ready_heap.display_sorted(std::cout << "READY:", filter) << std::endl;
 	}
+#if USE_PROP_HEAP
 	if (show_prop) {
-	  prop_q.displaySorted(std::cout << "PROPO:", filter) << std::endl;
+	  prop_heap.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
+#endif
       }
 
 
       // data_mtx should be held when called
-      void reduce_reservation_tags(C client_id) {
+      void reduce_reservation_tags(ClientRec& client) {
+	for (auto& r : client.requests) {
+	  r.tag.reservation -= client.info.reservation_inv;
+	}
+	// don't forget to update previous tag
+	client.prev_tag.reservation -= client.info.reservation_inv;
+	resv_heap.promote(client);
+      }
+
+
+      // data_mtx should be held when called
+      void reduce_reservation_tags(const C& client_id) {
 	auto client_it = client_map.find(client_id);
 
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
-	if (client_map.end() == client_it) return;
-
-	double reduction = client_it->second.info.reservation_inv;
-	for (auto i = reserv_q.begin(); i != reserv_q.end(); ++i) {
-	  if ((*i)->client == client_id) {
-	    (*i)->tag.reservation -= reduction;
-	    i.increase(); // since tag goes down, priority increases
-	  }
-	}
-      }
-
-
-      // data_mtx should be held when called; furthermore, the heap
-      // should not be empty and the top element of the heap should
-      // not be already handled
-      template<typename K>
-      C submit_top_request(Heap<EntryRef, K>& heap, PhaseType phase) {
-	EntryRef& top = heap.top();
-	top->handled = true;
-	handle_f(top->client, std::move(top->request), phase);
-	C client_result = top->client;
-	heap.pop();
-	return client_result;
-      }
-
-
-      // data_mtx should be held when called
-      template<typename K>
-      void prepare_queue(Heap<EntryRef, K>& heap) {
-	while (!heap.empty() && heap.top()->handled) {
-	  heap.pop();
-	}
+	assert(client_map.end() != client_it);
+	reduce_reservation_tags(*client_it->second);
       }
 
 
       // data_mtx should be held when called
       void schedule_request() {
 	NextReq next_req = next_request();
-	switch (next_req.status) {
-	case NextReqStat::none:
+	switch (next_req.type) {
+	case NextReqType::none:
 	  return;
-	case NextReqStat::future:
+	case NextReqType::future:
 	  sched_at(next_req.when_ready);
 	  break;
-	case NextReqStat::returning:
+	case NextReqType::returning:
 	  submit_request(next_req.heap_id);
 	  break;
 	default:
@@ -739,21 +834,23 @@ namespace crimson {
 	switch(heap_id) {
 	case HeapId::reservation:
 	  // don't need to note client
-	  (void) submit_top_request(reserv_q, PhaseType::reservation);
+	  (void) submit_top_request(resv_heap, PhaseType::reservation);
 	  // unlike the other two cases, we do not reduce reservation
 	  // tags here
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  client = submit_top_request(ready_q, PhaseType::priority);
+	  client = submit_top_request(ready_heap, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++prop_sched_count;
 	  break;
+#if USE_PROP_HEAP
 	case HeapId::proportional:
-	  client = submit_top_request(prop_q, PhaseType::priority);
+	  client = submit_top_request(prop_heap, PhaseType::priority);
 	  reduce_reservation_tags(client);
 	  ++limit_break_sched_count;
 	  break;
+#endif
 	default:
 	  assert(false);
 	}
@@ -762,40 +859,31 @@ namespace crimson {
 
       // data_mtx should be held when called
       NextReq next_request() {
+	return next_request(get_time());
+      }
+
+      
+      // data_mtx should be held when called
+      NextReq next_request(Time now) {
 	NextReq result;
 	
 	if (Mechanism::push == mechanism && !can_handle_f()) {
-	  result.status = NextReqStat::none;
+	  result.type = NextReqType::none;
 	  return result;
 	}
 
-	Time now = get_time();
-
-	// so queue management is handled incrementally, remove
-	// handled items from each of the queues
-	prepare_queue(reserv_q);
-	prepare_queue(ready_q);
-	prepare_queue(lim_q);
-	prepare_queue(prop_q);
+	// if reservation queue is empty, all are empty (i.e., no active clients)
+	if(resv_heap.empty()) {
+	  result.type = NextReqType::none;
+	  return result;
+	}
 
 	// try constraint (reservation) based scheduling
 
-#if 0
-	{
-	  static uint count = 0;
-	  ++count;
-	  if (50 <= count && count <= 55) {
-	    std::cout << "schedule_request A:" << std::endl;
-	    std::cout << "now:" << format_time(now) << std::endl;
-	    display_queues();
-	    std::cout << std::endl;
-	    debugger();
-	  }
-	}
-#endif
-
-	if (!reserv_q.empty() && reserv_q.top()->tag.reservation <= now) {
-	  result.status = NextReqStat::returning;
+	auto& reserv = resv_heap.top();
+	if (reserv.has_request() &&
+	    reserv.next_request().tag.reservation <= now) {
+	  result.type = NextReqType::returning;
 	  result.heap_id = HeapId::reservation;
 	  return result;
 	}
@@ -805,62 +893,45 @@ namespace crimson {
 
 	// all items that are within limit are eligible based on
 	// priority
-	while (!lim_q.empty()) {
-	  auto top = lim_q.top();
-	  if (top->handled) {
-	    lim_q.pop();
-	  } else if (top->tag.limit <= now) {
-	    ready_q.push(top);
-	    lim_q.pop();
-	  } else {
-	    break;
-	  }
+	auto limits = &limit_heap.top();
+	while (limits->has_request() &&
+	       !limits->next_request().tag.ready &&
+	       limits->next_request().tag.limit <= now) {
+	  limits->next_request().tag.ready = true;
+	  ready_heap.promote(*limits);
+	  limit_heap.demote(*limits);
+
+	  limits = &limit_heap.top();
 	}
 
-#if 0
-	{
-	  static uint count = 0;
-	  ++count;
-	  if (2000 <= count && count < 2002) {
-	    std::cout << "schedule_request B:" << std::endl;
-	    std::cout << "now:" << format_time(now) << std::endl;
-	    display_queues();
-	    std::cout << std::endl;
-	    debugger();
-	  }
-	}
-#endif
-
-	if (!ready_q.empty()) {
-	  result.status = NextReqStat::returning;
+	auto readys = &ready_heap.top();
+	if (readys->has_request() &&
+	    (readys->next_request().tag.ready || allow_limit_break)) {
+	  result.type = NextReqType::returning;
 	  result.heap_id = HeapId::ready;
 	  return result;
-	}
-
-	if (allowLimitBreak) {
-	  if (!prop_q.empty()) {
-	    result.status = NextReqStat::returning;
-	    result.heap_id = HeapId::proportional;
-	    return result;
-	  }
 	}
 
 	// nothing scheduled; make sure we re-run when next
 	// reservation item or next limited item comes up
 
 	Time next_call = TimeMax;
-	if (!reserv_q.empty()) {
-	  next_call = min_not_0_time(next_call, reserv_q.top()->tag.reservation);
+	if (resv_heap.top().has_request()) {
+	  next_call =
+	    min_not_0_time(next_call,
+			   resv_heap.top().next_request().tag.reservation);
 	}
-	if (!lim_q.empty()) {
-	  next_call = min_not_0_time(next_call, lim_q.top()->tag.limit);
+	if (limit_heap.top().has_request()) {
+	  const auto& next = limit_heap.top().next_request();
+	  assert(!next.tag.ready);
+	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
 	if (next_call < TimeMax) {
-	  result.status = NextReqStat::future;
+	  result.type = NextReqType::future;
 	  result.when_ready = next_call;
 	  return result;
 	} else {
-	  result.status = NextReqStat::none;
+	  result.type = NextReqType::none;
 	  return result;
 	}
       } // schedule_request
@@ -912,7 +983,9 @@ namespace crimson {
 	}
       }
 
+
     protected:
+
 
       /*
        * This is being called regularly by RunEvery. Every time it's
@@ -947,18 +1020,35 @@ namespace crimson {
 	}
 
 	if (erase_point > 0 || idle_point > 0) {
-	  for (auto i = client_map.begin();
-	       i != client_map.end();
-	       /* empty */) {
+	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
-	    if (erase_point && i2->second.last_tick <= erase_point) {
+	    if (erase_point && i2->second->last_tick <= erase_point) {
 	      client_map.erase(i2);
-	    } else if (idle_point && i2->second.last_tick <= idle_point) {
-	      i2->second.idle = true;
+	      delete_from_heaps(i2->second);
+	    } else if (idle_point && i2->second->last_tick <= idle_point) {
+	      i2->second->idle = true;
 	    }
 	  } // for
 	} // if
       } // do_clean
+
+
+      template<IndIntruHeapData ClientRec::*C1,typename C2>
+      void delete_from_heap(ClientRecRef& client,
+			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2>& heap) {
+	auto i = heap.rfind(client);
+	heap.remove(i);
+      }
+
+
+      void delete_from_heaps(ClientRecRef& client) {
+	delete_from_heap(client, resv_heap);
+#if USE_PROP_HEAP
+	delete_from_heap(client, prop_heap);
+#endif
+	delete_from_heap(client, limit_heap);
+	delete_from_heap(client, ready_heap);
+      }
     }; // class PriorityQueue
   } // namespace dmclock
 } // namespace crimson
