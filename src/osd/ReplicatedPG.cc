@@ -6181,6 +6181,15 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	obs.oi.set_omap_digest(rollback_to->obs.oi.omap_digest);
       else
 	obs.oi.clear_omap_digest();
+
+      if (rollback_to->obs.oi.is_omap()) {
+	dout(10) << __func__ << " setting omap flag on " << obs.oi.soid << dendl;
+	obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      } else {
+	dout(10) << __func__ << " clearing omap flag on " << obs.oi.soid << dendl;
+	obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+      }
+
       snapset.head_exists = true;
     }
   }
