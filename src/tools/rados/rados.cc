@@ -2769,6 +2769,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "cleanup") == 0) {
     if (!pool_name)
       usage_exit();
+    if (wildcard)
+      io_ctx.set_namespace(all_nspaces);
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up(prefix, concurrent_ios, run_name);
     if (ret != 0)
