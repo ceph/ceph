@@ -1627,13 +1627,38 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  hobject_t head(m->get_oid(), m->get_object_locator().key,
+		 CEPH_NOSNAP, m->get_pg().ps(),
+		 info.pgid.pool(), m->get_object_locator().nspace);
+
   // object name too long?
-  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
-                              osd->osd->store->get_max_object_name_length());
-  if (m->get_oid().name.size() > max_name_len) {
-    dout(4) << "do_op '" << m->get_oid().name << "' is longer than "
-            << max_name_len << " bytes" << dendl;
+  if (m->get_oid().name.size() > g_conf->osd_max_object_name_len) {
+    dout(4) << "do_op name is longer than "
+            << g_conf->osd_max_object_name_len
+	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+  if (m->get_object_locator().key.size() > g_conf->osd_max_object_name_len) {
+    dout(4) << "do_op locator is longer than "
+            << g_conf->osd_max_object_name_len
+	    << " bytes" << dendl;
+    osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+  if (m->get_object_locator().nspace.size() >
+      g_conf->osd_max_object_namespace_len) {
+    dout(4) << "do_op namespace is longer than "
+            << g_conf->osd_max_object_namespace_len
+	    << " bytes" << dendl;
+    osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+
+  if (int r = osd->store->validate_hobject_key(head)) {
+    dout(4) << "do_op object " << head << " invalid for backing store: "
+	    << r << dendl;
+    osd->reply_op_error(op, r);
     return;
   }
 
@@ -1701,11 +1726,6 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	   << " -> " << (write_ordered ? "write-ordered" : "read-ordered")
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
-
-  hobject_t head(m->get_oid(), m->get_object_locator().key,
-		 CEPH_NOSNAP, m->get_pg().ps(),
-		 info.pgid.pool(), m->get_object_locator().nspace);
-
 
   if (write_ordered &&
       scrubber.write_blocked_by_scrub(head, get_sort_bitwise())) {

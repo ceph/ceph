@@ -123,6 +123,12 @@ static CompatSet get_fs_supported_compat_set() {
   return compat;
 }
 
+int FileStore::validate_hobject_key(const hobject_t &obj) const
+{
+  unsigned len = LFNIndex::get_max_escaped_name_len(obj);
+  return len > m_filestore_max_xattr_value_size ? -ENAMETOOLONG : 0;
+}
+
 int FileStore::get_block_device_fsid(const string& path, uuid_d *fsid)
 {
   // make sure we don't try to use aio or direct_io (and get annoying
@@ -559,7 +565,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
   m_fs_type(0),
   m_filestore_max_inline_xattr_size(0),
-  m_filestore_max_inline_xattrs(0)
+  m_filestore_max_inline_xattrs(0),
+  m_filestore_max_xattr_value_size(0)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
   for (int i = 0; i < m_ondisk_finisher_num; ++i) {
@@ -5663,21 +5670,25 @@ void FileStore::set_xattr_limits_via_conf()
 {
   uint32_t fs_xattr_size;
   uint32_t fs_xattrs;
+  uint32_t fs_xattr_max_value_size;
 
   switch (m_fs_type) {
 #if defined(__linux__)
   case XFS_SUPER_MAGIC:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
+    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_xfs;
     break;
   case BTRFS_SUPER_MAGIC:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
+    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_btrfs;
     break;
 #endif
   default:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
+    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_other;
     break;
   }
 
@@ -5692,6 +5703,12 @@ void FileStore::set_xattr_limits_via_conf()
     m_filestore_max_inline_xattrs = g_conf->filestore_max_inline_xattrs;
   else
     m_filestore_max_inline_xattrs = fs_xattrs;
+
+  // Use override value if set
+  if (g_conf->filestore_max_xattr_value_size)
+    m_filestore_max_xattr_value_size = g_conf->filestore_max_xattr_value_size;
+  else
+    m_filestore_max_xattr_value_size = fs_xattr_max_value_size;
 }
 
 // -- FSSuperblock --
