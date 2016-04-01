@@ -3638,7 +3638,6 @@ int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const g
   }
   r = _do_clone_range(**o, **n, srcoff, len, dstoff);
   if (r < 0) {
-    r = -errno;
     goto out3;
   }
 
