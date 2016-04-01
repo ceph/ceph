@@ -74,6 +74,14 @@ struct FDCloser {
 
 /* Public methods */
 
+uint64_t LFNIndex::get_max_escaped_name_len(const hobject_t &obj)
+{
+  ghobject_t ghobj(obj);
+  ghobj.shard_id = shard_id_t(0);
+  ghobj.generation = 0;
+  ghobj.hobj.snap = 0;
+  return lfn_generate_object_name_current(ghobj).size();
+}
 
 int LFNIndex::init()
 {
@@ -621,13 +629,8 @@ static void append_escaped(string::const_iterator begin,
   }
 }
 
-string LFNIndex::lfn_generate_object_name(const ghobject_t &oid)
+string LFNIndex::lfn_generate_object_name_current(const ghobject_t &oid)
 {
-  if (index_version == HASH_INDEX_TAG)
-    return lfn_generate_object_name_keyless(oid);
-  if (index_version == HASH_INDEX_TAG_2)
-    return lfn_generate_object_name_poolless(oid);
-
   string full_name;
   string::const_iterator i = oid.hobj.oid.name.begin();
   if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {

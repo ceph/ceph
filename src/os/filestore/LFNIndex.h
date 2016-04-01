@@ -212,6 +212,11 @@ public:
       );
   }
 
+  /**
+   * Returns the length of the longest escaped name which could result
+   * from any clone, shard, or rollback object of this object
+   */
+  static uint64_t get_max_escaped_name_len(const hobject_t &obj);
 
 protected:
   virtual int _init() = 0;
@@ -480,9 +485,21 @@ private:
     ); ///< @return Generated object name.
 
   /// Generate object name
-  string lfn_generate_object_name(
+  static string lfn_generate_object_name_current(
     const ghobject_t &oid ///< [in] Object for which to generate.
     ); ///< @return Generated object name.
+
+  /// Generate object name
+  string lfn_generate_object_name(
+    const ghobject_t &oid ///< [in] Object for which to generate.
+    ) {
+    if (index_version == HASH_INDEX_TAG)
+      return lfn_generate_object_name_keyless(oid);
+    if (index_version == HASH_INDEX_TAG_2)
+      return lfn_generate_object_name_poolless(oid);
+    else
+      return lfn_generate_object_name_current(oid);
+  } ///< @return Generated object name.
 
   /// Parse object name
   bool lfn_parse_object_name_keyless(

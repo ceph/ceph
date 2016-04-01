@@ -667,8 +667,8 @@ public:
 
   int fsck() override;
 
-  unsigned get_max_object_name_length() override {
-    return 4096;
+  int validate_hobject_key(const hobject_t &obj) const override {
+    return 0;
   }
   unsigned get_max_attr_name_length() override {
     return 256;  // arbitrary; there is no real limit internally
