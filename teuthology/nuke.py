@@ -283,6 +283,66 @@ def remove_yum_timedhosts(ctx):
         )
 
 
+def remove_ceph_packages(ctx):
+    """
+    remove ceph and ceph dependent packages by force
+    force is needed since the node's repo might have changed and
+    in many cases autocorrect will not work due to missing packages
+    due to repo changes
+    """
+    ceph_packages_to_remove = ['ceph-common', 'ceph-mon', 'ceph-osd',
+                               'libcephfs1', 'librados2', 'librgw2', 'librbd1',
+                               'ceph-selinux', 'python-cephfs', 'ceph-base',
+                               'python-rbd', 'python-rados', 'ceph-mds',
+                               'libcephfs-java', 'libcephfs-jni',
+                               'ceph-deploy', 'libapache2-mod-fastcgi'
+                               ]
+    pkgs = str.join(' ', ceph_packages_to_remove)
+    for remote in ctx.cluster.remotes.iterkeys():
+        if remote.os.package_type == 'rpm':
+            log.info("Remove any broken repos")
+            remote.run(
+                args=['sudo', 'rm', run.Raw("/etc/yum.repos.d/*ceph*")],
+                check_status=False
+            )
+            remote.run(
+                args=['sudo', 'rm', run.Raw("/etc/yum.repos.d/*fcgi*")],
+                check_status=False,
+            )
+            remote.run(
+                args=['sudo', 'rpm', '--rebuilddb', run.Raw('&&'), 'yum',
+                      'clean', 'all']
+            )
+            log.info('Remove any ceph packages')
+            remote.run(
+                args=['sudo', 'yum', 'remove', '-y', run.Raw(pkgs)],
+                check_status=False
+            )
+        else:
+            log.info("Remove any broken repos")
+            remote.run(
+                args=['sudo', 'rm', run.Raw("/etc/apt/sources.list.d/*ceph*")],
+                check_status=False,
+            )
+            log.info("Autoclean")
+            remote.run(
+                args=['sudo', 'apt-get', 'autoclean'],
+                check_status=False,
+            )
+            log.info('Remove any ceph packages')
+            remote.run(
+                args=[
+                     'sudo', 'dpkg', '--remove', '--force-remove-reinstreq',
+                     run.Raw(pkgs)
+                     ],
+                check_status=False
+            )
+            log.info("Autoclean")
+            remote.run(
+                args=['sudo', 'apt-get', 'autoclean']
+            )
+
+
 def remove_installed_packages(ctx):
     dpkg_configure(ctx)
     conf = dict(
@@ -722,6 +782,8 @@ def nuke_helper(ctx, should_unlock):
         log.info("Terminating Hadoop services...")
         kill_hadoop(ctx)
 
+    log.info("Force remove ceph packages")
+    remove_ceph_packages(ctx)
     if need_reboot:
         reboot(ctx, need_reboot)
     log.info('All kernel mounts gone.')
