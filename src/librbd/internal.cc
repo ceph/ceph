@@ -291,14 +291,17 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
 
   int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
       &mirror_image_internal);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
-    return r;
-  } else if (r == -ENOENT) {
+  if (r == -ENOENT) {
     // mirroring is not enabled for this image
     ldout(cct, 20) << "ignoring disable command: mirroring is not enabled "
       "for this image" << dendl;
     return 0;
+  } else if (r == -EOPNOTSUPP) {
+    ldout(cct, 5) << "mirroring not supported by OSD" << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
   }
 
   bool is_primary;
@@ -1960,7 +1963,7 @@ remove_mirroring_image:
 
       if (!old_format) {
         r = mirror_image_disable_internal(ictx, false);
-        if (r < 0) {
+        if (r < 0 && r != -EOPNOTSUPP) {
           lderr(cct) << "error disabling image mirroring: " << cpp_strerror(r)
                      << dendl;
           ictx->owner_lock.put_read();
