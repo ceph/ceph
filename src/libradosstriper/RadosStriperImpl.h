@@ -121,14 +121,6 @@ struct libradosstriper::RadosStriperImpl {
   };
 
   /**
-   * exception wrapper around an error code
-   */
-  struct ErrorCode {
-    ErrorCode(int error) : m_code(error) {};
-    int m_code;
-  };
-    
-  /**
    * Helper struct to handle simple locks on objects
    */
   struct RadosExclusiveLock {
@@ -142,6 +134,52 @@ struct libradosstriper::RadosStriperImpl {
     RadosExclusiveLock(librados::IoCtx* ioCtx, const std::string &oid);
     /// destructor : releases the lock
     ~RadosExclusiveLock();
+  };
+
+  struct RemoveCompletionData : CompletionData {
+    /// removal flags
+    int flags;
+    /// exclusive lock
+    RadosExclusiveLock *m_lock;
+    /**
+     * constructor
+     * note that the constructed object will take ownership of the lock
+     */
+    RemoveCompletionData(libradosstriper::RadosStriperImpl * striper,
+			 const std::string& soid,
+			 const std::string& lockCookie,
+			 librados::AioCompletionImpl *userCompletion,
+			 RadosExclusiveLock *lock,
+			 int flags = 0);
+    /// destructor
+    ~RemoveCompletionData();
+  };
+
+  /**
+   * struct handling the data needed to pass to the call back
+   * function in asynchronous truncate operations
+   */
+  struct TruncateCompletionData : RefCountedObject {
+    /// constructor
+    TruncateCompletionData(libradosstriper::RadosStriperImpl* striper,
+			   const std::string& soid,
+			   uint64_t size);
+    /// destructor
+    virtual ~TruncateCompletionData();
+    /// striper to be used
+    libradosstriper::RadosStriperImpl *m_striper;
+    /// striped object concerned by the truncate operation
+    std::string m_soid;
+    /// the final size of the truncated object
+    uint64_t m_size;
+  };
+
+  /**
+   * exception wrapper around an error code
+   */
+  struct ErrorCode {
+    ErrorCode(int error) : m_code(error) {};
+    int m_code;
   };
 
   /*
@@ -165,7 +203,7 @@ struct libradosstriper::RadosStriperImpl {
   int setxattr(const object_t& soid, const char *name, bufferlist& bl);
   int getxattrs(const object_t& soid, map<string, bufferlist>& attrset);
   int rmxattr(const object_t& soid, const char *name);
-  
+
   // io
   int write(const std::string& soid, const bufferlist& bl, size_t len, uint64_t off);
   int append(const std::string& soid, const bufferlist& bl, size_t len);
@@ -189,6 +227,12 @@ struct libradosstriper::RadosStriperImpl {
   int stat(const std::string& soid, uint64_t *psize, time_t *pmtime);
   int remove(const std::string& soid, int flags=0);
   int trunc(const std::string& soid, uint64_t size);
+
+  // asynchronous remove. Note that the removal is not 100% parallelized :
+  // the removal of the first rados object of the striped object will be
+  // done via a syncrhonous call after the completion of all other removals.
+  // These are done asynchrounously and in parallel
+  int aio_remove(const std::string& soid, librados::AioCompletionImpl *c, int flags=0);
 
   // reference counting
   void get() {
@@ -250,6 +294,10 @@ struct libradosstriper::RadosStriperImpl {
 				   ceph_file_layout *layout,
 				   uint64_t *size);
 
+  int internal_aio_remove(const std::string& soid,
+			  libradosstriper::MultiAioCompletionImpl *multi_completion,
+			  int flags=0);
+
   /**
    * opens an existing striped object and takes a shared lock on it
    * @return 0 if everything is ok and the lock was taken. -errcode otherwise
@@ -266,7 +314,7 @@ struct libradosstriper::RadosStriperImpl {
    * and sets its size to the size it will have after the write.
    * In case the striped object does not exists, it will create it by
    * calling createOrOpenStripedObject.
-   * @param layout this is filled with the layout of the file 
+   * @param layout this is filled with the layout of the file
    * @param size new size of the file (together with isFileSizeAbsolute)
    * In case of success, this is filled with the size of the file before the opening
    * @param isFileSizeAbsolute if false, this means that the given size should
@@ -296,12 +344,24 @@ struct libradosstriper::RadosStriperImpl {
 				 bool isFileSizeAbsolute);
 
   /**
-   * truncates an object. Should only be called with size < original_size
+   * truncates an object synchronously. Should only be called with size < original_size
    */
   int truncate(const std::string& soid,
 	       uint64_t original_size,
 	       uint64_t size,
 	       ceph_file_layout &layout);
+
+  /**
+   * truncates an object asynchronously. Should only be called with size < original_size
+   * note that the method is not 100% asynchronous, only the removal of rados objects
+   * is, the (potential) truncation of the rados object residing just at the truncation
+   * point is synchronous for lack of asynchronous truncation in the rados layer
+   */
+  int aio_truncate(const std::string& soid,
+		   libradosstriper::MultiAioCompletionImpl *c,
+		   uint64_t original_size,
+		   uint64_t size,
+		   ceph_file_layout &layout);
 
   /**
    * grows an object (adding 0s). Should only be called with size > original_size
@@ -310,12 +370,12 @@ struct libradosstriper::RadosStriperImpl {
 	   uint64_t original_size,
 	   uint64_t size,
 	   ceph_file_layout &layout);
-  
+
   /**
    * creates a unique identifier
    */
   static std::string getUUID();
-  
+
   CephContext *cct() {
     return (CephContext*)m_radosCluster.cct();
   }
