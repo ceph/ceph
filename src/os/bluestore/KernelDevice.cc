@@ -366,7 +366,9 @@ int KernelDevice::aio_write(
   bool buffered)
 {
   uint64_t len = bl.length();
-  dout(20) << __func__ << " " << off << "~" << len << dendl;
+  dout(20) << __func__ << " " << off << "~" << len
+	   << (buffered ? " (buffered)" : " (direct)")
+	   << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
@@ -471,7 +473,9 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
 {
-  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  dout(5) << __func__ << " " << off << "~" << len
+	  << (buffered ? " (buffered)" : " (direct)")
+	  << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
