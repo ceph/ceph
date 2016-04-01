@@ -184,7 +184,6 @@ void _usage()
   cout << "                               replica datalog get/delete\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         remote to pull period\n";
-  cout << "   --parent=<id>             parent period id\n";
   cout << "   --period=<id>             period id\n";
   cout << "   --epoch=<number>          period epoch\n";
   cout << "   --commit                  commit the period during 'period update'\n";
@@ -1934,7 +1933,7 @@ int main(int argc, char **argv)
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
-  std::string period_id, period_epoch, remote, url, parent_period;
+  std::string period_id, period_epoch, remote, url;
   std::string master_zonegroup, master_zone;
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
@@ -2252,8 +2251,6 @@ int main(int argc, char **argv)
         cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char*)NULL)) {
-      parent_period = val;
     } else if (ceph_argparse_binary_flag(args, i, &is_master_int, NULL, "--master", (char*)NULL)) {
       is_master = (bool)is_master_int;
       is_master_set = true;
