@@ -115,47 +115,99 @@ int get_fs_stats(ceph_data_stats_t &stats, const char *path)
   return 0;
 }
 
-static bool lsb_release_set(char *buf, const char *prefix,
+static char* value_sanitize(char *value)
+{
+  while (isspace(*value) || *value == '"')
+    value++;
+
+  char* end = value + strlen(value) - 1;
+  while (end > value && (isspace(*end) || *end == '"'))
+    end--;
+
+  *(end + 1) = '\0';
+
+  return value;
+}
+
+static bool value_set(char *buf, const char *prefix,
 			    map<string, string> *pm, const char *key)
 {
   if (strncmp(buf, prefix, strlen(prefix))) {
     return false;
   }
 
-  if (buf[strlen(buf)-1] == '\n')
-    buf[strlen(buf)-1] = '\0';
-
-  char *value = buf + strlen(prefix) + 1;
-  (*pm)[key] = value;
+  (*pm)[key] = value_sanitize(buf + strlen(prefix));
   return true;
 }
 
-static void lsb_release_parse(map<string, string> *m, CephContext *cct)
+static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<string, string> *m, CephContext *cct) {
+  char buf[512];
+  while (fgets(buf, sizeof(buf) - 1, fp) != NULL) {
+    for (auto& kv : kvm) {
+      if (value_set(buf, kv.second.c_str(), m, kv.first.c_str()))
+        continue;
+    }
+  }
+}
+
+static bool lsb_release_parse(map<string, string> *m, CephContext *cct)
 {
+  static const map<string, string> kvm = {
+      { "distro", "Distributor ID:" },
+      { "distro_description", "Description:" },
+      { "distro_codename", "Codename:", },
+      { "distro_version", "Release:" }
+  };
+
   FILE *fp = popen("lsb_release -idrc", "r");
   if (!fp) {
     int ret = -errno;
     lderr(cct) << "lsb_release_parse - failed to call lsb_release binary with error: " << cpp_strerror(ret) << dendl;
-    return;
+    return false;
   }
 
-  char buf[512];
-  while (fgets(buf, sizeof(buf) - 1, fp) != NULL) {
-    if (lsb_release_set(buf, "Distributor ID:", m, "distro"))
-      continue;
-    if (lsb_release_set(buf, "Description:", m, "distro_description"))
-      continue;
-    if (lsb_release_set(buf, "Release:", m, "distro_version"))
-      continue;
-    if (lsb_release_set(buf, "Codename:", m, "distro_codename"))
-      continue;
-
-    lderr(cct) << "unhandled output: " << buf << dendl;
-  }
+  file_values_parse(kvm, fp, m, cct);
 
   if (pclose(fp)) {
     int ret = -errno;
     lderr(cct) << "lsb_release_parse - pclose failed: " << cpp_strerror(ret) << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+static bool os_release_parse(map<string, string> *m, CephContext *cct)
+{
+  static const map<string, string> kvm = {
+    { "distro", "ID=" },
+    { "distro_description", "PRETTY_NAME=" },
+    { "distro_version", "VERSION_ID=" }
+  };
+
+  FILE *fp = fopen("/etc/os-release", "r");
+  if (!fp) {
+    int ret = -errno;
+    lderr(cct) << "os_release_parse - failed to open /etc/os-release: " << cpp_strerror(ret) << dendl;
+    return false;
+  }
+
+  file_values_parse(kvm, fp, m, cct);
+
+  fclose(fp);
+
+  return true;
+}
+
+static void distro_detect(map<string, string> *m, CephContext *cct)
+{
+  if (!lsb_release_parse(m, cct) && !os_release_parse(m, cct)) {
+    lderr(cct) << "distro_detect - lsb_release or /etc/os-release is required" << dendl;
+  }
+
+  for (const char* rk: {"distro", "distro_version"}) {
+    if (m->find(rk) == m->end())
+      lderr(cct) << "distro_detect - can't detect " << rk << dendl;
   }
 }
 
@@ -218,7 +270,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   }
 
   // distro info
-  lsb_release_parse(m, cct);
+  distro_detect(m, cct);
 }
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
