@@ -5518,7 +5518,6 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_max_sync_interval",
     "filestore_queue_max_ops",
     "filestore_queue_max_bytes",
-    "filestore_queue_max_ops",
     "filestore_expected_throughput_bytes",
     "filestore_expected_throughput_ops",
     "filestore_queue_low_threshhold",
