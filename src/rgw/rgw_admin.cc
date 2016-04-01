@@ -197,8 +197,11 @@ void _usage()
   cout << "   --realm-new-name=<realm new name> realm new name\n";
   cout << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
   cout << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
+  cout << "   --zone-id=<zone id>       zone id\n";
   cout << "   --zone-new-name=<zone>    zone new name\n";
+  cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
+  cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
   cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";

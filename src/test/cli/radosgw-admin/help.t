@@ -149,8 +149,11 @@
      --realm-new-name=<realm new name> realm new name
      --rgw-zonegroup=<zonegroup>   zonegroup name
      --rgw-zone=<zone>         zone in which radosgw is running
+     --zone-id=<zone id>       zone id
      --zone-new-name=<zone>    zone new name
+     --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
+     --read-only               set zone as read-only (when adding to zonegroup)
      --endpoints=<list>        zone endpoints
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
