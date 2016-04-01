@@ -257,6 +257,39 @@ RGWHTTPClient::~RGWHTTPClient()
 }
 
 
+int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
+{
+  const std::string header_line(static_cast<const char * const>(ptr), len);
+
+  /* We're tokening the line that way due to backward compatibility. */
+  const size_t sep_loc = header_line.find_first_of(" \t:");
+
+  if (std::string::npos == sep_loc) {
+    /* Wrongly formatted header? Just skip it. */
+    return 0;
+  }
+
+  header_name_t name(header_line.substr(0, sep_loc));
+  if (0 == relevant_headers.count(name)) {
+    /* Not interested in this particular header. */
+    return 0;
+  }
+
+  /* Skip spaces and tabs after the separator. */
+  const size_t val_loc_s = header_line.find_first_not_of(' ', sep_loc + 1);
+  const size_t val_loc_e = header_line.find_first_of("\r\n", sep_loc + 1);
+
+  if (std::string::npos == val_loc_s || std::string::npos == val_loc_e) {
+    /* Empty value case. */
+    found_headers.emplace(name, header_value_t());
+  } else {
+    found_headers.emplace(name, header_value_t(
+        header_line.substr(val_loc_s, val_loc_e - val_loc_s)));
+  }
+
+  return 0;
+}
+
 #if HAVE_CURL_MULTI_WAIT
 
 static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
