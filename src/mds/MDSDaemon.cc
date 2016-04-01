@@ -989,6 +989,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
             // has taken our ID, we don't want to keep restarting and
             // fighting them for the ID.
             suicide();
+            m->put();
             return;
           }
         }
