@@ -6,7 +6,6 @@ import os
 import subprocess
 import time
 import yaml
-from StringIO import StringIO
 
 import teuthology
 from . import orchestra
@@ -45,14 +44,15 @@ def clear_firewall(ctx):
             "sudo", "sh", "-c",
             "iptables-save | grep -v teuthology | iptables-restore"
         ],
-        wait=False,
     )
 
 
 def shutdown_daemons(ctx):
-    nodes = {}
-    for remote in ctx.cluster.remotes.iterkeys():
-        proc = remote.run(
+    ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
+                          'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
+                          'sudo', 'systemctl', 'stop', 'ceph.target'],
+                    check_status=False)
+    ctx.cluster.run(
             args=[
                 'if', 'grep', '-q', 'ceph-fuse', '/etc/mtab', run.Raw(';'),
                 'then',
@@ -86,65 +86,26 @@ def shutdown_daemons(ctx):
                 run.Raw('||'),
                 'true',  # ignore errors from ceph binaries not being found
             ],
-            wait=False,
         )
-        nodes[remote.name] = proc
-
-    for name, proc in nodes.iteritems():
-        log.info('Waiting for %s to finish shutdowns...', name)
-        proc.wait()
 
 
 def kill_hadoop(ctx):
-    for remote in ctx.cluster.remotes.iterkeys():
-        pids_out = StringIO()
-        ps_proc = remote.run(args=[
-            "ps", "-eo", "pid,cmd",
+    ctx.cluster.run(args=[
+            "ps", "-ef",
             run.Raw("|"), "grep", "java.*hadoop",
-            run.Raw("|"), "grep", "-v", "grep"
-            ], stdout=pids_out, check_status=False)
-
-        if ps_proc.exitstatus == 0:
-            for line in pids_out.getvalue().strip().split("\n"):
-                pid, cmdline = line.split(None, 1)
-                log.info("Killing PID {0} ({1})".format(pid, cmdline))
-                remote.run(args=["kill", "-9", pid], check_status=False)
+            run.Raw("|"), "grep", "-v", "grep",
+            run.Raw("|"), 'awk', '{print $2}',
+            run.Raw("|"), 'xargs', 'kill', '-9',
+            ], check_status=False)
 
 
-def find_kernel_mounts(ctx):
-    nodes = {}
-    log.info('Looking for kernel mounts to handle...')
-    for remote in ctx.cluster.remotes.iterkeys():
-        proc = remote.run(
-            args=[
-                'grep', '-q', ' ceph ', '/etc/mtab',
-                run.Raw('||'),
-                'grep', '-q', '^/dev/rbd', '/etc/mtab',
-            ],
-            wait=False,
-        )
-        nodes[remote] = proc
-    kernel_mounts = list()
-    for remote, proc in nodes.iteritems():
-        try:
-            proc.wait()
-            log.debug('kernel mount exists on %s', remote.name)
-            kernel_mounts.append(remote)
-        except run.CommandFailedError:  # no mounts!
-            log.debug('no kernel mount on %s', remote.name)
-
-    return kernel_mounts
-
-
-def remove_kernel_mounts(ctx, kernel_mounts):
+def remove_kernel_mounts(ctx):
     """
     properly we should be able to just do a forced unmount,
     but that doesn't seem to be working, so you should reboot instead
     """
-    nodes = {}
-    for remote in kernel_mounts:
-        log.info('clearing kernel mount from %s', remote.name)
-        proc = remote.run(
+    log.info('clearing kernel mount from all nodes')
+    ctx.cluster.run(
             args=[
                 'grep', 'ceph', '/etc/mtab', run.Raw('|'),
                 'grep', '-o', "on /.* type", run.Raw('|'),
@@ -153,12 +114,8 @@ def remove_kernel_mounts(ctx, kernel_mounts):
                 'sudo', 'umount', '-f', run.Raw(';'),
                 'fi'
             ],
-            wait=False
+            check_status=False,
         )
-        nodes[remote] = proc
-
-    for remote, proc in nodes:
-        proc.wait()
 
 
 def remove_osd_mounts(ctx):
@@ -199,15 +156,15 @@ def reboot(ctx, remotes):
     for remote in remotes:
         log.info('rebooting %s', remote.name)
         try:
-            proc = remote.run(  # note use of -n to force a no-sync reboot
+            proc = remote.run(
                 args=[
                     'sync',
                     run.Raw('&'),
                     'sleep', '5',
                     run.Raw(';'),
-                    'sudo', 'reboot', '-f', '-n'
+                    'sudo', 'reboot',
                     ],
-                wait=False
+                wait=False,
                 )
         except Exception:
             log.exception('ignoring exception during reboot command')
@@ -237,7 +194,6 @@ def reset_syslog_dir(ctx):
                 'fi',
                 run.Raw(';'),
             ],
-            wait=False,
         )
         nodes[remote.name] = proc
 
@@ -247,11 +203,12 @@ def reset_syslog_dir(ctx):
 
 
 def dpkg_configure(ctx):
-    nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         if remote.os.package_type != 'deb':
             continue
-        proc = remote.run(
+        log.info(
+            'Waiting for dpkg --configure -a and apt-get -f install...')
+        remote.run(
             args=[
                 'sudo', 'dpkg', '--configure', '-a',
                 run.Raw(';'),
@@ -260,15 +217,8 @@ def dpkg_configure(ctx):
                 run.Raw('||'),
                 ':',
             ],
-            wait=False,
+            check_status=False,
         )
-        nodes[remote.name] = proc
-
-    for name, proc in nodes.iteritems():
-        log.info(
-            'Waiting for %s to dpkg --configure -a and apt-get -f install...',
-            name)
-        proc.wait()
 
 
 def remove_yum_timedhosts(ctx):
@@ -279,7 +229,7 @@ def remove_yum_timedhosts(ctx):
             continue
         remote.run(
             args="sudo find /var/cache/yum -name 'timedhosts' -exec rm {} \;",
-            check_status=False,
+            check_status=False
         )
 
 
@@ -351,9 +301,11 @@ def remove_installed_packages(ctx):
     )
     packages = install_task.get_package_list(ctx, conf)
     debs = packages['deb'] + \
-        ['salt-common', 'salt-minion', 'calamari-server', 'python-rados']
+        ['salt-common', 'salt-minion', 'calamari-server',
+         'python-rados', 'multipath-tools']
     rpms = packages['rpm'] + \
-        ['salt-common', 'salt-minion', 'calamari-server']
+        ['salt-common', 'salt-minion', 'calamari-server',
+         'multipath-tools', 'device-mapper-multipath']
     install_task.remove_packages(
         ctx,
         conf,
@@ -367,9 +319,7 @@ def remove_installed_packages(ctx):
 
 
 def remove_testing_tree(ctx):
-    nodes = {}
-    for remote in ctx.cluster.remotes.iterkeys():
-        proc = remote.run(
+    ctx.cluster.run(
             args=[
                 'sudo', 'rm', '-rf', get_testdir(ctx),
                 # just for old time's sake
@@ -380,13 +330,7 @@ def remove_testing_tree(ctx):
                 run.Raw('&&'),
                 'sudo', 'rm', '-rf', '/etc/ceph',
             ],
-            wait=False,
         )
-        nodes[remote.name] = proc
-
-    for name, proc in nodes.iteritems():
-        log.info('Waiting for %s to clear filesystem...', name)
-        proc.wait()
 
 
 def remove_configuration_files(ctx):
@@ -398,21 +342,11 @@ def remove_configuration_files(ctx):
     ``~/.cephdeploy.conf`` to alter how it handles installation by specifying
     a default section in its config with custom locations.
     """
-
-    nodes = {}
-
-    for remote in ctx.cluster.remotes.iterkeys():
-        proc = remote.run(
+    ctx.cluster.run(
             args=[
                 'rm', '-f', '/home/ubuntu/.cephdeploy.conf'
             ],
-            wait=False,
         )
-        nodes[remote.name] = proc
-
-    for name, proc in nodes.iteritems():
-        log.info('removing temporary configuration files on %s', name)
-        proc.wait()
 
 
 def undo_multipath(ctx):
@@ -426,22 +360,13 @@ def undo_multipath(ctx):
             args=[
                 'sudo', 'multipath', '-F',
             ],
-            check_status=False,
-        )
-        install_task.remove_packages(
-            ctx,
-            dict(),     # task config not relevant here
-            {
-                "rpm": ['multipath-tools', 'device-mapper-multipath'],
-                "deb": ['multipath-tools'],
-            }
+            check_status=False
         )
 
 
 def synch_clocks(remotes):
-    nodes = {}
     for remote in remotes:
-        proc = remote.run(
+        remote.run(
             args=[
                 'sudo', 'service', 'ntp', 'stop',
                 run.Raw('&&'),
@@ -453,12 +378,7 @@ def synch_clocks(remotes):
                 run.Raw('||'),
                 'true',    # ignore errors; we may be racing with ntpd startup
             ],
-            wait=False,
         )
-        nodes[remote.name] = proc
-    for name, proc in nodes.iteritems():
-        log.info('Waiting for clock to synchronize on %s...', name)
-        proc.wait()
 
 
 def stale_openstack(ctx):
@@ -767,31 +687,26 @@ def nuke_helper(ctx, should_unlock):
     shutdown_daemons(ctx)
     log.info('All daemons killed.')
 
-    need_reboot = find_kernel_mounts(ctx)
-
-    # no need to unmount anything if we're rebooting
-    if ctx.reboot_all:
-        need_reboot = ctx.cluster.remotes.keys()
-    else:
-        log.info('Unmount any osd data directories...')
-        remove_osd_mounts(ctx)
-        log.info('Unmount any osd tmpfs dirs...')
-        remove_osd_tmpfs(ctx)
-        # log.info('Dealing with any kernel mounts...')
-        # remove_kernel_mounts(ctx, need_reboot)
-        log.info("Terminating Hadoop services...")
-        kill_hadoop(ctx)
+    remotes = ctx.cluster.remotes.keys()
+    reboot(ctx, remotes)
+    #shutdown daemons again incase of startup
+    log.info('Stop daemons after restart...')
+    shutdown_daemons(ctx)
+    log.info('All daemons killed.')
+    log.info('Unmount any osd data directories...')
+    remove_osd_mounts(ctx)
+    log.info('Unmount any osd tmpfs dirs...')
+    remove_osd_tmpfs(ctx)
+    log.info("Terminating Hadoop services...")
+    kill_hadoop(ctx)
+    log.info("Remove kernel mounts...")
+    remove_kernel_mounts(ctx)
 
     log.info("Force remove ceph packages")
     remove_ceph_packages(ctx)
-    if need_reboot:
-        reboot(ctx, need_reboot)
-    log.info('All kernel mounts gone.')
 
     log.info('Synchronizing clocks...')
-    if ctx.synch_clocks:
-        need_reboot = ctx.cluster.remotes.keys()
-    synch_clocks(need_reboot)
+    synch_clocks(remotes)
 
     log.info('Making sure firmware.git is not locked...')
     ctx.cluster.run(args=['sudo', 'rm', '-f',
