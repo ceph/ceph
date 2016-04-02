@@ -116,6 +116,7 @@ namespace dpdk {
         }
       }
     });
+    t.detach();
     std::unique_lock<std::mutex> l(lock);
     while (!done)
       cond.wait(l);
