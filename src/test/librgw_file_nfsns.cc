@@ -331,6 +331,14 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    ASSERT_EQ(rc, 0);
 	    sf.sync();
 	    ASSERT_TRUE(sf.rgw_fh->is_file());
+
+	    /* because we made it the hard way, fixup attributes */
+	    struct stat st;
+	    st.st_uid = owner_uid;
+	    st.st_gid = owner_gid;
+	    st.st_mode = 644;
+	    sf.rgw_fh->create_stat(&st, create_mask);
+
 	    /* open handle */
 	    rc = rgw_open(fs, sf.fh, 0 /* flags */);
 	    ASSERT_EQ(rc, 0);
