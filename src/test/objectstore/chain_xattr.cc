@@ -259,6 +259,120 @@ TEST(chain_xattr, listxattr) {
   ::unlink(file);
 }
 
+list<string> get_xattrs(int fd)
+{
+  char _buf[1024];
+  char *buf = _buf;
+  int len = sys_flistxattr(fd, _buf, sizeof(_buf));
+  if (len < 0)
+    return list<string>();
+  list<string> ret;
+  while (len > 0) {
+    size_t next_len = strlen(buf);
+    ret.push_back(string(buf, buf + next_len));
+    assert(len >= (int)(next_len + 1));
+    buf += (next_len + 1);
+    len -= (next_len + 1);
+  }
+  return ret;
+}
+
+list<string> get_xattrs(string fn)
+{
+  int fd = ::open(fn.c_str(), O_RDONLY);
+  if (fd < 0)
+    return list<string>();
+  auto ret = get_xattrs(fd);
+  ::close(fd);
+  return ret;
+}
+
+TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
+{
+  const char *name = "user.foo";
+  const char *file = FILENAME;
+  ::unlink(file);
+  int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+
+  char buf[800];
+  memset(buf, sizeof(buf), 0x1F);
+  // set chunked without either
+  {
+    int r = chain_fsetxattr(fd, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_GT(get_xattrs(fd).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  // overwrite
+  {
+    int r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof (buf));
+    ASSERT_EQ(get_xattrs(fd).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  ::close(fd);
+  ::unlink(file);
+}
+
+TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
+{
+  const char *name = "user.foo";
+  const char *file = FILENAME;
+  ::unlink(file);
+  int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+  ::close(fd);
+
+  char buf[3000];
+  memset(buf, sizeof(buf), 0x1F);
+  // set chunked without either
+  {
+    int r = chain_setxattr(file, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_GT(get_xattrs(file).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_getxattr(file, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  // overwrite
+  {
+    int r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof (buf));
+    ASSERT_EQ(get_xattrs(file).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_getxattr(file, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  ::unlink(file);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
