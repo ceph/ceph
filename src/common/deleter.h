@@ -22,6 +22,7 @@
 #ifndef CEPH_COMMON_DELETER_H
 #define CEPH_COMMON_DELETER_H
 
+#include <atomic>
 #include <memory>
 #include <cstdlib>
 #include <type_traits>
@@ -108,9 +109,9 @@ class deleter final {
 
 /// \cond internal
 struct deleter::impl {
-  unsigned refs = 1;
+  std::atomic_uint refs;
   deleter next;
-  impl(deleter next) : next(std::move(next)) {}
+  impl(deleter next) : refs(1), next(std::move(next)) {}
   virtual ~impl() {}
 };
 /// \endcond
