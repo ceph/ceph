@@ -25,7 +25,6 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "common/Cycles.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
