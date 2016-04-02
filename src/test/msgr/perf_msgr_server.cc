@@ -97,11 +97,7 @@ class ServerDispatcher : public Dispatcher {
     if (think_time)
       usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;
-    // op_wq.queue(m);
-    MOSDOp *osd_op = static_cast<MOSDOp*>(m);
-    MOSDOpReply *reply = new MOSDOpReply(osd_op, 0, 0, 0, false);
-    m->get_connection()->send_message(reply);
-    m->put();
+    op_wq.queue(m);
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
