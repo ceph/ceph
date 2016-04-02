@@ -76,11 +76,11 @@ void DPDKWorker::initialize()
   if (i == 0) {
     // Hardcoded port index 0.
     // TODO: Inherit it from the opts
+    cores = cct->_conf->ms_async_op_threads;
     std::unique_ptr<DPDKDevice> dev = create_dpdk_net_device(
-        cct, cct->_conf->ms_dpdk_port_id,
+        cct, cores, cct->_conf->ms_dpdk_port_id,
         cct->_conf->ms_dpdk_lro,
         cct->_conf->ms_dpdk_hw_flow_control);
-    cores = cct->_conf->ms_async_op_threads;
     sdev = std::shared_ptr<DPDKDevice>(dev.release());
     sdev->workers.resize(cores);
     ldout(cct, 1) << __func__ << " using " << cores << " cores " << dendl;

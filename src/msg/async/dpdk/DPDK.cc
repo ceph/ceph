@@ -1237,6 +1237,7 @@ void DPDKDevice::set_rss_table()
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     CephContext *cct,
+    unsigned cores,
     uint8_t port_idx,
     bool use_lro,
     bool enable_fc)
@@ -1249,5 +1250,5 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
   }
 
   return std::unique_ptr<DPDKDevice>(
-      new DPDKDevice(cct, port_idx, rte_lcore_count(), use_lro, enable_fc));
+      new DPDKDevice(cct, port_idx, cores, use_lro, enable_fc));
 }
