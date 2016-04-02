@@ -242,8 +242,8 @@ class EventCenter {
   };
  public:
   template <typename func>
-  static void submit_to(int id, func &&f, bool nowait = false) {
-    EventCenter *c = centers[id];
+  static void submit_to(int i, func &&f, bool nowait = false) {
+    EventCenter *c = centers[i];
     if (c->in_thread()) {
       f();
       return ;
