@@ -16,12 +16,12 @@
 #define CEPH_MSG_DPDKSTACK_H
 
 #include <functional>
-#include <thread>
 
 #include "common/ceph_context.h"
 #include "common/Tub.h"
 
 #include "msg/async/Stack.h"
+#include "dpdk_rte.h"
 #include "DPDK.h"
 #include "net.h"
 #include "const.h"
@@ -235,7 +235,6 @@ class DPDKWorker : public Worker {
 };
 
 class DPDKStack : public NetworkStack {
-  std::thread t;
  public:
   explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {}
   virtual bool support_zero_copy_read() const override { return true; }
@@ -243,7 +242,10 @@ class DPDKStack : public NetworkStack {
 
   virtual void spawn_workers(std::vector<std::function<void ()>> &threads) override;
   virtual void join_workers() override {
-    t.join();
+    dpdk::eal::execute_on_master([&]() {
+      for (unsigned i = 1; i <= threads.size(); ++i)
+        rte_eal_wait_lcore(i);
+    });
   }
 };
 

@@ -41,7 +41,6 @@
 #include <tuple>
 
 #include "common/ceph_argparse.h"
-#include "dpdk_rte.h"
 #include "DPDKStack.h"
 #include "DPDK.h"
 #include "IP.h"
@@ -81,12 +80,7 @@ void DPDKWorker::initialize()
         cct, cct->_conf->ms_dpdk_port_id,
         cct->_conf->ms_dpdk_lro,
         cct->_conf->ms_dpdk_hw_flow_control);
-    cores = rte_lcore_count();
-    if (int(cores) != cct->_conf->ms_async_op_threads) {
-      lderr(cct) << __func__ << " async op threads " << cct->_conf->ms_async_op_threads
-                    << " != " << " dpdk core mask count" << cores << dendl;
-      assert(0);
-    }
+    cores = cct->_conf->ms_async_op_threads;
     sdev = std::shared_ptr<DPDKDevice>(dev.release());
     sdev->workers.resize(cores);
     ldout(cct, 1) << __func__ << " using " << cores << " cores " << dendl;
@@ -244,31 +238,27 @@ int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 void DPDKStack::spawn_workers(std::vector<std::function<void ()>> &threads) {
   // create a extra master thread
   //
-  t = std::thread([this](std::vector<std::function<void ()>> &threads) {
-    static bool called = false;
-
-    int r = 0;
-    if (!called) {
-      r = dpdk::eal::init(cct);
+  int r = 0;
+  r = dpdk::eal::init(cct);
+  if (r < 0) {
+    lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
+    assert(0);
+  }
+  // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
+  // cores
+  if (rte_lcore_count() <= threads.size()) {
+    lderr(cct) << __func__ << " required " << threads.size() + 1 << " only "
+               << rte_lcore_count() << dendl;
+    assert(0);
+  }
+  dpdk::eal::execute_on_master([&]() {
+    auto it = threads.begin();
+    for (unsigned i = 1; i <= threads.size(); ++i) {
+      r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&*(it++)), i);
       if (r < 0) {
-        lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
+        lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
         assert(0);
       }
-      called = true;
     }
-    auto it = threads.begin();
-    ++it;
-    unsigned i;
-    RTE_LCORE_FOREACH_SLAVE(i) {
-      rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&*(it++)), i);
-    }
-
-   if (r < 0) {
-      lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
-      assert(0);
-    }
-
-    threads[0]();
-    rte_eal_mp_wait_lcore();
-  }, std::ref(threads));
+  });
 }

@@ -33,6 +33,10 @@ namespace dpdk {
   }
 
   bool eal::initialized = false;
+  std::thread eal::t;
+  std::mutex eal::lock;
+  std::condition_variable eal::cond;
+  std::list<std::function<void()>> eal::funcs;
 
   static int bitcount(unsigned n)
   {
@@ -45,57 +49,76 @@ namespace dpdk {
   int eal::init(CephContext *c)
   {
     if (initialized) {
-      return 0;
+      return 1;
     }
 
-    // TODO: Inherit these from the app parameters - "opts"
-    std::vector<std::vector<char>> args {
-        string2vector(string("ceph")),
-        string2vector("-c"), string2vector(c->_conf->ms_dpdk_coremask),
-        string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
-    };
+    bool done = false;
+    t = std::thread([&]() {
+      // TODO: Inherit these from the app parameters - "opts"
+      std::vector<std::vector<char>> args {
+          string2vector(string("ceph")),
+          string2vector("-c"), string2vector(c->_conf->ms_dpdk_coremask),
+          string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
+      };
 
-    Tub<std::string> hugepages_path;
-    if (!c->_conf->ms_dpdk_hugepages.empty()) {
-      hugepages_path.construct(c->_conf->ms_dpdk_hugepages);
-    }
+      Tub<std::string> hugepages_path;
+      if (!c->_conf->ms_dpdk_hugepages.empty()) {
+        hugepages_path.construct(c->_conf->ms_dpdk_hugepages);
+      }
 
-    // If "hugepages" is not provided and DPDK PMD drivers mode is requested -
-    // use the default DPDK huge tables configuration.
-    if (hugepages_path) {
-      args.push_back(string2vector("--huge-dir"));
-      args.push_back(string2vector(*hugepages_path));
+      // If "hugepages" is not provided and DPDK PMD drivers mode is requested -
+      // use the default DPDK huge tables configuration.
+      if (hugepages_path) {
+        args.push_back(string2vector("--huge-dir"));
+        args.push_back(string2vector(*hugepages_path));
 
-      //
-      // We don't know what is going to be our networking configuration so we
-      // assume there is going to be a queue per-CPU. Plus we'll give a DPDK
-      // 64MB for "other stuff".
-      //
-      unsigned int x;
-      std::stringstream ss;
-      ss << std::hex << "fffefffe";
-      ss >> x;
-      size_t size_MB = mem_size(bitcount(x)) >> 20;
-      std::stringstream size_MB_str;
-      size_MB_str << size_MB;
+        //
+        // We don't know what is going to be our networking configuration so we
+        // assume there is going to be a queue per-CPU. Plus we'll give a DPDK
+        // 64MB for "other stuff".
+        //
+        unsigned int x;
+        std::stringstream ss;
+        ss << std::hex << "fffefffe";
+        ss >> x;
+        size_t size_MB = mem_size(bitcount(x)) >> 20;
+        std::stringstream size_MB_str;
+        size_MB_str << size_MB;
 
-      args.push_back(string2vector("-m"));
-      args.push_back(string2vector(size_MB_str.str()));
-    } else if (!c->_conf->ms_dpdk_pmd.empty()) {
-      args.push_back(string2vector("--no-huge"));
-    }
+        args.push_back(string2vector("-m"));
+        args.push_back(string2vector(size_MB_str.str()));
+      } else if (!c->_conf->ms_dpdk_pmd.empty()) {
+        args.push_back(string2vector("--no-huge"));
+      }
 
-    std::vector<char*> cargs;
+      std::vector<char*> cargs;
 
-    for (auto&& a: args) {
-      cargs.push_back(a.data());
-    }
-    /* initialise the EAL for all */
-    int ret = rte_eal_init(cargs.size(), cargs.data());
-    if (ret < 0)
-      return ret;
+      for (auto&& a: args) {
+        cargs.push_back(a.data());
+      }
+      /* initialise the EAL for all */
+      int ret = rte_eal_init(cargs.size(), cargs.data());
+      if (ret < 0)
+        return ret;
 
-    initialized = true;
+      std::unique_lock<std::mutex> l(lock);
+      initialized = true;
+      done = true;
+      cond.notify_all();
+      while (true) {
+        if (!funcs.empty()) {
+          auto f = std::move(funcs.front());
+          funcs.pop_front();
+          f();
+          cond.notify_all();
+        } else {
+          cond.wait(l);
+        }
+      }
+    });
+    std::unique_lock<std::mutex> l(lock);
+    while (!done)
+      cond.wait(l);
     return 0;
   }
 
