@@ -30,13 +30,21 @@ protected:
 
   class Thread_factory : public Thread {
   public:
+    static void cleanup(void *arg) {
+      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+      if (instance.lock.is_locked())
+        instance.lock.Unlock();
+    }
+
     virtual void *entry() {
       ErasureCodeProfile profile;
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
+      pthread_cleanup_push(cleanup, NULL);
       instance.factory("hangs",
 		       g_conf->erasure_code_dir,
 		       profile, &erasure_code, &cerr);
+      pthread_cleanup_pop(0);
       return NULL;
     }
   };
