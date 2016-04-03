@@ -16,6 +16,7 @@ wait_for_qemu() {
   done
 }
 
+wait_for_qemu
 rbd feature disable ${IMAGE_NAME} journaling || true
 rbd feature disable ${IMAGE_NAME} fast-diff || true
 rbd feature disable ${IMAGE_NAME} object-map || true
@@ -24,7 +25,6 @@ rbd feature disable ${IMAGE_NAME} exclusive-lock || true
 rbd feature enable ${IMAGE_NAME} exclusive-lock
 rbd feature enable ${IMAGE_NAME} object-map
 
-wait_for_qemu
 while is_qemu_running ; do
   echo "*** Rebuilding object map"
   rbd object-map rebuild ${IMAGE_NAME}
