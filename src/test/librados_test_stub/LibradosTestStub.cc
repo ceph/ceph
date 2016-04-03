@@ -1118,6 +1118,11 @@ int cls_cxx_map_set_vals(cls_method_context_t hctx,
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len,
                  bufferlist *outbl) {
+  return cls_cxx_read2(hctx, ofs, len, outbl, 0);
+}
+
+int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
+                  bufferlist *outbl, uint32_t op_flags) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->read(ctx->oid, len, ofs, outbl);
@@ -1138,6 +1143,11 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime) {
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len,
                   bufferlist *inbl) {
+  return cls_cxx_write2(hctx, ofs, len, inbl, 0);
+}
+
+int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *inbl, uint32_t op_flags) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);
