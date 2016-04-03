@@ -1251,7 +1251,7 @@ if(${WITH_RADOSGW})
     )
 
   add_library(rgw SHARED ${librgw_srcs})
-  target_link_libraries(rgw PRIVATE
+  target_link_libraries(rgw LINK_PRIVATE
     rgw_a
     librados
     cls_rgw_client
