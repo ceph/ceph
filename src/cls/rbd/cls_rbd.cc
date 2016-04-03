@@ -2332,7 +2332,8 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   BitVector<2> object_map;
   bufferlist header_bl;
-  r = cls_cxx_read(hctx, 0, object_map.get_header_length(), &header_bl);
+  r = cls_cxx_read2(hctx, 0, object_map.get_header_length(), &header_bl,
+                    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_ERR("object map header read failed");
     return r;
@@ -2347,8 +2348,9 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   }
 
   bufferlist footer_bl;
-  r = cls_cxx_read(hctx, object_map.get_footer_offset(),
-		   size - object_map.get_footer_offset(), &footer_bl);
+  r = cls_cxx_read2(hctx, object_map.get_footer_offset(),
+		    size - object_map.get_footer_offset(), &footer_bl,
+                    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_ERR("object map footer read failed");
     return r;
@@ -2372,8 +2374,8 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 			      &byte_offset, &byte_length);
 
   bufferlist data_bl;
-  r = cls_cxx_read(hctx, object_map.get_header_length() + byte_offset,
-		   byte_length, &data_bl); 
+  r = cls_cxx_read2(hctx, object_map.get_header_length() + byte_offset,
+		    byte_length, &data_bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_ERR("object map data read failed");
     return r;
@@ -2386,7 +2388,7 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     CLS_ERR("failed to decode data chunk [%" PRIu64 "]: %s",
 	    byte_offset, err.what());
     return -EINVAL;
-  } 
+  }
 
   bool updated = false;
   for (uint64_t object_no = start_object_no; object_no < end_object_no;
@@ -2407,21 +2409,22 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
     bufferlist data_bl;
     object_map.encode_data(data_bl, byte_offset, byte_length);
-    r = cls_cxx_write(hctx, object_map.get_header_length() + byte_offset,
-		      data_bl.length(), &data_bl);
+    r = cls_cxx_write2(hctx, object_map.get_header_length() + byte_offset,
+		       data_bl.length(), &data_bl,
+                       CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
-      CLS_ERR("failed to write object map header: %s", cpp_strerror(r).c_str());  
-      return r;         
+      CLS_ERR("failed to write object map header: %s", cpp_strerror(r).c_str());
+      return r;
     }
-   
+
     footer_bl.clear();
     object_map.encode_footer(footer_bl);
-    r = cls_cxx_write(hctx, object_map.get_footer_offset(), footer_bl.length(),
-		      &footer_bl);
+    r = cls_cxx_write2(hctx, object_map.get_footer_offset(), footer_bl.length(),
+		       &footer_bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
-      CLS_ERR("failed to write object map footer: %s", cpp_strerror(r).c_str());  
+      CLS_ERR("failed to write object map footer: %s", cpp_strerror(r).c_str());
       return r;
-    } 
+    }
   } else {
     CLS_LOG(20, "object_map_update: no update necessary");
   }

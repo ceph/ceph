@@ -269,12 +269,19 @@ int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mt
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 {
+  return cls_cxx_read2(hctx, ofs, len, outbl, 0);
+}
+
+int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
+                  bufferlist *outbl, uint32_t op_flags)
+{
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
   int ret;
   ops[0].op.op = CEPH_OSD_OP_SYNC_READ;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
+  ops[0].op.flags = op_flags;
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
@@ -284,11 +291,18 @@ int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
 {
+  return cls_cxx_write2(hctx, ofs, len, inbl, 0);
+}
+
+int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *inbl, uint32_t op_flags)
+{
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
   ops[0].op.op = CEPH_OSD_OP_WRITE;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
+  ops[0].op.flags = op_flags;
   ops[0].indata = *inbl;
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
