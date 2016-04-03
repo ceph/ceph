@@ -575,7 +575,7 @@ enum bl_type
 #define MAX_XIO_BUF_SIZE 1044480
 
 static inline int
-xio_count_buffers(buffer::list& bl, int& req_size, int& msg_off, int& req_off)
+xio_count_buffers(const buffer::list& bl, int& req_size, int& msg_off, int& req_off)
 {
 
   const std::list<buffer::ptr>& buffers = bl.buffers();
@@ -620,7 +620,7 @@ xio_count_buffers(buffer::list& bl, int& req_size, int& msg_off, int& req_off)
 }
 
 static inline void
-xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
+xio_place_buffers(const buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
 		  struct xio_iovec_ex*& msg_iov, int& req_size,
 		  int ex_cnt, int& msg_off, int& req_off, bl_type type)
 {
