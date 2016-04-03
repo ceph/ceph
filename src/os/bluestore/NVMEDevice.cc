@@ -675,7 +675,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     assert(0);
   }
 
-  request_mempool = rte_mempool_create("nvme_request", 512,
+  request_mempool = rte_mempool_create("nvme_request", 1024,
                                        spdk_nvme_request_size(), 128, 0,
                                        NULL, NULL, NULL, NULL,
                                        SOCKET_ID_ANY, 0);
