@@ -2641,7 +2641,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     set_max_osd(nosd);
   } else {
     // count osds
-    int maxosd = 0, numosd = 0;
+    int maxosd = 0;
     const md_config_t *conf = cct->_conf;
     vector<string> sections;
     conf->get_all_sections(sections);
@@ -2659,7 +2659,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 	lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
 	return -ERANGE;
       }
-      numosd++;
+
       if (o > maxosd)
 	maxosd = o;
     }
