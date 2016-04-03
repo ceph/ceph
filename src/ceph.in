@@ -478,6 +478,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
+
 def complete(sigdict, args, target):
     """
     Command completion.  Match as much of [args] as possible,
@@ -495,45 +496,37 @@ def complete(sigdict, args, target):
         args = args[2:]
     # look for best match, accumulate possibles in bestcmds
     # (so we can maybe give a more-useful error message)
-    best_match_cnt = 0
-    bestcmds = []
+
+    match_count = 0
+    comps = []
     for cmdtag, cmd in sigdict.iteritems():
         sig = cmd['sig']
-        matched = matchnum(args, sig, partial=True)
-        if (matched > best_match_cnt):
-            if complete_verbose:
-                print("better match: {0} > {1}: {2}:{3} ".format(matched,
-                        best_match_cnt, cmdtag, concise_sig(sig)),  file=sys.stderr)
-            best_match_cnt = matched
-            bestcmds = [{cmdtag:cmd}]
-        elif matched == best_match_cnt:
-            if complete_verbose:
-                print("equal match: {0} > {1}: {2}:{3} ".format(matched,
-                        best_match_cnt, cmdtag, concise_sig(sig)), file=sys.stderr)
-            bestcmds.append({cmdtag:cmd})
+        j = 0
+        # iterate over all arguments, except last one
+        for arg in args[0:-1]:
+            if j > len(sig)-1:
+                # an out of argument definitions
+                break
+            found_match = arg in sig[j].complete(arg)
+            if not found_match and sig[j].req:
+                # no elements that match
+                break
+            if not sig[j].N:
+                j += 1
+        else:
+            # successfully matched all - except last one - arguments
+            if j < len(sig) and len(args) > 0:
+                comps += sig[j].complete(args[-1])
 
-    # look through all matching sigs
-    comps = []
-    for cmddict in bestcmds:
-        for cmd in cmddict.itervalues():
-            sig = cmd['sig']
-            # either:
-            #   we match everything fully, so we want the next desc, or
-            #   we match more partially, so we want the partial match
-            fullindex = matchnum(args, sig, partial=False) - 1
-            partindex = matchnum(args, sig, partial=True) - 1
-            if complete_verbose:
-                print('{}: f {} p {} len {}'.format(sig, fullindex, partindex, len(sig)), file=sys.stderr)
-            if fullindex == partindex and fullindex + 1 < len(sig):
-                d = sig[fullindex + 1]
-            else:
-                d = sig[partindex]
-            comps.append(str(d))
-    if complete_verbose:
-        print('\n'.join(comps), file=sys.stderr)
-    print('\n'.join(comps))
+            match_count += 1
+            match_cmd = cmd
 
+    if match_count == 1 and len(comps) == 0:
+        # only one command matched and no hints yet => add help
+        comps = comps + [' ', '#'+match_cmd['help']]
+    print('\n'.join(sorted(set(comps))))
     return 0
+
 
 ###
 # ping a monitor
@@ -716,9 +709,6 @@ def main():
             file=sys.stderr)
         return 1
 
-    if childargs in [['mon'], ['osd']]:
-        parsed_args.help = True
-
     if parsed_args.help:
         # short default timeout for -h
         if not timeout:
@@ -731,7 +721,9 @@ def main():
         if len(childargs) < 2:
             print('"ping" requires a monitor name as argument: "ping mon.<id>"', file=sys.stderr)
             return 1
-
+    if parsed_args.completion:
+        #for completion let timeout be really small
+        timeout = 3
     try:
         if childargs and childargs[0] == 'ping':
             return ping_monitor(cluster_handle, childargs[1], timeout)
