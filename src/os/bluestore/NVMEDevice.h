@@ -28,7 +28,7 @@
 
 #include "include/atomic.h"
 #include "include/interval_set.h"
-#include "include/utime.h"
+#include "common/ceph_time.h"
 #include "common/Mutex.h"
 #include "BlockDevice.h"
 
@@ -43,13 +43,18 @@ class NVMEDevice;
 
 struct Task {
   NVMEDevice *device;
-  IOContext *ctx;
+  IOContext *ctx = nullptr;
   IOCommand command;
-  uint64_t offset, len;
-  void *buf;
-  Task *next;
+  uint64_t offset;
+  uint64_t len;
+  void *buf = nullptr;
+  Task *next = nullptr;
   int64_t return_code;
   utime_t start;
+  Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
+    : device(dev), command(c), offset(off), len(l),
+      return_code(rc),
+      start(ceph_clock_now(g_ceph_context)) {}
 };
 
 class PerfCounters;
