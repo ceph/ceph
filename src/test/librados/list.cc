@@ -5,6 +5,10 @@
 #include "include/stringify.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 
 #include "include/types.h"
 #include "common/hobject.h"
@@ -956,3 +960,18 @@ TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args);
+  cout << args << std::endl;
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  return RUN_ALL_TESTS();
+}
