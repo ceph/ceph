@@ -925,8 +925,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       // fall through
 
     case CEPH_OSD_OP_PGNLS:
-      if (m->get_pg() != info.pgid.pgid) {
-        dout(10) << " pgnls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+      if (get_osdmap()->raw_pg_to_pg(m->get_pg()) != info.pgid.pgid) {
+        dout(10) << " pgnls pg=" << m->get_pg()
+		 << " " << get_osdmap()->raw_pg_to_pg(m->get_pg())
+		 << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
 	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
@@ -1127,8 +1129,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       // fall through
 
     case CEPH_OSD_OP_PGLS:
-      if (m->get_pg() != info.pgid.pgid) {
-        dout(10) << " pgls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+      if (get_osdmap()->raw_pg_to_pg(m->get_pg()) != info.pgid.pgid) {
+        dout(10) << " pgls pg=" << m->get_pg()
+		 << " " << get_osdmap()->raw_pg_to_pg(m->get_pg())
+		 << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
 	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
