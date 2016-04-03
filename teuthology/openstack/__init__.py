@@ -288,7 +288,7 @@ class OpenStack(object):
             raise Exception('no OS_AUTH_URL environment variable')
         providers = (('runabove.io', 'runabove'),
                      ('cloud.ovh.net', 'ovh'),
-                     ('ctl:', 'cloudlab'),
+                     ('cloudlab.us', 'cloudlab'),
                      ('entercloudsuite.com', 'entercloudsuite'),
                      ('rackspacecloud.com', 'rackspace'),
                      ('dream.io', 'dreamhost'))
