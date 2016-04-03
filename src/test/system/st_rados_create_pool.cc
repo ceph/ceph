@@ -125,6 +125,7 @@ std::string get_temp_pool_name(const char* prefix)
   char poolname[256];
   ret = snprintf(poolname, sizeof(poolname),
                  "%s.%s-%d", prefix, hostname, getpid());
-  assert(ret < sizeof(poolname));
+  assert(ret > 0);
+  assert((unsigned int)ret < sizeof(poolname));
   return poolname;
 }
