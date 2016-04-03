@@ -7,7 +7,8 @@ ceph_test_rados_api_lock
 ceph_test_rados_api_misc
 # skip *Whiteout tests (see #15095)
 ceph_test_rados_api_tier --gtest_filter=-*Whiteout
-ceph_test_rados_api_pool
+# skip LibRadosPools.PoolGetBaseTier, which tries to set 'readonly' cache-mode
+ceph_test_rados_api_pool --gtest_filter=-*PoolGetBaseTier
 ceph_test_rados_api_snapshots
 ceph_test_rados_api_stat
 ceph_test_rados_api_watch_notify
