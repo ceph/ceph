@@ -3993,7 +3993,7 @@ void BlueStore::_kv_sync_thread()
 	// cleanup the wal
 	string key;
 	get_wal_key(wt.seq, &key);
-	t->rmkey(PREFIX_WAL, key);
+	t->rm_single_key(PREFIX_WAL, key);
       }
       db->submit_transaction_sync(t);
 
