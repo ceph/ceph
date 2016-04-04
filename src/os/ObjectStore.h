@@ -438,7 +438,7 @@ public:
       __le32 largest_data_off_in_tbl;
       __le32 fadvise_flags;
 
-      TransactionData() :
+      TransactionData() noexcept :
         ops(0),
         largest_data_len(0),
         largest_data_off(0),
@@ -446,7 +446,7 @@ public:
 	fadvise_flags(0) { }
 
       // override default move operations to reset default values
-      TransactionData(TransactionData&& other) :
+      TransactionData(TransactionData&& other) noexcept :
         ops(other.ops),
         largest_data_len(other.largest_data_len),
         largest_data_off(other.largest_data_off),
@@ -458,7 +458,7 @@ public:
         other.largest_data_off_in_tbl = 0;
         other.fadvise_flags = 0;
       }
-      TransactionData& operator=(TransactionData&& other) {
+      TransactionData& operator=(TransactionData&& other) noexcept {
         ops = other.ops;
         largest_data_len = other.largest_data_len;
         largest_data_off = other.largest_data_off;
@@ -518,7 +518,7 @@ public:
     }
 
     // override default move operations to reset default values
-    Transaction(Transaction&& other) :
+    Transaction(Transaction&& other) noexcept :
       data(std::move(other.data)),
       osr(other.osr),
       use_tbl(other.use_tbl),
@@ -539,7 +539,7 @@ public:
       other.object_id = 0;
     }
 
-    Transaction& operator=(Transaction&& other) {
+    Transaction& operator=(Transaction&& other) noexcept {
       data = std::move(other.data);
       osr = other.osr;
       use_tbl = other.use_tbl;
@@ -630,7 +630,7 @@ public:
       return use_tbl;
     }
 
-    void swap(Transaction& other) {
+    void swap(Transaction& other) noexcept {
       std::swap(data, other.data);
       std::swap(on_applied, other.on_applied);
       std::swap(on_commit, other.on_commit);
