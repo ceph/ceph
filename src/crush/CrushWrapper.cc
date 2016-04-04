@@ -116,7 +116,7 @@ int CrushWrapper::can_rename_item(const string& srcname,
     if (is_valid_crush_name(dstname)) {
       return 0;
     } else {
-      *ss << "srcname = '" << srcname << "' does not match [-_.0-9a-zA-Z]+";
+      *ss << "dstname = '" << dstname << "' does not match [-_.0-9a-zA-Z]+";
       return -EINVAL;
     }
   } else {
