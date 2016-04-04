@@ -907,6 +907,23 @@ class CephManager:
             args
         )
 
+
+    def do_rm(self, pool, obj, namespace=None):
+        """
+        Implement rados rm operation
+        """
+        args = ['-p', pool]
+        if namespace is not None:
+            args += ['-N', namespace]
+        args += [
+            'rm',
+            obj
+        ]
+        return self.do_rados(
+            self.controller,
+            args
+        )
+
     def osd_admin_socket(self, osd_id, command, check_status=True):
         return self.admin_socket('osd', osd_id, command, check_status)
 
