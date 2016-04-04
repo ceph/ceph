@@ -400,6 +400,9 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
             logging.error("Can't find imported object {name}".format(name=file))
             ERRORS += 1
         for obj_loc in obj_locs:
+            # For btrfs skip snap_* dirs
+            if re.search("/snap_[0-9]*/", obj_loc) is not None:
+                continue
             repcount += 1
             cmd = "diff -q {src} {obj_loc}".format(src=path, obj_loc=obj_loc)
             logging.debug(cmd)
