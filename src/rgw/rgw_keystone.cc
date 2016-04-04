@@ -14,6 +14,11 @@
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 
+#if 0
+// FIXME
+#include "rgw_swift.h"
+#endif
+
 #define dout_subsys ceph_subsys_rgw
 
 int rgw_open_cms_envelope(CephContext * const cct,
@@ -293,3 +298,136 @@ void RGWKeystoneTokenCache::invalidate(const string& token_id)
   tokens_lru.erase(e.lru_iter);
   tokens.erase(iter);
 }
+
+
+#if 0
+//FIXME
+typedef RGWPostHTTPData RGWGetRevokedTokens;
+int RGWSwift::check_revoked()
+{
+  string url;
+  string token;
+
+  bufferlist bl;
+  RGWGetRevokedTokens req(cct, &bl);
+
+  if (get_keystone_admin_token(token) < 0) {
+    return -EINVAL;
+  }
+  if (get_keystone_url(url) < 0) {
+    return -EINVAL;
+  }
+  req.append_header("X-Auth-Token", token);
+
+  const auto keystone_version = KeystoneService::get_api_version();
+  if (keystone_version == KeystoneApiVersion::VER_2) {
+    url.append("v2.0/tokens/revoked");
+  } else if (keystone_version == KeystoneApiVersion::VER_3) {
+    url.append("v3/auth/tokens/OS-PKI/revoked");
+  }
+
+  req.set_send_length(0);
+  int ret = req.process(url.c_str());
+  if (ret < 0) {
+    return ret;
+  }
+
+  bl.append((char)0); // NULL terminate for debug output
+
+  ldout(cct, 10) << "request returned " << bl.c_str() << dendl;
+
+  JSONParser parser;
+
+  if (!parser.parse(bl.c_str(), bl.length())) {
+    ldout(cct, 0) << "malformed json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObjIter iter = parser.find_first("signed");
+  if (iter.end()) {
+    ldout(cct, 0) << "revoked tokens response is missing signed section" << dendl;
+    return -EINVAL;
+  }  
+
+  JSONObj *signed_obj = *iter;
+
+  string signed_str = signed_obj->get_data();
+
+  ldout(cct, 10) << "signed=" << signed_str << dendl;
+
+  string signed_b64;
+  ret = rgw_open_cms_envelope(cct, signed_str, signed_b64);
+  if (ret < 0)
+    return ret;
+
+  ldout(cct, 10) << "content=" << signed_b64 << dendl;
+  
+  bufferlist json;
+  ret = rgw_decode_b64_cms(cct, signed_b64, json);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ldout(cct, 10) << "ceph_decode_cms: decoded: " << json.c_str() << dendl;
+
+  JSONParser list_parser;
+  if (!list_parser.parse(json.c_str(), json.length())) {
+    ldout(cct, 0) << "malformed json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObjIter revoked_iter = list_parser.find_first("revoked");
+  if (revoked_iter.end()) {
+    ldout(cct, 0) << "no revoked section in json" << dendl;
+    return -EINVAL;
+  }
+
+  JSONObj *revoked_obj = *revoked_iter;
+
+  JSONObjIter tokens_iter = revoked_obj->find_first();
+  for (; !tokens_iter.end(); ++tokens_iter) {
+    JSONObj *o = *tokens_iter;
+
+    JSONObj *token = o->find_obj("id");
+    if (!token) {
+      ldout(cct, 0) << "bad token in array, missing id" << dendl;
+      continue;
+    }
+
+    string token_id = token->get_data();
+    RGWKeystoneTokenCache::get_instance().invalidate(token_id);
+  }
+  
+  return 0;
+}
+
+bool RGWSwift::going_down()
+{
+  return (down_flag.read() != 0);
+}
+
+void *RGWSwift::KeystoneRevokeThread::entry() {
+  do {
+    dout(2) << "keystone revoke thread: start" << dendl;
+    int r = swift->check_revoked();
+    if (r < 0) {
+      dout(0) << "ERROR: keystone revocation processing returned error r=" << r << dendl;
+    }
+
+    if (swift->going_down())
+      break;
+
+    lock.Lock();
+    cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
+    lock.Unlock();
+  } while (!swift->going_down());
+
+  return NULL;
+}
+
+void RGWSwift::KeystoneRevokeThread::stop()
+{
+  Mutex::Locker l(lock);
+  cond.Signal();
+}
+#endif
