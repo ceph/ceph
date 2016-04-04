@@ -5,6 +5,8 @@
 #define CEPH_RGW_KEYSTONE_H
 
 #include "rgw_common.h"
+#include "rgw_http_client.h"
+#include "common/Cond.h"
 
 int rgw_open_cms_envelope(CephContext *cct,
                           const std::string& src,
@@ -102,21 +104,52 @@ class RGWKeystoneTokenCache {
     list<string>::iterator lru_iter;
   };
 
+  atomic_t down_flag;
+
+  class RevokeThread : public Thread {
+    friend class RGWKeystoneTokenCache;
+    typedef RGWPostHTTPData RGWGetRevokedTokens;
+
+    CephContext * const cct;
+    RGWKeystoneTokenCache * const cache;
+    Mutex lock;
+    Cond cond;
+
+    RevokeThread(CephContext * const cct, RGWKeystoneTokenCache * cache)
+      : cct(cct),
+        cache(cache),
+        lock("RGWKeystoneTokenCache::RevokeThread") {
+    }
+    void *entry();
+    void stop();
+    int check_revoked();
+  } revocator;
+
   CephContext * const cct;
 
-  string admin_token_id;
-  map<string, token_entry> tokens;
-  list<string> tokens_lru;
+  std::string admin_token_id;
+  std::map<std::string, token_entry> tokens;
+  std::list<std::string> tokens_lru;
 
   Mutex lock;
 
   const size_t max;
 
   RGWKeystoneTokenCache()
-    : cct(g_ceph_context),
+    : revocator(g_ceph_context, this),
+      cct(g_ceph_context),
       lock("RGWKeystoneTokenCache", true /* recursive */),
       max(cct->_conf->rgw_keystone_token_cache_size) {
+    /* The thread name has been kept for backward compliance. */
+    revocator.create("rgw_swift_k_rev");
   }
+  ~RGWKeystoneTokenCache() {
+    down_flag.set(1);
+
+    revocator.stop();
+    revocator.join();
+  }
+
 public:
   RGWKeystoneTokenCache(const RGWKeystoneTokenCache&) = delete;
   void operator=(const RGWKeystoneTokenCache&) = delete;
@@ -128,6 +161,7 @@ public:
   void add(const string& token_id, const KeystoneToken& token);
   void add_admin(const KeystoneToken& token);
   void invalidate(const string& token_id);
+  bool going_down() const;
 };
 
 

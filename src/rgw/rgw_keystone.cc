@@ -13,11 +13,7 @@
 #include "rgw_keystone.h"
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
-
-#if 0
-// FIXME
-#include "rgw_swift.h"
-#endif
+#include "common/Cond.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -299,11 +295,7 @@ void RGWKeystoneTokenCache::invalidate(const string& token_id)
   tokens.erase(iter);
 }
 
-
-#if 0
-//FIXME
-typedef RGWPostHTTPData RGWGetRevokedTokens;
-int RGWSwift::check_revoked()
+int RGWKeystoneTokenCache::RevokeThread::check_revoked()
 {
   string url;
   string token;
@@ -311,10 +303,10 @@ int RGWSwift::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (get_keystone_admin_token(token) < 0) {
+  if (RGWSwift::get_keystone_admin_token(cct, token) < 0) {
     return -EINVAL;
   }
-  if (get_keystone_url(url) < 0) {
+  if (RGWSwift::get_keystone_url(cct, url) < 0) {
     return -EINVAL;
   }
   req.append_header("X-Auth-Token", token);
@@ -347,7 +339,7 @@ int RGWSwift::check_revoked()
   if (iter.end()) {
     ldout(cct, 0) << "revoked tokens response is missing signed section" << dendl;
     return -EINVAL;
-  }  
+  }
 
   JSONObj *signed_obj = *iter;
 
@@ -395,39 +387,38 @@ int RGWSwift::check_revoked()
     }
 
     string token_id = token->get_data();
-    RGWKeystoneTokenCache::get_instance().invalidate(token_id);
+    cache->invalidate(token_id);
   }
   
   return 0;
 }
 
-bool RGWSwift::going_down()
+bool RGWKeystoneTokenCache::going_down() const
 {
   return (down_flag.read() != 0);
 }
 
-void *RGWSwift::KeystoneRevokeThread::entry() {
+void *RGWKeystoneTokenCache::RevokeThread::entry() {
   do {
     dout(2) << "keystone revoke thread: start" << dendl;
-    int r = swift->check_revoked();
+    int r = check_revoked();
     if (r < 0) {
       dout(0) << "ERROR: keystone revocation processing returned error r=" << r << dendl;
     }
 
-    if (swift->going_down())
+    if (cache->going_down())
       break;
 
     lock.Lock();
     cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
     lock.Unlock();
-  } while (!swift->going_down());
+  } while (!cache->going_down());
 
   return NULL;
 }
 
-void RGWSwift::KeystoneRevokeThread::stop()
+void RGWKeystoneTokenCache::RevokeThread::stop()
 {
   Mutex::Locker l(lock);
   cond.Signal();
 }
-#endif
