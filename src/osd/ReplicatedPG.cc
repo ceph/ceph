@@ -925,8 +925,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       // fall through
 
     case CEPH_OSD_OP_PGNLS:
-      if (m->get_pg() != info.pgid.pgid) {
-        dout(10) << " pgnls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+      if (get_osdmap()->raw_pg_to_pg(m->get_pg()) != info.pgid.pgid) {
+        dout(10) << " pgnls pg=" << m->get_pg()
+		 << " " << get_osdmap()->raw_pg_to_pg(m->get_pg())
+		 << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
 	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
@@ -946,7 +948,21 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
 	hobject_t next;
 	hobject_t lower_bound = response.handle;
-        dout(10) << " pgnls lower_bound " << lower_bound << dendl;
+	hobject_t pg_start = info.pgid.pgid.get_hobj_start();
+	hobject_t pg_end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
+        dout(10) << " pgnls lower_bound " << lower_bound
+		 << " pg_end " << pg_end << dendl;
+	if (get_sort_bitwise() &&
+	    ((lower_bound != hobject_t::get_max() &&
+	      cmp_bitwise(lower_bound, pg_end) >= 0) ||
+	     (lower_bound != hobject_t() &&
+	      cmp_bitwise(lower_bound, pg_start) < 0))) {
+	  // this should only happen with a buggy client.
+	  dout(10) << "outside of PG bounds " << pg_start << " .. "
+		   << pg_end << dendl;
+	  result = -EINVAL;
+	  break;
+	}
 
 	hobject_t current = lower_bound;
 	osr->flush();
@@ -1081,7 +1097,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	} else {
           response.handle = next;
         }
-        dout(10) << "pgls handle=" << response.handle << dendl;
+        dout(10) << "pgnls handle=" << response.handle << dendl;
 	::encode(response, osd_op.outdata);
 	if (filter)
 	  ::encode(filter_out, osd_op.outdata);
@@ -1113,8 +1129,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       // fall through
 
     case CEPH_OSD_OP_PGLS:
-      if (m->get_pg() != info.pgid.pgid) {
-        dout(10) << " pgls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+      if (get_osdmap()->raw_pg_to_pg(m->get_pg()) != info.pgid.pgid) {
+        dout(10) << " pgls pg=" << m->get_pg()
+		 << " " << get_osdmap()->raw_pg_to_pg(m->get_pg())
+		 << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
 	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
