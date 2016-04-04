@@ -892,16 +892,16 @@ class CephManager:
         """
         Implement rados get operation
         """
+        args = ['-p', pool]
+        args += [
+            'get',
+            obj,
+            fname
+        ]
         return self.do_rados(
             self.controller,
-            [
-                '-p',
-                pool,
-                'stat',
-                obj,
-                fname
-                ]
-            )
+            args
+        )
 
     def osd_admin_socket(self, osd_id, command, check_status=True):
         return self.admin_socket('osd', osd_id, command, check_status)
