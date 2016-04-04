@@ -136,7 +136,6 @@
                                  replica datalog get/delete
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         remote to pull period
-     --parent=<id>             parent period id
      --period=<id>             period id
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
