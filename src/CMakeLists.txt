@@ -38,6 +38,7 @@ add_executable(sim ${core_srcs} ${test_srcs})
 add_executable(alt_sim ${core_srcs} ${alt_test_srcs})
 
 target_link_libraries(sim PUBLIC pthread)
+target_link_libraries(alt_sim PUBLIC pthread)
 
 # file(COPY sim DESTINATION .)
 
