@@ -5354,6 +5354,7 @@ int main(int argc, char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args),
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
