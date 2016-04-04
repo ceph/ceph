@@ -873,26 +873,30 @@ class CephManager:
             args.append('--no-cleanup')
         return self.do_rados(self.controller, map(str, args))
 
-    def do_put(self, pool, obj, fname):
+    def do_put(self, pool, obj, fname, namespace=None):
         """
         Implement rados put operation
         """
+        args = ['-p', pool]
+        if namespace is not None:
+            args += ['-N', namespace]
+        args += [
+            'put',
+            obj,
+            fname
+        ]
         return self.do_rados(
             self.controller,
-            [
-                '-p',
-                pool,
-                'put',
-                obj,
-                fname
-                ]
+            args
             )
 
-    def do_get(self, pool, obj, fname='/dev/null'):
+    def do_get(self, pool, obj, fname='/dev/null', namespace=None):
         """
         Implement rados get operation
         """
         args = ['-p', pool]
+        if namespace is not None:
+            args += ['-N', namespace]
         args += [
             'get',
             obj,
