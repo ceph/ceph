@@ -1,0 +1,89 @@
+os_type: ubuntu
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+        debug ms: 1
+        debug paxos: 20
+        mon warn on legacy crush tunables: false
+        mon min osdmap epochs: 3
+      osd:
+        osd map cache size: 2
+        osd map max advance: 1
+        debug filestore: 20
+        debug journal: 20
+        debug ms: 1
+        debug osd: 20
+    log-whitelist:
+    - osd_map_cache_size
+    - slow request
+    - scrub mismatch
+    - ScrubResult
+    - failed to encode
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - mon.b
+  - mon.c
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+    branch: infernalis
+- print: '**** done installing infernalis'
+- ceph:
+    fs: xfs
+- print: '**** done ceph'
+- ceph_manager.create_pool:
+    args: ['test']
+    kwargs:
+      pg_num: 1
+- sleep:
+    duration: 10
+- ceph_manager.wait_for_clean: null
+- create_verify_lfn_objects:
+    pool: 'test'
+    prefix: 'infernalis-x'
+    namespace:
+    - 'long_namespace__________________________________________________'
+    - ''
+    - 'namespace'
+    num_objects: 5
+    name_length: [400, 800, 1600]
+- sequential:
+  - create_verify_lfn_objects:
+      pool: 'test'
+      prefix: 'infernalis-mixed'
+      namespace:
+      - 'long_namespace__________________________________________________'
+      - ''
+      - 'namespace'
+      num_objects: 5
+      name_length: [400, 800, 1600]
+  - install.upgrade:
+      mon.a: null
+  - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1]
+  - ceph_manager.wait_for_clean: null
+  - ceph_manager.do_pg_scrub:
+      args: ['test', 0, 'scrub']
+- ceph_manager.do_pg_scrub:
+    args: ['test', 0, 'scrub']
+- create_verify_lfn_objects:
+    pool: 'test'
+    prefix: 'mixed-x'
+    namespace:
+    - 'long_namespace__________________________________________________'
+    - ''
+    - 'namespace'
+    num_objects: 5
+    name_length: [400, 800, 1600]
+- ceph.restart: [osd.2]
+- ceph_manager.wait_for_clean: null
+- ceph_manager.do_pg_scrub:
+    args: ['test', 0, 'scrub']
