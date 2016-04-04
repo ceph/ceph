@@ -65,6 +65,8 @@ public:
       ASSERT_EQ(0, ctx.wait());
       delete m_image_watcher;
     }
+
+    TestFixture::TearDown();
   }
 
   MockMirroringWatcher *m_image_watcher = nullptr;
