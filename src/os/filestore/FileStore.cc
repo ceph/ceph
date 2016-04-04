@@ -5713,6 +5713,18 @@ void FileStore::set_xattr_limits_via_conf()
     m_filestore_max_xattr_value_size = g_conf->filestore_max_xattr_value_size;
   else
     m_filestore_max_xattr_value_size = fs_xattr_max_value_size;
+
+  if (m_filestore_max_xattr_value_size < g_conf->osd_max_object_name_len) {
+    derr << "WARNING: max attr value size ("
+	 << m_filestore_max_xattr_value_size
+	 << ") is smaller than osd_max_object_name_len ("
+	 << g_conf->osd_max_object_name_len
+	 << ").  Your backend filesystem appears to not support attrs large "
+	 << "enough to handle the configured max rados name size.  You may get "
+	 << "unexpected ENAMETOOLONG errors on rados operations or buggy "
+	 << "behavior"
+	 << dendl;
+  }
 }
 
 // -- FSSuperblock --
