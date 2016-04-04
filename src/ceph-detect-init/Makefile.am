@@ -69,7 +69,7 @@ ceph-detect-init-install-data:
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
 			options=--install-layout=deb ; \
 		else \
-			options=--prefix=/usr ; \
+			options=--prefix=$(prefix) ; \
 		fi ; \
 		root="--root=$(DESTDIR)" ; \
 	fi ; \
