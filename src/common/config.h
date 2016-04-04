@@ -185,7 +185,13 @@ private:
 
   bool expand_meta(std::string &val,
 		   std::ostream *oss) const;
-
+public:  // for global_init
+  bool early_expand_meta(std::string &val,
+			 std::ostream *oss) const {
+    Mutex::Locker l(lock);
+    return expand_meta(val, oss);
+  }
+private:
   bool expand_meta(std::string &val,
 		   config_option *opt,
 		   std::list<config_option *> stack,
