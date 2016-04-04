@@ -48,7 +48,8 @@ def task(ctx, config):
             name,
             '/etc/resolv.conf',
             namespace=ns)
-        assert not err
+        log.info("err is " + str(err))
+        assert err == 0
 
     try:
         yield
@@ -59,7 +60,8 @@ def task(ctx, config):
                 pool,
                 name,
                 namespace=ns)
-            assert not err
+            log.info("err is " + str(err))
+            assert err == 0
 
         log.info('ceph_verify_lfn_objects deleting...')
         for ns, name in objects:
@@ -67,7 +69,8 @@ def task(ctx, config):
                 pool,
                 name,
                 namespace=ns)
-            assert not err
+            log.info("err is " + str(err))
+            assert err == 0
 
         log.info('ceph_verify_lfn_objects verifying absent...')
         for ns, name in objects:
@@ -75,4 +78,5 @@ def task(ctx, config):
                 pool,
                 name,
                 namespace=ns)
-            assert err
+            log.info("err is " + str(err))
+            assert err != 0
