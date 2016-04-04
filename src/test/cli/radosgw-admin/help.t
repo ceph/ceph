@@ -103,7 +103,7 @@
     replicalog get             get replica metadata log entry
     replicalog update          update replica metadata log entry
     replicalog delete          delete replica metadata log entry
-    orphans find               init and run search for leaked rados objects
+    orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
   options:
      --tenant=<tenant>         tenant name
@@ -149,8 +149,11 @@
      --realm-new-name=<realm new name> realm new name
      --rgw-zonegroup=<zonegroup>   zonegroup name
      --rgw-zone=<zone>         zone in which radosgw is running
+     --zone-id=<zone id>       zone id
      --zone-new-name=<zone>    zone new name
+     --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
+     --read-only               set zone as read-only (when adding to zonegroup)
      --endpoints=<list>        zone endpoints
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
@@ -189,6 +192,8 @@
   Orphans search options:
      --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
+     --job-id                  set the job id (for orphans find)
+     --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
@@ -199,3 +204,5 @@
     --version         show version and quit
   
   [1]
+
+
