@@ -13,7 +13,26 @@
 #include "boost/intrusive/list.hpp"
 #include <boost/intrusive_ptr.hpp>
 
+class PerfCounters;
+
 class Allocator;
+
+enum {
+  l_bluefs_first = 732600,
+  l_bluefs_gift_bytes,
+  l_bluefs_reclaim_bytes,
+  l_bluefs_db_total_bytes,
+  l_bluefs_db_free_bytes,
+  l_bluefs_wal_total_bytes,
+  l_bluefs_wal_free_bytes,
+  l_bluefs_slow_total_bytes,
+  l_bluefs_slow_free_bytes,
+  l_bluefs_num_files,
+  l_bluefs_log_bytes,
+  l_bluefs_log_compactions,
+  l_bluefs_logged_bytes,
+  l_bluefs_last,
+};
 
 class BlueFS {
 public:
@@ -161,6 +180,8 @@ public:
 private:
   std::mutex lock;
 
+  PerfCounters *logger;
+
   // cache
   map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
@@ -184,6 +205,10 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<uint64_t> block_total;               ///< sum of block_all
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+
+  void _init_logger();
+  void _shutdown_logger();
+  void _update_logger_stats();
 
   void _init_alloc();
   void _stop_alloc();
