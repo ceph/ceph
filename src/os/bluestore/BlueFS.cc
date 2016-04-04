@@ -5,6 +5,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "BlockDevice.h"
 #include "Allocator.h"
 #include "StupidAllocator.h"
@@ -15,7 +16,8 @@
 #define dout_prefix *_dout << "bluefs "
 
 BlueFS::BlueFS()
-  : ino_last(0),
+  : logger(NULL),
+    ino_last(0),
     log_seq(0),
     log_writer(NULL),
     bdev(MAX_BDEV),
@@ -35,6 +37,52 @@ BlueFS::~BlueFS()
   }
   for (auto p : ioc) {
     delete p;
+  }
+}
+
+void BlueFS::_init_logger()
+{
+  PerfCountersBuilder b(g_ceph_context, "BlueFS",
+                        l_bluefs_first, l_bluefs_last);
+  b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes", "Bytes gifted from BlueStore");
+  b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes", "Bytes reclaimed by BlueStore");
+  b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes", "Total bytes (main db device)");
+  b.add_u64(l_bluefs_db_free_bytes, "db_free_bytes", "Free bytes (main db device)");
+  b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes", "Total bytes (wal device)");
+  b.add_u64(l_bluefs_wal_free_bytes, "wal_free_bytes", "Free bytes (wal device)");
+  b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes", "Total bytes (slow device)");
+  b.add_u64(l_bluefs_slow_free_bytes, "slow_free_bytes", "Free bytes (slow device)");
+  b.add_u64(l_bluefs_num_files, "num_files", "File count");
+  b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log");
+  b.add_u64_counter(l_bluefs_log_compactions, "log_compactions", "Compactions of the metadata log");
+  b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes", "Bytes written to the metadata log");
+  logger = b.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(logger);
+}
+
+void BlueFS::_shutdown_logger()
+{
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete logger;
+}
+
+void BlueFS::_update_logger_stats()
+{
+  // we must be holding the lock
+  logger->set(l_bluefs_num_files, file_map.size());
+  logger->set(l_bluefs_log_bytes, log_writer->file->fnode.size);
+
+  if (alloc[BDEV_WAL]) {
+    logger->set(l_bluefs_wal_total_bytes, block_total[BDEV_WAL]);
+    logger->set(l_bluefs_wal_free_bytes, alloc[BDEV_WAL]->get_free());
+  }
+  if (alloc[BDEV_DB]) {
+    logger->set(l_bluefs_db_total_bytes, block_total[BDEV_DB]);
+    logger->set(l_bluefs_db_free_bytes, alloc[BDEV_DB]->get_free());
+  }
+  if (alloc[BDEV_SLOW]) {
+    logger->set(l_bluefs_slow_total_bytes, block_total[BDEV_SLOW]);
+    logger->set(l_bluefs_slow_free_bytes, alloc[BDEV_SLOW]->get_free());
   }
 }
 
@@ -87,6 +135,9 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
     assert(r == 0);
     alloc[id]->init_add_free(offset, length);
   }
+
+  if (logger)
+    logger->inc(l_bluefs_gift_bytes, length);
   dout(10) << __func__ << " done" << dendl;
 }
 
@@ -112,6 +163,8 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   r = _flush_log();
   assert(r == 0);
 
+  if (logger)
+    logger->inc(l_bluefs_reclaim_bytes, *length);
   dout(1) << __func__ << " bdev " << id << " want " << want
 	  << " got " << *offset << "~" << *length << dendl;
   return 0;
@@ -171,6 +224,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
 	  << dendl;
 
   _init_alloc();
+  _init_logger();
 
   super.version = 1;
   super.block_size = bdev[BDEV_DB]->get_block_size();
@@ -215,6 +269,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   block_all.clear();
   block_total.clear();
   _stop_alloc();
+  _shutdown_logger();
 
   dout(10) << __func__ << " success" << dendl;
   return 0;
@@ -280,6 +335,8 @@ int BlueFS::mount()
   assert(log_writer->file->fnode.ino == 1);
   log_writer->pos = log_writer->file->fnode.size;
   dout(10) << __func__ << " log write pos set to " << log_writer->pos << dendl;
+
+  _init_logger();
   return 0;
 
  out:
@@ -301,6 +358,7 @@ void BlueFS::umount()
   dir_map.clear();
   super = bluefs_super_t();
   log_t.clear();
+  _shutdown_logger();
 }
 
 int BlueFS::fsck()
@@ -898,6 +956,8 @@ void BlueFS::_compact_log()
   for (auto& r : old_extents) {
     alloc[r.bdev]->release(r.offset, r.length);
   }
+
+  logger->inc(l_bluefs_log_compactions);
 }
 
 void BlueFS::_pad_bl(bufferlist& bl)
@@ -936,6 +996,8 @@ int BlueFS::_flush_log()
   _pad_bl(bl);
   log_writer->append(bl);
 
+  logger->inc(l_bluefs_logged_bytes, bl.length());
+
   log_t.clear();
   log_t.seq = 0;  // just so debug output is less confusing
 
@@ -954,6 +1016,8 @@ int BlueFS::_flush_log()
     file->dirty = false;
     dirty_files.erase(p++);
   }
+
+  _update_logger_stats();
 
   return 0;
 }
