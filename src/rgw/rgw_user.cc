@@ -230,8 +230,12 @@ struct user_info_entry {
 
 static RGWChainedCacheImpl<user_info_entry> uinfo_cache;
 
-int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
-                                 RGWObjVersionTracker *objv_tracker, real_time *pmtime)
+int rgw_get_user_info_from_index(RGWRados * const store,
+                                 const string& key,
+                                 rgw_bucket& bucket,
+                                 RGWUserInfo& info,
+                                 RGWObjVersionTracker * const objv_tracker,
+                                 real_time * const pmtime)
 {
   user_info_entry e;
   if (uinfo_cache.find(key, &e)) {
@@ -333,10 +337,15 @@ int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info
  * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker, real_time *pmtime)
+extern int rgw_get_user_info_by_swift(RGWRados * const store,
+                                      const string& swift_name,
+                                      RGWUserInfo& info,        /* out */
+                                      RGWObjVersionTracker * const objv_tracker,
+                                      real_time * const pmtime)
 {
-  return rgw_get_user_info_from_index(store, swift_name, store->get_zone_params().user_swift_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, swift_name,
+                                      store->get_zone_params().user_swift_pool,
+                                      info, objv_tracker, pmtime);
 }
 
 /**
