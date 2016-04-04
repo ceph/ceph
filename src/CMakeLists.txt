@@ -9,7 +9,7 @@ set(local_flags "-std=gnu++11 -Wall -pthread")
 set(core_srcs
   dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
-set(alt_test_srcs test_simp_client.cc test_simp.cc)
+set(alt_test_srcs test_simp.cc)
 
 set_source_files_properties(${core_srcs}
   PROPERTIES

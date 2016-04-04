@@ -24,8 +24,19 @@ using namespace std::placeholders;
 namespace dmc = crimson::dmclock;
 namespace chrono = std::chrono;
 
-using SelectFunc = TestClient::ServerSelectFunc;
-using SubmitFunc = TestClient::SubmitFunc;
+using TS = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
+                      dmc::ClientInfo,
+                      dmc::ReqParams<ClientId>,
+                      dmc::RespParams<ServerId>,
+                      TestAdditionalInfo,
+                      TestAccum>;
+
+using TC = TestClient<dmc::ServiceTracker<ServerId>,
+                      dmc::ReqParams<ClientId>,
+                      dmc::RespParams<ServerId>>;
+
+using SelectFunc = TC::ServerSelectFunc;
+using SubmitFunc = TC::SubmitFunc;
 
 
 void accumulate_f(TestAccum& a, const TestAdditionalInfo& add_info) {
@@ -37,33 +48,25 @@ void accumulate_f(TestAccum& a, const TestAdditionalInfo& add_info) {
 }
 
 
-using TS = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
-                      dmc::ClientInfo,
-                      dmc::ReqParams<ClientId>,
-                      dmc::RespParams<ServerId>,
-                      TestAdditionalInfo,
-                      TestAccum>;
-
-
 // If for debugging purposes we need to TimePoints, this converts them
 // into more easily read doubles in the unit of seconds. It also uses
 // modulo to strip off the upper digits (keeps 5 to the left of the
 // decimal point).
-static double fmt_tp(const TestClient::TimePoint& t) {
+static double fmt_tp(const TC::TimePoint& t) {
   auto c = t.time_since_epoch().count();
   return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
 }
 
 
 int main(int argc, char* argv[]) {
-  using ClientMap = std::map<ClientId,TestClient*>;
+  using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
 
   std::cout << "simulation started" << std::endl;
 
   // simulation params
 
-  const TestClient::TimePoint early_time = TestClient::now();
+  const TC::TimePoint early_time = TC::now();
   const chrono::seconds skip_amount(0); // skip first 2 secondsd of data
   const chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
@@ -195,14 +198,14 @@ int main(int argc, char* argv[]) {
       ;
 
     clients[i] =
-      new TestClient(i,
-		     server_post_f,
-		     server_select_f,
-		     i < (client_count - client_wait_count) ? no_wait : wait
+      new TC(i,
+	     server_post_f,
+	     server_select_f,
+	     i < (client_count - client_wait_count) ? no_wait : wait
 	);
   } // for
 
-  auto clients_created_time = TestClient::now();
+  auto clients_created_time = TC::now();
 
   // clients are now running; wait for all to finish
 
@@ -212,11 +215,11 @@ int main(int argc, char* argv[]) {
 
   // compute and display stats
 
-  const TestClient::TimePoint late_time = TestClient::now();
-  TestClient::TimePoint earliest_start = late_time;
-  TestClient::TimePoint latest_start = early_time;
-  TestClient::TimePoint earliest_finish = late_time;
-  TestClient::TimePoint latest_finish = early_time;
+  const TC::TimePoint late_time = TC::now();
+  TC::TimePoint earliest_start = late_time;
+  TC::TimePoint latest_start = early_time;
+  TC::TimePoint earliest_finish = late_time;
+  TC::TimePoint latest_finish = early_time;
 
   for (auto const &c : clients) {
     auto start = c.second->get_op_times().front();

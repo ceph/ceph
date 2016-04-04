@@ -21,21 +21,6 @@
 #include "test_simp_recs.h"
 
 
-/*
- * Q = crimson::dmclock::PriorityQueue<ClientId,TestRequest>
- *
- * CInfo = crimson::dmclock::ClientInfo
- *
- * ReqPm = crimson::dmclock::ReqParams<ClientId>
- *
- * RespPm = crimson::dmclock::RespParams<ServerId>
- *
- * Add = crimson::dmclock::PhaseType
- *
- * Accum = 
- */
-
-
 template<typename Q, typename CInfo,
 	 typename ReqPm, typename RespPm,
 	 typename AddInfo, typename Accum>
