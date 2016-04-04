@@ -16,12 +16,12 @@ wait_for_qemu() {
   done
 }
 
+wait_for_qemu
 rbd feature disable ${IMAGE_NAME} journaling || true
 rbd feature disable ${IMAGE_NAME} fast-diff || true
 rbd feature disable ${IMAGE_NAME} object-map || true
 rbd feature disable ${IMAGE_NAME} exclusive-lock || true
 
-wait_for_qemu
 while is_qemu_running ; do
   echo "*** Enabling all features"
   rbd feature enable ${IMAGE_NAME} exclusive-lock
