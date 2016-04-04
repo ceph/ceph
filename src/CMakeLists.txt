@@ -9,6 +9,7 @@ set(local_flags "-std=gnu++11 -Wall -pthread")
 set(core_srcs
   dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
 set(test_srcs test_server.cc test_client.cc test.cc)
+set(alt_test_srcs test_simp_client.cc test_simp.cc)
 
 set_source_files_properties(${core_srcs}
   PROPERTIES
@@ -28,7 +29,13 @@ set_source_files_properties(${test_srcs}
   COMPILE_FLAGS "${my_compile_flags} ${local_flags} ${warnings_off}"
   )
 
+set_source_files_properties(${alt_test_srcs}
+  PROPERTIES
+  COMPILE_FLAGS "${my_compile_flags} ${local_flags} ${warnings_off}"
+  )
+
 add_executable(sim ${core_srcs} ${test_srcs})
+add_executable(alt_sim ${core_srcs} ${alt_test_srcs})
 
 target_link_libraries(sim PUBLIC pthread)
 
