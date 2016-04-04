@@ -151,7 +151,7 @@ void _usage()
   cout << "  replicalog get             get replica metadata log entry\n";
   cout << "  replicalog update          update replica metadata log entry\n";
   cout << "  replicalog delete          delete replica metadata log entry\n";
-  cout << "  orphans find               init and run search for leaked rados objects\n";
+  cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
@@ -197,8 +197,11 @@ void _usage()
   cout << "   --realm-new-name=<realm new name> realm new name\n";
   cout << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
   cout << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
+  cout << "   --zone-id=<zone id>       zone id\n";
   cout << "   --zone-new-name=<zone>    zone new name\n";
+  cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
+  cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --endpoints=<list>        zone endpoints\n";
   cout << "   --fix                     besides checking bucket index, will also fix it\n";
   cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
@@ -235,6 +238,8 @@ void _usage()
   cout << "\nOrphans search options:\n";
   cout << "   --pool                    data pool to scan for leaked rados objects in\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cout << "   --job-id                  set the job id (for orphans find)\n";
+  cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
   cout << "\n";
   generic_client_usage();
 }
