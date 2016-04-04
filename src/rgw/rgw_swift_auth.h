@@ -65,9 +65,9 @@ protected:
 public:
   RGWSignedTokenAuthEngine(CephContext * const cct,
                            /* const */RGWRados * const store,
-                           const std::string token,
+                           const Extractor& extr,
                            const RGWLocalAuthApplier::Factory * const apl_factory)
-    : RGWTokenBasedAuthEngine(cct, token),
+    : RGWTokenBasedAuthEngine(cct, extr),
       store(store),
       apl_factory(apl_factory) {
   }
@@ -83,7 +83,6 @@ protected:
   /* const */ RGWRados * const store;
   const RGWLocalAuthApplier::Factory * const apl_factory;
 public:
-  //using RGWTokenBasedAuthEngine::RGWTokenBasedAuthEngine;
   RGWExternalTokenAuthEngine(CephContext * const cct,
                              /* const */RGWRados * const store,
                              const Extractor& extr,
@@ -95,6 +94,20 @@ public:
 
   bool is_applicable() const noexcept override;
   RGWAuthApplier::aplptr_t authenticate() const override;
+};
+
+
+/* Extractor for X-Auth-Token present in req_state. */
+class RGWXAuthTokenExtractor : public RGWTokenBasedAuthEngine::Extractor {
+protected:
+  const req_state * const s;
+public:
+  RGWXAuthTokenExtractor(const req_state * const s)
+    : s(s) {
+  }
+  std::string get_token() const {
+    return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
+  }
 };
 
 
