@@ -251,7 +251,7 @@ protected:
 
 	// processing
 
-#if 1
+#if 0 // not needed
 	TestResponse& resp = item.response;
 #endif
 
