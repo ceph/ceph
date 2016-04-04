@@ -193,7 +193,7 @@ def task(ctx, config):
             config['min_machine'], config['good_machine'], arch, select)
         default_arch = openstack.get_default_arch()
         http_flavor = openstack.flavor({
-            'disk': 40, # GB
+            'disk': 30, # GB
             'ram': 1024, # MB
             'cpus': 1,
         }, default_arch, select)
