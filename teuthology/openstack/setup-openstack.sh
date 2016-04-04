@@ -492,7 +492,7 @@ function verify_openstack() {
         provider=ovh
     elif echo $OS_AUTH_URL | grep -qq entercloudsuite.com ; then
         provider=entercloudsuite
-    elif echo $OS_AUTH_URL | grep -qq ctl: ; then
+    elif echo $OS_AUTH_URL | grep -qq cloudlab.us ; then
         provider=cloudlab
     else
         provider=any
