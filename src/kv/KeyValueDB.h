@@ -88,6 +88,16 @@ public:
       const std::string &k	      ///< [in] Key to remove
       ) = 0;
 
+    /// Remove Single Key which exists and was not overwritten.
+    /// This API is only related to performance optimization, and should only be
+    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB).
+    /// If a key is overwritten (by calling set multiple times), then the result
+    /// of calling rm_single_key on this key is undefined.
+    virtual void rm_single_key(
+      const std::string &prefix,   ///< [in] Prefix to search for
+      const std::string &k	      ///< [in] Key to remove
+      ) { return rmkey(prefix, k);}
+
     /// Removes keys beginning with prefix
     virtual void rmkeys_by_prefix(
       const std::string &prefix ///< [in] Prefix by which to remove keys
