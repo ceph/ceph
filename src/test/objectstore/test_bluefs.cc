@@ -38,8 +38,8 @@ TEST(BlueFS, mkfs) {
   string fn = get_temp_bdev(size);
   uuid_d fsid;
   BlueFS fs;
-  fs.add_block_device(0, fn);
-  fs.add_block_extent(0, 1048576, size - 1048576);
+  fs.add_block_device(BlueFS::BDEV_DB, fn);
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   fs.mkfs(fsid);
   rm_temp_bdev(fn);
 }
@@ -48,13 +48,13 @@ TEST(BlueFS, mkfs_mount) {
   uint64_t size = 1048476 * 128;
   string fn = get_temp_bdev(size);
   BlueFS fs;
-  ASSERT_EQ(0, fs.add_block_device(0, fn));
-  fs.add_block_extent(0, 1048576, size - 1048576);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid));
   ASSERT_EQ(0, fs.mount());
-  ASSERT_EQ(fs.get_total(0), size - 1048576);
-  ASSERT_LT(fs.get_free(0), size - 1048576);
+  ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size - 1048576);
+  ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size - 1048576);
   fs.umount();
   rm_temp_bdev(fn);
 }
@@ -63,8 +63,8 @@ TEST(BlueFS, write_read) {
   uint64_t size = 1048476 * 128;
   string fn = get_temp_bdev(size);
   BlueFS fs;
-  ASSERT_EQ(0, fs.add_block_device(0, fn));
-  fs.add_block_extent(0, 1048576, size - 1048576);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid));
   ASSERT_EQ(0, fs.mount());
@@ -99,8 +99,8 @@ TEST(BlueFS, small_appends) {
   uint64_t size = 1048476 * 128;
   string fn = get_temp_bdev(size);
   BlueFS fs;
-  ASSERT_EQ(0, fs.add_block_device(0, fn));
-  fs.add_block_extent(0, 1048576, size - 1048576);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
   ASSERT_EQ(0, fs.mkfs(fsid));
   ASSERT_EQ(0, fs.mount());
