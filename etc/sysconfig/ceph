@@ -4,7 +4,7 @@
 #
 
 # Increase tcmalloc cache size
-TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=128MB
+TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728
 
 ## use jemalloc instead of tcmalloc
 #
