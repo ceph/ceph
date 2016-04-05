@@ -16,7 +16,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int rgw_open_cms_envelope(CephContext * const cct, string& src, string& dst)
+int rgw_open_cms_envelope(CephContext * const cct,
+                          const std::string& src,
+                          std::string& dst)             /* out */
 {
 #define BEGIN_CMS "-----BEGIN CMS-----"
 #define END_CMS "-----END CMS-----"
