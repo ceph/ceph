@@ -12,7 +12,9 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/ObjectWatcher.h"
 #include "Replayer.h"
+#include "Threads.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -111,6 +113,55 @@ private:
 
   AdminSocket *admin_socket;
   Commands commands;
+};
+
+class MirrorStatusWatchCtx {
+public:
+  MirrorStatusWatchCtx(librados::IoCtx &ioctx, ContextWQ *work_queue) {
+    m_ioctx.dup(ioctx);
+    m_watcher = new Watcher(m_ioctx, work_queue);
+  }
+
+  ~MirrorStatusWatchCtx() {
+    delete m_watcher;
+  }
+
+  int register_watch() {
+    C_SaferCond cond;
+    m_watcher->register_watch(&cond);
+    return cond.wait();
+  }
+
+  int unregister_watch() {
+    C_SaferCond cond;
+    m_watcher->unregister_watch(&cond);
+    return cond.wait();
+  }
+
+  std::string get_oid() const {
+    return m_watcher->get_oid();
+  }
+
+private:
+  class Watcher : public librbd::ObjectWatcher<> {
+  public:
+    Watcher(librados::IoCtx &ioctx, ContextWQ *work_queue) :
+      ObjectWatcher<>(ioctx, work_queue) {
+    }
+
+    virtual std::string get_oid() const {
+      return RBD_MIRRORING;
+    }
+
+    virtual void handle_notify(uint64_t notify_id, uint64_t handle,
+			       bufferlist &bl) {
+      bufferlist out;
+      acknowledge_notify(notify_id, handle, out);
+    }
+  };
+
+  librados::IoCtx m_ioctx;
+  Watcher *m_watcher;
 };
 
 Replayer::Replayer(Threads *threads, RadosRef local_cluster,
@@ -306,6 +357,7 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
         }
       }
       if (pool_images.empty()) {
+	mirror_image_status_shut_down(pool_id);
 	it = m_images.erase(it);
       } else {
         ++it;
@@ -369,6 +421,14 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
 
     // create entry for pool if it doesn't exist
     auto &pool_replayers = m_images[pool_id];
+
+    if (pool_replayers.empty()) {
+      r = mirror_image_status_init(pool_id, local_ioctx);
+      if (r < 0) {
+	continue;
+      }
+    }
+
     for (const auto &image_id : kv.second) {
       auto it = pool_replayers.find(image_id.id);
       if (it == pool_replayers.end()) {
@@ -381,6 +441,51 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
       start_image_replayer(it->second);
     }
   }
+}
+
+int Replayer::mirror_image_status_init(int64_t pool_id,
+				       librados::IoCtx& ioctx) {
+  assert(m_status_watchers.find(pool_id) == m_status_watchers.end());
+
+  uint64_t instance_id = librados::Rados(ioctx).get_instance_id();
+
+  dout(20) << "pool_id=" << pool_id << ", instance_id=" << instance_id << dendl;
+
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::mirror_image_status_remove_down(&op);
+  int r = ioctx.operate(RBD_MIRRORING, &op);
+  if (r < 0) {
+    derr << "error initializing " << RBD_MIRRORING << "object: "
+	 << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  unique_ptr<MirrorStatusWatchCtx>
+    watch_ctx(new MirrorStatusWatchCtx(ioctx, m_threads->work_queue));
+
+  r = watch_ctx->register_watch();
+  if (r < 0) {
+    derr << "error registering watcher for " << watch_ctx->get_oid()
+	 << " object: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_status_watchers.insert(std::make_pair(pool_id, std::move(watch_ctx)));
+
+  return 0;
+}
+
+void Replayer::mirror_image_status_shut_down(int64_t pool_id) {
+  auto watcher_it = m_status_watchers.find(pool_id);
+  assert(watcher_it != m_status_watchers.end());
+
+  int r = watcher_it->second->unregister_watch();
+  if (r < 0) {
+    derr << "error unregistering watcher for " << watcher_it->second->get_oid()
+	 << " object: " << cpp_strerror(r) << dendl;
+  }
+
+  m_status_watchers.erase(watcher_it);
 }
 
 void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)

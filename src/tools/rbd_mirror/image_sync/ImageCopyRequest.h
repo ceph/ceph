@@ -19,6 +19,9 @@ namespace librbd { struct ImageCtx; }
 
 namespace rbd {
 namespace mirror {
+
+class ProgressContext;
+
 namespace image_sync {
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -30,6 +33,7 @@ public:
   typedef typename TypeTraits::Journaler Journaler;
   typedef librbd::journal::MirrorPeerSyncPoint MirrorPeerSyncPoint;
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
+  typedef rbd::mirror::ProgressContext ProgressContext;
 
   static ImageCopyRequest* create(ImageCtxT *local_image_ctx,
                                   ImageCtxT *remote_image_ctx,
@@ -37,16 +41,18 @@ public:
                                   Journaler *journaler,
                                   MirrorPeerClientMeta *client_meta,
                                   MirrorPeerSyncPoint *sync_point,
-                                  Context *on_finish) {
+                                  Context *on_finish,
+				  ProgressContext *progress_ctx = nullptr) {
     return new ImageCopyRequest(local_image_ctx, remote_image_ctx, timer,
                                 timer_lock, journaler, client_meta, sync_point,
-                                on_finish);
+                                on_finish, progress_ctx);
   }
 
   ImageCopyRequest(ImageCtxT *local_image_ctx, ImageCtxT *remote_image_ctx,
                    SafeTimer *timer, Mutex *timer_lock, Journaler *journaler,
                    MirrorPeerClientMeta *client_meta,
-                   MirrorPeerSyncPoint *sync_point, Context *on_finish);
+                   MirrorPeerSyncPoint *sync_point, Context *on_finish,
+		   ProgressContext *progress_ctx = nullptr);
 
   void send();
   void cancel();
@@ -82,6 +88,7 @@ private:
   MirrorPeerClientMeta *m_client_meta;
   MirrorPeerSyncPoint *m_sync_point;
   Context *m_on_finish;
+  ProgressContext *m_progress_ctx;
 
   SnapMap m_snap_map;
 
@@ -109,6 +116,7 @@ private:
 
   int compute_snap_map();
 
+  void update_progress(const std::string &description, bool flush = true);
 };
 
 } // namespace image_sync
