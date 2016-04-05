@@ -147,6 +147,84 @@ function test_teardown() {
 #######################################################################
 
 ##
+# Sends a signal to a single daemon.
+# This is a helper function for kill_daemons
+#
+# After the daemon is sent **signal**, its actual termination
+# will be verified by sending it signal 0. If the daemon is
+# still alive, kill_daemon will pause for a few seconds and
+# try again. This will repeat for a fixed number of times
+# before kill_daemon returns on failure. The list of
+# sleep intervals can be specified as **delays** and defaults
+# to:
+#
+#  0.1 0.2 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
+#
+# This sequence is designed to run first a very short sleep time (0.1)
+# if the machine is fast enough and the daemon terminates in a fraction of a
+# second. The increasing sleep numbers should give plenty of time for
+# the daemon to die even on the slowest running machine. If a daemon
+# takes more than a few minutes to stop (the sum of all sleep times),
+# there probably is no point in waiting more and a number of things
+# are likely to go wrong anyway: better give up and return on error.
+#
+# @param pid the process id to send a signal
+# @param send_signal the signal to send
+# @param delays sequence of sleep times before failure
+#
+function kill_daemon() {
+    local pid=$(cat $1)
+    local send_signal=$2
+    local delays=${3:-0.1 0.2 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
+    local exit_code=1
+    for try in $delays ; do
+         if kill -$send_signal $pid 2> /dev/null ; then
+            exit_code=1
+         else
+            exit_code=0
+            break
+         fi
+         send_signal=0
+         sleep $try
+    done;
+    return $exit_code
+}
+
+function test_kill_daemon() {
+    local dir=$1
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+
+    name_prefix=osd
+    for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
+        #
+        # sending signal 0 won't kill the daemon
+        # waiting just for one second instead of the default schedule
+        # allows us to quickly verify what happens when kill fails
+        # to stop the daemon (i.e. it must return false)
+        #
+        ! kill_daemon $pidfile 0 1 || return 1
+        #
+        # killing just the osd and verify the mon still is responsive
+        #
+        kill_daemon $pidfile TERM || return 1
+    done
+
+    ceph osd dump | grep "osd.0 down" || return 1
+
+    for pidfile in $(find $dir -name "*.pid" 2>/dev/null) ; do
+        #
+        # kill the mon and verify it cannot be reached
+        #
+        kill_daemon $pidfile TERM || return 1
+        ! ceph --connect-timeout 60 status || return 1
+    done
+
+    teardown $dir || return 1
+}
+
+##
 # Kill all daemons for which a .pid file exists in **dir**.  Each
 # daemon is sent a **signal** and kill_daemons waits for it to exit
 # during a few minutes. By default all daemons are killed. If a
@@ -168,24 +246,6 @@ function test_teardown() {
 # if at least one daemon remains, this is treated as an 
 # error and the function return 1.
 #
-# After the daemon is sent **signal**, its actual termination
-# will be verified by sending it signal 0. If the daemon is
-# still alive, kill_daemons will pause for a few seconds and
-# try again. This will repeat for a fixed number of times
-# before kill_daemons returns on failure. The list of
-# sleep intervals can be specified as **delays** and defaults
-# to:
-#
-#  0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
-#
-# This sequence is designed to not require a sleep time (0) if the
-# machine is fast enough and the daemon terminates in a fraction of a
-# second. The increasing sleep numbers should give plenty of time for
-# the daemon to die even on the slowest running machine. If a daemon
-# takes more than a few minutes to stop (the sum of all sleep times),
-# there probably is no point in waiting more and a number of things
-# are likely to go wrong anyway: better give up and return on error.
-#
 # @param dir path name of the environment
 # @param signal name of the first signal (defaults to TERM)
 # @param name_prefix only kill match daemons (defaults to all)
@@ -198,27 +258,17 @@ function kill_daemons() {
     local dir=$1
     local signal=${2:-TERM}
     local name_prefix=$3 # optional, osd, mon, osd.1
-    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
-
+    local delays=$4 #optional timing
     local status=0
+    local pids=""
+
     for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
-        pid=$(cat $pidfile)
-        local send_signal=$signal
-        local kill_complete=false
-        for try in $delays ; do
-            sleep $try
-            if kill -$send_signal $pid 2> /dev/null ; then
-                kill_complete=false
-            else
-                kill_complete=true
-                break
-            fi
-            send_signal=0
-        done
-        if ! $kill_complete ; then
-            status=1
-        fi
+	run_in_background pids kill_daemon $pidfile $signal $delays
     done
+
+    wait_background pids
+    status=$?
+
     $trace && shopt -s -o xtrace
     return $status
 }
@@ -924,7 +974,7 @@ function get_num_active_clean() {
     # grep -v '^$' 
     ceph --format xml pg dump pgs 2>/dev/null | \
         $XMLSTARLET sel -t -m "//pg_stat/state[$expression]" -v . -n | \
-        grep -v '^$' | wc -l
+        grep -cv '^$'
 }
 
 function test_get_num_active_clean() {
@@ -1024,32 +1074,36 @@ function test_is_clean() {
 
 ##
 # Wait until the cluster becomes clean or if it does not make progress
-# for $TIMEOUT seconds. The function **is_clean** is used to determine
-# if the cluster is clean. Progress is measured either vian the
-# **get_is_making_recovery_progress** predicate or if the number of
-# clean PGs changes.
+# for $TIMEOUT seconds.
+# Progress is measured either via the **get_is_making_recovery_progress**
+# predicate or if the number of clean PGs changes (as returned by get_num_active_clean)
 #
 # @return 0 if the cluster is clean, 1 otherwise
 #
 function wait_for_clean() {
     local status=1
-    local num_active_clean=$(get_num_active_clean)
+    local num_active_clean=-1
     local cur_active_clean
     local -i timer=0
-    while ! is_clean ; do
-        if get_is_making_recovery_progress ; then
-            timer=0
-        elif (( timer >= $TIMEOUT )) ; then
-            ceph report
-            return 1
-        fi
+    local num_pgs=$(get_num_pgs)
+    test $num_pgs != 0 || return 1
 
+    while true ; do
+        # Comparing get_num_active_clean & get_num_pgs is used to determine
+        # if the cluster is clean. That's almost an inline of is_clean() to
+        # get more performance by avoiding multiple calls of get_num_active_clean.
         cur_active_clean=$(get_num_active_clean)
+        test $cur_active_clean = $num_pgs && break
         if test $cur_active_clean != $num_active_clean ; then
             timer=0
             num_active_clean=$cur_active_clean
+        elif get_is_making_recovery_progress ; then
+            timer=0
+        elif (( timer >= $(($TIMEOUT * 10)))) ; then
+            ceph report
+            return 1
         fi
-        sleep 1
+        sleep .1
         timer=$(expr $timer + 1)
     done
     return 0
@@ -1280,6 +1334,83 @@ function test_display_logs() {
     display_logs $dir > $dir/log.out
     grep --quiet mon.a.log $dir/log.out || return 1
     teardown $dir || return 1
+}
+
+#######################################################################
+##
+# Spawn a command in background and save the pid in the variable name
+# passed in argument. To make the output reading easier, the output is
+# prepend with the process id.
+#
+# Example:
+#   pids1=""
+#   run_in_background pids1 bash -c 'sleep 1; exit 1'
+#
+# @param pid_variable the variable name (not value) where the pids will be stored
+# @param ... the command to execute
+# @return only the pid_variable output should be considered and used with **wait_background**
+#
+function run_in_background() {
+    local pid_variable=$1
+    shift;
+    # Execute the command and prepend the output with its pid
+    # We enforce to return the exit status of the command and not the awk one.
+    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print PROCINFO["pid"] ": " a[i]} }'; return ${PIPESTATUS[0]}) &
+    eval "$pid_variable+=\" $!\""
+}
+
+function test_run_in_background() {
+    local pids
+    run_in_background pids sleep 1
+    run_in_background pids sleep 1
+    test $(echo $pids | wc -w) = 2 || return 1
+    wait $pids || return 1
+}
+
+#######################################################################
+##
+# Wait for pids running in background to complete.
+# This function is usually used after a **run_in_background** call
+# Example:
+#   pids1=""
+#   run_in_background pids1 bash -c 'sleep 1; exit 1'
+#   wait_background pids1
+#
+# @param pids The variable name that contains the active PIDS. Set as empty at then end of the function.
+# @return returns 1 if at least one process exits in error unless returns 0
+#
+function wait_background() {
+    # We extract the PIDS from the variable name
+    pids=${!1}
+
+    return_code=0
+    for pid in $pids; do
+        if ! wait $pid; then
+            # If one process failed then return 1
+            return_code=1
+        fi
+    done
+
+    # We empty the variable reporting that all process ended
+    eval "$1=''"
+
+    return $return_code
+}
+
+
+function test_wait_background() {
+    local pids=""
+    run_in_background pids bash -c "sleep 1; exit 1"
+    run_in_background pids bash -c "sleep 2; exit 0"
+    wait_background pids
+    if [ $? -ne 1 ]; then return 1; fi
+
+    run_in_background pids bash -c "sleep 1; exit 0"
+    run_in_background pids bash -c "sleep 2; exit 0"
+    wait_background pids
+    if [ $? -ne 0 ]; then return 1; fi
+
+    if [ ! -z "$pids" ]; then return 1; fi
 }
 
 #######################################################################

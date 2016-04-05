@@ -44,9 +44,10 @@ def wait_for_health():
     print "Wait for health_ok...",
     tries = 0
     while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
-        if ++tries == 30:
+        tries += 1
+        if tries == 150:
             raise Exception("Time exceeded to go to health")
-        time.sleep(5)
+        time.sleep(1)
     print "DONE"
 
 
@@ -1799,15 +1800,11 @@ def main(argv):
         vstart(new=False)
         wait_for_health()
 
-        time.sleep(20)
-
         cmd = "./ceph osd pool set {pool} pg_num 2".format(pool=SPLIT_POOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
         time.sleep(5)
         wait_for_health()
-
-        time.sleep(15)
 
         kill_daemons()
 

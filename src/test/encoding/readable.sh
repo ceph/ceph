@@ -4,23 +4,25 @@ dir=../ceph-object-corpus
 
 set -e
 
-tmp1=`mktemp /tmp/typ-XXXXXXXXX`
-tmp2=`mktemp /tmp/typ-XXXXXXXXX`
-
 failed=0
 numtests=0
+pids=""
 
 myversion=`./ceph-dencoder version`
+DEBUG=0
+WAITALL_DELAY=.1
+debug() { if [ "$DEBUG" -gt 0 ]; then echo "DEBUG: $*" >&2; fi }
 
-for arversion in `ls -v $dir/archive`; do
-  vdir="$dir/archive/$arversion"
-  #echo $vdir
+test_object() {
+    local type=$1
+    local output_file=$2
+    local failed=0
+    local numtests=0
 
-  if [ ! -d "$vdir/objects" ]; then
-    continue;
-  fi
+    tmp1=`mktemp /tmp/typ-XXXXXXXXX`
+    tmp2=`mktemp /tmp/typ-XXXXXXXXX`
 
-  for type in `ls $vdir/objects`; do
+    rm -f $output_file
     if ./ceph-dencoder type $type 2>/dev/null; then
       #echo "type $type";
       echo "        $vdir/objects/$type"
@@ -84,15 +86,21 @@ for arversion in `ls -v $dir/archive`; do
           continue
         fi;
 
+        ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1 &
+        pid1="$!"
+        ./ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2 &
+        pid2="$!"
         #echo "\t$vdir/$type/$f"
-        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1; then
+        if ! wait $pid1; then
           echo "**** failed to decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
+          rm -f $tmp1 $tmp2
           continue      
         fi
-        if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode encode decode dump_json > $tmp2; then
+        if ! wait $pid2; then
           echo "**** failed to decode+encode+decode $vdir/objects/$type/$f ****"
           failed=$(($failed + 1))
+          rm -f $tmp1 $tmp2
           continue
         fi
 
@@ -114,14 +122,85 @@ for arversion in `ls -v $dir/archive`; do
           failed=$(($failed + 1))
         fi
         numtests=$(($numtests + 1))
+        echo "failed=$failed" > $output_file
+        echo "numtests=$numtests" >> $output_file
       done
     else
       echo "skipping unrecognized type $type"
     fi
+
+    rm -f $tmp1 $tmp2
+}
+
+waitall() { # PID...
+   ## Wait for children to exit and indicate whether all exited with 0 status.
+   local errors=0
+   while :; do
+     debug "Processes remaining: $*"
+     for pid in "$@"; do
+       shift
+       if kill -0 "$pid" 2>/dev/null; then
+         debug "$pid is still alive."
+         set -- "$@" "$pid"
+       elif wait "$pid"; then
+         debug "$pid exited with zero exit status."
+       else
+         debug "$pid exited with non-zero exit status."
+         errors=$(($errors + 1))
+       fi
+     done
+     (("$#" > 0)) || break
+     sleep ${WAITALL_DELAY:-1}
+    done
+   [ $errors -eq 0 ]
+}
+
+######
+# MAIN
+######
+
+# Using $MAX_PARALLEL_JOBS jobs if defined, unless the number of logical
+# processors
+max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
+
+for arversion in `ls -v $dir/archive`; do
+  vdir="$dir/archive/$arversion"
+  #echo $vdir
+
+  if [ ! -d "$vdir/objects" ]; then
+    continue;
+  fi
+
+  output_file=`mktemp /tmp/typ-XXXXXXXXX`
+  running_jobs=0
+  for type in `ls $vdir/objects`; do
+    test_object $type $output_file.$running_jobs &
+    pids="$pids $!"
+    running_jobs=$(($running_jobs + 1))
+
+    # Once we spawned enough jobs, let's wait them to complete
+    # Every spawned job have almost the same execution time so
+    # it's not a big deal having them not ending at the same time
+    if [ "$running_jobs" -eq "$max_parallel_jobs" ]; then
+        waitall $pids
+        pids=""
+        # Reading the output of jobs to compute failed & numtests
+        # Tests are run in parallel but sum should be done sequentialy to avoid
+        # races between threads
+        while [ "$running_jobs" -ge 0 ]; do
+            if [ -f $output_file.$running_jobs ]; then
+                read_failed=$(grep "^failed=" $output_file.$running_jobs | cut -d "=" -f 2)
+                read_numtests=$(grep "^numtests=" $output_file.$running_jobs | cut -d "=" -f 2)
+                rm -f $output_file.$running_jobs
+                failed=$(($failed + $read_failed))
+                numtests=$(($numtests + $read_numtests))
+            fi
+            running_jobs=$(($running_jobs - 1))
+        done
+        running_jobs=0
+    fi
   done
 done
-
-rm -f $tmp1 $tmp2
 
 if [ $failed -gt 0 ]; then
   echo "FAILED $failed / $numtests tests."
