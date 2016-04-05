@@ -871,7 +871,7 @@ def task(ctx, config):
         ctx.rgw.cache_pools = bool(config['cache-pools'])
         del config['cache-pools']
 
-    ctx.rgw.frontend = 'apache'
+    ctx.rgw.frontend = 'civetweb'
     if 'frontend' in config:
         ctx.rgw.frontend = config['frontend']
         del config['frontend']
