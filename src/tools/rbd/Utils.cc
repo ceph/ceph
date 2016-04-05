@@ -657,8 +657,8 @@ std::string image_id(librbd::Image& image) {
   return string(prefix + strlen(RBD_DATA_PREFIX));
 }
 
-std::string mirror_image_state(rbd_mirror_image_state_t mirror_image_state) {
-  switch (mirror_image_state) {
+std::string mirror_image_state(librbd::mirror_image_state_t state) {
+  switch (state) {
     case RBD_MIRROR_IMAGE_DISABLING:
       return "disabling";
     case RBD_MIRROR_IMAGE_ENABLED:
@@ -668,6 +668,51 @@ std::string mirror_image_state(rbd_mirror_image_state_t mirror_image_state) {
     default:
       return "unknown";
   }
+}
+
+std::string mirror_image_status_state(librbd::mirror_image_status_state_t state) {
+  switch (state) {
+  case MIRROR_IMAGE_STATUS_STATE_UNKNOWN:
+    return "unknown";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_ERROR:
+    return "error";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_SYNCING:
+    return "syncing";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY:
+    return "starting_replay";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_REPLAYING:
+    return "replaying";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY:
+    return "stopping_replay";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_STOPPED:
+    return "stopped";
+    break;
+  default:
+    return "unknown (" + stringify(static_cast<uint32_t>(state)) + ")";
+    break;
+  }
+}
+
+std::string mirror_image_status_state(librbd::mirror_image_status_t status) {
+  return (status.up ? "up+" : "down+") +
+    mirror_image_status_state(status.state);
+}
+
+std::string timestr(time_t t) {
+  struct tm tm;
+
+  localtime_r(&t, &tm);
+
+  char buf[32];
+  strftime(buf, sizeof(buf), "%F %T", &tm);
+
+  return buf;
 }
 
 } // namespace utils
