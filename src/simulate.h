@@ -5,6 +5,10 @@
  * Copyright (C) 2016 Red Hat Inc.
  */
 
+
+#pragma once
+
+
 #include <unistd.h>
 
 #include <memory>
@@ -14,61 +18,11 @@
 #include <iostream>
 #include <iomanip>
 
-#include "test_simp_recs.h"
-#include "test_simp_server.h"
-#include "test_simp_client.h"
+#include "simulate_common.h"
 
 
-using namespace std::placeholders;
-
-namespace dmc = crimson::dmclock;
-namespace chrono = std::chrono;
-
-using TS = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
-                      dmc::ClientInfo,
-                      dmc::ReqParams<ClientId>,
-                      dmc::RespParams<ServerId>,
-                      DmcServerAddInfo,
-                      DmcAccum>;
-
-using TC = TestClient<dmc::ServiceTracker<ServerId>,
-                      dmc::ReqParams<ClientId>,
-                      dmc::RespParams<ServerId>,
-		      DmcAccum>;
-
-using SelectFunc = TC::ServerSelectFunc;
-using SubmitFunc = TC::SubmitFunc;
-
-
-void dmc_server_accumulate_f(DmcAccum& a, const DmcServerAddInfo& add_info) {
-  if (dmc::PhaseType::reservation == add_info) {
-    ++a.reservation_count;
-  } else {
-    ++a.proportion_count;
-  }
-}
-
-
-void dmc_client_accumulate_f(DmcAccum& a, const dmc::RespParams<ServerId>& r) {
-  if (dmc::PhaseType::reservation == r.phase) {
-    ++a.reservation_count;
-  } else {
-    ++a.proportion_count;
-  }
-}
-
-
-// If for debugging purposes we need to TimePoints, this converts them
-// into more easily read doubles in the unit of seconds. It also uses
-// modulo to strip off the upper digits (keeps 5 to the left of the
-// decimal point).
-static double fmt_tp(const TC::TimePoint& t) {
-  auto c = t.time_since_epoch().count();
-  return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
-}
-
-
-int main(int argc, char* argv[]) {
+template<typename TS, typename TC>
+void simulate() {
   using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
 
@@ -76,7 +30,7 @@ int main(int argc, char* argv[]) {
 
   // simulation params
 
-  const TC::TimePoint early_time = TC::now();
+  const TimePoint early_time = now();
   const chrono::seconds skip_amount(0); // skip first 2 secondsd of data
   const chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
   const chrono::seconds report_unit(1); // unit to output reports in
@@ -216,7 +170,7 @@ int main(int argc, char* argv[]) {
 	);
   } // for
 
-  auto clients_created_time = TC::now();
+  TimePoint clients_created_time = now();
 
   // clients are now running; wait for all to finish
 
@@ -226,11 +180,11 @@ int main(int argc, char* argv[]) {
 
   // compute and display stats
 
-  const TC::TimePoint late_time = TC::now();
-  TC::TimePoint earliest_start = late_time;
-  TC::TimePoint latest_start = early_time;
-  TC::TimePoint earliest_finish = late_time;
-  TC::TimePoint latest_finish = early_time;
+  const TimePoint late_time = now();
+  TimePoint earliest_start = late_time;
+  TimePoint latest_start = early_time;
+  TimePoint earliest_finish = late_time;
+  TimePoint latest_finish = early_time;
 
   for (auto const &c : clients) {
     auto start = c.second->get_op_times().front();
@@ -313,34 +267,9 @@ int main(int argc, char* argv[]) {
     } while(has_data);
   }
 
-  // report how many ops were done by reservation and proportion for
-  // each client
-
-  {
-    std::cout << std::setw(head_w) << "res_ops:";
-    int total = 0;
-    for (auto const &c : clients) {
-      auto r = c.second->get_accumulator().reservation_count;
-      total += r;
-      if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << r;
-    }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
-      std::fixed << total << std::endl;
-  }
-
-  {
-    std::cout << std::setw(head_w) << "prop_ops:";
-    int total = 0;
-    for (auto const &c : clients) {
-      auto p = c.second->get_accumulator().proportion_count;
-      total += p;
-      if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << p;
-    }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
-      std::fixed << total << std::endl;
-  }
+#if 0
+  std::cout << client_data(head_w, data_w);
+#endif
 
   std::cout << std::endl << "==== Server Data ====" << std::endl;
 
@@ -351,31 +280,9 @@ int main(int argc, char* argv[]) {
   }
   std::cout << std::setw(data_w) << "total" << std::endl;
 
-  {
-    std::cout << std::setw(head_w) << "res_ops:";
-    int total = 0;
-    for (auto const &s : servers) {
-      auto rc = s.second->get_accumulator().reservation_count;
-      total += rc;
-      if (!server_disp_filter(s.first)) continue;
-      std::cout << std::setw(data_w) << rc;
-    }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
-      std::fixed << total << std::endl;
-  }
-
-  {
-    std::cout << std::setw(head_w) << "prop_ops:";
-    int total = 0;
-    for (auto const &s : servers) {
-      auto pc = s.second->get_accumulator().proportion_count;
-      total += pc;
-      if (!server_disp_filter(s.first)) continue;
-      std::cout << std::setw(data_w) << pc;
-    }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
-      std::fixed << total << std::endl;
-  }
+#if 0
+  std::cout << server_data(head_w, data_w);
+#endif
 
   // clean up clients then servers
 
@@ -390,4 +297,4 @@ int main(int argc, char* argv[]) {
   }
 
   std::cout << "simulation complete" << std::endl;
-}
+} // simulate<TS,TC>

@@ -6,12 +6,15 @@ include_directories(crimson/src)
 
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
-set(core_srcs
-  dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
-set(test_srcs test_server.cc test_client.cc test.cc)
-set(alt_test_srcs test_simp.cc)
+set(simple_sim_srcs test_simple.cc simulate.cc)
+set(dmc_sim_srcs test_dmclock.cc simulate.cc)
 
-set_source_files_properties(${core_srcs}
+set(dmc_srcs
+  dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
+
+set(srcs "${simple_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}")
+
+set_source_files_properties(${srcs}
   PROPERTIES
   COMPILE_FLAGS "${my_compile_flags} ${local_flags}"
   )
@@ -24,25 +27,22 @@ endif()
 
 # we can relax warnings a bit for testing code since we may keep
 # multiple options open with unused variables or functions
-set_source_files_properties(${test_srcs}
+# set(test_srcs test_server.cc test_client.cc test.cc)
+set_source_files_properties(${simple_sim_srcs} ${dmc_sim_src}
   PROPERTIES
-  COMPILE_FLAGS "${my_compile_flags} ${local_flags} ${warnings_off}"
+  COMPILE_FLAGS "${warnings_off}"
   )
 
-set_source_files_properties(${alt_test_srcs}
-  PROPERTIES
-  COMPILE_FLAGS "${my_compile_flags} ${local_flags} ${warnings_off}"
-  )
+add_executable(simple_sim ${simple_sim_srcs} ${dmc_src})
+add_executable(dmc_sim ${dmc_sim_srcs} ${dmc_srcs})
 
-add_executable(sim ${core_srcs} ${test_srcs})
-add_executable(alt_sim ${core_srcs} ${alt_test_srcs})
-
-target_link_libraries(sim PUBLIC pthread)
-target_link_libraries(alt_sim PUBLIC pthread)
+# target_link_libraries(sim PUBLIC pthread)
+target_link_libraries(simple_sim PUBLIC pthread)
+target_link_libraries(dmc_sim PUBLIC pthread)
 
 # file(COPY sim DESTINATION .)
 
-add_custom_target(runsim
-  DEPENDS sim
-  COMMAND $<TARGET_FILE:sim>
-  COMMAND printf '\\a\\a\\a')
+# add_custom_target(runsim
+#   DEPENDS sim
+#   COMMAND $<TARGET_FILE:sim>
+#  COMMAND printf '\\a\\a\\a')

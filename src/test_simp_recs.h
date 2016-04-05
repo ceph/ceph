@@ -9,22 +9,8 @@
 #pragma once
 
 
-#include <string>
-
-#include "dmclock_recs.h"
-
-
 using ClientId = uint;
 using ServerId = uint;
-
-
-using DmcServerAddInfo = crimson::dmclock::PhaseType;
-
-
-struct DmcAccum {
-  uint64_t reservation_count = 0;
-  uint64_t proportion_count = 0;
-};
 
 
 struct TestRequest {
