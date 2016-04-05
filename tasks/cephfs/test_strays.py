@@ -414,6 +414,8 @@ class TestStrays(CephFSTestCase):
         """
 
         # Set up two MDSs
+        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "allow_multimds",
+                                                   "true", "--yes-i-really-mean-it")
         self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "2")
 
         # See that we have two active MDSs
