@@ -36,7 +36,8 @@ public:
                                   journal::MockJournaler *journaler,
                                   librbd::journal::MirrorPeerClientMeta *client_meta,
                                   librbd::journal::MirrorPeerSyncPoint *sync_point,
-                                  Context *on_finish) {
+                                  Context *on_finish,
+                                  rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;

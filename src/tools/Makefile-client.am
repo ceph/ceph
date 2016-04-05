@@ -112,6 +112,7 @@ noinst_HEADERS += \
 	tools/rbd_mirror/ImageSync.h \
 	tools/rbd_mirror/Mirror.h \
 	tools/rbd_mirror/PoolWatcher.h \
+	tools/rbd_mirror/ProgressContext.h \
 	tools/rbd_mirror/Replayer.h \
 	tools/rbd_mirror/Threads.h \
 	tools/rbd_mirror/types.h \

@@ -65,7 +65,8 @@ struct BootstrapRequest<librbd::MockImageReplayerImageCtx> {
                                   const std::string &remote_mirror_uuid,
                                   ::journal::MockJournalerProxy *journaler,
                                   librbd::journal::MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish) {
+                                  Context *on_finish,
+                                  rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
