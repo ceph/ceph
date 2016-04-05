@@ -2428,7 +2428,11 @@ public:
           time_t mtime, JSONObj *obj, sync_type_t sync_mode) {
     RGWUserInfo info;
 
-    decode_json_obj(info, obj);
+    try {
+      decode_json_obj(info, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     RGWUserInfo old_info;
     time_t orig_mtime;
