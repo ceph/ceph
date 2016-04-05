@@ -59,14 +59,14 @@ public:
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
 
   virtual ~RGWHTTPClient();
-  explicit RGWHTTPClient(CephContext *_cct)
+  explicit RGWHTTPClient(CephContext *cct)
     : send_len(0),
       has_send_len(false),
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       user_info(nullptr),
       verify_ssl(true),
-      cct(_cct) {
+      cct(cct) {
   }
 
   void set_user_info(void *info) {
@@ -153,14 +153,27 @@ private:
 };
 
 
-class RGWPostHTTPData : public RGWHTTPClient {
-  bufferlist *bl;
+class RGWHTTPTransceiver : public RGWHTTPHeadersCollector {
+  bufferlist * const read_bl;
   std::string post_data;
   size_t post_data_index;
-  std::string subject_token;
+
 public:
-  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
-  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl, bool verify_ssl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0){
+  RGWHTTPTransceiver(CephContext * const cct,
+                     bufferlist * const read_bl,
+                     const header_spec_t intercept_headers = {})
+    : RGWHTTPHeadersCollector(cct, intercept_headers),
+      read_bl(read_bl),
+      post_data_index(0) {
+  }
+
+  RGWHTTPTransceiver(CephContext * const cct,
+                     bufferlist * const read_bl,
+                     const bool verify_ssl,
+                     const header_spec_t intercept_headers = {})
+    : RGWHTTPHeadersCollector(cct, intercept_headers),
+      read_bl(read_bl),
+      post_data_index(0) {
     set_verify_ssl(verify_ssl);
   }
 
@@ -168,20 +181,16 @@ public:
     this->post_data = _post_data;
   }
 
-  std::string get_subject_token() {
-    return subject_token;
-  }
-
 protected:
-  int send_data(void* ptr, size_t len);
+  int send_data(void* ptr, size_t len) override;
 
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
+  int receive_data(void *ptr, size_t len) override {
+    read_bl->append((char *)ptr, len);
     return 0;
   }
-
-  int receive_header(void *ptr, size_t len);
 };
+
+typedef RGWHTTPTransceiver RGWPostHTTPData;
 
 
 class RGWCompletionManager;
