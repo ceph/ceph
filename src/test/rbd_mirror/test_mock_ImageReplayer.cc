@@ -7,9 +7,9 @@
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
+#include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
-#include "test/rbd_mirror/mock/MockJournaler.h"
 
 namespace librbd {
 
