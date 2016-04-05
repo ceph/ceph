@@ -697,7 +697,7 @@ def create_nonregion_pools(ctx, config, regions):
     yield
 
 @contextlib.contextmanager
-def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, realm):
+def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, realm, master_client):
     """
     Configure multisite regions and zones from rados and rgw.
     """
@@ -724,7 +724,7 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
     # extract the zone info
     role_zones = dict([(client, extract_zone_info(ctx, client, c_config))
                        for client, c_config in config.iteritems()])
-    log.debug('roles_zones = %r', role_zones)
+    log.debug('role_zones = %r', role_zones)
 
     # extract the user info and append it to the payload tuple for the given
     # client
@@ -752,12 +752,6 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
         if zg_info['is_master']:
             master_zonegroup = zonegroup
             master_zone = zg_info['master_zone']
-            break
-
-    for client in config.iterkeys():
-        (zonegroup, zone, zone_info, user_info) = role_zones[client]
-        if zonegroup == master_zonegroup and zone == master_zone:
-            master_client = client
             break
 
     log.debug('master zonegroup =%r', master_zonegroup)
@@ -790,13 +784,15 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
                                zone, 64, ctx.rgw.erasure_code_profile)
             else:
                 create_replicated_pool(remote, pool_info['val']['data_pool'], 64)
-        zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
-        log.debug("zone info is: %s"), zone_json
-        rgwadmin(ctx, master_client,
-                 cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
-                      '--rgw-zone', zone],
-                 stdin=StringIO(zone_json),
-                 check_status=True)
+
+    (zonegroup, zone, zone_info, user_info) = role_zones[master_client]
+    zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
+    log.debug("zone info is: %s"), zone_json
+    rgwadmin(ctx, master_client,
+             cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
+                  '--rgw-zone', zone],
+             stdin=StringIO(zone_json),
+             check_status=True)
 
     rgwadmin(ctx, master_client,
              cmd=['-n', master_client, 'zone', 'default', zone],
@@ -807,7 +803,6 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
              check_status=True)
 
     yield
-
 
 @contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
@@ -1007,6 +1002,22 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
                      user_info['system_key']['secret_key']],
                      check_status=True)
 
+            (zonegroup, zone, zone_info, user_info) = role_zones[client]
+            zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
+            log.debug("zone info is: %s"), zone_json
+            rgwadmin(ctx, client,
+                     cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
+                          '--rgw-zone', zone],
+                     stdin=StringIO(zone_json),
+                     check_status=True)
+
+            rgwadmin(ctx, client,
+                     cmd=['period', 'update', '--commit', '--url',
+                          endpoint, '--access_key',
+                          user_info['system_key']['access_key'], '--secret',
+                          user_info['system_key']['secret_key']],
+                     check_status=True)
+
     yield
 
 @contextlib.contextmanager
@@ -1174,7 +1185,7 @@ def task(ctx, config):
     # structure
     ctx.rgw.regions = regions
 
-    realm = ''
+    realm = None
     if 'realm' in config:
         # separate region info so only clients are keys in config
         realm = config['realm']
@@ -1220,6 +1231,7 @@ def task(ctx, config):
 
     if multi_cluster:
         log.debug('multi cluster run')
+
         master_client = get_config_master_client(ctx=ctx,
                                                  config=config,
                                                  regions=regions)
@@ -1231,13 +1243,10 @@ def task(ctx, config):
                 regions=regions,
                 role_endpoints=role_endpoints,
                 realm=realm,
+                master_client = master_client,
             )
         ])
 
-        master_client = get_config_master_client(ctx=ctx,
-                                                 config=config,
-                                                 regions=regions)
-        log.debug('master_client %r', master_client)
         subtasks.extend([
             lambda: configure_users_for_client(
                 ctx=ctx,
