@@ -116,6 +116,13 @@ static bool is_string_in_set(set<string>& s, string h) {
   return false;
 }
 
+bool RGWCORSRule::has_wildcard_origin() {
+  if (allowed_origins.find("*") != allowed_origins.end())
+    return true;
+
+  return false;
+}
+
 bool RGWCORSRule::is_origin_present(const char *o) {
   string origin = o;
   return is_string_in_set(allowed_origins, origin);
