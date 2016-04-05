@@ -1,6 +1,5 @@
 #!/bin/sh
 set -e
-
 if [ $# -eq 0 ]; then
   install=false
 else
@@ -41,15 +40,20 @@ Linux)
 		missing="${missing:+$missing }$package"
 	    fi
 	done
+	fedora_release=$(lsb_release -rs)
+	package_manager=dnf
+	if [ $fedora_release -lt 23 ]; then
+	    package_manager=yum
+	fi
 	if [ -n "$missing" ]; then
             echo "$0: missing required packages:" 1>&2
             echo "$missing"
             if [ "$install" = true ]; then
                 echo "Installing missing packages..."
-                sudo yum -y install $missing
+                sudo $package_manager -y install $missing
             else
                 echo "Please install missing packages or run './bootstrap install' if you have sudo"
-                echo "sudo yum -y install $missing"
+                echo "sudo $package_manager -y install $missing"
                 exit 1
             fi
 	fi
