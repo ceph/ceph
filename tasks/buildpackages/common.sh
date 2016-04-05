@@ -53,7 +53,7 @@ function flavor2configure() {
 
     eval $(dpkg-architecture)
 
-    if test $flavor = notcmalloc || test $DEB_BUILD_ARCH = arm64 ; then
+    if test $flavor = notcmalloc || test "$DEB_HOST_GNU_CPU" = aarch64 ; then
         echo --without-tcmalloc --without-cryptopp
     fi
 }
