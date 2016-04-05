@@ -150,17 +150,10 @@ protected:
     Lock l(inner_queue_mtx);
     assert(!finishing);
     accum_f(accumulator, additional);
-#if 0
-    if (crimson::dmclock::PhaseType::reservation == phase) {
-      ++reservation_counter;
-    } else {
-      ++proportion_counter;
-    }
-#endif
     inner_queue.emplace_back(QueueItem(client, std::move(request), additional));
     inner_queue_cv.notify_one();
   }
-    
+
 
   void run(std::chrono::milliseconds check_period) {
     Lock l(inner_queue_mtx);
