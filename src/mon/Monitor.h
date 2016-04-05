@@ -54,6 +54,7 @@
 #include "include/memory.h"
 #include "include/str_map.h"
 #include <errno.h>
+#include <cmath>
 
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
@@ -463,6 +464,15 @@ private:
   version_t timecheck_round;
   unsigned int timecheck_acks;
   utime_t timecheck_round_start;
+  /* When we hit a skew we will start a new round based off of
+   * 'mon_timecheck_skew_interval'. Each new round will be backed off
+   * until we hit 'mon_timecheck_interval' -- which is the typical
+   * interval when not in the presence of a skew.
+   *
+   * This variable tracks the number of rounds with skews since last clean
+   * so that we can report to the user and properly adjust the backoff.
+   */
+  uint64_t timecheck_rounds_since_clean;
   /**
    * Time Check event.
    */
@@ -482,6 +492,8 @@ private:
   void timecheck_finish_round(bool success = true);
   void timecheck_cancel_round();
   void timecheck_cleanup();
+  void timecheck_reset_event();
+  void timecheck_check_skews();
   void timecheck_report();
   void timecheck();
   health_status_t timecheck_status(ostringstream &ss,
@@ -490,6 +502,16 @@ private:
   void handle_timecheck_leader(MTimeCheck *m);
   void handle_timecheck_peon(MTimeCheck *m);
   void handle_timecheck(MTimeCheck *m);
+
+  /**
+   * Returns 'true' if this is considered to be a skew; 'false' otherwise.
+   */
+  bool timecheck_has_skew(const double skew_bound, double *abs) const {
+    double abs_skew = std::fabs(skew_bound);
+    if (abs)
+      *abs = abs_skew;
+    return (abs_skew > g_conf->mon_clock_drift_allowed);
+  }
   /**
    * @}
    */
