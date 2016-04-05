@@ -109,7 +109,7 @@ void file_layout_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_unit", stripe_unit);
   f->dump_unsigned("stripe_count", stripe_count);
   f->dump_unsigned("object_size", object_size);
-  f->dump_unsigned("pool_id", pool_id);
+  f->dump_int("pool_id", pool_id);
   f->dump_string("pool_ns", pool_ns);
 }
 
