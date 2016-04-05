@@ -195,8 +195,11 @@ void global_init(std::vector < const char * > *alt_def_args,
     }
     if ((uid || gid) &&
 	g_conf->setuser_match_path.length()) {
+      // induce early expansion of setuser_match_path config option
+      string match_path = g_conf->setuser_match_path;
+      g_conf->early_expand_meta(match_path, &cerr);
       struct stat st;
-      int r = ::stat(g_conf->setuser_match_path.c_str(), &st);
+      int r = ::stat(match_path.c_str(), &st);
       if (r < 0) {
 	r = -errno;
 	cerr << "unable to stat setuser_match_path "
@@ -206,7 +209,7 @@ void global_init(std::vector < const char * > *alt_def_args,
       }
       if ((uid && uid != st.st_uid) ||
 	  (gid && gid != st.st_gid)) {
-	cerr << "WARNING: will not setuid/gid: " << g_conf->setuser_match_path
+	cerr << "WARNING: will not setuid/gid: " << match_path
 	     << " owned by " << st.st_uid << ":" << st.st_gid
 	     << " and not requested " << uid << ":" << gid
 	     << std::endl;
@@ -216,7 +219,7 @@ void global_init(std::vector < const char * > *alt_def_args,
 	gid_string.erase();
       } else {
 	priv_ss << "setuser_match_path "
-		<< g_conf->setuser_match_path << " owned by "
+		<< match_path << " owned by "
 		<< st.st_uid << ":" << st.st_gid << ". ";
       }
     }
