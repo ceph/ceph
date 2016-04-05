@@ -568,6 +568,10 @@ TEST(LibRGW, READ_DIRS1)
 	  ASSERT_EQ(sobj.rgw_fh->get_size(), 16UL);
 	  // do it
 	  memset(buf, 0, 256);
+	  if (verbose) {
+	    std::cout << "reading 0,256 " << sobj.rgw_fh->relative_object_name()
+		      << std::endl;
+	  }
 	  rc = rgw_read(fs, sobj.fh, 0, 256, &nread, buf, RGW_READ_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	  if (verbose) {
