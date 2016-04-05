@@ -137,9 +137,6 @@ protected:
 };
 
 
-#if 1
-// FIXME!
-#define dout_subsys ceph_subsys_rgw
 class RGWPostHTTPData : public RGWHTTPClient {
   bufferlist *bl;
   std::string post_data;
@@ -155,63 +152,18 @@ public:
     this->post_data = _post_data;
   }
 
-  int send_data(void* ptr, size_t len) {
-    int length_to_copy = 0;
-    if (post_data_index < post_data.length()) {
-      length_to_copy = min(post_data.length() - post_data_index, len);
-      memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
-      post_data_index += length_to_copy;
-    }
-    return length_to_copy;
-  }
-
+  int send_data(void* ptr, size_t len);
   int receive_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
     return 0;
   }
 
-  int receive_header(void *ptr, size_t len) {
-    char line[len + 1];
-
-    char *s = (char *)ptr, *end = (char *)ptr + len;
-    char *p = line;
-    ldout(cct, 20) << "RGWPostHTTPData::receive_header parsing HTTP headers" << dendl;
-
-    while (s != end) {
-      if (*s == '\r') {
-        s++;
-        continue;
-      }
-      if (*s == '\n') {
-        *p = '\0';
-        ldout(cct, 20) << "RGWPostHTTPData::receive_header: line="
-                       << line << dendl;
-        // TODO: fill whatever data required here
-        char *l = line;
-        char *tok = strsep(&l, " \t:");
-        if (tok) {
-          while (l && *l == ' ') {
-            l++;
-          }
-
-          if (strcasecmp(tok, "X-Subject-Token") == 0) {
-            subject_token = l;
-          }
-        }
-      }
-      if (s != end) {
-        *p++ = *s++;
-      }
-    }
-    return 0;
-  }
+  int receive_header(void *ptr, size_t len);
 
   std::string get_subject_token() {
     return subject_token;
   }
 };
-#undef dout_subsys
-#endif
 
 
 class RGWCompletionManager;
