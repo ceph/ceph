@@ -433,6 +433,11 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
     }
   }
 
+  ret = rgw_bucket_sync_user_stats(store, bucket.name);
+  if ( ret < 0) {
+     dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  }
+
   RGWObjVersionTracker objv_tracker;
 
   ret = store->delete_bucket(bucket, objv_tracker);
