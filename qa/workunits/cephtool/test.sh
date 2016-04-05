@@ -170,8 +170,8 @@ function ceph_watch_wait()
     fi
 
     for i in `seq ${timeout}`; do
-	sleep 1
 	grep -q "$regexp" $CEPH_WATCH_FILE && break
+	sleep 1
     done
 
     kill $CEPH_WATCH_PID
@@ -248,24 +248,24 @@ function test_tiering_agent()
   # wait for the object to be evicted from the cache
   local evicted
   evicted=false
-  for i in 1 2 4 8 16 32 64 128 256 ; do
+  for i in `seq 1 300` ; do
       if ! rados -p $fast ls | grep obj1 ; then
           evicted=true
           break
       fi
-      sleep $i
+      sleep 1
   done
   $evicted # assert
   # the object is proxy read and promoted to the cache
   rados -p $slow get obj1 - >/dev/null
   # wait for the promoted object to be evicted again
   evicted=false
-  for i in 1 2 4 8 16 32 64 128 256 ; do
+  for i in `seq 1 300` ; do
       if ! rados -p $fast ls | grep obj1 ; then
           evicted=true
           break
       fi
-      sleep $i
+      sleep 1
   done
   $evicted # assert
   ceph osd tier remove-overlay $slow
@@ -1084,10 +1084,10 @@ function test_mon_osd()
   ceph osd down 0
   ceph osd dump | grep 'osd.0 down'
   ceph osd unset noup
-  for ((i=0; i < 100; i++)); do
+  for ((i=0; i < 1000; i++)); do
     if ! ceph osd dump | grep 'osd.0 up'; then
       echo "waiting for osd.0 to come back up"
-      sleep 10
+      sleep 1
     else
       break
     fi
@@ -1814,7 +1814,10 @@ function test_mon_cephdf_commands()
   rados put cephdf_for_test cephdf_for_test -p cephdf_for_test
 
   #wait for update
-  sleep 10
+  for i in `seq 1 10`; do
+    rados -p cephdf_for_test ls - | grep -q cephdf_for_test && break
+    sleep 1
+  done
 
   cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
   raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
