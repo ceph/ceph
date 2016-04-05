@@ -4615,11 +4615,7 @@ void OSD::ms_handle_connect(Connection *con)
 
     // full map requests may happen while active or pre-boot
     if (requested_full_first) {
-      epoch_t first = requested_full_first;
-      epoch_t last = requested_full_last;
-      requested_full_first = 0;
-      requested_full_last = 0;
-      request_full_map(first, last);
+      rerequest_full_maps();
     }
   }
 }
