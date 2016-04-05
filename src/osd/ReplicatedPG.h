@@ -903,7 +903,9 @@ protected:
   void hit_set_in_memory_trim();                     ///< discard old in memory HitSets
 
   hobject_t get_hit_set_current_object(utime_t stamp);
-  hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
+  hobject_t get_hit_set_archive_object(utime_t start,
+				       utime_t end,
+				       bool using_gmt);
 
   // agent
   boost::scoped_ptr<TierAgentState> agent_state;

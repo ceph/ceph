@@ -16,6 +16,7 @@
  * 
  */
 
+#include <algorithm>
 #include <sstream>
 
 #include "OSDMonitor.h"
@@ -1639,6 +1640,9 @@ void OSDMonitor::take_all_failures(list<MOSDFailure*>& ls)
   failure_info.clear();
 }
 
+static bool uses_gmt_hitset(const std::pair<int64_t, pg_pool_t>& pool) {
+  return pool.second.use_gmt_hitset;
+}
 
 // boot --
 
@@ -1704,6 +1708,19 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
       mon->clog->info() << "disallowing boot of pre-hammer OSD "
 			<< m->get_orig_source_inst()
 			<< " because all up OSDs are post-hammer\n";
+      goto ignore;
+    }
+  }
+
+  if (std::find_if(osdmap.get_pools().begin(),
+		   osdmap.get_pools().end(),
+		   uses_gmt_hitset) != osdmap.get_pools().end()) {
+    assert(osdmap.get_num_up_osds() == 0 ||
+	   osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT);
+    if (!(m->osd_features & CEPH_FEATURE_OSD_HITSET_GMT)) {
+      dout(0) << __func__ << " one or more pools uses GMT hitsets but osd at "
+	      << m->get_orig_source_inst()
+	      << " doesn't announce support -- ignore" << dendl;
       goto ignore;
     }
   }
@@ -3134,6 +3151,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (!p->is_tier() &&
         (var == "hit_set_type" || var == "hit_set_period" ||
          var == "hit_set_count" || var == "hit_set_fpp" ||
+	 var == "use_gmt_hitset" ||
          var == "target_max_objects" || var == "target_max_bytes" ||
          var == "cache_target_full_ratio" ||
          var == "cache_target_dirty_ratio" ||
@@ -3186,6 +3204,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	  BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	  f->dump_float("hit_set_fpp", bloomp->get_fpp());
 	}
+      } else if (var == "use_gmt_hitset") {
+	f->dump_bool("use_gmt_hitset", p->use_gmt_hitset);
       } else if (var == "target_max_objects") {
         f->dump_unsigned("target_max_objects", p->target_max_objects);
       } else if (var == "target_max_bytes") {
@@ -3243,6 +3263,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
 	BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
 	ss << "hit_set_fpp: " << bloomp->get_fpp();
+      } else if (var == "use_gmt_hitset") {
+	ss << "use_gmt_hitset: " << p->use_gmt_hitset << "\n";
       } else if (var == "target_max_objects") {
         ss << "target_max_objects: " << p->target_max_objects;
       } else if (var == "target_max_bytes") {
@@ -4125,6 +4147,11 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  if (g_conf->osd_pool_use_gmt_hitset &&
+      (osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT))
+    pi->use_gmt_hitset = true;
+  else
+    pi->use_gmt_hitset = false;
 
   pi->size = size;
   pi->min_size = min_size;
@@ -4468,6 +4495,17 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
     bloomp->set_fpp(f);
+  } else if (var == "use_gmt_hitset") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      if (!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_HITSET_GMT)) {
+	ss << "not all OSDs support GMT hit set.";
+	return -EINVAL;
+      }
+      p.use_gmt_hitset = true;
+    } else {
+      ss << "expecting value 'true' or '1'";
+      return -EINVAL;
+    }
   } else if (var == "debug_fake_ec_pool") {
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
