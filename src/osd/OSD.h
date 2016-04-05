@@ -2057,7 +2057,6 @@ protected:
     requested_full_last = 0;
     request_full_map(first, last);
   }
-  void finish_full_map_request();
   void got_full_map(epoch_t e);
 
   // -- failures --
