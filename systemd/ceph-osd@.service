@@ -15,6 +15,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 ProtectHome=true
 ProtectSystem=full
 PrivateTmp=true
+TasksMax=infinity
 
 [Install]
 WantedBy=ceph-osd.target
