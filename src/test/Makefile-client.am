@@ -234,7 +234,7 @@ ceph_test_rados_api_aio_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_aio
 
 ceph_test_rados_api_list_SOURCES = test/librados/list.cc
-ceph_test_rados_api_list_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_list_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_rados_api_list_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_list
 
