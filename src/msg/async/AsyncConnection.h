@@ -77,6 +77,7 @@ class AsyncConnection : public Connection {
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl, bool more);
+  void inject_delay();
   ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist &authorizer_reply) {
     bufferlist reply_bl;
@@ -88,8 +89,10 @@ class AsyncConnection : public Connection {
       reply_bl.append(authorizer_reply.c_str(), authorizer_reply.length());
     }
     ssize_t r = try_send(reply_bl);
-    if (r < 0)
+    if (r < 0) {
+      inject_delay();
       return -1;
+    }
 
     state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
     return 0;
@@ -123,10 +126,77 @@ class AsyncConnection : public Connection {
     assert(write_lock.is_locked());
     return !out_q.empty();
   }
+  
+   /**
+   * The DelayedDelivery is for injecting delays into Message delivery off
+   * the socket. It is only enabled if delays are requested, and if they
+   * are then it pulls Messages off the DelayQueue and puts them into the
+   * AsyncMessenger event queue.
+   * This is a nearly direct copy & paste from SimpleMessenger, and as
+   * such, there was a problem during AsyncConnection shutdown, fixed by
+   * checking whether delay_thread isn't already stopped and refraining
+   * from stopping it again.
+   */
+  class DelayedDelivery: public Thread {
+    AsyncConnection *connection;
+    std::deque< pair<utime_t,Message*> > delay_queue;
+    Mutex delay_lock;
+    Cond delay_cond;
+    int flush_count;
+    AsyncMessenger *msgr;
+    bool active_flush;
+    bool stop_delayed_delivery;
+    bool delay_dispatching; // we are in fast dispatch now
+    bool stop_fast_dispatching_flag; // we need to stop fast dispatching
+
+    public:
+    explicit DelayedDelivery(AsyncConnection *p, AsyncMessenger *omsgr)
+      : connection(p),
+        delay_lock("AsyncConnection::DelayedDelivery::delay_lock"), flush_count(0),
+        msgr(omsgr),
+        active_flush(false),
+        stop_delayed_delivery(false),
+        delay_dispatching(false),
+        stop_fast_dispatching_flag(false) { }
+    ~DelayedDelivery() { discard(); }
+    void *entry();
+    void queue(utime_t release, Message *m) {
+      Mutex::Locker l(delay_lock);
+      delay_queue.push_back(make_pair(release, m));
+      delay_cond.Signal();
+    }
+    void discard();
+    void flush();
+    bool is_flushing() {
+      Mutex::Locker l(delay_lock);
+      return flush_count > 0 || active_flush;
+    }
+    void wait_for_flush() {
+      Mutex::Locker l(delay_lock);
+      while (flush_count > 0 || active_flush)
+        delay_cond.Wait(delay_lock);
+    }
+    void stop() {
+      delay_lock.Lock();
+      stop_delayed_delivery = true;
+      delay_cond.Signal();
+      delay_lock.Unlock();
+    }
+    void steal_for_pipe(AsyncConnection *new_owner) {
+      Mutex::Locker l(delay_lock);
+      connection = new_owner;
+    }
+    /**
+     * We need to stop fast dispatching before we need to stop putting
+     * normal messages into the DispatchQueue.
+     */
+    void stop_fast_dispatching();
+  } *delay_thread;
 
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
   ~AsyncConnection();
+  void maybe_start_delay_thread();
 
   ostream& _conn_prefix(std::ostream *_dout);
 
