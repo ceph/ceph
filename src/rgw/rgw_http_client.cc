@@ -14,36 +14,49 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+/* Static methods - callbacks for libcurl. */
+size_t RGWHTTPClient::receive_http_header(void * const ptr,
+                                          const size_t size,
+                                          const size_t nmemb,
+                                          void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_header(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_header() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::receive_http_data(void * const ptr,
+                                        const size_t size,
+                                        const size_t nmemb,
+                                        void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::send_http_data(void * const ptr,
+                                     const size_t size,
+                                     const size_t nmemb,
+                                     void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return ret;

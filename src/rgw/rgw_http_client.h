@@ -32,10 +32,29 @@ class RGWHTTPClient
 protected:
   CephContext *cct;
 
-  list<pair<string, string> > headers;
-  int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
-public:
+  std::list<std::pair<std::string, std::string>> headers;
+  int init_request(const char *method,
+                   const char *url,
+                   rgw_http_req_data *req_data);
 
+  virtual int receive_header(void *ptr, size_t len) = 0;
+  virtual int receive_data(void *ptr, size_t len) = 0;
+  virtual int send_data(void *ptr, size_t len) = 0;
+
+  /* Callbacks for libcurl. */
+  static size_t receive_http_header(void *ptr,
+                                    size_t size,
+                                    size_t nmemb,
+                                    void *_info);
+  static size_t receive_http_data(void *ptr,
+                                  size_t size,
+                                  size_t nmemb,
+                                  void *_info);
+   static size_t send_http_data(void *ptr,
+                                size_t size,
+                                size_t nmemb,
+                                void *_info);
+public:
   static const long HTTP_STATUS_NOSTATUS     = 0;
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
 
@@ -61,10 +80,6 @@ public:
   void append_header(const string& name, const string& val) {
     headers.push_back(pair<string, string>(name, val));
   }
-
-  virtual int receive_header(void *ptr, size_t len) = 0;
-  virtual int receive_data(void *ptr, size_t len) = 0;
-  virtual int send_data(void *ptr, size_t len) = 0;
 
   void set_send_length(size_t len) {
     send_len = len;
@@ -112,15 +127,6 @@ public:
       relevant_headers(relevant_headers) {
   }
 
-  int receive_header(void *ptr, size_t len) override;
-  int receive_data(void *ptr, size_t len) override {
-    return 0;
-  }
-
-  int send_data(void *ptr, size_t len) override {
-    return 0;
-  }
-
   std::map<header_name_t, header_value_t, CILess> get_headers() const {
     return found_headers;
   }
@@ -130,8 +136,18 @@ public:
     return found_headers.at(name);
   }
 
-
 protected:
+  virtual int receive_header(void *ptr, size_t len) override;
+
+  virtual int receive_data(void *ptr, size_t len) override {
+    return 0;
+  }
+
+  virtual int send_data(void *ptr, size_t len) override {
+    return 0;
+  }
+
+private:
   const std::set<header_name_t, CILess> relevant_headers;
   std::map<header_name_t, header_value_t, CILess> found_headers;
 };
@@ -152,17 +168,19 @@ public:
     this->post_data = _post_data;
   }
 
+  std::string get_subject_token() {
+    return subject_token;
+  }
+
+protected:
   int send_data(void* ptr, size_t len);
+
   int receive_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
     return 0;
   }
 
   int receive_header(void *ptr, size_t len);
-
-  std::string get_subject_token() {
-    return subject_token;
-  }
 };
 
 
