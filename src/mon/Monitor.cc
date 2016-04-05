@@ -4607,7 +4607,7 @@ int Monitor::write_default_keyring(bufferlist& bl)
   os << g_conf->mon_data << "/keyring";
 
   int err = 0;
-  int fd = ::open(os.str().c_str(), O_WRONLY|O_CREAT, 0644);
+  int fd = ::open(os.str().c_str(), O_WRONLY|O_CREAT, 0600);
   if (fd < 0) {
     err = -errno;
     dout(0) << __func__ << " failed to open " << os.str() 
