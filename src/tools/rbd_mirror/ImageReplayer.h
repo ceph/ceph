@@ -12,9 +12,11 @@
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "journal/ReplayEntry.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "ProgressContext.h"
 #include "types.h"
 
 class AdminSocketHook;
@@ -80,6 +82,7 @@ public:
   bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
+  void set_state_description(int r, const std::string &desc);
 
   void start(Context *on_finish = nullptr,
 	     const BootstrapParams *bootstrap_params = nullptr);
@@ -89,7 +92,7 @@ public:
   void print_status(Formatter *f, stringstream *ss);
 
   virtual void handle_replay_ready();
-  virtual void handle_replay_complete(int r);
+  virtual void handle_replay_complete(int r, const std::string &error_desc);
 
   inline int64_t get_remote_pool_id() const {
     return m_remote_pool_id;
@@ -159,7 +162,7 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail_start(int r);
+  virtual void on_start_fail_start(int r, const std::string &desc = "");
   virtual void on_start_fail_finish(int r);
   virtual bool on_start_interrupted();
 
@@ -180,6 +183,18 @@ protected:
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
 
+  class BootstrapProgressContext : public ProgressContext {
+  public:
+    BootstrapProgressContext(ImageReplayer<ImageCtxT> *replayer) :
+      replayer(replayer) {
+    }
+
+    virtual void update_progress(const std::string &description,
+				 bool flush = true);
+  private:
+    ImageReplayer<ImageCtxT> *replayer;
+  };
+
   Threads *m_threads;
   RadosRef m_local, m_remote;
   std::string m_local_mirror_uuid;
@@ -189,18 +204,25 @@ private:
   std::string m_local_image_name;
   std::string m_name;
   Mutex m_lock;
-  State m_state;
+  State m_state = STATE_UNINITIALIZED;
+  int m_last_r = 0;
+  std::string m_state_desc;
+  BootstrapProgressContext m_progress_cxt;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
-  ImageCtxT *m_local_image_ctx;
-  librbd::journal::Replay<ImageCtxT> *m_local_replay;
-  Journaler* m_remote_journaler;
-  ::journal::ReplayHandler *m_replay_handler;
+  ImageCtxT *m_local_image_ctx = nullptr;
+  librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
+  Journaler* m_remote_journaler = nullptr;
+  ::journal::ReplayHandler *m_replay_handler = nullptr;
 
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;
+  Context *m_update_status_task = nullptr;
+  int m_update_status_interval = 0;
+  librados::AioCompletion *m_update_status_comp = nullptr;
+  bool m_update_status_pending = false;
   bool m_stop_requested = false;
 
-  AdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook = nullptr;
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
@@ -231,6 +253,12 @@ private:
   bool is_running_() const { return !is_stopped_() && m_state != STATE_STOPPING; }
 
   void shut_down_journal_replay(bool cancel_ops);
+
+  void update_mirror_image_status(bool final = false);
+  void reschedule_update_status_task(int new_interval = 0);
+  void start_update_status_task();
+
+  std::string get_replay_status_description();
 
   void bootstrap();
   void handle_bootstrap(int r);

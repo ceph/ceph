@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "ImageSync.h"
+#include "ProgressContext.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
@@ -29,10 +30,12 @@ template <typename I>
 ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
                         SafeTimer *timer, Mutex *timer_lock,
                         const std::string &mirror_uuid, Journaler *journaler,
-                        MirrorPeerClientMeta *client_meta, Context *on_finish)
+                        MirrorPeerClientMeta *client_meta, Context *on_finish,
+			ProgressContext *progress_ctx)
   : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
     m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish),
+    m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)) {
 }
 
@@ -56,6 +59,8 @@ void ImageSync<I>::cancel() {
 
 template <typename I>
 void ImageSync<I>::send_prune_catch_up_sync_point() {
+  update_progress("PRUNE_CATCH_UP_SYNC_POINT");
+
   if (m_client_meta->sync_points.size() <= 1) {
     send_create_sync_point();
     return;
@@ -88,6 +93,8 @@ void ImageSync<I>::handle_prune_catch_up_sync_point(int r) {
 
 template <typename I>
 void ImageSync<I>::send_create_sync_point() {
+  update_progress("CREATE_SYNC_POINT");
+
   // TODO: when support for disconnecting laggy clients is added,
   //       re-connect and create catch-up sync point
   if (m_client_meta->sync_points.size() > 0) {
@@ -122,6 +129,8 @@ void ImageSync<I>::handle_create_sync_point(int r) {
 
 template <typename I>
 void ImageSync<I>::send_copy_snapshots() {
+  update_progress("COPY_SNAPSHOTS");
+
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -157,6 +166,8 @@ void ImageSync<I>::send_copy_image() {
     return;
   }
 
+  update_progress("COPY_IMAGE");
+
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -165,7 +176,7 @@ void ImageSync<I>::send_copy_image() {
   m_image_copy_request = ImageCopyRequest<I>::create(
     m_local_image_ctx, m_remote_image_ctx, m_timer, m_timer_lock,
     m_journaler, m_client_meta, &m_client_meta->sync_points.front(),
-    ctx);
+    ctx, m_progress_ctx);
   m_lock.Unlock();
 
   m_image_copy_request->send();
@@ -207,6 +218,8 @@ void ImageSync<I>::send_copy_object_map() {
     return;
   }
 
+  update_progress("COPY_OBJECT_MAP");
+
   assert(m_local_image_ctx->object_map != nullptr);
 
   assert(!m_client_meta->sync_points.empty());
@@ -242,6 +255,8 @@ void ImageSync<I>::send_refresh_object_map() {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
+  update_progress("REFRESH_OBJECT_MAP");
+
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_refresh_object_map>(this);
   m_object_map = m_local_image_ctx->create_object_map(CEPH_NOSNAP);
@@ -267,6 +282,8 @@ template <typename I>
 void ImageSync<I>::send_prune_sync_points() {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
+
+  update_progress("PRUNE_SYNC_POINTS");
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_prune_sync_points>(this);
@@ -302,6 +319,15 @@ void ImageSync<I>::finish(int r) {
 
   m_on_finish->complete(r);
   delete this;
+}
+
+template <typename I>
+void ImageSync<I>::update_progress(const std::string &description) {
+  dout(20) << ": " << description << dendl;
+
+  if (m_progress_ctx) {
+    m_progress_ctx->update_progress("IMAGE_SYNC/" + description);
+  }
 }
 
 } // namespace mirror
