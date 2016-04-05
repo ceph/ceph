@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/utime.h"
 #include <iosfwd>
 #include <string>
 
@@ -73,12 +74,63 @@ struct MirrorImage {
   static void generate_test_instances(std::list<MirrorImage*> &o);
 
   bool operator==(const MirrorImage &rhs) const;
+  bool operator<(const MirrorImage &rhs) const;
 };
 
 std::ostream& operator<<(std::ostream& os, const MirrorImageState& mirror_state);
 std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image);
 
 WRITE_CLASS_ENCODER(MirrorImage);
+
+enum MirrorImageStatusState {
+  MIRROR_IMAGE_STATUS_STATE_UNKNOWN         = 0,
+  MIRROR_IMAGE_STATUS_STATE_ERROR           = 1,
+  MIRROR_IMAGE_STATUS_STATE_SYNCING         = 2,
+  MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY = 3,
+  MIRROR_IMAGE_STATUS_STATE_REPLAYING       = 4,
+  MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY = 5,
+  MIRROR_IMAGE_STATUS_STATE_STOPPED         = 6,
+};
+
+inline void encode(const MirrorImageStatusState &state, bufferlist& bl,
+		   uint64_t features=0)
+{
+  ::encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(MirrorImageStatusState &state, bufferlist::iterator& it)
+{
+  uint8_t int_state;
+  ::decode(int_state, it);
+  state = static_cast<MirrorImageStatusState>(int_state);
+}
+
+struct MirrorImageStatus {
+  MirrorImageStatus() {}
+  MirrorImageStatus(MirrorImageStatusState state,
+		    const std::string &description = "")
+    : state(state), description(description) {}
+
+  MirrorImageStatusState state = MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
+  std::string description;
+  utime_t last_update;
+  bool up = false;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  std::string state_to_string() const;
+
+  static void generate_test_instances(std::list<MirrorImageStatus*> &o);
+
+  bool operator==(const MirrorImageStatus &rhs) const;
+};
+
+std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
+std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
+
+WRITE_CLASS_ENCODER(MirrorImageStatus);
 
 } // namespace rbd
 } // namespace cls
