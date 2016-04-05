@@ -197,7 +197,7 @@ class OpenStack(object):
         'opensuse-42.1-x86_64': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.1/images/openSUSE-Leap-42.1-OpenStack.x86_64.qcow2',
         'opensuse-42.2-x86_64': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.2/images/openSUSE-Leap-42.2-OpenStack.x86_64.qcow2',
         'ubuntu-14.04-x86_64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
-        'ubuntu-14.04-arm64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-arm64-disk1.img',
+        'ubuntu-14.04-aarch64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-arm64-disk1.img',
         'ubuntu-14.04-i686': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-i386-disk1.img',
         'ubuntu-16.04-x86_64': 'https://cloud-images.ubuntu.com/xenial/current/xenial-server-cloudimg-amd64-disk1.img',
         'ubuntu-16.04-aarch64': 'https://cloud-images.ubuntu.com/xenial/current/xenial-server-cloudimg-arm64-disk1.img',
@@ -605,7 +605,7 @@ class OpenStack(object):
         if (self.get_provider() == 'cloudlab' or
             (self.get_provider() == 'runabove' and
              'HZ1' in os.environ.get('OS_REGION_NAME', ''))):
-            return ('arm64',)
+            return ('aarch64',)
         else:
             return ('x86_64', 'i686')
 

@@ -162,7 +162,7 @@ def parse_args(argv):
     parser.add_argument(
         '--arch',
         default=None,
-        help='architecture (x86_64, i386, armv7, arm64)',
+        help='architecture (x86_64, i386, armv7, aarch64)',
     )
     parser.add_argument(
         '--json-query',
