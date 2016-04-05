@@ -19,7 +19,7 @@ find_library(DPDK_rte_cmdline_LIBRARY rte_cmdline)
 find_library(DPDK_rte_pmd_bond_LIBRARY rte_pmd_bond)
 find_library(DPDK_rte_pmd_vmxnet3_uio_LIBRARY rte_pmd_vmxnet3_uio)
 find_library(DPDK_rte_pmd_ixgbe_LIBRARY rte_pmd_ixgbe)
-find_library(DPDK_rte_pmd_e1000_LIBRARY rte_pmd_e1000)
+find_library(DPDK_rte_pmd_i40e_LIBRARY rte_pmd_i40e)
 find_library(DPDK_rte_pmd_ring_LIBRARY rte_pmd_ring)
 find_library(DPDK_rte_pmd_af_packet_LIBRARY rte_pmd_af_packet)
 
@@ -35,7 +35,7 @@ set(check_LIBRARIES
   ${DPDK_rte_pmd_bond_LIBRARY}
   ${DPDK_rte_pmd_vmxnet3_uio_LIBRARY}
   ${DPDK_rte_pmd_ixgbe_LIBRARY}
-  ${DPDK_rte_pmd_e1000_LIBRARY}
+  ${DPDK_rte_pmd_i40e_LIBRARY}
   ${DPDK_rte_pmd_ring_LIBRARY}
   ${DPDK_rte_pmd_af_packet_LIBRARY})
 
@@ -51,7 +51,7 @@ mark_as_advanced(DPDK_INCLUDE_DIR
   DPDK_rte_pmd_bond_LIBRARY
   DPDK_rte_pmd_vmxnet3_uio_LIBRARY
   DPDK_rte_pmd_ixgbe_LIBRARY
-  DPDK_rte_pmd_e1000_LIBRARY
+  DPDK_rte_pmd_i40e_LIBRARY
   DPDK_rte_pmd_ring_LIBRARY
   DPDK_rte_pmd_af_packet_LIBRARY)
 

@@ -820,6 +820,9 @@ target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
 if(${HAVE_LIBFUSE})
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif(${HAVE_LIBFUSE})
+if(${HAVE_DPDK})
+  target_link_libraries(ceph-osd ${DPDK_LIBRARIES})
+endif(${HAVE_DPDK})
 install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS
