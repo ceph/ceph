@@ -297,8 +297,8 @@ void RGWKeystoneTokenCache::invalidate(const string& token_id)
 
 int RGWKeystoneTokenCache::RevokeThread::check_revoked()
 {
-  string url;
-  string token;
+  std::string url;
+  std::string token;
 
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
@@ -342,15 +342,15 @@ int RGWKeystoneTokenCache::RevokeThread::check_revoked()
   }
 
   JSONObj *signed_obj = *iter;
-
-  string signed_str = signed_obj->get_data();
+  const std::string signed_str = signed_obj->get_data();
 
   ldout(cct, 10) << "signed=" << signed_str << dendl;
 
-  string signed_b64;
+  std::string signed_b64;
   ret = rgw_open_cms_envelope(cct, signed_str, signed_b64);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   ldout(cct, 10) << "content=" << signed_b64 << dendl;
   
@@ -386,7 +386,7 @@ int RGWKeystoneTokenCache::RevokeThread::check_revoked()
       continue;
     }
 
-    string token_id = token->get_data();
+    const std::string token_id = token->get_data();
     cache->invalidate(token_id);
   }
   
@@ -398,23 +398,27 @@ bool RGWKeystoneTokenCache::going_down() const
   return (down_flag.read() != 0);
 }
 
-void *RGWKeystoneTokenCache::RevokeThread::entry() {
+void * RGWKeystoneTokenCache::RevokeThread::entry()
+{
   do {
-    dout(2) << "keystone revoke thread: start" << dendl;
+    ldout(cct, 2) << "keystone revoke thread: start" << dendl;
     int r = check_revoked();
     if (r < 0) {
-      dout(0) << "ERROR: keystone revocation processing returned error r=" << r << dendl;
+      ldout(cct, 0) << "ERROR: keystone revocation processing returned error r="
+                    << r << dendl;
     }
 
-    if (cache->going_down())
+    if (cache->going_down()) {
       break;
+    }
 
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
+    cond.WaitInterval(cct, lock,
+                      utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
     lock.Unlock();
   } while (!cache->going_down());
 
-  return NULL;
+  return nullptr;
 }
 
 void RGWKeystoneTokenCache::RevokeThread::stop()
