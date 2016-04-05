@@ -6,7 +6,9 @@
 
 #include "rgw_common.h"
 
-int rgw_open_cms_envelope(CephContext *cct, string& src, string& dst);
+int rgw_open_cms_envelope(CephContext *cct,
+                          const std::string& src,
+                          std::string& dst);            /* out */
 int rgw_decode_b64_cms(CephContext *cct,
                        const string& signed_b64,
                        bufferlist& bl);
