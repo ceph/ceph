@@ -299,6 +299,8 @@ DENCODER_DEPS =
 
 # put virtualenvs in this directory
 # otherwise it may overflow #! 80 kernel limit
-export CEPH_BUILD_VIRTUALENV = /tmp
+# beware that some build environments might not be able to write to /tmp
+export TMPDIR ?= /tmp
+export CEPH_BUILD_VIRTUALENV = $(TMPDIR)
 
 radoslibdir = $(libdir)/rados-classes
