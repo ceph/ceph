@@ -189,7 +189,8 @@ int main(int argc, const char **argv)
   }
   if (get_device_fsid) {
     uuid_d uuid;
-    int r = ObjectStore::probe_block_device_fsid(device_path, &uuid);
+    int r = ObjectStore::probe_block_device_fsid(g_ceph_context, device_path,
+						 &uuid);
     if (r < 0) {
       cerr << "failed to get device fsid for " << device_path
 	   << ": " << cpp_strerror(r) << std::endl;

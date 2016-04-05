@@ -119,8 +119,10 @@ public:
    * @param path path to device
    * @param fsid [out] osd uuid
    */
-  static int probe_block_device_fsid(const string& path,
-				     uuid_d *fsid);
+  static int probe_block_device_fsid(
+    CephContext *cct,
+    const string& path,
+    uuid_d *fsid);
 
   Logger *logger;
 
