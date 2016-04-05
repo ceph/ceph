@@ -50,8 +50,8 @@ public:
 					    const TestResponse&,
 					    const RespPm&)>;
 
-  using AccumFunc = std::function<void(Accum& accumulator,
-				       const AddInfo& additional_info)>;
+  using ServerAccumFunc = std::function<void(Accum& accumulator,
+					     const AddInfo& additional_info)>;
 
 protected:
 
@@ -75,7 +75,7 @@ protected:
 
   // data collection
 
-  AccumFunc accum_f;
+  ServerAccumFunc accum_f;
   Accum accumulator;
 
   uint32_t reservation_counter = 0;
@@ -88,7 +88,7 @@ public:
 	     size_t _thread_pool_size,
 	     const ClientInfoFunc& _client_info_f,
 	     const ClientRespFunc& _client_resp_f,
-	     const AccumFunc& _accum_f,
+	     const ServerAccumFunc& _accum_f,
 	     bool use_soft_limit = false) :
     id(_id),
     priority_queue(_client_info_f,

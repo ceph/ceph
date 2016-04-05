@@ -28,19 +28,29 @@ using TS = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
                       dmc::ClientInfo,
                       dmc::ReqParams<ClientId>,
                       dmc::RespParams<ServerId>,
-                      TestAdditionalInfo,
-                      TestAccum>;
+                      DmcServerAddInfo,
+                      DmcAccum>;
 
 using TC = TestClient<dmc::ServiceTracker<ServerId>,
                       dmc::ReqParams<ClientId>,
-                      dmc::RespParams<ServerId>>;
+                      dmc::RespParams<ServerId>,
+		      DmcAccum>;
 
 using SelectFunc = TC::ServerSelectFunc;
 using SubmitFunc = TC::SubmitFunc;
 
 
-void accumulate_f(TestAccum& a, const TestAdditionalInfo& add_info) {
+void dmc_server_accumulate_f(DmcAccum& a, const DmcServerAddInfo& add_info) {
   if (dmc::PhaseType::reservation == add_info) {
+    ++a.reservation_count;
+  } else {
+    ++a.proportion_count;
+  }
+}
+
+
+void dmc_client_accumulate_f(DmcAccum& a, const dmc::RespParams<ServerId>& r) {
+  if (dmc::PhaseType::reservation == r.phase) {
     ++a.reservation_count;
   } else {
     ++a.proportion_count;
@@ -116,7 +126,7 @@ int main(int argc, char* argv[]) {
     servers[i] =
       new TS(i,
              server_iops, server_threads,
-             client_info_f, client_response_f, accumulate_f,
+             client_info_f, client_response_f, dmc_server_accumulate_f,
              server_soft_limit);
   }
 
@@ -201,6 +211,7 @@ int main(int argc, char* argv[]) {
       new TC(i,
 	     server_post_f,
 	     server_select_f,
+	     dmc_client_accumulate_f,
 	     i < (client_count - client_wait_count) ? no_wait : wait
 	);
   } // for
@@ -309,9 +320,10 @@ int main(int argc, char* argv[]) {
     std::cout << std::setw(head_w) << "res_ops:";
     int total = 0;
     for (auto const &c : clients) {
-      total += c.second->get_res_count();
+      auto r = c.second->get_accumulator().reservation_count;
+      total += r;
       if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << c.second->get_res_count();
+      std::cout << std::setw(data_w) << r;
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
       std::fixed << total << std::endl;
@@ -321,9 +333,10 @@ int main(int argc, char* argv[]) {
     std::cout << std::setw(head_w) << "prop_ops:";
     int total = 0;
     for (auto const &c : clients) {
-      total += c.second->get_prop_count();
+      auto p = c.second->get_accumulator().proportion_count;
+      total += p;
       if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << c.second->get_prop_count();
+      std::cout << std::setw(data_w) << p;
     }
     std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
       std::fixed << total << std::endl;

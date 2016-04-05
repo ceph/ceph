@@ -68,7 +68,7 @@ struct CliInst {
 // RespPm = crimson::dmclock::RespParams<ServerId>
 
 
-template<typename SvcTrk, typename ReqPm, typename RespPm>
+template<typename SvcTrk, typename ReqPm, typename RespPm, typename Accum>
 class TestClient {
 public:
 
@@ -76,6 +76,8 @@ public:
     std::function<void(const ServerId&, const TestRequest&, const ReqPm&)>;
 
   using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
+
+  using ClientAccumFunc = std::function<void(Accum&,const RespPm&)>;
 
   typedef std::chrono::time_point<std::chrono::steady_clock> TimePoint;
 
@@ -91,6 +93,7 @@ protected:
   const ClientId id;
   const SubmitFunc submit_f;
   const ServerSelectFunc server_select_f;
+  const ClientAccumFunc accum_f;
 
   std::vector<CliInst> instructions;
 
@@ -114,8 +117,7 @@ protected:
   // data collection
 
   std::vector<TimePoint>   op_times;
-  uint32_t                 reservation_counter = 0;
-  uint32_t                 proportion_counter = 0;
+  DmcAccum                 accumulator;
 
   std::thread              thd_req;
   std::thread              thd_resp;
@@ -125,10 +127,12 @@ public:
   TestClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
 	     const ServerSelectFunc& _server_select_f,
+	     const ClientAccumFunc& _accum_f,
 	     const std::vector<CliInst>& _instrs) :
     id(_id),
     submit_f(_submit_f),
     server_select_f(_server_select_f),
+    accum_f(_accum_f),
     instructions(_instrs),
     service_tracker(),
     outstanding_ops(0),
@@ -150,11 +154,12 @@ public:
   TestClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
 	     const ServerSelectFunc& _server_select_f,
+	     const ClientAccumFunc& _accum_f,
 	     uint16_t _ops_to_run,
 	     double _iops_goal,
 	     uint16_t _outstanding_ops_allowed) :
     TestClient(_id,
-	       _submit_f, _server_select_f,
+	       _submit_f, _server_select_f, _accum_f,
 	       {{req_op, _ops_to_run, _iops_goal, _outstanding_ops_allowed}})
   {
     // empty
@@ -178,13 +183,13 @@ public:
   }
 
   const std::vector<TimePoint>& get_op_times() const { return op_times; }
-  uint32_t get_res_count() const { return reservation_counter; }
-  uint32_t get_prop_count() const { return proportion_counter; }
 
   void wait_until_done() {
     if (thd_req.joinable()) thd_req.join();
     if (thd_resp.joinable()) thd_resp.join();
   }
+
+  const DmcAccum& get_accumulator() const { return accumulator; }
 
 protected:
 
@@ -226,7 +231,7 @@ protected:
     // all requests made, thread ends
   }
 
-  
+
   void run_resp() {
     std::chrono::milliseconds delay(1000);
     int op = 0;
@@ -246,11 +251,7 @@ protected:
 	// data collection
 
 	op_times.push_back(now());
-	if (crimson::dmclock::PhaseType::reservation == item.resp_params.phase) {
-	  ++reservation_counter;
-	} else {
-	  ++proportion_counter;
-	}
+	accum_f(accumulator, item.resp_params);
 
 	// processing
 
