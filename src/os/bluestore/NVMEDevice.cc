@@ -189,10 +189,11 @@ class SharedDriverData {
   Mutex flush_lock;
   Cond flush_cond;
   std::atomic_int flush_waiters;
+  std::set<uint64_t> flush_waiter_seqs;
 
  public:
   bool zero_command_support;
-  std::atomic_int inflight_ops;
+  std::atomic_ulong completed_op_seq, queue_op_seq;
   PerfCounters *logger = nullptr;
 
   SharedDriverData(unsigned i, const std::string &sn_tag, const std::string &n,
@@ -207,7 +208,7 @@ class SharedDriverData {
         queue_lock("NVMEDevice::queue_lock"),
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
-        inflight_ops(0) {
+        completed_op_seq(0), queue_op_seq(0) {
     block_size = std::max(CEPH_PAGE_SIZE, spdk_nvme_ns_get_sector_size(ns));
     size = spdk_nvme_ns_get_sector_size(ns) * spdk_nvme_ns_get_num_sectors(ns);
     zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
@@ -260,7 +261,7 @@ class SharedDriverData {
     return size;
   }
   void queue_task(Task *t, uint64_t ops = 1) {
-    inflight_ops += ops;
+    queue_op_seq += ops;
     Mutex::Locker l(queue_lock);
     task_queue.push(t);
     if (queue_empty.load()) {
@@ -270,14 +271,18 @@ class SharedDriverData {
   }
 
   void flush_wait() {
-    if (inflight_ops.load()) {
+    uint64_t cur_seq = queue_op_seq.load();
+    uint64_t left = cur_seq - completed_op_seq.load();
+    if (cur_seq > completed_op_seq) {
       // TODO: this may contains read op
-      dout(1) << __func__ << " existed inflight ops " << inflight_ops.load() << dendl;
+      dout(10) << __func__ << " existed inflight ops " << left << dendl;
       Mutex::Locker l(flush_lock);
       ++flush_waiters;
-      while (inflight_ops.load()) {
+      flush_waiter_seqs.insert(cur_seq);
+      while (cur_seq > completed_op_seq.load()) {
         flush_cond.Wait(flush_lock);
       }
+      flush_waiter_seqs.erase(cur_seq);
       --flush_waiters;
     }
   }
@@ -390,9 +395,10 @@ void SharedDriverData::_aio_thread()
   uint64_t lba_off, lba_count;
   ceph::coarse_real_clock::time_point cur, start = ceph::coarse_real_clock::now(g_ceph_context);
   while (true) {
+    bool inflight = queue_op_seq.load() - completed_op_seq.load();
  again:
     dout(40) << __func__ << " polling" << dendl;
-    if (inflight_ops.load()) {
+    if (inflight) {
       if (!spdk_nvme_ctrlr_process_io_completions(ctrlr, max)) {
         dout(30) << __func__ << " idle, have a pause" << dendl;
         _mm_pause();
@@ -495,24 +501,28 @@ void SharedDriverData::_aio_thread()
       }
       if (!t)
         queue_empty = true;
-    } else if (!inflight_ops.load()) {
+    } else {
       if (flush_waiters.load()) {
         Mutex::Locker l(flush_lock);
-        flush_cond.Signal();
+        if (*flush_waiter_seqs.begin() <= completed_op_seq.load())
+          flush_cond.Signal();
       }
 
-      for (auto &&it : registered_devices)
-        it->reap_ioc();
 
-      Mutex::Locker l(queue_lock);
-      if (queue_empty.load()) {
-        cur = ceph::coarse_real_clock::now(g_ceph_context);
-        auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
-        logger->tinc(l_bluestore_nvmedevice_polling_lat, dur);
-        if (aio_stop)
-          break;
-        queue_cond.Wait(queue_lock);
-        start = ceph::coarse_real_clock::now(g_ceph_context);
+      if (!inflight) {
+        for (auto &&it : registered_devices)
+          it->reap_ioc();
+
+        Mutex::Locker l(queue_lock);
+        if (queue_empty.load()) {
+          cur = ceph::coarse_real_clock::now(g_ceph_context);
+          auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
+          logger->tinc(l_bluestore_nvmedevice_polling_lat, dur);
+          if (aio_stop)
+            break;
+          queue_cond.Wait(queue_lock);
+          start = ceph::coarse_real_clock::now(g_ceph_context);
+        }
       }
     }
   }
@@ -719,7 +729,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
   SharedDriverData *driver = task->device->get_driver();
-  int left = --driver->inflight_ops;
+  ++driver->completed_op_seq;
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now(g_ceph_context) - task->start);
   if (task->command == IOCommand::WRITE_COMMAND ||
@@ -729,7 +739,8 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     else
       driver->logger->tinc(l_bluestore_nvmedevice_aio_zero_lat, dur);
     assert(!spdk_nvme_cpl_is_error(completion));
-    dout(20) << __func__ << " write/zero op successfully, left " << left << dendl;
+    dout(20) << __func__ << " write/zero op successfully, left "
+             << driver->queue_op_seq - driver->completed_op_seq << dendl;
     // check waiting count before doing callback (which may
     // destroy this ioc).
     if (ctx && !--ctx->num_running) {
@@ -845,13 +856,6 @@ int NVMEDevice::flush()
   dout(10) << __func__ << " start" << dendl;
   auto start = ceph::coarse_real_clock::now(g_ceph_context);
   driver->flush_wait();
-  Task *t = nullptr;
-  Task *prev = nullptr;
-  while (t) {
-    prev = t;
-    t = t->next;
-    delete prev;
-  }
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now(g_ceph_context) - start);
   driver->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
