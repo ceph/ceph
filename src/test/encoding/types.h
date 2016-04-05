@@ -192,6 +192,10 @@ TYPE_FEATUREFUL(InodeStore)
 TYPE_FEATUREFUL(MDSMap)
 TYPE_FEATUREFUL(MDSMap::mds_info_t)
 
+#include "mds/FSMap.h"
+//TYPE_FEATUREFUL(Filesystem)
+TYPE_FEATUREFUL(FSMap)
+
 #include "mds/Capability.h"
 TYPE_NOCOPY(Capability)
 
