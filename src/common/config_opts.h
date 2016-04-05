@@ -940,8 +940,6 @@ OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
-OPTION(bluestore_fail_eio, OPT_BOOL, true)
-OPTION(bluestore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
@@ -952,13 +950,11 @@ OPTION(bluestore_max_ops, OPT_U64, 512)
 OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_wal_max_ops, OPT_U64, 512)
 OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
-OPTION(bluestore_fid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
-OPTION(bluestore_open_by_handle, OPT_BOOL, true)
-OPTION(bluestore_o_direct, OPT_BOOL, true)
-OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
+OPTION(bluestore_clone_cow, OPT_BOOL, true)          // do copy-on-write for clones
+OPTION(bluestore_no_device_flush, OPT_BOOL, false)   // for setup has no buffered writes(WAL avoided), all direct & aio writes
 OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)

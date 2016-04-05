@@ -195,6 +195,10 @@ int KernelDevice::flush()
     g_ceph_context->_log->flush();
     _exit(1);
   }
+  if (g_conf->bluestore_no_device_flush) {
+    dout(10) << __func__ << " no-op (bluestore_no_device_flush is set.)" << dendl;
+    return 0;
+  }
   utime_t start = ceph_clock_now(NULL);
   int r = ::fdatasync(fd_direct);
   utime_t end = ceph_clock_now(NULL);

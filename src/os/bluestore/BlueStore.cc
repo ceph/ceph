@@ -5404,7 +5404,8 @@ int BlueStore::_do_write(
   }
 
   bool buffered = false;
-  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+  if ((fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) &&
+      !g_conf->bluestore_no_device_flush) {
     dout(20) << __func__ << " will do buffered write" << dendl;
     buffered = true;
   }
