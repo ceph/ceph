@@ -6,13 +6,25 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
+#include "librbd/journal/TypeTraits.h"
+#include "test/journal/mock/MockJournaler.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "test/rbd_mirror/mock/MockJournaler.h"
 #include "tools/rbd_mirror/image_sync/ImageCopyRequest.h"
 #include "tools/rbd_mirror/image_sync/ObjectCopyRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 #include <boost/scope_exit.hpp>
+
+namespace librbd {
+namespace journal {
+
+template <>
+struct TypeTraits<librbd::MockImageCtx> {
+  typedef ::journal::MockJournaler Journaler;
+};
+
+} // namespace journal
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
