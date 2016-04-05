@@ -170,8 +170,11 @@ public:
     wait_until_done();
   }
 
-  void receive_response(const TestResponse&,
-			const RespPm&) {
+  void receive_response(const TestResponse& resp,
+			const RespPm& resp_params) {
+    RespGuard g(mtx_resp);
+    resp_queue.push_back(RespQueueItem{resp, resp_params});
+    cv_resp.notify_one();
   }
 
   const std::vector<TimePoint>& get_op_times() const { return op_times; }
