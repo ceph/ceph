@@ -46,8 +46,9 @@ void file_layout_t::from_legacy(const ceph_file_layout& fl)
   stripe_count = fl.fl_stripe_count;
   object_size = fl.fl_object_size;
   pool_id = (int32_t)fl.fl_pg_pool;
-  // in the legacy encoding, pool 0 was undefined.
-  if (pool_id == 0)
+  // in the legacy encoding, a zeroed structure was the default and
+  // would have pool 0 instead of -1.
+  if (pool_id == 0 && stripe_unit == 0 && stripe_count == 0 && object_size == 0)
     pool_id = -1;
   pool_ns.clear();
 }
