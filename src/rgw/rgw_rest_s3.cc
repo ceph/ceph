@@ -20,6 +20,10 @@
 
 #include "rgw_client_io.h"
 
+/* This header consists several Keystone-related primitives
+ * we want to reuse here. */
+#include "rgw_swift.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace ceph::crypto;
@@ -2247,8 +2251,16 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id, 
     keystone_url.append("/");
   keystone_url.append("v2.0/s3tokens");
 
+  /* get authentication token for Keystone. */
+  string admin_token_id;
+  int r = RGWSwift::get_keystone_admin_token(cct, admin_token_id);
+  if (r < 0) {
+    ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
+    return r;
+  }
+
   /* set required headers for keystone request */
-  append_header("X-Auth-Token", cct->_conf->rgw_keystone_admin_token);
+  append_header("X-Auth-Token", admin_token_id);
   append_header("Content-Type", "application/json");
 
   /* encode token */
