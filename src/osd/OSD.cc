@@ -2984,8 +2984,11 @@ void OSD::build_past_intervals_parallel()
       PG *pg = i->second;
 
       epoch_t start, end;
-      if (!pg->_calc_past_interval_range(&start, &end, superblock.oldest_map))
+      if (!pg->_calc_past_interval_range(&start, &end, superblock.oldest_map)) {
+        if (pg->info.history.same_interval_since == 0)
+          pg->info.history.same_interval_since = end;
         continue;
+      }
 
       dout(10) << pg->info.pgid << " needs " << start << "-" << end << dendl;
       pistate& p = pis[pg];
@@ -3068,6 +3071,24 @@ void OSD::build_past_intervals_parallel()
 	p.up_primary = up_primary;
 	p.same_interval_since = cur_epoch;
       }
+    }
+  }
+
+  // Now that past_intervals have been recomputed let's fix the same_interval_since
+  // if it was cleared by import.
+  for (map<PG*,pistate>::iterator i = pis.begin(); i != pis.end(); ++i) {
+    PG *pg = i->first;
+    pistate& p = i->second;
+
+    // Verify same_interval_since is correct
+    if (pg->info.history.same_interval_since) {
+      assert(pg->info.history.same_interval_since == p.same_interval_since);
+    } else {
+      assert(p.same_interval_since);
+      dout(10) << __func__ << " fix same_interval_since " << p.same_interval_since << " pg " << *pg << dendl;
+      dout(10) << __func__ << " past_intervals " << pg->past_intervals << dendl;
+      // Fix it
+      pg->info.history.same_interval_since = p.same_interval_since;
     }
   }
 
