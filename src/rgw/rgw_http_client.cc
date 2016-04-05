@@ -75,36 +75,49 @@ struct rgw_http_req_data : public RefCountedObject {
 /*
  * the simple set of callbacks will be called on RGWHTTPClient::process()
  */
-static size_t simple_receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+/* Static methods - callbacks for libcurl. */
+size_t RGWHTTPClient::simple_receive_http_header(void * const ptr,
+                                                 const size_t size,
+                                                 const size_t nmemb,
+                                                 void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_header(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_header() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t simple_receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::simple_receive_http_data(void * const ptr,
+                                               const size_t size,
+                                               const size_t nmemb,
+                                               void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t simple_send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::simple_send_http_data(void * const ptr,
+                                            const size_t size,
+                                            const size_t nmemb,
+                                            void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return ret;
@@ -114,7 +127,10 @@ static size_t simple_send_http_data(void *ptr, size_t size, size_t nmemb, void *
  * the following set of callbacks will be called either on RGWHTTPManager::process(),
  * or via the RGWHTTPManager async processing.
  */
-static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::receive_http_header(void * const ptr,
+                                          const size_t size,
+                                          const size_t nmemb,
+                                          void * const _info)
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
   size_t len = size * nmemb;
@@ -133,7 +149,10 @@ static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_i
   return len;
 }
 
-static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::receive_http_data(void * const ptr,
+                                        const size_t size,
+                                        const size_t nmemb,
+                                        void * const _info)
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
   size_t len = size * nmemb;
@@ -152,7 +171,10 @@ static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_inf
   return len;
 }
 
-static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::send_http_data(void * const ptr,
+                                     const size_t size,
+                                     const size_t nmemb,
+                                     void * const _info)
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
 
