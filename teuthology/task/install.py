@@ -739,7 +739,7 @@ def rh_install_pkgs(ctx, remote, installed_version):
     if (installed_version == '2.0'):
         pkgs.append('ceph-fuse')
     rh_version_check = {'0.94.1': '1.3.0', '0.94.3': '1.3.1',
-                        '0.94.5': '1.3.2', '10.0.4': '2.0'}
+                        '0.94.5': '1.3.2', '10.1.0': '2.0'}
     log.info("Remove any epel packages installed on node %s", remote.shortname)
     remote.run(args=['sudo', 'yum', 'remove', run.Raw("leveldb xmlstarlet fcgi"), '-y'],check_status=False)
     for pkg in pkgs:
