@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+export LC_ALL=C
 if [ $# -eq 0 ]; then
   install=false
 else
