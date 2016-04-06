@@ -312,6 +312,14 @@ Upgrading from Infernalis
 * The rbd legacy image format (version 1) is deprecated with the Jewel
   release.
 
+* After upgrading, users should set the 'sortbitwise' flag to enable the new
+  internal object sort order::
+
+    ceph osd set sortbitwise
+
+  This flag is important for the new object enumeration API and for
+  new backends like BlueStore.
+
 Notable Changes since v10.0.4
 -----------------------------
 
