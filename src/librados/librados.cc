@@ -400,6 +400,14 @@ void librados::ObjectWriteOperation::write_full(const bufferlist& bl)
   o->write_full(c);
 }
 
+void librados::ObjectWriteOperation::writesame(uint64_t off, uint64_t write_len,
+					       const bufferlist& bl)
+{
+  ::ObjectOperation *o = &impl->o;
+  bufferlist c = bl;
+  o->writesame(off, write_len, c);
+}
+
 void librados::ObjectWriteOperation::append(const bufferlist& bl)
 {
   ::ObjectOperation *o = &impl->o;
@@ -1184,6 +1192,13 @@ int librados::IoCtx::write_full(const std::string& oid, bufferlist& bl)
   return io_ctx_impl->write_full(obj, bl);
 }
 
+int librados::IoCtx::writesame(const std::string& oid, bufferlist& bl,
+			       size_t write_len, uint64_t off)
+{
+  object_t obj(oid);
+  return io_ctx_impl->writesame(obj, bl, write_len, off);
+}
+
 int librados::IoCtx::clone_range(const std::string& dst_oid, uint64_t dst_off,
 				 const std::string& src_oid, uint64_t src_off,
 				 size_t len)
@@ -1795,6 +1810,14 @@ int librados::IoCtx::aio_write_full(const std::string& oid, librados::AioComplet
   object_t obj(oid);
   return io_ctx_impl->aio_write_full(obj, c->pc, bl);
 }
+
+int librados::IoCtx::aio_writesame(const std::string& oid, librados::AioCompletion *c,
+				   const bufferlist& bl, size_t write_len,
+				   uint64_t off)
+{
+  return io_ctx_impl->aio_writesame(oid, c->pc, bl, write_len, off);
+}
+
 
 int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion *c)
 {
@@ -3279,6 +3302,23 @@ extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf
   return retval;
 }
 
+extern "C" int rados_writesame(rados_ioctx_t io,
+				const char *o,
+				const char *buf,
+				size_t data_len,
+				size_t write_len,
+				uint64_t off)
+{
+  tracepoint(librados, rados_writesame_enter, io, o, buf, data_len, write_len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, data_len);
+  int retval = ctx->writesame(oid, bl, write_len, off);
+  tracepoint(librados, rados_writesame_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
                                  const char *src, uint64_t src_off, size_t len)
 {
@@ -4338,6 +4378,23 @@ extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
   return retval;
 }
 
+extern "C" int rados_aio_writesame(rados_ioctx_t io, const char *o,
+				   rados_completion_t completion,
+				   const char *buf, size_t data_len,
+				   size_t write_len, uint64_t off)
+{
+  tracepoint(librados, rados_aio_writesame_enter, io, o, completion, buf,
+						data_len, write_len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, data_len);
+  int retval = ctx->aio_writesame(o, (librados::AioCompletionImpl*)completion,
+				  bl, write_len, off);
+  tracepoint(librados, rados_aio_writesame_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_aio_remove(rados_ioctx_t io, const char *o,
 				rados_completion_t completion)
 {
@@ -4874,6 +4931,19 @@ extern "C" void rados_write_op_write_full(rados_write_op_t write_op,
   bl.append(buffer,len);
   ((::ObjectOperation *)write_op)->write_full(bl);
   tracepoint(librados, rados_write_op_write_full_exit);
+}
+
+extern "C" void rados_write_op_writesame(rados_write_op_t write_op,
+				         const char *buffer,
+				         size_t data_len,
+				         size_t write_len,
+					 uint64_t offset)
+{
+  tracepoint(librados, rados_write_op_writesame_enter, write_op, buffer, data_len, write_len, offset);
+  bufferlist bl;
+  bl.append(buffer, data_len);
+  ((::ObjectOperation *)write_op)->writesame(offset, write_len, bl);
+  tracepoint(librados, rados_write_op_writesame_exit);
 }
 
 extern "C" void rados_write_op_append(rados_write_op_t write_op,
