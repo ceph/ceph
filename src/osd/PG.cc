@@ -4948,7 +4948,7 @@ void PG::start_peering_interval(
     info.stats.up_primary = new_up_primary;
     info.stats.acting = acting;
     info.stats.acting_primary = new_acting_primary;
-    info.stats.mapping_epoch = info.history.same_interval_since;
+    info.stats.mapping_epoch = osdmap->get_epoch();
   }
 
   pg_stats_publish_lock.Lock();
