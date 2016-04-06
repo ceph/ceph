@@ -180,7 +180,7 @@ struct rgw_cls_link_olh_op {
     ::encode(olh_epoch, bl);
     ::encode(log_op, bl);
     ::encode(bilog_flags, bl);
-    time_t t = ceph::real_clock::to_time_t(unmod_since);
+    uint64_t t = ceph::real_clock::to_time_t(unmod_since);
     ::encode(t, bl);
     ::encode(unmod_since, bl);
     ::encode(high_precision_time, bl);
@@ -198,9 +198,9 @@ struct rgw_cls_link_olh_op {
     ::decode(log_op, bl);
     ::decode(bilog_flags, bl);
     if (struct_v == 2) {
-      time_t t;
+      uint64_t t;
       ::decode(t, bl);
-      unmod_since = ceph::real_clock::from_time_t(t);
+      unmod_since = ceph::real_clock::from_time_t(static_cast<time_t>(t));
     }
     if (struct_v >= 3) {
       ::decode(unmod_since, bl);
