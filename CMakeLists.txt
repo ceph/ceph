@@ -23,4 +23,9 @@ else()
   error("Could not find gtest; cannot continue.")
 endif(GTEST_FOUND)
 
+find_package(boost REQUIRED)
+if(NOT BOOST_FOUND)
+  error("Could not find boost; cannot continue.")
+endif(NOT BOOST_FOUND)
+
 add_subdirectory(src)
