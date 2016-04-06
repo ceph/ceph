@@ -204,6 +204,7 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between 
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
+OPTION(mon_timecheck_skew_interval, OPT_FLOAT, 30.0) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
