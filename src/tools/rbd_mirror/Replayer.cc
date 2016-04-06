@@ -5,6 +5,9 @@
 
 #include "common/Formatter.h"
 #include "common/admin_socket.h"
+#include "common/ceph_argparse.h"
+#include "common/code_environment.h"
+#include "common/common_init.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/stringify.h"
@@ -143,36 +146,59 @@ int Replayer::init()
 {
   dout(20) << "replaying for " << m_peer << dendl;
 
-  int r = m_remote->init2(m_peer.client_name.c_str(),
-			  m_peer.cluster_name.c_str(), 0);
-  if (r < 0) {
-    derr << "error initializing remote cluster handle for " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
-    return r;
+  // NOTE: manually bootstrap a CephContext here instead of via
+  // the librados API to avoid mixing global singletons between
+  // the librados shared library and the daemon
+  // TODO: eliminate intermingling of global singletons within Ceph APIs
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (m_peer.client_name.empty() ||
+      !iparams.name.from_str(m_peer.client_name)) {
+    derr << "error initializing remote cluster handle for " << m_peer << dendl;
+    return -EINVAL;
   }
 
-  r = m_remote->conf_read_file(nullptr);
+  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY,
+                                    CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  cct->_conf->cluster = m_peer.cluster_name;
+
+  // librados::Rados::conf_read_file
+  int r = cct->_conf->parse_config_files(nullptr, nullptr, 0);
   if (r < 0) {
-    derr << "could not read ceph conf for " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
+    derr << "could not read ceph conf for " << m_peer << ": "
+	 << cpp_strerror(r) << dendl;
+    cct->put();
     return r;
   }
+  cct->_conf->parse_env();
 
-  r = m_remote->conf_parse_env(nullptr);
+  // librados::Rados::conf_parse_env
+  std::vector<const char*> args;
+  env_to_vec(args, nullptr);
+  r = cct->_conf->parse_argv(args);
   if (r < 0) {
-    derr << "could not parse environment for " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
+    derr << "could not parse environment for " << m_peer << ":"
+         << cpp_strerror(r) << dendl;
+    cct->put();
     return r;
   }
 
   if (!m_args.empty()) {
-    r = m_remote->conf_parse_argv(m_args.size(), &m_args[0]);
+    // librados::Rados::conf_parse_argv
+    r = cct->_conf->parse_argv(m_args);
     if (r < 0) {
-      derr << "could not parse command line args for " << m_peer
-	   << " : " << cpp_strerror(r) << dendl;
+      derr << "could not parse command line args for " << m_peer << ": "
+	   << cpp_strerror(r) << dendl;
+      cct->put();
       return r;
     }
   }
+
+  cct->_conf->apply_changes(nullptr);
+  cct->_conf->complain_about_parse_errors(cct);
+
+  r = m_remote->init_with_context(cct);
+  assert(r == 0);
+  cct->put();
 
   r = m_remote->connect();
   if (r < 0) {
