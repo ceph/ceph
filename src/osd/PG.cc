@@ -4108,6 +4108,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
           bool boundary_found = false;
           hobject_t start = scrubber.start;
+          unsigned loop = 0;
           while (!boundary_found) {
             vector<hobject_t> objects;
             ret = get_pgbackend()->objects_list_partial(
@@ -4136,6 +4137,12 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
                 candidate_end = end;
                 boundary_found = true;
               }
+            }
+
+            // reset handle once in a while, the search maybe takes long.
+            if (++loop >= g_conf->osd_loop_before_reset_tphandle) {
+              handle.reset_tp_timeout();
+              loop = 0;
             }
           }
 
