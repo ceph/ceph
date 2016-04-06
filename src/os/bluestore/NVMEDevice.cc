@@ -161,6 +161,7 @@ class SharedDriverData {
   std::function<void ()> run_func;
 
   uint64_t block_size = 0;
+  uint64_t sector_size = 0;
   uint64_t size = 0;
   std::vector<NVMEDevice*> registered_devices;
   friend class AioCompletionThread;
@@ -209,6 +210,7 @@ class SharedDriverData {
         flush_lock("NVMEDevice::flush_lock"),
         flush_waiters(0),
         completed_op_seq(0), queue_op_seq(0) {
+    sector_size = spdk_nvme_ns_get_sector_size(ns);
     block_size = std::max(CEPH_PAGE_SIZE, spdk_nvme_ns_get_sector_size(ns));
     size = spdk_nvme_ns_get_sector_size(ns) * spdk_nvme_ns_get_num_sectors(ns);
     zero_command_support = spdk_nvme_ns_get_flags(ns) & SPDK_NVME_NS_WRITE_ZEROES_SUPPORTED;
@@ -290,11 +292,12 @@ class SharedDriverData {
 
 static void data_buf_reset_sgl(void *cb_arg, uint32_t sgl_offset)
 {
-  uint32_t i;
-  uint32_t offset = 0;
   Task *t = static_cast<Task*>(cb_arg);
+  uint32_t i = sgl_offset / data_buffer_size;
+  uint32_t offset = i * data_buffer_size;
+  assert(i <= t->io_request.nseg);
 
-  for (i = 0; i < t->io_request.nseg; i++) {
+  for (; i < t->io_request.nseg; i++) {
     offset += data_buffer_size;
     if (offset > sgl_offset) {
       if (offset > t->len)
@@ -319,13 +322,18 @@ static int data_buf_next_sge(void *cb_arg, uint64_t *address, uint32_t *length)
 
   void *addr = t->io_request.extra_segs ? t->io_request.extra_segs[t->io_request.cur_seg_idx] : t->io_request.inline_segs[t->io_request.cur_seg_idx];
 
-  *address = rte_malloc_virt2phy(addr);
   if (t->io_request.cur_seg_left) {
     *length = t->io_request.cur_seg_left;
-    if (t->io_request.cur_seg_idx != t->io_request.nseg - 1)
-      *address += data_buffer_size - t->io_request.cur_seg_left;
+    *address = rte_malloc_virt2phy(addr) + data_buffer_size - t->io_request.cur_seg_left;
+    if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
+      uint64_t tail = t->len % data_buffer_size;
+      if (tail) {
+        *address = rte_malloc_virt2phy(addr) + tail - t->io_request.cur_seg_left;
+      }
+    }
     t->io_request.cur_seg_left = 0;
   } else {
+    *address = rte_malloc_virt2phy(addr);
     *length = data_buffer_size;
     if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
       uint64_t tail = t->len % data_buffer_size;
@@ -406,8 +414,8 @@ void SharedDriverData::_aio_thread()
     }
 
     for (; t; t = t->next) {
-      lba_off = t->offset / block_size;
-      lba_count = t->len / block_size;
+      lba_off = t->offset / sector_size;
+      lba_count = t->len / sector_size;
       switch (t->command) {
         case IOCommand::WRITE_COMMAND:
         {
