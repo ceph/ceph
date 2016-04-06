@@ -19,28 +19,28 @@ source test/mon/mon-test-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7102"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    setup $dir || return 1
-    run_mon $dir a --public-addr $CEPH_MON
-    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
-    for TEST_function in $FUNCTIONS ; do
-        if ! $TEST_function $dir ; then
-            cat $dir/a/log
-            return 1
-        fi
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        $func $dir || return 1
     done
-    teardown $dir || return 1
 }
 
 TEST_POOL=rbd
 
 function TEST_osd_pool_get_set() {
-    local dir=$1 flag
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+
+    local flag
     for flag in hashpspool nodelete nopgchange nosizechange; do
         if [ $flag = hashpspool ]; then
 	    ./ceph osd dump | grep 'pool 0' | grep $flag || return 1
@@ -82,9 +82,32 @@ function TEST_osd_pool_get_set() {
     ! ./ceph osd pool set $ecpool min_size $(expr $k - 1) || return 1
     ! ./ceph osd pool set $ecpool min_size $(expr $size + 1) || return 1
 
+    teardown $dir || return 1
+
 }
 
-main misc
+function TEST_no_segfault_for_bad_keyring() {
+    local dir=$1
+    setup $dir || return 1
+    # create a client.admin key and add it to ceph.mon.keyring
+    ceph-authtool --create-keyring $dir/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+    ceph-authtool --create-keyring $dir/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *'
+    ceph-authtool $dir/ceph.mon.keyring --import-keyring $dir/ceph.client.admin.keyring
+    CEPH_ARGS_TMP="--fsid=$(uuidgen) --mon-host=127.0.0.1:7102 --auth-supported=cephx "
+    CEPH_ARGS_orig=$CEPH_ARGS
+    CEPH_ARGS="$CEPH_ARGS_TMP --keyring=$dir/ceph.mon.keyring "
+    run_mon $dir a
+    # create a bad keyring and make sure no segfault occurs when using the bad keyring
+    echo -e "[client.admin]\nkey = BQAUlgtWoFePIxAAQ9YLzJSVgJX5V1lh5gyctg==" > $dir/bad.keyring
+    CEPH_ARGS="$CEPH_ARGS_TMP --keyring=$dir/bad.keyring"
+    ceph osd dump 2> /dev/null
+    # 139(11|128) means segfault and core dumped
+    [ $? -eq 139 ] && return 1
+    CEPH_ARGS=$CEPH_ARGS_orig
+    teardown $dir || return 1
+}
+
+main misc "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && test/mon/misc.sh"
