@@ -1403,12 +1403,15 @@ TEST(BufferList, rebuild) {
   {
     bufferlist bl;
     bufferptr ptr(buffer::create_page_aligned(2));
+    ptr[0] = 'X';
+    ptr[1] = 'Y';
     ptr.set_offset(1);
     ptr.set_length(1);
     bl.append(ptr);
     EXPECT_FALSE(bl.is_page_aligned());
     bl.rebuild();
-    EXPECT_FALSE(bl.is_page_aligned());
+    EXPECT_EQ(1U, bl.length());
+    EXPECT_EQ('Y', *bl.begin());
   }
   {
     bufferlist bl;
