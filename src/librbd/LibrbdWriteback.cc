@@ -102,6 +102,10 @@ namespace librbd {
     delete m_finisher;
   }
 
+  void LibrbdWriteback::queue(Context *ctx, int r) {
+    m_finisher->queue(ctx, r);
+  }
+
   void LibrbdWriteback::read(const object_t& oid, uint64_t object_no,
 			     const object_locator_t& oloc,
 			     uint64_t off, uint64_t len, snapid_t snapid,
@@ -114,7 +118,7 @@ namespace librbd {
 
     {
       if (!m_ictx->object_map.object_may_exist(object_no)) {
-	m_finisher->queue(req, -ENOENT);
+	queue(req, -ENOENT);
 	return;
       }
     }
