@@ -105,17 +105,36 @@ int RGWSwift::validate_token(const char *token, struct rgw_swift_auth_info *info
 }
 
 
-typedef RGWPostHTTPData RGWValidateKeystoneToken;
-typedef RGWPostHTTPData RGWGetKeystoneAdminToken;
-typedef RGWPostHTTPData RGWGetRevokedTokens;
+class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
+public:
+  RGWKeystoneHTTPTransceiver(CephContext * const cct,
+                             bufferlist * const token_body_bl)
+    : RGWHTTPTransceiver(cct, token_body_bl,
+                         cct->_conf->rgw_keystone_verify_ssl,
+                         { "X-Subject-Token" }) {
+  }
+
+  std::string get_subject_token() const {
+    try {
+      return get_header_value("X-Subject-Token");
+    } catch (std::out_of_range&) {
+      return header_value_t();
+    }
+  }
+};
+
+typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
+typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
+typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 
 int RGWSwift::get_keystone_url(CephContext * const cct,
                                std::string& url)
 {
+  // FIXME: it seems we don't need RGWGetRevokedToken here
   bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl, cct->_conf->rgw_keystone_verify_ssl);
+  RGWGetRevokedTokens req(cct, &bl);
 
   url = cct->_conf->rgw_keystone_url;
   if (url.empty()) {
@@ -161,7 +180,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
   }
 
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(cct, &token_bl, cct->_conf->rgw_keystone_verify_ssl);
+  RGWGetKeystoneAdminToken token_req(cct, &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -421,7 +440,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token,
 
     /* can't decode, just go to the keystone server for validation */
 
-    RGWValidateKeystoneToken validate(cct, &bl, cct->_conf->rgw_keystone_verify_ssl);
+    RGWValidateKeystoneToken validate(cct, &bl);
 
     string url = g_conf->rgw_keystone_url;
     if (url.empty()) {
