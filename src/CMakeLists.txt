@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
 
+add_subdirectory(crimson)
+
+include_directories(crimson/src)
+include_directories(${BOOST_INCLUDE_DIR})
+
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
 set(core_srcs
