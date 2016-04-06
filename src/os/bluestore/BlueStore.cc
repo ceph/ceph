@@ -1215,16 +1215,17 @@ int BlueStore::_open_db(bool create)
       bluefs_extents.insert(BLUEFS_START, initial);
     }
 
+    // use a short, relative path, if it's bluefs.
+    strcpy(fn, "db");
+
     if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
       char db_paths[PATH_MAX*3];
       snprintf(
-	db_paths, sizeof(db_paths), "%s/db,%lld %s/db.slow,%lld",
-	path.c_str(),
+	db_paths, sizeof(db_paths), "db,%lld db.slow,%lld",
 	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_DB) *
 	 95 / 100,
-	path.c_str(),
 	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_SLOW) *
 	 95 / 100);
       g_conf->set_val("rocksdb_db_paths", db_paths, false, false);
