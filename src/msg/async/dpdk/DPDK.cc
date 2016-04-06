@@ -597,6 +597,16 @@ int DPDKDevice::check_port_link_status()
   return 0;
 }
 
+class C_handle_dev_stats : public EventCallback {
+  DPDKDevice* _dev;
+  EventCenter *center;
+ public:
+  C_handle_dev_stats(DPDKDevice* dev, EventCenter *c): _dev(dev), center(c) { }
+  void do_request(int id) {
+    _dev->handle_stats(center);
+  }
+};
+
 DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid)
   : cct(c), _dev(dev), _dev_port_idx(dev->port_idx()), center(cen), _qid(qid),
     _tx_poller(this), _rx_gc_poller(this), _tx_buf_factory(c, dev, qid),
@@ -622,7 +632,6 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
 
   plb.add_u64_counter(l_dpdk_qp_rx_packets, "dpdk_receive_packets", "DPDK received packets");
   plb.add_u64_counter(l_dpdk_qp_tx_packets, "dpdk_send_packets", "DPDK sendd packets");
-  plb.add_u64_counter(l_dpdk_qp_rx_total_errors, "dpdk_receive_total_errors", "DPDK received total error packets");
   plb.add_u64_counter(l_dpdk_qp_rx_bad_checksum_errors, "dpdk_receive_bad_checksum_errors", "DPDK received bad checksum packets");
   plb.add_u64_counter(l_dpdk_qp_rx_no_memory_errors, "dpdk_receive_no_memory_errors", "DPDK received no memory packets");
   plb.add_u64_counter(l_dpdk_qp_rx_bytes, "dpdk_receive_bytes", "DPDK received bytes");
@@ -641,6 +650,10 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
 
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
+
+  if (!_qid) {
+    center->create_time_event(1000*1000, new C_handle_dev_stats(_dev, center));
+  }
 }
 
 bool DPDKQueuePair::poll_tx() {
@@ -678,7 +691,9 @@ bool DPDKQueuePair::poll_tx() {
     } while (work && total_work < 256 && _tx_packetq.size() < 128);
   }
   if (!_tx_packetq.empty()) {
-    _stats.tx.good.update_pkts_bunch(send(_tx_packetq));
+    uint64_t c = send(_tx_packetq);
+    perf_logger->inc(l_dpdk_qp_tx_packets, c);
+    perf_logger->set(l_dpdk_qp_tx_last_bunch, c);
 #ifdef CEPH_PERF_DEV
     tx_count += total_work;
     tx_cycles += Cycles::rdtsc() - start;
@@ -800,7 +815,7 @@ void DPDKQueuePair::process_packets(
 
     // Drop the packet if translation above has failed
     if (!p) {
-      _stats.rx.bad.inc_no_mem();
+      perf_logger->inc(l_dpdk_qp_rx_no_memory_errors);
       continue;
     }
     // ldout(cct, 0) << __func__ << " len " << p->len() << " " << dendl;
@@ -817,7 +832,7 @@ void DPDKQueuePair::process_packets(
     if (_dev->get_hw_features().rx_csum_offload) {
       if (m->ol_flags & (PKT_RX_IP_CKSUM_BAD | PKT_RX_L4_CKSUM_BAD)) {
         // Packet with bad checksum, just drop it.
-        _stats.rx.bad.inc_csum_err();
+        perf_logger->inc(l_dpdk_qp_rx_bad_checksum_errors);
         continue;
       }
       // Note that when _hw_features.rx_csum_offload is on, the receive
@@ -833,8 +848,10 @@ void DPDKQueuePair::process_packets(
     _dev->l2receive(_qid, std::move(*p));
   }
 
-  _stats.rx.good.update_pkts_bunch(count);
-  _stats.rx.good.update_frags_stats(nr_frags, bytes);
+  perf_logger->inc(l_dpdk_qp_rx_packets, count);
+  perf_logger->set(l_dpdk_qp_rx_last_bunch, count);
+  perf_logger->inc(l_dpdk_qp_rx_fragments, nr_frags);
+  perf_logger->inc(l_dpdk_qp_rx_bytes, bytes);
 }
 
 bool DPDKQueuePair::poll_rx_once()
@@ -1023,7 +1040,7 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(
   // Too fragmented - linearize
   if (p.nr_frags() > max_frags) {
     p.linearize();
-    ++qp._stats.tx.linearized;
+    qp.perf_logger->inc(l_dpdk_qp_tx_linearize_ops);
   }
 
  build_mbuf_cluster:
@@ -1080,7 +1097,7 @@ DPDKQueuePair::tx_buf* DPDKQueuePair::tx_buf::from_packet_zc(
       (p.nr_frags() > vmxnet3_max_xmit_segment_frags && qp.port().is_vmxnet3_device())) {
     me(head)->recycle();
     p.linearize();
-    ++qp._stats.tx.linearized;
+    qp.perf_logger->inc(l_dpdk_qp_tx_linearize_ops);
 
     goto build_mbuf_cluster;
   }
@@ -1198,7 +1215,8 @@ size_t DPDKQueuePair::tx_buf::copy_one_data_buf(
   m->data_len = len;
   m->pkt_len  = len;
 
-  qp._stats.tx.good.update_copy_stats(1, len);
+  qp.perf_logger->inc(l_dpdk_qp_tx_copy_ops);
+  qp.perf_logger->inc(l_dpdk_qp_tx_copy_bytes, len);
 
   memcpy(rte_pktmbuf_mtod(m, void*), data, len);
 
@@ -1231,6 +1249,27 @@ void DPDKDevice::set_rss_table()
   if (rte_eth_dev_rss_reta_update(_port_idx, reta_conf, _dev_info.reta_size)) {
     rte_exit(EXIT_FAILURE, "Port %d: Failed to update an RSS indirection table", _port_idx);
   }
+}
+
+void DPDKDevice::handle_stats(EventCenter *c)
+{
+  rte_eth_stats rte_stats = {};
+  int rc = rte_eth_stats_get(_port_idx, &rte_stats);
+
+  if (rc) {
+    ldout(cct, 0) << __func__ << " failed to get port statistics: " << cpp_strerror(rc) << dendl;
+    return ;
+  }
+
+  perf_logger->set(l_dpdk_dev_rx_mcast, rte_stats.imcasts);
+
+  perf_logger->set(l_dpdk_dev_rx_badcrc_errors, rte_stats.ibadcrc);
+  perf_logger->set(l_dpdk_dev_rx_dropped_errors, rte_stats.imissed);
+  perf_logger->set(l_dpdk_dev_rx_nombuf_errors, rte_stats.rx_nombuf);
+
+  perf_logger->set(l_dpdk_dev_rx_total_errors, rte_stats.ierrors);
+  perf_logger->set(l_dpdk_dev_tx_total_errors, rte_stats.oerrors);
+  c->create_time_event(1000*1000, new C_handle_dev_stats(this, c));
 }
 
 /******************************** Interface functions *************************/

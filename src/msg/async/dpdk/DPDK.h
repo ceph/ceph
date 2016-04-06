@@ -61,123 +61,38 @@ struct free_deleter {
   void operator()(void* p) { ::free(p); }
 };
 
-struct port_stats {
-  port_stats() : rx{}, tx{} {}
-
-  struct {
-    struct {
-      uint64_t mcast;        // number of received multicast packets
-      uint64_t pause_xon;    // number of received PAUSE XON frames
-      uint64_t pause_xoff;   // number of received PAUSE XOFF frames
-    } good;
-
-    struct {
-      uint64_t dropped;      // missed packets (e.g. full FIFO)
-      uint64_t crc;          // packets with CRC error
-      uint64_t len;          // packets with a bad length
-      uint64_t total;        // total number of erroneous received packets
-    } bad;
-  } rx;
-
-  struct {
-    struct {
-      uint64_t pause_xon;   // number of sent PAUSE XON frames
-      uint64_t pause_xoff;  // number of sent PAUSE XOFF frames
-    } good;
-
-    struct {
-      uint64_t total;   // total number of failed transmitted packets
-    } bad;
-  } tx;
-};
 
 enum {
-  l_dpdk_dev_first,
+  l_dpdk_dev_first = 58800,
   l_dpdk_dev_rx_mcast,
   l_dpdk_dev_rx_total_errors,
   l_dpdk_dev_tx_total_errors,
   l_dpdk_dev_rx_badcrc_errors,
   l_dpdk_dev_rx_dropped_errors,
-  l_dpdk_dev_rx_badlength_errors,
-  l_dpdk_dev_rx_pause_xon,
-  l_dpdk_dev_tx_pause_xon,
-  l_dpdk_dev_rx_pause_xoff,
-  l_dpdk_dev_tx_pause_xoff,
+  l_dpdk_dev_rx_nombuf_errors,
   l_dpdk_dev_last
 };
 
-
-struct qp_stats_good {
-  /**
-   * Update the packets bunch related statistics.
-   *
-   * Update the last packets bunch size and the total packets counter.
-   *
-   * @param count Number of packets in the last packets bunch.
-   */
-  void update_pkts_bunch(uint64_t count) {
-    last_bunch = count;
-    packets   += count;
-  }
-
-  /**
-   * Increment the appropriate counters when a few fragments have been
-   * processed in a copy-way.
-   *
-   * @param nr_frags Number of copied fragments
-   * @param bytes    Number of copied bytes
-   */
-  void update_copy_stats(uint64_t nr_frags, uint64_t bytes) {
-    copy_frags += nr_frags;
-    copy_bytes += bytes;
-  }
-
-  /**
-   * Increment total fragments and bytes statistics
-   *
-   * @param nfrags Number of processed fragments
-   * @param nbytes Number of bytes in the processed fragments
-   */
-  void update_frags_stats(uint64_t nfrags, uint64_t nbytes) {
-    nr_frags += nfrags;
-    bytes    += nbytes;
-  }
-
-  uint64_t bytes;      // total number of bytes
-  uint64_t nr_frags;   // total number of fragments
-  uint64_t copy_frags; // fragments that were copied on L2 level
-  uint64_t copy_bytes; // bytes that were copied on L2 level
-  uint64_t packets;    // total number of packets
-  uint64_t last_bunch; // number of packets in the last sent/received bunch
-};
-
-struct qp_stats {
-  qp_stats() : rx{}, tx{} {}
-
-  struct {
-    struct qp_stats_good good;
-
-    struct {
-      void inc_csum_err() {
-        ++csum;
-        ++total;
-      }
-
-      void inc_no_mem() {
-        ++no_mem;
-        ++total;
-      }
-
-      uint64_t no_mem;       // Packets dropped due to allocation failure
-      uint64_t total;        // total number of erroneous packets
-      uint64_t csum;         // packets with bad checksum
-    } bad;
-  } rx;
-
-  struct {
-    struct qp_stats_good good;
-    uint64_t linearized;       // number of packets that were linearized
-  } tx;
+enum {
+  l_dpdk_qp_first = 58900,
+  l_dpdk_qp_rx_packets,
+  l_dpdk_qp_tx_packets,
+  l_dpdk_qp_rx_bad_checksum_errors,
+  l_dpdk_qp_rx_no_memory_errors,
+  l_dpdk_qp_rx_bytes,
+  l_dpdk_qp_tx_bytes,
+  l_dpdk_qp_rx_last_bunch,
+  l_dpdk_qp_tx_last_bunch,
+  l_dpdk_qp_rx_fragments,
+  l_dpdk_qp_tx_fragments,
+  l_dpdk_qp_rx_copy_ops,
+  l_dpdk_qp_tx_copy_ops,
+  l_dpdk_qp_rx_copy_bytes,
+  l_dpdk_qp_tx_copy_bytes,
+  l_dpdk_qp_rx_linearize_ops,
+  l_dpdk_qp_tx_linearize_ops,
+  l_dpdk_qp_tx_queue_length,
+  l_dpdk_qp_last
 };
 
 class DPDKDevice;
@@ -669,7 +584,8 @@ class DPDKQueuePair {
       pb.pop_front();
     }
 
-    _stats.tx.good.update_frags_stats(nr_frags, bytes);
+    perf_logger->inc(l_dpdk_qp_tx_fragments, nr_frags);
+    perf_logger->inc(l_dpdk_qp_tx_bytes, bytes);
 
     _tx_burst_idx += sent;
 
@@ -766,7 +682,6 @@ class DPDKQueuePair {
   circular_buffer<Packet> _tx_packetq;
   std::vector<void*> _alloc_bufs;
 
-  qp_stats _stats;
   PerfCounters *perf_logger;
   DPDKDevice* _dev;
   uint8_t _dev_port_idx;
@@ -854,7 +769,6 @@ class DPDKDevice {
   bool _enable_fc;
   std::vector<uint8_t> _redir_table;
   rss_key_type _rss_key;
-  port_stats _stats;
   bool _is_i40e_device = false;
   bool _is_vmxnet3_device = false;
 
@@ -920,11 +834,7 @@ class DPDKDevice {
     plb.add_u64_counter(l_dpdk_dev_tx_total_errors, "dpdk_device_send_total_errors", "DPDK sendd total_errors");
     plb.add_u64_counter(l_dpdk_dev_rx_badcrc_errors, "dpdk_device_receive_badcrc_errors", "DPDK received bad crc errors");
     plb.add_u64_counter(l_dpdk_dev_rx_dropped_errors, "dpdk_device_receive_dropped_errors", "DPDK received dropped errors");
-    plb.add_u64_counter(l_dpdk_dev_rx_badlength_errors, "dpdk_device_receive_badlength_errors", "DPDK received bad length errors");
-    plb.add_u64_counter(l_dpdk_dev_rx_pause_xon, "dpdk_device_receive_pause_xon", "DPDK received received PAUSE XON frames");
-    plb.add_u64_counter(l_dpdk_dev_tx_pause_xon, "dpdk_device_send_pause_xon", "DPDK received sendd PAUSE XON frames");
-    plb.add_u64_counter(l_dpdk_dev_rx_pause_xoff, "dpdk_device_receive_pause_xoff", "DPDK received received PAUSE XOFF frames");
-    plb.add_u64_counter(l_dpdk_dev_tx_pause_xoff, "dpdk_device_send_pause_xoff", "DPDK received sendd PAUSE XOFF frames");
+    plb.add_u64_counter(l_dpdk_dev_rx_nombuf_errors, "dpdk_device_receive_nombuf_errors", "DPDK received RX mbuf allocation errors");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
@@ -1006,36 +916,14 @@ class DPDKDevice {
   bool is_vmxnet3_device() const {
     return _is_vmxnet3_device;
   }
+
+  void handle_stats(EventCenter *c);
 };
 
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
     CephContext *c, unsigned cores, uint8_t port_idx = 0,
     bool use_lro = true, bool enable_fc = true);
-
-enum {
-  l_dpdk_qp_first,
-  l_dpdk_qp_rx_packets,
-  l_dpdk_qp_tx_packets,
-  l_dpdk_qp_rx_total_errors,
-  l_dpdk_qp_rx_bad_checksum_errors,
-  l_dpdk_qp_rx_no_memory_errors,
-  l_dpdk_qp_rx_bytes,
-  l_dpdk_qp_tx_bytes,
-  l_dpdk_qp_rx_last_bunch,
-  l_dpdk_qp_tx_last_bunch,
-  l_dpdk_qp_rx_fragments,
-  l_dpdk_qp_tx_fragments,
-  l_dpdk_qp_rx_copy_ops,
-  l_dpdk_qp_tx_copy_ops,
-  l_dpdk_qp_rx_copy_bytes,
-  l_dpdk_qp_tx_copy_bytes,
-  l_dpdk_qp_rx_linearize_ops,
-  l_dpdk_qp_tx_linearize_ops,
-  l_dpdk_qp_tx_queue_length,
-  l_dpdk_qp_last
-};
-
 
 
 /**
