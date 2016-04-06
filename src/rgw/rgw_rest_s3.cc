@@ -3409,7 +3409,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
    * that SigV4 typically does. this code follows the same approach that boto library
    * see auth.py:canonical_uri(...) */
 
-  s->aws4_auth->canonical_uri = s->info.request_uri;
+  s->aws4_auth->canonical_uri = s->info.request_uri_aws4;
 
   if (s->aws4_auth->canonical_uri.empty()) {
     s->aws4_auth->canonical_uri = "/";
