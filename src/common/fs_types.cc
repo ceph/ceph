@@ -122,3 +122,12 @@ void file_layout_t::generate_test_instances(list<file_layout_t*>& o)
   o.back()->pool_id = 3;
   o.back()->pool_ns = "myns";
 }
+
+ostream& operator<<(ostream& out, const file_layout_t &layout)
+{
+  JSONFormatter f;
+  layout.dump(&f);
+  f.flush(out);
+  return out;
+}
+

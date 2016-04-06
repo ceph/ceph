@@ -103,4 +103,6 @@ WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
 
 WRITE_EQ_OPERATORS_5(file_layout_t, stripe_unit, stripe_count, object_size, pool_id, pool_ns);
 
+ostream& operator<<(ostream& out, const file_layout_t &layout);
+
 #endif
