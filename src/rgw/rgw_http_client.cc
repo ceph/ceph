@@ -303,7 +303,7 @@ int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
   return 0;
 }
 
-int RGWPostHTTPData::send_data(void* ptr, size_t len)
+int RGWHTTPTransceiver::send_data(void* ptr, size_t len)
 {
   int length_to_copy = 0;
   if (post_data_index < post_data.length()) {
@@ -314,41 +314,6 @@ int RGWPostHTTPData::send_data(void* ptr, size_t len)
   return length_to_copy;
 }
 
-int RGWPostHTTPData::receive_header(void *ptr, size_t len) {
-  char line[len + 1];
-
-  char *s = (char *)ptr, *end = (char *)ptr + len;
-  char *p = line;
-  ldout(cct, 20) << "RGWPostHTTPData::receive_header parsing HTTP headers" << dendl;
-
-  while (s != end) {
-    if (*s == '\r') {
-      s++;
-      continue;
-    }
-    if (*s == '\n') {
-      *p = '\0';
-      ldout(cct, 20) << "RGWPostHTTPData::receive_header: line="
-                     << line << dendl;
-      // TODO: fill whatever data required here
-      char *l = line;
-      char *tok = strsep(&l, " \t:");
-      if (tok) {
-        while (l && *l == ' ') {
-          l++;
-        }
-
-        if (strcasecmp(tok, "X-Subject-Token") == 0) {
-          subject_token = l;
-        }
-      }
-    }
-    if (s != end) {
-      *p++ = *s++;
-    }
-  }
-  return 0;
-}
 
 #if HAVE_CURL_MULTI_WAIT
 
