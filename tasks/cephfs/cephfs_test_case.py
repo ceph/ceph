@@ -399,3 +399,13 @@ class CephFSTestCase(unittest.TestCase):
                 raise RuntimeError("Unexpected health messages: {0}".format(summary_strings))
 
         self.wait_until_true(seen_health_warning, timeout)
+
+    def wait_for_health_clear(self, timeout):
+        """
+        Wait until `ceph health` returns no messages
+        """
+        def is_clear():
+            health = self.fs.mon_manager.get_mon_health()
+            return len(health['summary']) == 0
+
+        self.wait_until_true(is_clear, timeout)
