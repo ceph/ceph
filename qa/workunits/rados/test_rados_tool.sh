@@ -364,10 +364,68 @@ test_ls() {
     $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
 }
 
+test_cleanup() {
+    echo "Testing rados cleanup command"
+    p=`uuidgen`
+    $CEPH_TOOL osd pool create $p 1
+    NS=5
+    OBJS=4
+    # Include default namespace (0) in the total
+    TOTAL=$(expr $OBJS \* $(expr $NS + 1))
+
+    for nsnum in `seq 0 $NS`
+    do
+        for onum in `seq 1 $OBJS`
+        do
+	    if [ "$nsnum" = "0" ];
+	    then
+                "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
+            else
+                "$RADOS_TOOL" -p $p -N "NS${nsnum}" put obj${onum} /etc/fstab 2> /dev/null
+	    fi
+	done
+    done
+
+    $RADOS_TOOL -p $p --all ls > $TDIR/before.ls.out 2> /dev/null
+
+    $RADOS_TOOL -p $p bench 3 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS1 bench 3 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS2 bench 3 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS3 bench 3 write --no-cleanup 2> /dev/null
+    # Leave dangling objects without a benchmark_last_metadata in NS4
+    expect_false timeout 3 $RADOS_TOOL -p $p -N NS4 bench 30 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS5 bench 3 write --no-cleanup 2> /dev/null
+
+    $RADOS_TOOL -p $p -N NS3 cleanup 2> /dev/null
+    #echo "Check NS3 after specific cleanup"
+    CHECK=$($RADOS_TOOL -p $p -N NS3 ls | wc -l)
+    if test "$OBJS" != "$CHECK";
+    then
+        die "Expected $OBJS objects in NS3 but saw $CHECK"
+    fi
+
+    #echo "Try to cleanup all"
+    $RADOS_TOOL -p $p --all cleanup
+    #echo "Check all namespaces"
+    $RADOS_TOOL -p $p --all ls > $TDIR/after.ls.out 2> /dev/null
+    CHECK=$(cat $TDIR/after.ls.out | wc -l)
+    if test "$TOTAL" != "$CHECK";
+    then
+        die "Expected $TOTAL objects but saw $CHECK"
+    fi
+    if ! diff $TDIR/before.ls.out $TDIR/after.ls.out
+    then
+        die "Different objects found after cleanup"
+    fi
+
+    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+}
+
 test_xattr
 test_omap
 test_rmobj
 test_ls
+test_cleanup
 
 echo "SUCCESS!"
 exit 0
