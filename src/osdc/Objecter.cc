@@ -542,10 +542,10 @@ void Objecter::_send_linger(LingerOp *info,
     }
     sl.unlock();
 
-    info->register_tid = _op_submit(o, sul);
+    _op_submit(o, sul, &info->register_tid);
   } else {
     // first send
-    info->register_tid = _op_submit_with_budget(o, sul);
+    _op_submit_with_budget(o, sul, &info->register_tid);
   }
 
   logger->inc(l_osdc_linger_send);
@@ -2125,14 +2125,18 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-ceph_tid_t Objecter::op_submit(Op *op, int *ctx_budget)
+void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
-  return _op_submit_with_budget(op, rl, ctx_budget);
+  ceph_tid_t tid = 0;
+  if (!ptid)
+    ptid = &tid;
+  _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
-ceph_tid_t Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
-					    int *ctx_budget)
+void Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
+				      ceph_tid_t *ptid,
+				      int *ctx_budget)
 {
   assert(initialized.read());
 
@@ -2160,7 +2164,7 @@ ceph_tid_t Objecter::_op_submit_with_budget(Op *op, shunique_lock& sul,
 				      op_cancel(tid, -ETIMEDOUT); });
   }
 
-  return _op_submit(op, sul);
+  _op_submit(op, sul, ptid);
 }
 
 void Objecter::_send_op_account(Op *op)
@@ -2242,7 +2246,7 @@ void Objecter::_send_op_account(Op *op)
   }
 }
 
-ceph_tid_t Objecter::_op_submit(Op *op, shunique_lock& sul)
+void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 {
   // rwlock is locked
 
@@ -2335,6 +2339,8 @@ ceph_tid_t Objecter::_op_submit(Op *op, shunique_lock& sul)
   if (check_for_latest_map) {
     _send_op_map_check(op);
   }
+  if (ptid)
+    *ptid = tid;
   op = NULL;
 
   sl.unlock();
@@ -2342,8 +2348,6 @@ ceph_tid_t Objecter::_op_submit(Op *op, shunique_lock& sul)
 
   ldout(cct, 5) << num_unacked.read() << " unacked, " << num_uncommitted.read()
 		<< " uncommitted" << dendl;
-
-  return tid;
 }
 
 int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
@@ -3219,7 +3223,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
     op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
-    _op_submit(op, sul);
+    _op_submit(op, sul, NULL);
     m->put();
     return;
   }
