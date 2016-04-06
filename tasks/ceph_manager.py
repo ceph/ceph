@@ -838,7 +838,7 @@ class CephManager:
         return self.controller.run(args=["sudo", "daemon-helper", "kill", "ceph", "-w"],
                                    wait=False, stdout=StringIO(), stdin=run.PIPE)
 
-    def do_rados(self, remote, cmd):
+    def do_rados(self, remote, cmd, check_status=True):
         """
         Execute a remote rados command.
         """
@@ -853,6 +853,7 @@ class CephManager:
         proc = remote.run(
             args=pre,
             wait=True,
+            check_status=check_status
             )
         return proc
 
@@ -887,8 +888,9 @@ class CephManager:
         ]
         return self.do_rados(
             self.controller,
-            args
-            )
+            args,
+            check_status=False
+        ).exitstatus
 
     def do_get(self, pool, obj, fname='/dev/null', namespace=None):
         """
@@ -904,9 +906,9 @@ class CephManager:
         ]
         return self.do_rados(
             self.controller,
-            args
-        )
-
+            args,
+            check_status=False
+        ).exitstatus
 
     def do_rm(self, pool, obj, namespace=None):
         """
@@ -921,8 +923,9 @@ class CephManager:
         ]
         return self.do_rados(
             self.controller,
-            args
-        )
+            args,
+            check_status=False
+        ).exitstatus
 
     def osd_admin_socket(self, osd_id, command, check_status=True):
         return self.admin_socket('osd', osd_id, command, check_status)
