@@ -161,8 +161,6 @@ typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
 typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
 typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
-static RGWKeystoneTokenCache *keystone_token_cache = NULL;
-
 int RGWSwift::get_keystone_url(CephContext * const cct,
                                std::string& url)
 {
@@ -207,7 +205,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
   KeystoneToken t;
 
   /* Try cache first. */
-  if (keystone_token_cache->find_admin(t)) {
+  if (RGWKeystoneTokenCache::get_instance().find_admin(t)) {
     ldout(cct, 20) << "found cached admin token" << dendl;
     token = t.token.id;
     return 0;
@@ -250,7 +248,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
     return -EINVAL;
   }
 
-  keystone_token_cache->add_admin(t);
+  RGWKeystoneTokenCache::get_instance().add_admin(t);
   token = t.token.id;
   return 0;
 }
@@ -348,7 +346,7 @@ int RGWSwift::check_revoked()
     }
 
     string token_id = token->get_data();
-    keystone_token_cache->invalidate(token_id);
+    RGWKeystoneTokenCache::get_instance().invalidate(token_id);
   }
   
   return 0;
@@ -500,7 +498,7 @@ int RGWSwift::validate_keystone_token(RGWRados * const store,
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
   /* check cache first */
-  if (keystone_token_cache->find(token_id, t)) {
+  if (RGWKeystoneTokenCache::get_instance().find(token_id, t)) {
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id() << dendl;
     rgw_set_keystone_token_auth_info(t, info);
     return 0;
@@ -562,7 +560,7 @@ int RGWSwift::validate_keystone_token(RGWRados * const store,
     return -EPERM;
   }
 
-  keystone_token_cache->add(token_id, t);
+  RGWKeystoneTokenCache::get_instance().add(token_id, t);
 
   return 0;
 }
@@ -878,8 +876,6 @@ void RGWSwift::init()
 
 void RGWSwift::init_keystone()
 {
-  keystone_token_cache = new RGWKeystoneTokenCache(cct, cct->_conf->rgw_keystone_token_cache_size);
-
   keystone_revoke_thread = new KeystoneRevokeThread(cct, this);
   keystone_revoke_thread->create("rgw_swift_k_rev");
 }
@@ -893,9 +889,6 @@ void RGWSwift::finalize()
 
 void RGWSwift::finalize_keystone()
 {
-  delete keystone_token_cache;
-  keystone_token_cache = NULL;
-
   down_flag.set(1);
   if (keystone_revoke_thread) {
     keystone_revoke_thread->stop();

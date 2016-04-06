@@ -95,13 +95,14 @@ public:
   void decode_json(JSONObj *access_obj);
 };
 
+
 class RGWKeystoneTokenCache {
   struct token_entry {
     KeystoneToken token;
     list<string>::iterator lru_iter;
   };
 
-  CephContext *cct;
+  CephContext * const cct;
 
   string admin_token_id;
   map<string, token_entry> tokens;
@@ -109,14 +110,18 @@ class RGWKeystoneTokenCache {
 
   Mutex lock;
 
-  size_t max;
+  const size_t max;
 
-public:
-  RGWKeystoneTokenCache(CephContext *_cct, int _max)
-    : cct(_cct),
+  RGWKeystoneTokenCache()
+    : cct(g_ceph_context),
       lock("RGWKeystoneTokenCache", true /* recursive */),
-      max(_max) {
+      max(cct->_conf->rgw_keystone_token_cache_size) {
   }
+public:
+  RGWKeystoneTokenCache(const RGWKeystoneTokenCache&) = delete;
+  void operator=(const RGWKeystoneTokenCache&) = delete;
+
+  static RGWKeystoneTokenCache& get_instance();
 
   bool find(const string& token_id, KeystoneToken& token);
   bool find_admin(KeystoneToken& token);
@@ -124,6 +129,7 @@ public:
   void add_admin(const KeystoneToken& token);
   void invalidate(const string& token_id);
 };
+
 
 class KeystoneAdminTokenRequest {
 public:
