@@ -1144,7 +1144,7 @@ dict_templ = {
                     'debug filestore': 20,
                     'debug journal': 20,
                     'debug ms': 1,
-                    'debug osd': 20
+                    'debug osd': 25
                 }
             },
             'log-whitelist': ['slow request'],
