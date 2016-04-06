@@ -203,6 +203,13 @@ int KeystoneToken::parse(CephContext * const cct,
   return 0;
 }
 
+RGWKeystoneTokenCache& RGWKeystoneTokenCache::get_instance()
+{
+  /* In C++11 this is thread safe. */
+  static RGWKeystoneTokenCache instance;
+  return instance;
+}
+
 bool RGWKeystoneTokenCache::find(const string& token_id, KeystoneToken& token)
 {
   lock.Lock();
