@@ -41,7 +41,7 @@ private:
   ~MFSMap() {}
 
 public:
-  const char *get_type_name() const { return "mdsmap"; }
+  const char *get_type_name() const { return "fsmap"; }
   void print(ostream& out) const {
     out << "fsmap(e " << epoch << ")";
   }
