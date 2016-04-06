@@ -5815,13 +5815,13 @@ int BlueStore::_do_zero(TransContext *txc,
   int r = 0;
   o->exists = true;
 
+  _dump_onode(o);
+  _assign_nid(txc, o);
+
   if (offset > o->onode.size) {
     // we are past eof; just truncate up.
     return _do_truncate(txc, c, o, offset + length);
   }
-
-  _dump_onode(o);
-  _assign_nid(txc, o);
 
   // overlay
   _do_overlay_trim(txc, o, offset, length);
