@@ -3357,8 +3357,16 @@ bool PG::sched_scrub()
 
     //NOSCRUB so skip regular scrubs
     if ((osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
-	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep)
+	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep) {
+      if (scrubber.reserved) {
+        // cancel scrub if it is still in scheduling,
+        // so pgs from other pools where scrub are still legal
+        // have a chance to go ahead with scrubbing.
+        clear_scrub_reserved();
+        scrub_unreserve_replicas();
+      }
       return false;
+    }
   }
 
   if (cct->_conf->osd_scrub_auto_repair
