@@ -323,9 +323,51 @@ test_rmobj() {
     rm $V1
 }
 
+test_ls() {
+    echo "Testing rados ls command"
+    p=`uuidgen`
+    $CEPH_TOOL osd pool create $p 1
+    NS=10
+    OBJS=20
+    # Include default namespace (0) in the total
+    TOTAL=$(expr $OBJS \* $(expr $NS + 1))
+
+    for nsnum in `seq 0 $NS`
+    do
+        for onum in `seq 1 $OBJS`
+        do
+	    if [ "$nsnum" = "0" ];
+	    then
+                "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
+            else
+                "$RADOS_TOOL" -p $p -N "NS${nsnum}" put obj${onum} /etc/fstab 2> /dev/null
+	    fi
+	done
+    done
+    CHECK=$("$RADOS_TOOL" -p $p ls 2> /dev/null | wc -l)
+    if test "$OBJS" != "$CHECK";
+    then
+        die "Created $OBJS objects in default namespace but saw $CHECK"
+    fi
+    TESTNS=NS${NS}
+    CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
+    if test "$OBJS" != "$CHECK";
+    then
+        die "Created $OBJS objects in $TESTNS namespace but saw $CHECK"
+    fi
+    CHECK=$("$RADOS_TOOL" -p $p --all ls 2> /dev/null | wc -l)
+    if test "$TOTAL" != "$CHECK";
+    then
+        die "Created $TOTAL objects but saw $CHECK"
+    fi
+
+    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+}
+
 test_xattr
 test_omap
 test_rmobj
+test_ls
 
 echo "SUCCESS!"
 exit 0
