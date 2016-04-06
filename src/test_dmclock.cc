@@ -110,23 +110,50 @@ void server_data(std::ostream& out, servers, int head_w, int data_w) {
 }
 #endif // do last
 
+  const double client_reservation = 20.0;
+  const double client_limit = 60.0;
+  const double client_weight = 1.0;
 
-using TS = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
+  dmc::ClientInfo client_info =
+    { client_weight, client_reservation, client_limit };
+
+  // construct servers
+
+#if 0 // REMOVE
+  auto client_info_f = [&client_info](const ClientId& c) -> dmc::ClientInfo {
+    return client_info;
+  };
+#endif
+
+
+dmc::ClientInfo client_info_f(const ClientId& c) {
+  return client_info;
+}
+
+using DmcServer = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
                       dmc::ClientInfo,
                       dmc::ReqParams<ClientId>,
                       dmc::RespParams<ServerId>,
                       DmcServerAddInfo,
                       DmcAccum>;
 
-using TC = TestClient<dmc::ServiceTracker<ServerId>,
+using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
                       dmc::ReqParams<ClientId>,
                       dmc::RespParams<ServerId>,
 		      DmcAccum>;
 
-using SelectFunc = TC::ServerSelectFunc;
-using SubmitFunc = TC::SubmitFunc;
+using SelectFunc = Dmc::ServerSelectFunc;
+using SubmitFunc = Dmc::SubmitFunc;
+
+
+DmcServer::ClientRespFunc client_response_f =
+    [&clients](ClientId client_id,
+	       const TestResponse& resp,
+	       const dmc::RespParams<ServerId>& resp_params) {
+    clients[client_id]->receive_response(resp, resp_params);
+  };
 
 
 int main(int argc, char* argv[]) {
-  simulate<TS,TC>();
+  simulate<DmcServer,DmcClient,dmc::ClientInfo>(client_info_f);
 }

@@ -21,8 +21,10 @@
 #include "simulate_common.h"
 
 
-template<typename TS, typename TC>
-void simulate() {
+
+template<typename TS, typename TC, typename ClientInfo>
+void simulate(std::function<TS*(ServerId)> create_server_f,
+              std::function<TC*(ClientId)> create_client_f) {
   using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
 
@@ -49,28 +51,9 @@ void simulate() {
   const uint client_wait_count = 1;
   const uint client_iops_goal = 50;
   const uint client_outstanding_ops = 100;
-  const double client_reservation = 20.0;
-  const double client_limit = 60.0;
-  const double client_weight = 1.0;
   const std::chrono::seconds client_wait(10);
 
-  dmc::ClientInfo client_info =
-    { client_weight, client_reservation, client_limit };
-
-  // construct servers
-
-  auto client_info_f = [&client_info](const ClientId& c) -> dmc::ClientInfo {
-    return client_info;
-  };
-
   ClientMap clients;
-
-  TS::ClientRespFunc client_response_f =
-    [&clients](ClientId client_id,
-	       const TestResponse& resp,
-	       const dmc::RespParams<ServerId>& resp_params) {
-    clients[client_id]->receive_response(resp, resp_params);
-  };
 
   std::vector<ServerId> server_ids;
 

@@ -33,11 +33,11 @@ set_source_files_properties(${simple_sim_srcs} ${dmc_sim_src}
   COMPILE_FLAGS "${warnings_off}"
   )
 
-add_executable(simple_sim ${simple_sim_srcs} ${dmc_src})
+# add_executable(simple_sim ${simple_sim_srcs} ${dmc_src})
 add_executable(dmc_sim ${dmc_sim_srcs} ${dmc_srcs})
 
 # target_link_libraries(sim PUBLIC pthread)
-target_link_libraries(simple_sim PUBLIC pthread)
+# target_link_libraries(simple_sim PUBLIC pthread)
 target_link_libraries(dmc_sim PUBLIC pthread)
 
 # file(COPY sim DESTINATION .)

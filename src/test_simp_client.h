@@ -63,11 +63,6 @@ struct CliInst {
 };
 
 
-// ServiceTrk = crimson::dmclock::ServiceTracker<ServerId>
-// ReqPm = crimson::dmclock::ReqParams<ClientId>
-// RespPm = crimson::dmclock::RespParams<ServerId>
-
-
 template<typename SvcTrk, typename ReqPm, typename RespPm, typename Accum>
 class TestClient {
 public:
@@ -117,7 +112,7 @@ protected:
   // data collection
 
   std::vector<TimePoint>   op_times;
-  DmcAccum                 accumulator;
+  Accum                    accumulator;
 
   std::thread              thd_req;
   std::thread              thd_resp;
@@ -189,7 +184,7 @@ public:
     if (thd_resp.joinable()) thd_resp.join();
   }
 
-  const DmcAccum& get_accumulator() const { return accumulator; }
+  const Accum& get_accumulator() const { return accumulator; }
 
 protected:
 
