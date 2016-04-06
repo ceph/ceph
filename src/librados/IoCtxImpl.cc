@@ -920,7 +920,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   return 0;
 }
 
-int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
+int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, int flags)
 {
   auto ut = ceph::real_clock::now(client->cct);
 
@@ -935,7 +935,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
   queue_aio_write(c);
 
   c->tid = objecter->remove(oid, oloc,
-		   snapc, ut, 0,
+		   snapc, ut, flags,
 		   onack, onsafe, &c->objver);
 
   return 0;
