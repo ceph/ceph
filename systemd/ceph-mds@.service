@@ -15,6 +15,7 @@ PrivateDevices=yes
 ProtectHome=true
 ProtectSystem=full
 PrivateTmp=true
+TasksMax=infinity
 
 [Install]
 WantedBy=ceph-mds.target
