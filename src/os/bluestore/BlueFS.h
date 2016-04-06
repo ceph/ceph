@@ -13,10 +13,34 @@
 #include "boost/intrusive/list.hpp"
 #include <boost/intrusive_ptr.hpp>
 
+class PerfCounters;
+
 class Allocator;
+
+enum {
+  l_bluefs_first = 732600,
+  l_bluefs_gift_bytes,
+  l_bluefs_reclaim_bytes,
+  l_bluefs_db_total_bytes,
+  l_bluefs_db_free_bytes,
+  l_bluefs_wal_total_bytes,
+  l_bluefs_wal_free_bytes,
+  l_bluefs_slow_total_bytes,
+  l_bluefs_slow_free_bytes,
+  l_bluefs_num_files,
+  l_bluefs_log_bytes,
+  l_bluefs_log_compactions,
+  l_bluefs_logged_bytes,
+  l_bluefs_last,
+};
 
 class BlueFS {
 public:
+  static constexpr unsigned MAX_BDEV = 3;
+  static constexpr unsigned BDEV_WAL = 0;
+  static constexpr unsigned BDEV_DB = 1;
+  static constexpr unsigned BDEV_SLOW = 2;
+
   struct File : public RefCountedObject {
     bluefs_fnode_t fnode;
     int refs;
@@ -80,22 +104,17 @@ public:
     bufferlist tail_block;  ///< existing partial block at end of file, if any
 
     std::mutex lock;
-    vector<IOContext*> iocv;  ///< one for each bdev
+    std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
 
-    FileWriter(FileRef f, unsigned num_bdev)
+    FileWriter(FileRef f)
       : file(f),
 	pos(0) {
       ++file->num_writers;
-      iocv.resize(num_bdev);
-      for (unsigned i = 0; i < num_bdev; ++i) {
-	iocv[i] = new IOContext(NULL);
-      }
     }
+    // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
       --file->num_writers;
-      assert(iocv.empty());  // caller must call BlueFS::close_writer()
     }
-
     void append(const char *buf, size_t len) {
       buffer.append(buf, len);
     }
@@ -161,6 +180,8 @@ public:
 private:
   std::mutex lock;
 
+  PerfCounters *logger;
+
   // cache
   map<string, DirRef> dir_map;                    ///< dirname -> Dir
   ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
@@ -173,24 +194,21 @@ private:
   bluefs_transaction_t log_t; ///< pending, unwritten log transaction
 
   /*
-   * - there can be from 1 to 3 block devices.
+   * There are up to 3 block devices:
    *
-   * - the first device always has the superblock.
-   *
-   * - if there is a dedicated db device, it is the first device, and the
-   *   second device is shared with bluestore.  the first device will be
-   *   db/, and the second device will be db.slow/.
-   *
-   * - if there is no dedicated db device, then the first device is shared, and
-   *   maps to the db/ directory.
-   *
-   * - a wal device, if present, it always the last device.  it should be
-   *   used for any files in the db.wal/ directory.
+   *  BDEV_DB   db/      - the primary db device
+   *  BDEV_WAL  db.wal/  - a small, fast device, specifically for the WAL
+   *  BDEV_SLOW db.slow/ - a big, slow device, to spill over to as BDEV_DB fills
    */
   vector<BlockDevice*> bdev;                  ///< block devices we can use
   vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
+  vector<uint64_t> block_total;               ///< sum of block_all
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+
+  void _init_logger();
+  void _shutdown_logger();
+  void _update_logger_stats();
 
   void _init_alloc();
   void _stop_alloc();
@@ -237,6 +255,7 @@ private:
   int _write_super();
   int _replay(); ///< replay journal
 
+  FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
 
   // always put the super in the second 4k block.  FIXME should this be
