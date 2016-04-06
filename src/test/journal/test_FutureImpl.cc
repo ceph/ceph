@@ -25,12 +25,11 @@ public:
     }
   };
 
-  journal::FutureImplPtr create_future(journal::JournalMetadataPtr metadata,
-                                       uint64_t tag_tid, uint64_t entry_tid,
+  journal::FutureImplPtr create_future(uint64_t tag_tid, uint64_t entry_tid,
                                        uint64_t commit_tid,
                                        const journal::FutureImplPtr &prev =
                                          journal::FutureImplPtr()) {
-    journal::FutureImplPtr future(new journal::FutureImpl(metadata, tag_tid,
+    journal::FutureImplPtr future(new journal::FutureImpl(tag_tid,
                                                           entry_tid,
                                                           commit_tid));
     future->init(prev);
@@ -50,7 +49,7 @@ TEST_F(TestFutureImpl, Getters) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   ASSERT_EQ(234U, future->get_tag_tid());
   ASSERT_EQ(123U, future->get_entry_tid());
   ASSERT_EQ(456U, future->get_commit_tid());
@@ -63,7 +62,7 @@ TEST_F(TestFutureImpl, Attach) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   ASSERT_FALSE(future->attach(&m_flush_handler));
   ASSERT_EQ(1U, m_flush_handler.refs);
 }
@@ -75,7 +74,7 @@ TEST_F(TestFutureImpl, AttachWithPendingFlush) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   future->flush(NULL);
 
   ASSERT_TRUE(future->attach(&m_flush_handler));
@@ -89,7 +88,7 @@ TEST_F(TestFutureImpl, Detach) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   ASSERT_FALSE(future->attach(&m_flush_handler));
   future->detach();
   ASSERT_EQ(0U, m_flush_handler.refs);
@@ -102,7 +101,7 @@ TEST_F(TestFutureImpl, DetachImplicit) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   ASSERT_FALSE(future->attach(&m_flush_handler));
   future.reset();
   ASSERT_EQ(0U, m_flush_handler.refs);
@@ -115,7 +114,7 @@ TEST_F(TestFutureImpl, Flush) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   ASSERT_FALSE(future->attach(&m_flush_handler));
 
   C_SaferCond cond;
@@ -133,7 +132,7 @@ TEST_F(TestFutureImpl, FlushWithoutContext) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   ASSERT_FALSE(future->attach(&m_flush_handler));
 
   future->flush(NULL);
@@ -150,10 +149,10 @@ TEST_F(TestFutureImpl, FlushChain) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future1 = create_future(metadata, 234, 123, 456);
-  journal::FutureImplPtr future2 = create_future(metadata, 234, 124, 457,
+  journal::FutureImplPtr future1 = create_future(234, 123, 456);
+  journal::FutureImplPtr future2 = create_future(234, 124, 457,
                                                  future1);
-  journal::FutureImplPtr future3 = create_future(metadata, 235, 1, 458,
+  journal::FutureImplPtr future3 = create_future(235, 1, 458,
                                                  future2);
   ASSERT_FALSE(future1->attach(&m_flush_handler));
   ASSERT_FALSE(future2->attach(&m_flush_handler));
@@ -184,8 +183,8 @@ TEST_F(TestFutureImpl, FlushInProgress) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future1 = create_future(metadata, 234, 123, 456);
-  journal::FutureImplPtr future2 = create_future(metadata, 234, 124, 457,
+  journal::FutureImplPtr future1 = create_future(234, 123, 456);
+  journal::FutureImplPtr future2 = create_future(234, 124, 457,
                                                  future1);
   ASSERT_FALSE(future1->attach(&m_flush_handler));
   ASSERT_FALSE(future2->attach(&m_flush_handler));
@@ -206,7 +205,7 @@ TEST_F(TestFutureImpl, FlushAlreadyComplete) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 123, 456);
+  journal::FutureImplPtr future = create_future(234, 123, 456);
   future->safe(-EIO);
 
   C_SaferCond cond;
@@ -221,7 +220,7 @@ TEST_F(TestFutureImpl, Wait) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 1, 456);
+  journal::FutureImplPtr future = create_future(234, 1, 456);
 
   C_SaferCond cond;
   future->wait(&cond);
@@ -236,7 +235,7 @@ TEST_F(TestFutureImpl, WaitAlreadyComplete) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future = create_future(metadata, 234, 1, 456);
+  journal::FutureImplPtr future = create_future(234, 1, 456);
   future->safe(-EEXIST);
 
   C_SaferCond cond;
@@ -251,8 +250,8 @@ TEST_F(TestFutureImpl, SafePreservesError) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future1 = create_future(metadata, 234, 123, 456);
-  journal::FutureImplPtr future2 = create_future(metadata, 234, 124, 457,
+  journal::FutureImplPtr future1 = create_future(234, 123, 456);
+  journal::FutureImplPtr future2 = create_future(234, 124, 457,
                                                  future1);
 
   future1->safe(-EIO);
@@ -268,8 +267,8 @@ TEST_F(TestFutureImpl, ConsistentPreservesError) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  journal::FutureImplPtr future1 = create_future(metadata, 234, 123, 456);
-  journal::FutureImplPtr future2 = create_future(metadata, 234, 124, 457,
+  journal::FutureImplPtr future1 = create_future(234, 123, 456);
+  journal::FutureImplPtr future2 = create_future(234, 124, 457,
                                                  future1);
 
   future2->safe(-EEXIST);
