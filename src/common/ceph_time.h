@@ -382,10 +382,13 @@ void encode(const std::chrono::time_point<Clock, Duration>& t,
 template<typename Clock, typename Duration>
 void decode(std::chrono::time_point<Clock, Duration>& t,
 	    bufferlist::iterator& p) {
-  uint32_t s, ns;
+  uint32_t s;
+  uint32_t ns;
   ::decode(s, p);
   ::decode(ns, p);
-  struct timespec ts = {s, ns};
+  struct timespec ts = {
+    static_cast<time_t>(s),
+    static_cast<long int>(ns)};
 
   t = Clock::from_timespec(ts);
 }
