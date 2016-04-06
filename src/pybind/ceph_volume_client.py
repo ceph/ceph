@@ -204,6 +204,7 @@ class CephFSVolumeClient(object):
     # Where shall we create our volumes?
     VOLUME_PREFIX = "/volumes"
     POOL_PREFIX = "fsvolume_"
+    POOL_NS_PREFIX = "fsvolumens_"
 
     def __init__(self, auth_id, conf_path, cluster_name):
         self.fs = None
@@ -443,7 +444,9 @@ class CephFSVolumeClient(object):
         if size is not None:
             self.fs.setxattr(path, 'ceph.quota.max_bytes', size.__str__(), 0)
 
+        # data_isolated means create a seperate pool for this volume
         if data_isolated:
+            log.info("create_volume: {0}, create pool {1} as data_isolated =True.".format(volume_path, pool_name))
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
             pool_id = self._create_volume_pool(pool_name)
             mds_map = self._rados_command("mds dump", {})
@@ -452,6 +455,11 @@ class CephFSVolumeClient(object):
                     'pool': pool_name
                 })
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
+
+        # enforce security isolation, create a seperate pool for this volume
+        namespace = "{0}{1}".format(self.POOL_NS_PREFIX, volume_path.volume_id)
+        log.info("create_volume: {0}, using rados namespace {1} to isolate data.".format(volume_path, namespace))
+        self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace', namespace, 0)
 
         return {
             'mount_path': path
@@ -568,12 +576,13 @@ class CephFSVolumeClient(object):
         # read the layout
         path = self._get_path(volume_path)
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+        namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
 
         # Now construct auth capabilities that give the guest just enough
         # permissions to access the share
         client_entity = "client.{0}".format(auth_id)
         want_mds_cap = 'allow rw path={0}'.format(path)
-        want_osd_cap = 'allow rw pool={0}'.format(pool_name)
+        want_osd_cap = 'allow rw pool={0} namespace={1}'.format(pool_name, namespace)
         try:
             existing = self._rados_command(
                 'auth get',
@@ -648,9 +657,10 @@ class CephFSVolumeClient(object):
         client_entity = "client.{0}".format(auth_id)
         path = self._get_path(volume_path)
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+        namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
 
         want_mds_cap = 'allow rw path={0}'.format(path)
-        want_osd_cap = 'allow rw pool={0}'.format(pool_name)
+        want_osd_cap = 'allow rw pool={0} namespace={1}'.format(pool_name, namespace)
 
         try:
             existing = self._rados_command(
