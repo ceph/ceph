@@ -321,6 +321,80 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   // object data
+  struct C_ObjectOperation_cmpext : public Context {
+    bufferlist bl;
+    bufferlist mbl;
+    bufferlist *mismatch_bl;
+    uint64_t *mismatch_bl_len;
+    uint64_t *mismatch_off;
+    int *prval;
+    char *mismatch_buf;
+    C_ObjectOperation_cmpext(bufferlist *mismatch_bl,
+			     uint64_t *mismatch_bl_len,
+			     uint64_t *mismatch_off,
+			     int *prval)
+      : mismatch_bl(mismatch_bl), mismatch_bl_len(mismatch_bl_len),
+	mismatch_off(mismatch_off), prval(prval), mismatch_buf(NULL) {}
+    C_ObjectOperation_cmpext(uint64_t cmp_len,
+			     char *mismatch_buf,
+			     uint64_t *mismatch_len,
+			     uint64_t *mismatch_off,
+			     int *prval)
+      : mismatch_bl_len(mismatch_len),
+	mismatch_off(mismatch_off), prval(prval), mismatch_buf(mismatch_buf) {
+      mbl.clear();
+      mbl.push_back(buffer::create_static(cmp_len, mismatch_buf));
+      mismatch_bl = &mbl;
+    }
+    void finish(int r) {
+      int ret = 0;
+      bufferlist::iterator iter = bl.begin();
+      if (r == -EILSEQ) {
+	/* mismatch occured, unmarshall response */
+	try {
+	  ::decode(*mismatch_off, iter);
+	  ::decode_nohead(iter.get_remaining(), *mismatch_bl, iter);
+	  ret = -EILSEQ;
+	} catch (buffer::error& e) {
+	  ret = -EIO;
+	}
+	if (ret != -EIO) {
+	  if (mismatch_bl_len)
+	    *mismatch_bl_len = mismatch_bl->length();
+	  /* FIXME - should be able to avoid the copy here! */
+	  if (mismatch_buf && !mbl.is_provided_buffer(mismatch_buf))
+	    mbl.copy(0, mbl.length(), mismatch_buf);
+	}
+      }
+      if (prval)
+	*prval = ret;
+    }
+  };
+  void cmpext(uint64_t off, bufferlist& cmp_bl,
+              bufferlist *mismatch_bl, uint64_t *mismatch_off, int *prval) {
+    add_data(CEPH_OSD_OP_CMPEXT, off, cmp_bl.length(), cmp_bl);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_cmpext *h = new C_ObjectOperation_cmpext(
+					mismatch_bl, NULL, mismatch_off, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
+  // Used by C API
+  void cmpext(uint64_t off, uint64_t cmp_len, const char *cmp_buf,
+              char *mismatch_buf, uint64_t *mismatch_len,
+	      uint64_t *mismatch_off, int *prval) {
+    bufferlist cmp_bl;
+    cmp_bl.append(cmp_buf, cmp_len);
+    add_data(CEPH_OSD_OP_CMPEXT, off, cmp_len, cmp_bl);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_cmpext *h = new C_ObjectOperation_cmpext(cmp_len,
+			mismatch_buf, mismatch_len, mismatch_off, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
+
   void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
 	    Context* ctx) {
     bufferlist bl;
@@ -1391,6 +1465,25 @@ public:
     }
   };
 
+  struct C_CmpExt : public Context {
+    bufferlist bl;
+    bufferlist *mismatch_bl;
+    uint64_t *mismatch_off;
+    Context *fin;
+    C_CmpExt(bufferlist *mismatch_bl, uint64_t *mismatch_off, Context *c) :
+      mismatch_bl(mismatch_bl), mismatch_off(mismatch_off), fin(c) {}
+    void finish(int r) {
+      if (r == -EILSEQ) {
+	/* mismatch occured, unmarshall response */
+	bufferlist::iterator iter = bl.begin();
+	::decode(*mismatch_off, iter);
+	::decode_nohead(iter.get_remaining(), *mismatch_bl, iter);
+      }
+
+      fin->complete(r);
+    }
+  };
+
   struct C_GetAttrs : public Context {
     bufferlist bl;
     map<string,bufferlist>& attrset;
@@ -2385,6 +2478,41 @@ public:
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_read_op(oid, oloc, off, len, snap, pbl, flags,
 			    onfinish, objver, extra_ops, op_flags);
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
+  }
+
+  Op *prepare_cmpext_op(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t off, bufferlist &cmp_bl,
+    snapid_t snap, bufferlist *mismatch_bl, uint64_t *mismatch_off,
+    int flags, Context *onfinish, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+    vector<OSDOp> ops;
+    int i = init_ops(ops, 1, extra_ops);
+    ops[i].op.op = CEPH_OSD_OP_CMPEXT;
+    ops[i].op.extent.offset = off;
+    ops[i].op.extent.length = cmp_bl.length();
+    ops[i].op.extent.truncate_size = 0;
+    ops[i].op.extent.truncate_seq = 0;
+    ops[i].indata = cmp_bl;
+    ops[i].op.flags = op_flags;
+    C_CmpExt *fin = new C_CmpExt(mismatch_bl, mismatch_off, onfinish);
+    Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
+		   CEPH_OSD_FLAG_READ, fin, 0, objver);
+    o->snapid = snap;
+    o->outbl = &fin->bl;
+    return o;
+  }
+  ceph_tid_t cmpext(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t off, bufferlist &cmp_bl,
+    snapid_t snap, bufferlist *mismatch_bl, uint64_t *mismatch_off,
+    int flags, Context *onfinish, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+    Op *o = prepare_cmpext_op(oid, oloc, off, cmp_bl, snap, mismatch_bl, mismatch_off,
+			      flags, onfinish, objver, extra_ops, op_flags);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;

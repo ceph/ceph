@@ -141,6 +141,8 @@ struct librados::IoCtxImpl {
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
   int stat2(const object_t& oid, uint64_t *psize, struct timespec *pts);
   int trunc(const object_t& oid, uint64_t size);
+  int cmpext(const object_t& oid, uint64_t off, bufferlist& cmp_bl,
+             bufferlist *mismatch_bl, uint64_t *mismatch_off);
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
   int tmap_put(const object_t& oid, bufferlist& bl);
@@ -197,6 +199,13 @@ struct librados::IoCtxImpl {
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		      size_t len, uint64_t off, uint64_t snapid);
+  int aio_cmpext(const object_t& oid, AioCompletionImpl *c, uint64_t off,
+		 bufferlist& cmp_bl, bufferlist *mismatch_bl,
+		 uint64_t *mismatch_off);
+  int aio_cmpext(const object_t& oid, AioCompletionImpl *c,
+		 const char *cmp_buf, size_t cmp_len, uint64_t off,
+		 char *mismatch_buf, size_t *mismatch_len,
+		 uint64_t *mismatch_off);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off);
   int aio_append(const object_t &oid, AioCompletionImpl *c,

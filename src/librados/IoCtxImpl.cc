@@ -869,6 +869,57 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   return 0;
 }
 
+int librados::IoCtxImpl::aio_cmpext(const object_t& oid,
+				    AioCompletionImpl *c,
+				    uint64_t off,
+				    bufferlist& cmp_bl,
+				    bufferlist *mismatch_bl,
+				    uint64_t *mismatch_off)
+{
+  if (cmp_bl.length() > UINT_MAX/2)
+    return -E2BIG;
+
+  Context *onack = new C_aio_Ack(c);
+
+  c->is_read = true;
+  c->io = this;
+
+  Objecter::Op *o = objecter->prepare_cmpext_op(
+    oid, oloc, off, cmp_bl, snap_seq, mismatch_bl, mismatch_off, 0,
+    onack, &c->objver);
+  objecter->op_submit(o, &c->tid);
+  return 0;
+}
+
+/* use m_ops.cmpext() + prepare_read_op() for non-bufferlist C API */
+int librados::IoCtxImpl::aio_cmpext(const object_t& oid,
+				    AioCompletionImpl *c,
+				    const char *cmp_buf, size_t cmp_len,
+				    uint64_t off,
+				    char *mismatch_buf, size_t *mismatch_len,
+				    uint64_t *mismatch_off)
+{
+  if (cmp_len > UINT_MAX/2)
+    return -E2BIG;
+
+  bufferlist cmp_bl;
+  cmp_bl.append(cmp_buf, cmp_len);
+
+  Context *nested = new C_aio_Ack(c);
+  C_ObjectOperation *onack = new C_ObjectOperation(nested);
+
+  c->is_read = true;
+  c->io = this;
+
+  onack->m_ops.cmpext(off, cmp_len, cmp_buf, mismatch_buf, mismatch_len,
+		      mismatch_off, NULL);
+
+  Objecter::Op *o = objecter->prepare_read_op(
+    oid, oloc, onack->m_ops, snap_seq, NULL, 0, onack, &c->objver);
+  objecter->op_submit(o, &c->tid);
+  return 0;
+}
+
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
 				   uint64_t off)
@@ -1220,6 +1271,19 @@ int librados::IoCtxImpl::read(const object_t& oid,
   }
 
   return bl.length();
+}
+
+int librados::IoCtxImpl::cmpext(const object_t& oid, uint64_t off,
+                                bufferlist& cmp_bl, bufferlist *mismatch_bl,
+				uint64_t *mismatch_off)
+{
+  if (cmp_bl.length() > UINT_MAX/2)
+    return -E2BIG;
+
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.cmpext(off, cmp_bl, mismatch_bl, mismatch_off, NULL);
+  return operate_read(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::mapext(const object_t& oid,

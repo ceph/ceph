@@ -140,6 +140,16 @@ void librados::ObjectOperation::set_op_flags2(int flags)
   ::set_op_flags(o, flags);
 }
 
+void librados::ObjectOperation::cmpext(uint64_t off,
+                                       bufferlist &cmp_bl,
+                                       bufferlist *mismatch_bl,
+                                       uint64_t *mismatch_off,
+                                       int *prval)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->cmpext(off, cmp_bl, mismatch_bl, mismatch_off, prval);
+}
+
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
 {
   ::ObjectOperation *o = &impl->o;
@@ -1238,6 +1248,14 @@ int librados::IoCtx::mapext(const std::string& oid, uint64_t off, size_t len,
   return io_ctx_impl->mapext(obj, off, len, m);
 }
 
+int librados::IoCtx::cmpext(const std::string& oid, uint64_t off,
+                            bufferlist& cmp_bl, bufferlist *mismatch_bl,
+                            uint64_t *mismatch_off)
+{
+  object_t obj(oid);
+  return io_ctx_impl->cmpext(obj, off, cmp_bl, mismatch_bl, mismatch_off);
+}
+
 int librados::IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
 				 bufferlist& bl, size_t len, uint64_t off)
 {
@@ -1773,6 +1791,17 @@ int librados::IoCtx::aio_exec(const std::string& oid,
 {
   object_t obj(oid);
   return io_ctx_impl->aio_exec(obj, c->pc, cls, method, inbl, outbl);
+}
+
+int librados::IoCtx::aio_cmpext(const std::string& oid,
+				librados::AioCompletion *c,
+				bufferlist *mismatch_bl,
+				uint64_t *mismatch_off,
+				uint64_t off,
+				bufferlist& cmp_bl)
+{
+  return io_ctx_impl->aio_cmpext(oid, c->pc, off, cmp_bl, mismatch_bl,
+				 mismatch_off);
 }
 
 int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioCompletion *c,
@@ -3702,6 +3731,38 @@ extern "C" int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, tim
   return retval;
 }
 
+extern "C" int rados_cmpext(rados_ioctx_t io, const char *o,
+			    const char *cmp_buf, size_t cmp_len,
+			    uint64_t off, char *mismatch_buf,
+			    size_t *mismatch_len, uint64_t *mismatch_off)
+{
+  tracepoint(librados, rados_cmpext_enter, io, o, cmp_buf, cmp_len, off,
+	     mismatch_buf, mismatch_len, mismatch_off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int ret;
+  object_t oid(o);
+
+  bufferlist cmp_bl;
+  cmp_bl.append(cmp_buf, cmp_len);
+
+  bufferlist mismatch_bl;
+  mismatch_bl.push_back(buffer::create_static(cmp_len, mismatch_buf));
+
+  ret = ctx->cmpext(oid, off, cmp_bl, &mismatch_bl, mismatch_off);
+  if (ret == -EILSEQ) {
+    *mismatch_len = mismatch_bl.length();
+    if (*mismatch_len > cmp_len) {
+      tracepoint(librados, rados_cmpext_exit, -ERANGE);
+      return -ERANGE;
+    }
+    if (!mismatch_bl.is_provided_buffer(mismatch_buf))
+      mismatch_bl.copy(0, *mismatch_len, mismatch_buf);
+  }
+
+  tracepoint(librados, rados_cmpext_exit, ret);
+  return ret;
+}
+
 extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
 			      char *buf, size_t len)
 {
@@ -4425,7 +4486,7 @@ extern "C" int rados_aio_flush(rados_ioctx_t io)
   return 0;
 }
 
-extern "C" int rados_aio_stat(rados_ioctx_t io, const char *o, 
+extern "C" int rados_aio_stat(rados_ioctx_t io, const char *o,
 			      rados_completion_t completion,
 			      uint64_t *psize, time_t *pmtime)
 {
@@ -4435,6 +4496,26 @@ extern "C" int rados_aio_stat(rados_ioctx_t io, const char *o,
   int retval = ctx->aio_stat(oid, (librados::AioCompletionImpl*)completion,
 		       psize, pmtime);
   tracepoint(librados, rados_aio_stat_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_cmpext(rados_ioctx_t io, const char *o,
+				rados_completion_t completion,
+				const char *cmp_buf,
+				size_t cmp_len,
+				uint64_t off,
+				char *mismatch_buf,
+				size_t *mismatch_len,
+				uint64_t *mismatch_off)
+{
+  tracepoint(librados, rados_aio_cmpext_enter, io, o, completion, cmp_buf,
+	     cmp_len, off, mismatch_buf, mismatch_len, mismatch_off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->aio_cmpext(oid, (librados::AioCompletionImpl*)completion,
+			       cmp_buf, cmp_len, off, mismatch_buf,
+			       mismatch_len, mismatch_off);
+  tracepoint(librados, rados_aio_cmpext_exit, retval);
   return retval;
 }
 
@@ -4836,6 +4917,22 @@ extern "C" void rados_write_op_assert_exists(rados_write_op_t write_op)
   tracepoint(librados, rados_write_op_assert_exists_exit);
 }
 
+extern "C" void rados_write_op_cmpext(rados_write_op_t write_op,
+				      const char *cmp_buf,
+				      size_t cmp_len,
+				      uint64_t off,
+				      char *mismatch_buf,
+				      size_t *mismatch_len,
+				      uint64_t *mismatch_off,
+				      int *prval)
+{
+  tracepoint(librados, rados_write_op_cmpext_enter, write_op, cmp_buf,
+	     cmp_len, off, mismatch_buf, mismatch_len, mismatch_off, prval);
+  ((::ObjectOperation *)write_op)->cmpext(off, cmp_len, cmp_buf, mismatch_buf,
+					 (uint64_t *)mismatch_len, mismatch_off, prval);
+  tracepoint(librados, rados_write_op_cmpext_exit);
+}
+
 extern "C" void rados_write_op_cmpxattr(rados_write_op_t write_op,
                                        const char *name,
 				       uint8_t comparison_operator,
@@ -5142,6 +5239,22 @@ extern "C" void rados_read_op_assert_exists(rados_read_op_t read_op)
   tracepoint(librados, rados_read_op_assert_exists_enter, read_op);
   ((::ObjectOperation *)read_op)->stat(NULL, (ceph::real_time *)NULL, NULL);
   tracepoint(librados, rados_read_op_assert_exists_exit);
+}
+
+extern "C" void rados_read_op_cmpext(rados_read_op_t read_op,
+				     const char *cmp_buf,
+				     size_t cmp_len,
+				     uint64_t off,
+				     char *mismatch_buf,
+				     size_t *mismatch_len,
+				     uint64_t *mismatch_off,
+				     int *prval)
+{
+  tracepoint(librados, rados_read_op_cmpext_enter, read_op, cmp_buf,
+	     cmp_len, off, mismatch_buf, mismatch_len, mismatch_off, prval);
+  ((::ObjectOperation *)read_op)->cmpext(off, cmp_len, cmp_buf, mismatch_buf,
+					 (uint64_t *)mismatch_len, mismatch_off, prval);
+  tracepoint(librados, rados_read_op_cmpext_exit);
 }
 
 extern "C" void rados_read_op_cmpxattr(rados_read_op_t read_op,

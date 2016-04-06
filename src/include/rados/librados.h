@@ -284,7 +284,7 @@ struct rados_cluster_stat_t {
  * - Creating objects: rados_write_op_create()
  * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
  *   rados_write_op_write_full(), rados_write_op_writesame(), rados_write_op_remove,
- *   rados_write_op_truncate(), rados_write_op_zero()
+ *   rados_write_op_truncate(), rados_write_op_zero(), rados_write_op_cmpext()
  * - Hints: rados_write_op_set_alloc_hint()
  * - Performing the operation: rados_write_op_operate(), rados_aio_write_op_operate()
  */
@@ -303,7 +303,7 @@ typedef void *rados_write_op_t;
  *   rados_read_op_omap_cmp()
  * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists(),
  *   rados_read_op_assert_version()
- * - IO on objects: rados_read_op_read()
+ * - IO on objects: rados_read_op_read(), rados_read_op_cmpext()
  * - Custom operations: rados_read_op_exec(), rados_read_op_exec_user_buf()
  * - Request properties: rados_read_op_set_flags()
  * - Performing the operation: rados_read_op_operate(),
@@ -1429,6 +1429,24 @@ CEPH_RADOS_API int rados_trunc(rados_ioctx_t io, const char *oid,
                                uint64_t size);
 
 /**
+ * Compare an on-disk object range with a buffer
+ *
+ * @param io the context in which to perform the comparison
+ * @param o name of the object
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @param mismatch_buf allocated buffer to fill with on-disk data on mismatch
+ * @param mismatch_len actual length of @mismatch_buf that was used, in bytes
+ * @param mismatch_off offset into @mismatch_buf where comparison failed
+ * @returns 0 on success, negative error code on failure. -EILSEQ on mismatch
+ */
+CEPH_RADOS_API int rados_cmpext(rados_ioctx_t io, const char *o,
+                                const char *cmp_buf, size_t cmp_len,
+                                uint64_t off, char *mismatch_buf,
+                                size_t *mismatch_len, uint64_t *mismatch_off);
+
+/**
  * @name Xattrs
  * Extended attributes are stored as extended attributes on the files
  * representing an object on the OSDs. Thus, they have the same
@@ -2012,6 +2030,33 @@ CEPH_RADOS_API int rados_aio_stat(rados_ioctx_t io, const char *o,
 		                  uint64_t *psize, time_t *pmtime);
 
 /**
+ * Asynchronously compare an on-disk object range with a buffer
+ *
+ * The return value of the completion will be zero on successful comparison
+ * (match), negative error code on failure. -EILSEQ will be returned on
+ * miscompare, with @mismatch_buf and @mismatch_off filled accordingly.
+ *
+ * @param io the context in which to perform the comparison
+ * @param o the name of the object to compare with
+ * @param completion what to do when the comparison is complete
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @param mismatch_buf allocated buffer to fill with on-disk data on mismatch
+ * @param mismatch_len actual length of @mismatch_buf that was used, in bytes
+ * @param mismatch_off offset into @mismatch_buf where comparison failed
+ * @returns 0 on success, negative error code on failure. -EILSEQ on mismatch
+ */
+CEPH_RADOS_API int rados_aio_cmpext(rados_ioctx_t io, const char *o,
+                                    rados_completion_t completion,
+                                    const char *cmp_buf,
+                                    size_t cmp_len,
+                                    uint64_t off,
+                                    char *mismatch_buf,
+                                    size_t *mismatch_len,
+                                    uint64_t *mismatch_off);
+
+/**
  * Cancel async operation
  *
  * @param io ioctx
@@ -2461,6 +2506,28 @@ CEPH_RADOS_API void rados_write_op_assert_exists(rados_write_op_t write_op);
 CEPH_RADOS_API void rados_write_op_assert_version(rados_write_op_t write_op, uint64_t ver);
 
 /**
+ * Ensure that given object range (extent) satisfies comparison.
+ * If the comparison is not satisfied, the return code of the
+ * operation will be -EILSEQ
+ * @param write_op operation to add this action to
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @param mismatch_buf allocated buffer to fill with on-disk data on mismatch
+ * @param mismatch_len actual length of @mismatch_buf that was used, in bytes
+ * @param mismatch_off offset into @mismatch_buf where comparison failed
+ * @param prval returned result of comparison
+ */
+CEPH_RADOS_API void rados_write_op_cmpext(rados_write_op_t write_op,
+                                          const char *cmp_buf,
+                                          size_t cmp_len,
+                                          uint64_t off,
+                                          char *mismatch_buf,
+                                          size_t *mismatch_len,
+                                          uint64_t *mismatch_off,
+                                          int *prval);
+
+/**
  * Ensure that given xattr satisfies comparison.
  * If the comparison is not satisfied, the return code of the
  * operation will be -ECANCELED
@@ -2747,6 +2814,28 @@ CEPH_RADOS_API void rados_read_op_assert_exists(rados_read_op_t read_op);
  * @param ver object version number
  */
 CEPH_RADOS_API void rados_read_op_assert_version(rados_read_op_t read_op, uint64_t ver);
+
+/**
+ * Ensure that given object range (extent) satisfies comparison.
+ * If the comparison is not satisfied, the return code of the
+ * operation will be -EILSEQ
+ * @param read_op operation to add this action to
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @param mismatch_buf allocated buffer to fill with on-disk data on mismatch
+ * @param mismatch_len actual length of @mismatch_buf that was used, in bytes
+ * @param mismatch_off offset into @mismatch_buf where comparison failed
+ * @param prval returned result of comparison
+ */
+CEPH_RADOS_API void rados_read_op_cmpext(rados_read_op_t read_op,
+                                         const char *cmp_buf,
+                                         size_t cmp_len,
+                                         uint64_t off,
+                                         char *mismatch_buf,
+                                         size_t *mismatch_len,
+                                         uint64_t *mismatch_off,
+                                         int *prval);
 
 /**
  * Ensure that the an xattr satisfies a comparison
