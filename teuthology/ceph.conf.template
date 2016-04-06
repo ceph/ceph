@@ -21,6 +21,7 @@
 	mon osd allow primary affinity = true
 	mon warn on legacy crush tunables = false
 	mon warn on crush straw calc version zero = false
+	mon warn on no sortbitwise = false
 
         osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd"
 
