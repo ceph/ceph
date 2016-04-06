@@ -6,12 +6,14 @@
  */
 
 
-
 #include "dmclock_recs.h"
+#include "dmclock_server.h"
+#include "dmclock_client.h"
 
-#include "test_simp_recs.h"
-#include "test_simp_server.h"
-#include "test_simp_client.h"
+#include "test_recs.h"
+#include "test_server.h"
+#include "test_client.h"
+
 #include "simulate_common.h"
 #include "simulate.h"
 

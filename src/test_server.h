@@ -15,10 +15,7 @@
 #include <chrono>
 #include <deque>
 
-#include "dmclock_recs.h"
-#include "dmclock_server.h"
-
-#include "test_simp_recs.h"
+#include "test_recs.h"
 
 
 template<typename Q, typename CInfo,
