@@ -21,10 +21,9 @@
 #include "simulate_common.h"
 
 
-
-template<typename TS, typename TC, typename ClientInfo>
-void simulate(std::function<TS*(ServerId)> create_server_f,
-              std::function<TC*(ClientId)> create_client_f) {
+template<typename TS, typename TC>
+void simulate(uint server_count, std::function<TS*(ServerId)> create_server_f,
+              uint client_count, std::function<TC*(ClientId)> create_client_f) {
   using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
 
@@ -33,25 +32,9 @@ void simulate(std::function<TS*(ServerId)> create_server_f,
   // simulation params
 
   const TimePoint early_time = now();
-  const chrono::seconds skip_amount(0); // skip first 2 secondsd of data
-  const chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
-  const chrono::seconds report_unit(1); // unit to output reports in
-
-  // server params
-
-  const uint server_count = 100;
-  const uint server_iops = 40;
-  const uint server_threads = 1;
-  const bool server_soft_limit = false;
-
-  // client params
-
-  const uint client_total_ops = 1000;
-  const uint client_count = 100;
-  const uint client_wait_count = 1;
-  const uint client_iops_goal = 50;
-  const uint client_outstanding_ops = 100;
-  const std::chrono::seconds client_wait(10);
+  const std::chrono::seconds skip_amount(0); // skip first 2 secondsd of data
+  const std::chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
+  const std::chrono::seconds report_unit(1); // unit to output reports in
 
   ClientMap clients;
 
@@ -60,97 +43,13 @@ void simulate(std::function<TS*(ServerId)> create_server_f,
   ServerMap servers;
   for (uint i = 0; i < server_count; ++i) {
     server_ids.push_back(i);
-    servers[i] =
-      new TS(i,
-             server_iops, server_threads,
-             client_info_f, client_response_f, dmc_server_accumulate_f,
-             server_soft_limit);
+    servers[i] = create_server_f(i);
   }
 
   // construct clients
 
-  // lambda to choose a server based on a seed and client; called by client
-  auto server_alternate_f =
-    [&server_ids, &server_count](uint64_t seed, uint16_t client_idx) -> const ServerId& {
-    int index = (client_idx + seed) % server_count;
-    return server_ids[index];
-  };
-
-  // lambda to choose a server alternately in a range
-  auto server_alt_range_f =
-    [&server_ids, &server_count, &client_count]
-    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
-    double factor = double(server_count) / client_count;
-    uint offset = seed % servers_per;
-    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
-    return server_ids[index];
-  };
-
-  std::default_random_engine
-    srv_rand(std::chrono::system_clock::now().time_since_epoch().count());
-
-  // lambda to choose a server randomly
-  auto server_random_f =
-    [&server_ids, &srv_rand, &server_count] (uint64_t seed) -> const ServerId& {
-    int index = srv_rand() % server_count;
-    return server_ids[index];
-  };
-
-  // lambda to choose a server randomly
-  auto server_ran_range_f =
-    [&server_ids, &srv_rand, &server_count, &client_count]
-    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
-    double factor = double(server_count) / client_count;
-    uint offset = srv_rand() % servers_per;
-    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
-    return server_ids[index];
-  };
-
-
-  // lambda to always choose the first server
-  SelectFunc server_0_f =
-    [server_ids] (uint64_t seed) -> const ServerId& {
-    return server_ids[0];
-  };
-
-  // lambda to post a request to the identified server; called by client
-  SubmitFunc server_post_f =
-    [&servers](const ServerId& server,
-	       const TestRequest& request,
-	       const dmc::ReqParams<ClientId>& req_params) {
-    auto i = servers.find(server);
-    assert(servers.end() != i);
-    i->second->post(request, req_params);
-  };
-
   for (uint i = 0; i < client_count; ++i) {
-    static std::vector<CliInst> no_wait =
-      { { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
-    static std::vector<CliInst> wait =
-      { { wait_op, client_wait },
-	{ req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
-
-    SelectFunc server_select_f =
-#if 0
-      std::bind(server_alternate_f, _1, i)
-#elif 1
-      std::bind(server_alt_range_f, _1, i, 8)
-#elif 0
-      std::bind(server_random_f, _1)
-#elif 0
-      std::bind(server_ran_range_f, _1, i, 8)
-#else
-      server_0_f
-#endif
-      ;
-
-    clients[i] =
-      new TC(i,
-	     server_post_f,
-	     server_select_f,
-	     dmc_client_accumulate_f,
-	     i < (client_count - client_wait_count) ? no_wait : wait
-	);
+    clients[i] = create_client_f(i);
   } // for
 
   TimePoint clients_created_time = now();

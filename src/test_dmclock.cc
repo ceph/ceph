@@ -144,8 +144,8 @@ using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
                       dmc::RespParams<ServerId>,
 		      DmcAccum>;
 
-using SelectFunc = Dmc::ServerSelectFunc;
-using SubmitFunc = Dmc::SubmitFunc;
+using SelectFunc = TestClient::ServerSelectFunc;
+using SubmitFunc = TestClient::SubmitFunc;
 
 
 DmcServer::ClientRespFunc client_response_f =
@@ -157,5 +157,115 @@ DmcServer::ClientRespFunc client_response_f =
 
 
 int main(int argc, char* argv[]) {
-  simulate<DmcServer,DmcClient,dmc::ClientInfo>(client_info_f);
+
+  // server params
+
+  const uint server_count = 100;
+  const uint server_iops = 40;
+  const uint server_threads = 1;
+  const bool server_soft_limit = false;
+
+  // client params
+
+  const uint client_total_ops = 1000;
+  const uint client_count = 100;
+  const uint client_wait_count = 1;
+  const uint client_iops_goal = 50;
+  const uint client_outstanding_ops = 100;
+  const std::chrono::seconds client_wait(10);
+
+  // lambda to choose a server based on a seed and client; called by client
+  auto server_alternate_f =
+    [&server_ids, &server_count](uint64_t seed, uint16_t client_idx) -> const ServerId& {
+    int index = (client_idx + seed) % server_count;
+    return server_ids[index];
+  };
+
+  // lambda to choose a server alternately in a range
+  auto server_alt_range_f =
+    [&server_ids, &server_count, &client_count]
+    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
+    double factor = double(server_count) / client_count;
+    uint offset = seed % servers_per;
+    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+    return server_ids[index];
+  };
+
+  std::default_random_engine
+    srv_rand(std::chrono::system_clock::now().time_since_epoch().count());
+
+  // lambda to choose a server randomly
+  auto server_random_f =
+    [&server_ids, &srv_rand, &server_count] (uint64_t seed) -> const ServerId& {
+    int index = srv_rand() % server_count;
+    return server_ids[index];
+  };
+
+  // lambda to choose a server randomly
+  auto server_ran_range_f =
+    [&server_ids, &srv_rand, &server_count, &client_count]
+    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
+    double factor = double(server_count) / client_count;
+    uint offset = srv_rand() % servers_per;
+    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+    return server_ids[index];
+  };
+
+
+  // lambda to always choose the first server
+  SelectFunc server_0_f =
+    [server_ids] (uint64_t seed) -> const ServerId& {
+    return server_ids[0];
+  };
+
+  // lambda to post a request to the identified server; called by client
+  SubmitFunc server_post_f =
+    [&servers](const ServerId& server,
+	       const TestRequest& request,
+	       const dmc::ReqParams<ClientId>& req_params) {
+    auto i = servers.find(server);
+    assert(servers.end() != i);
+    i->second->post(request, req_params);
+  };
+
+
+    static std::vector<CliInst> no_wait =
+      { { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+    static std::vector<CliInst> wait =
+      { { wait_op, client_wait },
+	{ req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+
+    SelectFunc server_select_f =
+#if 0
+      std::bind(server_alternate_f, _1, i)
+#elif 1
+      std::bind(server_alt_range_f, _1, i, 8)
+#elif 0
+      std::bind(server_random_f, _1)
+#elif 0
+      std::bind(server_ran_range_f, _1, i, 8)
+#else
+      server_0_f
+#endif
+      ;
+
+
+
+  auto create_server_f = [&](ServerId id) -> DmcServer* {
+    return new TS(i,
+		  server_iops, server_threads,
+		  client_info_f, client_response_f, dmc_server_accumulate_f,
+		  server_soft_limit);
+  };
+
+  auto create_client_f = [&](ClientId id) -> DmcClient* {
+    return new TC(i,
+		  server_post_f,
+		  server_select_f,
+		  dmc_client_accumulate_f,
+		  i < (client_count - client_wait_count) ? no_wait : wait);
+  };
+
+  simulate<DmcServer,DmcClient>(server_count, create_server_f,
+				client_count, create_client_f);
 }
