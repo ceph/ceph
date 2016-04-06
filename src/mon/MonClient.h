@@ -179,6 +179,7 @@ private:
   int authenticate_err;
 
   list<Message*> waiting_for_session;
+  utime_t last_rotating_renew_sent;
   Context *session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
