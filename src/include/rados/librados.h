@@ -283,8 +283,8 @@ struct rados_cluster_stat_t {
  *   rados_write_op_assert_version()
  * - Creating objects: rados_write_op_create()
  * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
- *   rados_write_op_write_full(), rados_write_op_remove, rados_write_op_truncate(),
- *   rados_write_op_zero()
+ *   rados_write_op_write_full(), rados_write_op_writesame(), rados_write_op_remove,
+ *   rados_write_op_truncate(), rados_write_op_zero()
  * - Hints: rados_write_op_set_alloc_hint()
  * - Performing the operation: rados_write_op_operate(), rados_aio_write_op_operate()
  */
@@ -1334,6 +1334,24 @@ CEPH_RADOS_API int rados_write_full(rados_ioctx_t io, const char *oid,
                                     const char *buf, size_t len);
 
 /**
+ * Write the same *data_len* bytes from *buf* multiple times into the
+ * *oid* object. *write_len* bytes are written in total, which must be
+ * a multiple of *data_len*. The value of *write_len* and *data_len*
+ * must be <= UINT_MAX/2.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param data_len length of the data, in bytes
+ * @param write_len the total number of bytes to write
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_writesame(rados_ioctx_t io, const char *oid,
+                                   const char *buf, size_t data_len,
+                                   size_t write_len, uint64_t off);
+
+/**
  * Efficiently copy a portion of one object to another
  *
  * If the underlying filesystem on the OSD supports it, this will be a
@@ -1888,6 +1906,29 @@ CEPH_RADOS_API int rados_aio_append(rados_ioctx_t io, const char *oid,
 CEPH_RADOS_API int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			                rados_completion_t completion,
 			                const char *buf, size_t len);
+
+/**
+ * Asychronously write the same buffer multiple times
+ *
+ * Queues the writesame and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the writesame is safe and complete
+ * @param buf data to write
+ * @param data_len length of the data, in bytes
+ * @param write_len the total number of bytes to write
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBRADOS_SNAP_HEAD
+ */
+CEPH_RADOS_API int rados_aio_writesame(rados_ioctx_t io, const char *oid,
+			               rados_completion_t completion,
+			               const char *buf, size_t data_len,
+				       size_t write_len, uint64_t off);
 
 /**
  * Asychronously remove an object
@@ -2509,6 +2550,20 @@ CEPH_RADOS_API void rados_write_op_write(rados_write_op_t write_op,
 CEPH_RADOS_API void rados_write_op_write_full(rados_write_op_t write_op,
                                               const char *buffer,
                                               size_t len);
+
+/**
+ * Write the same buffer multiple times
+ * @param write_op operation to add this action to
+ * @param buffer bytes to write
+ * @param data_len length of buffer
+ * @param write_len total number of bytes to write, as a multiple of @data_len
+ * @param offset offset to write to
+ */
+CEPH_RADOS_API void rados_write_op_writesame(rados_write_op_t write_op,
+                                             const char *buffer,
+                                             size_t data_len,
+                                             size_t write_len,
+                                             uint64_t offset);
 
 /**
  * Append to end of object.
