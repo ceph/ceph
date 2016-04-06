@@ -1827,7 +1827,9 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   }
 
   if (ms.map_epoch > sb.current_epoch) {
-    cerr << "ERROR: Export map_epoch " << ms.map_epoch << " > osd epoch " << sb.current_epoch << std::endl;
+    cerr << "ERROR: Export PG's map_epoch " << ms.map_epoch << " > OSD's epoch " << sb.current_epoch << std::endl;
+    cerr << "The OSD you are using is older than the exported PG" << std::endl;
+    cerr << "Either use another OSD or join selected OSD to cluster to update it first" << std::endl;
     return -EINVAL;
   }
 
@@ -1881,8 +1883,20 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     }
   }
 
+  if (debug) {
+    cerr << "Import pgid " << ms.info.pgid << std::endl;
+    cerr << "Clearing past_intervals " << ms.past_intervals << std::endl;
+    cerr << "Zero same_interval_since " << ms.info.history.same_interval_since << std::endl;
+  }
+
+  // Let osd recompute past_intervals and same_interval_since
   ms.past_intervals.clear();
-  ms.info.history.same_interval_since = ms.map_epoch = sb.current_epoch;
+  ms.info.history.same_interval_since =  0;
+
+  if (debug)
+    cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
+
+  ms.map_epoch = sb.current_epoch;
 
   return 0;
 }
