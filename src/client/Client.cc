@@ -59,6 +59,7 @@
 #include "messages/MClientCapRelease.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
+#include "messages/MFSMapUser.h"
 
 #include "mon/MonClient.h"
 
@@ -244,7 +245,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
-    cap_epoch_barrier(0), fsmap(nullptr),
+    cap_epoch_barrier(0), fsmap(nullptr), fsmap_user(nullptr),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
@@ -488,18 +489,6 @@ int Client::init()
   objecter->start();
 
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
-
-  std::string want = "mdsmap";
-  const auto &want_ns = cct->_conf->client_mds_namespace;
-  if (want_ns != FS_CLUSTER_ID_NONE) {
-    std::ostringstream oss;
-    oss << want << "." << want_ns;
-    want = oss.str();
-  }
-  ldout(cct, 10) << "Subscribing to map '" << want << "'" << dendl;
-
-  monclient->sub_want(want, 0, 0);
-  monclient->renew_subs();
 
   // logger
   PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
@@ -2378,6 +2367,9 @@ bool Client::ms_dispatch(Message *m)
   case CEPH_MSG_FS_MAP:
     handle_fs_map(static_cast<MFSMap*>(m));
     break;
+  case CEPH_MSG_FS_MAP_USER:
+    handle_fs_map_user(static_cast<MFSMapUser*>(m));
+    break;
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session(static_cast<MClientSession*>(m));
     break;
@@ -2446,6 +2438,17 @@ void Client::handle_fs_map(MFSMap *m)
   signal_cond_list(waiting_for_fsmap);
 
   monclient->sub_got("fsmap", fsmap->get_epoch());
+}
+
+void Client::handle_fs_map_user(MFSMapUser *m)
+{
+  delete fsmap_user;
+  fsmap_user = new FSMapUser;
+  *fsmap_user = m->get_fsmap();
+  m->put();
+
+  monclient->sub_got("fsmap.user", fsmap_user->get_epoch());
+  signal_cond_list(waiting_for_fsmap);
 }
 
 void Client::handle_mds_map(MMDSMap* m)
@@ -5292,6 +5295,49 @@ int Client::authenticate()
   return 0;
 }
 
+int Client::fetch_fsmap(bool user)
+{
+  int r;
+  // Retrieve FSMap to enable looking up daemon addresses.  We need FSMap
+  // rather than MDSMap because no one MDSMap contains all the daemons, and
+  // a `tell` can address any daemon.
+  version_t fsmap_latest;
+  do {
+    C_SaferCond cond;
+    monclient->get_version("fsmap", &fsmap_latest, NULL, &cond);
+    client_lock.Unlock();
+    r = cond.wait();
+    client_lock.Lock();
+  } while (r == -EAGAIN);
+
+  if (r < 0) {
+    lderr(cct) << "Failed to learn FSMap version: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  ldout(cct, 10) << __func__ << " learned FSMap version " << fsmap_latest << dendl;
+
+  if (user) {
+    if (fsmap_user == nullptr || fsmap_user->get_epoch() < fsmap_latest) {
+      monclient->sub_want("fsmap.user", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
+      monclient->renew_subs();
+      wait_on_list(waiting_for_fsmap);
+    }
+    assert(fsmap_user != nullptr);
+    assert(fsmap_user->get_epoch() >= fsmap_latest);
+  } else {
+    if (fsmap == nullptr || fsmap->get_epoch() < fsmap_latest) {
+      monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
+      monclient->renew_subs();
+      wait_on_list(waiting_for_fsmap);
+    }
+    assert(fsmap != nullptr);
+    assert(fsmap->get_epoch() >= fsmap_latest);
+  }
+  ldout(cct, 10) << __func__ << " finished waiting for FSMap version "
+		 << fsmap_latest << dendl;
+  return 0;
+}
 
 /**
  *
@@ -5316,33 +5362,10 @@ int Client::mds_command(
     return r;
   }
 
-  // Retrieve FSMap to enable looking up daemon addresses.  We need FSMap
-  // rather than MDSMap because no one MDSMap contains all the daemons, and
-  // a `tell` can address any daemon.
-  version_t fsmap_latest;
-  do {
-    C_SaferCond cond;
-    monclient->get_version("fsmap", &fsmap_latest, NULL, &cond);
-    client_lock.Unlock();
-    r = cond.wait();
-    client_lock.Lock();
-  } while (r == -EAGAIN);
-  ldout(cct, 20) << "Learned FSMap version " << fsmap_latest << dendl;
-
+  r = fetch_fsmap(false);
   if (r < 0) {
-    lderr(cct) << "Failed to learn FSMap version: " << cpp_strerror(r) << dendl;
     return r;
   }
-
-  if (fsmap == nullptr || fsmap->get_epoch() < fsmap_latest) {
-    monclient->sub_want("fsmap", fsmap_latest, CEPH_SUBSCRIBE_ONETIME);
-    monclient->renew_subs();
-    wait_on_list(waiting_for_fsmap);
-  }
-  assert(fsmap != nullptr);
-  assert(fsmap->get_epoch() >= fsmap_latest);
-  ldout(cct, 20) << "Finished waiting for FSMap version " << fsmap_latest
-    << dendl;
 
   // Look up MDS target(s) of the command
   std::vector<mds_gid_t> targets;
@@ -5445,9 +5468,27 @@ int Client::mount(const std::string &mount_root, bool require_mds)
     return r;
   }
 
+  std::string want = "mdsmap";
+  const auto &mds_ns = cct->_conf->client_mds_namespace;
+  if (!mds_ns.empty()) {
+    r = fetch_fsmap(true);
+    if (r < 0)
+      return r;
+    fs_cluster_id_t cid = fsmap_user->get_fs_cid(mds_ns);
+    if (cid == FS_CLUSTER_ID_NONE)
+      return -ENOENT;
+
+    std::ostringstream oss;
+    oss << want << "." << cid;
+    want = oss.str();
+  }
+  ldout(cct, 10) << "Subscribing to map '" << want << "'" << dendl;
+
+  monclient->sub_want(want, 0, 0);
+  monclient->renew_subs();
+
   tick(); // start tick
   
-  ldout(cct, 2) << "mounted: have mdsmap " << mdsmap->get_epoch() << dendl;
   if (require_mds) {
     while (1) {
       auto availability = mdsmap->is_cluster_available();
