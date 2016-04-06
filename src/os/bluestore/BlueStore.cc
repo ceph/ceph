@@ -1145,7 +1145,8 @@ int BlueStore::_open_db(bool create)
     } else if (s == "0") {
       do_bluefs = false;
     } else {
-      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting" << dendl;
+      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
+	   << dendl;
       return -EIO;
     }
   }
@@ -1162,36 +1163,42 @@ int BlueStore::_open_db(bool create)
 
     char bfn[PATH_MAX];
     struct stat st;
-    int id = 0;
 
     snprintf(bfn, sizeof(bfn), "%s/block.db", path.c_str());
     if (::stat(bfn, &st) == 0) {
-      r = bluefs->add_block_device(id, bfn);
+      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
              << cpp_strerror(r) << dendl;
         goto free_bluefs;
       }
-      r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
+      r = _check_or_set_bdev_label(
+	bfn,
+	bluefs->get_block_device_size(BlueFS::BDEV_DB),
         "bluefs db", create);
       if (r < 0) {
-        derr << __func__ << " check block device(" << bfn << ") label returned: " 
+        derr << __func__
+	     << " check block device(" << bfn << ") label returned: " 
              << cpp_strerror(r) << dendl;
         goto free_bluefs;
       }
       if (create) {
 	bluefs->add_block_extent(
-	  id, BLUEFS_START,
-	  bluefs->get_block_device_size(id) - BLUEFS_START);
+	  BlueFS::BDEV_DB,
+	  BLUEFS_START,
+	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - BLUEFS_START);
       }
-      ++id;
+      bluefs_shared_bdev = BlueFS::BDEV_SLOW;
+    } else {
+      bluefs_shared_bdev = BlueFS::BDEV_DB;
     }
 
+    // shared device
     snprintf(bfn, sizeof(bfn), "%s/block", path.c_str());
-    r = bluefs->add_block_device(id, bfn);
+    r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
-           << cpp_strerror(r) << dendl;
+	   << cpp_strerror(r) << dendl;
       goto free_bluefs;
     }
     if (create) {
@@ -1204,21 +1211,23 @@ int BlueStore::_open_db(bool create)
       // align to bluefs's alloc_size
       initial = ROUND_UP_TO(initial, g_conf->bluefs_alloc_size);
       initial += g_conf->bluefs_alloc_size - BLUEFS_START;
-      bluefs->add_block_extent(id, BLUEFS_START, initial);
+      bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
       bluefs_extents.insert(BLUEFS_START, initial);
     }
-    bluefs_shared_bdev = id;
-    ++id;
-    if (id == 2) {
+
+    // use a short, relative path, if it's bluefs.
+    strcpy(fn, "db");
+
+    if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
       char db_paths[PATH_MAX*3];
       snprintf(
-	db_paths, sizeof(db_paths), "%s/db,%lld %s/db.slow,%lld",
-	path.c_str(),
-	(unsigned long long)bluefs->get_block_device_size(0) * 95 / 100,
-	path.c_str(),
-	(unsigned long long)bluefs->get_block_device_size(1) * 95 / 100);
+	db_paths, sizeof(db_paths), "db,%lld db.slow,%lld",
+	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_DB) *
+	 95 / 100,
+	(unsigned long long)bluefs->get_block_device_size(BlueFS::BDEV_SLOW) *
+	 95 / 100);
       g_conf->set_val("rocksdb_db_paths", db_paths, false, false);
       dout(10) << __func__ << " set rocksdb_db_paths to "
 	       << g_conf->rocksdb_db_paths << dendl;
@@ -1226,23 +1235,26 @@ int BlueStore::_open_db(bool create)
 
     snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
     if (::stat(bfn, &st) == 0) {
-      r = bluefs->add_block_device(id, bfn);
+      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
 	     << cpp_strerror(r) << dendl;
         goto free_bluefs;			
       }
-      r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
+      r = _check_or_set_bdev_label(
+	bfn,
+	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
         "bluefs wal", create);
       if (r < 0) {
-        derr << __func__ << " check block device(" << bfn << ") label returned: " 
+        derr << __func__ << " check block device(" << bfn << ") label returned: "
 	     << cpp_strerror(r) << dendl;
         goto free_bluefs;
       }
       if (create) {
 	bluefs->add_block_extent(
-	  id, BDEV_LABEL_BLOCK_SIZE,
-	  bluefs->get_block_device_size(id) - BDEV_LABEL_BLOCK_SIZE);
+	  BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
+	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
+	   BDEV_LABEL_BLOCK_SIZE);
       }
       g_conf->set_val("rocksdb_separate_wal_dir", "true");
     } else {
@@ -1320,7 +1332,8 @@ int BlueStore::_open_db(bool create)
       delete bluefs;
       bluefs = NULL;
     }
-    // delete env manually here since we can't depend on db to do this under this case
+    // delete env manually here since we can't depend on db to do this
+    // under this case
     delete env;
     env = NULL;
     return -EIO;
