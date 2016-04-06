@@ -6,10 +6,102 @@
 
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_auth.h"
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
-extern int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info, string *pswift_user);
+/* TempURL: applier. */
+class RGWTempURLAuthApplier : public RGWLocalAuthApplier {
+public:
+  RGWTempURLAuthApplier(CephContext * const cct,
+                        const RGWUserInfo& user_info)
+    : RGWLocalAuthApplier(cct, user_info, RGWLocalAuthApplier::NO_SUBUSER) {
+  };
+
+  virtual void modify_request_state(req_state * s) const override; /* in/out */
+
+  struct Factory {
+    virtual ~Factory() {}
+    virtual aplptr_t create_apl_turl(CephContext * const cct,
+                                     const RGWUserInfo& user_info) const = 0;
+  };
+};
+
+/* TempURL: engine */
+class RGWTempURLAuthEngine : public RGWAuthEngine {
+protected:
+  /* const */ RGWRados * const store;
+  const req_state * const s;
+  const RGWTempURLAuthApplier::Factory * const apl_factory;
+
+  /* Helper methods. */
+  void get_owner_info(RGWUserInfo& owner_info) const;
+  bool is_expired(const std::string& expires) const;
+  std::string generate_signature(const string& key,
+                                 const string& method,
+                                 const string& path,
+                                 const string& expires) const;
+public:
+  RGWTempURLAuthEngine(const req_state * const s,
+                       /*const*/ RGWRados * const store,
+                       const RGWTempURLAuthApplier::Factory * const apl_factory)
+    : RGWAuthEngine(s->cct),
+      store(store),
+      s(s),
+      apl_factory(apl_factory) {
+  }
+
+  /* Interface implementations. */
+  bool is_applicable() const noexcept override;
+  RGWAuthApplier::aplptr_t authenticate() const override;
+};
+
+
+/* AUTH_rgwtk */
+class RGWSignedTokenAuthEngine : public RGWTokenBasedAuthEngine {
+protected:
+  /* const */ RGWRados * const store;
+  const RGWLocalAuthApplier::Factory * apl_factory;
+public:
+  RGWSignedTokenAuthEngine(CephContext * const cct,
+                           /* const */RGWRados * const store,
+                           const std::string token,
+                           const RGWLocalAuthApplier::Factory * const apl_factory)
+    : RGWTokenBasedAuthEngine(cct, token),
+      store(store),
+      apl_factory(apl_factory) {
+  }
+
+  bool is_applicable() const noexcept override;
+  RGWAuthApplier::aplptr_t authenticate() const override;
+};
+
+
+/* External token */
+class RGWExternalTokenAuthEngine : public RGWTokenBasedAuthEngine {
+protected:
+  /* const */ RGWRados * const store;
+  const RGWLocalAuthApplier::Factory * const apl_factory;
+public:
+  //using RGWTokenBasedAuthEngine::RGWTokenBasedAuthEngine;
+  RGWExternalTokenAuthEngine(CephContext * const cct,
+                             /* const */RGWRados * const store,
+                             const Extractor& extr,
+                             const RGWLocalAuthApplier::Factory * const apl_factory)
+    : RGWTokenBasedAuthEngine(cct, extr),
+      store(store),
+      apl_factory(apl_factory) {
+  }
+
+  bool is_applicable() const noexcept override;
+  RGWAuthApplier::aplptr_t authenticate() const override;
+};
+
+
+extern int rgw_swift_verify_signed_token(CephContext *cct,
+                                         RGWRados *store,
+                                         const char *token,
+                                         rgw_swift_auth_info& auth_info);
 
 class RGW_SWIFT_Auth_Get : public RGWOp {
 public:
