@@ -40,20 +40,6 @@ static struct xio_session_ops xio_msgr_ops;
 
 /* Accelio API callouts */
 
-/* string table */
-static const char *xio_session_event_types[] =
-{ "XIO_SESSION_REJECT_EVENT",
-  "XIO_SESSION_TEARDOWN_EVENT",
-  "XIO_SESSION_NEW_CONNECTION_EVENT",
-  "XIO_SESSION_CONNECTION_ESTABLISHED_EVENT",
-  "XIO_SESSION_CONNECTION_TEARDOWN_EVENT",
-  "XIO_SESSION_CONNECTION_CLOSED_EVENT",
-  "XIO_SESSION_CONNECTION_DISCONNECTED_EVENT",
-  "XIO_SESSION_CONNECTION_REFUSED_EVENT",
-  "XIO_SESSION_CONNECTION_ERROR_EVENT",
-  "XIO_SESSION_ERROR_EVENT"
-};
-
 namespace xio_log
 {
 typedef pair<const char*, int> level_pair;
@@ -544,7 +530,7 @@ int XioMessenger::session_event(struct xio_session *session,
   case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT: /* unexpected discon */
   case XIO_SESSION_CONNECTION_REFUSED_EVENT:
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
-    ldout(cct,2) << xio_session_event_types[event_data->event]
+    ldout(cct,2) << xio_session_event_str(event_data->event)
       << " xcon " << xcon << " session " << session  << dendl;
     if (likely(!!xcon)) {
       Spinlock::Locker lckr(conns_sp);
@@ -568,12 +554,13 @@ int XioMessenger::session_event(struct xio_session *session,
     break;
   case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
-    ldout(cct,2) << xio_session_event_types[event_data->event]
+    ldout(cct,2) << xio_session_event_str(event_data->event)
       << " xcon " << xcon << " session " << session << dendl;
     xcon->on_teardown_event();
     break;
   case XIO_SESSION_TEARDOWN_EVENT:
-    ldout(cct,2) << "xio_session_teardown " << session << dendl;
+    ldout(cct,2) << xio_session_event_str(event_data->event)
+      << " session " << session << dendl;
     if (unlikely(XioPool::trace_mempool)) {
       xp_stats.dump("xio session dtor", reinterpret_cast<uint64_t>(session));
     }
