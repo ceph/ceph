@@ -458,7 +458,7 @@ function teardown_ansible() {
 
 function remove_images() {
     glance image-list --property-filter ownedby=teuthology | grep -v -e ---- -e 'Disk Format' | cut -f4 -d ' ' | while read image ; do
-        echo "DELETED iamge $image"
+        echo "DELETED image $image"
         glance image-delete $image
     done
 }
@@ -631,8 +631,12 @@ function main() {
     fi
 
     case $provider in
-        entercloudsuite|cloudlab)
-            eval local network=$(neutron net-list -f json | jq '.[] | select(.subnets | contains("'$subnet'")) | .name')
+        entercloudsuite)
+            eval network=$(neutron net-list -f json | jq '.[] | select(.subnets | contains("'$subnet'")) | .name')
+            ;;
+        cloudlab)
+            network='flat-lan-1-net'
+            subnet='10.11.10.0/24'
             ;;
     esac
 
