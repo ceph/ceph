@@ -76,6 +76,9 @@ struct MockJournaler {
   MOCK_METHOD2(update_client, void(const bufferlist&, Context *on_safe));
 
   MOCK_METHOD3(get_tag, void(uint64_t, cls::journal::Tag *, Context *));
+
+  MOCK_METHOD2(get_cached_client, int(const std::string &,
+				      cls::journal::Client *));
 };
 
 struct MockJournalerProxy {
@@ -125,6 +128,11 @@ struct MockJournalerProxy {
 
   void get_tag(uint64_t tag_tid, cls::journal::Tag *tag, Context *on_finish) {
     MockJournaler::get_instance().get_tag(tag_tid, tag, on_finish);
+  }
+
+  int get_cached_client(const std::string &client_id,
+			 cls::journal::Client *client) {
+    return MockJournaler::get_instance().get_cached_client(client_id, client);
   }
 };
 
