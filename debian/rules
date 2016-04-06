@@ -132,7 +132,7 @@ binary-arch: build install
 	install -d -m0755 debian/ceph-common/etc/init
 	install -m0644 src/upstart/rbdmap.conf debian/ceph-common/etc/init
 	install -d -m0755 debian/ceph-mds/etc/init
-	install -m0644 src/upstart/ceph-mds.conf debian/ceph-mds/etc/init
+	install -m0644 src/upstart/ceph-mds*.conf debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
 	install -d -m0755 debian/rbd-mirror/etc/init
