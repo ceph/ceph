@@ -44,6 +44,7 @@ class VolumePath(object):
         self.group_id = group_id
         self.volume_id = volume_id
         assert self.group_id != NO_GROUP_NAME
+        assert self.volume_id != "" and self.volume_id is not None
 
     def __str__(self):
         return "{0}/{1}".format(self.group_id, self.volume_id)
@@ -446,8 +447,8 @@ class CephFSVolumeClient(object):
 
         # data_isolated means create a seperate pool for this volume
         if data_isolated:
-            log.info("create_volume: {0}, create pool {1} as data_isolated =True.".format(volume_path, pool_name))
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
+            log.info("create_volume: {0}, create pool {1} as data_isolated =True.".format(volume_path, pool_name))
             pool_id = self._create_volume_pool(pool_name)
             mds_map = self._rados_command("mds dump", {})
             if pool_id not in mds_map['data_pools']:
@@ -456,7 +457,7 @@ class CephFSVolumeClient(object):
                 })
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
 
-        # enforce security isolation, create a seperate pool for this volume
+        # enforce security isolation, use seperate namespace for this volume
         namespace = "{0}{1}".format(self.POOL_NS_PREFIX, volume_path.volume_id)
         log.info("create_volume: {0}, using rados namespace {1} to isolate data.".format(volume_path, namespace))
         self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace', namespace, 0)
