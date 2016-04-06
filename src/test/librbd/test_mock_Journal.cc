@@ -944,6 +944,7 @@ TEST_F(TestMockJournal, EventAndIOCommitOrder) {
 
   // commit journal event followed by IO event (standard)
   on_journal_safe1->complete(0);
+  ictx->op_work_queue->drain();
   expect_future_committed(mock_journaler);
   mock_journal.commit_io_event(1U, 0);
 
@@ -954,6 +955,7 @@ TEST_F(TestMockJournal, EventAndIOCommitOrder) {
   C_SaferCond event_ctx;
   mock_journal.wait_event(2U, &event_ctx);
   on_journal_safe2->complete(0);
+  ictx->op_work_queue->drain();
   ASSERT_EQ(0, event_ctx.wait());
 }
 
@@ -1054,6 +1056,7 @@ TEST_F(TestMockJournal, IOCommitError) {
 
   // failed IO remains uncommitted in journal
   on_journal_safe->complete(0);
+  ictx->op_work_queue->drain();
   mock_journal.commit_io_event(1U, -EINVAL);
 }
 
