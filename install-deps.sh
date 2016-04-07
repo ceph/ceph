@@ -24,12 +24,12 @@ if test -f /etc/redhat-release ; then
 fi
 
 if which apt-get > /dev/null ; then
-    $SUDO apt-get install -y lsb-release
+    $SUDO apt-get install -y --force-yes lsb-release
 fi
 
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
-        $SUDO apt-get install -y dpkg-dev
+        $SUDO apt-get install -y --force-yes dpkg-dev
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
@@ -47,7 +47,7 @@ Ubuntu|Debian|Devuan)
                 ;;
         esac
         packages=$(echo $packages) # change newlines into spaces
-        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y $packages"
+        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y --force-yes $packages"
         ;;
 CentOS|Fedora|SUSE*|RedHatEnterpriseServer)
         case $(lsb_release -si) in
