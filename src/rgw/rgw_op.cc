@@ -2410,6 +2410,9 @@ void RGWPutObj::execute()
     }
     if (!len)
       break;
+    if (need_calc_md5) {
+      hash.Update((const byte *)data.c_str(), data.length());
+    }
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
@@ -2422,15 +2425,14 @@ void RGWPutObj::execute()
       orig_data = data;
     }
 
-    op_ret = put_data_and_throttle(processor, data, ofs,
-				  (need_calc_md5 ? &hash : NULL), need_to_wait);
+    op_ret = put_data_and_throttle(processor, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="
 			  << op_ret << dendl;
         goto done;
       }
-
+      /* need_to_wait == true and op_ret == -EEXIST */
       ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
 
       /* restore original data */
@@ -2453,7 +2455,7 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+      op_ret = put_data_and_throttle(processor, data, ofs, false);
       if (op_ret < 0) {
         goto done;
       }
@@ -2502,9 +2504,6 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  if (need_calc_md5) {
-    processor->complete_hash(&hash);
-  }
   hash.Final(m);
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -2645,8 +2644,8 @@ void RGWPostObj::execute()
 
      if (!len)
        break;
-
-     op_ret = put_data_and_throttle(processor, data, ofs, &hash, false);
+     hash.Update((const byte *)data.c_str(), data.length());
+     op_ret = put_data_and_throttle(processor, data, ofs, false);
 
      ofs += len;
 
@@ -2669,7 +2668,6 @@ void RGWPostObj::execute()
     goto done;
   }
 
-  processor->complete_hash(&hash);
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
