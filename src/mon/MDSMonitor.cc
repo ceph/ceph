@@ -70,6 +70,11 @@ template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
+static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
+"It may cause problems up to and including data loss."
+"Consult the documentation at ceph.com, and if unsure, do not proceed."
+"Add --yes-i-really-mean-it if you are certain.");
+
 static const string MDS_METADATA_PREFIX("mds_metadata");
 
 
@@ -1525,10 +1530,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         return -EINVAL;
       }
       if (confirm != "--yes-i-really-mean-it") {
-	ss << "Multiple filesystems is an EXPERIMENTAL and BARELY-TESTED configuration"
-	  " that may break your entire cluster, probably prevent serious"
-	  " support, and irrevocably marks your cluster."
-	  " Add --yes-i-really-mean-it if you are sure you wish to continue.";
+	ss << EXPERIMENTAL_WARNING;
       }
       fsmap.set_enable_multiple(flag_bool);
       return 0;
@@ -1846,7 +1848,7 @@ public:
 	string confirm;
 	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
-	  ss << "inline data is new and experimental; you must specify --yes-i-really-mean-it";
+	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
 	ss << "inline data enabled";
@@ -1905,7 +1907,7 @@ public:
 	string confirm;
 	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
-	  ss << "Snapshots are unstable and will probably break your FS! Set to --yes-i-really-mean-it if you are sure you want to enable them";
+	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
         fsmap.modify_filesystem(
@@ -1934,7 +1936,7 @@ public:
 	string confirm;
 	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
-	  ss << "Multi-MDS clusters are unstable and will probably break your FS! Set to --yes-i-really-mean-it if you are sure you want to enable this";
+	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
         fsmap.modify_filesystem(
@@ -1963,7 +1965,7 @@ public:
 	string confirm;
 	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
-	  ss << "directory fragmentation is unstable and may break your FS! Set to --yes-i-really-mean-it if you are sure you want to enable this";
+	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
         fsmap.modify_filesystem(
