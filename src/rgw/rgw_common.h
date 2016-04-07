@@ -1861,13 +1861,20 @@ extern string rgw_trim_quotes(const string& val);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+bool verify_user_permission(struct req_state * const s,
+                            RGWAccessControlPolicy * const user_acl,
+                            const int perm);
+bool verify_user_permission(struct req_state * const s,
+                            const int perm);
 extern bool verify_bucket_permission(struct req_state * s,
+                                     RGWAccessControlPolicy * user_acl,
                                      RGWAccessControlPolicy * bucket_acl,
                                      int perm);
 extern bool verify_bucket_permission(struct req_state *s, int perm);
 extern bool verify_object_permission(struct req_state *s,
-                                     RGWAccessControlPolicy *bucket_acl,
-                                     RGWAccessControlPolicy *object_acl,
+                                     RGWAccessControlPolicy * user_acl,
+                                     RGWAccessControlPolicy * bucket_acl,
+                                     RGWAccessControlPolicy * object_acl,
                                      int perm);
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
