@@ -6,6 +6,9 @@
  */
 
 
+#include "simulate.h"
+
+
 TimePoint now() { return std::chrono::steady_clock::now(); }
 
 
@@ -17,5 +20,3 @@ double fmt_tp(const TimePoint& t) {
   auto c = t.time_since_epoch().count();
   return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
 }
-
-

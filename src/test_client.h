@@ -60,14 +60,19 @@ struct CliInst {
 };
 
 
+// using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
+using ClientBasedServerSelectFunc =
+  std::function<const ServerId&(uint64_t seed, uint16_t client_idx)>;
+
+using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
+
+
 template<typename SvcTrk, typename ReqPm, typename RespPm, typename Accum>
 class TestClient {
 public:
 
   using SubmitFunc =
     std::function<void(const ServerId&, const TestRequest&, const ReqPm&)>;
-
-  using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 
   using ClientAccumFunc = std::function<void(Accum&,const RespPm&)>;
 
