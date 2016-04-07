@@ -1370,9 +1370,9 @@ extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
 extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				    bool prefetch_data);
 
-static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
+static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs,
-					MD5 *hash, bool need_to_wait)
+					bool need_to_wait)
 {
   bool again;
 
@@ -1380,7 +1380,7 @@ static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
     void *handle;
     rgw_obj obj;
 
-    int ret = processor->handle_data(data, ofs, hash, &handle, &obj, &again);
+    int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
     if (ret < 0)
       return ret;
 

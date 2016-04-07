@@ -2320,7 +2320,7 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
 {
   *again = false;
 
@@ -2354,9 +2354,6 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
     obj_len = (uint64_t)first_chunk.length();
-    if (hash) {
-      hash->Update((const byte *)first_chunk.c_str(), obj_len);
-    }
     int r = prepare_next_part(obj_len);
     if (r < 0) {
       return r;
@@ -2371,17 +2368,9 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
                                                         object and cleanup can be messy */
   int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
-    if (hash) {
-      hash->Update((const byte *)bl.c_str(), bl.length());
-    }
     bl.clear();
   }
   return ret;
-}
-
-void RGWPutObjProcessor_Atomic::complete_hash(MD5 *hash)
-{
-  hash->Update((const byte *)pending_data_bl.c_str(), pending_data_bl.length());
 }
 
 
@@ -6239,7 +6228,7 @@ public:
     do {
       void *handle;
       rgw_obj obj;
-      int ret = processor->handle_data(bl, ofs, NULL, &handle, &obj, &again);
+      int ret = processor->handle_data(bl, ofs, &handle, &obj, &again);
       if (ret < 0)
         return ret;
 
@@ -7014,7 +7003,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       void *handle;
       rgw_obj obj;
 
-      ret = processor.handle_data(bl, ofs, NULL, &handle, &obj, &again);
+      ret = processor.handle_data(bl, ofs, &handle, &obj, &again);
       if (ret < 0) {
         return ret;
       }

@@ -754,9 +754,8 @@ namespace rgw {
     if (need_to_wait) {
       orig_data = data;
     }
-
+    hash.Update((const byte *)data.c_str(), data.length());
     op_ret = put_data_and_throttle(processor, data, ofs,
-				   (true /* md5 */ ? &hash : NULL),
 				   need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
@@ -787,7 +786,7 @@ namespace rgw {
 	goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+      op_ret = put_data_and_throttle(processor, data, ofs, false);
       if (op_ret < 0) {
 	goto done;
       }
@@ -815,7 +814,6 @@ namespace rgw {
       goto done;
     }
 
-    processor->complete_hash(&hash);
     hash.Final(m);
 
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
