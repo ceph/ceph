@@ -816,7 +816,7 @@ void PG::trim_past_intervals()
 
 bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
 {
-  epoch_t up_thru = get_osdmap()->get_up_thru(osd->whoami);
+  epoch_t up_thru = osdmap->get_up_thru(osd->whoami);
   if (need_up_thru &&
       up_thru >= info.history.same_interval_since) {
     dout(10) << "adjust_need_up_thru now " << up_thru << ", need_up_thru now false" << dendl;
@@ -5122,7 +5122,7 @@ void PG::on_new_interval()
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
-  do_sort_bitwise = get_osdmap()->test_flag(CEPH_OSDMAP_SORTBITWISE);
+  do_sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   if (do_sort_bitwise) {
     assert(get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT);
     if (g_conf->osd_debug_randomize_hobject_sort_order) {
