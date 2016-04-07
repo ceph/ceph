@@ -2289,6 +2289,24 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, re
 }
 
 
+
+class RGWPutObjEncryptFilter : public RGWPutObjDataProcessor
+{
+protected:
+  RGWPutObjDataProcessor& next;
+public:
+  RGWPutObjEncryptFilter(RGWPutObjDataProcessor& next) :
+  next(next){}
+  virtual ~RGWPutObjEncryptFilter(){}
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) {
+    return next.handle_data(bl, ofs, phandle, again);
+  }
+  virtual int throttle_data(void *handle, bool need_to_wait) {
+    return next.throttle_data(handle, need_to_wait);
+  }
+}; /* RGWPutObjEncryptFilter */
+
+
 RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart)
 {
   RGWPutObjProcessor *processor;
@@ -2393,7 +2411,6 @@ void RGWPutObj::execute()
   }
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
-
   op_ret = processor->prepare(store, NULL);
   if (op_ret < 0) {
     ldout(s->cct, 20) << "processor->prepare() returned ret=" << op_ret
