@@ -1081,6 +1081,7 @@ struct req_info {
   const char *method;
   string script_uri;
   string request_uri;
+  string request_uri_aws4;
   string effective_uri;
   string request_params;
   string domain;
