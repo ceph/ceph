@@ -71,6 +71,7 @@ noinst_HEADERS += \
 	tools/rbd/Utils.h
 rbd_LDADD = \
 	libjournal.la libcls_journal_client.la \
+	libcls_rbd_client.la libcls_lock_client.la \
 	$(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
 	$(BOOST_REGEX_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
