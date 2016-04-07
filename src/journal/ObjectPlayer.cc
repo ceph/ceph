@@ -32,6 +32,7 @@ ObjectPlayer::~ObjectPlayer() {
     Mutex::Locker timer_locker(m_timer_lock);
     Mutex::Locker locker(m_lock);
     assert(!m_fetch_in_progress);
+    assert(!m_watch_in_progress);
     assert(m_watch_ctx == NULL);
   }
 }
