@@ -3559,22 +3559,6 @@ void PG::sub_op_scrub_unreserve(OpRequestRef op)
   clear_scrub_reserved();
 }
 
-void PG::sub_op_scrub_stop(OpRequestRef op)
-{
-  op->mark_started();
-
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  dout(7) << "sub_op_scrub_stop" << dendl;
-
-  // see comment in sub_op_scrub_reserve
-  scrubber.reserved = false;
-
-  MOSDSubOpReply *reply = new MOSDSubOpReply(
-    m, pg_whoami, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  osd->send_message_osd_cluster(reply, m->get_connection());
-}
-
 void PG::reject_reservation()
 {
   osd->send_message_osd_cluster(
