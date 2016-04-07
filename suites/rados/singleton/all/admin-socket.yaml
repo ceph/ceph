@@ -19,3 +19,6 @@ tasks:
       config set filestore_dump_file /tmp/foo:
       perf dump:
       perf schema:
+      get_heap_property tcmalloc.max_total_thread_cache_byte:
+      set_heap_property tcmalloc.max_total_thread_cache_bytes 67108864:
+      set_heap_property tcmalloc.max_total_thread_cache_bytes 33554432:
