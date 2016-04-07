@@ -6919,10 +6919,6 @@ int ReplicatedPG::fill_in_copy_get(
     return result;
   }
 
-  if ((osd_op.op.copy_get.flags & CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP) &&
-      oi.is_omap())
-      return -EOPNOTSUPP;
-
   MOSDOp *op = reinterpret_cast<MOSDOp*>(ctx->op->get_req());
   uint64_t features = op->get_features();
 
@@ -7162,12 +7158,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // it already!
     assert(cop->cursor.is_initial());
   }
-
-  uint32_t copyget_flags = 0;
-  if (!pool.info.supports_omap())
-   copyget_flags |= CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP;
-
-  op.copy_get(&cop->cursor, get_copy_chunk_size(), copyget_flags,
+  op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
 	      &cop->results.snaps, &cop->results.snap_seq,
