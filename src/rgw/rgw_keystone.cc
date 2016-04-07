@@ -152,25 +152,24 @@ KeystoneApiVersion KeystoneService::get_api_version()
   }
 }
 
-int RGWSwift::get_keystone_url(CephContext * const cct,
-                               std::string& url)
+int KeystoneService::get_keystone_url(CephContext * const cct,
+                                      std::string& url)
 {
-  // FIXME: it seems we don't need RGWGetRevokedToken here
-  bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl);
-
   url = cct->_conf->rgw_keystone_url;
   if (url.empty()) {
     ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
     return -EINVAL;
   }
-  if (url[url.size() - 1] != '/')
+
+  if (url[url.size() - 1] != '/') {
     url.append("/");
+  }
+
   return 0;
 }
 
-int RGWSwift::get_keystone_admin_token(CephContext * const cct,
-                                       std::string& token)
+int KeystoneService::get_keystone_admin_token(CephContext * const cct,
+                                              std::string& token)
 {
   std::string token_url;
 
