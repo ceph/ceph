@@ -145,6 +145,24 @@ namespace rgw {
     return fhr;
   } /* RGWLibFS::stat_leaf */
 
+  int RGWLibFS::read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
+		     size_t* bytes_read, void* buffer, uint32_t flags)
+  {
+    if (! rgw_fh->is_file())
+      return -EINVAL;
+
+    RGWReadRequest req(get_context(), get_user(), rgw_fh, offset, length,
+		       buffer);
+
+    int rc = rgwlib.get_fe()->execute_req(&req);
+    if ((rc == 0) &&
+	(req.get_ret() == 0)) {
+      *bytes_read = req.nread;
+    }
+
+    return rc;
+  }
+
   int RGWLibFS::unlink(RGWFileHandle* parent, const char *name)
   {
     int rc = 0;
@@ -1083,22 +1101,10 @@ int rgw_read(struct rgw_fs *rgw_fs,
 	     size_t length, size_t *bytes_read, void *buffer,
 	     uint32_t flags)
 {
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (! rgw_fh->is_file())
-    return -EINVAL;
-
-  RGWReadRequest req(cct, fs->get_user(), rgw_fh, offset, length, buffer);
-
-  int rc = rgwlib.get_fe()->execute_req(&req);
-  if ((rc == 0) &&
-      (req.get_ret() == 0)) {
-    *bytes_read = req.nread;
-  }
-
-  return rc;
+  return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags);
 }
 
 /*

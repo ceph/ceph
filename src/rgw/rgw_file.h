@@ -857,6 +857,9 @@ namespace rgw {
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
 			     uint32_t flags);
 
+    int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
+	     size_t* bytes_read, void* buffer, uint32_t flags);
+
     int rename(RGWFileHandle* old_fh, RGWFileHandle* new_fh,
 	       const char *old_name, const char *new_name);
 
