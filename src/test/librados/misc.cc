@@ -734,15 +734,29 @@ std::string LibRadosTwoPoolsECPP::src_pool_name;
 
 //copy_from between ecpool and no-ecpool.
 TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
-  //create object w/ omapheader
+  bufferlist z;
+  z.append_zero(4194304*2);
   bufferlist b;
   b.append("copyfrom");
-  ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
 
-  version_t uv = src_ioctx.get_last_version();
-  ObjectWriteOperation op;
-  op.copy_from("foo", src_ioctx, uv);
-  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+  // create big object w/ omapheader
+  {
+    ASSERT_EQ(0, src_ioctx.write_full("foo", z));
+    ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
+    version_t uv = src_ioctx.get_last_version();
+    ObjectWriteOperation op;
+    op.copy_from("foo", src_ioctx, uv);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+  }
+
+  // same with small object
+  {
+    ASSERT_EQ(0, src_ioctx.omap_set_header("bar", b));
+    version_t uv = src_ioctx.get_last_version();
+    ObjectWriteOperation op;
+    op.copy_from("bar", src_ioctx, uv);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("bar.copy", &op));
+  }
 }
 
 TEST_F(LibRadosMiscPP, CopyScrubPP) {
