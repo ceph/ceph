@@ -37,13 +37,14 @@ void usage()
        << "                                specified entityname\n"
        << "  --gen-print-key               will generate a new secret key without set it\n"
        << "                                to the keyringfile, prints the secret to stdout\n"
-       << "  --import-keyring              will import the content of a given keyring\n"
+       << "  --import-keyring FILE         will import the content of a given keyring\n"
        << "                                into the keyringfile\n"
-       << "  -u, --set-uid                 sets the auid (authenticated user id) for the\n"
+       << "  -n NAME, --name NAME          specify entityname to operate on\n"
+       << "  -u AUID, --set-uid AUID       sets the auid (authenticated user id) for the\n"
        << "                                specified entityname\n"
-       << "  -a, --add-key                 will add an encoded key to the keyring\n"
-       << "  --cap subsystem capability    will set the capability for given subsystem\n"
-       << "  --caps capsfile               will set all of capabilities associated with a\n"
+       << "  -a BASE64, --add-key BASE64   will add an encoded key to the keyring\n"
+       << "  --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem\n"
+       << "  --caps CAPSFILE               will set all of capabilities associated with a\n"
        << "                                given key, for all subsystems"
        << std::endl;
   exit(1);
@@ -73,6 +74,9 @@ int main(int argc, const char **argv)
   bool set_auid = false;
   std::vector<const char*>::iterator i;
 
+  /* Handle options unique to ceph-authtool
+   * -n NAME, --name NAME is handled by global_init
+   * */
   for (i = args.begin(); i != args.end(); ) {
     std::string val;
     if (ceph_argparse_double_dash(args, i)) {
@@ -117,6 +121,7 @@ int main(int argc, const char **argv)
       usage();
     }
   }
+
   if (fn.empty() && !gen_print_key) {
     cerr << argv[0] << ": must specify filename" << std::endl;
     usage();

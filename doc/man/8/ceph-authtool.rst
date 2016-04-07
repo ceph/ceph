@@ -9,9 +9,18 @@
 Synopsis
 ========
 
-| **ceph-authtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
-  ] [ -p | --print ] [ -n | --name *entityname* ] [ --gen-key ] [ -a |
-  --add-key *base64_key* ] [ --caps *capfile* ]
+| **ceph-authtool** *keyringfile*
+  [ -l | --list ]
+  [ -p | --print ]
+  [ -C | --create-keyring ]
+  [ -g | --gen-key ]
+  [ --gen-print-key ]
+  [ --import-keyring *otherkeyringfile* ]
+  [ -n | --name *entityname* ]
+  [ -u | --set-uid *auid* ]
+  [ -a | --add-key *base64_key* ]
+  [ --cap *subsystem* *capability* ]
+  [ --caps *capfile* ]
 
 
 Description
@@ -45,19 +54,36 @@ Options
 
    will create a new keyring, overwriting any existing keyringfile
 
-.. option:: --gen-key
+.. option:: -g, --gen-key
 
    will generate a new secret key for the specified entityname
 
-.. option:: --add-key
+.. option:: --gen-print-key
+
+   will generate a new secret key for the specified entityname,
+   without altering the keyringfile, printing the secret to stdout
+
+.. option:: --import-keyring *secondkeyringfile*
+
+   will import the content of a given keyring to the keyringfile
+
+.. option:: -n, --name *name*
+
+   specify entityname to operate on
+
+.. option:: -u, --set-uid *auid*
+
+   sets the auid (authenticated user id) for the specified entityname
+
+.. option:: -a, --add-key *base64_key*
 
    will add an encoded key to the keyring
 
-.. option:: --cap subsystem capability
+.. option:: --cap *subsystem* *capability*
 
    will set the capability for given subsystem
 
-.. option:: --caps capsfile
+.. option:: --caps *capsfile*
 
    will set all of capabilities associated with a given key, for all subsystems
 
