@@ -80,8 +80,7 @@ Future JournalRecorder::append(uint64_t tag_tid,
   ObjectRecorderPtr object_ptr = get_object(splay_offset);
   uint64_t commit_tid = m_journal_metadata->allocate_commit_tid(
     object_ptr->get_object_number(), tag_tid, entry_tid);
-  FutureImplPtr future(new FutureImpl(m_journal_metadata, tag_tid, entry_tid,
-                                      commit_tid));
+  FutureImplPtr future(new FutureImpl(tag_tid, entry_tid, commit_tid));
   future->init(m_prev_future);
   m_prev_future = future;
 
