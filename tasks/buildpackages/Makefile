@@ -36,7 +36,7 @@ flock-${PKG_REPO}:
 	ip=$(call get_ip,${PKG_REPO}) ; \
 	for delay in 1 2 4 8 8 8 8 8 8 8 8 8 16 16 16 16 16 32 32 32 64 128 256 512 ; do if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else sleep $$delay ; fi ; done ; \
 	ssh $$ip sudo apt-get update ; \
-	ssh $$ip sudo apt-get install -y nginx && \
+	ssh $$ip sudo apt-get install -y nginx rsync && \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html && \
 	ssh $$ip sudo rm /usr/share/nginx/html/\* && \
 	ssh $$ip sudo perl -pi -e '"s|location / {|location / { autoindex on;|"' /etc/nginx/sites-available/default && \
