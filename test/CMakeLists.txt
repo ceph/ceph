@@ -5,7 +5,7 @@ include_directories(../src/crimson/src)
 
 # set(local_flags "-g -O0")
 
-set(core_srcs ../src/test_client.cc ../src/crimson/src/run_every.cc)
+set(core_srcs ../src/crimson/src/run_every.cc)
 set(test_srcs test_test_client.cc test_dmclock_server.cc test_dmclock_client.cc)
 
 set_source_files_properties(${core_srcs} ${test_srcs}
