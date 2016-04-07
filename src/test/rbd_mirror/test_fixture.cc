@@ -22,11 +22,13 @@ TestFixture::TestFixture() {
 }
 
 void TestFixture::SetUpTestCase() {
+  ASSERT_EQ("", connect_cluster_pp(_rados));
+
   _local_pool_name = get_temp_pool_name("test-rbd-mirror-");
-  ASSERT_EQ("", create_one_pool_pp(_local_pool_name, _rados));
+  ASSERT_EQ(0, _rados.pool_create(_local_pool_name.c_str()));
 
   _remote_pool_name = get_temp_pool_name("test-rbd-mirror-");
-  ASSERT_EQ("", create_one_pool_pp(_remote_pool_name, _rados));
+  ASSERT_EQ(0, _rados.pool_create(_remote_pool_name.c_str()));
 }
 
 void TestFixture::TearDownTestCase() {

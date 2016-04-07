@@ -54,7 +54,8 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
 
   void create_pool(bool enable_mirroring, const peer_t &peer, string *name=nullptr) {
     string pool_name = get_temp_pool_name("test-rbd-mirror-");
-    ASSERT_EQ("", create_one_pool_pp(pool_name, *m_cluster));
+    ASSERT_EQ(0, m_cluster->pool_create(pool_name.c_str()));
+
     int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
     ASSERT_GE(pool_id, 0);
     m_pools.insert(pool_name);
@@ -83,7 +84,8 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
   void create_cache_pool(const string &base_pool, string *cache_pool_name) {
     bufferlist inbl;
     *cache_pool_name = get_temp_pool_name("test-rbd-mirror-");
-    ASSERT_EQ("", create_one_pool_pp(*cache_pool_name, *m_cluster));
+    ASSERT_EQ(0, m_cluster->pool_create(cache_pool_name->c_str()));
+
     ASSERT_EQ(0, m_cluster->mon_command(
       "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool +
       "\", \"tierpool\": \"" + *cache_pool_name +

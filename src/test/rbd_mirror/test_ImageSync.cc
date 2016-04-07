@@ -58,6 +58,11 @@ public:
     ASSERT_EQ(0, m_remote_journaler->register_client(client_data_bl));
   }
 
+  virtual void TearDown() {
+    TestFixture::TearDown();
+    delete m_remote_journaler;
+  }
+
   void create_and_open(librados::IoCtx &io_ctx, librbd::ImageCtx **image_ctx) {
     librbd::RBD rbd;
     ASSERT_EQ(0, create_image(rbd, io_ctx, m_image_name, m_image_size));
