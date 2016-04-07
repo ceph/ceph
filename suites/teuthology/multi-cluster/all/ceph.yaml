@@ -1,0 +1,22 @@
+roles:
+- - ceph.mon.a
+  - ceph.mon.b
+  - backup.osd.0
+  - backup.osd.1
+  - backup.osd.2
+  - backup.client.0
+- - backup.mon.a
+  - ceph.osd.0
+  - ceph.osd.1
+  - ceph.osd.2
+  - ceph.client.0
+  - client.1
+  - osd.3
+tasks:
+- install:
+- ceph:
+    cluster: backup
+- ceph:
+- workunit:
+    clients:
+      all: [true.sh]
