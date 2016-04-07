@@ -1694,15 +1694,17 @@ bool OSDMonitor::can_mark_in(int i)
   return true;
 }
 
-void OSDMonitor::check_failures(utime_t now)
+bool OSDMonitor::check_failures(utime_t now)
 {
+  bool found_failure = false;
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
        p != failure_info.end();
        ++p) {
     if (can_mark_down(p->first)) {
-      check_failure(now, p->first, p->second);
+      found_failure |= check_failure(now, p->first, p->second);
     }
   }
+  return found_failure;
 }
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
@@ -2666,7 +2668,8 @@ void OSDMonitor::tick()
   utime_t now = ceph_clock_now(g_ceph_context);
 
   // mark osds down?
-  check_failures(now);
+  if (check_failures(now))
+    do_propose = true;
 
   // mark down osds out?
 
