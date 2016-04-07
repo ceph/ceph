@@ -2425,8 +2425,7 @@ void RGWPutObj::execute()
       op_ret = len;
       goto done;
     }
-    if (!len)
-      break;
+
     if (need_calc_md5) {
       hash.Update((const byte *)data.c_str(), data.length());
     }
