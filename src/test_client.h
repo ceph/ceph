@@ -60,11 +60,10 @@ struct CliInst {
 };
 
 
-// using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 using ClientBasedServerSelectFunc =
-  std::function<const ServerId&(uint64_t seed, uint16_t client_idx)>;
+  std::function<ServerId(uint64_t seed, uint16_t client_idx)>;
 
-using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
+using ServerSelectFunc = std::function<ServerId(uint64_t seed)>;
 
 
 template<typename SvcTrk, typename ReqPm, typename RespPm, typename Accum>

@@ -13,9 +13,7 @@ set(dmc_sim_srcs test_dmclock.cc simulate.cc)
 set(dmc_srcs
   dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
 
-set(srcs "${simple_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}")
-
-set_source_files_properties(${srcs}
+set_source_files_properties(${simple_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}
   PROPERTIES
   COMPILE_FLAGS "${my_compile_flags} ${local_flags}"
   )

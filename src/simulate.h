@@ -9,7 +9,8 @@
 #pragma once
 
 
-#include <unistd.h>
+// #include <unistd.h>
+#include <assert.h>
 
 #include <memory>
 #include <chrono>
@@ -26,34 +27,30 @@ extern double fmt_tp(const TimePoint&);
 extern TimePoint now();
 
 
-template<typename TS, typename TC>
+template<typename ServerId, typename ClientId, typename TS, typename TC>
 class Simulation {
   using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
+  using ClientBasedServerSelectFunc = std::function<const ServerId(uint64_t, uint16_t)>;
 
-  uint server_count;
-  uint client_count;
+  uint server_count = 0;
+  uint client_count = 0;
+
+#if 0 // TRASH
   std::function<TS*(ServerId)> create_server_f;
   std::function<TC*(ClientId)> create_client_f;
+#endif
 
   ServerMap servers;
   ClientMap clients;
   std::vector<ServerId> server_ids;
 
-  
   std::default_random_engine prng;
 
 
 public:
 
-  Simulation(uint _server_count,
-	     std::function<TS*(ServerId)> _create_server_f,
-	     uint _client_count,
-	     std::function<TC*(ClientId)> _create_client_f) :
-    server_count(_server_count),
-    create_server_f(_create_server_f),
-    client_count(_client_count),
-    create_client_f(_create_client_f),
+  Simulation() :
     prng(std::chrono::system_clock::now().time_since_epoch().count())
   {
     // empty
@@ -61,10 +58,32 @@ public:
 
   TC& get_client(ClientId id) { return *clients[id]; }
   TS& get_server(ServerId id) { return *servers[id]; }
-  ServerId& get_server_id(uint index) { return server_ids[index]; }
-    
-    
+  ServerId get_server_id(uint index) { return server_ids[index]; }
+
+
+  void add_servers(uint count,
+		   std::function<TS*(ServerId)> create_server_f) {
+    for (uint i = 0; i < count; ++i) {
+      server_ids.push_back(server_count + i);
+      servers[i] = create_server_f(server_count + i);
+    }
+    server_count += count;
+  }
+
+
+  void add_clients(uint count,
+		   std::function<TC*(ClientId)> create_client_f) {
+    for (uint i = 0; i < count; ++i) {
+      clients[i] = create_client_f(client_count + i);
+    }
+    client_count += count;
+  }
+
+
   void run() {
+    assert(server_count > 0);
+    assert(client_count > 0);
+
     std::cout << "simulation started" << std::endl;
 
     // simulation params
@@ -73,18 +92,7 @@ public:
     const std::chrono::seconds skip_amount(0); // skip first 2 secondsd of data
     const std::chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
     const std::chrono::seconds report_unit(1); // unit to output reports in
-
-    for (uint i = 0; i < server_count; ++i) {
-      server_ids.push_back(i);
-      servers[i] = create_server_f(i);
-    }
-
-    // construct clients
-
-    for (uint i = 0; i < client_count; ++i) {
-      clients[i] = create_client_f(i);
-    } // for
-
+    
     TimePoint clients_created_time = now();
 
     // clients are now running; wait for all to finish
@@ -226,7 +234,7 @@ public:
 
   // returns a lambda using the range specified as servers_per (client)
   ClientBasedServerSelectFunc make_server_select_alt_range(uint16_t servers_per) {
-    return [servers_per,this](uint64_t seed, uint16_t client_idx) -> const ServerId& {
+    return [servers_per,this](uint64_t seed, uint16_t client_idx) -> ServerId {
       double factor = double(server_count) / client_count;
       uint offset = seed % servers_per;
       uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
@@ -234,7 +242,7 @@ public:
     };
   }
 
-  
+
 #if 0 // TRASH
   const ServerId& server_select_alternate(uint64_t seed, uint16_t client_idx) {
   // lambda to choose a server alternately in a range
@@ -270,6 +278,4 @@ public:
     return server_ids[0];
   };
 #endif
-
-  
 }; // class Simulation

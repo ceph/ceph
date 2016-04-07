@@ -120,16 +120,11 @@ dmc::ClientInfo client_info =
 
 // construct servers
 
-#if 0 // REMOVE
-auto client_info_f = [&client_info](const ClientId& c) -> dmc::ClientInfo {
-  return client_info;
-};
-#endif
-
 
 dmc::ClientInfo client_info_f(const ClientId& c) {
   return client_info;
 }
+
 
 using DmcServer = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
 			     dmc::ClientInfo,
@@ -143,7 +138,6 @@ using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
 			     dmc::RespParams<ServerId>,
 			     DmcAccum>;
 
-// using SelectFunc = DmcClient::ServerSelectFunc;
 using SubmitFunc = DmcClient::SubmitFunc;
 
 
@@ -164,7 +158,7 @@ int main(int argc, char* argv[]) {
   const uint client_outstanding_ops = 100;
   const std::chrono::seconds client_wait(10);
 
-  using MySim = Simulation<DmcServer,DmcClient>;
+  using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 
   MySim *simulation;
 
@@ -183,9 +177,6 @@ int main(int argc, char* argv[]) {
     { { wait_op, client_wait },
       { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
 
-  ClientBasedServerSelectFunc server_select_f =
-    simulation->make_server_select_alt_range(8);
-
 #if 0
   SelectFunc 
 #if 0
@@ -202,7 +193,11 @@ int main(int argc, char* argv[]) {
     ;
 #endif
 
-  
+  simulation = new MySim();
+
+  ClientBasedServerSelectFunc server_select_f =
+    simulation->make_server_select_alt_range(8);
+
   DmcServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
 		  const TestResponse& resp,
@@ -210,7 +205,7 @@ int main(int argc, char* argv[]) {
     simulation->get_client(client_id).receive_response(resp, resp_params);
   };
 
-auto create_server_f = [&](ServerId id) -> DmcServer* {
+  auto create_server_f = [&](ServerId id) -> DmcServer* {
     return new DmcServer(id,
 			 server_iops, server_threads,
 			 client_info_f,
@@ -227,9 +222,8 @@ auto create_server_f = [&](ServerId id) -> DmcServer* {
 			 id < (client_count - client_wait_count) ? no_wait : wait);
   };
 
-  simulation =
-    new Simulation<DmcServer,DmcClient>(server_count, create_server_f,
-					client_count, create_client_f);
-  
+  simulation->add_servers(server_count, create_server_f);
+  simulation->add_clients(client_count, create_client_f);
+
   simulation->run();
 }
