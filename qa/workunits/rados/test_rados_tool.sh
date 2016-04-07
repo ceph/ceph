@@ -418,6 +418,11 @@ test_cleanup() {
         die "Different objects found after cleanup"
     fi
 
+    set +e
+    run_expect_fail $RADOS_TOOL -p $p cleanup --prefix illegal_prefix
+    run_expect_succ $RADOS_TOOL -p $p cleanup --prefix benchmark_data_otherhost
+    set -e
+
     $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
 }
 

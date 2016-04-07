@@ -1089,6 +1089,11 @@ int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, cons
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
   const std::string prefix = (orig_prefix.empty() ? generate_object_prefix_nopid() : orig_prefix);
 
+  if (prefix.substr(0, BENCH_PREFIX.length()) != BENCH_PREFIX) {
+    cerr << "Specified --prefix invalid, it must begin with \"" << BENCH_PREFIX << "\"" << std::endl;
+    return -EINVAL;
+  }
+
   std::list<Object> unfiltered_objects;
   std::set<std::string> meta_namespaces, all_namespaces;
 
