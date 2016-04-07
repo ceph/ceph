@@ -7330,6 +7330,16 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   copy_ops.erase(cobc->obs.oi.soid);
   cobc->stop_block();
 
+  if (r < 0 && cop->results.started_temp_obj) {
+    dout(10) << __func__ << " deleting partial temp object "
+	     << cop->results.temp_oid << dendl;
+    ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
+    OpContextUPtr ctx = simple_opc_create(tempobc);
+    ctx->op_t->remove(cop->results.temp_oid);
+    ctx->discard_temp_oid = cop->results.temp_oid;
+    simple_opc_submit(std::move(ctx));
+  }
+
   // cancel and requeue proxy ops on this object
   if (!r) {
     for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
