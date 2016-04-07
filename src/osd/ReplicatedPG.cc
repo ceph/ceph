@@ -3202,9 +3202,6 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
     case CEPH_OSD_OP_SCRUB_UNRESERVE:
       sub_op_scrub_unreserve(op);
       return;
-    case CEPH_OSD_OP_SCRUB_STOP:
-      sub_op_scrub_stop(op);
-      return;
     case CEPH_OSD_OP_SCRUB_MAP:
       sub_op_scrub_map(op);
       return;

@@ -1324,7 +1324,6 @@ public:
   void sub_op_scrub_reserve(OpRequestRef op);
   void sub_op_scrub_reserve_reply(OpRequestRef op);
   void sub_op_scrub_unreserve(OpRequestRef op);
-  void sub_op_scrub_stop(OpRequestRef op);
 
   void reject_reservation();
   void schedule_backfill_full_retry();
