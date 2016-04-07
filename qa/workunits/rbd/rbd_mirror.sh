@@ -35,12 +35,12 @@
 #
 #   cd /tmp/tmp.rbd_mirror
 #   ls
-#   less rbd-mirror.cluster1_daemon.cluster1.log
+#   less rbd-mirror.cluster1_daemon.$pid.log
 #   ceph --cluster cluster1 -s
 #   ceph --cluster cluster1 -s
 #   rbd --cluster cluster2 -p mirror ls
 #   rbd --cluster cluster2 -p mirror journal status --image test
-#   ceph --admin-daemon rbd-mirror.cluster1_daemon.cluster1.asok help
+#   ceph --admin-daemon rbd-mirror.cluster1_daemon.cluster1.$pid.asok help
 #   ...
 #
 # Also you can execute commands (functions) from the script:
@@ -48,9 +48,9 @@
 #   cd $CEPH_SRC_PATH
 #   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
 #   ../qa/workunits/rbd/rbd_mirror.sh status
-#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror cluster1_daemon
-#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror cluster2_daemon cluster2
-#   ../qa/workunits/rbd/rbd_mirror.sh flush cluster2_daemon
+#   ../qa/workunits/rbd/rbd_mirror.sh stop_mirror cluster1
+#   ../qa/workunits/rbd/rbd_mirror.sh start_mirror cluster2
+#   ../qa/workunits/rbd/rbd_mirror.sh flush cluster2
 #   ...
 #
 # Eventually, run the cleanup:
@@ -62,8 +62,6 @@
 
 CLUSTER1=cluster1
 CLUSTER2=cluster2
-CLUSTER1_DAEMON=${CLUSTER1}_daemon
-CLUSTER2_DAEMON=${CLUSTER2}_daemon
 POOL=mirror
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
@@ -74,17 +72,17 @@ TEMPDIR=
 
 daemon_asok_file()
 {
-    local daemon=$1
+    local local_cluster=$1
     local cluster=$2
 
-    echo "${TEMPDIR}/rbd-mirror.${daemon}.${cluster}.asok"
+    echo "${TEMPDIR}/rbd-mirror.${local_cluster}_daemon.${cluster}.asok"
 }
 
 daemon_pid_file()
 {
-    local daemon=$1
+    local cluster=$1
 
-    echo "${TEMPDIR}/rbd-mirror.${daemon}.pid"
+    echo "${TEMPDIR}/rbd-mirror.${cluster}_daemon.pid"
 }
 
 setup()
@@ -126,8 +124,8 @@ cleanup()
 
     set +e
 
-    stop_mirror ${CLUSTER1_DAEMON}
-    stop_mirror ${CLUSTER2_DAEMON}
+    stop_mirror "${CLUSTER1}"
+    stop_mirror "${CLUSTER2}"
 
     cd ${SRC_DIR}
 
@@ -139,14 +137,13 @@ cleanup()
 
 start_mirror()
 {
-    local daemon=$1
-    local cluster=$2
+    local cluster=$1
 
     rbd-mirror \
 	--cluster ${cluster} \
-	--pid-file=$(daemon_pid_file "${daemon}") \
-	--log-file=${TEMPDIR}/rbd-mirror.${daemon}.\$cluster.\$pid.log \
-	--admin-socket=${TEMPDIR}/rbd-mirror.${daemon}.\$cluster.asok \
+	--pid-file=$(daemon_pid_file "${cluster}") \
+	--log-file=${TEMPDIR}/rbd-mirror.\$cluster_daemon.\$pid.log \
+	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.asok \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
 	--daemonize=true
@@ -154,10 +151,10 @@ start_mirror()
 
 stop_mirror()
 {
-    local daemon=$1
+    local cluster=$1
 
     local pid
-    pid=$(cat $(daemon_pid_file "${daemon}") 2>/dev/null) || :
+    pid=$(cat $(daemon_pid_file "${cluster}") 2>/dev/null) || :
     if [ -n "${pid}" ]
     then
 	kill ${pid}
@@ -167,22 +164,9 @@ stop_mirror()
 	done
 	ps auxww | awk -v pid=${pid} '$2 == pid {print; exit 1}'
     fi
-    rm -f $(daemon_asok_file "${daemon}" "${CLUSTER1}")
-    rm -f $(daemon_asok_file "${daemon}" "${CLUSTER2}")
-    rm -f $(daemon_pid_file "${daemon}")
-}
-
-daemon_local_cluster()
-{
-    local daemon=$1
-    local pid_file=$(daemon_pid_file $daemon)
-
-    pid=$(cat $(daemon_pid_file "${daemon}"))
-
-    test -n "${pid}"
-
-    ps auxww | awk -v pid=${pid} '$2 == pid' |
-	sed -nEe 's/^.*--cluster +([^ ]+).*$/\1/p'
+    rm -f $(daemon_asok_file "${cluster}" "${CLUSTER1}")
+    rm -f $(daemon_asok_file "${cluster}" "${CLUSTER2}")
+    rm -f $(daemon_pid_file "${cluster}")
 }
 
 status()
@@ -216,12 +200,12 @@ status()
 
     local ret
 
-    for daemon in "${CLUSTER1_DAEMON}" "${CLUSTER2_DAEMON}"
+    for cluster in "${CLUSTER1}" "${CLUSTER2}"
     do
-	local pid_file=$(daemon_pid_file ${daemon})
+	local pid_file=$(daemon_pid_file ${cluster} )
 	if [ ! -e ${pid_file} ]
 	then
-	    echo "${daemon} rbd-mirror not running or unknown" \
+	    echo "${cluster} rbd-mirror not running or unknown" \
 		 "(${pid_file} not exist)"
 	    continue
 	fi
@@ -230,7 +214,7 @@ status()
 	pid=$(cat ${pid_file} 2>/dev/null) || :
 	if [ -z "${pid}" ]
 	then
-	    echo "${daemon} rbd-mirror not running or unknown" \
+	    echo "${cluster} rbd-mirror not running or unknown" \
 		 "(can't find pid using ${pid_file})"
 	    ret=1
 	    continue
@@ -241,24 +225,22 @@ status()
 		awk -v pid=${pid} 'NR == 1 {print} $2 == pid {print; exit 1}'
 	then
 	    echo
-	    echo "${daemon} rbd-mirror not running" \
+	    echo "${cluster} rbd-mirror not running" \
 		 "(can't find pid $pid in ps output)"
 	    ret=1
 	    continue
 	fi
 	echo
 
-	cluster=$(daemon_local_cluster ${daemon})
-
-	local asok_file=$(daemon_asok_file ${daemon} ${cluster})
+	local asok_file=$(daemon_asok_file ${cluster} ${cluster})
 	if [ ! -S "${asok_file}" ]
 	then
-	    echo "${daemon} rbd-mirror asok is unknown (${asok_file} not exits)"
+	    echo "${cluster} rbd-mirror asok is unknown (${asok_file} not exits)"
 	    ret=1
 	    continue
 	fi
 
-	echo "${daemon} rbd-mirror status"
+	echo "${cluster} rbd-mirror status"
 	ceph --admin-daemon ${asok_file} rbd mirror status
 	echo
     done
@@ -268,7 +250,7 @@ status()
 
 flush()
 {
-    local daemon=$1
+    local cluster=$1
     local image=$2
     local cmd="rbd mirror flush"
 
@@ -277,8 +259,7 @@ flush()
        cmd="${cmd} ${POOL}/${image}"
     fi
 
-    local cluster=$(daemon_local_cluster "${daemon}")
-    local asok_file=$(daemon_asok_file "${daemon}" "${cluster}")
+    local asok_file=$(daemon_asok_file "${cluster}" "${cluster}")
     test -S "${asok_file}"
 
     ceph --admin-daemon ${asok_file} ${cmd}
@@ -286,13 +267,12 @@ flush()
 
 test_image_replay_state()
 {
-    local daemon=$1
+    local cluster=$1
     local image=$2
     local test_state=$3
     local current_state=stopped
 
-    local cluster=$(daemon_local_cluster "${daemon}")
-    local asok_file=$(daemon_asok_file "${daemon}" "${cluster}")
+    local asok_file=$(daemon_asok_file "${cluster}" "${cluster}")
     test -S "${asok_file}"
 
     ceph --admin-daemon ${asok_file} help |
@@ -302,7 +282,7 @@ test_image_replay_state()
 
 wait_for_image_replay_state()
 {
-    local daemon=$1
+    local cluster=$1
     local image=$2
     local state=$3
     local s
@@ -310,25 +290,25 @@ wait_for_image_replay_state()
     # TODO: add a way to force rbd-mirror to update replayers
     for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
 	sleep ${s}
-	test_image_replay_state "${daemon}" "${image}" "${state}" && return 0
+	test_image_replay_state "${cluster}" "${image}" "${state}" && return 0
     done
     return 1
 }
 
 wait_for_image_replay_started()
 {
-    local daemon=$1
+    local cluster=$1
     local image=$2
 
-    wait_for_image_replay_state "${daemon}" "${image}" started
+    wait_for_image_replay_state "${cluster}" "${image}" started
 }
 
 wait_for_image_replay_stopped()
 {
-    local daemon=$1
+    local cluster=$1
     local image=$2
 
-    wait_for_image_replay_state "${daemon}" "${image}" stopped
+    wait_for_image_replay_state "${cluster}" "${image}" stopped
 }
 
 get_position()
@@ -365,14 +345,14 @@ get_mirror_position()
 
 wait_for_replay_complete()
 {
-    local daemon=$1
+    local local_cluster=$1
     local cluster=$2
     local image=$3
     local s master_pos mirror_pos
 
     for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16; do
 	sleep ${s}
-	flush "${daemon}" "${image}"
+	flush "${local_cluster}" "${image}"
 	master_pos=$(get_master_position "${cluster}" "${image}")
 	mirror_pos=$(get_mirror_position "${cluster}" "${image}")
 	test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
@@ -466,58 +446,58 @@ set -xe
 setup
 
 echo "TEST: add image and test replay"
-start_mirror ${CLUSTER1_DAEMON} ${CLUSTER1}
+start_mirror ${CLUSTER1}
 image=test
 create_image ${CLUSTER2} ${image}
-wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${image}
 write_image ${CLUSTER2} ${image} 100
-wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
 compare_images ${image}
 
 echo "TEST: stop mirror, add image, start mirror and test replay"
-stop_mirror ${CLUSTER1_DAEMON}
+stop_mirror ${CLUSTER1}
 image1=test1
 create_image ${CLUSTER2} ${image1}
 write_image ${CLUSTER2} ${image1} 100
-start_mirror ${CLUSTER1_DAEMON} ${CLUSTER1}
-wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image1}
-wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image1}
+start_mirror ${CLUSTER1}
+wait_for_image_replay_started ${CLUSTER1} ${image1}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image1}
 test_status_in_pool_dir ${CLUSTER1} ${image1} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
 compare_images ${image1}
 
 echo "TEST: test the first image is replaying after restart"
 write_image ${CLUSTER2} ${image} 100
-wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 compare_images ${image}
 
 echo "TEST: failover and failback"
-start_mirror ${CLUSTER2_DAEMON} ${CLUSTER2}
+start_mirror ${CLUSTER2}
 
 # failover
 demote_image ${CLUSTER2} ${image}
-wait_for_image_replay_stopped ${CLUSTER1_DAEMON} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+stopped'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 promote_image ${CLUSTER1} ${image}
-wait_for_image_replay_started ${CLUSTER2_DAEMON} ${image}
+wait_for_image_replay_started ${CLUSTER2} ${image}
 write_image ${CLUSTER1} ${image} 100
-wait_for_replay_complete ${CLUSTER2_DAEMON} ${CLUSTER1} ${image}
+wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+stopped'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'up+replaying' 'master_position'
 compare_images ${image}
 
 # failback
 demote_image ${CLUSTER1} ${image}
-wait_for_image_replay_stopped ${CLUSTER2_DAEMON} ${image}
+wait_for_image_replay_stopped ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 promote_image ${CLUSTER2} ${image}
-wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${image}
 write_image ${CLUSTER2} ${image} 100
-wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 compare_images ${image}
