@@ -2050,7 +2050,13 @@ protected:
   epoch_t requested_full_first, requested_full_last;
 
   void request_full_map(epoch_t first, epoch_t last);
-  void finish_full_map_request();
+  void rerequest_full_maps() {
+    epoch_t first = requested_full_first;
+    epoch_t last = requested_full_last;
+    requested_full_first = 0;
+    requested_full_last = 0;
+    request_full_map(first, last);
+  }
   void got_full_map(epoch_t e);
 
   // -- failures --
