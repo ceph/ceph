@@ -271,6 +271,7 @@ OPTION(mon_crush_min_required_version, OPT_STR, "firefly")
 OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL, true) // warn if crush straw_calc_version==0
 OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL, true) // warn if 'mon_osd_down_out_interval == 0'
 OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL, true)
+OPTION(mon_warn_on_no_sortbitwise, OPT_BOOL, true)  // warn when sortbitwise not set
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
 OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
 OPTION(mon_max_log_epochs, OPT_INT, 500)
