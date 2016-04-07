@@ -55,6 +55,10 @@ RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
 if ! test -f $RADOS_TOOL ; then
     RADOS_TOOL=$(which rados)
 fi
+CEPH_TOOL="`readlink -f \"$DNAME/../ceph\"`"
+if ! test -f $CEPH_TOOL ; then
+    RADOS_TOOL=$(which ceph)
+fi
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
@@ -306,11 +310,11 @@ test_xattr() {
 }
 test_rmobj() {
     p=`uuidgen`
-    ceph osd pool create $p 1
-    ceph osd pool set-quota $p max_objects 1
+    $CEPH_TOOL osd pool create $p 1
+    $CEPH_TOOL osd pool set-quota $p max_objects 1
     V1=`mktemp fooattrXXXXXXX`
     rados put $OBJ $V1 -p $p
-    while ! ceph osd dump | grep 'full max_objects'
+    while ! $CEPH_TOOL osd dump | grep 'full max_objects'
     do
 	sleep 2
     done
