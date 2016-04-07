@@ -712,6 +712,7 @@ def get_partition_base_mpath(dev):
     name = open(name_path, 'r').read().strip()
     return os.path.join('/dev/mapper', name)
 
+
 def is_bcache(dev_name):
     """
     Check if dev_name is a bcache
@@ -720,9 +721,11 @@ def is_bcache(dev_name):
         return False
     if not os.path.exists(os.path.join('/sys/block', dev_name, 'bcache')):
         return False
-    if os.path.exists(os.path.join('/sys/block', dev_name, 'bcache/cache_mode')):
+    if os.path.exists(os.path.join('/sys/block', dev_name,
+                                   'bcache/cache_mode')):
         return True
     return False
+
 
 def is_partition(dev):
     """
