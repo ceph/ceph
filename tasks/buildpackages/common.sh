@@ -16,6 +16,14 @@
 #
 function install_deps() {
     git archive --remote=git://git.ceph.com/ceph.git master install-deps.sh | tar -xvf -
+    #
+    # drop the following hack when trusty is not supported anymore
+    # there is no other way as long as we maintain a debian directory that tries
+    # to be the same for all distributions
+    #
+    if grep --quiet 14.04 /etc/issue 2>/dev/null && sudo apt-get install --force-yes -qq -y dpkg-dev && test "$(dpkg-architecture -qDEB_BUILD_GNU_CPU 2>/dev/null)" = aarch64 ; then
+        sed -i -e '/libgoogle-perftools-dev/d' debian/control
+    fi
     bash -x install-deps.sh
 }
 
@@ -53,7 +61,7 @@ function flavor2configure() {
 
     eval $(dpkg-architecture)
 
-    if test $flavor = notcmalloc || test $DEB_BUILD_ARCH = arm64 ; then
+    if test $flavor = notcmalloc || test "$DEB_HOST_GNU_CPU" = aarch64 ; then
         echo --without-tcmalloc --without-cryptopp
     fi
 }

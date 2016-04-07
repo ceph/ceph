@@ -126,7 +126,7 @@ function build_repo() {
 Codename: $codename
 Suite: stable
 Components: main
-Architectures: i386 amd64 source
+Architectures: i386 amd64 arm64 source
 EOF
     reprepro --basedir $sha1_dir include $codename WORKDIR/*.changes
     echo $dvers > $sha1_dir/version
@@ -134,6 +134,7 @@ EOF
     link_same $codename/$base/ref $ceph_dir $sha1
     if test "$gitbuilder_host" ; then
         cd $codename
+        sudo apt-get install -y rsync
         RSYNC_RSH='ssh -o StrictHostKeyChecking=false' rsync -av $base/ $gitbuilder_host:/usr/share/nginx/html/$base/
     fi
 }
