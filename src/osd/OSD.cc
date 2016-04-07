@@ -3450,7 +3450,7 @@ void OSD::handle_pg_peering_evt(
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
-	pgid, false, result == RES_SELF,
+	pgid, false, false,
 	role,
 	up, up_primary,
 	acting, acting_primary,
