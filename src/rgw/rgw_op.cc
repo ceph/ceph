@@ -805,7 +805,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   if (op_ret < 0)
     return op_ret;
 
-  if (!verify_object_permission(s, bucket_policy, &obj_policy, RGW_PERM_READ)) {
+  /* We can use global user_acl because LOs cannot have segments
+   * stored inside different accounts. */
+  if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
+          &obj_policy, RGW_PERM_READ)) {
     return -EPERM;
   }
 
@@ -1418,6 +1421,10 @@ int RGWGetObj::init_common()
 
 int RGWListBuckets::verify_permission()
 {
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
   return 0;
 }
 
@@ -1565,6 +1572,10 @@ void RGWGetUsage::execute()
 
 int RGWStatAccount::verify_permission()
 {
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
   return 0;
 }
 
@@ -1877,15 +1888,22 @@ int RGWGetBucketLocation::verify_permission()
 
 int RGWCreateBucket::verify_permission()
 {
+  /* This check is mostly needed for S3 that doesn't support account ACL.
+   * Swift doesn't allow to delegate any permission to an anonymous user,
+   * so it will become an early exit in such case. */
   if (s->auth_identity->is_anonymous()) {
     return -EACCES;
   }
 
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
   if (s->user->user_id.tenant != s->bucket_tenant) {
-    ldout(s->cct, 10)
-      << "user cannot create a bucket in a different tenant (user_id.tenant="
-      << s->user->user_id.tenant << " requested=" << s->bucket_tenant << ")"
-      << dendl;
+    ldout(s->cct, 10) << "user cannot create a bucket in a different tenant"
+                      << " (user_id.tenant=" << s->user->user_id.tenant
+                      << " requested=" << s->bucket_tenant << ")"
+                      << dendl;
     return -EACCES;
   }
 
@@ -1896,8 +1914,9 @@ int RGWCreateBucket::verify_permission()
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
 				   marker, string(), s->user->max_buckets,
 				   false, &is_truncated);
-    if (op_ret < 0)
+    if (op_ret < 0) {
       return op_ret;
+    }
 
     if (buckets.count() >= s->user->max_buckets) {
       return -ERR_TOO_MANY_BUCKETS;
@@ -2981,9 +3000,9 @@ int RGWPutMetadataAccount::verify_permission()
     return -EACCES;
   }
 
-  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
-  //   return -EACCES;
-  // }
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
 
   /* Altering TempURL keys requires FULL_CONTROL. */
   if (!temp_url_keys.empty() && s->perm_mask != RGW_PERM_FULL_CONTROL) {
@@ -4601,7 +4620,9 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
 
   bucket_owner = bacl.get_owner();
 
-  return verify_bucket_permission(s, &bacl, RGW_PERM_WRITE);
+  /* We can use global user_acl because each BulkDelete request is allowed
+   * to work on entities from a single account only. */
+  return verify_bucket_permission(s, s->user_acl.get(), &bacl, RGW_PERM_WRITE);
 }
 
 bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
