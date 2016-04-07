@@ -2883,8 +2883,7 @@ void RGWPutObj::execute()
       orig_data = data;
     }
 
-    op_ret = put_data_and_throttle(processor, data, ofs,
-				  (need_calc_md5 ? &hash : NULL), need_to_wait);
+    op_ret = put_data_and_throttle(processor, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="
@@ -2914,7 +2913,7 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+      op_ret = put_data_and_throttle(processor, data, ofs, false);
       if (op_ret < 0) {
         goto done;
       }
@@ -3138,7 +3137,7 @@ void RGWPostObj::execute()
        break;
 
      hash.Update((const byte *)data.c_str(), data.length());
-     op_ret = put_data_and_throttle(processor, data, ofs, &hash, false);
+     op_ret = put_data_and_throttle(processor, data, ofs, false);
 
      ofs += len;
 
