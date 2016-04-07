@@ -689,24 +689,6 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return  true;
   }
 
-  if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
-    if (rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token,
-                                      auth_info) < 0) {
-      return false;
-    }
-
-    if (load_acct_info(store, s->account_name, auth_info, *(s->user)) < 0) {
-      return false;
-    }
-
-    if (load_user_info(store, auth_info, s->auth_user, s->perm_mask,
-                       s->admin_request) < 0) {
-      return false;
-    }
-
-    return  true;
-  }
-
   if (supports_keystone()) {
     if (validate_keystone_token(store, s->os_auth_token, &auth_info) < 0) {
       /* Authentication failed. */
