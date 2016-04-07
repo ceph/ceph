@@ -13,14 +13,13 @@
 #include <fstream>
 #include <sstream>
 #include <boost/program_options.hpp>
-
+#include "cls/rbd/cls_rbd_client.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
 
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
-//#include "librbd/Journal.h" // XXXMG: for librbd::Journal::reset()
 #include "librbd/journal/Types.h"
 
 namespace rbd {
@@ -134,40 +133,35 @@ static int do_show_journal_status(librados::IoCtx& io_ctx,
 static int do_reset_journal(librados::IoCtx& io_ctx,
 			    const std::string& journal_id)
 {
-  // XXXMG: does not work due to a linking issue
-  //return librbd::Journal::reset(io_ctx, journal_id);
-
-  ::journal::Journaler journaler(io_ctx, journal_id, "", 5);
-
-  C_SaferCond cond;
-  journaler.init(&cond);
-
-  int r = cond.wait();
+  // disable/re-enable journaling to delete/re-create the journal
+  // to properly handle mirroring constraints
+  std::string image_name;
+  int r = librbd::cls_client::dir_get_name(&io_ctx, RBD_DIRECTORY, journal_id,
+                                           &image_name);
   if (r < 0) {
-    std::cerr << "failed to initialize journal: " << cpp_strerror(r)
-	      << std::endl;
+    std::cerr << "failed to locate journal's image: " << cpp_strerror(r)
+              << std::endl;
     return r;
   }
 
-  uint8_t order, splay_width;
-  int64_t pool_id;
-  journaler.get_metadata(&order, &splay_width, &pool_id);
-
-  r = journaler.remove(true);
+  librbd::Image image;
+  r = utils::open_image(io_ctx, image_name, false, &image);
   if (r < 0) {
-    std::cerr << "failed to reset journal: " << cpp_strerror(r) << std::endl;
-    return r;
-  }
-  r = journaler.create(order, splay_width, pool_id);
-  if (r < 0) {
-    std::cerr << "failed to create journal: " << cpp_strerror(r) << std::endl;
+    std::cerr << "failed to open image: " << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  // TODO register with librbd payload
-  r = journaler.register_client(bufferlist());
+  r = image.update_features(RBD_FEATURE_JOURNALING, false);
   if (r < 0) {
-    std::cerr << "failed to register client: " << cpp_strerror(r) << std::endl;
+    std::cerr << "failed to disable image journaling: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  r = image.update_features(RBD_FEATURE_JOURNALING, true);
+  if (r < 0) {
+    std::cerr << "failed to re-enable image journaling: " << cpp_strerror(r)
+              << std::endl;
     return r;
   }
   return 0;
