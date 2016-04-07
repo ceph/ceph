@@ -56,9 +56,6 @@ class RGWSwift {
                      uint32_t& perm_mask,               /* out */
                      bool& admin_request);              /* out */
 
-  int get_keystone_url(std::string& url);
-  int get_keystone_admin_token(std::string& token);
-
   class KeystoneRevokeThread : public Thread {
     CephContext *cct;
     RGWSwift *swift;
@@ -96,10 +93,6 @@ public:
   static uint32_t get_perm_mask(const string& swift_user,
                                 const RGWUserInfo &uinfo);
   bool going_down();
-
-  /* Static methods shared between Swift API and S3. */
-  static int get_keystone_url(CephContext *cct, std::string& url);
-  static int get_keystone_admin_token(CephContext *cct, std::string& token);
 };
 
 extern RGWSwift *rgw_swift;
