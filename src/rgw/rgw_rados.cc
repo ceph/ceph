@@ -2724,7 +2724,6 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
-
   r = obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0) {
     return r;
@@ -9264,7 +9263,6 @@ int RGWRados::Object::Read::prepare()
   if (r < 0) {
     return r;
   }
-
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
