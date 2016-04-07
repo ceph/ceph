@@ -76,14 +76,14 @@ public:
     EXPECT_EQ("", connect_cluster_pp(m_local_cluster));
 
     m_local_pool_name = get_temp_pool_name();
-    EXPECT_EQ("", create_one_pool_pp(m_local_pool_name, m_local_cluster));
+    EXPECT_EQ(0, m_local_cluster.pool_create(m_local_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster.ioctx_create(m_local_pool_name.c_str(),
 					      m_local_ioctx));
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
 
     m_remote_pool_name = get_temp_pool_name();
-    EXPECT_EQ("", create_one_pool_pp(m_remote_pool_name, m_remote_cluster));
+    EXPECT_EQ(0, m_remote_cluster.pool_create(m_remote_pool_name.c_str()));
     m_remote_pool_id = m_remote_cluster.pool_lookup(m_remote_pool_name.c_str());
     EXPECT_GE(m_remote_pool_id, 0);
 
