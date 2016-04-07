@@ -545,16 +545,29 @@ namespace rgw {
   }
 
   int RGWLibRequest::read_permissions(RGWOp* op) {
+    /* bucket and object ops */
     int ret =
       rgw_build_bucket_policies(rgwlib.get_store(), get_state());
     if (ret < 0) {
-      ldout(get_state()->cct, 10) << "read_permissions on "
+      ldout(get_state()->cct, 10) << "read_permissions (bucket policy) on "
 				  << get_state()->bucket << ":"
 				  << get_state()->object
 				  << " only_bucket=" << only_bucket()
 				  << " ret=" << ret << dendl;
       if (ret == -ENODATA)
 	ret = -EACCES;
+    } else if (! only_bucket()) {
+      /* object ops */
+      ret = rgw_build_object_policies(rgwlib.get_store(), get_state(),
+				      op->prefetch_data());
+      if (ret < 0) {
+	ldout(get_state()->cct, 10) << "read_permissions (object policy) on"
+				    << get_state()->bucket << ":"
+				    << get_state()->object
+				    << " ret=" << ret << dendl;
+	if (ret == -ENODATA)
+	  ret = -EACCES;
+      }
     }
     return ret;
   } /* RGWLibRequest::read_permissions */

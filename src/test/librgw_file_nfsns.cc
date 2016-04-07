@@ -331,6 +331,14 @@ TEST(LibRGW, SETUP_DIRS1) {
 	    ASSERT_EQ(rc, 0);
 	    sf.sync();
 	    ASSERT_TRUE(sf.rgw_fh->is_file());
+
+	    /* because we made it the hard way, fixup attributes */
+	    struct stat st;
+	    st.st_uid = owner_uid;
+	    st.st_gid = owner_gid;
+	    st.st_mode = 644;
+	    sf.rgw_fh->create_stat(&st, create_mask);
+
 	    /* open handle */
 	    rc = rgw_open(fs, sf.fh, 0 /* flags */);
 	    ASSERT_EQ(rc, 0);
@@ -523,6 +531,9 @@ TEST(LibRGW, GETATTR_DIRS1)
 	  ASSERT_TRUE(sobj.rgw_fh->is_dir());
 	  ASSERT_TRUE(S_ISDIR(st.st_mode));
 	}
+	/* validate Unix owners */
+	ASSERT_EQ(st.st_uid, owner_uid);
+	ASSERT_EQ(st.st_gid, owner_gid);
 	if (verbose) {
 	  obj_rec_st rec_st{sobj, st};
 	  std::cout << "\t"
@@ -557,6 +568,10 @@ TEST(LibRGW, READ_DIRS1)
 	  ASSERT_EQ(sobj.rgw_fh->get_size(), 16UL);
 	  // do it
 	  memset(buf, 0, 256);
+	  if (verbose) {
+	    std::cout << "reading 0,256 " << sobj.rgw_fh->relative_object_name()
+		      << std::endl;
+	  }
 	  rc = rgw_read(fs, sobj.fh, 0, 256, &nread, buf, RGW_READ_FLAG_NONE);
 	  ASSERT_EQ(rc, 0);
 	  if (verbose) {
