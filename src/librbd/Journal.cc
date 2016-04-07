@@ -827,7 +827,8 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
                  << "length=" << length << ", "
                  << "flush=" << flush_entry << ", tid=" << tid << dendl;
 
-  Context *on_safe = new C_IOEventSafe(this, tid);
+  Context *on_safe = create_async_context_callback(
+    m_image_ctx, new C_IOEventSafe(this, tid));
   if (flush_entry) {
     future.flush(on_safe);
   } else {
@@ -942,8 +943,9 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
     op_finish_future = m_journaler->append(m_tag_tid, bl);
   }
 
-  op_finish_future.flush(new C_OpEventSafe(this, op_tid, op_start_future,
-                                           op_finish_future));
+  op_finish_future.flush(create_async_context_callback(
+    m_image_ctx, new C_OpEventSafe(this, op_tid, op_start_future,
+                                   op_finish_future)));
 }
 
 template <typename I>
@@ -971,7 +973,7 @@ void Journal<I>::flush_event(uint64_t tid, Context *on_safe) {
   }
 
   if (future.is_valid()) {
-    future.flush(NULL);
+    future.flush(nullptr);
   }
 }
 

@@ -70,9 +70,15 @@ void ObjectPlayer::watch(Context *on_fetch, double interval) {
 void ObjectPlayer::unwatch() {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " unwatch" << dendl;
   Mutex::Locker timer_locker(m_timer_lock);
+
   cancel_watch();
 
-  m_watch_ctx = NULL;
+  Context *watch_ctx = nullptr;
+  std::swap(watch_ctx, m_watch_ctx);
+  if (watch_ctx != nullptr) {
+    delete watch_ctx;
+  }
+
   while (m_watch_in_progress) {
     m_watch_in_progress_cond.Wait(m_timer_lock);
   }
@@ -202,18 +208,17 @@ void ObjectPlayer::handle_watch_fetched(int r) {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " poll complete, r=" << r
                    << dendl;
 
-  Context *on_finish = NULL;
+  Context *on_finish = nullptr;
   {
     Mutex::Locker timer_locker(m_timer_lock);
     assert(m_watch_in_progress);
     if (r == -ENOENT) {
       r = 0;
     }
-    on_finish = m_watch_ctx;
-    m_watch_ctx = NULL;
+    std::swap(on_finish, m_watch_ctx);
   }
 
-  if (on_finish != NULL) {
+  if (on_finish != nullptr) {
     on_finish->complete(r);
   }
 
