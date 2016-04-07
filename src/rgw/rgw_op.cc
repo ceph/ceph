@@ -1370,6 +1370,7 @@ void RGWGetObj::execute()
   RGWGetObj_CB cb(this);
   RGWGetDataCB* filter = (RGWGetDataCB*)&cb;
   boost::optional<RGWGetObj_Decompress> decompress;
+  RGWGetDataCB* decrypt = nullptr;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
@@ -1438,6 +1439,15 @@ void RGWGetObj::execute()
     decompress.emplace(s->cct, &cs_info, partial_content, filter);
     filter = &*decompress;
   }
+  attr_iter = attrs.find(RGW_ATTR_MANIFEST);
+  op_ret = this->get_decrypt_filter(&decrypt, filter, 
+                                    attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
+  if (decrypt != nullptr) {
+    filter = decrypt;
+  }
+  if (op_ret < 0) {
+    goto done_err;
+  }
 
   // for range requests with obj size 0
   if (range_str && !(s->obj_size)) {
@@ -1461,6 +1471,7 @@ void RGWGetObj::execute()
     }
     return;
   }
+
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
     is_slo = true;
@@ -1507,10 +1518,12 @@ void RGWGetObj::execute()
   if (op_ret < 0) {
     goto done_err;
   }
+  delete decrypt;
   return;
 
 done_err:
   send_response_data_error();
+  delete decrypt;
 }
 
 int RGWGetObj::init_common()
@@ -2602,25 +2615,9 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
-class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
-{
-  string part_num;
-  RGWMPObj mp;
-  req_state *s;
-  string upload_id;
-
-protected:
-  int prepare(RGWRados *store, string *oid_rand) override;
-  int do_complete(size_t accounted_size, const string& etag, real_time *mtime,
-                  real_time set_mtime, map<string, bufferlist>& attrs,
-                  real_time delete_at, const char *if_match,
-                  const char *if_nomatch) override;
-
-public:
-  bool immutable_head() override { return true; }
-  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
-};
+void RGWPutObjProcessor_Multipart::get_mp(RGWMPObj** _mp){
+  *_mp = &mp;
+}
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 {
@@ -2896,7 +2893,8 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
-  RGWPutObjDataProcessor *filter = NULL;
+  RGWPutObjDataProcessor *filter = nullptr;
+  RGWPutObjDataProcessor *encrypt = nullptr;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -2915,7 +2913,6 @@ void RGWPutObj::execute()
   boost::optional<RGWPutObj_Compress> compressor;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
-
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;
   if (s->object.empty()) {
@@ -3007,6 +3004,13 @@ void RGWPutObj::execute()
       filter = &*compressor;
     }
   }
+  op_ret = get_encrypt_filter(&encrypt, filter);
+  if (encrypt != nullptr)
+    filter = encrypt;
+
+  if (op_ret < 0) {
+    goto done;
+  }
 
   do {
     bufferlist data_in;
@@ -3060,7 +3064,7 @@ void RGWPutObj::execute()
 			  << op_ret << dendl;
         goto done;
       }
-
+      /* need_to_wait == true and op_ret == -EEXIST */
       ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
 
       /* restore original data */
@@ -3069,8 +3073,10 @@ void RGWPutObj::execute()
       /* restart processing with different oid suffix */
 
       dispose_processor(processor);
+      if (encrypt) {
+        delete encrypt;
+      }
       processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
-
       filter = processor;
 
       string oid_rand;
@@ -3089,6 +3095,13 @@ void RGWPutObj::execute()
         compressor.emplace(s->cct, plugin, filter);
         filter = &*compressor;
       }
+      
+      op_ret = get_encrypt_filter(&encrypt, filter);
+      if (encrypt != nullptr)
+	filter = encrypt;
+      if (op_ret < 0) {
+	goto done;
+      }
 
       op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
@@ -3098,6 +3111,14 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
+
+  {
+    bufferlist flush;
+    op_ret = put_data_and_throttle(filter, flush, ofs, false);
+    if (op_ret < 0) {
+      goto done;
+    }
+  }
 
   if (!chunked_upload &&
       ofs != s->content_length &&
@@ -3226,6 +3247,9 @@ void RGWPutObj::execute()
 
 done:
   dispose_processor(processor);
+  if (encrypt) {
+    delete encrypt;
+  }
   perfcounter->tinc(l_rgw_put_lat,
 		    (ceph_clock_now() - s->time));
 }
@@ -3259,6 +3283,7 @@ void RGWPostObj::pre_exec()
 void RGWPostObj::execute()
 {
   RGWPutObjDataProcessor *filter = NULL;
+  RGWPutObjDataProcessor *encrypt = nullptr;
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
@@ -3318,6 +3343,13 @@ void RGWPostObj::execute()
     }
   }
 
+  op_ret = get_encrypt_filter(&encrypt, filter);
+  if (encrypt != nullptr)
+    filter = encrypt;
+  if (op_ret < 0) {
+    goto done;
+  }
+
   while (data_pending) {
      bufferlist data;
      len = get_data(data);
@@ -3340,7 +3372,10 @@ void RGWPostObj::execute()
        return;
      }
    }
-
+  {
+    bufferlist flush;
+    op_ret = put_data_and_throttle(filter, flush, ofs, false);
+  }
   if (len < min_len) {
     op_ret = -ERR_TOO_SMALL;
     return;
@@ -3382,6 +3417,10 @@ void RGWPostObj::execute()
 
   op_ret = processor.complete(s->obj_size, etag, NULL, real_time(), attrs,
                               (delete_at ? *delete_at : real_time()));
+done:
+  if (encrypt) {
+    delete encrypt;
+  }
 }
 
 
@@ -4599,7 +4638,7 @@ void RGWInitMultipart::execute()
 
   if (get_params() < 0)
     return;
-  op_ret = -EINVAL;
+
   if (s->object.empty())
     return;
 
@@ -4607,6 +4646,12 @@ void RGWInitMultipart::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   populate_with_generic_attrs(s, attrs);
+
+  /* select encryption mode */
+  op_ret = prepare_encryption(attrs);
+  if (op_ret != 0)
+    return;
+
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   do {
@@ -4813,7 +4858,6 @@ void RGWCompleteMultipart::execute()
   op_ret = get_params();
   if (op_ret < 0)
     return;
-
   op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (op_ret < 0) {
     return;
@@ -4871,6 +4915,7 @@ void RGWCompleteMultipart::execute()
   meta_obj.index_hash_source = s->object.name;
 
   op_ret = get_obj_attrs(store, s, meta_obj, attrs);
+
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj
 		     << " ret=" << op_ret << dendl;
