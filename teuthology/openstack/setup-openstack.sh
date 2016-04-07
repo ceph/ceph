@@ -412,9 +412,6 @@ function define_dnsmasq() {
         done | sudo tee $host_records > /tmp/dnsmasq
         head -2 /tmp/dnsmasq
         echo 'etc.'
-        if test "$OS_CLOUDLAB_CTL_IP" ; then
-            echo "host-record=ctl,$OS_CLOUDLAB_CTL_IP" | sudo tee -a $host_records
-        fi
         # restart is not always picking up changes
         sudo /etc/init.d/dnsmasq stop || true
         sudo /etc/init.d/dnsmasq start
@@ -479,9 +476,6 @@ function install_packages() {
 CAT=${CAT:-cat}
 
 function verify_openstack() {
-    if test "$OS_CLOUDLAB_CTL_IP" ; then
-        echo $OS_CLOUDLAB_CTL_IP ctl | sudo tee -a /etc/hosts >&2
-    fi
     if ! openstack server list > /dev/null ; then
         echo ERROR: the credentials from ~/openrc.sh are not working >&2
         return 1
