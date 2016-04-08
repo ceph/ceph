@@ -173,6 +173,35 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
   return ret;
 }
 
+int chain_getxattr_buf(const char *fn, const char *name, bufferptr *bp)
+{
+  size_t size = 1024; // Initial
+  while (1) {
+    bufferptr buf(size);
+    int r = chain_getxattr(
+      fn,
+      name,
+      buf.c_str(),
+      size);
+    if (r > 0) {
+      buf.set_length(r);
+      if (bp)
+	bp->swap(buf);
+      return r;
+    } else if (r == 0) {
+      return 0;
+    } else {
+      if (r == -ERANGE) {
+	size *= 2;
+      } else {
+	return r;
+      }
+    }
+  }
+  assert(0 == "unreachable");
+  return 0;
+}
+
 static int chain_fgetxattr_len(int fd, const char *name)
 {
   int i = 0, total = 0;
