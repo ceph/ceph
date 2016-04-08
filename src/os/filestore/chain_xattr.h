@@ -6,6 +6,7 @@
 
 #include "common/xattr.h"
 #include "include/assert.h"
+#include "include/buffer.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -80,6 +81,7 @@ static inline int sys_fremovexattr(int fd, const char *name)
 // wrappers to chain large values across multiple xattrs
 
 int chain_getxattr(const char *fn, const char *name, void *val, size_t size);
+int chain_getxattr_buf(const char *fn, const char *name, bufferptr *bp);
 int chain_fgetxattr(int fd, const char *name, void *val, size_t size);
 
 int get_xattr_block_size(size_t size);
