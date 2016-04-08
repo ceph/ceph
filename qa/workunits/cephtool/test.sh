@@ -814,6 +814,8 @@ function test_mon_mds()
   ceph mds remove_data_pool $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
+  expect_false ceph mds set_max_mds 4
+  ceph mds set allow_multimds true --yes-i-really-mean-it
   ceph mds set_max_mds 4
   ceph mds set_max_mds 3
   ceph mds set_max_mds 256
@@ -875,7 +877,7 @@ function test_mon_mds()
   set -e
 
   # Check that setting enable_multiple enables creation of second fs
-  ceph fs flag set enable_multiple true
+  ceph fs flag set enable_multiple true --yes-i-really-mean-it
   ceph fs new cephfs2 fs_metadata2 fs_data2
 
   # Clean up multi-fs stuff
