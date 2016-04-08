@@ -30,6 +30,7 @@ _SERVICE_MAP = {
 
 DISTRO_CODENAME_MAP = {
     "ubuntu": {
+        "16.04": "xenial",
         "14.04": "trusty",
         "12.04": "precise",
         "15.04": "vivid",
