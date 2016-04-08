@@ -35,19 +35,22 @@ public:
 
   KVTest() : db(0) {}
 
+  string mydirname() { return "kv_test_temp_dir_" + string(GetParam()); }
+
   void init() {
+    cout << "Creating " << string(GetParam()) << "\n";
     db.reset(KeyValueDB::create(g_ceph_context, string(GetParam()),
-				string("kv_test_temp_dir")));
+				mydirname()));
   }
   void fini() {
     db.reset(NULL);
   }
 
   virtual void SetUp() {
-    int r = ::mkdir("kv_test_temp_dir", 0777);
+    int r = ::mkdir(mydirname().c_str(), 0777);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
-      cerr << __func__ << ": unable to create kv_test_temp_dir"
+      cerr << __func__ << ": unable to create " << mydirname()
 	   << ": " << cpp_strerror(r) << std::endl;
       return;
     }
@@ -87,11 +90,11 @@ TEST_P(KVTest, PutReopen) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    bufferlist v;
-    ASSERT_EQ(0, db->get("prefix", "key", &v));
-    ASSERT_EQ(v.length(), 5u);
-    ASSERT_EQ(0, db->get("prefix", "key2", &v));
-    ASSERT_EQ(v.length(), 5u);
+    bufferlist v1, v2;
+    ASSERT_EQ(0, db->get("prefix", "key", &v1));
+    ASSERT_EQ(v1.length(), 5u);
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 5u);
   }
   {
     KeyValueDB::Transaction t = db->get_transaction();
@@ -104,11 +107,11 @@ TEST_P(KVTest, PutReopen) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    bufferlist v;
-    ASSERT_EQ(-ENOENT, db->get("prefix", "key", &v));
-    ASSERT_EQ(0, db->get("prefix", "key2", &v));
-    ASSERT_EQ(v.length(), 5u);
-    ASSERT_EQ(-ENOENT, db->get("prefix", "key3", &v));
+    bufferlist v1, v2, v3;
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key", &v1));
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 5u);
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key3", &v3));
   }
   fini();
 }
@@ -144,6 +147,64 @@ TEST_P(KVTest, BenchCommit) {
   utime_t dur = end - start;
   cout << n << " commits in " << dur << ", avg latency " << (dur / (double)n)
        << std::endl;
+  fini();
+}
+
+struct AppendMOP : public KeyValueDB::MergeOperator {
+   virtual void merge_nonexistant(const string& rhs,std::string& new_value) {
+     new_value = "?" + rhs;
+   }
+   virtual void merge(const std::string &lhs,const string& rhs,std::string& new_value) {
+     new_value = lhs + rhs;
+   }
+   /// We use each operator name and each prefix to construct the overall RocksDB operator name for consistency check at open time.
+   virtual string name() const { return "Append"; }
+};
+
+string tostr(bufferlist& b) {
+  return string(b.c_str(),b.length());
+}
+
+TEST_P(KVTest, Merge) {
+  shared_ptr<KeyValueDB::MergeOperator> p(new AppendMOP);
+  int r = db->set_merge_operator("A",p);
+  if (r == -1) goto skip; // No merge operators for this database type
+  ASSERT_EQ(0, db->create_and_open(cout));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist v1, v2, v3;
+    v1.append(string("1"));
+    v2.append(string("2"));
+    v3.append(string("3"));
+    t->set("P", "K1", v1);
+    t->set("A", "A1", v2);
+    t->rmkey("A", "A2");
+    t->merge("A", "A2", v3);
+    db->submit_transaction_sync(t);
+  }
+  {
+    bufferlist v1, v2, v3;
+    ASSERT_EQ(0, db->get("P", "K1", &v1));
+    ASSERT_EQ(tostr(v1), "1");
+    ASSERT_EQ(0, db->get("A", "A1", &v2));
+    ASSERT_EQ(tostr(v2), "2");
+    ASSERT_EQ(0, db->get("A", "A2", &v3));
+    ASSERT_EQ(tostr(v3), "?3");
+  }
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist v1;
+    v1.append(string("1"));
+    t->merge("A", "A2", v1);
+    db->submit_transaction_sync(t);
+  }
+  {
+    bufferlist v;
+    ASSERT_EQ(0, db->get("A", "A2", &v));
+    ASSERT_EQ(tostr(v), "?31");
+  }
+  fini();
+skip:;
 }
 
 
