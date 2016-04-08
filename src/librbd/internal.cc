@@ -341,6 +341,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
   header_oid = ::journal::Journaler::header_oid(ictx->id);
 
   while(true) {
+    clients.clear();
     r = cls::journal::client::client_list(ictx->md_ctx, header_oid, &clients);
     if (r < 0) {
       lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
