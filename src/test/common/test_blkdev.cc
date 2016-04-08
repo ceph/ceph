@@ -27,6 +27,8 @@ TEST(blkdev, get_block_device_base) {
     // work backwards
     sprintf(buf, "%s/sys/block", root);
     DIR *dir = opendir(buf);
+    if (*root == '\0' && errno == EACCES)
+      continue;
     ASSERT_TRUE(dir);
     while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
       if (!de)
