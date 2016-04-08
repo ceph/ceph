@@ -1801,6 +1801,11 @@ int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion 
   return io_ctx_impl->aio_remove(oid, c->pc);
 }
 
+int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion *c, int flags)
+{
+  return io_ctx_impl->aio_remove(oid, c->pc, flags);
+}
+
 int librados::IoCtx::aio_flush_async(librados::AioCompletion *c)
 {
   io_ctx_impl->flush_aio_writes_async(c->pc);
