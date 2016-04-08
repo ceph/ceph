@@ -9,7 +9,6 @@
 #pragma once
 
 
-// #include <unistd.h>
 #include <assert.h>
 
 #include <memory>
@@ -31,15 +30,9 @@ template<typename ServerId, typename ClientId, typename TS, typename TC>
 class Simulation {
   using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
-  using ClientBasedServerSelectFunc = std::function<const ServerId(uint64_t, uint16_t)>;
 
   uint server_count = 0;
   uint client_count = 0;
-
-#if 0 // TRASH
-  std::function<TS*(ServerId)> create_server_f;
-  std::function<TC*(ClientId)> create_client_f;
-#endif
 
   ServerMap servers;
   ClientMap clients;
@@ -50,6 +43,9 @@ class Simulation {
 
 public:
 
+  using ClientBasedServerSelectFunc =
+    std::function<const ServerId&(uint64_t, uint16_t)>;
+
   Simulation() :
     prng(std::chrono::system_clock::now().time_since_epoch().count())
   {
@@ -58,7 +54,7 @@ public:
 
   TC& get_client(ClientId id) { return *clients[id]; }
   TS& get_server(ServerId id) { return *servers[id]; }
-  ServerId get_server_id(uint index) { return server_ids[index]; }
+  const ServerId& get_server_id(uint index) const { return server_ids[index]; }
 
 
   void add_servers(uint count,
@@ -223,7 +219,7 @@ public:
   } // simulate
 
 
-  // server selection functions
+  // **** server selection functions ****
 
 
   const ServerId& server_select_alternate(uint64_t seed, uint16_t client_idx) {
@@ -234,7 +230,8 @@ public:
 
   // returns a lambda using the range specified as servers_per (client)
   ClientBasedServerSelectFunc make_server_select_alt_range(uint16_t servers_per) {
-    return [servers_per,this](uint64_t seed, uint16_t client_idx) -> ServerId {
+    return [servers_per,this](uint64_t seed, uint16_t client_idx)
+      -> const ServerId& {
       double factor = double(server_count) / client_count;
       uint offset = seed % servers_per;
       uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
@@ -243,39 +240,27 @@ public:
   }
 
 
-#if 0 // TRASH
-  const ServerId& server_select_alternate(uint64_t seed, uint16_t client_idx) {
-  // lambda to choose a server alternately in a range
-  auto server_alt_range_f =
-    [&simulation, &server_count, &client_count]
-    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
-  };
-#endif
-
-
-#if 0
-  // lambda to choose a server randomly
-  auto server_random_f =
-    [&server_ids, &prng, &server_count] (uint64_t seed) -> const ServerId& {
-    int index = prng() % server_count;
+  // function to choose a server randomly
+  const ServerId& server_select_random(uint64_t seed, uint16_t client_idx) {
+    uint index = prng() % server_count;
     return server_ids[index];
-  };
+  }
 
-  // lambda to choose a server randomly
-  auto server_ran_range_f =
-    [&server_ids, &prng, &server_count, &client_count]
-    (uint64_t seed, uint16_t client_idx, uint16_t servers_per) -> const ServerId& {
-    double factor = double(server_count) / client_count;
-    uint offset = prng() % servers_per;
-    uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
-    return server_ids[index];
-  };
+  
+  // function to choose a server randomly
+  ClientBasedServerSelectFunc make_server_select_ran_range(uint16_t servers_per) {
+    return [servers_per,this](uint64_t seed, uint16_t client_idx)
+      -> const ServerId& {
+      double factor = double(server_count) / client_count;
+      uint offset = prng() % servers_per;
+      uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+      return server_ids[index];
+    };
+  }
 
 
-  // lambda to always choose the first server
-  SelectFunc server_0_f =
-    [server_ids] (uint64_t seed) -> const ServerId& {
+  // function to always choose the first server
+  const ServerId& server_select_0(uint64_t seed, uint16_t client_idx) {
     return server_ids[0];
-  };
-#endif
+  }
 }; // class Simulation

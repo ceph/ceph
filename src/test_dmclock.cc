@@ -177,25 +177,9 @@ int main(int argc, char* argv[]) {
     { { wait_op, client_wait },
       { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
 
-#if 0
-  SelectFunc 
-#if 0
-    std::bind(server_alternate_f, _1, i)
-#elif 1
-    std::bind(server_alt_range_f, _1, i, 8)
-#elif 0
-    std::bind(server_random_f, _1)
-#elif 0
-    std::bind(server_ran_range_f, _1, i, 8)
-#else
-    server_0_f
-#endif
-    ;
-#endif
-
   simulation = new MySim();
 
-  ClientBasedServerSelectFunc server_select_f =
+  MySim::ClientBasedServerSelectFunc server_select_f =
     simulation->make_server_select_alt_range(8);
 
   DmcServer::ClientRespFunc client_response_f =
@@ -219,7 +203,8 @@ int main(int argc, char* argv[]) {
 			 server_post_f,
 			 std::bind(server_select_f, _1, id),
 			 dmc_client_accumulate_f,
-			 id < (client_count - client_wait_count) ? no_wait : wait);
+			 id < (client_count - client_wait_count)
+			 ? no_wait : wait);
   };
 
   simulation->add_servers(server_count, create_server_f);
