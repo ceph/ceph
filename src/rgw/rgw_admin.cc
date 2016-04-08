@@ -2383,6 +2383,11 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
+  // not a raw op if 'period update' needs to commit to master
+  bool raw_period_update = opt_cmd == OPT_PERIOD_UPDATE && !commit;
+  // not a raw op if 'period pull' needs to look up remotes
+  bool raw_period_pull = opt_cmd == OPT_PERIOD_PULL && remote.empty() && !url.empty();
+
   bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_ADD || opt_cmd == OPT_ZONEGROUP_CREATE || opt_cmd == OPT_ZONEGROUP_DELETE ||
 			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||  
                          opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
@@ -2395,7 +2400,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_REALM_CREATE || opt_cmd == OPT_PERIOD_PREPARE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
-			 (opt_cmd == OPT_PERIOD_UPDATE && !commit) ||
+                         raw_period_update || raw_period_pull ||
 			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
 			 opt_cmd == OPT_REALM_LIST_PERIODS ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
@@ -2534,6 +2539,26 @@ int main(int argc, char **argv)
           cerr << "period update failed: " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+      }
+      break;
+    case OPT_PERIOD_PULL: // period pull --url
+      {
+        if (url.empty()) {
+          cerr << "A --url or --remote must be provided." << std::endl;
+          return -EINVAL;
+        }
+        RGWPeriod period;
+        int ret = do_period_pull(remote, url, access_key, secret_key,
+                                 realm_id, realm_name, period_id, period_epoch,
+                                 &period);
+        if (ret < 0) {
+          cerr << "period pull failed: " << cpp_strerror(-ret) << std::endl;
+          return ret;
+        }
+
+        encode_json("period", period, formatter);
+        formatter->flush(cout);
+        cout << std::endl;
       }
       break;
     case OPT_REALM_CREATE:
@@ -3732,9 +3757,9 @@ int main(int argc, char **argv)
       }
     }
     return 0;
-  case OPT_PERIOD_PULL:
+  case OPT_PERIOD_PULL: // period pull --remote
     {
-      if (remote.empty() && url.empty() ) {
+      if (remote.empty()) {
 	/* use realm master zonegroup as remote */
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store);
@@ -3756,6 +3781,7 @@ int main(int argc, char **argv)
                                &period);
       if (ret < 0) {
         cerr << "period pull failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
       }
 
       encode_json("period", period, formatter);
