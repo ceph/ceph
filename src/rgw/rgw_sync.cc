@@ -1868,13 +1868,28 @@ int RGWRemoteMetaLog::run_sync()
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
+  int r = 0;
 
   // get shard count and oldest log period from master
   rgw_mdlog_info mdlog_info;
-  int r = read_log_info(&mdlog_info);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
-    return r;
+  for (;;) {
+    if (going_down.read()) {
+      ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
+      return 0;
+    }
+    r = read_log_info(&mdlog_info);
+    if (r == -EIO) {
+      // keep retrying if master isn't alive
+      ldout(store->ctx(), 10) << __func__ << "(): waiting for master.." << dendl;
+      backoff.backoff_sleep();
+      continue;
+    }
+    backoff.reset();
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
+      return r;
+    }
+    break;
   }
 
   do {
@@ -1924,7 +1939,7 @@ int RGWRemoteMetaLog::run_sync()
   auto num_shards = sync_status.sync_info.num_shards;
   if (num_shards != mdlog_info.num_shards) {
     lderr(store->ctx()) << "ERROR: can't sync, mismatch between num shards, master num_shards=" << mdlog_info.num_shards << " local num_shards=" << num_shards << dendl;
-    return r;
+    return -EINVAL;
   }
 
   RGWPeriodHistory::Cursor cursor;
