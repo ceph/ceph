@@ -199,7 +199,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   map<string, string> headers;
   if (extra_headers) {
-    headers.insert(extra_params->begin(), extra_params->end());
+    headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
   ret = req.get_resource(key, headers, resource, mgr);
