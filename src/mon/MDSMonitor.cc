@@ -70,6 +70,11 @@ template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
+static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
+"It may cause problems up to and including data loss."
+"Consult the documentation at ceph.com, and if unsure, do not proceed."
+"Add --yes-i-really-mean-it if you are certain.");
+
 static const string MDS_METADATA_PREFIX("mds_metadata");
 
 
@@ -1508,6 +1513,9 @@ class FlagSetHandler : public FileSystemCommandHandler
     string flag_val;
     cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
 
+    string confirm;
+    cmd_getval(g_ceph_context, cmdmap, "confirm", confirm);
+
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
       int r = parse_bool(flag_val, &flag_bool, ss);
@@ -1521,7 +1529,9 @@ class FlagSetHandler : public FileSystemCommandHandler
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
       }
-
+      if (confirm != "--yes-i-really-mean-it") {
+	ss << EXPERIMENTAL_WARNING;
+      }
       fsmap.set_enable_multiple(flag_bool);
       return 0;
     } else {
@@ -1812,6 +1822,11 @@ public:
       if (interr.length()) {
 	return -EINVAL;
       }
+      if (!fs->mds_map.allows_multimds() && n > fs->mds_map.get_max_mds() &&
+	  n > 1) {
+	ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
+	return -EINVAL;
+      }
       if (n > MAX_MDS) {
         ss << "may not have more than " << MAX_MDS << " MDS ranks";
         return -EINVAL;
@@ -1833,7 +1848,7 @@ public:
 	string confirm;
 	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
-	  ss << "inline data is new and experimental; you must specify --yes-i-really-mean-it";
+	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
 	ss << "inline data enabled";
@@ -1892,7 +1907,7 @@ public:
 	string confirm;
 	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
 	    confirm != "--yes-i-really-mean-it") {
-	  ss << "Snapshots are unstable and will probably break your FS! Set to --yes-i-really-mean-it if you are sure you want to enable them";
+	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
         fsmap.modify_filesystem(
@@ -1902,6 +1917,64 @@ public:
           fs->mds_map.set_snaps_allowed();
         });
 	ss << "enabled new snapshots";
+      }
+    } else if (var == "allow_multimds") {
+      bool enable_multimds = false;
+      int r = parse_bool(val, &enable_multimds, ss);
+      if (r != 0) {
+	return r;
+      }
+
+      if (!enable_multimds) {
+	fsmap.modify_filesystem(fs->fscid,
+	     [](std::shared_ptr<Filesystem> fs)
+		{
+		  fs->mds_map.clear_multimds_allowed();
+		});
+	ss << "disallowed increasing the cluster size past 1";
+      } else {
+	string confirm;
+	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	    confirm != "--yes-i-really-mean-it") {
+	  ss << EXPERIMENTAL_WARNING;
+	  return -EPERM;
+	}
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [](std::shared_ptr<Filesystem> fs)
+        {
+          fs->mds_map.set_multimds_allowed();
+        });
+	ss << "enabled creation of more than 1 active MDS";
+      }
+    } else if (var == "allow_dirfrags") {
+      bool enable_dirfrags = false;
+      int r = parse_bool(val, &enable_dirfrags, ss);
+      if (r != 0) {
+	return r;
+      }
+
+      if (!enable_dirfrags) {
+	fsmap.modify_filesystem(fs->fscid,
+	     [](std::shared_ptr<Filesystem> fs)
+		{
+		  fs->mds_map.clear_dirfrags_allowed();
+		});
+	ss << "disallowed new directory fragmentation";
+      } else {
+	string confirm;
+	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	    confirm != "--yes-i-really-mean-it") {
+	  ss << EXPERIMENTAL_WARNING;
+	  return -EPERM;
+	}
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [](std::shared_ptr<Filesystem> fs)
+        {
+          fs->mds_map.set_dirfrags_allowed();
+        });
+	ss << "enabled directory fragmentation";
       }
     } else if (var == "cluster_down") {
       bool is_down = false;
@@ -2329,6 +2402,17 @@ int MDSMonitor::legacy_filesystem_command(
     if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0) {
       return -EINVAL;
     }
+
+    const MDSMap& mdsmap =
+      pending_fsmap.filesystems.at(pending_fsmap.legacy_client_fscid)->mds_map;
+      
+    if (!mdsmap.allows_multimds() &&
+	maxmds > mdsmap.get_max_mds() &&
+	maxmds > 1) {
+      ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
+      return -EINVAL;
+    }
+
     if (maxmds > MAX_MDS) {
       ss << "may not have more than " << MAX_MDS << " MDS ranks";
       return -EINVAL;
