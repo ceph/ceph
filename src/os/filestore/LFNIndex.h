@@ -502,19 +502,19 @@ private:
   } ///< @return Generated object name.
 
   /// Parse object name
-  bool lfn_parse_object_name_keyless(
+  int lfn_parse_object_name_keyless(
     const string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successfull, False otherwise.
 
   /// Parse object name
-  bool lfn_parse_object_name_poolless(
+  int lfn_parse_object_name_poolless(
     const string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successfull, False otherwise.
 
   /// Parse object name
-  bool lfn_parse_object_name(
+  int lfn_parse_object_name(
     const string &long_name, ///< [in] Name to parse
     ghobject_t *out	     ///< [out] Resulting Object
     ); ///< @return True if successfull, False otherwise.

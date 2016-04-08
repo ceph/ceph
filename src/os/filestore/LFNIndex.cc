@@ -429,9 +429,11 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
     ghobject_t obj;
     if (lfn_is_object(short_name)) {
       r = lfn_translate(to_list, short_name, &obj);
-      if (r < 0) {
+      if (r == -EINVAL) {
+	continue;
+      } else if (r < 0) {
 	goto cleanup;
-      } else if (r > 0) {
+      } else {
 	string long_name = lfn_generate_object_name(obj);
 	if (!lfn_must_hash(long_name)) {
 	  assert(long_name == short_name);
@@ -441,8 +443,6 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 
 	out->insert(pair<string, ghobject_t>(short_name, obj));
 	++listed;
-      } else {
-	continue;
       }
     }
   }
@@ -1037,7 +1037,7 @@ static int parse_object(const char *s, ghobject_t& o)
   return 0;
 }
 
-bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t *out)
+int LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t *out)
 {
   bool r = parse_object(long_name.c_str(), *out);
   int64_t pool = -1;
@@ -1047,7 +1047,7 @@ bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t
   out->hobj.pool = pool;
   if (!r) return r;
   string temp = lfn_generate_object_name(*out);
-  return r;
+  return r ? 0 : -EINVAL;
 }
 
 static bool append_unescaped(string::const_iterator begin,
@@ -1074,8 +1074,8 @@ static bool append_unescaped(string::const_iterator begin,
   return true;
 }
 
-bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
-					      ghobject_t *out)
+int LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
+					     ghobject_t *out)
 {
   string name;
   string key;
@@ -1086,7 +1086,7 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
   if (*current == '\\') {
     ++current;
     if (current == long_name.end()) {
-      return false;
+      return -EINVAL;
     } else if (*current == 'd') {
       name.append("DIR_");
       ++current;
@@ -1101,27 +1101,27 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
   string::const_iterator end = current;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   if (!append_unescaped(current, end, &name))
-    return false;
+    return -EINVAL;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   if (!append_unescaped(current, end, &key))
-    return false;
+    return -EINVAL;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   string snap_str(current, end);
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end != long_name.end())
-    return false;
+    return -EINVAL;
   string hash_str(current, end);
 
   if (snap_str == "head")
@@ -1138,11 +1138,11 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
   if (coll().is_pg_prefix(&pg))
     pool = (int64_t)pg.pgid.pool();
   (*out) = ghobject_t(hobject_t(name, key, snap, hash, pool, ""));
-  return true;
+  return 0;
 }
 
 
-bool LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
+int LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
 {
   string name;
   string key;
@@ -1162,7 +1162,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
   if (*current == '\\') {
     ++current;
     if (current == long_name.end()) {
-      return false;
+      return -EINVAL;
     } else if (*current == 'd') {
       name.append("DIR_");
       ++current;
@@ -1177,35 +1177,35 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
   string::const_iterator end = current;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   if (!append_unescaped(current, end, &name))
-    return false;
+    return -EINVAL;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   if (!append_unescaped(current, end, &key))
-    return false;
+    return -EINVAL;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   string snap_str(current, end);
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   string hash_str(current, end);
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
   if (end == long_name.end())
-    return false;
+    return -EINVAL;
   if (!append_unescaped(current, end, &ns))
-    return false;
+    return -EINVAL;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != '_'; ++end) ;
@@ -1217,7 +1217,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
     current = ++end;
     for ( ; end != long_name.end() && *end != '_'; ++end) ;
     if (end == long_name.end())
-      return false;
+      return -EINVAL;
     genstring = string(current, end);
 
     generation = (gen_t)strtoull(genstring.c_str(), NULL, 16);
@@ -1225,7 +1225,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
     current = ++end;
     for ( ; end != long_name.end() && *end != '_'; ++end) ;
     if (end != long_name.end())
-      return false;
+      return -EINVAL;
     shardstring = string(current, end);
 
     shard_id = (shard_id_t)strtoul(shardstring.c_str(), NULL, 16);
@@ -1245,7 +1245,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, ghobject_t *out)
     pool = strtoull(pstring.c_str(), NULL, 16);
 
   (*out) = ghobject_t(hobject_t(name, key, snap, hash, (int64_t)pool, ns), generation, shard_id);
-  return true;
+  return 0;
 }
 
 bool LFNIndex::lfn_is_hashed_filename(const string &name)
