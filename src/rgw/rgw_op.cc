@@ -2995,7 +2995,8 @@ void RGWDeleteObj::execute()
     return;
   }
 
-  rgw_obj obj(s->bucket, s->object);
+  rgw_obj obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
   map<string, bufferlist> attrs;
 
 
