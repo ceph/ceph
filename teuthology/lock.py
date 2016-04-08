@@ -43,7 +43,8 @@ def get_distro_from_downburst():
                                  u'11.04(natty)', u'11.10(oneiric)',
                                  u'12.04(precise)', u'12.10(quantal)',
                                  u'13.04(raring)', u'13.10(saucy)',
-                                 u'14.04(trusty)', u'utopic(utopic)'],
+                                 u'14.04(trusty)', u'utopic(utopic)',
+                                 u'16.04(xenial)'],
                      u'sles': [u'11-sp2'],
                      u'debian': [u'6.0', u'7.0', u'8.0']}
     executable_cmd = provision.downburst_executable()
