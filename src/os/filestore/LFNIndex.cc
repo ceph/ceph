@@ -430,7 +430,6 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
     if (lfn_is_object(short_name)) {
       r = lfn_translate(to_list, short_name, &obj);
       if (r < 0) {
-	r = -errno;
 	goto cleanup;
       } else if (r > 0) {
 	string long_name = lfn_generate_object_name(obj);
