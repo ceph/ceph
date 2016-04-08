@@ -2384,7 +2384,7 @@ class PrepareData(object):
         elif stat.S_ISBLK(dmode):
             self.type = self.DEVICE
         else:
-            raise Error('not a dir or block device', args.data)
+            raise Error('not a dir or block device', self.args.data)
 
     def is_file(self):
         return self.type == self.FILE
