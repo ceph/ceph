@@ -7650,7 +7650,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
       post_event(NeedUpThru());
     } else {
       dout(10) << "Got last missing, don't need missing "
-	       << "posting CheckRepops" << dendl;
+	       << "posting Activate" << dendl;
       post_event(Activate(pg->get_osdmap()->get_epoch()));
     }
   }
