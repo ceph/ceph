@@ -22,7 +22,7 @@ using namespace std;
 
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
-static int parse_list(string& uid_list, list<string>& uids)
+static int parse_list(const string& uid_list, list<string>& uids)
 {
   char *s = strdup(uid_list.c_str());
   if (!s) {
@@ -62,13 +62,13 @@ static bool uid_is_public(const string& uid)
          sub.compare(".referrer") == 0;
 }
 
-void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uids, int perm)
+void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados * const store,
+                                              const list<string>& uids,
+                                              const int perm)
 {
-  list<string>::iterator iter;
-  for (iter = uids.begin(); iter != uids.end(); ++iter ) {
+  for (const auto& uid : uids) {
     ACLGrant grant;
     RGWUserInfo grant_user;
-    string& uid = *iter;
     if (uid_is_public(uid)) {
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
       acl.add_grant(&grant);
@@ -85,7 +85,11 @@ void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uid
   }
 }
 
-bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string& name, string& read_list, string& write_list)
+bool RGWAccessControlPolicy_SWIFT::create(RGWRados * const store,
+                                          const rgw_user& id,
+                                          const std::string& name,
+                                          const std::string& read_list,
+                                          const std::string& write_list)
 {
   acl.create_default(id, name);
   owner.set_id(id);
