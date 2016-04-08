@@ -420,7 +420,7 @@ void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
 bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
   /* The conditions below may clear (on_local_recover, before we queue
-   * the tranasction) before we actually requeue the degraded waiters
+   * the transaction) before we actually requeue the degraded waiters
    * in on_global_recover after the transaction completes.
    */
   if (waiting_for_degraded_object.count(soid))
@@ -578,7 +578,7 @@ bool PGLSParentFilter::filter(const hobject_t &obj,
   vector<inode_backpointer_t>::iterator vi;
   for (vi = bt.ancestors.begin(); vi != bt.ancestors.end(); ++vi) {
     generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
-    if ( vi->dirino == parent_ino) {
+    if (vi->dirino == parent_ino) {
       ::encode(*vi, outdata);
       return true;
     }
@@ -680,7 +680,7 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
   } else {
     // Successfully constructed and initialized, return it.
     *pfilter = filter;
-    return  0;
+    return 0;
   }
 }
 
@@ -830,7 +830,6 @@ int ReplicatedPG::do_command(
     {
       f->open_array_section("objects");
       int32_t num = 0;
-      bufferlist bl;
       for (; p != needs_recovery_map.end() && num < cct->_conf->osd_command_max_records; ++p) {
         if (missing_loc.is_unfound(p->first)) {
 	  f->open_object_section("object");
@@ -855,7 +854,7 @@ int ReplicatedPG::do_command(
       }
       f->close_section();
     }
-    f->dump_int("more", p != needs_recovery_map.end());
+    f->dump_bool("more", p != needs_recovery_map.end());
     f->close_section();
     f->flush(odata);
     return 0;
@@ -1422,7 +1421,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
-  snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  snapset_contexts_lock("ReplicatedPG::snapset_contexts_lock"),
   backfills_in_flight(hobject_t::Comparator(true)),
   pending_backfill_updates(hobject_t::Comparator(true)),
   new_backfill(false),
