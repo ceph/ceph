@@ -122,7 +122,7 @@ class Ptype(object):
 
     @staticmethod
     def get_ready_by_name(name):
-        return [x[name]['ready'] for x in PTYPE.values()]
+        return [x[name]['ready'] for x in PTYPE.values() if name in x]
 
     @staticmethod
     def is_regular_space(ptype):
@@ -2241,8 +2241,8 @@ class Lockbox(object):
                       self.args.lockbox)
             self.partition = DevicePartition.factory(
                 path=None, dev=self.args.lockbox, args=self.args)
-            ptype = partition.get_ptype()
-            ready = Ptype.get_ready_by_type('lockbox')
+            ptype = self.partition.get_ptype()
+            ready = Ptype.get_ready_by_name('lockbox')
             if ptype not in ready:
                 LOG.warning('incorrect partition UUID: %s, expected %s'
                             % (ptype, str(ready)))
