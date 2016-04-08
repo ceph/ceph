@@ -312,13 +312,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
     return r;
   }
 
-  if (!is_primary) {
-    if (!force) {
-      lderr(cct) << "Mirrored image is not the primary, add force option to"
-        " disable mirroring" << dendl;
-      return -EINVAL;
-    }
-    goto remove_mirroring_image;
+  if (!is_primary && !force) {
+    lderr(cct) << "Mirrored image is not the primary, add force option to"
+                  " disable mirroring" << dendl;
+    return -EINVAL;
   }
 
   mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
@@ -327,6 +324,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  if (!is_primary) {
+    goto remove_mirroring_image;
   }
 
   r = MirroringWatcher<>::notify_image_updated(
