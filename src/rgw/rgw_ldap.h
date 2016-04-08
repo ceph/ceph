@@ -4,8 +4,10 @@
 #ifndef RGW_LDAP_H
 #define RGW_LDAP_H
 
+#if defined(HAVE_OPENLDAP)
 #define LDAP_DEPRECATED 1
 #include "ldap.h"
+#endif
 
 #include <stdint.h>
 #include <tuple>
