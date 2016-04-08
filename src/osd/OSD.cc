@@ -3453,7 +3453,7 @@ void OSD::handle_pg_peering_evt(
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
-	pgid, false, result == RES_SELF,
+	pgid, false, false,
 	role,
 	up, up_primary,
 	acting, acting_primary,
@@ -4249,7 +4249,7 @@ void OSD::tick_without_osd_lock()
 	      << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
       reset = true;
-      last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
+      last_pg_stats_ack = now;  // reset clock
       last_pg_stats_sent = utime_t();
       stats_ack_timeout =
 	MAX(g_conf->osd_mon_ack_timeout,
