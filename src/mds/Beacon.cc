@@ -443,6 +443,13 @@ void Beacon::notify_health(MDSRank const *mds)
       large_completed_requests_metrics.clear();
     }
   }
+
+  // Report a health warning if we are readonly
+  if (mds->mdcache->is_readonly()) {
+    MDSHealthMetric m(MDS_HEALTH_READ_ONLY, HEALTH_WARN,
+                      "MDS in read-only mode");
+    health.metrics.push_back(m);
+  }
 }
 
 MDSMap::DaemonState Beacon::get_want_state() const
