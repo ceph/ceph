@@ -5911,7 +5911,7 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
     post_event(advmap);
     return transit< Reset >();
   }
-  
+  pg->check_full_transition(advmap.lastmap, advmap.osdmap);
   pg->adjust_need_up_thru(advmap.osdmap);
   
   return forward_event();
@@ -6617,6 +6617,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
   dout(10) << "Active advmap" << dendl;
+  pg->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (!pg->pool.newly_removed_snaps.empty()) {
     pg->snap_trimq.union_of(pg->pool.newly_removed_snaps);
     dout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
