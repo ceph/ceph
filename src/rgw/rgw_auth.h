@@ -233,6 +233,9 @@ protected:
   RGWAuthEngine& operator=(const RGWAuthEngine&) = delete;
 
 public:
+  /* Get name of the auth engine. */
+  virtual std::string get_name() const noexcept = 0;
+
   /* Fast, non-throwing method for screening whether a concrete engine may
    * be interested in handling a specific request. */
   virtual bool is_applicable() const noexcept = 0;
@@ -291,6 +294,10 @@ public:
       apl_factory(apl_factory) {
   }
 
+  std::string get_name() const noexcept override {
+    return "RGWKeystoneAuthEngine";
+  }
+
   bool is_applicable() const noexcept override;
   RGWAuthApplier::aplptr_t authenticate() const override;
 };
@@ -309,6 +316,10 @@ public:
 
   bool is_applicable() const noexcept override {
     return true;
+  }
+
+  std::string get_name() const noexcept override {
+    return "RGWAnonymousAuthEngine";
   }
 
   RGWAuthApplier::aplptr_t authenticate() const override;

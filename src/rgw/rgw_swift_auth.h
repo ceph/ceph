@@ -65,6 +65,10 @@ public:
   }
 
   /* Interface implementations. */
+  std::string get_name() const noexcept override {
+    return "RGWTempURLAuthEngine";
+  }
+
   bool is_applicable() const noexcept override;
   RGWAuthApplier::aplptr_t authenticate() const override;
 };
@@ -85,6 +89,10 @@ public:
       apl_factory(apl_factory) {
   }
 
+  std::string get_name() const noexcept override {
+    return "RGWSignedTokenAuthEngine";
+  }
+
   bool is_applicable() const noexcept override;
   RGWAuthApplier::aplptr_t authenticate() const override;
 };
@@ -103,6 +111,10 @@ public:
     : RGWTokenBasedAuthEngine(cct, extr),
       store(store),
       apl_factory(apl_factory) {
+  }
+
+  std::string get_name() const noexcept override {
+    return "RGWExternalTokenAuthEngine";
   }
 
   bool is_applicable() const noexcept override;
