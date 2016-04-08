@@ -135,7 +135,7 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
     return getxattr_len(fn, name);
 
   do {
-    chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
+    chunk_size = size;
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
 
     r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
@@ -206,7 +206,7 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
     return chain_fgetxattr_len(fd, name);
 
   do {
-    chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
+    chunk_size = size;
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
 
     r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
