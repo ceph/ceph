@@ -15,7 +15,8 @@ def multi_region_enabled(ctx):
     # use that as an indicator that we're testing multi-region sync
     return 'radosgw_agent' in ctx
 
-def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
+def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
+             format='json'):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
     pre = [
@@ -24,7 +25,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'radosgw-admin'.format(tdir=testdir),
         '--log-to-stderr',
-        '--format', 'json',
+        '--format', format,
         '-n',  client,
         ]
     pre.extend(cmd)
