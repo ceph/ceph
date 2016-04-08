@@ -993,7 +993,7 @@ def task(ctx, config):
     # TESTCASE 'zone-info', 'zone', 'get', 'get zone info', 'succeeds, has default placement rule'
     #
 
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
     orig_placement_pools = len(out['placement_pools'])
 
     # removed this test, it is not correct to assume that zone has default placement, it really
@@ -1013,6 +1013,6 @@ def task(ctx, config):
         stdin=StringIO(json.dumps(out)),
         check_status=True)
 
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
     assert len(out) > 0
     assert len(out['placement_pools']) == orig_placement_pools + 1
