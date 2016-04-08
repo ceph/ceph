@@ -599,3 +599,38 @@ void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_tra
   o.back()->ops.back().data.append("foodata");
   o.back()->ops.back().nid = 4;
 }
+
+// bluestore_blob_t
+void bluestore_blob_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("flags", flags);
+  //FIXME: more fields to dump
+}
+
+// bluestore_lextent_t
+string bluestore_lextent_t::get_flags_string(unsigned flags)
+{
+  string s;
+  return s;
+}
+
+void bluestore_lextent_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("blob", blob);
+  f->dump_unsigned("x_offset", x_offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("flags", flags);
+}
+
+void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& o)
+{
+}
+
+ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
+{
+  out  << lb.x_offset << "~" << lb.length << "->" << lb.blob;
+  if (lb.flags)
+    out << ":" << bluestore_lextent_t::get_flags_string(lb.flags);
+  return out;
+}
