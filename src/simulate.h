@@ -17,10 +17,10 @@
 #include <random>
 #include <iostream>
 #include <iomanip>
+#include <string>
 
 
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-
 
 extern double fmt_tp(const TimePoint&);
 extern TimePoint now();
@@ -38,7 +38,13 @@ class Simulation {
   ClientMap clients;
   std::vector<ServerId> server_ids;
 
+  TimePoint early_time;
+  TimePoint clients_created_time;
+  TimePoint late_time;
+
   std::default_random_engine prng;
+
+  bool has_run = false;
 
 
 public:
@@ -46,12 +52,27 @@ public:
   using ClientBasedServerSelectFunc =
     std::function<const ServerId&(uint64_t, uint16_t)>;
 
+  using ClientFilter = std::function<bool(const ClientId&)>;
+
+  using ServerFilter = std::function<bool(const ServerId&)>;
+
+  using ServerDataOutF =
+    std::function<std::string(Simulation* sim, ServerFilter,
+			      int header_w, int data_w, int data_prec)>;
+
+  using ClientDataOutF =
+    std::function<std::string(Simulation* sim, ClientFilter,
+			      int header_w, int data_w, int data_prec)>;
+
   Simulation() :
+    early_time(now()),
     prng(std::chrono::system_clock::now().time_since_epoch().count())
   {
     // empty
   }
 
+  uint get_client_count() const { return client_count; }
+  uint get_server_count() const { return server_count; }
   TC& get_client(ClientId id) { return *clients[id]; }
   TS& get_server(ServerId id) { return *servers[id]; }
   const ServerId& get_server_id(uint index) const { return server_ids[index]; }
@@ -73,6 +94,8 @@ public:
       clients[i] = create_client_f(client_count + i);
     }
     client_count += count;
+
+    clients_created_time = now();
   }
 
 
@@ -82,24 +105,33 @@ public:
 
     std::cout << "simulation started" << std::endl;
 
-    // simulation params
-
-    const TimePoint early_time = now();
-    const std::chrono::seconds skip_amount(0); // skip first 2 secondsd of data
-    const std::chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
-    const std::chrono::seconds report_unit(1); // unit to output reports in
-    
-    TimePoint clients_created_time = now();
-
     // clients are now running; wait for all to finish
 
     for (auto const &i : clients) {
       i.second->wait_until_done();
     }
 
+    late_time = now();
+
+    std::cout << "simulation complete" << std::endl;
+
+    has_run = true;
+  } // run
+
+
+  void display_stats(std::ostream& out,
+		     ServerDataOutF server_out_f, ClientDataOutF client_out_f,
+		     ServerFilter server_filter = [](const ServerId&) { return true; },
+		     ClientFilter client_filter = [](const ClientId&) { return true; },
+		     int head_w = 12, int data_w = 8, int data_prec = 2) {
+    assert(has_run);
+    
+    const std::chrono::seconds skip_amount(0); // skip first 2 secondsd of data
+    const std::chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
+    const std::chrono::seconds report_unit(1); // unit to output reports in
+
     // compute and display stats
 
-    const TimePoint late_time = now();
     TimePoint earliest_start = late_time;
     TimePoint latest_start = early_time;
     TimePoint earliest_finish = late_time;
@@ -138,33 +170,21 @@ public:
       }
     }
 
-    const int head_w = 12;
-    const int data_w = 8;
-    const int data_prec = 2;
+    out << "==== Client Data ====" << std::endl;
 
-    auto client_disp_filter = [=] (ClientId i) -> bool {
-      return i < 3 || i >= (client_count - 3);
-    };
-
-    auto server_disp_filter = [=] (ServerId i) -> bool {
-      return i < 3 || i >= (server_count - 3);
-    };
-
-    std::cout << "==== Client Data ====" << std::endl;
-
-    std::cout << std::setw(head_w) << "client:";
+    out << std::setw(head_w) << "client:";
     for (auto const &c : clients) {
-      if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << c.first;
+      if (!client_filter(c.first)) continue;
+      out << std::setw(data_w) << c.first;
     }
-    std::cout << std::setw(data_w) << "total" << std::endl;
+    out << std::setw(data_w) << "total" << std::endl;
 
     {
       bool has_data;
       size_t i = 0;
       do {
 	std::string line_header = "t_" + std::to_string(i) + ":";
-	std::cout << std::setw(head_w) << line_header;
+	out << std::setw(head_w) << line_header;
 	has_data = false;
 	double total = 0.0;
 	for (auto const &c : clients) {
@@ -175,33 +195,29 @@ public:
 	  }
 	  total += data;
 
-	  if (!client_disp_filter(c.first)) continue;
+	  if (!client_filter(c.first)) continue;
 
-	  std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+	  out << std::setw(data_w) << std::setprecision(data_prec) <<
 	    std::fixed << data;
 	}
-	std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+	out << std::setw(data_w) << std::setprecision(data_prec) <<
 	  std::fixed << total << std::endl;
 	++i;
       } while(has_data);
     }
 
-#if 0
-    std::cout << client_data(head_w, data_w);
-#endif
+    out << client_out_f(this, client_filter, head_w, data_w, data_prec);
 
-    std::cout << std::endl << "==== Server Data ====" << std::endl;
+    out << std::endl << "==== Server Data ====" << std::endl;
 
-    std::cout << std::setw(head_w) << "server:";
+    out << std::setw(head_w) << "server:";
     for (auto const &s : servers) {
-      if (!server_disp_filter(s.first)) continue;
-      std::cout << std::setw(data_w) << s.first;
+      if (!server_filter(s.first)) continue;
+      out << std::setw(data_w) << s.first;
     }
-    std::cout << std::setw(data_w) << "total" << std::endl;
+    out << std::setw(data_w) << "total" << std::endl;
 
-#if 0
-    std::cout << server_data(head_w, data_w);
-#endif
+    out << server_out_f(this, server_filter, head_w, data_w, data_prec);
 
     // clean up clients then servers
 
@@ -214,9 +230,7 @@ public:
       delete i->second;
       i->second = nullptr;
     }
-
-    std::cout << "simulation complete" << std::endl;
-  } // simulate
+  } // display_stats
 
 
   // **** server selection functions ****

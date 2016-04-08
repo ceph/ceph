@@ -6,6 +6,8 @@
  */
 
 
+#include <sstream>
+
 #include "dmclock_recs.h"
 #include "dmclock_server.h"
 #include "dmclock_client.h"
@@ -23,12 +25,24 @@ namespace dmc = crimson::dmclock;
 
 using DmcServerAddInfo = crimson::dmclock::PhaseType;
 
-
 struct DmcAccum {
   uint64_t reservation_count = 0;
   uint64_t proportion_count = 0;
 };
 
+using DmcServer = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
+			     dmc::ClientInfo,
+			     dmc::ReqParams<ClientId>,
+			     dmc::RespParams<ServerId>,
+			     DmcServerAddInfo,
+			     DmcAccum>;
+
+using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
+			     dmc::ReqParams<ClientId>,
+			     dmc::RespParams<ServerId>,
+			     DmcAccum>;
+
+using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 
 
 void dmc_server_accumulate_f(DmcAccum& a, const DmcServerAddInfo& add_info) {
@@ -49,67 +63,80 @@ void dmc_client_accumulate_f(DmcAccum& a, const dmc::RespParams<ServerId>& r) {
 }
 
 
-#if 0 // do last
-void client_data(std::ostream& out, clients, int head_w, int data_w) {
+std::string client_data(MySim* sim,
+			MySim::ClientFilter client_disp_filter,
+			int head_w, int data_w, int data_prec) {
+  std::stringstream out;
   // report how many ops were done by reservation and proportion for
   // each client
 
   {
-    std::cout << std::setw(head_w) << "res_ops:";
+    out << std::setw(head_w) << "res_ops:";
     int total = 0;
-    for (auto const &c : clients) {
-      auto r = c.second->get_accumulator().reservation_count;
+    for (uint i = 0; i < sim->get_client_count(); ++i) {
+      const auto& client = sim->get_client(i);
+      auto r = client.get_accumulator().reservation_count;
       total += r;
-      if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << r;
+      if (!client_disp_filter(i)) continue;
+      out << std::setw(data_w) << r;
     }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << std::setw(data_w) << std::setprecision(data_prec) <<
       std::fixed << total << std::endl;
   }
-
+#if 0
   {
-    std::cout << std::setw(head_w) << "prop_ops:";
+    out << std::setw(head_w) << "prop_ops:";
     int total = 0;
     for (auto const &c : clients) {
       auto p = c.second->get_accumulator().proportion_count;
       total += p;
       if (!client_disp_filter(c.first)) continue;
-      std::cout << std::setw(data_w) << p;
+      out << std::setw(data_w) << p;
     }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << std::setw(data_w) << std::setprecision(data_prec) <<
       std::fixed << total << std::endl;
   }
+#endif
+
+  return out.str();
 }
 
 
-void server_data(std::ostream& out, servers, int head_w, int data_w) {
+std::string server_data(MySim* sim,
+			MySim::ServerFilter server_disp_filter,
+			int head_w, int data_w, int data_prec) {
+  std::stringstream out;
+
+#if 0
   {
-    std::cout << std::setw(head_w) << "res_ops:";
+    out << std::setw(head_w) << "res_ops:";
     int total = 0;
     for (auto const &s : servers) {
       auto rc = s.second->get_accumulator().reservation_count;
       total += rc;
       if (!server_disp_filter(s.first)) continue;
-      std::cout << std::setw(data_w) << rc;
+      out << std::setw(data_w) << rc;
     }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << std::setw(data_w) << std::setprecision(data_prec) <<
       std::fixed << total << std::endl;
   }
 
   {
-    std::cout << std::setw(head_w) << "prop_ops:";
+    out << std::setw(head_w) << "prop_ops:";
     int total = 0;
     for (auto const &s : servers) {
       auto pc = s.second->get_accumulator().proportion_count;
       total += pc;
       if (!server_disp_filter(s.first)) continue;
-      std::cout << std::setw(data_w) << pc;
+      out << std::setw(data_w) << pc;
     }
-    std::cout << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << std::setw(data_w) << std::setprecision(data_prec) <<
       std::fixed << total << std::endl;
   }
+#endif
+
+  return out.str();
 }
-#endif // do last
 
 const double client_reservation = 20.0;
 const double client_limit = 60.0;
@@ -125,18 +152,6 @@ dmc::ClientInfo client_info_f(const ClientId& c) {
   return client_info;
 }
 
-
-using DmcServer = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
-			     dmc::ClientInfo,
-			     dmc::ReqParams<ClientId>,
-			     dmc::RespParams<ServerId>,
-			     DmcServerAddInfo,
-			     DmcAccum>;
-
-using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
-			     dmc::ReqParams<ClientId>,
-			     dmc::RespParams<ServerId>,
-			     DmcAccum>;
 
 using SubmitFunc = DmcClient::SubmitFunc;
 
@@ -158,7 +173,14 @@ int main(int argc, char* argv[]) {
   const uint client_outstanding_ops = 100;
   const std::chrono::seconds client_wait(10);
 
-  using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
+  auto client_disp_filter = [=] (const ClientId& i) -> bool {
+    return i < 3 || i >= (client_count - 3);
+  };
+
+  auto server_disp_filter = [=] (const ServerId& i) -> bool {
+    return i < 3 || i >= (server_count - 3);
+  };
+
 
   MySim *simulation;
 
@@ -211,4 +233,7 @@ int main(int argc, char* argv[]) {
   simulation->add_clients(client_count, create_client_f);
 
   simulation->run();
+  simulation->display_stats(std::cout,
+			    &server_data, &client_data,
+			    server_disp_filter, client_disp_filter);
 }
