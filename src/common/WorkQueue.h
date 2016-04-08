@@ -414,6 +414,11 @@ public:
       }
       return m_items.front();
     }
+    void requeue(T *item) {
+      Mutex::Locker pool_locker(m_pool->_lock);
+      _void_process_finish(nullptr);
+      m_items.push_front(item);
+    }
     void signal() {
       Mutex::Locker pool_locker(m_pool->_lock);
       m_pool->_cond.SignalOne();
