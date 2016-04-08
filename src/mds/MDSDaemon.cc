@@ -482,8 +482,21 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
     mds_lock.Unlock();
     return r;
   }
+
+  int rotating_auth_attempts = 0;
+  const int max_rotating_auth_attempts = 10;
+
   while (monc->wait_auth_rotating(30.0) < 0) {
-    derr << "unable to obtain rotating service keys; retrying" << dendl;
+    if (++rotating_auth_attempts <= max_rotating_auth_attempts) {
+      derr << "unable to obtain rotating service keys; retrying" << dendl;
+      continue;
+    }
+    derr << "ERROR: failed to refresh rotating keys, "
+         << "maximum retry time reached." << dendl;
+    mds_lock.Lock();
+    suicide();
+    mds_lock.Unlock();
+    return -ETIMEDOUT;
   }
 
   objecter->start();
@@ -809,6 +822,7 @@ int MDSDaemon::_handle_command(
     if (mds_rank == NULL) {
       r = -EINVAL;
       ss << "MDS not active";
+      goto out;
     }
     // FIXME harmonize `session kill` with admin socket session evict
     int64_t session_id = 0;
@@ -996,6 +1010,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
             // has taken our ID, we don't want to keep restarting and
             // fighting them for the ID.
             suicide();
+            m->put();
             return;
           }
         }
@@ -1252,6 +1267,7 @@ bool MDSDaemon::handle_core_message(Message *m)
     if (mds_rank) {
       mds_rank->handle_osd_map();
     }
+    m->put();
     break;
 
   default:
