@@ -1876,18 +1876,18 @@ class PrepareSpace(object):
         if stat.S_ISBLK(mode):
             if getattr(args, name + '_file'):
                 raise Error('%s is not a regular file' % name.capitalize,
-                            geattr(args, name))
+                            getattr(args, name))
             self.type = self.DEVICE
             return
 
         if stat.S_ISREG(mode):
             if getattr(args, name + '_dev'):
                 raise Error('%s is not a block device' % name.capitalize,
-                            geattr(args, name))
+                            getattr(args, name))
             self.type = self.FILE
 
         raise Error('%s %s is neither a block device nor regular file' %
-                    (name.capitalize, geattr(args, name)))
+                    (name.capitalize, getattr(args, name)))
 
     def is_none(self):
         return self.type == self.NONE
