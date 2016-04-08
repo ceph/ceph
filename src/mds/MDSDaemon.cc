@@ -337,11 +337,19 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("dump_blocked_ops");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
+  admin_socket->unregister_command("tag path");
   admin_socket->unregister_command("flush_path");
+  admin_socket->unregister_command("export dir");
+  admin_socket->unregister_command("dump cache");
   admin_socket->unregister_command("session evict");
+  admin_socket->unregister_command("osdmap barrier");
   admin_socket->unregister_command("session ls");
   admin_socket->unregister_command("flush journal");
   admin_socket->unregister_command("force_readonly");
+  admin_socket->unregister_command("get subtrees");
+  admin_socket->unregister_command("dirfrag split");
+  admin_socket->unregister_command("dirfrag merge");
+  admin_socket->unregister_command("dirfrag ls");
   delete asok_hook;
   asok_hook = NULL;
 }
