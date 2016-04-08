@@ -413,6 +413,9 @@ COMMAND("fs add_data_pool name=fs_name,type=CephString " \
 COMMAND("fs rm_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("fs set_default name=fs_name,type=CephString", \
+	"set the default to the named filesystem", \
+	"fs", "rw", "cli,rest")
 
 /*
  * Monmap commands
