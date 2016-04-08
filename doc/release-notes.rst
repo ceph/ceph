@@ -2,8 +2,8 @@
  Release Notes
 ===============
 
-v10.1.1 (draft)
-===============
+v10.1.1
+=======
 
 Notable Changes since v10.1.0
 -----------------------------
@@ -14,12 +14,12 @@ Notable Changes since v10.1.0
 * Makefile-env.am: set a default for CEPH_BUILD_VIRTUALENV (part 2) (`pr#8320 <http://github.com/ceph/ceph/pull/8320>`_, Loic Dachary)
 * Minor fixes around data scan in some scenarios (`pr#8115 <http://github.com/ceph/ceph/pull/8115>`_, Yan, Zheng)
 * PG: pg down state blocked by osd.x, lost osd.x cannot solve peering stuck (`issue#13531 <http://tracker.ceph.com/issues/13531>`_, `pr#6317 <http://github.com/ceph/ceph/pull/6317>`_, Xiaowei Chen)
-* Revewed-by: Samuel Just <sjust@redhat.com> (`pr#8156 <http://github.com/ceph/ceph/pull/8156>`_, Sage Weil)
+* osd/PG: indicate in pg query output whether ignore_history_les would help (`pr#8156 <http://github.com/ceph/ceph/pull/8156>`_, Sage Weil)
 * Striper: reduce assemble_result log level (`pr#8426 <http://github.com/ceph/ceph/pull/8426>`_, Jason Dillaman)
 * Test exit values on test.sh, fix tier.cc (`issue#15165 <http://tracker.ceph.com/issues/15165>`_, `pr#8266 <http://github.com/ceph/ceph/pull/8266>`_, Samuel Just)
-* Tested-by: Sage Weil <sage@redhat.com> (`pr#8360 <http://github.com/ceph/ceph/pull/8360>`_, Josh Durgin)
-* Wip 14438 (`pr#8215 <http://github.com/ceph/ceph/pull/8215>`_, David Zafman)
-* Wip rgw sync fixes 4 (`pr#8190 <http://github.com/ceph/ceph/pull/8190>`_, Yehuda Sadeh)
+* ceph.in: correct dev python path for automake builds (`pr#8360 <http://github.com/ceph/ceph/pull/8360>`_, Josh Durgin)
+* osd/OSD: fix build_past_intervals_parallel (`pr#8215 <http://github.com/ceph/ceph/pull/8215>`_, David Zafman)
+* rgw: sync fixes 4 (`pr#8190 <http://github.com/ceph/ceph/pull/8190>`_, Yehuda Sadeh)
 * [rgw] Check return code in RGWFileHandle::write (`pr#7875 <http://github.com/ceph/ceph/pull/7875>`_, Brad Hubbard)
 * build: fix compiling warnings (`pr#8366 <http://github.com/ceph/ceph/pull/8366>`_, Dongsheng Yang)
 * ceph-detect-init/run-tox.sh: FreeBSD: No init detect (`pr#8373 <http://github.com/ceph/ceph/pull/8373>`_, Willem Jan Withagen)
@@ -129,8 +129,6 @@ Notable Changes since v10.1.0
 * rgw_file: set owner uid, gid, and Unix mode on new objects (`pr#8321 <http://github.com/ceph/ceph/pull/8321>`_, Matt Benjamin)
 * rpm: prefer UID/GID 167 when creating ceph user/group (`issue#15246 <http://tracker.ceph.com/issues/15246>`_, `pr#8277 <http://github.com/ceph/ceph/pull/8277>`_, Nathan Cutler)
 * script: subscription-manager support (`issue#14972 <http://tracker.ceph.com/issues/14972>`_, `pr#7907 <http://github.com/ceph/ceph/pull/7907>`_, Loic Dachary)
-* script: subscription-manager support (part 2) (`issue#14972 <http://tracker.ceph.com/issues/14972>`_, `pr#8293 <http://github.com/ceph/ceph/pull/8293>`_, Loic Dachary)
-* script: subscription-manager support (part 3) (`pr#8334 <http://github.com/ceph/ceph/pull/8334>`_, Loic Dachary)
 * set 128MB tcmalloc cache size by bytes (`pr#8427 <http://github.com/ceph/ceph/pull/8427>`_, Star Guo)
 * systemd: set up environment in rbdmap unit file (`issue#14984 <http://tracker.ceph.com/issues/14984>`_, `pr#8222 <http://github.com/ceph/ceph/pull/8222>`_, Nathan Cutler)
 * test/system/*: use dynamically generated pool name (`issue#15240 <http://tracker.ceph.com/issues/15240>`_, `pr#8318 <http://github.com/ceph/ceph/pull/8318>`_, Kefu Chai)
@@ -149,8 +147,6 @@ Notable Changes since v10.1.0
 * xio: fix compilation against latest accelio (`pr#8022 <http://github.com/ceph/ceph/pull/8022>`_, Roi Dayan)
 * xio: xio_init needs to be called before any other xio function (`pr#8227 <http://github.com/ceph/ceph/pull/8227>`_, Roi Dayan)
 * ceph.spec.in: disable lttng and babeltrace explicitly (`issue#14844 <http://tracker.ceph.com/issues/14844>`_, `pr#7857 <http://github.com/ceph/ceph/pull/7857>`_, Kefu Chai)
-    ceph.spec.in: enable lttng and babeltrace explicitly
-    thanks to ktdreyer, we have lttng and babel in EPEL-7 now.
 
 v10.1.0 Jewel (release candidate)
 =================================
