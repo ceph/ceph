@@ -12099,10 +12099,12 @@ int Client::check_pool_perm(Inode *in, int need)
   if (!cct->_conf->client_check_pool_perm)
     return 0;
 
-  int64_t pool = in->layout.pool_id;
+  int64_t pool_id = in->layout.pool_id;
+  std::string pool_ns = in->layout.pool_ns;
+  std::pair<int64_t, std::string> perm_key(pool_id, pool_ns);
   int have = 0;
   while (true) {
-    std::map<int64_t, int>::iterator it = pool_perms.find(pool);
+    auto it = pool_perms.find(perm_key);
     if (it == pool_perms.end())
       break;
     if (it->second == POOL_CHECKING) {
@@ -12123,7 +12125,7 @@ int Client::check_pool_perm(Inode *in, int need)
       return 0;
     }
 
-    pool_perms[pool] = POOL_CHECKING;
+    pool_perms[perm_key] = POOL_CHECKING;
 
     char oid_buf[32];
     snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (unsigned long long)in->ino);
@@ -12155,7 +12157,7 @@ int Client::check_pool_perm(Inode *in, int need)
     if (rd_ret == 0 || rd_ret == -ENOENT)
       have |= POOL_READ;
     else if (rd_ret != -EPERM) {
-      ldout(cct, 10) << "check_pool_perm on pool " << pool
+      ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
       errored = true;
     }
@@ -12163,7 +12165,7 @@ int Client::check_pool_perm(Inode *in, int need)
     if (wr_ret == 0 || wr_ret == -EEXIST)
       have |= POOL_WRITE;
     else if (wr_ret != -EPERM) {
-      ldout(cct, 10) << "check_pool_perm on pool " << pool
+      ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
       errored = true;
     }
@@ -12172,22 +12174,22 @@ int Client::check_pool_perm(Inode *in, int need)
       // Indeterminate: erase CHECKING state so that subsequent calls re-check.
       // Raise EIO because actual error code might be misleading for
       // userspace filesystem user.
-      pool_perms.erase(pool);
+      pool_perms.erase(perm_key);
       signal_cond_list(waiting_for_pool_perm);
       return -EIO;
     }
 
-    pool_perms[pool] = have | POOL_CHECKED;
+    pool_perms[perm_key] = have | POOL_CHECKED;
     signal_cond_list(waiting_for_pool_perm);
   }
 
   if ((need & CEPH_CAP_FILE_RD) && !(have & POOL_READ)) {
-    ldout(cct, 10) << "check_pool_perm on pool " << pool
+    ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		   << " need " << ccap_string(need) << ", but no read perm" << dendl;
     return -EPERM;
   }
   if ((need & CEPH_CAP_FILE_WR) && !(have & POOL_WRITE)) {
-    ldout(cct, 10) << "check_pool_perm on pool " << pool
+    ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		   << " need " << ccap_string(need) << ", but no write perm" << dendl;
     return -EPERM;
   }
