@@ -2539,8 +2539,8 @@ class PrepareData(object):
                       self.args.data)
             self.partition = DevicePartition.factory(
                 path=None, dev=self.args.data, args=self.args)
-            ptype = partition.get_ptype()
-            ready = Ptype.get_ready_by_type('osd')
+            ptype = self.partition.get_ptype()
+            ready = Ptype.get_ready_by_name('osd')
             if ptype not in ready:
                 LOG.warning('incorrect partition UUID: %s, expected %s'
                             % (ptype, str(ready)))
