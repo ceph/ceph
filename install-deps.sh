@@ -110,7 +110,7 @@ function activate_virtualenv() {
     if ! test -d $env_dir ; then
         virtualenv --python $interpreter $env_dir
         . $env_dir/bin/activate
-        if ! populate_wheelhouse install ; then
+        if ! populate_wheelhouse "install --upgrade" ; then
             rm -rf $env_dir
             return 1
         fi
