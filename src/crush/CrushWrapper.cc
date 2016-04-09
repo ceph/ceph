@@ -353,7 +353,7 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
     if (t && t->size) {
-      ldout(cct, 1) << "remove_item_undef bucket " << item << " has " << t->size
+      ldout(cct, 1) << "remove_item_under bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
     }
