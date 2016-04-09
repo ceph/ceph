@@ -365,7 +365,7 @@ List Regions
 
 A Ceph cluster contains a list of regions. To list the regions, execute:: 
 
-	sudo radosgw-admin regions list
+	sudo radosgw-admin region list
 
 The ``radosgw-admin`` returns a JSON formatted list of regions. 
 

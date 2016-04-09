@@ -107,7 +107,7 @@ which are as follows:
 :command:`region get`
   Show region info.
 
-:command:`regions list`
+:command:`region list`
   List all regions set on this cluster.
 
 :command:`region set`
