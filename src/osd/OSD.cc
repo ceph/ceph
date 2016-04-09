@@ -227,14 +227,14 @@ OSDService::OSDService(OSD *osd) :
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
-  agent_lock("OSD::agent_lock"),
+  agent_lock("OSDService::agent_lock"),
   agent_valid_iterator(false),
   agent_ops(0),
   flush_mode_high_count(0),
   agent_active(true),
   agent_thread(this),
   agent_stop_flag(false),
-  agent_timer_lock("OSD::agent_timer_lock"),
+  agent_timer_lock("OSDService::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
   promote_probability_millis(1000),
   last_recalibrate(ceph_clock_now(NULL)),
@@ -242,10 +242,10 @@ OSDService::OSDService(OSD *osd) :
   promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
-  watch_lock("OSD::watch_lock"),
+  watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
-  backfill_request_lock("OSD::backfill_request_lock"),
+  backfill_request_lock("OSDService::backfill_request_lock"),
   backfill_request_timer(cct, backfill_request_lock, false),
   last_tid(0),
   reserver_finisher(cct),
@@ -254,12 +254,12 @@ OSDService::OSDService(OSD *osd) :
   remote_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		  cct->_conf->osd_min_recovery_priority),
   pg_temp_lock("OSDService::pg_temp_lock"),
-  map_cache_lock("OSDService::map_lock"),
+  map_cache_lock("OSDService::map_cache_lock"),
   map_cache(cct, cct->_conf->osd_map_cache_size),
   map_bl_cache(cct->_conf->osd_map_cache_size),
   map_bl_inc_cache(cct->_conf->osd_map_cache_size),
   in_progress_split_lock("OSDService::in_progress_split_lock"),
-  stat_lock("OSD::stat_lock"),
+  stat_lock("OSDService::stat_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
   last_msg(0),
@@ -2440,9 +2440,6 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_push,      "push", "Push messages sent");       // push messages
   osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes", "Pushed size");  // pushed bytes
 
-  osd_plb.add_u64_counter(l_osd_push_in,    "push_in", "Inbound push messages");        // inbound push messages
-  osd_plb.add_u64_counter(l_osd_push_inb,   "push_in_bytes", "Inbound pushed size");  // inbound pushed bytes
-
   osd_plb.add_u64_counter(l_osd_rop, "recovery_ops",
       "Started recovery operations", "recop");       // recovery ops (started)
 
@@ -3453,7 +3450,7 @@ void OSD::handle_pg_peering_evt(
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
-	pgid, false, result == RES_SELF,
+	pgid, false, false,
 	role,
 	up, up_primary,
 	acting, acting_primary,
@@ -4182,15 +4179,11 @@ void OSD::tick()
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
 
   if (is_active() || is_waiting_for_healthy()) {
-    map_lock.get_read();
-
     maybe_update_heartbeat_peers();
 
     heartbeat_lock.Lock();
     heartbeat_check();
     heartbeat_lock.Unlock();
-
-    map_lock.put_read();
   }
 
   if (is_waiting_for_healthy()) {
@@ -4249,7 +4242,7 @@ void OSD::tick_without_osd_lock()
 	      << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
       reset = true;
-      last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
+      last_pg_stats_ack = now;  // reset clock
       last_pg_stats_sent = utime_t();
       stats_ack_timeout =
 	MAX(g_conf->osd_mon_ack_timeout,

@@ -816,7 +816,7 @@ void PG::trim_past_intervals()
 
 bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
 {
-  epoch_t up_thru = get_osdmap()->get_up_thru(osd->whoami);
+  epoch_t up_thru = osdmap->get_up_thru(osd->whoami);
   if (need_up_thru &&
       up_thru >= info.history.same_interval_since) {
     dout(10) << "adjust_need_up_thru now " << up_thru << ", need_up_thru now false" << dendl;
@@ -3559,22 +3559,6 @@ void PG::sub_op_scrub_unreserve(OpRequestRef op)
   clear_scrub_reserved();
 }
 
-void PG::sub_op_scrub_stop(OpRequestRef op)
-{
-  op->mark_started();
-
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  dout(7) << "sub_op_scrub_stop" << dendl;
-
-  // see comment in sub_op_scrub_reserve
-  scrubber.reserved = false;
-
-  MOSDSubOpReply *reply = new MOSDSubOpReply(
-    m, pg_whoami, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  osd->send_message_osd_cluster(reply, m->get_connection());
-}
-
 void PG::reject_reservation()
 {
   osd->send_message_osd_cluster(
@@ -5105,7 +5089,7 @@ void PG::on_new_interval()
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
-  do_sort_bitwise = get_osdmap()->test_flag(CEPH_OSDMAP_SORTBITWISE);
+  do_sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   if (do_sort_bitwise) {
     assert(get_min_upacting_features() & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT);
     if (g_conf->osd_debug_randomize_hobject_sort_order) {
@@ -6820,13 +6804,13 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
   {
     q.f->open_object_section("scrub");
     q.f->dump_stream("scrubber.epoch_start") << pg->scrubber.epoch_start;
-    q.f->dump_int("scrubber.active", pg->scrubber.active);
+    q.f->dump_bool("scrubber.active", pg->scrubber.active);
     q.f->dump_string("scrubber.state", Scrubber::state_string(pg->scrubber.state));
     q.f->dump_stream("scrubber.start") << pg->scrubber.start;
     q.f->dump_stream("scrubber.end") << pg->scrubber.end;
     q.f->dump_stream("scrubber.subset_last_update") << pg->scrubber.subset_last_update;
     q.f->dump_bool("scrubber.deep", pg->scrubber.deep);
-    q.f->dump_int("scrubber.seed", pg->scrubber.seed);
+    q.f->dump_unsigned("scrubber.seed", pg->scrubber.seed);
     q.f->dump_int("scrubber.waiting_on", pg->scrubber.waiting_on);
     {
       q.f->open_array_section("scrubber.waiting_on_whom");
@@ -7647,7 +7631,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
       post_event(NeedUpThru());
     } else {
       dout(10) << "Got last missing, don't need missing "
-	       << "posting CheckRepops" << dendl;
+	       << "posting Activate" << dendl;
       post_event(Activate(pg->get_osdmap()->get_epoch()));
     }
   }
@@ -7816,13 +7800,13 @@ PG::PriorSet::PriorSet(bool ec_pool,
   // but because we want their pg_info to inform choose_acting(), and
   // so that we know what they do/do not have explicitly before
   // sending them any new info/logs/whatever.
-  for (unsigned i=0; i<acting.size(); i++) {
+  for (unsigned i = 0; i < acting.size(); i++) {
     if (acting[i] != CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(acting[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
-  // It may be possible to exlude the up nodes, but let's keep them in
+  // It may be possible to exclude the up nodes, but let's keep them in
   // there for now.
-  for (unsigned i=0; i<up.size(); i++) {
+  for (unsigned i = 0; i < up.size(); i++) {
     if (up[i] != CRUSH_ITEM_NONE)
       probe.insert(pg_shard_t(up[i], ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
@@ -7849,7 +7833,7 @@ PG::PriorSet::PriorSet(bool ec_pool,
     bool any_down_now = false;  // any candidates down now (that might have useful data)
 
     // consider ACTING osds
-    for (unsigned i=0; i<interval.acting.size(); i++) {
+    for (unsigned i = 0; i < interval.acting.size(); i++) {
       int o = interval.acting[i];
       if (o == CRUSH_ITEM_NONE)
 	continue;
@@ -7941,7 +7925,7 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
     int o = *p;
 
     if (osdmap->is_up(o)) {
-      dout(10) << "affected_by_map osd." << *p << " now up" << dendl;
+      dout(10) << "affected_by_map osd." << o << " now up" << dendl;
       return true;
     }
 
@@ -7954,8 +7938,8 @@ bool PG::PriorSet::affected_by_map(const OSDMapRef osdmap, const PG *debug_pg) c
     map<int, epoch_t>::const_iterator r = blocked_by.find(o);
     if (r != blocked_by.end()) {
       if (osdmap->get_info(o).lost_at != r->second) {
-  dout(10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
-  return true;
+        dout(10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
+        return true;
       }
     } 
   }
