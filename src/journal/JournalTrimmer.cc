@@ -194,7 +194,8 @@ JournalTrimmer::C_RemoveSet::C_RemoveSet(JournalTrimmer *_journal_trimmer,
 
 void JournalTrimmer::C_RemoveSet::complete(int r) {
   lock.Lock();
-  if (r < 0 && r != -ENOENT && return_value == -ENOENT) {
+  if (r < 0 && r != -ENOENT &&
+      (return_value == -ENOENT || return_value == 0)) {
     return_value = r;
   } else if (r == 0 && return_value == -ENOENT) {
     return_value = 0;
