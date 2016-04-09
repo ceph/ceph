@@ -567,7 +567,7 @@ public:
     }
     template <typename F>
     void register_on_success(F &&f) {
-      on_finish.emplace_back(std::move(f));
+      on_success.emplace_back(std::move(f));
     }
     template <typename F>
     void register_on_applied(F &&f) {
