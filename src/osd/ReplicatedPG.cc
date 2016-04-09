@@ -465,6 +465,7 @@ void ReplicatedPG::block_write_on_full_cache(
 	   << " on full cache" << dendl;
   objects_blocked_on_cache_full.insert(oid);
   waiting_for_cache_not_full.push_back(op);
+  op->mark_delayed("waiting for cache not full");
 }
 
 void ReplicatedPG::block_write_on_snap_rollback(
