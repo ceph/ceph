@@ -4593,9 +4593,6 @@ def main_catch(func, args):
         )
 
 
-def run():
-    main(sys.argv[1:])
-
 if __name__ == '__main__':
     main(sys.argv[1:])
     warned_about = {}
