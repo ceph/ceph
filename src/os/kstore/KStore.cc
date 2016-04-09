@@ -2185,14 +2185,13 @@ void KStore::_txc_state_proc(TransContext *txc)
       txc->state = TransContext::STATE_KV_QUEUED;
       if (!g_conf->kstore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
-	if (g_conf->kstore_sync_submit_transaction) {
-	  db->submit_transaction(txc->t);
-	}
+	if (g_conf->kstore_sync_submit_transaction)
+          assert(0 == db->submit_transaction(txc->t));
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
 	return;
       }
-      db->submit_transaction_sync(txc->t);
+      assert(0 == db->submit_transaction_sync(txc->t));
       break;
 
     case TransContext::STATE_KV_QUEUED:
@@ -2355,10 +2354,10 @@ void KStore::_kv_sync_thread()
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
-	  db->submit_transaction((*it)->t);
+	  assert(0 == db->submit_transaction((*it)->t));
 	}
       }
-      db->submit_transaction_sync(t);
+      assert(0 == db->submit_transaction_sync(t));
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
