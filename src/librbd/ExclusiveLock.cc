@@ -104,9 +104,14 @@ template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
-  Mutex::Locker locker(m_lock);
-  assert(!is_shutdown());
-  execute_action(ACTION_SHUT_DOWN, on_shut_down);
+  {
+    Mutex::Locker locker(m_lock);
+    assert(!is_shutdown());
+    execute_action(ACTION_SHUT_DOWN, on_shut_down);
+  }
+
+  // if stalled in request state machine -- abort
+  handle_lock_released();
 }
 
 template <typename I>
