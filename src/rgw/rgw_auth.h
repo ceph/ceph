@@ -5,9 +5,10 @@
 #ifndef CEPH_RGW_AUTH_H
 #define CEPH_RGW_AUTH_H
 
+#include <type_traits>
+
 #include "rgw_common.h"
 #include "rgw_keystone.h"
-
 
 /* Interface for classes applying changes to request state/RADOS store imposed
  * by a particular RGWAuthEngine.
@@ -15,7 +16,8 @@
  * In contrast to RGWAuthEngine, implementations of this interface are allowed
  * to handle req_state or RGWRados in the read-write manner. */
 class RGWAuthApplier {
-  friend class RGWDecoratoringAuthApplier;
+  template <typename DecorateeT>
+   friend class RGWDecoratingAuthApplier;
 protected:
   CephContext * const cct;
 public:
@@ -41,12 +43,42 @@ public:
 
 
 /* Abstract decorator over any implementation of RGWAuthApplier. */
-class RGWDecoratoringAuthApplier : public RGWAuthApplier {
-protected:
+template <typename DecorateeT>
+class RGWDecoratingAuthApplier : public RGWAuthApplier {
+  static_assert(std::is_base_of<RGWAuthApplier, DecorateeT>::value,
+                "DecorateeT must be a subclass of RGWAuthApplier");
+  DecorateeT decoratee;
+
+public:
+  RGWDecoratingAuthApplier(const DecorateeT& decoratee)
+    : RGWAuthApplier(decoratee.cct),
+      decoratee(decoratee) {
+  }
+
+  virtual void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
+    return decoratee.load_acct_info(user_info);
+  }
+
+  virtual void load_user_info(rgw_user& auth_user,                      /* out */
+                              uint32_t& perm_mask,                      /* out */
+                              bool& admin_request) const override {     /* out */
+    return decoratee.load_user_info(auth_user, perm_mask, admin_request);
+  }
+
+  virtual void modify_request_state(req_state * s) const override {     /* in/out */
+    return decoratee.modify_request_state(s);
+  }
+};
+
+
+/* Decorator specialization for dealing with pointers to an applier. Useful
+ * for decorating the applier returned after successfull authenication. */
+template <>
+class RGWDecoratingAuthApplier<RGWAuthApplier::aplptr_t> : public RGWAuthApplier {
   aplptr_t decoratee;
 
 public:
-  RGWDecoratoringAuthApplier(aplptr_t&& decoratee)
+  RGWDecoratingAuthApplier(aplptr_t&& decoratee)
     : RGWAuthApplier(decoratee->cct),
       decoratee(std::move(decoratee)) {
   }
@@ -54,6 +86,7 @@ public:
   virtual void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
     return decoratee->load_acct_info(user_info);
   }
+
   virtual void load_user_info(rgw_user& auth_user,                      /* out */
                               uint32_t& perm_mask,                      /* out */
                               bool& admin_request) const override {     /* out */
@@ -66,17 +99,19 @@ public:
 };
 
 
-class RGWThirdPartyAccountAuthApplier : public RGWDecoratoringAuthApplier {
+template <typename T>
+class RGWThirdPartyAccountAuthApplier : public RGWDecoratingAuthApplier<T> {
   /* const */RGWRados * const store;
   const rgw_user acct_user_override;
 public:
   /* FIXME: comment this. */
   static const rgw_user UNKNOWN_ACCT;
 
-  RGWThirdPartyAccountAuthApplier(aplptr_t&& decoratee,
+  template <typename U>
+  RGWThirdPartyAccountAuthApplier(U&& decoratee,
                                   RGWRados * const store,
                                   const rgw_user acct_user_override)
-    : RGWDecoratoringAuthApplier(std::move(decoratee)),
+    : RGWDecoratingAuthApplier<T>(std::move(decoratee)),
       store(store),
       acct_user_override(acct_user_override) {
   }

@@ -80,37 +80,6 @@ void RGWRemoteAuthApplier::load_user_info(rgw_user& auth_user,               /* 
 }
 
 
-/* static declaration */
-const rgw_user RGWThirdPartyAccountAuthApplier::UNKNOWN_ACCT;
-
-void RGWThirdPartyAccountAuthApplier::load_acct_info(RGWUserInfo& user_info) const
-{
-  rgw_user auth_user;
-  uint32_t perm_mask;
-  bool is_admin;
-
-  RGWDecoratoringAuthApplier::load_user_info(auth_user, perm_mask, is_admin);
-
-
-  if (UNKNOWN_ACCT == acct_user_override) {
-    /* There is no override specified by the upper layer. This means that we'll
-     * load the account owned by the authenticated identity (aka auth_user). */
-    RGWDecoratoringAuthApplier::load_acct_info(user_info);
-  } else if (acct_user_override == auth_user) {
-    /* The override has been specified but the account belongs to the authenticated
-     * identity. We may safely forward the call to a next stage. */
-    RGWDecoratoringAuthApplier::load_acct_info(user_info);
-  } else {
-    int ret = rgw_get_user_info_by_uid(store, acct_user_override, user_info);
-    if (ret < 0) {
-      /* We aren't trying to recover from ENOENT here. It's supposed that creating
-       * someone else's account isn't a thing we want to support. */
-      throw ret;
-    }
-  }
-}
-
-
 /* LocalAuthApplier */
 /* static declaration */
 const std::string RGWLocalAuthApplier::NO_SUBUSER;
