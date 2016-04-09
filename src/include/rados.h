@@ -446,10 +446,6 @@ enum {
 };
 
 enum {
-	CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP = 1, /* mean dest pool don't support omap*/
-};
-
-enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
 
@@ -516,7 +512,6 @@ struct ceph_osd_op {
 		} __attribute__ ((packed)) clonerange;
 		struct {
 			__le64 max;     /* max data in reply */
-			__le32 flags;
 		} __attribute__ ((packed)) copy_get;
 		struct {
 			__le64 snapid;
