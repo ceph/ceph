@@ -34,6 +34,7 @@ using namespace std;
 #include "common/linux_version.h"
 #endif
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/safe_io.h"
        
 #include <sys/types.h>
@@ -223,6 +224,9 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_messenger_start_failed;
     }
 
+    init_async_signal_handler();
+    register_async_signal_handler(SIGHUP, sighup_handler);
+
     // start client
     r = client->init();
     if (r < 0) {
@@ -268,6 +272,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   out_shutdown:
     client->shutdown();
   out_init_failed:
+    unregister_async_signal_handler(SIGHUP, sighup_handler);
+    shutdown_async_signal_handler();
+
     // wait for messenger to finish
     messenger->shutdown();
     messenger->wait();
