@@ -69,10 +69,17 @@ function build_package() {
     # options (otherwise parts of the source tree will be left out).
     #
     ./autogen.sh
+    # Building with LTTNG on Ubuntu Precise is not possible.
+    # It fails the LTTNG-is-sane check (it misses headers)
+    # And the Debian rules files leave it out anyway
+    case $codename in
+	precise) lttng_opt="--without-lttng" ;;
+	*) lttng_opt="--with-lttng" ;;
+    esac
     ./configure $(flavor2configure $flavor) \
         --with-rocksdb --with-ocf \
         --with-nss --with-debug --enable-cephfs-java \
-        --with-lttng --with-babeltrace
+        $lttng_opt --with-babeltrace
     #
     # use distdir= to set the name of the top level directory of the
     # tarbal to match the desired version
