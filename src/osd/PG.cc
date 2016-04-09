@@ -3357,8 +3357,16 @@ bool PG::sched_scrub()
 
     //NOSCRUB so skip regular scrubs
     if ((osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
-	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep)
+	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep) {
+      if (scrubber.reserved) {
+        // cancel scrub if it is still in scheduling,
+        // so pgs from other pools where scrub are still legal
+        // have a chance to go ahead with scrubbing.
+        clear_scrub_reserved();
+        scrub_unreserve_replicas();
+      }
       return false;
+    }
   }
 
   if (cct->_conf->osd_scrub_auto_repair
@@ -4108,6 +4116,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
           bool boundary_found = false;
           hobject_t start = scrubber.start;
+          unsigned loop = 0;
           while (!boundary_found) {
             vector<hobject_t> objects;
             ret = get_pgbackend()->objects_list_partial(
@@ -4136,6 +4145,12 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
                 candidate_end = end;
                 boundary_found = true;
               }
+            }
+
+            // reset handle once in a while, the search maybe takes long.
+            if (++loop >= g_conf->osd_loop_before_reset_tphandle) {
+              handle.reset_tp_timeout();
+              loop = 0;
             }
           }
 
