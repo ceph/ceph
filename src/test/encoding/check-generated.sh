@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-source ../qa/workunits/ceph-helpers.sh
+. ../qa/workunits/ceph-helpers.sh
 
 dir=$1
 
