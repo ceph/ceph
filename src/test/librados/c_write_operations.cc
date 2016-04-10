@@ -196,3 +196,31 @@ TEST(LibRadosCWriteOps, Exec) {
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+TEST(LibRadosCWriteOps, WriteSame) {
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  // Create an object, write to it using writesame
+  rados_write_op_t op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_create(op, LIBRADOS_CREATE_EXCLUSIVE, NULL);
+  rados_write_op_writesame(op, "four", 4, 4 * 4, 0);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  char hi[4 * 4];
+  ASSERT_EQ(sizeof(hi), rados_read(ioctx, "test", hi, sizeof(hi), 0));
+  rados_release_write_op(op);
+  ASSERT_EQ(0, memcmp("fourfourfourfour", hi, sizeof(hi)));
+
+  // cleanup
+  op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_remove(op);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
