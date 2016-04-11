@@ -64,6 +64,8 @@ public:
       decode(bl_iter);
     }
 
+  static size_t get_max_encoded_length();
+
   const buffer::list& get_bl() { encode(bl); return bl; };
 
   inline void encode_hdr(buffer::list& bl) const {
