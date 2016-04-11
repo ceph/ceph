@@ -838,7 +838,7 @@ class CephManager:
         return self.controller.run(args=["sudo", "daemon-helper", "kill", "ceph", "-w"],
                                    wait=False, stdout=StringIO(), stdin=run.PIPE)
 
-    def do_rados(self, remote, cmd):
+    def do_rados(self, remote, cmd, check_status=True):
         """
         Execute a remote rados command.
         """
@@ -853,6 +853,7 @@ class CephManager:
         proc = remote.run(
             args=pre,
             wait=True,
+            check_status=check_status
             )
         return proc
 
@@ -873,35 +874,58 @@ class CephManager:
             args.append('--no-cleanup')
         return self.do_rados(self.controller, map(str, args))
 
-    def do_put(self, pool, obj, fname):
+    def do_put(self, pool, obj, fname, namespace=None):
         """
         Implement rados put operation
         """
+        args = ['-p', pool]
+        if namespace is not None:
+            args += ['-N', namespace]
+        args += [
+            'put',
+            obj,
+            fname
+        ]
         return self.do_rados(
             self.controller,
-            [
-                '-p',
-                pool,
-                'put',
-                obj,
-                fname
-                ]
-            )
+            args,
+            check_status=False
+        ).exitstatus
 
-    def do_get(self, pool, obj, fname='/dev/null'):
+    def do_get(self, pool, obj, fname='/dev/null', namespace=None):
         """
         Implement rados get operation
         """
+        args = ['-p', pool]
+        if namespace is not None:
+            args += ['-N', namespace]
+        args += [
+            'get',
+            obj,
+            fname
+        ]
         return self.do_rados(
             self.controller,
-            [
-                '-p',
-                pool,
-                'stat',
-                obj,
-                fname
-                ]
-            )
+            args,
+            check_status=False
+        ).exitstatus
+
+    def do_rm(self, pool, obj, namespace=None):
+        """
+        Implement rados rm operation
+        """
+        args = ['-p', pool]
+        if namespace is not None:
+            args += ['-N', namespace]
+        args += [
+            'rm',
+            obj
+        ]
+        return self.do_rados(
+            self.controller,
+            args,
+            check_status=False
+        ).exitstatus
 
     def osd_admin_socket(self, osd_id, command, check_status=True):
         return self.admin_socket('osd', osd_id, command, check_status)
@@ -1942,3 +1966,4 @@ create_pool = utility_task("create_pool")
 remove_pool = utility_task("remove_pool")
 wait_for_clean = utility_task("wait_for_clean")
 set_pool_property = utility_task("set_pool_property")
+do_pg_scrub = utility_task("do_pg_scrub")
