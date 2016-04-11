@@ -95,6 +95,88 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen*2, 'a').c_str(), bl, bl.length(), 0));
 }
 
+TEST_F(LibRadosMiscPP, LongLocatorPP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_object_name_len;
+  ioctx.locator_set_key(
+    string((maxlen/2), 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen - 1, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen+1, 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string((maxlen*2), 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+}
+
+TEST_F(LibRadosMiscPP, LongNSpacePP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_object_namespace_len;
+  ioctx.set_namespace(
+    string((maxlen/2), 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen - 1, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen+1, 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string((maxlen*2), 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+}
+
 TEST_F(LibRadosMiscPP, LongAttrNamePP) {
   bufferlist bl;
   bl.append("content");

@@ -432,10 +432,9 @@ public:
   int write_op_seq(int, uint64_t seq);
   int mount();
   int umount();
-  unsigned get_max_object_name_length() {
-    // not safe for all file systems, btw!  use the tunable to limit this.
-    return 4096;
-  }
+
+  int validate_hobject_key(const hobject_t &obj) const override;
+
   unsigned get_max_attr_name_length() {
     // xattr limit is 128; leave room for our prefixes (user.ceph._),
     // some margin, and cap at 100
@@ -739,6 +738,7 @@ private:
   void set_xattr_limits_via_conf();
   uint32_t m_filestore_max_inline_xattr_size;
   uint32_t m_filestore_max_inline_xattrs;
+  uint32_t m_filestore_max_xattr_value_size;
 
   FSSuperblock superblock;
 
