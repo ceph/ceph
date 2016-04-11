@@ -213,7 +213,8 @@ function test_kill_daemon() {
 
     ceph osd dump | grep "osd.0 down" || return 1
 
-    for pidfile in $(find $dir -name "*.pid" 2>/dev/null) ; do
+    name_prefix=mon
+    for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
         #
         # kill the mon and verify it cannot be reached
         #
