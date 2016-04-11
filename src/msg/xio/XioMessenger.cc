@@ -293,7 +293,9 @@ void XioInit::package_init(CephContext *cct) {
        xopt = max(cct->_conf->xio_max_send_inline, 512);
        xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
                   &xopt, sizeof(xopt));
-       xopt = 216;
+
+       xopt = XioMsgHdr::get_max_encoded_length();
+       ldout(cct,2) << "setting accelio max header size " << xopt << dendl;
        xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
                   &xopt, sizeof(xopt));
 
