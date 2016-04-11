@@ -83,7 +83,6 @@ librgw_la_SOURCES = \
 	rgw/rgw_rest_usage.cc \
 	rgw/rgw_rest_user.cc \
 	rgw/rgw_swift_auth.cc \
-	rgw/rgw_swift.cc \
 	rgw/rgw_usage.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_file.cc \
@@ -219,7 +218,6 @@ noinst_HEADERS += \
 	rgw/rgw_os_lib.h \
 	rgw/rgw_orphan.h \
 	rgw/rgw_http_client.h \
-	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \
 	rgw/rgw_quota.h \
 	rgw/rgw_rados.h \
