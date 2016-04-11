@@ -139,29 +139,6 @@ int RGWSwift::validate_token(RGWRados * const store,
 }
 
 
-class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
-public:
-  RGWKeystoneHTTPTransceiver(CephContext * const cct,
-                             bufferlist * const token_body_bl)
-    : RGWHTTPTransceiver(cct, token_body_bl,
-                         cct->_conf->rgw_keystone_verify_ssl,
-                         { "X-Subject-Token" }) {
-  }
-
-  std::string get_subject_token() const {
-    try {
-      return get_header_value("X-Subject-Token");
-    } catch (std::out_of_range&) {
-      return header_value_t();
-    }
-  }
-};
-
-typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
-typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
-typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
-
-
 int RGWSwift::check_revoked()
 {
   string url;
