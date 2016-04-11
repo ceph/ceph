@@ -106,6 +106,7 @@ class Thrasher:
         self.sighup_delay = self.config.get('sighup_delay')
         self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
         self.dump_ops_enable = self.config.get('dump_ops_enable')
+        self.noscrub_toggle_delay = self.config.get('noscrub_toggle_delay')
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -135,6 +136,8 @@ class Thrasher:
             self.optrack_toggle_thread = gevent.spawn(self.do_optrack_toggle)
         if self.dump_ops_enable == "true":
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
+        if self.noscrub_toggle_delay:
+            self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
         if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
@@ -437,6 +440,9 @@ class Thrasher:
         if self.dump_ops_enable == "true":
             self.log("joining the do_dump_ops greenlet")
             self.dump_ops_thread.join()
+        if self.noscrub_toggle_delay:
+            self.log("joining the do_noscrub_toggle greenlet")
+            self.noscrub_toggle_thread.join()
 
     def grow_pool(self):
         """
@@ -703,6 +709,33 @@ class Thrasher:
                 self.ceph_manager.osd_admin_socket(osd, command=['dump_historic_ops'],
                                      check_status=False, timeout=30)
             gevent.sleep(0)
+
+    @log_exc
+    def do_noscrub_toggle(self):
+        """
+        Loops and toggle noscrub flags
+
+        Loop delay is controlled by the config value noscrub_toggle_delay.
+        """
+        delay = float(self.noscrub_toggle_delay)
+        scrub_state = "none"
+        self.log("starting do_noscrub_toggle with a delay of {0}".format(delay))
+        while not self.stopping:
+            if scrub_state == "none":
+                self.ceph_manager.raw_cluster_cmd('osd', 'set', 'noscrub')
+                scrub_state = "noscrub"
+            elif scrub_state == "noscrub":
+                self.ceph_manager.raw_cluster_cmd('osd', 'set', 'nodeep-scrub')
+                scrub_state = "both"
+            elif scrub_state == "both":
+                self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+                scrub_state = "nodeep-scrub"
+            else:
+                self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
+                scrub_state = "none"
+            gevent.sleep(delay)
+        self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+        self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
 
     @log_exc
     def do_thrash(self):
