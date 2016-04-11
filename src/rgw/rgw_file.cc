@@ -106,6 +106,11 @@ namespace rgw {
 	    RGWFileHandle* rgw_fh = get<0>(fhr);
 	    rgw_fh->set_size(req.get_size());
 	    rgw_fh->set_mtime(real_clock::to_timespec(req.get_mtime()));
+	    /* restore attributes */
+	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
+	    if (ux_attrs) {
+	      rgw_fh->decode_attrs(ux_attrs);
+	    }
 	  }
 	  goto done;
 	}
@@ -487,6 +492,17 @@ namespace rgw {
     } while (! stop);
   } /* RGWLibFS::gc */
 
+  void RGWFileHandle::encode_attrs(buffer::list& bl)
+  {
+    rgw::encode(*this, bl);
+  } /* RGWFileHandle::decode_attrs */
+
+  void RGWFileHandle::decode_attrs(const buffer::list* cbl)
+  {
+    auto bl_iter = const_cast<buffer::list*>(cbl)->begin();
+    rgw::decode(*this, bl_iter);
+  } /* RGWFileHandle::decode_attrs */
+
   bool RGWFileHandle::reclaim() {
     fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
     return true;
@@ -706,8 +722,7 @@ namespace rgw {
 
   int RGWWriteRequest::exec_finish()
   {
-    bufferlist bl, aclbl;
-    map<string, bufferlist> attrs;
+    buffer::list bl, aclbl, bl_unix;
     map<string, string>::iterator iter;
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
@@ -728,15 +743,18 @@ namespace rgw {
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
     etag = calc_md5;
 
-    policy.encode(aclbl);
-    attrs[RGW_ATTR_ACL] = aclbl;
-
     bl.append(etag.c_str(), etag.size() + 1);
-    attrs[RGW_ATTR_ETAG] = bl;
+    emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+    policy.encode(aclbl);
+    emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
+
+    rgw_fh->encode_attrs(bl_unix);
+    emplace_attr(RGW_ATTR_UNIX1, std::move(bl_unix));
 
     for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
 	 ++iter) {
-      bufferlist& attrbl = attrs[iter->first];
+      buffer::list& attrbl = attrs[iter->first];
       const string& val = iter->second;
       attrbl.append(val.c_str(), val.size() + 1);
     }
@@ -748,13 +766,13 @@ namespace rgw {
      * is an SLO or not. Appending the attribute must be performed AFTER
      * processing any input from user in order to prohibit overwriting. */
     if (unlikely(!! slo_info)) {
-      bufferlist slo_userindicator_bl;
+      buffer::list slo_userindicator_bl;
       ::encode("True", slo_userindicator_bl);
-      attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+      emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
     }
 
-    op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at, if_match,
-				 if_nomatch);
+    op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
+				 if_match, if_nomatch);
     if (! op_ret) {
       /* update stats */
       rgw_fh->set_mtime(real_clock::to_timespec(mtime));

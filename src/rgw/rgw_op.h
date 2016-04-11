@@ -647,7 +647,7 @@ protected:
   RGWAccessControlPolicy policy;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
-
+  map<string, bufferlist> attrs;
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
@@ -672,6 +672,10 @@ public:
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
+  }
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(key, bl); /* key and bl are r-value refs */
   }
 
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
