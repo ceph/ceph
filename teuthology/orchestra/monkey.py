@@ -39,6 +39,12 @@ def patch_100_logger_getChild():
         logging.Logger.getChild = getChild
 
 
+def patch_100_trigger_rekey():
+    # Fixes http://tracker.ceph.com/issues/15236
+    from paramiko.packet import Packetizer
+    Packetizer._trigger_rekey = lambda self: True
+
+
 def patch_all():
     """
     Run all the patch_* functions in this module.
