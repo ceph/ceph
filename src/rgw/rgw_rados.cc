@@ -1549,12 +1549,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool 
     name = cct->_conf->rgw_zone;
   }
 
-  int ret = RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return ret;
+  return RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
 }
 
 int RGWZoneParams::read_default_id(string& default_id, bool old_format)
