@@ -334,7 +334,7 @@ def main(ctx):
                 machines_to_update.append(machine)
     elif ctx.num_to_lock:
         result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user,
-                           ctx.desc, ctx.os_type, ctx.os_version)
+                           ctx.desc, ctx.os_type, ctx.os_version, ctx.arch)
         if not result:
             ret = 1
         else:
