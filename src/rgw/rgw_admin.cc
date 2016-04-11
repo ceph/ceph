@@ -1333,9 +1333,18 @@ static int send_to_remote_gateway(const string& remote, req_info& info,
   return ret;
 }
 
-static int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
+static int send_to_url(const string& url, const string& access,
+                       const string& secret, req_info& info,
                        bufferlist& in_data, JSONParser& parser)
 {
+  if (access.empty() || secret.empty()) {
+    cerr << "An --access-key and --secret must be provided with --url." << std::endl;
+    return -EINVAL;
+  }
+  RGWAccessKey key;
+  key.id = access;
+  key.key = secret;
+
   list<pair<string, string> > params;
   RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
 
@@ -1358,15 +1367,7 @@ static int send_to_remote_or_url(const string& remote, const string& url,
   if (url.empty()) {
     return send_to_remote_gateway(remote, info, in_data, parser);
   }
-
-  if (access.empty() || secret.empty()) {
-    cerr << "An --access-key and --secret must be provided with --url." << std::endl;
-    return -EINVAL;
-  }
-  RGWAccessKey key;
-  key.id = access;
-  key.key = secret;
-  return send_to_url(url, key, info, in_data, parser);
+  return send_to_url(url, access, secret, info, in_data, parser);
 }
 
 static int commit_period(RGWRealm& realm, RGWPeriod& period,
@@ -2759,6 +2760,10 @@ int main(int argc, char **argv)
       break;
     case OPT_REALM_PULL:
       {
+        if (url.empty()) {
+          cerr << "A --url must be provided." << std::endl;
+          return EINVAL;
+        }
         RGWEnv env;
         req_info info(g_ceph_context, &env);
         info.method = "GET";
@@ -2772,8 +2777,7 @@ int main(int argc, char **argv)
 
         bufferlist bl;
         JSONParser p;
-        int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
-                                        info, bl, p);
+        int ret = send_to_url(url, access_key, secret_key, info, bl, p);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
           if (ret == -EACCES) {
