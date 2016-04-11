@@ -45,6 +45,7 @@ protected:
   static void TearDownTestCase();
   static void cleanup_all_objects(librados::IoCtx ioctx);
   static librados::Rados s_cluster;
+  static bool is_connected;
   static std::string pool_name;
 
   virtual void SetUp();
@@ -62,6 +63,7 @@ public:
 protected:
   static void cleanup_all_objects(librados::IoCtx ioctx);
   static librados::Rados s_cluster;
+  static bool is_connected;
   static std::string pool_name;
   static std::string cache_pool_name;
 
@@ -96,6 +98,7 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   static librados::Rados s_cluster;
+  static bool is_connected;
   static std::string pool_name;
 
   virtual void SetUp();
@@ -142,6 +145,7 @@ protected:
   static void cleanup_default_namespace(librados::IoCtx ioctx);
   static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
   static librados::Rados s_cluster;
+  static bool is_connected;
   static std::string pool_name;
 
   virtual void SetUp();
@@ -161,6 +165,7 @@ protected:
   static void cleanup_default_namespace(librados::IoCtx ioctx);
   static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
   static librados::Rados s_cluster;
+  static bool is_connected;
   static std::string pool_name;
   static std::string cache_pool_name;
 
@@ -197,6 +202,7 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   static librados::Rados s_cluster;
+  static bool is_connected;
   static std::string pool_name;
 
   virtual void SetUp();

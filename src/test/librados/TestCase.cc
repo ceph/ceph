@@ -13,16 +13,26 @@ rados_t RadosTestNS::s_cluster = NULL;
 void RadosTestNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
+  auto res = create_one_pool(pool_name, &s_cluster);
+  if (!res.empty()) {
+    s_cluster = NULL;
+    FAIL() << res;
+  }
 }
 
 void RadosTestNS::TearDownTestCase()
 {
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &s_cluster));
+  if (s_cluster) {
+    ASSERT_EQ(0, destroy_one_pool(pool_name, &s_cluster));
+    s_cluster = NULL;
+  }
 }
 
 void RadosTestNS::SetUp()
 {
+  if (!s_cluster) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   cluster = RadosTestNS::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   int requires;
@@ -32,6 +42,9 @@ void RadosTestNS::SetUp()
 
 void RadosTestNS::TearDown()
 {
+  if (!s_cluster) {
+    return;
+  }
   cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
 }
@@ -58,20 +71,32 @@ void RadosTestNS::cleanup_all_objects(rados_ioctx_t ioctx)
 
 std::string RadosTestPPNS::pool_name;
 Rados RadosTestPPNS::s_cluster;
+bool RadosTestPPNS::is_connected = false;
 
 void RadosTestPPNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+  auto res= create_one_pool_pp(pool_name, s_cluster);
+  if (res.empty()) {
+    is_connected = true;
+  } else {
+    FAIL() << res;
+  }
 }
 
 void RadosTestPPNS::TearDownTestCase()
 {
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+  if (is_connected) {
+    ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+    is_connected = false;
+  }
 }
 
 void RadosTestPPNS::SetUp()
 {
+  if (!is_connected) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   bool requires;
   ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
@@ -80,6 +105,8 @@ void RadosTestPPNS::SetUp()
 
 void RadosTestPPNS::TearDown()
 {
+  if (!is_connected)
+    return;
   cleanup_all_objects(ioctx);
   ioctx.close();
 }
@@ -100,15 +127,23 @@ void RadosTestPPNS::cleanup_all_objects(librados::IoCtx ioctx)
 std::string RadosTestParamPPNS::pool_name;
 std::string RadosTestParamPPNS::cache_pool_name;
 Rados RadosTestParamPPNS::s_cluster;
+bool RadosTestParamPPNS::is_connected = false;
 
 void RadosTestParamPPNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+  auto res = create_one_pool_pp(pool_name, s_cluster);
+  if (res.empty()) {
+    is_connected = true;
+  } else {
+    FAIL() << res;
+  }
 }
 
 void RadosTestParamPPNS::TearDownTestCase()
 {
+  if (!is_connected)
+    return;
   if (cache_pool_name.length()) {
     // tear down tiers
     bufferlist inbl;
@@ -131,6 +166,9 @@ void RadosTestParamPPNS::TearDownTestCase()
 
 void RadosTestParamPPNS::SetUp()
 {
+  if (!is_connected) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   if (strcmp(GetParam(), "cache") == 0 && cache_pool_name.empty()) {
     cache_pool_name = get_temp_pool_name();
     bufferlist inbl;
@@ -162,6 +200,8 @@ void RadosTestParamPPNS::SetUp()
 
 void RadosTestParamPPNS::TearDown()
 {
+  if (!is_connected)
+    return;
   cleanup_all_objects(ioctx);
   ioctx.close();
 }
@@ -185,16 +225,25 @@ rados_t RadosTestECNS::s_cluster = NULL;
 void RadosTestECNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_ec_pool(pool_name, &s_cluster));
+  auto res = create_one_ec_pool(pool_name, &s_cluster);
+  if (!res.empty()) {
+    s_cluster = NULL;
+    FAIL() << res;
+  }
 }
 
 void RadosTestECNS::TearDownTestCase()
 {
-  ASSERT_EQ(0, destroy_one_ec_pool(pool_name, &s_cluster));
+  if (s_cluster) {
+    ASSERT_EQ(0, destroy_one_ec_pool(pool_name, &s_cluster));
+  }
 }
 
 void RadosTestECNS::SetUp()
 {
+  if (!s_cluster) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   cluster = RadosTestECNS::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   int requires;
@@ -206,26 +255,38 @@ void RadosTestECNS::SetUp()
 
 void RadosTestECNS::TearDown()
 {
+  if (!s_cluster)
+    return;
   cleanup_all_objects(ioctx);
   rados_ioctx_destroy(ioctx);
 }
 
 std::string RadosTestECPPNS::pool_name;
 Rados RadosTestECPPNS::s_cluster;
+bool RadosTestECPPNS::is_connected = false;
 
 void RadosTestECPPNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+  auto res = create_one_ec_pool_pp(pool_name, s_cluster);
+  if (res.empty()) {
+    is_connected = true;
+  } else {
+    FAIL() << res;
+  }
 }
 
 void RadosTestECPPNS::TearDownTestCase()
 {
+  if (!is_connected)
+    return;
   ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
 }
 
 void RadosTestECPPNS::SetUp()
 {
+  if (!is_connected)
+    return;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   bool requires;
   ASSERT_EQ(0, ioctx.pool_requires_alignment2(&requires));
@@ -236,6 +297,8 @@ void RadosTestECPPNS::SetUp()
 
 void RadosTestECPPNS::TearDown()
 {
+  if (!is_connected)
+    return;
   cleanup_all_objects(ioctx);
   ioctx.close();
 }
@@ -246,16 +309,25 @@ rados_t RadosTest::s_cluster = NULL;
 void RadosTest::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool(pool_name, &s_cluster));
+  auto res = create_one_pool(pool_name, &s_cluster);
+  if (!res.empty()) {
+    s_cluster = NULL;
+    FAIL() << res;
+  }
 }
 
 void RadosTest::TearDownTestCase()
 {
-  ASSERT_EQ(0, destroy_one_pool(pool_name, &s_cluster));
+  if (s_cluster) {
+    ASSERT_EQ(0, destroy_one_pool(pool_name, &s_cluster));
+  }
 }
 
 void RadosTest::SetUp()
 {
+  if (!s_cluster) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   cluster = RadosTest::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   nspace = get_temp_pool_name();
@@ -267,6 +339,9 @@ void RadosTest::SetUp()
 
 void RadosTest::TearDown()
 {
+  if (!s_cluster) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   cleanup_default_namespace(ioctx);
   cleanup_namespace(ioctx, nspace);
   rados_ioctx_destroy(ioctx);
@@ -298,20 +373,32 @@ void RadosTest::cleanup_namespace(rados_ioctx_t ioctx, std::string ns)
 
 std::string RadosTestPP::pool_name;
 Rados RadosTestPP::s_cluster;
+bool RadosTestPP::is_connected = false;
 
 void RadosTestPP::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+  auto res = create_one_pool_pp(pool_name, s_cluster);
+  if (res.empty()) {
+    is_connected = true;
+  } else {
+    FAIL() << res;
+  }
 }
 
 void RadosTestPP::TearDownTestCase()
 {
+  if (!is_connected)
+    return;
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
+  is_connected = false;
 }
 
 void RadosTestPP::SetUp()
 {
+  if (!is_connected) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
@@ -322,6 +409,8 @@ void RadosTestPP::SetUp()
 
 void RadosTestPP::TearDown()
 {
+  if (!is_connected)
+    return;
   cleanup_default_namespace(ioctx);
   cleanup_namespace(ioctx, nspace);
   ioctx.close();
@@ -355,15 +444,23 @@ void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 std::string RadosTestParamPP::pool_name;
 std::string RadosTestParamPP::cache_pool_name;
 Rados RadosTestParamPP::s_cluster;
+bool RadosTestParamPP::is_connected = false;
 
 void RadosTestParamPP::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
+  auto res = create_one_pool_pp(pool_name, s_cluster);
+  if (res.empty()) {
+    is_connected = true;
+  } else {
+    FAIL() << res;
+  }
 }
 
 void RadosTestParamPP::TearDownTestCase()
 {
+  if (!is_connected)
+    return;
   if (cache_pool_name.length()) {
     // tear down tiers
     bufferlist inbl;
@@ -386,6 +483,9 @@ void RadosTestParamPP::TearDownTestCase()
 
 void RadosTestParamPP::SetUp()
 {
+  if (!is_connected) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   if (strcmp(GetParam(), "cache") == 0 && cache_pool_name.empty()) {
     cache_pool_name = get_temp_pool_name();
     bufferlist inbl;
@@ -419,6 +519,8 @@ void RadosTestParamPP::SetUp()
 
 void RadosTestParamPP::TearDown()
 {
+  if (!is_connected)
+    return;
   cleanup_default_namespace(ioctx);
   cleanup_namespace(ioctx, nspace);
   ioctx.close();
@@ -448,16 +550,25 @@ rados_t RadosTestEC::s_cluster = NULL;
 void RadosTestEC::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_ec_pool(pool_name, &s_cluster));
+  auto res = create_one_ec_pool(pool_name, &s_cluster);
+  if (!res.empty()) {
+    s_cluster = NULL;
+    FAIL() << res;
+  }
 }
 
 void RadosTestEC::TearDownTestCase()
 {
-  ASSERT_EQ(0, destroy_one_ec_pool(pool_name, &s_cluster));
+  if (s_cluster) {
+    ASSERT_EQ(0, destroy_one_ec_pool(pool_name, &s_cluster));
+  }
 }
 
 void RadosTestEC::SetUp()
 {
+  if (!s_cluster) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   cluster = RadosTestEC::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
   nspace = get_temp_pool_name();
@@ -471,6 +582,9 @@ void RadosTestEC::SetUp()
 
 void RadosTestEC::TearDown()
 {
+  if (!s_cluster) {
+    return;
+  }
   cleanup_default_namespace(ioctx);
   cleanup_namespace(ioctx, nspace);
   rados_ioctx_destroy(ioctx);
@@ -478,20 +592,31 @@ void RadosTestEC::TearDown()
 
 std::string RadosTestECPP::pool_name;
 Rados RadosTestECPP::s_cluster;
+bool RadosTestECPP::is_connected = false;
 
 void RadosTestECPP::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+  auto res = create_one_ec_pool_pp(pool_name, s_cluster);
+  if (res.empty()) {
+    is_connected = true;
+  } else {
+    FAIL() << res;
+  }
 }
 
 void RadosTestECPP::TearDownTestCase()
 {
+  if (!is_connected)
+    return;
   ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
 }
 
 void RadosTestECPP::SetUp()
 {
+  if (!is_connected) {
+    FAIL() << "cluster not connected, skipping this tests";
+  }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);
@@ -504,6 +629,8 @@ void RadosTestECPP::SetUp()
 
 void RadosTestECPP::TearDown()
 {
+  if (!is_connected)
+    return;
   cleanup_default_namespace(ioctx);
   cleanup_namespace(ioctx, nspace);
   ioctx.close();
