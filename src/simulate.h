@@ -57,12 +57,14 @@ public:
   using ServerFilter = std::function<bool(const ServerId&)>;
 
   using ServerDataOutF =
-    std::function<std::string(Simulation* sim, ServerFilter,
-			      int header_w, int data_w, int data_prec)>;
+    std::function<void(std::ostream& out,
+		       Simulation* sim, ServerFilter,
+		       int header_w, int data_w, int data_prec)>;
 
   using ClientDataOutF =
-    std::function<std::string(Simulation* sim, ClientFilter,
-			      int header_w, int data_w, int data_prec)>;
+    std::function<void(std::ostream& out,
+		       Simulation* sim, ClientFilter,
+		       int header_w, int data_w, int data_prec)>;
 
   Simulation() :
     early_time(now()),
@@ -206,7 +208,7 @@ public:
       } while(has_data);
     }
 
-    out << client_out_f(this, client_filter, head_w, data_w, data_prec);
+    client_out_f(out, this, client_filter, head_w, data_w, data_prec);
 
     out << std::endl << "==== Server Data ====" << std::endl;
 
@@ -217,7 +219,7 @@ public:
     }
     out << std::setw(data_w) << "total" << std::endl;
 
-    out << server_out_f(this, server_filter, head_w, data_w, data_prec);
+    server_out_f(out, this, server_filter, head_w, data_w, data_prec);
 
     // clean up clients then servers
 
