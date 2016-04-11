@@ -70,7 +70,7 @@ class C_handle_frag_timeout : public EventCallback {
 
 enum {
   l_dpdk_qp_first = 99000,
-  l_dpdk_total_operations,
+  l_dpdk_total_linearize_operations,
   l_dpdk_qp_last
 };
 
@@ -95,7 +95,7 @@ ipv4::ipv4(CephContext *c, EventCenter *cen, interface* netif)
     _packet_filter(nullptr)
 {
   PerfCountersBuilder plb(cct, "ipv4", l_dpdk_qp_first, l_dpdk_qp_last);
-  plb.add_u64_counter(l_dpdk_total_operations, "dpdk_total_operations", "DPDK linearization operations");
+  plb.add_u64_counter(l_dpdk_total_linearize_operations, "dpdk_ip_linearize_operations", "DPDK IP Packet linearization operations");
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
   frag_handler = new C_handle_frag_timeout(this);
@@ -223,6 +223,8 @@ int ipv4::handle_received_packet(Packet p, ethernet_address from)
       // Delete this frag from _frags and _frags_age
       frag_drop(frag_id, dropped_size);
       _frags_age.remove(frag_id);
+      perf_logger->set(l_dpdk_total_linearize_operations,
+                       ipv4_packet_merger::linearizations());
     } else {
       // Some of the fragments are missing
       if (frag_timefd) {
