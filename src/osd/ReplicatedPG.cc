@@ -2823,6 +2823,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 	     << " blocked by scrub" << dendl;
     if (op) {
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for scrub");
       dout(10) << __func__ << " " << hoid
 	       << " placing op in waiting_for_active" << dendl;
     } else {
