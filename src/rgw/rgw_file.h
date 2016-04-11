@@ -830,10 +830,12 @@ namespace rgw {
 			cohort::lru::Edge::MRU,
 			cohort::lru::FLAG_INITIAL));
 	if (fh) {
-	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
-	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
+	  /* lock fh (LATCHED) */
 	  if (fh->flags & RGWFileHandle::FLAG_LOCK)
 	    fh->mtx.lock();
+	  /* inserts, releasing latch */
+	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
+	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
@@ -873,6 +875,8 @@ namespace rgw {
 		      uint32_t mask, uint32_t flags);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
+		      uint32_t mask, uint32_t flags);
+    MkObjResult mkdir2(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
 
     int unlink(RGWFileHandle* parent, const char *name);
