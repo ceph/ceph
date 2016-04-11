@@ -21,9 +21,7 @@
 
 #include "rgw_client_io.h"
 
-/* This header consists several Keystone-related primitives
- * we want to reuse here. */
-#include "rgw_swift.h"
+#include "rgw_keystone.h"
 
 #include <typeinfo> // for 'typeid'
 
@@ -2933,7 +2931,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* get authentication token for Keystone. */
   string admin_token_id;
-  int r = RGWSwift::get_keystone_admin_token(cct, admin_token_id);
+  int r = KeystoneService::get_keystone_admin_token(cct, admin_token_id);
   if (r < 0) {
     ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
     return r;

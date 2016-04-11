@@ -10,8 +10,9 @@
 #include "rgw_common.h"
 #include "common/Cond.h"
 
+#include "rgw_keystone.h"
+
 class RGWRados;
-class KeystoneToken;
 
 struct rgw_swift_auth_info {
   int status;

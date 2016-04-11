@@ -262,10 +262,10 @@ int RGWSwift::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (get_keystone_admin_token(token) < 0) {
+  if (KeystoneService::get_keystone_admin_token(cct, token) < 0) {
     return -EINVAL;
   }
-  if (get_keystone_url(url) < 0) {
+  if (KeystoneService::get_keystone_url(cct, url) < 0) {
     return -EINVAL;
   }
   req.append_header("X-Auth-Token", token);
@@ -521,9 +521,9 @@ int RGWSwift::validate_keystone_token(RGWRados * const store,
     if (url[url.size() - 1] != '/')
       url.append("/");
     std::string admin_token;
-    if (get_keystone_admin_token(admin_token) < 0)
+    if (KeystoneService::get_keystone_admin_token(cct, admin_token) < 0)
       return -EINVAL;
-    if (get_keystone_url(url) < 0)
+    if (KeystoneService::get_keystone_url(cct, url) < 0)
       return -EINVAL;
 
     validate.append_header("X-Auth-Token", admin_token);
