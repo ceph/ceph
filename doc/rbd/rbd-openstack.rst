@@ -115,7 +115,7 @@ On the ``nova-compute``, ``cinder-backup`` and on the ``cinder-volume`` node,
 use both the Python bindings and the client command line tools::
 
   sudo apt-get install ceph-common
-  sudo yum install ceph
+  sudo yum install ceph-common
 
 
 Setup Ceph Client Authentication
