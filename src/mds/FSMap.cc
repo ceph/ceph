@@ -537,13 +537,18 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
   return result;
 }
 
-mds_gid_t FSMap::find_unused(bool force_standby_active) const {
+mds_gid_t FSMap::find_unused(fs_cluster_id_t fscid,
+			     bool force_standby_active) const {
   for (const auto &i : standby_daemons) {
     const auto &gid = i.first;
     const auto &info = i.second;
     assert(info.state == MDSMap::STATE_STANDBY);
 
     if (info.laggy() || info.rank >= 0)
+      continue;
+
+    if (info.standby_for_fscid != FS_CLUSTER_ID_NONE &&
+        info.standby_for_fscid != fscid)
       continue;
 
     if ((info.standby_for_rank == MDSMap::MDS_NO_STANDBY_PREF ||
@@ -562,7 +567,7 @@ mds_gid_t FSMap::find_replacement_for(mds_role_t role, const std::string& name,
   if (standby)
     return standby;
   else
-    return find_unused(force_standby_active);
+    return find_unused(role.fscid, force_standby_active);
 }
 
 void FSMap::sanity() const
