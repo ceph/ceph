@@ -477,7 +477,7 @@ void XioConnection::msg_release_fail(struct xio_msg *msg, int code)
     " (" << xio_strerror(code) << ")" << dendl;
 } /* msg_release_fail */
 
-int XioConnection::flush_input_queue(uint32_t flags) {
+int XioConnection::flush_out_queues(uint32_t flags) {
   XioMessenger* msgr = static_cast<XioMessenger*>(get_messenger());
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_lock(&sp);
@@ -640,7 +640,7 @@ int XioConnection::CState::state_up_ready(uint32_t flags)
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_lock(&xcon->sp);
 
-  xcon->flush_input_queue(flags|CState::OP_FLAG_LOCKED);
+  xcon->flush_out_queues(flags|CState::OP_FLAG_LOCKED);
 
   session_state.set(UP);
   startup_state.set(READY);

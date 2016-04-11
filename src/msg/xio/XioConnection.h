@@ -319,7 +319,7 @@ public:
 		   struct xio_msg  *msg, void *conn_user_context);
   void msg_send_fail(XioMsg *xmsg, int code);
   void msg_release_fail(struct xio_msg *msg, int code);
-  int flush_input_queue(uint32_t flags);
+  int flush_out_queues(uint32_t flags);
   int discard_input_queue(uint32_t flags);
   int adjust_clru(uint32_t flags);
 };
