@@ -3314,11 +3314,16 @@ int main(int argc, char **argv)
 	if(zone.realm_id.empty()) {
 	  RGWRealm realm(realm_id, realm_name);
 	  int ret = realm.init(g_ceph_context, store);
-	  if (ret < 0) {
+	  if (ret < 0 && ret != -ENOENT) {
 	    cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
 	  zone.realm_id = realm.get_id();
+	}
+
+	if( !zone_name.empty() && !zone.get_name().empty() && zone.get_name() != zone_name) {
+	  cerr << "Error: zone name" << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
+	  return -EINVAL;
 	}
 
         if (zone.get_name().empty()) {
@@ -3328,11 +3333,6 @@ int main(int argc, char **argv)
             return EINVAL;
           }
         }
-
-	if(zone.get_name() != zone_name) {
-	  cerr << "Error: zone name" << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
-	  return -EINVAL;
-	}
 
         zone_name = zone.get_name();
 
