@@ -3322,6 +3322,11 @@ int main(int argc, char **argv)
 	  zone.realm_id = realm.get_id();
 	}
 
+	if( !zone_name.empty() && !zone.get_name().empty() && zone.get_name() != zone_name) {
+	  cerr << "Error: zone name" << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
+	  return -EINVAL;
+	}
+
         if (zone.get_name().empty()) {
           zone.set_name(zone_name);
           if (zone.get_name().empty()) {
@@ -3329,11 +3334,6 @@ int main(int argc, char **argv)
             return EINVAL;
           }
         }
-
-	if(zone.get_name() != zone_name) {
-	  cerr << "Error: zone name" << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
-	  return -EINVAL;
-	}
 
         zone_name = zone.get_name();
 
