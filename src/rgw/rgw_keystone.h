@@ -16,6 +16,13 @@ int rgw_decode_b64_cms(CephContext *cct,
                        bufferlist& bl);
 bool rgw_is_pki_token(const string& token);
 void rgw_get_token_id(const string& token, string& token_id);
+static inline std::string rgw_get_token_id(const string& token)
+{
+  std::string token_id;
+  rgw_get_token_id(token, token_id);
+
+  return token_id;
+}
 bool rgw_decode_pki_token(CephContext *cct,
                           const string& token,
                           bufferlist& bl);
