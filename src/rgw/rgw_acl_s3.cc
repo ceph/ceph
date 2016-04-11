@@ -435,7 +435,7 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
 }
 
 void  RGWAccessControlPolicy_S3::to_xml(ostream& out) {
-  out << "<AccessControlPolicy xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">";
+  out << "<AccessControlPolicy xmlns=\"" << XMLNS_AWS_S3 << "\">";
   ACLOwner_S3& _owner = static_cast<ACLOwner_S3 &>(owner);
   RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
   _owner.to_xml(out);

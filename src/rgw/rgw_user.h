@@ -25,6 +25,8 @@ using namespace std;
 #define PUBLIC_ID_LEN 20
 #define RAND_SUBUSER_LEN 5
 
+#define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
+
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
