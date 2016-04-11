@@ -7,7 +7,7 @@ include_directories(${BOOST_INCLUDE_DIR})
 
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
-set(simple_sim_srcs test_simple.cc)
+set(simple_sim_srcs test_simple.cc test_simple_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
 
 set(dmc_srcs
