@@ -105,6 +105,8 @@ def task(ctx, config):
 
     dump_ops_enable: (true) continuously dump ops on all live osds
 
+    noscrub_toggle_delay: (2.0) duration to delay between toggling noscrub
+
     example:
 
     tasks:
@@ -126,6 +128,8 @@ def task(ctx, config):
     config['optrack_toggle_delay'] = config.get('optrack_toggle_delay', 2.0)
     # add default value for dump_ops_enable
     config['dump_ops_enable'] = config.get('dump_ops_enable', "true")
+    # add default value for noscrub_toggle_delay
+    config['noscrub_toggle_delay'] = config.get('noscrub_toggle_delay', 2.0)
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
 
