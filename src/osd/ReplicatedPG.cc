@@ -3812,7 +3812,7 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
     newop.op.op = CEPH_OSD_OP_READ;
     newop.op.extent.offset = 0;
     newop.op.extent.length = 0;
-    do_osd_ops(ctx, nops);
+    result = do_osd_ops(ctx, nops);
 
     dout(10) << "tmapup read " << newop.outdata.length() << dendl;
 
@@ -3856,7 +3856,6 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       ::decode(nextkey, ip);
       ::decode(nextval, ip);
     }
-    result = 0;
     while (!bp.end() && !result) {
       __u8 op;
       string key;
