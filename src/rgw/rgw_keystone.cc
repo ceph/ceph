@@ -384,10 +384,10 @@ int RGWKeystoneTokenCache::RevokeThread::check_revoked()
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  if (RGWSwift::get_keystone_admin_token(cct, token) < 0) {
+  if (KeystoneService::get_keystone_admin_token(cct, token) < 0) {
     return -EINVAL;
   }
-  if (RGWSwift::get_keystone_url(cct, url) < 0) {
+  if (KeystoneService::get_keystone_url(cct, url) < 0) {
     return -EINVAL;
   }
   req.append_header("X-Auth-Token", token);
