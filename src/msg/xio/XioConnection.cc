@@ -198,40 +198,40 @@ static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   return xhook;
 }
 
-int XioConnection::on_msg_req(struct xio_session *session,
-			      struct xio_msg *req,
+int XioConnection::on_msg(struct xio_session *session,
+			      struct xio_msg *msg,
 			      int more_in_batch,
 			      void *cb_user_context)
 {
-  struct xio_msg *treq = req;
+  struct xio_msg *tmsg = msg;
 
   /* XXX Accelio guarantees message ordering at
    * xio_session */
 
   if (! in_seq.p()) {
-    if (!treq->in.header.iov_len) {
+    if (!tmsg->in.header.iov_len) {
 	ldout(msgr->cct,0) << __func__ << " empty header: packet out of sequence?" << dendl;
-	xio_release_msg(req);
+	xio_release_msg(msg);
 	return 0;
     }
     XioMsgCnt msg_cnt(
-      buffer::create_static(treq->in.header.iov_len,
-			    (char*) treq->in.header.iov_base));
-    ldout(msgr->cct,10) << __func__ << " receive req " << "treq " << treq
+      buffer::create_static(tmsg->in.header.iov_len,
+			    (char*) tmsg->in.header.iov_base));
+    ldout(msgr->cct,10) << __func__ << " receive msg " << "tmsg " << tmsg
       << " msg_cnt " << msg_cnt.msg_cnt
-      << " iov_base " << treq->in.header.iov_base
-      << " iov_len " << (int) treq->in.header.iov_len
-      << " nents " << treq->in.pdata_iov.nents
+      << " iov_base " << tmsg->in.header.iov_base
+      << " iov_len " << (int) tmsg->in.header.iov_len
+      << " nents " << tmsg->in.pdata_iov.nents
       << " conn " << conn << " sess " << session
-      << " sn " << treq->sn << dendl;
+      << " sn " << tmsg->sn << dendl;
     assert(session == this->session);
     in_seq.set_count(msg_cnt.msg_cnt);
   } else {
     /* XXX major sequence error */
-    assert(! treq->in.header.iov_len);
+    assert(! tmsg->in.header.iov_len);
   }
 
-  in_seq.append(req);
+  in_seq.append(msg);
   if (in_seq.count() > 0) {
     return 0;
   }
@@ -252,14 +252,14 @@ int XioConnection::on_msg_req(struct xio_session *session,
     dendl;
 
   struct xio_msg* msg_iter = msg_seq.begin();
-  treq = msg_iter;
+  tmsg = msg_iter;
   XioMsgHdr hdr(header, footer,
-		buffer::create_static(treq->in.header.iov_len,
-				      (char*) treq->in.header.iov_base));
+		buffer::create_static(tmsg->in.header.iov_len,
+				      (char*) tmsg->in.header.iov_base));
 
   if (magic & (MSG_MAGIC_TRACE_XCON)) {
     if (hdr.hdr->type == 43) {
-      print_xio_msg_hdr(msgr->cct, "on_msg_req", hdr, NULL);
+      print_xio_msg_hdr(msgr->cct, "on_msg", hdr, NULL);
     }
   }
 
@@ -272,9 +272,9 @@ int XioConnection::on_msg_req(struct xio_session *session,
   blen = header.front_len;
 
   while (blen && (msg_iter != msg_seq.end())) {
-    treq = msg_iter;
-    iov_len = vmsg_sglist_nents(&treq->in);
-    iovs = vmsg_sglist(&treq->in);
+    tmsg = msg_iter;
+    iov_len = vmsg_sglist_nents(&tmsg->in);
+    iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
 
@@ -319,9 +319,9 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   while (blen && (msg_iter != msg_seq.end())) {
-    treq = msg_iter;
-    iov_len = vmsg_sglist_nents(&treq->in);
-    iovs = vmsg_sglist(&treq->in);
+    tmsg = msg_iter;
+    iov_len = vmsg_sglist_nents(&tmsg->in);
+    iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
       take_len = MIN(blen, msg_iov->iov_len);
@@ -351,9 +351,9 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   while (blen && (msg_iter != msg_seq.end())) {
-    treq = msg_iter;
-    iov_len = vmsg_sglist_nents(&treq->in);
-    iovs = vmsg_sglist(&treq->in);
+    tmsg = msg_iter;
+    iov_len = vmsg_sglist_nents(&tmsg->in);
+    iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
       data.append(
@@ -368,7 +368,7 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   /* update connection timestamp */
-  recv.set(treq->timestamp);
+  recv.set(tmsg->timestamp);
 
   Message *m =
     decode_message(msgr->cct, msgr->crcflags, header, footer, payload, middle,

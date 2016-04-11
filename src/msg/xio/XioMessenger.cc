@@ -145,7 +145,7 @@ static int on_msg(struct xio_session *session,
     }
   }
 
-  return xcon->on_msg_req(session, req, more_in_batch,
+  return xcon->on_msg(session, req, more_in_batch,
 			  cb_user_context);
 }
 
