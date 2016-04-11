@@ -122,7 +122,7 @@ class Ptype(object):
 
     @staticmethod
     def get_ready_by_name(name):
-        return [x[name]['ready'] for x in PTYPE.values()]
+        return [x[name]['ready'] for x in PTYPE.values() if name in x]
 
     @staticmethod
     def is_regular_space(ptype):
@@ -1876,18 +1876,18 @@ class PrepareSpace(object):
         if stat.S_ISBLK(mode):
             if getattr(args, name + '_file'):
                 raise Error('%s is not a regular file' % name.capitalize,
-                            geattr(args, name))
+                            getattr(args, name))
             self.type = self.DEVICE
             return
 
         if stat.S_ISREG(mode):
             if getattr(args, name + '_dev'):
                 raise Error('%s is not a block device' % name.capitalize,
-                            geattr(args, name))
+                            getattr(args, name))
             self.type = self.FILE
 
         raise Error('%s %s is neither a block device nor regular file' %
-                    (name.capitalize, geattr(args, name)))
+                    (name.capitalize, getattr(args, name)))
 
     def is_none(self):
         return self.type == self.NONE
@@ -2241,8 +2241,8 @@ class Lockbox(object):
                       self.args.lockbox)
             self.partition = DevicePartition.factory(
                 path=None, dev=self.args.lockbox, args=self.args)
-            ptype = partition.get_ptype()
-            ready = Ptype.get_ready_by_type('lockbox')
+            ptype = self.partition.get_ptype()
+            ready = Ptype.get_ready_by_name('lockbox')
             if ptype not in ready:
                 LOG.warning('incorrect partition UUID: %s, expected %s'
                             % (ptype, str(ready)))
@@ -2384,7 +2384,7 @@ class PrepareData(object):
         elif stat.S_ISBLK(dmode):
             self.type = self.DEVICE
         else:
-            raise Error('not a dir or block device', args.data)
+            raise Error('not a dir or block device', self.args.data)
 
     def is_file(self):
         return self.type == self.FILE
@@ -2539,8 +2539,8 @@ class PrepareData(object):
                       self.args.data)
             self.partition = DevicePartition.factory(
                 path=None, dev=self.args.data, args=self.args)
-            ptype = partition.get_ptype()
-            ready = Ptype.get_ready_by_type('osd')
+            ptype = self.partition.get_ptype()
+            ready = Ptype.get_ready_by_name('osd')
             if ptype not in ready:
                 LOG.warning('incorrect partition UUID: %s, expected %s'
                             % (ptype, str(ready)))
