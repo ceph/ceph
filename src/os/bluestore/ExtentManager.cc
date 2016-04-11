@@ -62,13 +62,10 @@ int ExtentManager::read(uint64_t offset, uint32_t length, void* opaque, bufferli
     assert(bptr != nullptr);
     unsigned l2read;
     if(o >= lext->first && o < lext->first + lext->second.length) {
-      blobs2read_t::iterator it = blobs2read.find(bptr);
       unsigned r_off = o - lext->first;
       l2read = MIN(l, lext->second.length - r_off);
-      if (it != blobs2read.end())
-        it->second.push_back(region_t(o, r_off + lext->second.x_offset, 0, l2read));
-      else
-        blobs2read[bptr].push_back(region_t(o, r_off + lext->second.x_offset, 0, l2read));
+      regions2read_t& regions = blobs2read[bptr];
+      regions.push_back(region_t(o, r_off + lext->second.x_offset, 0, l2read));
       ++lext;
     } else if(o >= lext->first + lext->second.length){
       //handling the case when the first lookup get into the previous block due to the hole
@@ -253,11 +250,8 @@ int ExtentManager::blob2read_to_extents2read(const bluestore_blob_t* blob, Exten
       if (r_len > 0) {
 	r_len = MIN(r_len, l);
 	const bluestore_extent_t* eptr = &(*ext_it);
-	extents2read_t::iterator res_it = result->find(eptr);
-	if (res_it != result->end())
-	  res_it->second.push_back(region_t(l_offs, ext_pos, r_offs, r_len));
-	else
-	  (*result)[eptr].push_back(region_t(l_offs, ext_pos, r_offs, r_len));
+	regions2read_t& regions = (*result)[eptr];
+	regions.push_back(region_t(l_offs, ext_pos, r_offs, r_len));
 	l -= r_len;
 	l_offs += r_len;
       }
