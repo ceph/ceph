@@ -20,14 +20,15 @@
 #include <string>
 
 
-using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
-
-extern double fmt_tp(const TimePoint&);
-extern TimePoint now();
-
-
 template<typename ServerId, typename ClientId, typename TS, typename TC>
 class Simulation {
+  
+public:
+
+  using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
+
+protected:
+
   using ClientMap = std::map<ClientId,TC*>;
   using ServerMap = std::map<ServerId,TS*>;
 
@@ -48,6 +49,15 @@ class Simulation {
 
 
 public:
+
+  double fmt_tp(const TimePoint& t) {
+    auto c = t.time_since_epoch().count();
+    return uint64_t(c / 1000000.0 + 0.5) % 100000 / 1000.0;
+  }
+
+  TimePoint now() {
+    return std::chrono::steady_clock::now();
+  }
 
   using ClientBasedServerSelectFunc =
     std::function<const ServerId&(uint64_t, uint16_t)>;
