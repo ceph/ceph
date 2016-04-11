@@ -2925,7 +2925,7 @@ int KStore::_do_write(TransContext *txc,
     bl.claim_append(t);
     bl_off += use;
     if (end_rem) {
-      if (end_rem < prev.length()) {
+      if (offset + length < stripe_off + stripe_size) {
 	unsigned l = prev.length() - end_rem;
 	dout(20) << __func__ << " reuse trailing " << l << " bytes" << dendl;
 	bufferlist t;
