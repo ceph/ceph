@@ -1218,7 +1218,17 @@ def task(ctx, config):
             ctx=ctx, config=config, regions=regions),
         ]
 
-    multi_cluster = len(ctx.config['roles']) > 1
+    multisite = len(regions) > 1
+
+    if not multisite:
+        for zonegroup, zonegroup_info in regions.iteritems():
+            log.debug("zonegroup_info =%r", zonegroup_info)
+            if len(zonegroup_info['zones']) > 1:
+                multisite = True
+                break
+
+    log.debug('multisite %s', multisite)
+    multi_cluster = multisite and len(ctx.config['roles']) > 1
     log.debug('multi_cluster %s', multi_cluster)
     master_client = None
 
