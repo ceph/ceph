@@ -18,7 +18,6 @@
 
 
 namespace test_dmc {
-
     namespace dmc = crimson::dmclock;
 
     using DmcServerAddInfo = crimson::dmclock::PhaseType;
@@ -44,10 +43,9 @@ namespace test_dmc {
 
     using SubmitFunc = DmcClient::SubmitFunc;
 
+    extern void dmc_server_accumulate_f(DmcAccum& a,
+                                        const DmcServerAddInfo& add_info);
 
-    extern void dmc_server_accumulate_f(DmcAccum& a, const DmcServerAddInfo& add_info);
-
-    extern void dmc_client_accumulate_f(DmcAccum& a, const dmc::RespParams<ServerId>& r);
-
-    extern dmc::ClientInfo client_info_f(const ClientId& c);
-};
+    extern void dmc_client_accumulate_f(DmcAccum& a,
+                                        const dmc::RespParams<ServerId>& r);
+}; // namespace test_dmc

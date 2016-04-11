@@ -8,7 +8,7 @@ include_directories(${BOOST_INCLUDE_DIR})
 set(local_flags "-std=gnu++11 -Wall -pthread")
 
 set(simple_sim_srcs test_simple.cc)
-set(dmc_sim_srcs test_dmclock.cc)
+set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
 
 set(dmc_srcs
   dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
