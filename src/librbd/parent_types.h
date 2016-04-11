@@ -14,12 +14,12 @@ namespace librbd {
     parent_spec() : pool_id(-1), snap_id(CEPH_NOSNAP) {}
     parent_spec(uint64_t pool_id, string image_id, snapid_t snap_id) :
       pool_id(pool_id), image_id(image_id), snap_id(snap_id) {}
-    bool operator==(const parent_spec &other) {
+    bool operator==(const parent_spec &other) const {
       return ((this->pool_id == other.pool_id) &&
 	      (this->image_id == other.image_id) &&
 	      (this->snap_id == other.snap_id));
     }
-    bool operator!=(const parent_spec &other) {
+    bool operator!=(const parent_spec &other) const {
       return !(*this == other);
     }
   };
@@ -28,6 +28,12 @@ namespace librbd {
     parent_spec spec;
     uint64_t overlap;
     parent_info() : overlap(0) {}
+    bool operator==(const parent_info &other) const {
+        return (spec == other.spec) && (overlap == other.overlap);
+    }
+    bool operator!=(const parent_info &other) const {
+      return (spec != other.spec) || (overlap != other.overlap);
+    }
   };
 }
 
