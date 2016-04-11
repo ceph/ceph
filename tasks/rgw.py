@@ -995,13 +995,6 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
                      user_info['system_key']['secret_key']],
                      check_status=True)
 
-            rgwadmin(ctx, client,
-                cmd=['-n', client, 'period', 'pull', '--rgw-realm', realm, '--url',
-                     endpoint, '--access_key',
-                     user_info['system_key']['access_key'], '--secret',
-                     user_info['system_key']['secret_key']],
-                     check_status=True)
-
             (zonegroup, zone, zone_info, user_info) = role_zones[client]
             zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
             log.debug("zone info is: %s"), zone_json
