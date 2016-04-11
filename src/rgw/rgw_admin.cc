@@ -3315,7 +3315,7 @@ int main(int argc, char **argv)
 	if(zone.realm_id.empty()) {
 	  RGWRealm realm(realm_id, realm_name);
 	  int ret = realm.init(g_ceph_context, store);
-	  if (ret < 0) {
+	  if (ret < 0 && ret != -ENOENT) {
 	    cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
