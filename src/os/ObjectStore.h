@@ -1928,7 +1928,15 @@ public:
   virtual int fsck() {
     return -EOPNOTSUPP;
   }
-  virtual unsigned get_max_object_name_length() = 0;
+
+  /**
+   * Returns 0 if the hobject is valid, -error otherwise
+   *
+   * Errors:
+   * -ENAMETOOLONG: locator/namespace/name too large
+   */
+  virtual int validate_hobject_key(const hobject_t &obj) const = 0;
+
   virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
   virtual int mkjournal() = 0; // journal only

@@ -123,6 +123,12 @@ static CompatSet get_fs_supported_compat_set() {
   return compat;
 }
 
+int FileStore::validate_hobject_key(const hobject_t &obj) const
+{
+  unsigned len = LFNIndex::get_max_escaped_name_len(obj);
+  return len > m_filestore_max_xattr_value_size ? -ENAMETOOLONG : 0;
+}
+
 int FileStore::get_block_device_fsid(const string& path, uuid_d *fsid)
 {
   // make sure we don't try to use aio or direct_io (and get annoying
@@ -300,8 +306,9 @@ int FileStore::lfn_open(const coll_t& cid,
           << ") in index: " << cpp_strerror(-r) << dendl;
       goto fail;
     }
-    r = chain_fsetxattr(fd, XATTR_SPILL_OUT_NAME,
-                        XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT), true);
+    r = chain_fsetxattr<true, true>(
+      fd, XATTR_SPILL_OUT_NAME,
+      XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT));
     if (r < 0) {
       VOID_TEMP_FAILURE_RETRY(::close(fd));
       derr << "error setting spillout xattr for oid " << oid << " (" << (*path)->path()
@@ -559,7 +566,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
   m_fs_type(0),
   m_filestore_max_inline_xattr_size(0),
-  m_filestore_max_inline_xattrs(0)
+  m_filestore_max_inline_xattrs(0),
+  m_filestore_max_xattr_value_size(0)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
   for (int i = 0; i < m_ondisk_finisher_num; ++i) {
@@ -2146,7 +2154,8 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   // then record that we did it
   bufferlist v;
   ::encode(spos, v);
-  int r = chain_fsetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length(), true);
+  int r = chain_fsetxattr<true, true>(
+    fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     derr << __func__ << ": fsetxattr " << GLOBAL_REPLAY_GUARD_XATTR
 	 << " got " << cpp_strerror(r) << dendl;
@@ -2236,7 +2245,8 @@ void FileStore::_set_replay_guard(int fd,
   bufferlist v(40);
   ::encode(spos, v);
   ::encode(in_progress, v);
-  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length(), true);
+  int r = chain_fsetxattr<true, true>(
+    fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
@@ -2279,7 +2289,8 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   ::encode(spos, v);
   bool in_progress = false;
   ::encode(in_progress, v);
-  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length(), true);
+  int r = chain_fsetxattr<true, true>(
+    fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
@@ -3391,11 +3402,11 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
 
     r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
     if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
-      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
-                          sizeof(XATTR_NO_SPILL_OUT), true);
+      r = chain_fsetxattr<true, true>(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
+                          sizeof(XATTR_NO_SPILL_OUT));
     } else {
-      r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
-                          sizeof(XATTR_SPILL_OUT), true);
+      r = chain_fsetxattr<true, true>(**n, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
+                          sizeof(XATTR_SPILL_OUT));
     }
     if (r < 0)
       goto out3;
@@ -5663,21 +5674,25 @@ void FileStore::set_xattr_limits_via_conf()
 {
   uint32_t fs_xattr_size;
   uint32_t fs_xattrs;
+  uint32_t fs_xattr_max_value_size;
 
   switch (m_fs_type) {
 #if defined(__linux__)
   case XFS_SUPER_MAGIC:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
+    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_xfs;
     break;
   case BTRFS_SUPER_MAGIC:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
+    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_btrfs;
     break;
 #endif
   default:
     fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
     fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
+    fs_xattr_max_value_size = g_conf->filestore_max_xattr_value_size_other;
     break;
   }
 
@@ -5692,6 +5707,24 @@ void FileStore::set_xattr_limits_via_conf()
     m_filestore_max_inline_xattrs = g_conf->filestore_max_inline_xattrs;
   else
     m_filestore_max_inline_xattrs = fs_xattrs;
+
+  // Use override value if set
+  if (g_conf->filestore_max_xattr_value_size)
+    m_filestore_max_xattr_value_size = g_conf->filestore_max_xattr_value_size;
+  else
+    m_filestore_max_xattr_value_size = fs_xattr_max_value_size;
+
+  if (m_filestore_max_xattr_value_size < g_conf->osd_max_object_name_len) {
+    derr << "WARNING: max attr value size ("
+	 << m_filestore_max_xattr_value_size
+	 << ") is smaller than osd_max_object_name_len ("
+	 << g_conf->osd_max_object_name_len
+	 << ").  Your backend filesystem appears to not support attrs large "
+	 << "enough to handle the configured max rados name size.  You may get "
+	 << "unexpected ENAMETOOLONG errors on rados operations or buggy "
+	 << "behavior"
+	 << dendl;
+  }
 }
 
 // -- FSSuperblock --
