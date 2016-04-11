@@ -2293,7 +2293,6 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
-      list<string>::iterator iter;
       get_str_list(val, endpoints);
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
       source_zone_name = val;
@@ -2453,7 +2452,7 @@ int main(int argc, char **argv)
     case OPT_PERIOD_DELETE:
       {
 	if (period_id.empty()) {
-	  cerr << "missing realm name or id" << std::endl;
+	  cerr << "missing period id" << std::endl;
 	  return -EINVAL;
 	}
 	RGWPeriod period(period_id);
