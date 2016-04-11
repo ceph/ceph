@@ -2332,13 +2332,11 @@ void RGWPutObj::execute()
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   bufferlist bl, aclbl;
-  map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
   bool multipart;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
-
 
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;

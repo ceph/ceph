@@ -522,7 +522,7 @@ namespace rgw {
       state.atime = ts;
     }
 
-    void encode(bufferlist& bl) const {
+    void encode(buffer::list& bl) const {
       ENCODE_START(1, 1, bl);
       ::encode(fh.fh_hk.bucket, bl);
       ::encode(fh.fh_hk.object, bl);
@@ -557,6 +557,10 @@ namespace rgw {
       }
       DECODE_FINISH(bl);
     }
+
+    void decode_attrs(const ceph::buffer::list* bl);
+
+    void encode_attrs(ceph::buffer::list& bl);
 
     virtual bool reclaim();
 
@@ -640,6 +644,8 @@ namespace rgw {
     }; /* Factory */
 
   }; /* RGWFileHandle */
+
+  WRITE_CLASS_ENCODER(RGWFileHandle);
 
   static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
     return static_cast<RGWFileHandle*>(fh->fh_private);
@@ -1600,7 +1606,12 @@ public:
   uint64_t get_size() { return _size; }
   real_time ctime() { return mod_time; } // XXX
   real_time mtime() { return mod_time; }
-  map<string, bufferlist>& get_attrs() { return attrs; }
+  std::map<string, bufferlist>& get_attrs() { return attrs; }
+
+  buffer::list* get_attr(const std::string& k) {
+    auto iter = attrs.find(k);
+    return (iter != attrs.end()) ? &(iter->second) : nullptr;
+  }
 
   virtual bool only_bucket() { return false; }
 
@@ -1641,6 +1652,7 @@ public:
   virtual int send_response_data(ceph::buffer::list& _bl, off_t s_off,
 				off_t e_off) {
     /* NOP */
+    /* XXX save attrs? */
     return 0;
   }
 
