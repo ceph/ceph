@@ -14,6 +14,7 @@
 #include "rgw_client_io.h"
 
 #include "rgw_auth.h"
+#include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
 #include <sstream>
@@ -1382,27 +1383,28 @@ int RGWHandler_REST_SWIFT::authorize()
     try {
       ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
 
-      auto applier = engine->authenticate();
-      if (!applier) {
+      auto final_applier = engine->authenticate();
+      if (!final_applier) {
         /* Access denied is acknowledged by returning a std::unique_ptr with
          * nullptr inside. */
         ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
         return false;
       }
 
-      applier = std::unique_ptr<RGWThirdPartyAccountAuthApplier>(
-          new RGWThirdPartyAccountAuthApplier(std::move(applier), store, s->account_name));
+      /* Construct a pipeline over the final_applier. */
+      RGWThirdPartyAccountAuthApplier<RGWAuthApplier::aplptr_t> applier(
+        std::move(final_applier), store, s->account_name);
 
       try {
         /* Account used by a given RGWOp is decoupled from identity employed
          * in the authorization phase (RGWOp::verify_permissions). */
-        applier->load_acct_info(*s->user);
-        applier->load_user_info(s->auth_user, s->perm_mask, s->admin_request);
+        applier.load_acct_info(*s->user);
+        applier.load_user_info(s->auth_user, s->perm_mask, s->admin_request);
 
         /* This is the signle place where we pass req_state as a pointer
          * to non-const and thus its modification is allowed. In the time
          * of writing only RGWTempURLEngine needed that feature. */
-        applier->modify_request_state(s);
+        applier.modify_request_state(s);
       } catch (int err) {
         ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
         return err;
