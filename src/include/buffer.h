@@ -558,6 +558,8 @@ namespace buffer CEPH_BUFFER_API {
      */
     const char& operator[](unsigned n) const;
     char *c_str();
+    std::string to_str() const;
+
     void substr_of(const list& other, unsigned off, unsigned len);
 
     /// return a pointer to a contiguous extent of the buffer,

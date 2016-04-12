@@ -1780,6 +1780,19 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
+  string buffer::list::to_str() const {
+    string s;
+    s.reserve(length());
+    for (std::list<ptr>::const_iterator p = _buffers.begin();
+	 p != _buffers.end();
+	 ++p) {
+      if (p->length()) {
+	s.append(p->c_str(), p->length());
+      }
+    }
+    return s;
+  }
+
   char *buffer::list::get_contiguous(unsigned orig_off, unsigned len)
   {
     if (orig_off + len > length())
