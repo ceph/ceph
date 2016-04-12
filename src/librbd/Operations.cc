@@ -41,12 +41,28 @@ struct C_NotifyUpdate : public Context {
   }
 
   virtual void complete(int r) override {
-    if (r < 0 || notified) {
+    CephContext *cct = image_ctx.cct;
+    if (notified) {
+      if (r == -ETIMEDOUT) {
+        // don't fail the op if a peer fails to get the update notification
+        lderr(cct) << "update notification timed-out" << dendl;
+        r = 0;
+      } else if (r < 0) {
+        lderr(cct) << "update notification failed: " << cpp_strerror(r)
+                   << dendl;
+      }
       Context::complete(r);
-    } else {
-      notified = true;
-      image_ctx.notify_update(this);
+      return;
     }
+
+    if (r < 0) {
+      // op failed -- no need to send update notification
+      Context::complete(r);
+      return;
+    }
+
+    notified = true;
+    image_ctx.notify_update(this);
   }
   virtual void finish(int r) override {
     on_finish->complete(r);
