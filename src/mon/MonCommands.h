@@ -329,7 +329,8 @@ COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest")
 COMMAND("mds set " \
-	"name=var,type=CephChoices,strings=max_mds|max_file_size|allow_new_snaps|inline_data " \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size"
+	"|allow_new_snaps|inline_data|allow_multimds|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
@@ -397,12 +398,13 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down " \
+        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
-        "name=val,type=CephString", \
+        "name=val,type=CephString " \
+	"name=confirm,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"Set a global CephFS flag", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs add_data_pool name=fs_name,type=CephString " \
@@ -411,6 +413,9 @@ COMMAND("fs add_data_pool name=fs_name,type=CephString " \
 COMMAND("fs rm_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("fs set_default name=fs_name,type=CephString", \
+	"set the default to the named filesystem", \
+	"fs", "rw", "cli,rest")
 
 /*
  * Monmap commands

@@ -491,6 +491,11 @@ class TestFS(TestArgparse):
         self.assert_valid_command(['fs', 'ls'])
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
 
+    def test_fs_set_default(self):
+        self.assert_valid_command(['fs', 'set_default', 'cephfs'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'set_default']))
+        assert_equal({}, validate_command(sigdict, ['fs', 'set_default', 'cephfs', 'toomany']))
+
 class TestMon(TestArgparse):
 
     def test_dump(self):
