@@ -1181,7 +1181,7 @@ struct RGWPeriodMap
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
 
-  int update(const RGWZoneGroup& zonegroup);
+  int update(const RGWZoneGroup& zonegroup, CephContext *cct);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
