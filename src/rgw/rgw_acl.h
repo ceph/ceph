@@ -223,7 +223,7 @@ struct ACLReferer {
       return false;
     }
 
-    if ('.' == http_referer[0]) {
+    if ('.' == url_spec[0]) {
       /* Wildcard support: a referer matches the spec when its last char are
        * perfectly equal to spec. */
       return !http_referer.compare(http_referer.length() - url_spec.length(),
