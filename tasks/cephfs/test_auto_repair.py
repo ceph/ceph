@@ -80,6 +80,11 @@ class TestMDSAutoRepair(CephFSTestCase):
         # background writer also should fail
         self.assertTrue(writer.finished)
 
+        # The MDS should report its readonly health state to the mon
+        self.wait_for_health("MDS in read-only mode", timeout=30)
+
         # restart mds to make it writable
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
+
+        self.wait_for_health_clear(timeout=30)
