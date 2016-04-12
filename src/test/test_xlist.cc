@@ -10,7 +10,7 @@ struct Item {
   xlist<Item*>::item xitem;
   int val;
 
-  Item(int v) :
+  explicit Item(int v) :
     xitem(this),
     val(v)
   {}

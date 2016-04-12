@@ -20,6 +20,7 @@
 #include "common/Timer.h"
 
 #include "Beacon.h"
+#include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "MDCache.h"
@@ -153,6 +154,7 @@ class MDSRank {
     MDLog        *mdlog;
     MDBalancer   *balancer;
     ScrubStack   *scrubstack;
+    DamageTable  damage_table;
 
     InoTable     *inotable;
 
@@ -205,7 +207,7 @@ class MDSRank {
       MDSRank *mds;
       Cond cond;
       public:
-      ProgressThread(MDSRank *mds_) : mds(mds_) {}
+      explicit ProgressThread(MDSRank *mds_) : mds(mds_) {}
       void * entry(); 
       void shutdown();
       void signal() {cond.Signal();}
@@ -347,13 +349,7 @@ class MDSRank {
       replay_queue.push_back(c);
     }
 
-    bool queue_one_replay() {
-      if (replay_queue.empty())
-        return false;
-      queue_waiter(replay_queue.front());
-      replay_queue.pop_front();
-      return true;
-    }
+    bool queue_one_replay();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
@@ -366,8 +362,11 @@ class MDSRank {
 
     int get_req_rate() { return logger->get(l_mds_request); }
 
+    void dump_status(Formatter *f) const;
+
   protected:
-    void command_scrub_path(Formatter *f, const string& path);
+    void dump_clientreplay_status(Formatter *f) const;
+    void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
     void command_tag_path(Formatter *f, const string& path,
                           const string &tag);
     void command_flush_path(Formatter *f, const string& path);
@@ -390,7 +389,6 @@ class MDSRank {
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
-    // <<<
 
   protected:
     Messenger    *messenger;

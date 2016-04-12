@@ -1,4 +1,4 @@
-policy_module(ceph, 1.1.0)
+policy_module(ceph, 1.1.1)
 
 require {
 	type sysfs_t;
@@ -43,7 +43,7 @@ files_pid_file(ceph_var_run_t)
 allow ceph_t self:process { signal_perms };
 allow ceph_t self:fifo_file rw_fifo_file_perms;
 allow ceph_t self:unix_stream_socket create_stream_socket_perms;
-allow ceph_t self:capability { setuid setgid };
+allow ceph_t self:capability { setuid setgid dac_override };
 
 manage_dirs_pattern(ceph_t, ceph_log_t, ceph_log_t)
 manage_files_pattern(ceph_t, ceph_log_t, ceph_log_t)
@@ -94,6 +94,7 @@ files_list_tmp(ceph_t)
 fstools_exec(ceph_t)
 nis_use_ypbind_uncond(ceph_t)
 storage_raw_rw_fixed_disk(ceph_t)
+files_manage_generic_locks(ceph_t)
 
 allow ceph_t sysfs_t:dir read;
 allow ceph_t sysfs_t:file { read getattr open };

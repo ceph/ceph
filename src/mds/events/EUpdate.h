@@ -40,7 +40,7 @@ public:
 
   EMetaBlob *get_metablob() { return &metablob; }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EUpdate*>& ls);
@@ -49,5 +49,6 @@ public:
   void replay(MDSRank *mds);
   EMetaBlob const *get_metablob() const {return &metablob;}
 };
+WRITE_CLASS_ENCODER_FEATURES(EUpdate)
 
 #endif

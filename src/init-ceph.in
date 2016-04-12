@@ -26,14 +26,14 @@ grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
     SBINDIR=.
-    LIBDIR=.
+    LIBEXECDIR=.
     ETCDIR=.
     SYSTEMD_RUN=""
     ASSUME_DEV=1
 else
     BINDIR=@bindir@
     SBINDIR=@prefix@/sbin
-    LIBDIR=@libdir@/ceph
+    LIBEXECDIR=@libexecdir@/ceph
     ETCDIR=@sysconfdir@/ceph
     ASSUME_DEV=0
 fi
@@ -65,9 +65,9 @@ usage_exit() {
 
 # behave if we are not completely installed (e.g., Debian "removed,
 # config remains" state)
-test -f $LIBDIR/ceph_common.sh || exit 0
+test -f $LIBEXECDIR/ceph_common.sh || exit 0
 
-. $LIBDIR/ceph_common.sh
+. $LIBEXECDIR/ceph_common.sh
 
 EXIT_STATUS=0
 
@@ -338,11 +338,13 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
+	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
+
 	    if [ -n "$SYSTEMD_RUN" ]; then
                 time=`date +%s.%N` 
-		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
+		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $tcmalloc $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
 	    else
-		cmd="$files $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
+		cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
@@ -383,10 +385,10 @@ for name in $what; do
 		do_root_cmd_okfail "mkdir -p $fs_path"
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
-		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts && umount $fs_path ; mount -t btrfs $fs_opt $first_dev $fs_path"
 		else
 		    echo Mounting $fs_type on $host:$fs_path
-		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts && umount $fs_path ; mount -t $fs_type $fs_opt $first_dev $fs_path"
 		fi
 		if [ "$ERR" != "0" ]; then
 		    EXIT_STATUS=$ERR
@@ -396,7 +398,7 @@ for name in $what; do
 
 	    if [ "$type" = "osd" ]; then
 		get_conf update_crush "" "osd crush update on start"
-		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
+		case "${update_crush:-1}" in 1|[Tt][Rr][Uu][Ee])
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
 		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
@@ -408,7 +410,7 @@ for name in $what; do
 			EXIT_STATUS=$ERR
 			continue
 		    fi
-		fi
+		esac
 	    fi
 
 	    echo Starting Ceph $name on $host...
@@ -533,7 +535,9 @@ done
 # activate latent osds?
 if [ "$command" = "start" -a "$BINDIR" != "." ]; then
     if [ "$*" = "" ] || echo $* | grep -q ^osd\$ ; then
-	ceph-disk activate-all
+       if [ -x $SBINDIR/ceph-disk ]; then
+           ceph-disk activate-all
+       fi
     fi
 fi
 

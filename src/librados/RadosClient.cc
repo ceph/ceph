@@ -86,10 +86,8 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
     return r;
   }
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  int64_t ret = osdmap->lookup_pg_pool_name(name);
-  objecter->put_osdmap_read();
-  return ret;
+  return objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
+			       name);
 }
 
 bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
@@ -107,7 +105,7 @@ bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
 
 // a safer version of pool_requires_alignment
 int librados::RadosClient::pool_requires_alignment2(int64_t pool_id,
-	bool *requires)
+						    bool *requires)
 {
   if (!requires)
     return -EINVAL;
@@ -117,14 +115,13 @@ int librados::RadosClient::pool_requires_alignment2(int64_t pool_id,
     return r;
   }
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (!osdmap->have_pg_pool(pool_id)) { 
-    objecter->put_osdmap_read();
-    return -ENOENT;
-  }
-  *requires = osdmap->get_pg_pool(pool_id)->requires_aligned_append();
-  objecter->put_osdmap_read();
-  return 0;
+  return objecter->with_osdmap([requires, pool_id](const OSDMap& o) {
+      if (!o.have_pg_pool(pool_id)) {
+	return -ENOENT;
+      }
+      *requires = o.get_pg_pool(pool_id)->requires_aligned_append();
+      return 0;
+    });
 }
 
 uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
@@ -140,7 +137,7 @@ uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
 
 // a safer version of pool_required_alignment
 int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
-	uint64_t *alignment)
+						    uint64_t *alignment)
 {
   if (!alignment)
     return -EINVAL;
@@ -150,30 +147,30 @@ int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
     return r;
   }
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (!osdmap->have_pg_pool(pool_id)) {
-    objecter->put_osdmap_read();
-    return -ENOENT;
-  }
-  *alignment = osdmap->get_pg_pool(pool_id)->required_alignment();
-  objecter->put_osdmap_read();
-  return 0;
+  return objecter->with_osdmap([alignment, pool_id](const OSDMap &o) {
+      if (!o.have_pg_pool(pool_id)) {
+	return -ENOENT;
+      }
+      *alignment = o.get_pg_pool(pool_id)->required_alignment();
+      return 0;
+    });
 }
 
-int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *auid)
+int librados::RadosClient::pool_get_auid(uint64_t pool_id,
+					 unsigned long long *auid)
 {
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  const pg_pool_t *pg = osdmap->get_pg_pool(pool_id);
-  if (!pg) {
-    r = -ENOENT;
-  } else {
-    r = 0;
-    *auid = pg->auid;
-  }
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      const pg_pool_t *pg = o.get_pg_pool(pool_id);
+      if (!pg) {
+	r = -ENOENT;
+      } else {
+	r = 0;
+	*auid = pg->auid;
+      }
+    });
   return r;
 }
 
@@ -182,14 +179,14 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (!osdmap->have_pg_pool(pool_id)) {
-    r = -ENOENT;
-  } else {
-    r = 0;
-    *s = osdmap->get_pool_name(pool_id);
-  }
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      if (!o.have_pg_pool(pool_id)) {
+	r = -ENOENT;
+      } else {
+	r = 0;
+	*s = o.get_pool_name(pool_id);
+      }
+    });
   return r;
 }
 
@@ -256,7 +253,6 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting objecter" << dendl;
 
-  err = -ENOMEM;
   objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
 			  &finisher,
 			  cct->_conf->rados_mon_op_timeout,
@@ -333,20 +329,25 @@ void librados::RadosClient::shutdown()
     lock.Unlock();
     return;
   }
-  if (state == CONNECTED) {
-    finisher.stop();
-  }
+
   bool need_objecter = false;
   if (objecter && objecter->initialized.read()) {
     need_objecter = true;
+  }
+
+  if (state == CONNECTED) {
+    if (need_objecter) {
+      // make sure watch callbacks are flushed
+      watch_flush();
+    }
+    finisher.wait_for_empty();
+    finisher.stop();
   }
   state = DISCONNECTED;
   instance_id = 0;
   timer.shutdown();   // will drop+retake lock
   lock.Unlock();
   if (need_objecter) {
-    // make sure watch callbacks are flushed
-    watch_flush();
     objecter->shutdown();
   }
   monclient.shutdown();
@@ -360,7 +361,51 @@ void librados::RadosClient::shutdown()
 int librados::RadosClient::watch_flush()
 {
   ldout(cct, 10) << __func__ << " enter" << dendl;
-  objecter->linger_callback_flush();
+  Mutex mylock("RadosClient::watch_flush::mylock");
+  Cond cond;
+  bool done;
+  objecter->linger_callback_flush(new C_SafeCond(&mylock, &cond, &done));
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  ldout(cct, 10) << __func__ << " exit" << dendl;
+  return 0;
+}
+
+struct C_aio_watch_flush_Complete : public Context {
+  librados::RadosClient *client;
+  librados::AioCompletionImpl *c;
+
+  C_aio_watch_flush_Complete(librados::RadosClient *_client, librados::AioCompletionImpl *_c)
+    : client(_client), c(_c) {
+    c->get();
+  }
+
+  virtual void finish(int r) {
+    c->lock.Lock();
+    c->rval = r;
+    c->ack = true;
+    c->safe = true;
+    c->cond.Signal();
+
+    if (c->callback_complete) {
+      client->finisher.queue(new librados::C_AioComplete(c));
+    }
+    if (c->callback_safe) {
+      client->finisher.queue(new librados::C_AioSafe(c));
+    }
+    c->put_unlock();
+  }
+};
+
+int librados::RadosClient::async_watch_flush(AioCompletionImpl *c)
+{
+  ldout(cct, 10) << __func__ << " enter" << dendl;
+  Context *oncomplete = new C_aio_watch_flush_Complete(this, c);
+  objecter->linger_callback_flush(oncomplete);
   ldout(cct, 10) << __func__ << " exit" << dendl;
   return 0;
 }
@@ -409,6 +454,7 @@ bool librados::RadosClient::ms_dispatch(Message *m)
 {
   bool ret;
 
+  Mutex::Locker l(lock);
   if (state == DISCONNECTED) {
     ldout(cct, 10) << "disconnected, discarding " << *m << dendl;
     m->put();
@@ -435,12 +481,11 @@ void librados::RadosClient::ms_handle_remote_reset(Connection *con)
 
 bool librados::RadosClient::_dispatch(Message *m)
 {
+  assert(lock.is_locked());
   switch (m->get_type()) {
   // OSD
   case CEPH_MSG_OSD_MAP:
-    lock.Lock();
     cond.Signal();
-    lock.Unlock();
     m->put();
     break;
 
@@ -468,11 +513,11 @@ int librados::RadosClient::wait_for_osdmap()
   }
 
   bool need_map = false;
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  if (osdmap->get_epoch() == 0) {
-    need_map = true;
-  }
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      if (o.get_epoch() == 0) {
+	need_map = true;
+      }
+    });
 
   if (need_map) {
     Mutex::Locker l(lock);
@@ -481,23 +526,20 @@ int librados::RadosClient::wait_for_osdmap()
     if (cct->_conf->rados_mon_op_timeout > 0)
       timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
 
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    if (osdmap->get_epoch() == 0) {
+    if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
       utime_t start = ceph_clock_now(cct);
-      while (osdmap->get_epoch() == 0) {
-        objecter->put_osdmap_read();
-        cond.WaitInterval(cct, lock, timeout);
-        utime_t elapsed = ceph_clock_now(cct) - start;
-        if (!timeout.is_zero() && elapsed > timeout) {
-          lderr(cct) << "timed out waiting for first osdmap from monitors" << dendl;
-          return -ETIMEDOUT;
-        }
-        osdmap = objecter->get_osdmap_read();
+      while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
+	cond.WaitInterval(cct, lock, timeout);
+	utime_t elapsed = ceph_clock_now(cct) - start;
+	if (!timeout.is_zero() && elapsed > timeout) {
+	  lderr(cct) << "timed out waiting for first osdmap from monitors"
+		     << dendl;
+	  return -ETIMEDOUT;
+	}
       }
       ldout(cct, 10) << __func__ << " done waiting" << dendl;
     }
-    objecter->put_osdmap_read();
     return 0;
   } else {
     return 0;
@@ -526,12 +568,11 @@ int librados::RadosClient::pool_list(std::list<std::pair<int64_t, string> >& v)
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-  for (map<int64_t,pg_pool_t>::const_iterator p = osdmap->get_pools().begin();
-       p != osdmap->get_pools().end();
-       ++p)
-    v.push_back(std::make_pair(p->first, osdmap->get_pool_name(p->first)));
-  objecter->put_osdmap_read();
+
+  objecter->with_osdmap([&](const OSDMap& o) {
+      for (auto p : o.get_pools())
+	v.push_back(std::make_pair(p.first, o.get_pool_name(p.first)));
+    });
   return 0;
 }
 
@@ -634,21 +675,19 @@ int librados::RadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tie
     return r;
   }
 
-  const OSDMap *osdmap = objecter->get_osdmap_read();
-
-  const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
-  if (pool) {
-    if (pool->tier_of < 0) {
-      *base_tier = pool_id;
-    } else {
-      *base_tier = pool->tier_of;
-    }
-    r = 0;
-  } else {
-    r = -ENOENT;
-  }
-
-  objecter->put_osdmap_read();
+  objecter->with_osdmap([&](const OSDMap& o) {
+      const pg_pool_t* pool = o.get_pg_pool(pool_id);
+      if (pool) {
+	if (pool->tier_of < 0) {
+	  *base_tier = pool_id;
+	} else {
+	  *base_tier = pool->tier_of;
+	}
+	r = 0;
+      } else {
+	r = -ENOENT;
+      }
+    });
   return r;
 }
 
@@ -832,6 +871,10 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
 {
   Mutex::Locker l(lock);
 
+  if (state != CONNECTED) {
+    return -ENOTCONN;
+  }
+
   if (cb == NULL) {
     // stop watch
     ldout(cct, 10) << __func__ << " removing cb " << (void*)log_cb << dendl;
@@ -873,7 +916,7 @@ int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t
 
 void librados::RadosClient::handle_log(MLog *m)
 {
-  Mutex::Locker l(lock);
+  assert(lock.is_locked());
   ldout(cct, 10) << __func__ << " version " << m->version << dendl;
 
   if (log_last_version < m->version) {

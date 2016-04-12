@@ -30,7 +30,7 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
     m_append_task(NULL),
     m_lock(utils::unique_lock_name("ObjectRecorder::m_lock", this)),
     m_append_tid(0), m_pending_bytes(0), m_size(0), m_overflowed(false),
-    m_object_closed(false) {
+    m_object_closed(false), m_in_flight_flushes(false) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
   assert(m_overflow_handler != NULL);
@@ -47,6 +47,12 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
   bool schedule_append = false;
   {
     Mutex::Locker locker(m_lock);
+    if (m_overflowed) {
+      m_append_buffers.insert(m_append_buffers.end(),
+                              append_buffers.begin(), append_buffers.end());
+      return false;
+    }
+
     for (AppendBuffers::const_iterator iter = append_buffers.begin();
          iter != append_buffers.end(); ++iter) {
       if (append(*iter, &schedule_append)) {
@@ -72,6 +78,13 @@ void ObjectRecorder::flush(Context *on_safe) {
   Future future;
   {
     Mutex::Locker locker(m_lock);
+
+    // if currently handling flush notifications, wait so that
+    // we notify in the correct order (since lock is dropped on
+    // callback)
+    if (m_in_flight_flushes) {
+      m_in_flight_flushes_cond.Wait(m_lock);
+    }
 
     // attach the flush to the most recent append
     if (!m_append_buffers.empty()) {
@@ -229,6 +242,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
       // all remaining unsent appends should be redirected to new object
       notify_overflow();
     }
+    m_in_flight_flushes = true;
   }
 
   // Flag the associated futures as complete.
@@ -238,6 +252,11 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
                      << dendl;
     buf_it->first->safe(r);
   }
+
+  // wake up any flush requests that raced with a RADOS callback
+  Mutex::Locker locker(m_lock);
+  m_in_flight_flushes = false;
+  m_in_flight_flushes_cond.Signal();
 }
 
 void ObjectRecorder::append_overflowed(uint64_t tid) {
@@ -286,6 +305,7 @@ void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
                      << dendl;
     it->first->set_flush_in_progress();
     op.append(it->second);
+    op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     m_size += it->second.length();
   }
   m_in_flight_appends[append_tid].swap(*append_buffers);

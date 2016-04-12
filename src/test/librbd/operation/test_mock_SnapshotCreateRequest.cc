@@ -7,6 +7,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -22,6 +23,7 @@ using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::Return;
 using ::testing::SetArgPointee;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockOperationSnapshotCreateRequest : public TestMockFixture {
@@ -30,14 +32,14 @@ public:
 
   void expect_block_writes(MockImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
-                  .WillRepeatedly(CompleteContext(0, NULL));
+                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_verify_lock_ownership(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.image_watcher, is_lock_supported(_))
-                  .WillRepeatedly(Return(true));
-    EXPECT_CALL(*mock_image_ctx.image_watcher, is_lock_owner())
-                  .WillRepeatedly(Return(true));
+    if (mock_image_ctx.exclusive_lock != nullptr) {
+      EXPECT_CALL(*mock_image_ctx.exclusive_lock, is_lock_owner())
+                    .WillRepeatedly(Return(true));
+    }
   }
 
   void expect_allocate_snap_id(MockImageCtx &mock_image_ctx, int r) {
@@ -61,15 +63,16 @@ public:
   }
 
   void expect_snap_create(MockImageCtx &mock_image_ctx, int r) {
-    if (!mock_image_ctx.old_format) {
-      EXPECT_CALL(*mock_image_ctx.image_watcher, assert_header_locked(_))
+    if (!mock_image_ctx.old_format &&
+         mock_image_ctx.exclusive_lock != nullptr) {
+      EXPECT_CALL(*mock_image_ctx.exclusive_lock, assert_header_locked(_))
                     .Times(r == -ESTALE ? 2 : 1);
     }
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, "rbd",
-                               mock_image_ctx.old_format ? "snap_add" :
-                                                           "snapshot_add",
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                               StrEq(mock_image_ctx.old_format ? "snap_add" :
+                                                                 "snapshot_add"),
                                _, _, _));
     if (r == -ESTALE) {
       expect.WillOnce(Return(r)).WillOnce(DoDefault());
@@ -81,11 +84,8 @@ public:
   }
 
   void expect_object_map_snap_create(MockImageCtx &mock_image_ctx) {
-    bool enabled = mock_image_ctx.image_ctx->test_features(RBD_FEATURE_OBJECT_MAP);
-    EXPECT_CALL(mock_image_ctx.object_map, enabled(_))
-                  .WillOnce(Return(enabled));
-    if (enabled) {
-      EXPECT_CALL(mock_image_ctx.object_map, snapshot_add(_, _))
+    if (mock_image_ctx.object_map != nullptr) {
+      EXPECT_CALL(*mock_image_ctx.object_map, snapshot_add(_, _))
                     .WillOnce(WithArg<1>(CompleteContext(
                       0, mock_image_ctx.image_ctx->op_work_queue)));
     }
@@ -106,10 +106,22 @@ public:
 };
 
 TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
+  REQUIRE_FORMAT_V2();
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
 
   expect_verify_lock_ownership(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
@@ -118,13 +130,15 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   expect_block_writes(mock_image_ctx);
   expect_allocate_snap_id(mock_image_ctx, 0);
   expect_snap_create(mock_image_ctx, 0);
-  expect_update_snap_context(mock_image_ctx);
-  expect_object_map_snap_create(mock_image_ctx);
+  if (!mock_image_ctx.old_format) {
+    expect_update_snap_context(mock_image_ctx);
+    expect_object_map_snap_create(mock_image_ctx);
+  }
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -138,6 +152,11 @@ TEST_F(TestMockOperationSnapshotCreateRequest, AllocateSnapIdError) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
   expect_verify_lock_ownership(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -148,7 +167,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, AllocateSnapIdError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -162,19 +181,31 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
   expect_verify_lock_ownership(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
   expect_block_writes(mock_image_ctx);
   expect_allocate_snap_id(mock_image_ctx, -ESTALE);
   expect_snap_create(mock_image_ctx, -ESTALE);
-  expect_update_snap_context(mock_image_ctx);
-  expect_object_map_snap_create(mock_image_ctx);
+  if (!mock_image_ctx.old_format) {
+    expect_update_snap_context(mock_image_ctx);
+    expect_object_map_snap_create(mock_image_ctx);
+  }
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -188,6 +219,11 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapError) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
   expect_verify_lock_ownership(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -199,7 +235,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -213,6 +249,11 @@ TEST_F(TestMockOperationSnapshotCreateRequest, ReleaseSnapIdError) {
 
   MockImageCtx mock_image_ctx(*ictx);
 
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
   expect_verify_lock_ownership(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
@@ -224,7 +265,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, ReleaseSnapIdError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, "snap1", 0);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

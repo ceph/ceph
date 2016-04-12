@@ -4,6 +4,8 @@
 #include "librbd/DiffIterate.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
@@ -61,7 +63,7 @@ public:
   void send() {
     C_OrderedThrottle *ctx = m_diff_context.throttle.start_op(this);
     librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(ctx, NULL, rados_ctx_cb);
+      util::create_rados_safe_callback(ctx);
 
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_ret);
@@ -111,7 +113,6 @@ private:
   ImageCtx &m_image_ctx;
   librados::IoCtx &m_head_ctx;
   DiffContext &m_diff_context;
-  uint64_t m_request_num;
   std::string m_oid;
   uint64_t m_offset;
   std::vector<ObjectExtent> m_object_extents;
@@ -124,9 +125,11 @@ private:
 
     // calc diff from from_snap_id -> to_snap_id
     interval_set<uint64_t> diff;
+    uint64_t end_size;
     bool end_exists;
     calc_snap_set_diff(cct, m_snap_set, m_diff_context.from_snap_id,
-                       m_diff_context.end_snap_id, &diff, &end_exists);
+                       m_diff_context.end_snap_id, &diff, &end_size,
+                       &end_exists);
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
     if (diff.empty()) {
@@ -348,7 +351,6 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
   }
 
   object_diff_state->clear();
-  int r;
   uint64_t current_snap_id = from_snap_id;
   uint64_t next_snap_id = to_snap_id;
   BitVector<2> prev_object_map;
@@ -370,7 +372,7 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     }
 
     uint64_t flags;
-    r = m_image_ctx.get_flags(from_snap_id, &flags);
+    int r = m_image_ctx.get_flags(from_snap_id, &flags);
     if (r < 0) {
       lderr(cct) << "diff_object_map: failed to retrieve image flags" << dendl;
       return r;

@@ -33,7 +33,8 @@ protected:
     // never propagate an error back to the caller
     return 0;
   }
-  virtual void finish() = 0;
+  virtual void finish_request() {
+  }
 
 private:
   /**

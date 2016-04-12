@@ -42,6 +42,12 @@
       lock remove (lock rm)       Release a lock on an image.
       map                         Map image to a block device using the kernel.
       merge-diff                  Merge two diff exports together.
+      mirror image demote         Demote an image to non-primary for RBD
+                                  mirroring.
+      mirror image disable        Disable RBD mirroring for an image.
+      mirror image enable         Enable RBD mirroring for an image.
+      mirror image promote        Promote an image to primary for RBD mirroring.
+      mirror image resync         Force resync to primary image for RBD mirroring.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
       mirror pool info            Show information about the pool mirroring
@@ -149,8 +155,8 @@
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping(+), exclusive-lock(*),
-                              object-map(*), fast-diff(*), deep-flatten,
+                              [layering(+), striping, exclusive-lock(+*),
+                              object-map(+*), fast-diff(+*), deep-flatten(+-),
                               journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
@@ -161,6 +167,7 @@
   
   Image Features:
     (*) supports enabling/disabling on existing images
+    (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
   
   rbd help copy
@@ -192,8 +199,8 @@
     --order arg                  object order [12 <= order <= 25]
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
-                                 [layering(+), striping(+), exclusive-lock(*),
-                                 object-map(*), fast-diff(*), deep-flatten,
+                                 [layering(+), striping, exclusive-lock(+*),
+                                 object-map(+*), fast-diff(+*), deep-flatten(+-),
                                  journaling(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit
@@ -205,6 +212,7 @@
   
   Image Features:
     (*) supports enabling/disabling on existing images
+    (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
   
   rbd help create
@@ -228,14 +236,14 @@
   Optional arguments
     -p [ --pool ] arg         pool name
     --image arg               image name
-    --image-format arg        image format [1 or 2]
+    --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping(+), exclusive-lock(*),
-                              object-map(*), fast-diff(*), deep-flatten,
+                              [layering(+), striping, exclusive-lock(+*),
+                              object-map(+*), fast-diff(+*), deep-flatten(+-),
                               journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
@@ -247,6 +255,7 @@
   
   Image Features:
     (*) supports enabling/disabling on existing images
+    (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
   
   rbd help diff
@@ -473,14 +482,14 @@
     --path arg                import file (or '-' for stdin)
     --dest-pool arg           destination pool name
     --dest arg                destination image name
-    --image-format arg        image format [1 or 2]
+    --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping(+), exclusive-lock(*),
-                              object-map(*), fast-diff(*), deep-flatten,
+                              [layering(+), striping, exclusive-lock(+*),
+                              object-map(+*), fast-diff(+*), deep-flatten(+-),
                               journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit
@@ -494,6 +503,7 @@
   
   Image Features:
     (*) supports enabling/disabling on existing images
+    (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
   
   rbd help import-diff
@@ -742,6 +752,78 @@
     --path arg           path to merged diff (or '-' for stdout)
     --no-progress        disable progress output
   
+  rbd help mirror image demote
+  usage: rbd mirror image demote [--pool <pool>] [--image <image>] 
+                                 <image-spec> 
+  
+  Demote an image to non-primary for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image disable
+  usage: rbd mirror image disable [--force] [--pool <pool>] [--image <image>] 
+                                  <image-spec> 
+  
+  Disable RBD mirroring for an image.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    --force              disable even if not primary
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image enable
+  usage: rbd mirror image enable [--pool <pool>] [--image <image>] 
+                                 <image-spec> 
+  
+  Enable RBD mirroring for an image.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image promote
+  usage: rbd mirror image promote [--force] [--pool <pool>] [--image <image>] 
+                                  <image-spec> 
+  
+  Promote an image to primary for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    --force              promote even if not cleanly demoted by remote cluster
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help mirror image resync
+  usage: rbd mirror image resync [--pool <pool>] [--image <image>] 
+                                 <image-spec> 
+  
+  Force resync to primary image for RBD mirroring.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
   rbd help mirror pool disable
   usage: rbd mirror pool disable [--pool <pool>] 
                                  <pool-name> 
@@ -756,12 +838,13 @@
   
   rbd help mirror pool enable
   usage: rbd mirror pool enable [--pool <pool>] 
-                                <pool-name> 
+                                <pool-name> <mode> 
   
   Enable RBD mirroring by default within a pool.
   
   Positional arguments
     <pool-name>          pool name
+    <mode>               mirror mode [image or pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -785,44 +868,42 @@
   usage: rbd mirror pool peer add [--pool <pool>] 
                                   [--remote-client-name <remote-client-name>] 
                                   [--remote-cluster <remote-cluster>] 
-                                  [--remote-cluster-uuid <remote-cluster-uuid>] 
                                   <pool-name> <remote-cluster-spec> 
   
   Add a mirroring peer to a pool.
   
   Positional arguments
-    <pool-name>               pool name
-    <remote-cluster-spec>     remote cluster spec
-                              (example: [<client name>@]<cluster name>
+    <pool-name>              pool name
+    <remote-cluster-spec>    remote cluster spec
+                             (example: [<client name>@]<cluster name>
   
   Optional arguments
-    -p [ --pool ] arg         pool name
-    --remote-client-name arg  remote client name
-    --remote-cluster arg      remote cluster name
-    --remote-cluster-uuid arg remote cluster uuid
+    -p [ --pool ] arg        pool name
+    --remote-client-name arg remote client name
+    --remote-cluster arg     remote cluster name
   
   rbd help mirror pool peer remove
   usage: rbd mirror pool peer remove [--pool <pool>] 
-                                     <pool-name> <cluster-uuid> 
+                                     <pool-name> <uuid> 
   
   Remove a mirroring peer from a pool.
   
   Positional arguments
     <pool-name>          pool name
-    <cluster-uuid>       cluster UUID
+    <uuid>               peer uuid
   
   Optional arguments
     -p [ --pool ] arg    pool name
   
   rbd help mirror pool peer set
   usage: rbd mirror pool peer set [--pool <pool>] 
-                                  <pool-name> <cluster-uuid> <key> <value> 
+                                  <pool-name> <uuid> <key> <value> 
   
   Update mirroring peer settings.
   
   Positional arguments
     <pool-name>          pool name
-    <cluster-uuid>       cluster UUID
+    <uuid>               peer uuid
     <key>                peer parameter [client or cluster]
     <value>              new client or cluster name
   
@@ -1019,6 +1100,7 @@
   rbd help snap rename
   usage: rbd snap rename [--pool <pool>] [--image <image>] [--snap <snap>] 
                          [--dest-pool <dest-pool>] [--dest <dest>] 
+                         [--dest-snap <dest-snap>] 
                          <source-snap-spec> <dest-snap-spec> 
   
   Rename a snapshot.
@@ -1035,6 +1117,7 @@
     --snap arg           source snapshot name
     --dest-pool arg      destination pool name
     --dest arg           destination image name
+    --dest-snap arg      destination snapshot name
   
   rbd help snap rollback
   usage: rbd snap rollback [--pool <pool>] [--image <image>] [--snap <snap>] 

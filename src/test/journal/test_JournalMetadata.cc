@@ -14,13 +14,16 @@ public:
          it != m_metadata_list.end(); ++it) {
       (*it)->remove_listener(&m_listener);
     }
+    m_metadata_list.clear();
+
     RadosTestFixture::TearDown();
   }
 
   journal::JournalMetadataPtr create_metadata(const std::string &oid,
-                                              const std::string &client_id) {
-    journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, client_id, 0.1));
+                                              const std::string &client_id,
+                                              double commit_internal = 0.1) {
+    journal::JournalMetadataPtr metadata = RadosTestFixture::create_metadata(
+      oid, client_id, commit_internal);
     m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
@@ -50,36 +53,49 @@ TEST_F(TestJournalMetadata, ClientDNE) {
   ASSERT_EQ(-ENOENT, init_metadata(metadata2));
 }
 
-TEST_F(TestJournalMetadata, SetCommitPositions) {
+TEST_F(TestJournalMetadata, Committed) {
   std::string oid = get_temp_oid();
 
   ASSERT_EQ(0, create(oid, 14, 2));
   ASSERT_EQ(0, client_register(oid, "client1", ""));
 
-  journal::JournalMetadataPtr metadata1 = create_metadata(oid, "client1");
+  journal::JournalMetadataPtr metadata1 = create_metadata(oid, "client1", 600);
   ASSERT_EQ(0, init_metadata(metadata1));
 
   journal::JournalMetadataPtr metadata2 = create_metadata(oid, "client1");
   ASSERT_EQ(0, init_metadata(metadata2));
   ASSERT_TRUE(wait_for_update(metadata2));
 
-  journal::JournalMetadata::ObjectSetPosition commit_position;
+  journal::JournalMetadata::ObjectSetPosition expect_commit_position;
   journal::JournalMetadata::ObjectSetPosition read_commit_position;
   metadata1->get_commit_position(&read_commit_position);
-  ASSERT_EQ(commit_position, read_commit_position);
+  ASSERT_EQ(expect_commit_position, read_commit_position);
 
-  journal::JournalMetadata::EntryPositions entry_positions;
-  entry_positions = {
-    cls::journal::EntryPosition("tag1", 122)};
-  commit_position = journal::JournalMetadata::ObjectSetPosition(1, entry_positions);
+  uint64_t commit_tid1 = metadata1->allocate_commit_tid(0, 0, 0);
+  uint64_t commit_tid2 = metadata1->allocate_commit_tid(0, 1, 0);
+  uint64_t commit_tid3 = metadata1->allocate_commit_tid(1, 0, 1);
+  uint64_t commit_tid4 = metadata1->allocate_commit_tid(0, 0, 2);
 
-  C_SaferCond cond;
-  metadata1->set_commit_position(commit_position, &cond);
-  ASSERT_EQ(0, cond.wait());
+  // cannot commit until tid1 + 2 committed
+  metadata1->committed(commit_tid2, []() { return nullptr; });
+  metadata1->committed(commit_tid3, []() { return nullptr; });
+
+  C_SaferCond cond1;
+  metadata1->committed(commit_tid1, [&cond1]() { return &cond1; });
+
+  // given our 10 minute commit internal, this should override the
+  // in-flight commit
+  C_SaferCond cond2;
+  metadata1->committed(commit_tid4, [&cond2]() { return &cond2; });
+
+  ASSERT_EQ(-ESTALE, cond1.wait());
+  metadata1->flush_commit_position();
+  ASSERT_EQ(0, cond2.wait());
+
   ASSERT_TRUE(wait_for_update(metadata2));
-
   metadata2->get_commit_position(&read_commit_position);
-  ASSERT_EQ(commit_position, read_commit_position);
+  expect_commit_position = {{{0, 0, 2}, {1, 0, 1}}};
+  ASSERT_EQ(expect_commit_position, read_commit_position);
 }
 
 TEST_F(TestJournalMetadata, UpdateActiveObject) {

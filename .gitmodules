@@ -23,3 +23,9 @@
 	path = src/gmock
 	url = https://github.com/ceph/gmock.git
         branch = ceph-release-1.7.0
+[submodule "src/spdk"]
+	path = src/spdk
+	url = https://github.com/ceph/spdk.git
+[submodule "src/xxHash"]
+	path = src/xxHash
+	url = https://github.com/ceph/xxHash.git

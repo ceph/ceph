@@ -128,7 +128,7 @@ protected:
   class C_Active : public Context {
     PaxosService *svc;
   public:
-    C_Active(PaxosService *s) : svc(s) {}
+    explicit C_Active(PaxosService *s) : svc(s) {}
     void finish(int r) {
       if (r >= 0)
 	svc->_active();
@@ -142,7 +142,7 @@ protected:
   class C_Propose : public Context {
     PaxosService *ps;
   public:
-    C_Propose(PaxosService *p) : ps(p) { }
+    explicit C_Propose(PaxosService *p) : ps(p) { }
     void finish(int r) {
       ps->proposal_timer = 0;
       if (r >= 0)
@@ -167,7 +167,7 @@ protected:
   class C_Committed : public Context {
     PaxosService *ps;
   public:
-    C_Committed(PaxosService *p) : ps(p) { }
+    explicit C_Committed(PaxosService *p) : ps(p) { }
     void finish(int r) {
       ps->proposing = false;
       if (r >= 0)
@@ -257,11 +257,6 @@ private:
    *	   active
    */
   void _active();
-  /**
-   * Scrub our versions after we convert the store from the old layout to
-   * the new k/v store.
-   */
-  void remove_legacy_versions();
 
 public:
   /**
@@ -343,8 +338,6 @@ public:
   /**
    * Query the Paxos system for the latest state and apply it if it's newer
    * than the current Monitor state.
-   *
-   * @returns 'true' on success; 'false' otherwise.
    */
   virtual void update_from_paxos(bool *need_bootstrap) = 0;
 
@@ -487,7 +480,8 @@ public:
    * @param detail optional list of detailed problem reports; may be NULL
    */
   virtual void get_health(list<pair<health_status_t,string> >& summary,
-			  list<pair<health_status_t,string> > *detail) const { }
+			  list<pair<health_status_t,string> > *detail,
+			  CephContext *cct) const { }
 
  private:
   /**

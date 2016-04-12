@@ -59,13 +59,10 @@
 #define RBD_LOCK_NAME		"rbd_lock"
 
 /**
- * rbd_pool_settings object in each pool contains pool-specific settings
- * for configuring features such as async image mirroring to other Ceph
- * clusters.
+ * rbd_mirroring object in each pool contains pool-specific settings
+ * for configuring mirroring.
  */
-#define RBD_POOL_SETTINGS       "rbd_pool_settings"
-
-#define RBD_DEFAULT_OBJ_ORDER	22   /* 4MB */
+#define RBD_MIRRORING       "rbd_mirroring"
 
 #define RBD_MAX_OBJ_NAME_SIZE	96
 #define RBD_MAX_BLOCK_NAME_SIZE 24

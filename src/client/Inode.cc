@@ -7,6 +7,7 @@
 #include "Dir.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
+#include "UserGroups.h"
 
 ostream& operator<<(ostream &out, Inode &in)
 {
@@ -279,34 +280,17 @@ Dir *Inode::open_dir()
   return dir;
 }
 
-bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, uint32_t rflags)
+bool Inode::check_mode(uid_t ruid, UserGroups& groups, unsigned want)
 {
-  unsigned fmode = 0;
-
-  if ((rflags & O_ACCMODE) == O_WRONLY)
-      fmode = 2;
-  else if ((rflags & O_ACCMODE) == O_RDWR)
-      fmode = 6;
-  else if ((rflags & O_ACCMODE) == O_RDONLY)
-      fmode = 4;
-
-  // if uid is owner, owner entry determines access
   if (uid == ruid) {
-    fmode = fmode << 6;
-  } else if (gid == rgid) {
+    // if uid is owner, owner entry determines access
+    want = want << 6;
+  } else if (groups.is_in(gid)) {
     // if a gid or sgid matches the owning group, group entry determines access
-    fmode = fmode << 3;
-  } else {
-    int i = 0;
-    for (; i < sgids_count; ++i) {
-      if (sgids[i] == gid) {
-        fmode = fmode << 3;
-	break;
-      }
-    }
+    want = want << 3;
   }
 
-  return (mode & fmode) == fmode;
+  return (mode & want) == want;
 }
 
 void Inode::get() {
@@ -345,9 +329,7 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("atime") << atime;
   f->dump_int("time_warp_seq", time_warp_seq);
 
-  f->open_object_section("layout");
-  ::dump(layout, f);
-  f->close_section();
+  f->dump_object("layout", layout);
   if (is_dir()) {
     f->open_object_section("dir_layout");
     ::dump(dir_layout, f);

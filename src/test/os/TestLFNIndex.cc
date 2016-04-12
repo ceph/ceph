@@ -21,8 +21,8 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include "os/LFNIndex.h"
-#include "os/chain_xattr.h"
+#include "os/filestore/LFNIndex.h"
+#include "os/filestore/chain_xattr.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include <gtest/gtest.h>
@@ -49,7 +49,7 @@ public:
     const std::string mangled_name = lfn_generate_object_name(hoid);
     EXPECT_EQ(mangled_expected, mangled_name);
     ghobject_t hoid_parsed;
-    EXPECT_TRUE(lfn_parse_object_name(mangled_name, &hoid_parsed));
+    EXPECT_EQ(0, lfn_parse_object_name(mangled_name, &hoid_parsed));
     EXPECT_EQ(hoid, hoid_parsed);
   }
 

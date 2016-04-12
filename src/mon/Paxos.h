@@ -282,7 +282,7 @@ public:
    *
    * @return 'true' if we are on the Recovering state; 'false' otherwise.
    */
-  bool is_recovering() const { return (state & STATE_RECOVERING); }
+  bool is_recovering() const { return (state == STATE_RECOVERING); }
   /**
    * Check if we are active.
    *
@@ -629,7 +629,7 @@ private:
   class C_CollectTimeout : public Context {
     Paxos *paxos;
   public:
-    C_CollectTimeout(Paxos *p) : paxos(p) {}
+    explicit C_CollectTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -643,7 +643,7 @@ private:
   class C_AcceptTimeout : public Context {
     Paxos *paxos;
   public:
-    C_AcceptTimeout(Paxos *p) : paxos(p) {}
+    explicit C_AcceptTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -657,7 +657,7 @@ private:
   class C_LeaseAckTimeout : public Context {
     Paxos *paxos;
   public:
-    C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
+    explicit C_LeaseAckTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -671,7 +671,7 @@ private:
   class C_LeaseTimeout : public Context {
     Paxos *paxos;
   public:
-    C_LeaseTimeout(Paxos *p) : paxos(p) {}
+    explicit C_LeaseTimeout(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -685,7 +685,7 @@ private:
   class C_LeaseRenew : public Context {
     Paxos *paxos;
   public:
-    C_LeaseRenew(Paxos *p) : paxos(p) {}
+    explicit C_LeaseRenew(Paxos *p) : paxos(p) {}
     void finish(int r) {
       if (r == -ECANCELED)
 	return;
@@ -696,7 +696,7 @@ private:
   class C_Trimmed : public Context {
     Paxos *paxos;
   public:
-    C_Trimmed(Paxos *p) : paxos(p) { }
+    explicit C_Trimmed(Paxos *p) : paxos(p) { }
     void finish(int r) {
       paxos->trimming = false;
     }
@@ -1186,11 +1186,6 @@ public:
    */
   bool store_state(MMonPaxos *m);
   void _sanity_check_store();
-
-  /**
-   * remove legacy paxos versions from before conversion
-   */
-  void remove_legacy_versions();
 
   /**
    * Helper function to decode a bufferlist into a transaction and append it

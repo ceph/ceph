@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -74,7 +75,12 @@ static int do_import_diff(librbd::Image &image, const char *path,
         goto done;
       dout(2) << " from snap " << from << dendl;
 
-      if (!image.snap_exists(from.c_str())) {
+      bool exists; 
+      r = image.snap_exists2(from.c_str(), &exists);
+      if (r < 0)
+        goto done;
+
+      if (!exists) {
         std::cerr << "start snapshot '" << from
                   << "' does not exist in the image, aborting" << std::endl;
         r = -EINVAL;
@@ -88,7 +94,12 @@ static int do_import_diff(librbd::Image &image, const char *path,
       dout(2) << "   to snap " << to << dendl;
 
       // verify this snap isn't already present
-      if (image.snap_exists(to.c_str())) {
+      bool exists;
+      r = image.snap_exists2(to.c_str(), &exists);
+      if (r < 0)
+        goto done;
+      
+      if (exists) {
         std::cerr << "end snapshot '" << to
                   << "' already exists, aborting" << std::endl;
         r = -EEXIST;

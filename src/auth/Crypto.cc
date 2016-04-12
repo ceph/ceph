@@ -354,6 +354,7 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
   ostringstream oss;
   if (ckh->init(secret, oss) < 0) {
     error = oss.str();
+    delete ckh;
     return NULL;
   }
   return ckh;

@@ -94,13 +94,13 @@ public:
 	old_inodes = *oi;
       snapbl = sbl;
     }
-    fullbit(bufferlist::iterator &p) {
+    explicit fullbit(bufferlist::iterator &p) {
       decode(p);
     }
     fullbit() {}
     ~fullbit() {}
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
@@ -130,7 +130,7 @@ public:
       return state_string;
     }
   };
-  WRITE_CLASS_ENCODER(fullbit)
+  WRITE_CLASS_ENCODER_FEATURES(fullbit)
   
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
@@ -144,7 +144,7 @@ public:
 
     remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
-    remotebit(bufferlist::iterator &p) { decode(p); }
+    explicit remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
 	d_type('\0'), dirty(false) {}
 
@@ -171,7 +171,7 @@ public:
 
     nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
-    nullbit(bufferlist::iterator &p) { decode(p); }
+    explicit nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
 
     void encode(bufferlist& bl) const;
@@ -262,9 +262,9 @@ public:
     }
 
     // if this changes, update the versioning in encode for it!
-    void _encode_bits() const {
+    void _encode_bits(uint64_t features) const {
       if (!dn_decoded) return;
-      ::encode(dfull, dnbl);
+      ::encode(dfull, dnbl, features);
       ::encode(dremote, dnbl);
       ::encode(dnull, dnbl);
     }
@@ -277,12 +277,12 @@ public:
       dn_decoded = true;
     }
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<dirlump*>& ls);
   };
-  WRITE_CLASS_ENCODER(dirlump)
+  WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
@@ -317,7 +317,7 @@ private:
   list<pair<metareqid_t,uint64_t> > client_flushes;
 
  public:
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void get_inodes(std::set<inodeno_t> &inodes) const;
   void get_paths(std::vector<std::string> &paths) const;
@@ -333,7 +333,7 @@ private:
   // for replay, in certain cases
   //LogSegment *_segment;
 
-  EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
+  explicit EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
   ~EMetaBlob() { }
 
   void print(ostream& out) {
@@ -580,11 +580,11 @@ private:
   void update_segment(LogSegment *ls);
   void replay(MDSRank *mds, LogSegment *ls, MDSlaveUpdate *su=NULL);
 };
-WRITE_CLASS_ENCODER(EMetaBlob)
-WRITE_CLASS_ENCODER(EMetaBlob::fullbit)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
 WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
 WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
-WRITE_CLASS_ENCODER(EMetaBlob::dirlump)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::dirlump)
 
 inline ostream& operator<<(ostream& out, const EMetaBlob& t) {
   t.print(out);

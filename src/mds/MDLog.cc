@@ -99,12 +99,18 @@ class C_MDL_WriteError : public MDSIOContextBase {
       mds->respawn();
     } else {
       derr << "unhandled error " << cpp_strerror(r) << ", shutting down..." << dendl;
-      mds->suicide();
+      // Although it's possible that this could be something transient,
+      // it's severe and scary, so disable this rank until an administrator
+      // intervenes.
+      mds->clog->error() << "Unhandled journal write error on MDS rank " <<
+        mds->get_nodeid() << ": " << cpp_strerror(r) << ", shutting down.";
+      mds->damaged();
+      assert(0);  // damaged should never return
     }
   }
 
   public:
-  C_MDL_WriteError(MDLog *m) : mdlog(m) {}
+  explicit C_MDL_WriteError(MDLog *m) : mdlog(m) {}
 };
 
 
@@ -169,17 +175,18 @@ void MDLog::create(MDSInternalContextBase *c)
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
 
-  submit_thread.create();
+  submit_thread.create("md_submit");
 }
 
 void MDLog::open(MDSInternalContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
+  assert(!recovery_thread.is_started());
   recovery_thread.set_completion(c);
-  recovery_thread.create();
+  recovery_thread.create("md_recov_open");
 
-  submit_thread.create();
+  submit_thread.create("md_submit");
   // either append() or replay() will follow.
 }
 
@@ -215,8 +222,13 @@ void MDLog::reopen(MDSInternalContextBase *c)
   delete journaler;
   journaler = NULL;
 
+  // recovery_thread was started at some point in the past.  Although
+  // it has called it's completion if we made it back here, it might
+  // still not have been cleaned up: join it.
+  recovery_thread.join();
+
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
-  recovery_thread.create();
+  recovery_thread.create("md_recov_reopen");
 }
 
 void MDLog::append()
@@ -350,6 +362,11 @@ void MDLog::_submit_thread()
   submit_mutex.Lock();
 
   while (!mds->is_daemon_stopping()) {
+    if (g_conf->mds_log_pause) {
+      submit_cond.Wait(submit_mutex);
+      continue;
+    }
+
     map<uint64_t,list<PendingEvent> >::iterator it = pending_events.begin();
     if (it == pending_events.end()) {
       submit_cond.Wait(submit_mutex);
@@ -371,7 +388,7 @@ void MDLog::_submit_thread()
       LogSegment *ls = le->_segment;
       // encode it, with event type
       bufferlist bl;
-      le->encode_with_header(bl);
+      le->encode_with_header(bl, mds->mdsmap->get_up_features());
 
       uint64_t write_pos = journaler->get_write_pos();
 
@@ -452,6 +469,12 @@ void MDLog::flush()
 
   if (do_flush)
     journaler->flush();
+}
+
+void MDLog::kick_submitter()
+{
+  Mutex::Locker l(submit_mutex);
+  submit_cond.Signal();
 }
 
 void MDLog::cap()
@@ -840,9 +863,14 @@ void MDLog::replay(MDSInternalContextBase *c)
 	   << " to " << journaler->get_write_pos() << dendl;
 
   assert(num_events == 0 || already_replayed);
+  if (already_replayed) {
+    // Ensure previous instance of ReplayThread is joined before
+    // we create another one
+    replay_thread.join();
+  }
   already_replayed = true;
 
-  replay_thread.create();
+  replay_thread.create("md_log_replay");
 }
 
 
@@ -864,7 +892,11 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   if (g_conf->mds_journal_format > JOURNAL_FORMAT_MAX) {
       dout(0) << "Configuration value for mds_journal_format is out of bounds, max is "
               << JOURNAL_FORMAT_MAX << dendl;
-      mds->suicide();
+
+      // Oh dear, something unreadable in the store for this rank: require
+      // operator intervention.
+      mds->damaged();
+      assert(0);  // damaged should not return
   }
 
   // First, read the pointer object.
@@ -1016,7 +1048,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   Journaler *new_journal = new Journaler(jp.back, mds->mdsmap->get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->finisher);
   dout(4) << "Writing new journal header " << jp.back << dendl;
-  ceph_file_layout new_layout = old_journal->get_layout();
+  file_layout_t new_layout = old_journal->get_layout();
   new_journal->set_writeable();
   new_journal->create(&new_layout, g_conf->mds_journal_format);
 
@@ -1112,7 +1144,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
       if (modified) {
         bl.clear();
-        le->encode_with_header(bl);
+        le->encode_with_header(bl, mds->mdsmap->get_up_features());
       }
 
       delete le;
@@ -1385,4 +1417,15 @@ void MDLog::standby_trim_segments()
     mds->mdcache->trim(-1);
   } else
     dout(20) << " removed no segments!" << dendl;
+}
+
+void MDLog::dump_replay_status(Formatter *f) const
+{
+  f->open_object_section("replay_status");
+  f->dump_unsigned("journal_read_pos", journaler ? journaler->get_read_pos() : 0);
+  f->dump_unsigned("journal_write_pos", journaler ? journaler->get_write_pos() : 0);
+  f->dump_unsigned("journal_expire_pos", journaler ? journaler->get_expire_pos() : 0);
+  f->dump_unsigned("num_events", get_num_events());
+  f->dump_unsigned("num_segments", get_num_segments());
+  f->close_section();
 }

@@ -17,8 +17,6 @@ public:
   }
 };
 
-::testing::Environment* const crypto_env = ::testing::AddGlobalTestEnvironment(new CryptoEnvironment);
-
 TEST(AES, ValidateSecret) {
   CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
   int l;

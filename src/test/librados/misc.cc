@@ -38,6 +38,16 @@ TEST(LibRadosMiscVersion, VersionPP) {
   Rados::version(&major, &minor, &extra);
 }
 
+static void test_rados_log_cb(void *arg,
+                              const char *line,
+                              const char *who,
+                              uint64_t sec, uint64_t nsec,
+                              uint64_t seq, const char *level,
+                              const char *msg)
+{
+    std::cerr << "monitor log callback invoked" << std::endl;
+}
+
 TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   rados_t cluster;
 
@@ -49,7 +59,13 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
   ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
 
-  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000001"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000000001"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "debug_monc", "20"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "debug_ms", "1"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "log_to_stderr", "true"));
+
+  ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
+                                         test_rados_log_cb, NULL));
 
   ASSERT_NE(0, rados_connect(cluster));
   ASSERT_NE(0, rados_connect(cluster));
@@ -77,6 +93,88 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
   ASSERT_EQ(0, ioctx.write(string(maxlen, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen+1, 'a').c_str(), bl, bl.length(), 0));
   ASSERT_EQ(-ENAMETOOLONG, ioctx.write(string(maxlen*2, 'a').c_str(), bl, bl.length(), 0));
+}
+
+TEST_F(LibRadosMiscPP, LongLocatorPP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_object_name_len;
+  ioctx.locator_set_key(
+    string((maxlen/2), 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen - 1, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string(maxlen+1, 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.locator_set_key(
+    string((maxlen*2), 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+}
+
+TEST_F(LibRadosMiscPP, LongNSpacePP) {
+  bufferlist bl;
+  bl.append("content");
+  int maxlen = g_conf->osd_max_object_namespace_len;
+  ioctx.set_namespace(
+    string((maxlen/2), 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen - 1, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen, 'a'));
+  ASSERT_EQ(
+    0,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string(maxlen+1, 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
+  ioctx.set_namespace(
+    string((maxlen*2), 'a'));
+  ASSERT_EQ(
+    -ENAMETOOLONG,
+    ioctx.write(
+      string("a").c_str(),
+      bl, bl.length(), 0));
 }
 
 TEST_F(LibRadosMiscPP, LongAttrNamePP) {
@@ -718,15 +816,29 @@ std::string LibRadosTwoPoolsECPP::src_pool_name;
 
 //copy_from between ecpool and no-ecpool.
 TEST_F(LibRadosTwoPoolsECPP, CopyFrom) {
-  //create object w/ omapheader
+  bufferlist z;
+  z.append_zero(4194304*2);
   bufferlist b;
   b.append("copyfrom");
-  ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
 
-  version_t uv = src_ioctx.get_last_version();
-  ObjectWriteOperation op;
-  op.copy_from("foo", src_ioctx, uv);
-  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+  // create big object w/ omapheader
+  {
+    ASSERT_EQ(0, src_ioctx.write_full("foo", z));
+    ASSERT_EQ(0, src_ioctx.omap_set_header("foo", b));
+    version_t uv = src_ioctx.get_last_version();
+    ObjectWriteOperation op;
+    op.copy_from("foo", src_ioctx, uv);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo.copy", &op));
+  }
+
+  // same with small object
+  {
+    ASSERT_EQ(0, src_ioctx.omap_set_header("bar", b));
+    version_t uv = src_ioctx.get_last_version();
+    ObjectWriteOperation op;
+    op.copy_from("bar", src_ioctx, uv);
+    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("bar.copy", &op));
+  }
 }
 
 TEST_F(LibRadosMiscPP, CopyScrubPP) {

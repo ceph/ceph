@@ -14,10 +14,10 @@
 
 #include "strtol.h"
 
-#include <errno.h>
-#include <limits.h>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <sstream>
-#include <stdlib.h>
 
 using std::ostringstream;
 
@@ -129,14 +129,15 @@ float strict_strtof(const char *str, std::string *err)
   return ret;
 }
 
-uint64_t strict_sistrtoll(const char *str, std::string *err)
+template<typename T>
+T strict_si_cast(const char *str, std::string *err)
 {
   std::string s(str);
   if (s.empty()) {
     *err = "strict_sistrtoll: value not specified";
     return 0;
   }
-  const char &u = s.at(s.size()-1); //str[std::strlen(str)-1];
+  const char &u = s.back();
   int m = 0;
   if (u == 'B')
     m = 0;
@@ -155,30 +156,42 @@ uint64_t strict_sistrtoll(const char *str, std::string *err)
   else
     m = -1;
 
-  const char *v = NULL;
   if (m >= 0)
-    s = std::string(str, s.size()-1);
-  v = s.c_str();
+    s.pop_back();
+  else
+    m = 0;
 
-  long long r_ll = strict_strtoll(v, 10, err);
-
-  if (r_ll < 0) {
+  long long ll = strict_strtoll(s.c_str(), 10, err);
+  if (ll < 0 && !std::numeric_limits<T>::is_signed) {
     *err = "strict_sistrtoll: value should not be negative";
     return 0;
   }
-
-  uint64_t r = r_ll;
-  if (err->empty() && m > 0) {
-    if (r > (std::numeric_limits<uint64_t>::max() >> m)) {
-      *err = "strict_sistrtoll: value seems to be too large";
-      return 0;
-    }
-    r <<= m;
+  if (static_cast<unsigned>(m) >= sizeof(T) * CHAR_BIT) {
+    *err = ("strict_sistrtoll: the SI prefix is too large for the designated "
+	    "type");
+    return 0;
   }
-  return r;
+  using promoted_t = typename std::common_type<decltype(ll), T>::type;
+  if (static_cast<promoted_t>(ll) <
+      static_cast<promoted_t>(std::numeric_limits<T>::min()) >> m) {
+    *err = "strict_sistrtoll: value seems to be too small";
+    return 0;
+  }
+  if (static_cast<promoted_t>(ll) >
+      static_cast<promoted_t>(std::numeric_limits<T>::max()) >> m) {
+    *err = "strict_sistrtoll: value seems to be too large";
+    return 0;
+  }
+  return (ll << m);
 }
 
-template <>
-uint64_t strict_si_cast(const char *str, std::string *err) {
-  return strict_sistrtoll(str, err);
+template int strict_si_cast<int>(const char *str, std::string *err);
+
+template long long strict_si_cast<long long>(const char *str, std::string *err);
+
+template uint64_t strict_si_cast<uint64_t>(const char *str, std::string *err);
+
+uint64_t strict_sistrtoll(const char *str, std::string *err)
+{
+  return strict_si_cast<uint64_t>(str, err);
 }

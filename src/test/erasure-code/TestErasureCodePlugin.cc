@@ -30,13 +30,21 @@ protected:
 
   class Thread_factory : public Thread {
   public:
+    static void cleanup(void *arg) {
+      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+      if (instance.lock.is_locked())
+        instance.lock.Unlock();
+    }
+
     virtual void *entry() {
       ErasureCodeProfile profile;
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
+      pthread_cleanup_push(cleanup, NULL);
       instance.factory("hangs",
 		       g_conf->erasure_code_dir,
 		       profile, &erasure_code, &cerr);
+      pthread_cleanup_pop(0);
       return NULL;
     }
   };
@@ -55,7 +63,7 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
   useconds_t delay = 0;
   const useconds_t DELAY_MAX = 20 * 1000 * 1000;
   Thread_factory sleep_forever;
-  sleep_forever.create();
+  sleep_forever.create("sleep_forever");
   do {
     cout << "Trying (1) with delay " << delay << "us\n";
     if (delay > 0)

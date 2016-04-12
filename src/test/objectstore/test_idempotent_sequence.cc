@@ -19,7 +19,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/debug.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 
 #include "DeterministicOpSequence.h"
 #include "FileStoreDiff.h"

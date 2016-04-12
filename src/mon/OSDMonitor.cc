@@ -125,6 +125,9 @@ void OSDMonitor::create_initial()
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
+  // new cluster should require jewel by default
+  newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
+
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
   pending_inc.full_crc = newmap.get_crc();
@@ -475,16 +478,21 @@ void OSDMonitor::update_logger()
  * The osds that will get a lower weight are those with with a utilization
  * percentage 'oload' percent greater than the average utilization.
  */
-int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
-					bool by_pg, const set<int64_t> *pools)
+int OSDMonitor::reweight_by_utilization(int oload,
+					double max_changef,
+					int max_osds,
+					bool by_pg, const set<int64_t> *pools,
+					bool no_increasing,
+					bool dry_run,
+					std::stringstream *ss,
+					std::string *out_str,
+					Formatter *f)
 {
   if (oload <= 100) {
-    ostringstream oss;
-    oss << "You must give a percentage higher than 100. "
+    *ss << "You must give a percentage higher than 100. "
       "The reweighting threshold will be calculated as <average-utilization> "
       "times <input-percentage>. For example, an argument of 200 would "
       "reweight OSDs which are twice as utilized as the average OSD.\n";
-    out_str = oss.str();
     return -EINVAL;
   }
 
@@ -520,10 +528,8 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     }
 
     if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
-      ostringstream oss;
-      oss << "Refusing to reweight: we only have " << num_pg_copies
+      *ss << "Refusing to reweight: we only have " << num_pg_copies
 	  << " PGs across " << num_osds << " osds!\n";
-      out_str = oss.str();
       return -EDOM;
     }
 
@@ -534,17 +540,15 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
-      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
 	  << " kb across all osds!\n";
-      out_str = oss.str();
       return -EDOM;
     }
     if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
-      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
 	  << " kb used across all osds!\n";
-      out_str = oss.str();
       return -EDOM;
     }
 
@@ -557,61 +561,129 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   // but aggressively adjust weights up whenever possible.
   double underload_util = average_util;
 
+  unsigned max_change = (unsigned)(max_changef * (double)0x10000);
+
   ostringstream oss;
-  char buf[128];
-  snprintf(buf, sizeof(buf), "average %04f, overload %04f. ",
-	   average_util, overload_util);
-  oss << buf;
-  std::string sep;
-  oss << "reweighted: ";
+  if (f) {
+    f->open_object_section("reweight_by_utilization");
+    f->dump_unsigned("overload_min", oload);
+    f->dump_float("max_change", max_changef);
+    f->dump_float("max_change_osds", max_osds);
+    f->dump_float("average_utilization", average_util);
+    f->dump_float("overload_utilization", overload_util);
+  } else {
+    oss << "oload " << oload << "\n";
+    oss << "max_change " << max_changef << "\n";
+    oss << "max_change_osds " << max_osds << "\n";
+    char buf[128];
+    snprintf(buf, sizeof(buf), "average %04f\noverload %04f\n",
+	     average_util, overload_util);
+    oss << buf;
+  }
   bool changed = false;
+  int num_changed = 0;
+
+  // precompute util for each OSD
+  std::vector<std::pair<int, float> > util_by_osd;
   for (ceph::unordered_map<int,osd_stat_t>::const_iterator p =
-	 pgm.osd_stat.begin();
+       pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
-    float util;
+    std::pair<int, float> osd_util;
+    osd_util.first = p->first;
     if (by_pg) {
-      util = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
+      osd_util.second = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
     } else {
-      util = (double)p->second.kb_used / (double)p->second.kb;
+      osd_util.second = (double)p->second.kb_used / (double)p->second.kb;
     }
+    util_by_osd.push_back(osd_util);
+  }
+
+  // sort and iterate from most to least utilized
+  std::sort(util_by_osd.begin(), util_by_osd.end(), [](std::pair<int, float> l, std::pair<int, float> r) {
+    return l.second > r.second;
+  });
+
+  OSDMap::Incremental newinc;
+
+  if (f)
+    f->open_array_section("reweights");
+
+  for (std::vector<std::pair<int, float> >::const_iterator p =
+	 util_by_osd.begin();
+       p != util_by_osd.end();
+       ++p) {
+    float util = p->second;
+
     if (util >= overload_util) {
-      sep = ", ";
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
-      pending_inc.new_weight[p->first] = new_weight;
-      char buf[128];
-      snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
-	       (float)weight / (float)0x10000,
-	       (float)new_weight / (float)0x10000);
-      oss << buf << sep;
-      changed = true;
+      new_weight = MAX(new_weight, weight - max_change);
+      newinc.new_weight[p->first] = new_weight;
+      if (!dry_run) {
+	pending_inc.new_weight[p->first] = new_weight;
+	changed = true;
+      }
+      if (f) {
+	f->open_object_section("osd");
+	f->dump_unsigned("osd", p->first);
+	f->dump_float("weight", (float)weight / (float)0x10000);
+	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
+	f->close_section();
+      } else {
+	char buf[128];
+	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
+		 (float)weight / (float)0x10000,
+		 (float)new_weight / (float)0x10000);
+	oss << buf;
+      }
+      if (++num_changed >= max_osds)
+	break;
     }
-    if (util <= underload_util) {
+    if (!no_increasing && util <= underload_util) {
       // assign a higher weight.. if we can.
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      new_weight = MIN(new_weight, weight + max_change);
       if (new_weight > 0x10000)
 	new_weight = 0x10000;
       if (new_weight > weight) {
-	sep = ", ";
-	pending_inc.new_weight[p->first] = new_weight;
+	newinc.new_weight[p->first] = new_weight;
+	if (!dry_run) {
+	  pending_inc.new_weight[p->first] = new_weight;
+	  changed = true;
+	}
 	char buf[128];
-	snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
+	snprintf(buf, sizeof(buf), "osd.%d weight %04f -> %04f\n", p->first,
 		 (float)weight / (float)0x10000,
 		 (float)new_weight / (float)0x10000);
-	oss << buf << sep;
-	changed = true;
+	oss << buf;
+	if (++num_changed >= max_osds)
+	  break;
       }
     }
   }
-  if (sep.empty()) {
-    oss << "(none)";
+  if (f) {
+    f->close_section();
   }
-  out_str = oss.str();
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newinc.fsid = newmap.fsid;
+  newinc.epoch = newmap.get_epoch() + 1;
+  newmap.apply_incremental(newinc);
+
+  osdmap.summarize_mapping_stats(&newmap, pools, out_str, f);
+
+  if (f) {
+    f->close_section();
+  } else {
+    *out_str += "\n";
+    *out_str += oss.str();
+  }
   dout(10) << "reweight_by_utilization: finished with " << out_str << dendl;
   return changed;
 }
@@ -781,7 +853,7 @@ public:
 protected:
   struct lowprecision_t {
     float v;
-    lowprecision_t(float _v) : v(_v) {}
+    explicit lowprecision_t(float _v) : v(_v) {}
   };
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
@@ -1564,7 +1636,7 @@ bool OSDMonitor::can_mark_down(int i)
   int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
   float up_ratio = (float)up / (float)num_osds;
   if (up_ratio < g_conf->mon_osd_min_up_ratio) {
-    dout(5) << "can_mark_down current up_ratio " << up_ratio << " < min "
+    dout(2) << "can_mark_down current up_ratio " << up_ratio << " < min "
 	    << g_conf->mon_osd_min_up_ratio
 	    << ", will not mark osd." << i << " down" << dendl;
     return false;
@@ -1871,6 +1943,16 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
+  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_SERVER_JEWEL)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because the osdmap requires"
+		      << " CEPH_FEATURE_SERVER_JEWEL"
+		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL\n";
+    goto ignore;
+  }
+
   if (osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
       !(m->osd_features & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
     mon->clog->info() << "disallowing boot of OSD "
@@ -2067,8 +2149,11 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
       dout(10) << " not laggy, new xi " << xi << dendl;
     } else {
       if (xi.down_stamp.sec()) {
-	int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
-	xi.laggy_interval =
+        int interval = ceph_clock_now(g_ceph_context).sec() - xi.down_stamp.sec();
+        if (g_conf->mon_osd_laggy_max_interval && (interval > g_conf->mon_osd_laggy_max_interval)) {
+          interval =  g_conf->mon_osd_laggy_max_interval;
+        }
+        xi.laggy_interval =
 	  interval * g_conf->mon_osd_laggy_weight +
 	  xi.laggy_interval * (1.0 - g_conf->mon_osd_laggy_weight);
       }
@@ -2479,7 +2564,8 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 
   while (first <= osdmap.get_epoch()) {
-    epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
+    epoch_t last = MIN(first + g_conf->osd_map_message_max - 1,
+		       osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
 
     if (req) {
@@ -2766,7 +2852,8 @@ void OSDMonitor::mark_all_down()
 }
 
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
-			    list<pair<health_status_t,string> > *detail) const
+			    list<pair<health_status_t,string> > *detail,
+			    CephContext *cct) const
 {
   int num_osds = osdmap.get_num_osds();
 
@@ -2819,9 +2906,22 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
     // old crush tunables?
     if (g_conf->mon_warn_on_legacy_crush_tunables) {
-      if (osdmap.crush->has_legacy_tunables()) {
+      string min = osdmap.crush->get_min_required_version();
+      if (min < g_conf->mon_crush_min_required_version) {
 	ostringstream ss;
-	ss << "crush map has legacy tunables";
+	ss << "crush map has legacy tunables (require " << min
+	   << ", min is " << g_conf->mon_crush_min_required_version << ")";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail) {
+	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
+    }
+    if (g_conf->mon_warn_on_crush_straw_calc_version_zero) {
+      if (osdmap.crush->get_straw_calc_version() == 0) {
+	ostringstream ss;
+	ss << "crush map has straw_calc_version=0";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail) {
 	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
@@ -2854,6 +2954,16 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	ss << problem_cache_pools << " cache pools are missing hit_sets";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       }
+    }
+
+    // Not using 'sortbitwise' and should be?
+    if (g_conf->mon_warn_on_no_sortbitwise &&
+	!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
+	(osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+	 CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
+      ostringstream ss;
+      ss << "no legacy OSD present but 'sortbitwise' flag is not set";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
     }
 
     // Warn if 'mon_osd_down_out_interval' is set to zero.
@@ -2923,7 +3033,7 @@ namespace {
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
     HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
     SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL,
-    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY};
+    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY, SCRUB_PRIORITY};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3099,6 +3209,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
       rdata.append(ds);
     }
+  } else if (prefix == "osd utilization") {
+    string out;
+    osdmap.summarize_mapping_stats(NULL, NULL, &out, f.get());
+    if (f)
+      f->flush(rdata);
+    else
+      rdata.append(out);
+    r = 0;
+    goto reply;
   } else if (prefix  == "osd find") {
     int64_t osd;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
@@ -3404,7 +3523,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("scrub_max_interval", SCRUB_MAX_INTERVAL)
       ("deep_scrub_interval", DEEP_SCRUB_INTERVAL)
       ("recovery_priority", RECOVERY_PRIORITY)
-      ("recovery_op_priority", RECOVERY_OP_PRIORITY);
+      ("recovery_op_priority", RECOVERY_OP_PRIORITY)
+      ("scrub_priority", SCRUB_PRIORITY);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3588,6 +3708,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEEP_SCRUB_INTERVAL:
           case RECOVERY_PRIORITY:
           case RECOVERY_OP_PRIORITY:
+          case SCRUB_PRIORITY:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -3721,6 +3842,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEEP_SCRUB_INTERVAL:
           case RECOVERY_PRIORITY:
           case RECOVERY_OP_PRIORITY:
+          case SCRUB_PRIORITY:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -4628,6 +4750,18 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     dout(10) << " prepare_pool_size returns " << r << dendl;
     return r;
   }
+  const int64_t minsize = osdmap.crush->get_rule_mask_min_size(crush_ruleset);
+  if ((int64_t)size < minsize) {
+    *ss << "pool size " << size << " is smaller than crush ruleset name "
+        << crush_ruleset_name << " min size " << minsize;
+    return -EINVAL;
+  }
+  const int64_t maxsize = osdmap.crush->get_rule_mask_max_size(crush_ruleset);
+  if ((int64_t)size > maxsize) {
+    *ss << "pool size " << size << " is bigger than crush ruleset name "
+        << crush_ruleset_name << " max size " << maxsize;
+    return -EINVAL;
+  }
   uint32_t stripe_width = 0;
   r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
   if (r) {
@@ -4825,7 +4959,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
        var == "cache_target_dirty_high_ratio" ||
        var == "cache_min_flush_age" || var == "cache_min_evict_age" ||
-       var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n")) {
+       var == "hit_set_grade_decay_rate" || var == "hit_set_search_last_n" ||
+       var == "min_read_recency_for_promote" || var == "min_write_recency_for_promote")) {
     return -EACCES;
   }
 
@@ -4969,6 +5104,19 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (!osdmap.crush->ruleset_exists(n)) {
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
+    }
+    const int64_t poolsize = p.get_size();
+    const int64_t minsize = osdmap.crush->get_rule_mask_min_size(n);
+    if (poolsize < minsize) {
+      ss << "pool size " << poolsize << " is smaller than crush ruleset " 
+         << n << " min size " << minsize;
+      return -EINVAL;
+    }
+    const int64_t maxsize = osdmap.crush->get_rule_mask_max_size(n);
+    if (poolsize > maxsize) {
+      ss << "pool size " << poolsize << " is bigger than crush ruleset " 
+         << n << " max size " << maxsize;
+      return -EINVAL;
     }
     p.crush_ruleset = n;
   } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
@@ -5737,6 +5885,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       newcrush.set_tunables_firefly();
     } else if (profile == "hammer") {
       newcrush.set_tunables_hammer();
+    } else if (profile == "jewel") {
+      newcrush.set_tunables_jewel();
     } else if (profile == "optimal") {
       newcrush.set_tunables_optimal();
     } else if (profile == "default") {
@@ -6131,6 +6281,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
       } else {
 	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
+	err = -EPERM;
+      }
+    } else if (key == "require_jewel_osds") {
+      if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_JEWEL) {
+	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
+      } else {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
 	err = -EPERM;
       }
     } else {
@@ -6551,6 +6708,18 @@ done:
 					      get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd blacklist clear") {
+    pending_inc.new_blacklist.clear();
+    std::list<std::pair<entity_addr_t,utime_t > > blacklist;
+    osdmap.get_blacklist(&blacklist);
+    for (const auto &entry : blacklist) {
+      pending_inc.old_blacklist.push_back(entry.first);
+    }
+    ss << " removed all blacklist entries";
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                                              get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd blacklist") {
     string addrstr;
     cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
@@ -6814,8 +6983,9 @@ done:
 					      get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd pool delete") {
-    // osd pool delete <poolname> <poolname again> --yes-i-really-really-mean-it
+  } else if (prefix == "osd pool delete" ||
+             prefix == "osd pool rm") {
+    // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
     string poolstr, poolstr2, sure;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     cmd_getval(g_ceph_context, cmdmap, "pool2", poolstr2);
@@ -6964,7 +7134,8 @@ done:
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd tier remove") {
+  } else if (prefix == "osd tier remove" ||
+             prefix == "osd tier rm") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -7078,7 +7249,8 @@ done:
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd tier remove-overlay") {
+  } else if (prefix == "osd tier remove-overlay" ||
+             prefix == "osd tier rm-overlay") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -7138,6 +7310,19 @@ done:
       goto reply;
     }
 
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if ((mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	 mode != pg_pool_t::CACHEMODE_NONE &&
+	 mode != pg_pool_t::CACHEMODE_PROXY &&
+	 mode != pg_pool_t::CACHEMODE_READPROXY) &&
+	sure != "--yes-i-really-mean-it") {
+      ss << "'" << modestr << "' is not a well-supported cache mode and may "
+	 << "corrupt your data.  pass --yes-i-really-mean-it to force.";
+      err = -EPERM;
+      goto reply;
+    }
+
     // pool already has this cache-mode set and there are no pending changes
     if (p->cache_mode == mode &&
 	(pending_inc.new_pools.count(pool_id) == 0 ||
@@ -7155,15 +7340,17 @@ done:
      *  writeback:  Cache writes, promote reads from base pool
      *  readonly:   Forward writes to base pool
      *  readforward: Writes are in writeback mode, Reads are in forward mode
+     *  proxy:       Proxy all reads and writes to base pool
      *  readproxy:   Writes are in writeback mode, Reads are in proxy mode
      *
      * Hence, these are the allowed transitions:
      *
      *  none -> any
-     *  forward -> readforward || readproxy || writeback || any IF num_objects_dirty == 0
-     *  readforward -> forward || readproxy || writeback || any IF num_objects_dirty == 0
-     *  readproxy -> forward || readforward || writeback || any IF num_objects_dirty == 0
-     *  writeback -> readforward || readproxy || forward
+     *  forward -> proxy || readforward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  proxy -> forward || readforward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  readforward -> forward || proxy || readproxy || writeback || any IF num_objects_dirty == 0
+     *  readproxy -> forward || proxy || readforward || writeback || any IF num_objects_dirty == 0
+     *  writeback -> readforward || readproxy || forward || proxy
      *  readonly -> any
      */
 
@@ -7173,12 +7360,15 @@ done:
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
         (mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) {
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
+	 << "','"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_PROXY)
 	 << "','"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READFORWARD)
 	 << "','"
@@ -7190,16 +7380,25 @@ done:
     if ((p->cache_mode == pg_pool_t::CACHEMODE_READFORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	  mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_READPROXY &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD)) ||
+	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY)) ||
+
+        (p->cache_mode == pg_pool_t::CACHEMODE_PROXY &&
+        (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	  mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
       const pool_stat_t& tier_stats =
@@ -7337,7 +7536,7 @@ done:
     string field;
     cmd_getval(g_ceph_context, cmdmap, "field", field);
     if (field != "max_objects" && field != "max_bytes") {
-      ss << "unrecognized field '" << field << "'; max_bytes of max_objects";
+      ss << "unrecognized field '" << field << "'; should be 'max_bytes' or 'max_objects'";
       err = -EINVAL;
       goto reply;
     }
@@ -7367,23 +7566,15 @@ done:
 					      get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd reweight-by-utilization") {
-    int64_t oload;
-    cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
-    string out_str;
-    err = reweight_by_utilization(oload, out_str, false, NULL);
-    if (err < 0) {
-      ss << "FAILED reweight-by-utilization: " << out_str;
-    } else if (err == 0) {
-      ss << "no change: " << out_str;
-    } else {
-      ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
-      getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-						get_last_committed() + 1));
-      return true;
-    }
-  } else if (prefix == "osd reweight-by-pg") {
+  } else if (prefix == "osd reweight-by-pg" ||
+	     prefix == "osd reweight-by-utilization" ||
+	     prefix == "osd test-reweight-by-pg" ||
+	     prefix == "osd test-reweight-by-utilization") {
+    bool by_pg =
+      prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
+    bool dry_run =
+      prefix == "osd test-reweight-by-pg" ||
+      prefix == "osd test-reweight-by-utilization";
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
     set<int64_t> pools;
@@ -7398,18 +7589,39 @@ done:
       }
       pools.insert(pool);
     }
+    double max_change = g_conf->mon_reweight_max_change;
+    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
+    if (max_change <= 0.0) {
+      ss << "max_change " << max_change << " must be positive";
+      err = -EINVAL;
+      goto reply;
+    }
+    int64_t max_osds = g_conf->mon_reweight_max_osds;
+    cmd_getval(g_ceph_context, cmdmap, "max_osds", max_osds);
+    string no_increasing;
+    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
-    err = reweight_by_utilization(oload, out_str, true,
-				  pools.empty() ? NULL : &pools);
+    err = reweight_by_utilization(oload,
+				  max_change,
+				  max_osds,
+				  by_pg,
+				  pools.empty() ? NULL : &pools,
+				  no_increasing == "--no-increasing",
+				  dry_run,
+				  &ss, &out_str, f.get());
+    if (f)
+      f->flush(rdata);
+    else
+      rdata.append(out_str);
     if (err < 0) {
-      ss << "FAILED reweight-by-pg: " << out_str;
+      ss << "FAILED reweight-by-pg";
     } else if (err == 0) {
-      ss << "no change: " << out_str;
+      ss << "no change";
     } else {
-      ss << "SUCCESSFUL reweight-by-pg: " << out_str;
-      getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-						get_last_committed() + 1));
+      ss << "SUCCESSFUL reweight-by-pg";
+      wait_for_finished_proposal(
+	op,
+	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd thrash") {
@@ -7693,8 +7905,8 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
   const string& poolstr = osdmap.get_pool_name(pool);
 
   // If the Pool is in use by CephFS, refuse to delete it
-  MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-  if (pending_mdsmap.pool_in_use(pool)) {
+  FSMap const &pending_fsmap = mon->mdsmon()->pending_fsmap;
+  if (pending_fsmap.pool_in_use(pool)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
   }
@@ -7742,8 +7954,8 @@ bool OSDMonitor::_check_become_tier(
   const std::string &tier_pool_name = osdmap.get_pool_name(tier_pool_id);
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
-  const MDSMap &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-  if (pending_mdsmap.pool_in_use(tier_pool_id)) {
+  const FSMap &pending_fsmap = mon->mdsmon()->pending_fsmap;
+  if (pending_fsmap.pool_in_use(tier_pool_id)) {
     *ss << "pool '" << tier_pool_name << "' is in use by CephFS";
     *err = -EBUSY;
     return false;
@@ -7792,8 +8004,8 @@ bool OSDMonitor::_check_remove_tier(
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
   // Apply CephFS-specific checks
-  const MDSMap &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-  if (pending_mdsmap.pool_in_use(base_pool_id)) {
+  const FSMap &pending_fsmap = mon->mdsmon()->pending_fsmap;
+  if (pending_fsmap.pool_in_use(base_pool_id)) {
     if (base_pool->type != pg_pool_t::TYPE_REPLICATED) {
       // If the underlying pool is erasure coded, we can't permit the
       // removal of the replicated tier that CephFS relies on to access it

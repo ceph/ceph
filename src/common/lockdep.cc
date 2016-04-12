@@ -15,6 +15,7 @@
 #include "Clock.h"
 #include "common/dout.h"
 #include "common/environment.h"
+#include "common/valgrind.h"
 #include "include/types.h"
 #include "lockdep.h"
 
@@ -34,7 +35,7 @@ namespace std {
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  2000   // increase me as needed
+#define MAX_LOCKS  4096   // increase me as needed
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
@@ -67,6 +68,10 @@ void lockdep_register_ceph_context(CephContext *cct)
 {
   pthread_mutex_lock(&lockdep_mutex);
   if (g_lockdep_ceph_ctx == NULL) {
+    ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep_ceph_ctx, sizeof(g_lockdep_ceph_ctx),
+                               "lockdep cct");
+    ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep, sizeof(g_lockdep),
+                               "lockdep enabled");
     g_lockdep = true;
     g_lockdep_ceph_ctx = cct;
     lockdep_dout(0) << "lockdep start" << dendl;
@@ -133,7 +138,14 @@ int lockdep_register(const char *name)
   pthread_mutex_lock(&lockdep_mutex);
   ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
-    assert(!free_ids.empty());
+    if (free_ids.empty()) {
+      lockdep_dout(0) << "ERROR OUT OF IDS .. have " << free_ids.size()
+		      << " max " << MAX_LOCKS << dendl;
+      for (auto& p : lock_names) {
+	lockdep_dout(0) << "  lock " << p.first << " " << p.second << dendl;
+      }
+      assert(free_ids.empty());
+    }
     id = free_ids.front();
     free_ids.pop_front();
 

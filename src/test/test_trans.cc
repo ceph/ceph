@@ -15,7 +15,7 @@
 #include <iostream>
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
 #include "include/assert.h"
 
@@ -70,9 +70,9 @@ int main(int argc, const char **argv)
   }
   
   dout(0) << "starting thread" << dendl;
-  foo.create();
+  foo.create("foo");
   dout(0) << "starting op" << dendl;
-  fs->apply_transaction(&osr, t);
+  fs->apply_transaction(&osr, std::move(t));
 
 }
 

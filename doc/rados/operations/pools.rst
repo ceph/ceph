@@ -78,7 +78,7 @@ Where:
               default value ``8`` is NOT suitable for most systems.
 
 :Type: Integer
-:Required: Yes
+:Required: Yes.
 :Default: 8
 
 ``{pgp-num}``
@@ -481,11 +481,11 @@ You may set values for the following keys:
 ``fast_read``
 
 :Description: On Erasure Coding pool, if this flag is turned on, the read request
-              would issue sub reads to all shards, and wait until it receives enough
+              would issue sub reads to all shards, and waits until it receives enough
               shards to decode to serve the client. In the case of jerasure and isa
               erasure plugins, once the first K replies return, client's request is
-              serverd immediately using the data decoded from these replies. This
-              helps to tradeoff some resources for betterperformance. Currently this
+              served immediately using the data decoded from these replies. This
+              helps to tradeoff some resources for better performance. Currently this
               flag is only supported for Erasure Coding pool.
 
 :Type: Boolean
@@ -495,7 +495,7 @@ You may set values for the following keys:
 
 ``scrub_min_interval``
 
-:Description: The maximum interval in seconds for pool scrubbing when
+:Description: The minimum interval in seconds for pool scrubbing when
               load is low. If it is 0, the value osd_scrub_min_interval
               from config is used.
 
@@ -705,7 +705,7 @@ To get the number of object replicas, execute the following::
 	ceph osd dump | grep 'replicated size'
 	
 Ceph will list the pools, with the ``replicated size`` attribute highlighted.
-By default, ceph Creates two replicas of an object (a total of three copies, or 
+By default, ceph creates two replicas of an object (a total of three copies, or 
 a size of 3).
 
 

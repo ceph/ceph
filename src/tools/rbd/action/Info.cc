@@ -71,6 +71,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   uint8_t old_format;
   uint64_t overlap, features, flags;
   bool snap_protected = false;
+  librbd::mirror_image_info_t mirror_image;
   int r;
 
   r = image.stat(info, sizeof(info));
@@ -98,6 +99,13 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     r = image.snap_is_protected(snapname, &snap_protected);
     if (r < 0)
       return r;
+  }
+
+  if (features & RBD_FEATURE_JOURNALING) {
+    r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
+    if (r < 0) {
+      return r;
+    }
   }
 
   char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
@@ -176,6 +184,28 @@ static int do_show_info(const char *imgname, librbd::Image& image,
       f->dump_string("journal", utils::image_id(image));
     } else {
       std::cout << "\tjournal: " << utils::image_id(image) << std::endl;
+    }
+  }
+
+  if (features & RBD_FEATURE_JOURNALING) {
+    if (f) {
+      f->open_object_section("mirroring");
+      f->dump_string("state",
+          utils::mirror_image_state(mirror_image.state));
+      if (mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {
+        f->dump_string("global_id", mirror_image.global_id);
+        f->dump_bool("primary", mirror_image.primary);
+      }
+      f->close_section();
+    } else {
+      std::cout << "\tmirroring state: "
+                << utils::mirror_image_state(mirror_image.state) << std::endl;
+      if (mirror_image.state != RBD_MIRROR_IMAGE_DISABLED) {
+        std::cout << "\tmirroring global id: " << mirror_image.global_id
+                  << std::endl
+                  << "\tmirroring primary: "
+                  << (mirror_image.primary ? "true" : "false") <<std::endl;
+      }
     }
   }
 

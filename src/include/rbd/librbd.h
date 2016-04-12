@@ -41,6 +41,7 @@ extern "C" {
 #define LIBRBD_SUPPORTS_WATCH 0
 #define LIBRBD_SUPPORTS_AIO_FLUSH 1
 #define LIBRBD_SUPPORTS_INVALIDATE 1
+#define LIBRBD_SUPPORTS_AIO_OPEN 1
 
 #if __GNUC__ >= 4
   #define CEPH_RBD_API    __attribute__ ((visibility ("default")))
@@ -54,6 +55,9 @@ extern "C" {
 typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
 typedef void *rbd_image_options_t;
+
+typedef void *rbd_completion_t;
+typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 
 typedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void *ptr);
 
@@ -85,11 +89,29 @@ typedef struct {
   char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
 } rbd_image_info_t;
 
+typedef enum {
+  RBD_MIRROR_MODE_DISABLED, /* mirroring is disabled */
+  RBD_MIRROR_MODE_IMAGE,    /* mirroring enabled on a per-image basis */
+  RBD_MIRROR_MODE_POOL      /* mirroring enabled on all journaled images */
+} rbd_mirror_mode_t;
+
 typedef struct {
-  char *cluster_uuid;
+  char *uuid;
   char *cluster_name;
   char *client_name;
 } rbd_mirror_peer_t;
+
+typedef enum {
+  RBD_MIRROR_IMAGE_DISABLING = 0,
+  RBD_MIRROR_IMAGE_ENABLED = 1,
+  RBD_MIRROR_IMAGE_DISABLED = 2
+} rbd_mirror_image_state_t;
+
+typedef struct {
+  char *global_id;
+  rbd_mirror_image_state_t state;
+  bool primary;
+} rbd_mirror_image_info_t;
 
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
 
@@ -166,28 +188,33 @@ CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                             const char *destname);
 
 /* pool mirroring */
-CEPH_RBD_API int rbd_mirror_is_enabled(rados_ioctx_t io_ctx, bool *enabled);
-CEPH_RBD_API int rbd_mirror_set_enabled(rados_ioctx_t io_ctx, bool enabled);
+CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
+                                     rbd_mirror_mode_t *mirror_mode);
+CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
+                                     rbd_mirror_mode_t mirror_mode);
 CEPH_RBD_API int rbd_mirror_peer_add(rados_ioctx_t io_ctx,
-                                     const char *cluster_uuid,
+                                     char *uuid, size_t uuid_max_length,
                                      const char *cluster_name,
                                      const char *client_name);
 CEPH_RBD_API int rbd_mirror_peer_remove(rados_ioctx_t io_ctx,
-                                        const char *cluster_name);
+                                        const char *uuid);
 CEPH_RBD_API int rbd_mirror_peer_list(rados_ioctx_t io_ctx,
                                       rbd_mirror_peer_t *peers, int *max_peers);
 CEPH_RBD_API void rbd_mirror_peer_list_cleanup(rbd_mirror_peer_t *peers,
                                                int max_peers);
 CEPH_RBD_API int rbd_mirror_peer_set_client(rados_ioctx_t io_ctx,
-                                            const char *cluster_uuid,
+                                            const char *uuid,
                                             const char *client_name);
 CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
-                                             const char *cluster_uuid,
+                                             const char *uuid,
                                              const char *cluster_name);
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
 
+CEPH_RBD_API int rbd_aio_open(rados_ioctx_t io, const char *name,
+			      rbd_image_t *image, const char *snap_name,
+			      rbd_completion_t c);
 /**
  * Open an image in read-only mode.
  *
@@ -209,7 +236,11 @@ CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
  */
 CEPH_RBD_API int rbd_open_read_only(rados_ioctx_t io, const char *name,
                                     rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
+					rbd_image_t *image, const char *snap_name,
+					rbd_completion_t c);
 CEPH_RBD_API int rbd_close(rbd_image_t image);
+CEPH_RBD_API int rbd_aio_close(rbd_image_t image, rbd_completion_t c);
 CEPH_RBD_API int rbd_resize(rbd_image_t image, uint64_t size);
 CEPH_RBD_API int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
 			     librbd_progress_fn_t cb, void *cbdata);
@@ -423,8 +454,6 @@ CEPH_RBD_API int rbd_break_lock(rbd_image_t image, const char *client,
 /** @} locking */
 
 /* I/O */
-typedef void *rbd_completion_t;
-typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 CEPH_RBD_API ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
                               char *buf);
 /*
@@ -569,6 +598,15 @@ CEPH_RBD_API int rbd_metadata_remove(rbd_image_t image, const char *key);
 CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
     char *keys, size_t *key_len, char *values, size_t *vals_len);
 
+// RBD image mirroring support functions
+CEPH_RBD_API int rbd_mirror_image_enable(rbd_image_t image);
+CEPH_RBD_API int rbd_mirror_image_disable(rbd_image_t image, bool force);
+CEPH_RBD_API int rbd_mirror_image_promote(rbd_image_t image, bool force);
+CEPH_RBD_API int rbd_mirror_image_demote(rbd_image_t image);
+CEPH_RBD_API int rbd_mirror_image_resync(rbd_image_t image);
+CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
+                                           rbd_mirror_image_info_t *mirror_image_info,
+                                           size_t info_size);
 
 #ifdef __cplusplus
 }

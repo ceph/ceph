@@ -6,6 +6,7 @@ EXTRA_DIST = \
 	man/8/ceph-debugpack.rst	\
 	man/8/ceph-dencoder.rst	\
 	man/8/ceph-deploy.rst	\
+	man/8/ceph-detect-init.rst	\
 	man/8/ceph-disk.rst	\
 	man/8/cephfs.rst	\
 	man/8/ceph-fuse.rst	\
@@ -27,8 +28,10 @@ EXTRA_DIST = \
 	man/8/radosgw.rst	\
 	man/8/rados.rst	\
 	man/8/rbd-fuse.rst	\
+	man/8/rbd-mirror.rst	\
 	man/8/rbd-nbd.rst	\
 	man/8/rbd-replay-many.rst	\
 	man/8/rbd-replay-prep.rst	\
 	man/8/rbd-replay.rst	\
-	man/8/rbd.rst
+	man/8/rbd.rst           \
+	man/8/rbdmap.rst

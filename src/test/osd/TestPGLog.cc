@@ -29,6 +29,7 @@
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
+  PGLogTest() : PGLog(g_ceph_context) {}
   virtual void SetUp() { }
 
   virtual void TearDown() {
@@ -165,6 +166,9 @@ public:
       const hobject_t &hoid) {
       removed.insert(hoid);
     }
+    void try_stash(const hobject_t &, version_t) override {
+      // lost/unfound cases are not tested yet
+    }
     void trim(
       const pg_log_entry_t &entry) {}
   };
@@ -265,7 +269,7 @@ public:
 
 struct TestHandler : public PGLog::LogEntryHandler {
   list<hobject_t> &removed;
-  TestHandler(list<hobject_t> &removed) : removed(removed) {}
+  explicit TestHandler(list<hobject_t> &removed) : removed(removed) {}
 
   void rollback(
     const pg_log_entry_t &entry) {}
@@ -274,6 +278,9 @@ struct TestHandler : public PGLog::LogEntryHandler {
     removed.push_back(hoid);
   }
   void cant_rollback(const pg_log_entry_t &entry) {}
+  void try_stash(const hobject_t &, version_t) override {
+    // lost/unfound cases are not tested yet
+  }
   void trim(
     const pg_log_entry_t &entry) {}
 };
@@ -291,9 +298,8 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     log.tail = eversion_t(2, 1);
     TestHandler h(remove_snap);
-    EXPECT_THROW(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
-				      dirty_info, dirty_big_info),
-		 FailedAssertion);
+    EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
+				      dirty_info, dirty_big_info), "");
   }
 
   /*        +----------------+
@@ -445,6 +451,40 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
+  }
+
+  // Test for 13965
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    list<hobject_t> remove_snap;
+    pg_info_t info;
+    info.log_tail = log.tail = eversion_t(1, 5);
+    info.last_update = eversion_t(1, 6);
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    {
+      pg_log_entry_t e;
+      e.mod_desc.mark_unrollbackable();
+      e.version = eversion_t(1, 5);
+      e.soid.set_hash(0x9);
+      add(e);
+    }
+    {
+      pg_log_entry_t e;
+      e.mod_desc.mark_unrollbackable();
+      e.version = eversion_t(1, 6);
+      e.soid.set_hash(0x10);
+      add(e);
+    }
+    TestHandler h(remove_snap);
+    trim_rollback_info(eversion_t(1, 6), &h);
+    rewind_divergent_log(t, eversion_t(1, 5), info, &h,
+			 dirty_info, dirty_big_info);
+    pg_log_t log;
+    claim_log_and_clear_rollback_info(log, &h);
   }
 }
 
@@ -1200,8 +1240,8 @@ TEST_F(PGLogTest, merge_log) {
     olog.tail = eversion_t(1, 1);
 
     TestHandler h(remove_snap);
-    ASSERT_THROW(merge_log(t, oinfo, olog, fromosd, info, &h,
-                           dirty_info, dirty_big_info), FailedAssertion);
+    ASSERT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
+			   dirty_info, dirty_big_info), "");
   }
 
   /*        +--------------------------+
@@ -1264,8 +1304,8 @@ TEST_F(PGLogTest, merge_log) {
     }
 
     TestHandler h(remove_snap);
-    EXPECT_THROW(merge_log(t, oinfo, olog, fromosd, info, &h,
-                           dirty_info, dirty_big_info), FailedAssertion);
+    EXPECT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
+			   dirty_info, dirty_big_info), "");
   }
 }
 

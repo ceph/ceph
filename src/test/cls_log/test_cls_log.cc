@@ -187,6 +187,9 @@ TEST(cls_rgw, test_log_add_same_time)
   ASSERT_EQ(1, (int)truncated);
 
   delete rop;
+
+  /* destroy pool */
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
 TEST(cls_rgw, test_log_add_different_time)
@@ -280,6 +283,9 @@ TEST(cls_rgw, test_log_add_different_time)
 
   ASSERT_EQ(10, i);
   delete rop;
+
+  /* destroy pool */
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
 TEST(cls_rgw, test_log_trim)
@@ -331,4 +337,7 @@ TEST(cls_rgw, test_log_trim)
     ASSERT_EQ(0, (int)truncated);
   }
   delete rop;
+
+  /* destroy pool */
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }

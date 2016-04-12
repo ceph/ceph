@@ -44,21 +44,25 @@ namespace librbd {
                    << "read_buf=" << reinterpret_cast<void*>(read_buf) << ", "
                    << "real_bl=" <<  reinterpret_cast<void*>(read_bl) << dendl;
     if (rval >= 0 && aio_type == AIO_TYPE_READ) {
-      // FIXME: make the destriper write directly into a buffer so
-      // that we avoid shuffling pointers and copying zeros around.
-      bufferlist bl;
-      destriper.assemble_result(cct, bl, true);
+      if (read_buf && !read_bl) {
+	destriper.assemble_result(cct, read_buf, read_buf_len);
+      } else {
+	// FIXME: make the destriper write directly into a buffer so
+	// that we avoid shuffling pointers and copying zeros around.
+	bufferlist bl;
+	destriper.assemble_result(cct, bl, true);
 
-      if (read_buf) {
-	assert(bl.length() == read_buf_len);
-	bl.copy(0, read_buf_len, read_buf);
-	ldout(cct, 20) << "copied resulting " << bl.length()
-		       << " bytes to " << (void*)read_buf << dendl;
-      }
-      if (read_bl) {
-	ldout(cct, 20) << "moving resulting " << bl.length()
-		       << " bytes to bl " << (void*)read_bl << dendl;
-	read_bl->claim(bl);
+	if (read_buf) {
+	  assert(bl.length() == read_buf_len);
+	  bl.copy(0, read_buf_len, read_buf);
+	  ldout(cct, 20) << "copied resulting " << bl.length()
+	    << " bytes to " << (void*)read_buf << dendl;
+	}
+	if (read_bl) {
+	  ldout(cct, 20) << " moving resulting " << bl.length()
+	    << " bytes to bl " << (void*)read_bl << dendl;
+	  read_bl->claim(bl);
+	}
       }
     }
   }
@@ -69,6 +73,9 @@ namespace librbd {
     assert(lock.is_locked());
     elapsed = ceph_clock_now(cct) - start_time;
     switch (aio_type) {
+    case AIO_TYPE_OPEN:
+    case AIO_TYPE_CLOSE:
+      break;
     case AIO_TYPE_READ:
       ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
     case AIO_TYPE_WRITE:
@@ -88,12 +95,7 @@ namespace librbd {
       ictx->journal->commit_io_event(journal_tid, rval);
     }
 
-    // note: possible for image to be closed after op marked finished
     done = true;
-    if (async_op.started()) {
-      async_op.finish_op();
-    }
-
     if (complete_cb) {
       lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
@@ -107,6 +109,11 @@ namespace librbd {
       ictx->event_socket.notify();
     }
     cond.Signal();
+
+    // note: possible for image to be closed after op marked finished
+    if (async_op.started()) {
+      async_op.finish_op();
+    }
     tracepoint(librbd, aio_complete_exit);
   }
 

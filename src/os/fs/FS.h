@@ -57,13 +57,31 @@ public:
     void *priv;
     int fd;
     vector<iovec> iov;
+    uint64_t offset, length;
+    int rval;
+    bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
-    aio_t(void *p, int f) : priv(p), fd(f) {
+    aio_t(void *p, int f) : priv(p), fd(f), rval(-1000) {
       memset(&iocb, 0, sizeof(iocb));
     }
 
-    void pwritev(uint64_t offset) {
+    void pwritev(uint64_t _offset) {
+      offset = _offset;
       io_prep_pwritev(&iocb, fd, &iov[0], iov.size(), offset);
+      length = 0;
+      for (unsigned u=0; u<iov.size(); ++u)
+	length += iov[u].iov_len;
+    }
+    void pread(uint64_t _offset, uint64_t len) {
+      offset = _offset;
+      length = len;
+      bufferptr p = buffer::create_page_aligned(length);
+      io_prep_pread(&iocb, fd, p.c_str(), length, offset);
+      bl.append(std::move(p));
+    }
+
+    int get_return_value() {
+      return rval;
     }
   };
 
@@ -71,7 +89,7 @@ public:
     int max_iodepth;
     io_context_t ctx;
 
-    aio_queue_t(unsigned max_iodepth)
+    explicit aio_queue_t(unsigned max_iodepth)
       : max_iodepth(max_iodepth),
 	ctx(0) {
     }
@@ -92,13 +110,16 @@ public:
     }
 
     int submit(aio_t &aio, int *retries) {
-      int attempts = 10;
+      // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
+      int attempts = 16;
+      int delay = 125;
       iocb *piocb = &aio.iocb;
       while (true) {
 	int r = io_submit(ctx, 1, &piocb);
 	if (r < 0) {
 	  if (r == -EAGAIN && attempts-- > 0) {
-	    usleep(500);
+	    usleep(delay);
+	    delay *= 2;
 	    (*retries)++;
 	    continue;
 	  }
@@ -116,12 +137,13 @@ public:
 	timeout_ms / 1000,
 	(timeout_ms % 1000) * 1000 * 1000
       };
-      int r = io_getevents(ctx, 1, 1, event, &t);
+      int r = io_getevents(ctx, 1, max, event, &t);
       if (r <= 0) {
 	return r;
       }
       for (int i=0; i<r; ++i) {
 	paio[i] = (aio_t *)event[i].obj;
+	paio[i]->rval = event[i].res;
       }
       return r;
     }

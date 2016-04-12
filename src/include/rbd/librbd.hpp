@@ -47,10 +47,18 @@ namespace librbd {
   } locker_t;
 
   typedef struct {
-    std::string cluster_uuid;
+    std::string uuid;
     std::string cluster_name;
     std::string client_name;
   } mirror_peer_t;
+
+  typedef rbd_mirror_image_state_t mirror_image_state_t;
+
+  typedef struct {
+    std::string global_id;
+    mirror_image_state_t state;
+    bool primary;
+  } mirror_image_info_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -84,9 +92,13 @@ public:
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  int aio_open(IoCtx& io_ctx, Image& image, const char *name,
+	       const char *snapname, RBD::AioCompletion *c);
   // see librbd.h
   int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 		     const char *snapname);
+  int aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
+			 const char *snapname, RBD::AioCompletion *c);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
@@ -109,16 +121,16 @@ public:
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
   // RBD pool mirroring support functions
-  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled);
-  int mirror_set_enabled(IoCtx& io_ctx, bool enabled);
-  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);
-  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid);
   int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
-  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
                              const std::string &client_name);
-  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
 
 private:
@@ -155,6 +167,7 @@ public:
   ~Image();
 
   int close();
+  int aio_close(RBD::AioCompletion *c);
 
   int resize(uint64_t size);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
@@ -206,7 +219,9 @@ public:
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
-  bool snap_exists(const char *snapname);
+  /* DEPRECATED; use snap_exists2 */
+  bool snap_exists(const char *snapname) __attribute__ ((deprecated));
+  int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
   int snap_rollback(const char *snap_name);
@@ -219,7 +234,7 @@ public:
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t read2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
@@ -255,12 +270,12 @@ public:
 		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
 
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
   /**
@@ -281,7 +296,7 @@ public:
    * @param c aio completion to notify when read is complete
    */
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_read2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
@@ -313,6 +328,15 @@ public:
    * Returns a pair of key/value for this image
    */
   int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
+
+  // RBD image mirroring support functions
+  int mirror_image_enable();
+  int mirror_image_disable(bool force);
+  int mirror_image_promote(bool force);
+  int mirror_image_demote();
+  int mirror_image_resync();
+  int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                            size_t info_size);
 
 private:
   friend class RBD;

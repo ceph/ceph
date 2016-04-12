@@ -18,8 +18,7 @@ class ImageCtx;
 
 class ObjectMap {
 public:
-
-  ObjectMap(ImageCtx &image_ctx);
+  ObjectMap(ImageCtx &image_ctx, uint64_t snap_id);
 
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static std::string object_map_name(const std::string &image_id,
@@ -31,8 +30,8 @@ public:
     return m_object_map.size();
   }
 
-  int lock();
-  int unlock();
+  void open(Context *on_finish);
+  void close(Context *on_finish);
 
   bool object_may_exist(uint64_t object_no) const;
 
@@ -52,21 +51,15 @@ public:
                   const boost::optional<uint8_t> &current_state,
                   Context *on_finish);
 
-  void refresh(uint64_t snap_id);
   void rollback(uint64_t snap_id, Context *on_finish);
   void snapshot_add(uint64_t snap_id, Context *on_finish);
   void snapshot_remove(uint64_t snap_id, Context *on_finish);
-
-  bool enabled() const;
-  bool enabled(const RWLock &object_map_lock) const;
 
 private:
   ImageCtx &m_image_ctx;
   ceph::BitVector<2> m_object_map;
   uint64_t m_snap_id;
-  bool m_enabled;
 
-  void invalidate(uint64_t snap_id, bool force);
 };
 
 } // namespace librbd

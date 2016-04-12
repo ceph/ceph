@@ -96,7 +96,9 @@ private:
     uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
     atomic_t out_seq; // atomic<uint32_t>
 
-    lifecycle() : state(lifecycle::INIT), in_seq(0), out_seq(0) {}
+    lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
+		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
+		  out_seq(0) {}
 
     void set_in_seq(uint32_t seq) {
       in_seq = seq;
@@ -142,12 +144,19 @@ private:
 
     uint32_t flags;
 
-    CState(XioConnection* _xcon)
-      : xcon(_xcon),
+    explicit CState(XioConnection* _xcon)
+      : features(0),
+	authorizer(NULL),
+	xcon(_xcon),
 	protocol_version(0),
 	session_state(INIT),
 	startup_state(IDLE),
+	reconnects(0),
+	connect_seq(0),
+	global_seq(0),
+	peer_global_seq(0),
 	in_seq(0),
+	out_seq_acked(0),
 	out_seq(0),
 	flags(FLAG_NONE) {}
 
@@ -259,13 +268,13 @@ public:
       xio_connection_destroy(conn);
   }
 
-  bool is_connected() { return connected.read(); }
+  bool is_connected() override { return connected.read(); }
 
-  int send_message(Message *m);
-  void send_keepalive() {}
-  virtual void mark_down();
+  int send_message(Message *m) override;
+  void send_keepalive() override {}
+  void mark_down() override;
   int _mark_down(uint32_t flags);
-  virtual void mark_disposable();
+  void mark_disposable() override;
   int _mark_disposable(uint32_t flags);
 
   const entity_inst_t& get_peer() const { return peer; }
@@ -322,7 +331,7 @@ class XioLoopbackConnection : public Connection
 private:
   atomic_t seq;
 public:
-  XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
+  explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {
       const entity_inst_t& m_inst = m->get_myinst();
       peer_addr = m_inst.addr;
@@ -334,12 +343,12 @@ public:
     return static_cast<XioLoopbackConnection*>(RefCountedObject::get());
   }
 
-  virtual bool is_connected() { return true; }
+  bool is_connected() override { return true; }
 
-  int send_message(Message *m);
-  void send_keepalive() {}
-  void mark_down() {}
-  void mark_disposable() {}
+  int send_message(Message *m) override;
+  void send_keepalive() override {}
+  void mark_down() override {}
+  void mark_disposable() override {}
 
   uint32_t get_seq() {
     return seq.read();

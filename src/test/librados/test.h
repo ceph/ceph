@@ -22,14 +22,18 @@
 #include <string>
 #include <unistd.h>
 
-std::string get_temp_pool_name();
+std::string get_temp_pool_name(const std::string &prefix = "test-rados-api-");
 
-std::string create_one_pool(const std::string &pool_name, rados_t *cluster);
+std::string create_one_pool(const std::string &pool_name, rados_t *cluster,
+    uint32_t pg_num=0);
 std::string create_one_ec_pool(const std::string &pool_name, rados_t *cluster);
 std::string create_one_pool_pp(const std::string &pool_name,
 			    librados::Rados &cluster);
 std::string create_one_ec_pool_pp(const std::string &pool_name,
 			    librados::Rados &cluster);
+std::string set_pg_num(
+    rados_t *cluster, const std::string &pool_name, uint32_t pg_num);
+
 std::string connect_cluster(rados_t *cluster);
 std::string connect_cluster_pp(librados::Rados &cluster);
 int destroy_one_pool(const std::string &pool_name, rados_t *cluster);

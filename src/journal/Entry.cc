@@ -15,7 +15,7 @@ namespace journal {
 
 namespace {
 
-const uint32_t HEADER_FIXED_SIZE = 17; /// preamble, version, tid
+const uint32_t HEADER_FIXED_SIZE = 25; /// preamble, version, entry tid, tag id
 
 } // anonymous namespace
 
@@ -23,10 +23,10 @@ void Entry::encode(bufferlist &bl) const {
   bufferlist data_bl;
   ::encode(preamble, data_bl);
   ::encode(static_cast<uint8_t>(1), data_bl);
-  ::encode(m_tid, data_bl);
+  ::encode(m_entry_tid, data_bl);
+  ::encode(m_tag_tid, data_bl);
   assert(HEADER_FIXED_SIZE == data_bl.length());
 
-  ::encode(m_tag, data_bl);
   ::encode(m_data, data_bl);
 
   uint32_t crc = data_bl.crc32c(0);
@@ -49,8 +49,8 @@ void Entry::decode(bufferlist::iterator &iter) {
     throw buffer::malformed_input("unknown version: " + stringify(version));
   }
 
-  ::decode(m_tid, iter);
-  ::decode(m_tag, iter);
+  ::decode(m_entry_tid, iter);
+  ::decode(m_tag_tid, iter);
   ::decode(m_data, iter);
   uint32_t end_offset = iter.get_off();
 
@@ -67,8 +67,8 @@ void Entry::decode(bufferlist::iterator &iter) {
 }
 
 void Entry::dump(Formatter *f) const {
-  f->dump_string("tag", m_tag);
-  f->dump_unsigned("tid", m_tid);
+  f->dump_unsigned("tag_tid", m_tag_tid);
+  f->dump_unsigned("entry_tid", m_entry_tid);
 
   std::stringstream data;
   m_data.hexdump(data);
@@ -88,19 +88,6 @@ bool Entry::is_readable(bufferlist::iterator iter, uint32_t *bytes_needed) {
     return false;
   }
   iter.advance(HEADER_FIXED_SIZE - sizeof(bl_preamble));
-
-  if (iter.get_remaining() < sizeof(uint32_t)) {
-    *bytes_needed = sizeof(uint32_t) - iter.get_remaining();
-    return false;
-  }
-  uint32_t tag_size;
-  ::decode(tag_size, iter);
-
-  if (iter.get_remaining() < tag_size) {
-    *bytes_needed = tag_size - iter.get_remaining();
-    return false;
-  }
-  iter.advance(tag_size);
 
   if (iter.get_remaining() < sizeof(uint32_t)) {
     *bytes_needed = sizeof(uint32_t) - iter.get_remaining();
@@ -134,21 +121,22 @@ bool Entry::is_readable(bufferlist::iterator iter, uint32_t *bytes_needed) {
 }
 
 void Entry::generate_test_instances(std::list<Entry *> &o) {
-  o.push_back(new Entry("tag1", 123, bufferlist()));
+  o.push_back(new Entry(1, 123, bufferlist()));
 
   bufferlist bl;
   bl.append("data");
-  o.push_back(new Entry("tag2", 123, bl));
+  o.push_back(new Entry(2, 123, bl));
 }
 
 bool Entry::operator==(const Entry& rhs) const {
-  return (m_tag == rhs.m_tag && m_tid == rhs.m_tid &&
+  return (m_tag_tid == rhs.m_tag_tid && m_entry_tid == rhs.m_entry_tid &&
           const_cast<bufferlist&>(m_data).contents_equal(
             const_cast<bufferlist&>(rhs.m_data)));
 }
 
 std::ostream &operator<<(std::ostream &os, const Entry &entry) {
-  os << "Entry[tag=" << entry.get_tag() << ", tid=" << entry.get_tid() << ", "
+  os << "Entry[tag_tid=" << entry.get_tag_tid() << ", "
+     << "entry_tid=" << entry.get_entry_tid() << ", "
      << "data size=" << entry.get_data().length() << "]";
   return os;
 }

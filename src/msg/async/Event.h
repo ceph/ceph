@@ -58,7 +58,7 @@ class EventCallback {
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
-typedef ceph::shared_ptr<EventCallback> EventCallbackRef;
+typedef EventCallback* EventCallbackRef;
 
 struct FiredFileEvent {
   int fd;
@@ -89,22 +89,23 @@ class EventCenter {
     int mask;
     EventCallbackRef read_cb;
     EventCallbackRef write_cb;
-    FileEvent(): mask(0) {}
+    FileEvent(): mask(0), read_cb(NULL), write_cb(NULL) {}
   };
 
   struct TimeEvent {
     uint64_t id;
     EventCallbackRef time_cb;
 
-    TimeEvent(): id(0) {}
+    TimeEvent(): id(0), time_cb(NULL) {}
   };
 
   CephContext *cct;
   int nevent;
   // Used only to external event
   Mutex external_lock, file_lock, time_lock;
+  atomic_t external_num_events;
   deque<EventCallbackRef> external_events;
-  FileEvent *file_events;
+  vector<FileEvent> file_events;
   EventDriver *driver;
   map<utime_t, list<TimeEvent> > time_events;
   uint64_t time_event_next_id;
@@ -114,34 +115,34 @@ class EventCenter {
   int notify_send_fd;
   NetHandler net;
   pthread_t owner;
+  EventCallbackRef notify_handler;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
     assert(fd < nevent);
-    FileEvent *p = &file_events[fd];
-    if (!p->mask)
-      new(p) FileEvent();
-    return p;
+    return &file_events[fd];
   }
 
  public:
   atomic_t already_wakeup;
 
-  EventCenter(CephContext *c):
+  explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
     external_lock("AsyncMessenger::external_lock"),
     file_lock("AsyncMessenger::file_lock"),
     time_lock("AsyncMessenger::time_lock"),
-    file_events(NULL),
-    driver(NULL), time_event_next_id(0),
-    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0), already_wakeup(0) {
+    external_num_events(0),
+    driver(NULL), time_event_next_id(1),
+    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
+    notify_handler(NULL),
+    already_wakeup(0) {
     last_time = time(NULL);
   }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
   int init(int nevent);
-  void set_owner(pthread_t p) { owner = p; }
+  void set_owner();
   pthread_t get_owner() { return owner; }
 
   // Used by internal thread

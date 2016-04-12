@@ -129,7 +129,10 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
 {
   ldout(store->ctx(), 20) << "trying to trim removal hints to  " << to << dendl;
 
-  int ret = store->objexp_hint_trim(shard, from, to);
+  real_time rt_from = from.to_real_time();
+  real_time rt_to = to.to_real_time();
+
+  int ret = store->objexp_hint_trim(shard, rt_from, rt_to);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR during trim: " << ret << dendl;
   }
@@ -163,8 +166,11 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
     return;
   }
   do {
+    real_time rt_last = last_run.to_real_time();
+    real_time rt_start = round_start.to_real_time();
+
     list<cls_timeindex_entry> entries;
-    ret = store->objexp_hint_list(shard, last_run, round_start,
+    ret = store->objexp_hint_list(shard, rt_last, rt_start,
                                       num_entries, marker, entries,
                                       &out_marker, &truncated);
     if (ret < 0) {
@@ -218,7 +224,7 @@ bool RGWObjectExpirer::going_down()
 void RGWObjectExpirer::start_processor()
 {
   worker = new OEWorker(store->ctx(), this);
-  worker->create();
+  worker->create("rgw_obj_expirer");
 }
 
 void RGWObjectExpirer::stop_processor()

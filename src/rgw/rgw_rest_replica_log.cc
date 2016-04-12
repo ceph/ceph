@@ -22,6 +22,7 @@
 #include "rgw_rest_replica_log.h"
 #include "rgw_client_io.h"
 #include "common/errno.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define REPLICA_INPUT_MAX_LEN (512*1024)
@@ -36,7 +37,6 @@ static int parse_to_utime(string& in, utime_t& out) {
   out = utime_t(sec, nsec);
   return 0;
 }
-
 
 void RGWOp_OBJLog_SetBounds::execute() {
   string id_str = s->info.args.get("id"),
@@ -148,7 +148,7 @@ void RGWOp_OBJLog_DeleteBounds::execute() {
 
 static int bucket_instance_to_bucket(RGWRados *store, const string& bucket_instance, rgw_bucket& bucket) {
   RGWBucketInfo bucket_info;
-  time_t mtime;
+  real_time mtime;
   
   RGWObjectCtx obj_ctx(store);
   int r = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, &mtime, NULL);

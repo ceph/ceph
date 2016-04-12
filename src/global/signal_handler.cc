@@ -30,7 +30,6 @@
 extern char *sys_siglist[]; 
 #endif 
 
-
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;
@@ -54,7 +53,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
 #else
     snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
 	    "%d when trying to install a signal handler for %s\n",
-	     ret, sys_siglist[signum]);
+	     ret, sig_str(signum));
 #endif
     dout_emergency(buf);
     exit(1);
@@ -92,14 +91,19 @@ static void handle_fatal_signal(int signum)
   // case, SA_RESETHAND specifies that the default signal handler--
   // presumably dump core-- will handle it.
   char buf[1024];
+  char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
+  int r = pthread_getname_np(pthread_self(), pthread_name, sizeof(pthread_name));
+  (void)r;
 #if defined(__sun)
   char message[SIG2STR_MAX];
   sig2str(signum,message);
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx\n", message, (unsigned long long)pthread_self());
+	    "in thread %llx thread_name:%s\n", message, (unsigned long long)pthread_self(),
+	    pthread_name);
 #else
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx\n", sys_siglist[signum], (unsigned long long)pthread_self());
+	    "in thread %llx thread_name:%s\n", sig_str(signum), (unsigned long long)pthread_self(),
+	    pthread_name);
 #endif
   dout_emergency(buf);
   pidfile_remove();
@@ -193,7 +197,7 @@ struct SignalHandler : public Thread {
     assert(r == 0);
 
     // create thread
-    create();
+    create("sginal_handler");
   }
 
   ~SignalHandler() {

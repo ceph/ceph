@@ -22,7 +22,7 @@ class CephContext;
 
 class AuthNoneServiceHandler  : public AuthServiceHandler {
 public:
-  AuthNoneServiceHandler(CephContext *cct_) 
+  explicit AuthNoneServiceHandler(CephContext *cct_)
     : AuthServiceHandler(cct_) {}
   ~AuthNoneServiceHandler() {}
   

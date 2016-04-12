@@ -26,7 +26,14 @@ git submodule update
 cd src
 rm -f project.tgz
 make project.tgz
-scp -i ~/coverity_rsa project.tgz sage@ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz
-curl --data "project=ceph&password=`cat ~/coverity.build.pass.txt`&email=sage@newdream.net&url=http://ceph.com/coverity/`git describe`.tgz" http://scan5.coverity.com/cgi-bin/submit_build.py
+
+version=`git describe`
+token=`cat ~/coverity.build.pass.txt`
+curl --form token=$token \
+  --form email=sage@newdream.net \
+  --form file=@project.tgz \
+  --form version="$version" \
+  --form description="Automated Ceph build from `hostname`" \
+  https://scan.coverity.com/builds?project=ceph
 
 echo done.

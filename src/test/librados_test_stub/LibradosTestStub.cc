@@ -66,6 +66,16 @@ void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
 
 } // anonymous namespace
 
+namespace librados {
+
+MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx) {
+  MockTestMemIoCtxImpl **mock =
+    reinterpret_cast<MockTestMemIoCtxImpl **>(&ioctx);
+  return **mock;
+}
+
+}
+
 namespace librados_test_stub {
 
 TestRadosClientPtr *rados_client() {
@@ -153,12 +163,11 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   md_config_t *conf = client->cct()->_conf;
-  std::deque<std::string> parse_errors;
-  int ret = conf->parse_config_files(path, &parse_errors, NULL, 0);
+  int ret = conf->parse_config_files(path, NULL, 0);
   if (ret == 0) {
     conf->parse_env();
     conf->apply_changes(NULL);
-    complain_about_parse_errors(client->cct(), &parse_errors);
+    conf->complain_about_parse_errors(client->cct());
   } else if (ret == -EINVAL) {
     // ignore missing client config
     return 0;
@@ -404,6 +413,17 @@ int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
   return ctx->aio_remove(oid, c->pc);
 }
 
+int IoCtx::aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
+                     librados::WatchCtx2 *watch_ctx) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_watch(o, c->pc, handle, watch_ctx);
+}
+
+int IoCtx::aio_unwatch(uint64_t handle, AioCompletion *c) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_unwatch(handle, c->pc);
+}
+
 config_t IoCtx::cct() {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return reinterpret_cast<config_t>(ctx->get_rados_client()->cct());
@@ -528,8 +548,7 @@ int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
 int IoCtx::remove(const std::string& oid) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
-    oid, boost::bind(&TestIoCtxImpl::remove, _1, _2));
-  return ctx->remove(oid);
+    oid, boost::bind(&TestIoCtxImpl::remove, _1, _2, ctx->get_snap_context()));
 }
 
 int IoCtx::selfmanaged_snap_create(uint64_t *snapid) {
@@ -569,6 +588,13 @@ int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
     oid, boost::bind(&TestIoCtxImpl::tmap_update, _1, _2, cmdbl));
+}
+
+int IoCtx::trunc(const std::string& oid, uint64_t off) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::truncate, _1, _2, off,
+                     ctx->get_snap_context()));
 }
 
 int IoCtx::unwatch2(uint64_t handle) {
@@ -661,6 +687,19 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
+                                        int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::list_watchers, _1,
+                                           _2, out_watchers);
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
                                int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
@@ -698,6 +737,19 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::stat, _1, _2,
+                                           psize, pmtime);
+
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectWriteOperation::append(const bufferlist &bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::append, _1, _2, bl, _4));
@@ -715,7 +767,7 @@ void ObjectWriteOperation::omap_set(const std::map<std::string, bufferlist> &map
 
 void ObjectWriteOperation::remove() {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(boost::bind(&TestIoCtxImpl::remove, _1, _2));
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::remove, _1, _2, _4));
 }
 
 void ObjectWriteOperation::selfmanaged_snap_rollback(uint64_t snapid) {
@@ -783,6 +835,11 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
       reinterpret_cast<void**>(&c));
   assert(r == 0);
   return new AioCompletion(c);
+}
+
+int Rados::aio_watch_flush(AioCompletion* c) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->aio_watch_flush(c->pc);
 }
 
 int Rados::blacklist_add(const std::string& client_address,
@@ -1061,6 +1118,11 @@ int cls_cxx_map_set_vals(cls_method_context_t hctx,
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len,
                  bufferlist *outbl) {
+  return cls_cxx_read2(hctx, ofs, len, outbl, 0);
+}
+
+int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
+                  bufferlist *outbl, uint32_t op_flags) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->read(ctx->oid, len, ofs, outbl);
@@ -1081,6 +1143,11 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime) {
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len,
                   bufferlist *inbl) {
+  return cls_cxx_write2(hctx, ofs, len, inbl, 0);
+}
+
+int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *inbl, uint32_t op_flags) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);

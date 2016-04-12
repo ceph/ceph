@@ -33,7 +33,7 @@ bool Request::should_complete(int r) {
 
     {
       RWLock::WLocker l2(m_image_ctx.object_map_lock);
-      finish();
+      finish_request();
     }
     return true;
 
@@ -62,8 +62,9 @@ bool Request::invalidate() {
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  InvalidateRequest *req = new InvalidateRequest(m_image_ctx, m_snap_id, true,
-                                                 create_callback_context());
+  InvalidateRequest<> *req = new InvalidateRequest<>(m_image_ctx, m_snap_id,
+                                                     true,
+                                                     create_callback_context());
   req->send();
   return false;
 }

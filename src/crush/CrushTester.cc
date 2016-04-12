@@ -8,6 +8,15 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <boost/lexical_cast.hpp>
+// to workaround https://svn.boost.org/trac/boost/ticket/9501
+#ifdef _LIBCPP_VERSION
+#include <boost/version.hpp>
+#if BOOST_VERSION < 105600
+#define ICL_USE_BOOST_MOVE_IMPLEMENTATION
+#endif
+#endif
+#include <boost/icl/interval_map.hpp>
+#include <boost/algorithm/string/join.hpp>
 #include <common/SubProcess.h>
 
 void CrushTester::set_device_weight(int dev, float f)
@@ -252,12 +261,6 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
       crush.get_max_devices() == 0)
     return -EINVAL;
 
-  // compute each device's proportional weight
-  vector<float> proportional_weights( weight.size() );
-  for (unsigned i = 0; i < weight.size(); i++) {
-    proportional_weights[i] = (float) weight[i] / (float) total_weight;
-  }
-
   // determine the real maximum number of devices to return
   int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
@@ -450,6 +453,51 @@ bool CrushTester::check_name_maps(unsigned max_id) const
   return true;
 }
 
+static string get_rule_name(CrushWrapper& crush, int rule)
+{
+  if (crush.get_rule_name(rule))
+    return crush.get_rule_name(rule);
+  else
+    return string("rule") + std::to_string(rule);
+}
+
+void CrushTester::check_overlapped_rules() const
+{
+  namespace icl = boost::icl;
+  typedef std::set<string> RuleNames;
+  typedef icl::interval_map<int, RuleNames> Rules;
+  // <ruleset, type> => interval_map<size, {names}>
+  typedef std::map<std::pair<int, int>, Rules> RuleSets;
+  using interval = icl::interval<int>;
+
+  // mimic the logic of crush_find_rule(), but it only return the first matched
+  // one, but I am collecting all of them by the overlapped sizes.
+  RuleSets rulesets;
+  for (int rule = 0; rule < crush.get_max_rules(); rule++) {
+    if (!crush.rule_exists(rule)) {
+      continue;
+    }
+    Rules& rules = rulesets[{crush.get_rule_mask_ruleset(rule),
+			     crush.get_rule_mask_type(rule)}];
+    rules += make_pair(interval::closed(crush.get_rule_mask_min_size(rule),
+					crush.get_rule_mask_max_size(rule)),
+		       RuleNames{get_rule_name(crush, rule)});
+  }
+  for (auto i : rulesets) {
+    auto ruleset_type = i.first;
+    const Rules& rules = i.second;
+    for (auto r : rules) {
+      const RuleNames& names = r.second;
+      // if there are more than one rules covering the same size range,
+      // print them out.
+      if (names.size() > 1) {
+	err << "overlapped rules in ruleset " << ruleset_type.first << ": "
+	    << boost::join(names, ", ") << "\n";
+      }
+    }
+  }
+}
+
 int CrushTester::test()
 {
   if (min_rule < 0 || max_rule < 0) {
@@ -524,7 +572,6 @@ int CrushTester::test()
 
       // create a structure to hold data for post-processing
       tester_data_set tester_data;
-      vector<int> vector_data_buffer;
       vector<float> vector_data_buffer_f;
 
       // create a map to hold batch-level placement information

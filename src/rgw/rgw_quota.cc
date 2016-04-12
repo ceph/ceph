@@ -258,7 +258,7 @@ int BucketAsyncRefreshHandler::init_fetch()
 {
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  int r = store->get_bucket_stats_async(bucket, this);
+  int r = store->get_bucket_stats_async(bucket, RGW_NO_SHARD, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
@@ -306,7 +306,7 @@ protected:
   int fetch_stats_from_storage(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats);
 
 public:
-  RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  explicit RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
   AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, rgw_bucket& bucket) {
@@ -322,7 +322,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, rgw_buck
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  int r = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, bucket_stats, NULL);
+  int r = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
     return r;
@@ -453,7 +453,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
       do {
         int ret = stats->sync_all_users();
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
+          ldout(cct, 5) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
         }
 
         lock.Lock();
@@ -516,9 +516,9 @@ public:
                                         rwlock("RGWUserStatsCache::rwlock") {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
-      buckets_sync_thread->create();
+      buckets_sync_thread->create("rgw_buck_st_syn");
       user_sync_thread = new UserSyncThread(store->ctx(), this);
-      user_sync_thread->create();
+      user_sync_thread->create("rgw_user_st_syn");
     } else {
       buckets_sync_thread = NULL;
       user_sync_thread = NULL;
@@ -590,10 +590,11 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
     return 0;
   }
 
-  utime_t when_need_full_sync = header.last_stats_sync;
-  when_need_full_sync += store->ctx()->_conf->rgw_user_quota_sync_wait_time;
+  real_time when_need_full_sync = header.last_stats_sync;
+  when_need_full_sync += make_timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
   
   // check if enough time passed since last full sync
+  /* FIXME: missing check? */
 
   ret = rgw_user_sync_all_stats(store, user);
   if (ret < 0) {
@@ -611,7 +612,7 @@ int RGWUserStatsCache::sync_all_users()
 
   int ret = store->meta_mgr->list_keys_init(key, &handle);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: can't get key: ret=" << ret << dendl;
+    ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
   }
 

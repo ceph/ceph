@@ -907,7 +907,7 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::BACKLOG;
     EXPECT_TRUE(e.is_backlog());
     EXPECT_FALSE(missing.is_missing(oid));
-    EXPECT_THROW(missing.add_next_event(e), FailedAssertion);
+    EXPECT_DEATH(missing.add_next_event(e), "");
   }
 
   // adding a DELETE matching an existing event
@@ -1020,14 +1020,14 @@ TEST(pg_missing_t, got)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     // assert if the oid does not exist
-    EXPECT_THROW(missing.got(oid, eversion_t()), FailedAssertion);
+    EXPECT_DEATH(missing.got(oid, eversion_t()), "");
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
     missing.add(oid, need, eversion_t());
     EXPECT_TRUE(missing.is_missing(oid));
     // assert if that the version to be removed is lower than the version of the object
-    EXPECT_THROW(missing.got(oid, eversion_t(epoch / 2,20)), FailedAssertion);
+    EXPECT_DEATH(missing.got(oid, eversion_t(epoch / 2,20)), "");
     // remove of a later version removes the object
     missing.got(oid, eversion_t(epoch * 2,20));
     EXPECT_FALSE(missing.is_missing(oid));
@@ -1074,7 +1074,7 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_read_lock(ObjectContext& _obc) :
+    explicit Thread_read_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
@@ -1089,7 +1089,7 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_write_lock(ObjectContext& _obc) :
+    explicit Thread_write_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
@@ -1161,7 +1161,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(1, obc.unstable_writes);
 
     Thread_read_lock t(obc);
-    t.create();
+    t.create("obc_read");
 
     do {
       cout << "Trying (1) with delay " << delay << "us\n";
@@ -1218,7 +1218,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(0, obc.unstable_writes);
 
     Thread_write_lock t(obc);
-    t.create();
+    t.create("obc_write");
 
     do {
       cout << "Trying (3) with delay " << delay << "us\n";
@@ -1372,6 +1372,56 @@ TEST(coll_t, temp) {
   ASSERT_EQ(pgid, pgid2);
 }
 
+TEST(coll_t, assigment) {
+  spg_t pgid;
+  coll_t right(pgid);
+  ASSERT_EQ(right.to_str(), string("0.0_head"));
+
+  coll_t left, middle;
+
+  ASSERT_EQ(left.to_str(), string("meta"));
+  ASSERT_EQ(middle.to_str(), string("meta"));
+
+  left = middle = right;
+
+  ASSERT_EQ(left.to_str(), string("0.0_head"));
+  ASSERT_EQ(middle.to_str(), string("0.0_head"));
+  
+  ASSERT_NE(middle.c_str(), right.c_str());
+  ASSERT_NE(left.c_str(), middle.c_str());
+}
+
+TEST(hobject_t, parse) {
+  const char *v[] = {
+    "MIN",
+    "MAX",
+    "-1:60c2fa6d:::inc_osdmap.1:0",
+    "-1:60c2fa6d:::inc_osdmap.1:333",
+    "0:00000000::::head",
+    "1:00000000:nspace:key:obj:head",
+    "-40:00000000:nspace::obj:head",
+    "20:00000000::key:obj:head",
+    "20:00000000:::o%fdj:head",
+    "20:00000000:::o%02fdj:head",
+    "20:00000000:::_zero_%00_:head",
+    NULL
+  };
+
+  for (unsigned i=0; v[i]; ++i) {
+    hobject_t o;
+    bool b = o.parse(v[i]);
+    if (!b) {
+      cout << "failed to parse " << v[i] << std::endl;
+      ASSERT_TRUE(false);
+    }
+    string s = stringify(o);
+    if (s != v[i]) {
+      cout << v[i] << " -> " << o << " -> " << s << std::endl;
+      ASSERT_EQ(s, string(v[i]));
+    }
+  }
+}
+
 TEST(ghobject_t, cmp) {
   ghobject_t min;
   ghobject_t sep;
@@ -1388,9 +1438,40 @@ TEST(ghobject_t, cmp) {
   ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
 }
 
+TEST(ghobject_t, parse) {
+  const char *v[] = {
+    "GHMIN",
+    "GHMAX",
+    "13#0:00000000::::head#",
+    "13#0:00000000::::head#deadbeef",
+    "#-1:60c2fa6d:::inc_osdmap.1:333#deadbeef",
+    "#-1:60c2fa6d:::inc%02osdmap.1:333#deadbeef",
+    "#-1:60c2fa6d:::inc_osdmap.1:333#",
+    "1#MIN#deadbeefff",
+    "1#MAX#",
+    "#MAX#123",
+    "#-40:00000000:nspace::obj:head#",
+    NULL
+  };
+
+  for (unsigned i=0; v[i]; ++i) {
+    ghobject_t o;
+    bool b = o.parse(v[i]);
+    if (!b) {
+      cout << "failed to parse " << v[i] << std::endl;
+      ASSERT_TRUE(false);
+    }
+    string s = stringify(o);
+    if (s != v[i]) {
+      cout << v[i] << " -> " << o << " -> " << s << std::endl;
+      ASSERT_EQ(s, string(v[i]));
+    }
+  }
+}
+
 TEST(pool_opts_t, invalid_opt) {
   EXPECT_FALSE(pool_opts_t::is_opt_name("INVALID_OPT"));
-  EXPECT_THROW(pool_opts_t::get_opt_desc("INVALID_OPT"), FailedAssertion);
+  EXPECT_DEATH(pool_opts_t::get_opt_desc("INVALID_OPT"), "");
 }
 
 TEST(pool_opts_t, scrub_min_interval) {
@@ -1401,7 +1482,7 @@ TEST(pool_opts_t, scrub_min_interval) {
 
   pool_opts_t opts;
   EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MIN_INTERVAL));
-  EXPECT_THROW(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL), FailedAssertion);
+  EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL), "");
   double val;
   EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &val));
   opts.set(pool_opts_t::SCRUB_MIN_INTERVAL, static_cast<double>(2015));
@@ -1419,7 +1500,7 @@ TEST(pool_opts_t, scrub_max_interval) {
 
   pool_opts_t opts;
   EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MAX_INTERVAL));
-  EXPECT_THROW(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL), FailedAssertion);
+  EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL), "");
   double val;
   EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &val));
   opts.set(pool_opts_t::SCRUB_MAX_INTERVAL, static_cast<double>(2015));
@@ -1437,7 +1518,7 @@ TEST(pool_opts_t, deep_scrub_interval) {
 
   pool_opts_t opts;
   EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
-  EXPECT_THROW(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL), FailedAssertion);
+  EXPECT_DEATH(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL), "");
   double val;
   EXPECT_FALSE(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &val));
   opts.set(pool_opts_t::DEEP_SCRUB_INTERVAL, static_cast<double>(2015));

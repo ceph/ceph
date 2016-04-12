@@ -5,9 +5,11 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -20,37 +22,17 @@
 namespace librbd {
 namespace operation {
 
+using util::create_context_callback;
+using util::create_rados_safe_callback;
+
 namespace {
 
 template <typename I>
-std::ostream& operator<<(std::ostream& os,
-                         const typename SnapshotRollbackRequest<I>::State& state) {
-  switch(state) {
-  case SnapshotRollbackRequest<I>::STATE_RESIZE_IMAGE:
-    os << "RESIZE_IMAGE";
-    break;
-  case SnapshotRollbackRequest<I>::STATE_ROLLBACK_OBJECT_MAP:
-    os << "ROLLBACK_OBJECT_MAP";
-    break;
-  case SnapshotRollbackRequest<I>::STATE_ROLLBACK_OBJECTS:
-    os << "ROLLBACK_OBJECTS";
-    break;
-  case SnapshotRollbackRequest<I>::STATE_INVALIDATE_CACHE:
-    os << "INVALIDATE_CACHE";
-    break;
-  default:
-    os << "UNKNOWN (" << static_cast<uint32_t>(state) << ")";
-    break;
-  }
-  return os;
-}
-
-template <typename I>
-class C_RollbackObject : public C_AsyncObjectThrottle<> {
+class C_RollbackObject : public C_AsyncObjectThrottle<I> {
 public:
-  C_RollbackObject(AsyncObjectThrottle<> &throttle, I *image_ctx,
+  C_RollbackObject(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                    uint64_t snap_id, uint64_t object_num)
-    : C_AsyncObjectThrottle(throttle, *image_ctx), m_snap_id(snap_id),
+    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_snap_id(snap_id),
       m_object_num(object_num) {
   }
 
@@ -62,10 +44,11 @@ public:
 
     std::string oid = image_ctx.get_object_name(m_object_num);
 
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_ctx_cb);
     librados::ObjectWriteOperation op;
     op.selfmanaged_snap_rollback(m_snap_id);
+
+    librados::AioCompletion *rados_completion =
+      util::create_rados_safe_callback(this);
     image_ctx.data_ctx.aio_operate(oid, rados_completion, &op);
     rados_completion->release();
     return 0;
@@ -86,54 +69,58 @@ SnapshotRollbackRequest<I>::SnapshotRollbackRequest(I &image_ctx,
                                                     uint64_t snap_size,
                                                     ProgressContext &prog_ctx)
   : Request<I>(image_ctx, on_finish), m_snap_name(snap_name),
-    m_snap_id(snap_id), m_snap_size(snap_size), m_prog_ctx(prog_ctx) {
+    m_snap_id(snap_id), m_snap_size(snap_size), m_prog_ctx(prog_ctx),
+    m_object_map(nullptr) {
+}
+
+template <typename I>
+SnapshotRollbackRequest<I>::~SnapshotRollbackRequest() {
+  I &image_ctx = this->m_image_ctx;
+  if (m_blocking_writes) {
+    image_ctx.aio_work_queue->unblock_writes();
+  }
+  delete m_object_map;
 }
 
 template <typename I>
 void SnapshotRollbackRequest<I>::send_op() {
-  send_resize_image();
+  send_block_writes();
 }
 
 template <typename I>
-bool SnapshotRollbackRequest<I>::should_complete(int r) {
+void SnapshotRollbackRequest<I>::send_block_writes() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
-                << "r=" << r << dendl;
-  if (r < 0) {
-    lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
-    return true;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+
+  m_blocking_writes = true;
+  image_ctx.aio_work_queue->block_writes(create_context_callback<
+    SnapshotRollbackRequest<I>,
+    &SnapshotRollbackRequest<I>::handle_block_writes>(this));
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::handle_block_writes(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher();
   }
 
-  RWLock::RLocker owner_lock(image_ctx.owner_lock);
-  bool finished = false;
-  switch (m_state) {
-  case STATE_RESIZE_IMAGE:
-    send_rollback_object_map();
-    break;
-  case STATE_ROLLBACK_OBJECT_MAP:
-    send_rollback_objects();
-    break;
-  case STATE_ROLLBACK_OBJECTS:
-    finished = send_invalidate_cache();
-    break;
-  case STATE_INVALIDATE_CACHE:
-    finished = true;
-    break;
-  default:
-    assert(false);
-    break;
-  }
-  return finished;
+  send_resize_image();
+  return nullptr;
 }
 
 template <typename I>
 void SnapshotRollbackRequest<I>::send_resize_image() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
 
   uint64_t current_size;
   {
+    RWLock::RLocker owner_locker(image_ctx.owner_lock);
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     current_size = image_ctx.get_image_size(CEPH_NOSNAP);
   }
@@ -145,28 +132,47 @@ void SnapshotRollbackRequest<I>::send_resize_image() {
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-  m_state = STATE_RESIZE_IMAGE;
 
-  ResizeRequest<I> *req = new ResizeRequest<I>(image_ctx,
-                                               this->create_callback_context(),
-                                               m_snap_size, m_no_op_prog_ctx);
+  Context *ctx = create_context_callback<
+    SnapshotRollbackRequest<I>,
+    &SnapshotRollbackRequest<I>::handle_resize_image>(this);
+  ResizeRequest<I> *req = ResizeRequest<I>::create(image_ctx, ctx, m_snap_size,
+                                                   m_no_op_prog_ctx, 0, true);
   req->send();
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::handle_resize_image(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to resize image for rollback: "
+               << cpp_strerror(*result) << dendl;
+    return this->create_context_finisher();
+  }
+
+  send_rollback_object_map();
+  return nullptr;
 }
 
 template <typename I>
 void SnapshotRollbackRequest<I>::send_rollback_object_map() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
 
   {
+    RWLock::RLocker owner_locker(image_ctx.owner_lock);
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     RWLock::WLocker object_map_lock(image_ctx.object_map_lock);
-    if (image_ctx.object_map.enabled(image_ctx.object_map_lock)) {
+    if (image_ctx.object_map != nullptr) {
       CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;
-      m_state = STATE_ROLLBACK_OBJECT_MAP;
 
-      image_ctx.object_map.rollback(m_snap_id, this->create_callback_context());
+      Context *ctx = create_context_callback<
+        SnapshotRollbackRequest<I>,
+        &SnapshotRollbackRequest<I>::handle_rollback_object_map>(this);
+      image_ctx.object_map->rollback(m_snap_id, ctx);
       return;
     }
   }
@@ -175,14 +181,23 @@ void SnapshotRollbackRequest<I>::send_rollback_object_map() {
 }
 
 template <typename I>
+Context *SnapshotRollbackRequest<I>::handle_rollback_object_map(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  assert(*result == 0);
+  send_rollback_objects();
+  return nullptr;
+}
+
+template <typename I>
 void SnapshotRollbackRequest<I>::send_rollback_objects() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
-
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-  m_state = STATE_ROLLBACK_OBJECTS;
 
+  RWLock::RLocker owner_locker(image_ctx.owner_lock);
   uint64_t num_objects;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
@@ -190,30 +205,110 @@ void SnapshotRollbackRequest<I>::send_rollback_objects() {
                                            image_ctx.get_current_size());
   }
 
-  Context *ctx = this->create_callback_context();
+  Context *ctx = create_context_callback<
+    SnapshotRollbackRequest<I>,
+    &SnapshotRollbackRequest<I>::handle_rollback_objects>(this);
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_RollbackObject<I> >(),
       boost::lambda::_1, &image_ctx, m_snap_id, boost::lambda::_2));
-  AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<>(
+  AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, 0, num_objects);
   throttle->start_ops(image_ctx.concurrent_management_ops);
 }
 
 template <typename I>
-bool SnapshotRollbackRequest<I>::send_invalidate_cache() {
+Context *SnapshotRollbackRequest<I>::handle_rollback_objects(int *result) {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (image_ctx.object_cacher == NULL) {
-    return true;
+  if (*result < 0) {
+    lderr(cct) << "failed to rollback objects: " << cpp_strerror(*result)
+               << dendl;
+    return this->create_context_finisher();
+  }
+
+  return send_refresh_object_map();
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::send_refresh_object_map() {
+  I &image_ctx = this->m_image_ctx;
+
+  bool object_map_enabled;
+  {
+    RWLock::RLocker owner_locker(image_ctx.owner_lock);
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    object_map_enabled = (image_ctx.object_map != nullptr);
+  }
+  if (!object_map_enabled) {
+    return send_invalidate_cache();
   }
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-  m_state = STATE_INVALIDATE_CACHE;
 
-  image_ctx.invalidate_cache(this->create_callback_context());
-  return false;
+  m_object_map = image_ctx.create_object_map(CEPH_NOSNAP);
+
+  Context *ctx = create_context_callback<
+    SnapshotRollbackRequest<I>,
+    &SnapshotRollbackRequest<I>::handle_refresh_object_map>(this);
+  m_object_map->open(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::handle_refresh_object_map(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  assert(*result == 0);
+  return send_invalidate_cache();
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
+  I &image_ctx = this->m_image_ctx;
+
+  apply();
+  if (image_ctx.object_cacher == NULL) {
+    return this->create_context_finisher();
+  }
+
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+
+  RWLock::RLocker owner_lock(image_ctx.owner_lock);
+  Context *ctx = create_context_callback<
+    SnapshotRollbackRequest<I>,
+    &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
+  image_ctx.invalidate_cache(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::handle_invalidate_cache(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to invalidate cache: " << cpp_strerror(*result)
+               << dendl;
+  }
+  return this->create_context_finisher();
+}
+
+template <typename I>
+void SnapshotRollbackRequest<I>::apply() {
+  I &image_ctx = this->m_image_ctx;
+
+  RWLock::RLocker owner_locker(image_ctx.owner_lock);
+  RWLock::WLocker snap_locker(image_ctx.snap_lock);
+  if (image_ctx.object_map != nullptr) {
+    std::swap(m_object_map, image_ctx.object_map);
+  }
 }
 
 } // namespace operation

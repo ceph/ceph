@@ -45,6 +45,7 @@ void ObjectPlayer::fetch(Context *on_finish) {
   C_Fetch *context = new C_Fetch(this, on_finish);
   librados::ObjectReadOperation op;
   op.read(m_read_off, 2 << m_order, &context->read_bl, NULL);
+  op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   librados::AioCompletion *rados_completion =
     librados::Rados::aio_create_completion(context, utils::rados_ctx_callback,
@@ -69,9 +70,15 @@ void ObjectPlayer::watch(Context *on_fetch, double interval) {
 void ObjectPlayer::unwatch() {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " unwatch" << dendl;
   Mutex::Locker timer_locker(m_timer_lock);
+
   cancel_watch();
 
-  m_watch_ctx = NULL;
+  Context *watch_ctx = nullptr;
+  std::swap(watch_ctx, m_watch_ctx);
+  if (watch_ctx != nullptr) {
+    delete watch_ctx;
+  }
+
   while (m_watch_in_progress) {
     m_watch_in_progress_cond.Wait(m_timer_lock);
   }
@@ -141,7 +148,8 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl) {
     ::decode(entry, iter);
     ldout(m_cct, 20) << ": " << entry << " decoded" << dendl;
 
-    EntryKey entry_key(std::make_pair(entry.get_tag(), entry.get_tid()));
+    EntryKey entry_key(std::make_pair(entry.get_tag_tid(),
+                                      entry.get_entry_tid()));
     if (m_entry_keys.find(entry_key) == m_entry_keys.end()) {
       m_entry_keys[entry_key] = m_entries.insert(m_entries.end(), entry);
     } else {
@@ -159,7 +167,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl) {
   }
 
   if (!m_invalid_ranges.empty()) {
-    r = -EINVAL;
+    r = -EBADMSG;
   }
   return r;
 }
@@ -200,19 +208,17 @@ void ObjectPlayer::handle_watch_fetched(int r) {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " poll complete, r=" << r
                    << dendl;
 
-  Context *on_finish = NULL;
+  Context *on_finish = nullptr;
   {
     Mutex::Locker timer_locker(m_timer_lock);
     assert(m_watch_in_progress);
     if (r == -ENOENT) {
-      schedule_watch();
-    } else {
-      on_finish = m_watch_ctx;
-      m_watch_ctx = NULL;
+      r = 0;
     }
+    std::swap(on_finish, m_watch_ctx);
   }
 
-  if (on_finish != NULL) {
+  if (on_finish != nullptr) {
     on_finish->complete(r);
   }
 

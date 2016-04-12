@@ -11,6 +11,36 @@
 
 namespace journal {
 
+namespace {
+
+struct C_Flush : public Context {
+  JournalMetadataPtr journal_metadata;
+  Context *on_finish;
+  atomic_t pending_flushes;
+  int ret_val;
+
+  C_Flush(JournalMetadataPtr _journal_metadata, Context *_on_finish,
+          size_t _pending_flushes)
+    : journal_metadata(_journal_metadata), on_finish(_on_finish),
+      pending_flushes(_pending_flushes), ret_val(0) {
+  }
+
+  virtual void complete(int r) {
+    if (r < 0 && ret_val == 0) {
+      ret_val = r;
+    }
+    if (pending_flushes.dec() == 0) {
+      // ensure all prior callback have been flushed as well
+      journal_metadata->queue(on_finish, ret_val);
+      delete this;
+    }
+  }
+  virtual void finish(int r) {
+  }
+};
+
+} // anonymous namespace
+
 JournalRecorder::JournalRecorder(librados::IoCtx &ioctx,
                                  const std::string &object_oid_prefix,
                                  const JournalMetadataPtr& journal_metadata,
@@ -39,24 +69,24 @@ JournalRecorder::~JournalRecorder() {
   m_journal_metadata->remove_listener(&m_listener);
 }
 
-Future JournalRecorder::append(const std::string &tag,
+Future JournalRecorder::append(uint64_t tag_tid,
                                const bufferlist &payload_bl) {
   Mutex::Locker locker(m_lock);
 
-  uint64_t tid = m_journal_metadata->allocate_tid(tag);
+  uint64_t entry_tid = m_journal_metadata->allocate_entry_tid(tag_tid);
   uint8_t splay_width = m_journal_metadata->get_splay_width();
-  uint8_t splay_offset = tid % splay_width;
+  uint8_t splay_offset = entry_tid % splay_width;
 
   ObjectRecorderPtr object_ptr = get_object(splay_offset);
   uint64_t commit_tid = m_journal_metadata->allocate_commit_tid(
-    object_ptr->get_object_number(), tag, tid);
-  FutureImplPtr future(new FutureImpl(m_journal_metadata->get_finisher(),
-                                      tag, tid, commit_tid));
+    object_ptr->get_object_number(), tag_tid, entry_tid);
+  FutureImplPtr future(new FutureImpl(tag_tid, entry_tid, commit_tid));
   future->init(m_prev_future);
   m_prev_future = future;
 
   bufferlist entry_bl;
-  ::encode(Entry(future->get_tag(), future->get_tid(), payload_bl), entry_bl);
+  ::encode(Entry(future->get_tag_tid(), future->get_entry_tid(), payload_bl),
+           entry_bl);
 
   AppendBuffers append_buffers;
   append_buffers.push_back(std::make_pair(future, entry_bl));
@@ -76,14 +106,15 @@ void JournalRecorder::flush(Context *on_safe) {
   {
     Mutex::Locker locker(m_lock);
 
-    ctx = new C_Flush(on_safe, m_object_ptrs.size());
+    ctx = new C_Flush(m_journal_metadata, on_safe, m_object_ptrs.size() + 1);
     for (ObjectRecorderPtrs::iterator it = m_object_ptrs.begin();
          it != m_object_ptrs.end(); ++it) {
       it->second->flush(ctx);
     }
   }
 
-  ctx->unblock();
+  // avoid holding the lock in case there is nothing to flush
+  ctx->complete(0);
 }
 
 ObjectRecorderPtr JournalRecorder::get_object(uint8_t splay_offset) {

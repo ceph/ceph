@@ -9,8 +9,8 @@ class TestEntry : public ::testing::Test {
 
 TEST_F(TestEntry, DefaultConstructor) {
   journal::Entry entry;
-  ASSERT_EQ(0U, entry.get_tid());
-  ASSERT_EQ("", entry.get_tag());
+  ASSERT_EQ(0U, entry.get_entry_tid());
+  ASSERT_EQ(0U, entry.get_tag_tid());
 
   bufferlist data(entry.get_data());
   bufferlist expected_data;
@@ -20,7 +20,7 @@ TEST_F(TestEntry, DefaultConstructor) {
 TEST_F(TestEntry, Constructor) {
   bufferlist data;
   data.append("data");
-  journal::Entry entry("tag", 123, data);
+  journal::Entry entry(234, 123, data);
 
   data.clear();
   data = entry.get_data();
@@ -28,15 +28,15 @@ TEST_F(TestEntry, Constructor) {
   bufferlist expected_data;
   expected_data.append("data");
 
-  ASSERT_EQ(123U, entry.get_tid());
-  ASSERT_EQ("tag", entry.get_tag());
+  ASSERT_EQ(123U, entry.get_entry_tid());
+  ASSERT_EQ(234U, entry.get_tag_tid());
   ASSERT_TRUE(data.contents_equal(expected_data));
 }
 
 TEST_F(TestEntry, IsReadable) {
   bufferlist data;
   data.append("data");
-  journal::Entry entry("tag", 123, data);
+  journal::Entry entry(234, 123, data);
 
   bufferlist full_bl;
   ::encode(entry, full_bl);
@@ -58,7 +58,7 @@ TEST_F(TestEntry, IsReadable) {
 TEST_F(TestEntry, IsReadableBadPreamble) {
   bufferlist data;
   data.append("data");
-  journal::Entry entry("tag", 123, data);
+  journal::Entry entry(234, 123, data);
 
   uint64_t stray_bytes = 0x1122334455667788;
   bufferlist full_bl;
@@ -78,7 +78,7 @@ TEST_F(TestEntry, IsReadableBadPreamble) {
 TEST_F(TestEntry, IsReadableBadCRC) {
   bufferlist data;
   data.append("data");
-  journal::Entry entry("tag", 123, data);
+  journal::Entry entry(234, 123, data);
 
   bufferlist full_bl;
   ::encode(entry, full_bl);

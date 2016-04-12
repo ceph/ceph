@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
+#include <thread>
 
 #include "common/Throttle.h"
 #include "common/dout.h"
@@ -235,6 +236,185 @@ int64_t Throttle::put(int64_t c)
     }
   }
   return count.read();
+}
+
+bool BackoffThrottle::set_params(
+  double _low_threshhold,
+  double _high_threshhold,
+  double _expected_throughput,
+  double _high_multiple,
+  double _max_multiple,
+  uint64_t _throttle_max,
+  ostream *errstream)
+{
+  bool valid = true;
+  if (_low_threshhold > _high_threshhold) {
+    valid = false;
+    if (errstream) {
+      *errstream << "low_threshhold (" << _low_threshhold
+		 << ") > high_threshhold (" << _high_threshhold
+		 << ")" << std::endl;
+    }
+  }
+
+  if (_high_multiple > _max_multiple) {
+    valid = false;
+    if (errstream) {
+      *errstream << "_high_multiple (" << _high_multiple
+		 << ") > _max_multiple (" << _max_multiple
+		 << ")" << std::endl;
+    }
+  }
+
+  if (_low_threshhold > 1 || _low_threshhold < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid low_threshhold (" << _low_threshhold << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_high_threshhold > 1 || _high_threshhold < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid high_threshhold (" << _high_threshhold << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_max_multiple < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid _max_multiple ("
+		 << _max_multiple << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_high_multiple < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid _high_multiple ("
+		 << _high_multiple << ")"
+		 << std::endl;
+    }
+  }
+
+  if (_expected_throughput < 0) {
+    valid = false;
+    if (errstream) {
+      *errstream << "invalid _expected_throughput("
+		 << _expected_throughput << ")"
+		 << std::endl;
+    }
+  }
+
+  if (!valid)
+    return false;
+
+  locker l(lock);
+  low_threshhold = _low_threshhold;
+  high_threshhold = _high_threshhold;
+  high_delay_per_count = _high_multiple / _expected_throughput;
+  max_delay_per_count = _max_multiple / _expected_throughput;
+  max = _throttle_max;
+
+  if (high_threshhold - low_threshhold > 0) {
+    s0 = high_delay_per_count / (high_threshhold - low_threshhold);
+  } else {
+    low_threshhold = high_threshhold;
+    s0 = 0;
+  }
+
+  if (1 - high_threshhold > 0) {
+    s1 = (max_delay_per_count - high_delay_per_count)
+      / (1 - high_threshhold);
+  } else {
+    high_threshhold = 1;
+    s1 = 0;
+  }
+
+  _kick_waiters();
+  return true;
+}
+
+std::chrono::duration<double> BackoffThrottle::_get_delay(uint64_t c) const
+{
+  if (max == 0)
+    return std::chrono::duration<double>(0);
+
+  double r = ((double)current) / ((double)max);
+  if (r < low_threshhold) {
+    return std::chrono::duration<double>(0);
+  } else if (r < high_threshhold) {
+    return c * std::chrono::duration<double>(
+      (r - low_threshhold) * s0);
+  } else {
+    return c * std::chrono::duration<double>(
+      high_delay_per_count + ((r - high_threshhold) * s1));
+  }
+}
+
+std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
+{
+  locker l(lock);
+  auto delay = _get_delay(c);
+
+  // fast path
+  if (delay == std::chrono::duration<double>(0) &&
+      waiters.empty() &&
+      ((max == 0) || (current == 0) || ((current + c) <= max))) {
+    current += c;
+    return std::chrono::duration<double>(0);
+  }
+
+  auto ticket = _push_waiter();
+
+  while (waiters.begin() != ticket) {
+    (*ticket)->wait(l);
+  }
+
+  auto start = std::chrono::system_clock::now();
+  delay = _get_delay(c);
+  while (((start + delay) > std::chrono::system_clock::now()) ||
+	 !((max == 0) || (current == 0) || ((current + c) <= max))) {
+    assert(ticket == waiters.begin());
+    (*ticket)->wait_until(l, start + delay);
+    delay = _get_delay(c);
+  }
+  waiters.pop_front();
+  _kick_waiters();
+
+  current += c;
+  return std::chrono::system_clock::now() - start;
+}
+
+uint64_t BackoffThrottle::put(uint64_t c)
+{
+  locker l(lock);
+  assert(current >= c);
+  current -= c;
+  _kick_waiters();
+  return current;
+}
+
+uint64_t BackoffThrottle::take(uint64_t c)
+{
+  locker l(lock);
+  current += c;
+  return current;
+}
+
+uint64_t BackoffThrottle::get_current()
+{
+  locker l(lock);
+  return current;
+}
+
+uint64_t BackoffThrottle::get_max()
+{
+  locker l(lock);
+  return max;
 }
 
 SimpleThrottle::SimpleThrottle(uint64_t max, bool ignore_enoent)

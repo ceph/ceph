@@ -16,6 +16,8 @@ public:
          it != m_metadata_list.end(); ++it) {
       (*it)->remove_listener(&m_listener);
     }
+    m_metadata_list.clear();
+
     for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
          it != m_trimmers.end(); ++it) {
       delete *it;
@@ -27,21 +29,16 @@ public:
                      const std::string &oid, uint64_t object_num,
                      const std::string &payload, uint64_t *commit_tid) {
     int r = append(oid + "." + stringify(object_num), create_payload(payload));
-    uint64_t tid = metadata->allocate_commit_tid(object_num, "tag", 123);
+    uint64_t tid = metadata->allocate_commit_tid(object_num, 234, 123);
     if (commit_tid != NULL) {
       *commit_tid = tid;
     }
     return r;
   }
 
-  using RadosTestFixture::client_register;
-  int client_register(const std::string &oid) {
-    return RadosTestFixture::client_register(oid, "client", "");
-  }
-
   journal::JournalMetadataPtr create_metadata(const std::string &oid) {
-    journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-      m_ioctx, oid, "client", 0.1));
+    journal::JournalMetadataPtr metadata = RadosTestFixture::create_metadata(
+      oid);
     m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
@@ -85,10 +82,10 @@ TEST_F(TestJournalTrimmer, Committed) {
   uint64_t commit_tid5;
   uint64_t commit_tid6;
   ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid1));
-  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid2));
+  ASSERT_EQ(0, append_payload(metadata, oid, 4, "payload", &commit_tid2));
   ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid3));
   ASSERT_EQ(0, append_payload(metadata, oid, 0, "payload", &commit_tid4));
-  ASSERT_EQ(0, append_payload(metadata, oid, 2, "payload", &commit_tid5));
+  ASSERT_EQ(0, append_payload(metadata, oid, 4, "payload", &commit_tid5));
   ASSERT_EQ(0, append_payload(metadata, oid, 5, "payload", &commit_tid6));
 
   journal::JournalTrimmer *trimmer = create_trimmer(oid, metadata);

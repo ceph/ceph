@@ -166,28 +166,10 @@ if __name__ == '__main__':
     r = expect('mds/dump.xml', 'GET', 200, 'xml')
     assert(r.tree.find('output/mdsmap/created') is not None)
 
-    failresps = []
-    while len(failresps) < 10:
-        r = expect('mds/dump.json', 'GET', 200, 'json')
-        assert('created' in r.myjson['output'])
-        current_epoch = r.myjson['output']['epoch']
-
-        map = expect('mds/getmap', 'GET', 200, '')
-        assert(len(map.content) != 0)
-        msg, r = expect_nofail(
-            'mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
-            'plain', {'Content-Type':'text/plain'}, data=map.content
-            )
-        if msg:
-            failresps.append(msg + r.content)
-        else:
-            break
-
-    if len(failresps) == 10:
-        fail(r, 'Could not mds setmap in 10 tries; responses:' +
-             '\n'.join(failresps))
-    expect('mds/newfs?metadata=0&data=1&sure=--yes-i-really-mean-it', 'PUT',
-           200, '')
+    expect('fs/flag/set?flag_name=enable_multiple&val=true', 'PUT', 200, '')
+    expect('osd/pool/create?pg_num=1&pool=cephfs_metadata', 'PUT', 200, '')
+    expect('osd/pool/create?pg_num=1&pool=cephfs_data', 'PUT', 200, '')
+    expect('fs/new?fs_name=cephfs&metadata=cephfs_metadata&data=cephfs_data', 'PUT', 200, '')
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
     pools = r.myjson['output']['pools']
@@ -215,9 +197,9 @@ if __name__ == '__main__':
     r = expect('mds/stat.json', 'GET', 200, 'json')
     expect('mds/set?var=max_mds&val=2', 'PUT', 200, '')
     r = expect('mds/stat.json', 'GET', 200, 'json')
-    assert('info' in r.myjson['output']['mdsmap'])
+    assert('epoch' in r.myjson['output']['fsmap'])
     r = expect('mds/stat.xml', 'GET', 200, 'xml')
-    assert(r.tree.find('output/mds_stat/mdsmap/info') is not None)
+    assert(r.tree.find('output/mds_stat/fsmap/epoch') is not None)
 
     # more content tests below, just check format here
     expect('mon/dump.json', 'GET', 200, 'json')

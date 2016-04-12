@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [10.0.0], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [10.1.1], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -63,6 +63,7 @@ darwin*)
 	;;
 linux*)
 	linux="yes"
+	CFLAGS="-D_LARGEFILE64_SOURCE ${CFLAGS}"
 	;;
 freebsd*)
 	freebsd="yes"
@@ -126,7 +127,7 @@ AM_CONDITIONAL(WITH_RBD, test "$with_rbd" = "yes")
 #AS_IF([test "$with_rbd" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD])])
 
 AC_ARG_WITH([cython],
-	[AS_HELP_STRING([--with-cython], [build python bindings for librbd])],
+	[AS_HELP_STRING([--with-cython], [build python bindings for libraries])],
 	[],
 	[with_cython=yes])
 AM_CONDITIONAL(WITH_CYTHON, test "$with_cython" = "yes")
@@ -207,12 +208,27 @@ AC_ARG_ENABLE([server],
 AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 #AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
 
-# cython is required to build librbd python bindings
+# subscription manager?
+AC_ARG_ENABLE([subman],
+	[AS_HELP_STRING([--enable-subman], [enable subman])],
+	[],
+	[enable_subman=no])
+AM_CONDITIONAL([ENABLE_SUBMAN], test "x$enable_subman" != "xno")
+
+# cython is required to build python bindings for libraries
 if test x"$with_cython" = xyes; then
     AC_CHECK_PROG(CYTHON_CHECK, cython, yes)
     if test x"$CYTHON_CHECK" != xyes; then
         AC_MSG_FAILURE([cython not found])
     fi
+    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, python-config, yes)
+    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
+        AC_MSG_FAILURE([python-config not found])
+    fi
+    PYTHON_CFLAGS=`python-config --cflags`
+    AC_SUBST(PYTHON_CFLAGS)
+    PYTHON_LDFLAGS=`python-config --ldflags`
+    AC_SUBST(PYTHON_LDFLAGS)
 fi
 
 # cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project
@@ -454,11 +470,6 @@ AC_ARG_WITH([profiler],
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
 	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])
-             AC_LANG_PUSH([C++])
-             AC_CHECK_HEADERS([gperftools/heap-profiler.h \
-               gperftools/malloc_extension.h \
-               gperftools/profiler.h])
-             AC_LANG_POP([C++])
             ],
 	    [])
 AM_CONDITIONAL(WITH_PROFILER, test "$with_profiler" = "yes")
@@ -528,7 +539,8 @@ AC_ARG_WITH([fuse],
 LIBFUSE=
 AS_IF([test "x$with_fuse" != xno], [
   PKG_CHECK_MODULES([LIBFUSE], [fuse],
-    [HAVE_LIBFUSE=1],
+    [HAVE_LIBFUSE=1
+     AC_DEFINE([HAVE_LIBFUSE], [1], [Define if you have fuse])],
     [AC_MSG_FAILURE([no FUSE found (use --without-fuse to disable)])])
 ])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
@@ -590,6 +602,15 @@ AS_IF([test "x$with_tcmalloc" != xno],
 	    [AC_MSG_FAILURE(
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
+
+AS_IF([test "$with_profiler" = yes -o \
+            "$HAVE_LIBTCMALLOC" = "1" -o \
+            "$HAVE_LIBTCMALLOC_MINIMAL" = "1"],
+      [AC_LANG_PUSH([C++])
+       AC_CHECK_HEADERS([gperftools/heap-profiler.h \
+                         gperftools/malloc_extension.h \
+                         gperftools/profiler.h])
+       AC_LANG_POP([C++])])
 
 # error out if --with-jemalloc and ! --without-tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
@@ -717,13 +738,24 @@ if test "x$enable_xio" = x"yes"; then
 fi
 
 #
-# FreeBSD has it in base.
+# SPDK
 #
-if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
-PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
-                [], AC_MSG_FAILURE([No usable version of libedit found.]))
-else
-	LIBEDIT_LIBS="-ledit"
+AC_ARG_WITH(spdk,
+    [AC_HELP_STRING([--with-spdk], [build Ceph SPDK Support])], [], [with_spdk=no])
+
+AM_CONDITIONAL(WITH_SPDK, [test "x$with_spdk" != "xno"])
+
+if test "x$with_spdk" != x"no"; then
+   PKG_CHECK_MODULES([LIBPCIACCESS], [pciaccess])
+   AC_CHECK_HEADER([dpdk/rte_config.h], [],
+     AC_MSG_ERROR([dpdk/rte_config.h not found (libdpdk-dev, libdpdk-devel)]))
+   AC_CHECK_LIB([rte_eal], [rte_eal_init], [true],
+     AC_MSG_FAILURE([DPDK rte_eal_init not found]),
+                [-lrte_mempool -lrte_ring -lpthread -ldl])
+   AC_SUBST([LIBDPDK_CFLAGS], [-I/usr/include/dpdk])
+   AC_SUBST([LIBDPDK_LIBS], ['-lrte_eal -lrte_mempool -lrte_ring -lpthread'])
+   AC_SUBST([LIBPCIACCESS_LIBS])
+   AC_DEFINE([HAVE_SPDK], [1], [SPDK conditional compilation])
 fi
 
 #libatomic-ops? You want it!
@@ -811,7 +843,7 @@ AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 AC_ARG_WITH([librocksdb-static],
             [AS_HELP_STRING([--with-librocksdb-static], [build rocksdb support])],
             [],
-            [with_librocksdb_static=no])
+            [with_librocksdb_static=check])
 AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
             [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
@@ -819,13 +851,12 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"],
 AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
 AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
 
-# error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
-if test "x$with_jemalloc" = "xyes"; then
-	if test "x$with_librocksdb_static" != "xno"; then
-		AC_MSG_FAILURE([--with-jemalloc called with --with-librocksdb_static, turn off
-			        --with-librocksdb-static or --with-jemalloc])
-	fi
-fi
+# rocksdb detects bzlib and lz4 in its Makefile, which forces us to do the same.
+AS_IF([test "x$with_librocksdb_static" = "xyes"], [
+  AC_CHECK_HEADER([bzlib.h], [have_bzlib=yes])
+  AC_CHECK_HEADER([lz4.h], [have_lz4=yes])])
+AM_CONDITIONAL(HAVE_BZLIB, [test "x$have_bzlib" = "xyes"])
+AM_CONDITIONAL(HAVE_LZ4, [test "x$have_lz4" = "xyes"])
 
 # needs libcurl and libxml2
 if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
@@ -900,6 +931,9 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 	[AC_DEFINE([HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION], [], [have boost::random::discrete_distribution])],
 	[])
 
+AC_CHECK_HEADER([boost/asio/coroutine.hpp],
+	[AC_DEFINE([HAVE_BOOST_ASIO_COROUTINE], [], [have boost::asio::coroutine])],
+	[])
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
 AC_CHECK_HEADER([boost/regex.hpp], [],
@@ -912,6 +946,10 @@ AC_CHECK_HEADER([boost/program_options/option.hpp], [],
 AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
+
+AC_CHECK_LIB(boost_iostreams-mt, main, [],
+    [AC_CHECK_LIB(boost_iostreams, main, [],
+        AC_MSG_FAILURE(["Boost iostreams library not found."]))])
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""
@@ -1054,6 +1092,7 @@ AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([pipe2])
 AC_CHECK_FUNCS([posix_fadvise])
+AC_CHECK_FUNCS([pwritev], AC_DEFINE([HAVE_PWRITEV], [1], [we have pwritev]))
 
 AC_MSG_CHECKING([for fdatasync])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
@@ -1215,91 +1254,6 @@ if test "x$enable_valgrind" = "xyes"; then
   AC_CHECK_HEADERS([valgrind/helgrind.h])
 fi
 
-dnl systemd-libexec-dir
-AC_SUBST(systemd_libexec_dir)
-AC_ARG_WITH(
-    systemd-libexec-dir,
-    AS_HELP_STRING(
-	    [--with-systemd-libexec-dir=DIR],
-	    [systemd libexec directory @<:@SYSTEMD_LIBEXEC_DIR@:>@
-        defaults to --libexecdir=DIR]
-    ),
-    [
-	    systemd_libexec_dir="$withval"
-    ],
-    [
-        if test "x$SYSTEMD_LIBEXEC_DIR" = "x"; then
-            dnl store old values
-
-            prefix_save=$prefix
-            exec_prefix_save=$exec_prefix
-
-            dnl if no prefix given, then use /usr/local, the default prefix
-            if test "x$prefix" = "xNONE"; then
-                prefix="$ac_default_prefix"
-            fi
-            dnl if no exec_prefix given, then use prefix
-            if test "x$exec_prefix" = "xNONE"; then
-                exec_prefix=$prefix
-            fi
-
-            dnl now get the expanded default
-            systemd_libexec_dir="`eval exec_prefix=$exec_prefix prefix=$prefix echo $libexecdir`"
-
-            dnl now cleanup prefix and exec_prefix
-
-            prefix=$prefix_save
-            exec_prefix=$exec_prefix_save
-        else
-            systemd_libexec_dir="$SYSTEMD_LIBEXEC_DIR"
-        fi
-    ]
-)
-
-
-dnl rgw-user
-AC_SUBST(user_rgw)
-AC_ARG_WITH(
-    rgw-user,
-    AS_HELP_STRING(
-        [--with-rgw-user=USER],
-        [systemd unit directory @<:@USER_RGW@:>@
-        Defaults to "www-data"]
-    ),
-    [
-        user_rgw="$withval"
-    ],
-    [
-        if test "x$USER_RGW" = "x"; then
-            user_rgw=www-data
-        else
-            user_rgw="$USER_RGW"
-        fi
-    ]
-)
-
-dnl rgw-group
-AC_SUBST(group_rgw)
-AC_ARG_WITH(
-    rgw-group,
-    AS_HELP_STRING(
-        [--with-rgw-group=GROUP],
-        [systemd unit directory @<:@GROUP_RGW@:>@
-        Defaults to "www-data"]
-    ),
-    [
-        group_rgw="$withval"
-    ],
-    [
-        if test "x$GROUP_RGW" = "x"; then
-            group_rgw=www-data
-        else
-            group_rgw="$GROUP_RGW"
-        fi
-    ]
-)
-
-
 AC_SUBST(systemd_unit_dir)
 AC_ARG_WITH(
     systemd-unit-dir,
@@ -1332,6 +1286,19 @@ AS_IF([test "x$with_eventfd" != xno],
     [AC_CHECK_HEADERS(sys/eventfd.h,
                      [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])])])
 AM_CONDITIONAL(WITH_EVENTFD, [ test "$with_eventfd" = "yes" ])
+
+# disable OpenLDAP support
+AC_ARG_WITH([openldap],
+            [AS_HELP_STRING([--without-openldap], [Disable OpenLDAP support (RGW)])])
+if test "x$with_openldap" != "xno"; then
+   AC_CHECK_HEADER([ldap.h], [],
+      AC_MSG_ERROR([ldap.h not found (openldap-dev, openldap-devel)]))
+    AC_CHECK_LIB([ldap], [ldap_initialize], [true],
+      AC_MSG_FAILURE([libldap not found]))
+   AC_DEFINE([HAVE_OPENLDAP], [1], [Defined if OpenLDAP enabled])
+   have_openldap="yes"
+fi
+AM_CONDITIONAL(WITH_OPENLDAP, [ test "$have_openldap" = "yes" ])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL

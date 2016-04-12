@@ -365,7 +365,7 @@ List Regions
 
 A Ceph cluster contains a list of regions. To list the regions, execute:: 
 
-	sudo radosgw-admin regions list
+	sudo radosgw-admin region list
 
 The ``radosgw-admin`` returns a JSON formatted list of regions. 
 
@@ -709,9 +709,17 @@ configuration.
 ``rgw region root pool``
 
 :Description: The pool for storing all region-specific information.
+              Not used in Ceph version ``Jewel``.
 :Type: String
 :Default: ``.rgw.root``
 
+.. versionadded:: Jewel
+
+``rgw zonegroup root pool``
+
+:Description: The pool for storing all zonegroup-specific information.
+:Type: String
+:Default: ``.rgw.root``
 
 
 .. versionadded:: v.67
@@ -975,6 +983,11 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
+``rgw keystone verify ssl`
+
+:Description: Verify SSL certificates while making token requests to keystone.
+:Type: Boolean
+:Default: ``true``
 
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/

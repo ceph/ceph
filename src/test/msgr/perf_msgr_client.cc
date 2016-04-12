@@ -142,7 +142,7 @@ class MessengerClient {
   }
   void start() {
     for (uint64_t i = 0; i < clients.size(); ++i)
-      clients[i]->create();
+      clients[i]->create("client");
     for (uint64_t i = 0; i < msgrs.size(); ++i)
       msgrs[i]->wait();
   }
@@ -196,6 +196,7 @@ int main(int argc, char **argv)
   cerr << "       message data bytes " << len << std::endl;
   MessengerClient client(g_ceph_context->_conf->ms_type, args[0], think_time);
   client.ready(concurrent, numjobs, ios, len);
+  Cycles::init();
   uint64_t start = Cycles::rdtsc();
   client.start();
   uint64_t stop = Cycles::rdtsc();

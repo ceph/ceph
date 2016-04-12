@@ -72,8 +72,10 @@ int ClassHandler::open_all_classes()
 
 void ClassHandler::shutdown()
 {
-  for (map<string, ClassData>::iterator p = classes.begin(); p != classes.end(); ++p) {
-    dlclose(p->second.handle);
+  for (auto& cls : classes) {
+    if (cls.second.handle) {
+      dlclose(cls.second.handle);
+    }
   }
   classes.clear();
 }

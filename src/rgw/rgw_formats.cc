@@ -21,8 +21,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWFormatter_Plain::RGWFormatter_Plain()
-  : buf(NULL), len(0), max_len(0), min_stack_level(0)
+RGWFormatter_Plain::RGWFormatter_Plain(const bool ukv)
+  : buf(NULL),
+    len(0),
+    max_len(0),
+    min_stack_level(0),
+    use_kv(ukv)
 {
 }
 
@@ -64,6 +68,14 @@ void RGWFormatter_Plain::open_array_section(const char *name)
   struct plain_stack_entry new_entry;
   new_entry.is_array = true;
   new_entry.size = 0;
+
+  if (use_kv && min_stack_level > 0 && !stack.empty()) {
+    struct plain_stack_entry& entry = stack.back();
+
+    if (!entry.is_array)
+      dump_format(name, "");
+  }
+
   stack.push_back(new_entry);
 }
 
@@ -79,6 +91,10 @@ void RGWFormatter_Plain::open_object_section(const char *name)
   struct plain_stack_entry new_entry;
   new_entry.is_array = false;
   new_entry.size = 0;
+
+  if (use_kv && min_stack_level > 0)
+    dump_format(name, "");
+
   stack.push_back(new_entry);
 }
 
@@ -124,14 +140,13 @@ std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
 void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  const char *format;
 
   struct plain_stack_entry& entry = stack.back();
 
   if (!min_stack_level)
     min_stack_level = stack.size();
 
-  bool should_print = (stack.size() == min_stack_level && !entry.size);
+  bool should_print = ((stack.size() == min_stack_level && !entry.size) || use_kv);
 
   entry.size++;
 
@@ -139,12 +154,20 @@ void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool q
     return;
 
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  if (len)
-    format = "\n%s";
-  else
-    format = "%s";
 
-  write_data(format, buf);
+  const char *eol;
+  if (len) {
+    if (use_kv && entry.is_array && entry.size > 1)
+      eol = ", ";
+    else
+      eol = "\n";
+  } else
+    eol = "";
+
+  if (use_kv && !entry.is_array)
+    write_data("%s%s: %s", eol, name, buf);
+  else
+    write_data("%s%s", eol, buf);
 }
 
 int RGWFormatter_Plain::get_len() const
@@ -233,7 +256,7 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
     min_stack_level = stack.size();
 
   struct plain_stack_entry& entry = stack.back();
-  bool should_print = (stack.size() == min_stack_level && !entry.size);
+  bool should_print = ((stack.size() == min_stack_level && !entry.size) || use_kv);
 
   entry.size++;
 
@@ -250,5 +273,9 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   else
     eol = "";
 
-  write_data("%s%s", eol, buf);
+  if (use_kv && !entry.is_array)
+    write_data("%s%s: %s", eol, name, buf);
+  else
+    write_data("%s%s", eol, buf);
+
 }

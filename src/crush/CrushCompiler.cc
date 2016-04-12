@@ -19,6 +19,7 @@
 
 #include <typeinfo>
 #include "common/errno.h"
+#include <boost/algorithm/string.hpp>
 
 // -------------
 
@@ -195,6 +196,8 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable chooseleaf_descend_once " << crush.get_chooseleaf_descend_once() << "\n";
   if (crush.get_chooseleaf_vary_r() != 0)
     out << "tunable chooseleaf_vary_r " << crush.get_chooseleaf_vary_r() << "\n";
+  if (crush.get_chooseleaf_stable() != 0)
+    out << "tunable chooseleaf_stable " << crush.get_chooseleaf_stable() << "\n";
   if (crush.get_straw_calc_version() != 0)
     out << "tunable straw_calc_version " << crush.get_straw_calc_version() << "\n";
   if (crush.get_allowed_bucket_algs() != CRUSH_LEGACY_ALLOWED_BUCKET_ALGS)
@@ -213,7 +216,7 @@ int CrushCompiler::decompile(ostream &out)
   for (int i=0; n; i++) {
     const char *name = crush.get_type_name(i);
     if (!name) {
-      if (i == 0) out << "type 0 device\n";
+      if (i == 0) out << "type 0 osd\n";
       continue;
     }
     n--;
@@ -285,6 +288,10 @@ int CrushCompiler::decompile(ostream &out)
 	out << "\tstep set_chooseleaf_vary_r " << crush.get_rule_arg1(i, j)
 	    << "\n";
 	break;
+      case CRUSH_RULE_SET_CHOOSELEAF_STABLE:
+	out << "\tstep set_chooseleaf_stable " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
       case CRUSH_RULE_CHOOSE_FIRSTN:
 	out << "\tstep choose firstn "
 	    << crush.get_rule_arg1(i, j) 
@@ -326,11 +333,7 @@ int CrushCompiler::decompile(ostream &out)
 
 string CrushCompiler::string_node(node_t &node)
 {
-  string s = string(node.value.begin(), node.value.end());
-  while (s.length() > 0 &&
-	 s[0] == ' ')
-    s = string(s.begin() + 1, s.end());
-  return s;
+  return boost::trim_copy(string(node.value.begin(), node.value.end()));
 }
 
 int CrushCompiler::int_node(node_t &node) 
@@ -377,6 +380,8 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_chooseleaf_descend_once(val);
   else if (name == "chooseleaf_vary_r")
     crush.set_chooseleaf_vary_r(val);
+  else if (name == "chooseleaf_stable")
+    crush.set_chooseleaf_stable(val);
   else if (name == "straw_calc_version")
     crush.set_straw_calc_version(val);
   else if (name == "allowed_bucket_algs")
@@ -673,6 +678,13 @@ int CrushCompiler::parse_rule(iter_t const& i)
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_chooseleaf_vary_r(ruleno, step++, val);
+      }
+      break;
+
+    case crush_grammar::_step_set_chooseleaf_stable:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_chooseleaf_stable(ruleno, step++, val);
       }
       break;
 

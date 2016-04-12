@@ -92,6 +92,7 @@ enum NotifyOp {
 
 struct AcquiredLockPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ACQUIRED_LOCK;
+  static const bool CHECK_FOR_REFRESH = true;
 
   ClientId client_id;
 
@@ -105,6 +106,7 @@ struct AcquiredLockPayload {
 
 struct ReleasedLockPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RELEASED_LOCK;
+  static const bool CHECK_FOR_REFRESH = true;
 
   ClientId client_id;
 
@@ -118,11 +120,15 @@ struct ReleasedLockPayload {
 
 struct RequestLockPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_REQUEST_LOCK;
+  static const bool CHECK_FOR_REFRESH = true;
 
   ClientId client_id;
+  bool force = false;
 
   RequestLockPayload() {}
-  RequestLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+  RequestLockPayload(const ClientId &client_id_, bool force_)
+    : client_id(client_id_), force(force_) {
+  }
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
@@ -131,6 +137,7 @@ struct RequestLockPayload {
 
 struct HeaderUpdatePayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_HEADER_UPDATE;
+  static const bool CHECK_FOR_REFRESH = false;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
@@ -152,6 +159,7 @@ protected:
 
 struct AsyncProgressPayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_PROGRESS;
+  static const bool CHECK_FOR_REFRESH = false;
 
   AsyncProgressPayload() : offset(0), total(0) {}
   AsyncProgressPayload(const AsyncRequestId &id, uint64_t offset_, uint64_t total_)
@@ -167,6 +175,7 @@ struct AsyncProgressPayload : public AsyncRequestPayloadBase {
 
 struct AsyncCompletePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_COMPLETE;
+  static const bool CHECK_FOR_REFRESH = false;
 
   AsyncCompletePayload() {}
   AsyncCompletePayload(const AsyncRequestId &id, int r)
@@ -181,6 +190,7 @@ struct AsyncCompletePayload : public AsyncRequestPayloadBase {
 
 struct FlattenPayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_FLATTEN;
+  static const bool CHECK_FOR_REFRESH = true;
 
   FlattenPayload() {}
   FlattenPayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
@@ -188,6 +198,7 @@ struct FlattenPayload : public AsyncRequestPayloadBase {
 
 struct ResizePayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RESIZE;
+  static const bool CHECK_FOR_REFRESH = true;
 
   ResizePayload() : size(0) {}
   ResizePayload(uint64_t size_, const AsyncRequestId &id)
@@ -202,6 +213,8 @@ struct ResizePayload : public AsyncRequestPayloadBase {
 
 struct SnapPayloadBase {
 public:
+  static const bool CHECK_FOR_REFRESH = true;
+
   std::string snap_name;
 
   void encode(bufferlist &bl) const;
@@ -257,6 +270,7 @@ struct SnapUnprotectPayload : public SnapPayloadBase {
 
 struct RebuildObjectMapPayload : public AsyncRequestPayloadBase {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_REBUILD_OBJECT_MAP;
+  static const bool CHECK_FOR_REFRESH = true;
 
   RebuildObjectMapPayload() {}
   RebuildObjectMapPayload(const AsyncRequestId &id)
@@ -265,6 +279,7 @@ struct RebuildObjectMapPayload : public AsyncRequestPayloadBase {
 
 struct RenamePayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RENAME;
+  static const bool CHECK_FOR_REFRESH = true;
 
   RenamePayload() {}
   RenamePayload(const std::string _image_name) : image_name(_image_name) {}
@@ -278,6 +293,7 @@ struct RenamePayload {
 
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
+  static const bool CHECK_FOR_REFRESH = false;
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
@@ -306,6 +322,8 @@ struct NotifyMessage {
   NotifyMessage(const Payload &payload_) : payload(payload_) {}
 
   Payload payload;
+
+  bool check_for_refresh() const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);

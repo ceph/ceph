@@ -37,22 +37,8 @@ namespace librados
   typedef uint64_t auid_t;
   typedef void *config_t;
 
-  struct cluster_stat_t {
-    uint64_t kb, kb_used, kb_avail;
-    uint64_t num_objects;
-  };
-
-  struct pool_stat_t {
-    uint64_t num_bytes;    // in bytes
-    uint64_t num_kb;       // in KB
-    uint64_t num_objects;
-    uint64_t num_object_clones;
-    uint64_t num_object_copies;  // num_objects * num_replicas
-    uint64_t num_objects_missing_on_primary;
-    uint64_t num_objects_unfound;
-    uint64_t num_objects_degraded;
-    uint64_t num_rd, num_rd_kb, num_wr, num_wr_kb;
-  };
+  typedef struct rados_cluster_stat_t cluster_stat_t;
+  typedef struct rados_pool_stat_t pool_stat_t;
 
   typedef struct {
     std::string client;
@@ -149,6 +135,29 @@ namespace librados
     void get_next();
     ceph::shared_ptr < ObjListCtx > ctx;
     std::pair<std::string, std::string> cur_obj;
+  };
+
+  class CEPH_RADOS_API ObjectCursor
+  {
+    public:
+    ObjectCursor();
+    ObjectCursor(const ObjectCursor &rhs);
+    ~ObjectCursor();
+    bool operator<(const ObjectCursor &rhs);
+    void set(rados_object_list_cursor c);
+
+    friend class IoCtx;
+
+    protected:
+    rados_object_list_cursor c_cursor;
+  };
+
+  class CEPH_RADOS_API ObjectItem
+  {
+    public:
+    std::string oid;
+    std::string nspace;
+    std::string locator;
   };
 
   /// DEPRECATED; do not use
@@ -346,14 +355,13 @@ namespace librados
   class CEPH_RADOS_API ObjectWriteOperation : public ObjectOperation
   {
   protected:
-    time_t *pmtime;
+    time_t *unused;
   public:
-    ObjectWriteOperation() : pmtime(NULL) {}
+    ObjectWriteOperation() : unused(NULL) {}
     ~ObjectWriteOperation() {}
 
-    void mtime(time_t *pt) {
-      pmtime = pt;
-    }
+    void mtime(time_t *pt);
+    void mtime2(struct timespec *pts);
 
     void create(bool exclusive);
     void create(bool exclusive,
@@ -465,6 +473,7 @@ namespace librados
     ~ObjectReadOperation() {}
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
+    void stat2(uint64_t *psize, struct timespec *pts, int *prval);
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
@@ -679,6 +688,7 @@ namespace librados
                    size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
+    int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
     int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
     int sparse_read(const std::string& o, std::map<uint64_t,uint64_t>& m, bufferlist& bl, size_t len, uint64_t off);
@@ -687,6 +697,7 @@ namespace librados
     int setxattr(const std::string& oid, const char *name, bufferlist& bl);
     int rmxattr(const std::string& oid, const char *name);
     int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
+    int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts);
     int exec(const std::string& oid, const char *cls, const char *method,
 	     bufferlist& inbl, bufferlist& outbl);
     /**
@@ -803,6 +814,22 @@ namespace librados
     /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const __attribute__ ((deprecated));
 
+    ObjectCursor object_list_begin();
+    ObjectCursor object_list_end();
+    bool object_list_is_end(const ObjectCursor &oc);
+    int object_list(const ObjectCursor &start, const ObjectCursor &finish,
+                    const size_t result_count,
+                    const bufferlist &filter,
+                    std::vector<ObjectItem> *result,
+                    ObjectCursor *next);
+    void object_list_slice(
+        const ObjectCursor start,
+        const ObjectCursor finish,
+        const size_t n,
+        const size_t m,
+        ObjectCursor *split_start,
+        ObjectCursor *split_finish);
+
     /**
      * List available hit set objects
      *
@@ -915,6 +942,7 @@ namespace librados
     int aio_flush_async(AioCompletion *c);
 
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
+    int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, struct timespec *pts);
 
     /**
      * Cancel aio operation
@@ -964,7 +992,10 @@ namespace librados
     // watch/notify
     int watch2(const std::string& o, uint64_t *handle,
 	       librados::WatchCtx2 *ctx);
+    int aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
+	       librados::WatchCtx2 *ctx);
     int unwatch2(uint64_t handle);
+    int aio_unwatch(uint64_t handle, AioCompletion *c);
     /**
      * Send a notify event ot watchers
      *
@@ -1066,8 +1097,14 @@ namespace librados
 
     int64_t get_id();
 
-    uint32_t get_object_hash_position(const std::string& oid);
-    uint32_t get_object_pg_hash_position(const std::string& oid);
+    // deprecated versions
+    uint32_t get_object_hash_position(const std::string& oid)
+      __attribute__ ((deprecated));
+    uint32_t get_object_pg_hash_position(const std::string& oid)
+      __attribute__ ((deprecated));
+
+    int get_object_hash_position2(const std::string& oid, uint32_t *hash_position);
+    int get_object_pg_hash_position2(const std::string& oid, uint32_t *pg_hash_position);
 
     config_t cct();
 
@@ -1081,6 +1118,17 @@ namespace librados
 
     IoCtxImpl *io_ctx_impl;
   };
+
+  struct PlacementGroupImpl;
+  struct CEPH_RADOS_API PlacementGroup {
+    PlacementGroup();
+    PlacementGroup(const PlacementGroup&);
+    ~PlacementGroup();
+    bool parse(const char*);
+    std::unique_ptr<PlacementGroupImpl> impl;
+  };
+
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream&, const PlacementGroup&);
 
   class CEPH_RADOS_API Rados
   {
@@ -1099,6 +1147,7 @@ namespace librados
     int connect();
     void shutdown();
     int watch_flush();
+    int aio_watch_flush(AioCompletion*);
     int conf_read_file(const char * const path) const;
     int conf_parse_argv(int argc, const char ** argv) const;
     int conf_parse_argv_remainder(int argc, const char ** argv,
@@ -1123,6 +1172,10 @@ namespace librados
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);
+    int osd_command(int osdid, std::string cmd, const bufferlist& inbl,
+                    bufferlist *outbl, std::string *outs);
+    int pg_command(const char *pgstr, std::string cmd, const bufferlist& inbl,
+                   bufferlist *outbl, std::string *outs);
 
     int ioctx_create(const char *name, IoCtx &pioctx);
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
@@ -1144,6 +1197,51 @@ namespace librados
 		       std::map<std::string, stats_map>& stats);
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
+
+    /**
+     * List inconsistent placement groups in the given pool
+     *
+     * @param pool_id the pool id
+     * @param pgs [out] the inconsistent PGs
+     */
+    int get_inconsistent_pgs(int64_t pool_id,
+                             std::vector<PlacementGroup>* pgs);
+    /**
+     * List the inconsistent objects found in a given PG by last scrub
+     *
+     * @param pg the placement group returned by @c pg_list()
+     * @param start_after the first returned @c objects
+     * @param max_return the max number of the returned @c objects
+     * @param c what to do when the operation is complete and safe
+     * @param objects [out] the objects where inconsistencies are found
+     * @param interval [in,out] an epoch indicating current interval
+     * @returns if a non-zero @c interval is specified, will return -EAGAIN i
+     *          the current interval begin epoch is different.
+     */
+    int get_inconsistent_objects(const PlacementGroup& pg,
+                                 const object_id_t &start_after,
+                                 unsigned max_return,
+                                 AioCompletion *c,
+                                 std::vector<inconsistent_obj_t>* objects,
+                                 uint32_t* interval);
+    /**
+     * List the inconsistent snapsets found in a given PG by last scrub
+     *
+     * @param pg the placement group returned by @c pg_list()
+     * @param start_after the first returned @c objects
+     * @param max_return the max number of the returned @c objects
+     * @param c what to do when the operation is complete and safe
+     * @param snapsets [out] the objects where inconsistencies are found
+     * @param interval [in,out] an epoch indicating current interval
+     * @returns if a non-zero @c interval is specified, will return -EAGAIN i
+     *          the current interval begin epoch is different.
+     */
+    int get_inconsistent_snapsets(const PlacementGroup& pg,
+                                  const object_id_t &start_after,
+                                  unsigned max_return,
+                                  AioCompletion *c,
+                                  std::vector<inconsistent_snapset_t>* snapset,
+                                  uint32_t* interval);
 
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();

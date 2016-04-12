@@ -93,7 +93,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
+  global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
+	      0, "mds_data");
   ceph_heap_profiler_init();
 
   // mds specific args
@@ -159,6 +160,8 @@ int main(int argc, const char **argv)
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
 				      getpid());
+  if (!msgr)
+    exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
   cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
@@ -213,8 +216,10 @@ int main(int argc, const char **argv)
     r = mds->init(shadow);
   else
     r = mds->init();
-  if (r < 0)
+  if (r < 0) {
+    msgr->wait();
     goto shutdown;
+  }
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();

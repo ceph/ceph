@@ -40,7 +40,7 @@ public:
 
 struct WatcherUnwatcher : public Thread {
   string pool;
-  WatcherUnwatcher(string& _pool) : pool(_pool) {}
+  explicit WatcherUnwatcher(string& _pool) : pool(_pool) {}
 
   void *entry() {
     Rados cluster;
@@ -76,7 +76,7 @@ TEST_P(WatchStress, Stress1) {
   WatchNotifyTestCtx ctx;
 
   WatcherUnwatcher *thr = new WatcherUnwatcher(pool_name);
-  thr->create();
+  thr->create("watcher_unwatch");
   ASSERT_EQ(0, nioctx.create("foo", false));
 
   for (unsigned i = 0; i < 75; ++i) {

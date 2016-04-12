@@ -38,14 +38,19 @@ enum {
 
 namespace rocksdb{
   class DB;
+  class Env;
   class Cache;
   class FilterPolicy;
   class Snapshot;
   class Slice;
   class WriteBatch;
   class Iterator;
+  class Logger;
   struct Options;
 }
+
+extern rocksdb::Logger *create_rocksdb_ceph_logger();
+
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */
@@ -53,7 +58,9 @@ class RocksDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
+  void *priv;
   rocksdb::DB *db;
+  rocksdb::Env *env;
   string options_str;
   int do_open(ostream &out, bool create_if_missing);
 
@@ -65,7 +72,7 @@ class RocksDBStore : public KeyValueDB {
   class CompactThread : public Thread {
     RocksDBStore *db;
   public:
-    CompactThread(RocksDBStore *d) : db(d) {}
+    explicit CompactThread(RocksDBStore *d) : db(d) {}
     void *entry() {
       db->compact_thread_entry();
       return NULL;
@@ -104,11 +111,13 @@ public:
   }
   int get_info_log_level(string info_log_level);
 
-  RocksDBStore(CephContext *c, const string &path) :
+  RocksDBStore(CephContext *c, const string &path, void *p) :
     cct(c),
     logger(NULL),
     path(path),
+    priv(p),
     db(NULL),
+    env(static_cast<rocksdb::Env*>(p)),
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
@@ -133,7 +142,7 @@ public:
     rocksdb::WriteBatch *bat;
     RocksDBStore *db;
 
-    RocksDBTransactionImpl(RocksDBStore *_db);
+    explicit RocksDBTransactionImpl(RocksDBStore *_db);
     ~RocksDBTransactionImpl();
     void set(
       const string &prefix,
@@ -148,8 +157,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return std::shared_ptr< RocksDBTransactionImpl >(
-      new RocksDBTransactionImpl(this));
+    return std::make_shared<RocksDBTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);
@@ -170,7 +178,7 @@ public:
   protected:
     rocksdb::Iterator *dbiter;
   public:
-    RocksDBWholeSpaceIteratorImpl(rocksdb::Iterator *iter) :
+    explicit RocksDBWholeSpaceIteratorImpl(rocksdb::Iterator *iter) :
       dbiter(iter) { }
     //virtual ~RocksDBWholeSpaceIteratorImpl() { }
     ~RocksDBWholeSpaceIteratorImpl();
@@ -188,6 +196,7 @@ public:
     pair<string,string> raw_key();
     bool raw_key_is_prefixed(const string &prefix);
     bufferlist value();
+    bufferptr value_as_ptr();
     int status();
   };
 

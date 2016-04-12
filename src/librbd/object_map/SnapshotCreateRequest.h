@@ -55,9 +55,6 @@ public:
 protected:
   virtual bool should_complete(int r);
 
-  virtual void finish() {
-  }
-
 private:
   State m_state;
   ceph::BitVector<2> &m_object_map;

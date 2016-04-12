@@ -44,12 +44,30 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('sysvinit', centos.choose_init())
 
     def test_debian(self):
-        with mock.patch('ceph_detect_init.debian.distro',
-                        'debian'):
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='debian',
+                                 codename='wheezy'):
             self.assertEqual('sysvinit', debian.choose_init())
-        with mock.patch('ceph_detect_init.debian.distro',
-                        'ubuntu'):
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='debian',
+                                 codename='squeeze'):
+            self.assertEqual('sysvinit', debian.choose_init())
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='debian',
+                                 codename='jessie'):
+            self.assertEqual('systemd', debian.choose_init())
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='ubuntu',
+                                 codename='trusty'):
             self.assertEqual('upstart', debian.choose_init())
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='ubuntu',
+                                 codename='vivid'):
+            self.assertEqual('systemd', debian.choose_init())
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='not-debian',
+                                 codename='andy'):
+            self.assertIs(None, debian.choose_init())
 
     def test_fedora(self):
         with mock.patch('ceph_detect_init.fedora.release',

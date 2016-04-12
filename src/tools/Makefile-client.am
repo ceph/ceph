@@ -46,12 +46,11 @@ rbd_SOURCES = \
 	tools/rbd/action/ImportDiff.cc \
 	tools/rbd/action/Info.cc \
 	tools/rbd/action/Journal.cc \
-	tools/rbd/action/Kernel.cc \
-	tools/rbd/action/Nbd.cc \
 	tools/rbd/action/List.cc \
 	tools/rbd/action/Lock.cc \
 	tools/rbd/action/MergeDiff.cc \
 	tools/rbd/action/MirrorPool.cc \
+	tools/rbd/action/MirrorImage.cc \
 	tools/rbd/action/ObjectMap.cc \
 	tools/rbd/action/Remove.cc \
 	tools/rbd/action/Rename.cc \
@@ -59,6 +58,11 @@ rbd_SOURCES = \
 	tools/rbd/action/Snap.cc \
 	tools/rbd/action/Status.cc \
 	tools/rbd/action/Watch.cc
+if LINUX
+rbd_SOURCES += \
+	tools/rbd/action/Kernel.cc \
+	tools/rbd/action/Nbd.cc
+endif # LINUX
 noinst_HEADERS += \
 	tools/rbd/ArgumentTypes.h \
 	tools/rbd/IndentStream.h \
@@ -67,17 +71,74 @@ noinst_HEADERS += \
 	tools/rbd/Utils.h
 rbd_LDADD = \
 	libjournal.la libcls_journal_client.la \
-	$(LIBKRBD) $(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
+	libcls_rbd_client.la libcls_lock_client.la \
+	$(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
 	$(BOOST_REGEX_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
+rbd_LDADD += $(LIBKRBD)
+endif # LINUX
 bin_PROGRAMS += rbd
 
+if LINUX
 rbd_nbd_SOURCES = tools/rbd_nbd/rbd-nbd.cc
 rbd_nbd_CXXFLAGS = $(AM_CXXFLAGS)
 rbd_nbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) $(BOOST_REGEX_LIBS)
 bin_PROGRAMS += rbd-nbd
 
 endif # LINUX
+
+# library for unit tests
+librbd_mirror_internal_la_SOURCES = \
+	tools/rbd_mirror/ClusterWatcher.cc \
+	tools/rbd_mirror/ImageReplayer.cc \
+	tools/rbd_mirror/ImageSync.cc \
+	tools/rbd_mirror/Mirror.cc \
+	tools/rbd_mirror/PoolWatcher.cc \
+	tools/rbd_mirror/Replayer.cc \
+	tools/rbd_mirror/Threads.cc \
+	tools/rbd_mirror/types.cc \
+	tools/rbd_mirror/image_replayer/BootstrapRequest.cc \
+	tools/rbd_mirror/image_replayer/CloseImageRequest.cc \
+	tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc \
+	tools/rbd_mirror/image_sync/ImageCopyRequest.cc \
+	tools/rbd_mirror/image_sync/ObjectCopyRequest.cc \
+	tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc \
+	tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc \
+	tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc
+noinst_LTLIBRARIES += librbd_mirror_internal.la
+noinst_HEADERS += \
+	tools/rbd_mirror/ClusterWatcher.h \
+	tools/rbd_mirror/ImageReplayer.h \
+	tools/rbd_mirror/ImageSync.h \
+	tools/rbd_mirror/Mirror.h \
+	tools/rbd_mirror/PoolWatcher.h \
+	tools/rbd_mirror/Replayer.h \
+	tools/rbd_mirror/Threads.h \
+	tools/rbd_mirror/types.h \
+	tools/rbd_mirror/image_replayer/BootstrapRequest.h \
+	tools/rbd_mirror/image_replayer/CloseImageRequest.h \
+	tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h \
+	tools/rbd_mirror/image_sync/ImageCopyRequest.h \
+	tools/rbd_mirror/image_sync/ObjectCopyRequest.h \
+	tools/rbd_mirror/image_sync/SnapshotCopyRequest.h \
+	tools/rbd_mirror/image_sync/SyncPointCreateRequest.h \
+	tools/rbd_mirror/image_sync/SyncPointPruneRequest.h
+
+rbd_mirror_SOURCES = \
+	tools/rbd_mirror/main.cc
+rbd_mirror_LDADD = \
+	librbd_mirror_internal.la \
+	librbd_internal.la \
+	librbd_api.la \
+	$(LIBRBD_TYPES) \
+	libjournal.la \
+	$(LIBRADOS) $(LIBOSDC) \
+	librados_internal.la \
+	libcls_rbd_client.la \
+	libcls_lock_client.la \
+	libcls_journal_client.la \
+	$(CEPH_GLOBAL)
+bin_PROGRAMS += rbd-mirror
 
 endif # WITH_RBD
 

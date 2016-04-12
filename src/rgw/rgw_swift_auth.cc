@@ -17,7 +17,8 @@
 
 using namespace ceph::crypto;
 
-static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t& expiration, bufferlist& bl)
+static int build_token(string& swift_user, string& key, uint64_t nonce,
+		       utime_t& expiration, bufferlist& bl)
 {
   ::encode(swift_user, bl);
   ::encode(nonce, bl);
@@ -43,7 +44,8 @@ static int build_token(string& swift_user, string& key, uint64_t nonce, utime_t&
 
 }
 
-static int encode_token(CephContext *cct, string& swift_user, string& key, bufferlist& bl)
+static int encode_token(CephContext *cct, string& swift_user, string& key,
+			bufferlist& bl)
 {
   uint64_t nonce;
 
@@ -59,7 +61,9 @@ static int encode_token(CephContext *cct, string& swift_user, string& key, buffe
   return ret;
 }
 
-int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info, string *pswift_user)
+int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
+				  const char *token, RGWUserInfo& info,
+				  string *pswift_user)
 {
   if (strncmp(token, "AUTH_rgwtk", 10) != 0)
     return -EINVAL;
@@ -68,7 +72,8 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char 
 
   int len = strlen(token);
   if (len & 1) {
-    dout(0) << "NOTICE: failed to verify token: invalid token length len=" << len << dendl;
+    dout(0) << "NOTICE: failed to verify token: invalid token length len="
+	    << len << dendl;
     return -EINVAL;
   }
 
@@ -96,7 +101,8 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char 
   }
   utime_t now = ceph_clock_now(cct);
   if (expiration < now) {
-    dout(0) << "NOTICE: old timed out token was used now=" << now << " token.expiration=" << expiration << dendl;
+    dout(0) << "NOTICE: old timed out token was used now=" << now
+	    << " token.expiration=" << expiration << dendl;
     return -EPERM;
   }
 
@@ -116,7 +122,8 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char 
     return ret;
 
   if (tok.length() != bl.length()) {
-    dout(0) << "NOTICE: tokens length mismatch: bl.length()=" << bl.length() << " tok.length()=" << tok.length() << dendl;
+    dout(0) << "NOTICE: tokens length mismatch: bl.length()=" << bl.length()
+	    << " tok.length()=" << tok.length() << dendl;
     return -EPERM;
   }
 
@@ -179,7 +186,6 @@ void RGW_SWIFT_Auth_Get::execute()
     }
   }
 
-
   if (!key || !user)
     goto done;
 
@@ -207,10 +213,13 @@ void RGW_SWIFT_Auth_Get::execute()
   if (!g_conf->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
+  } else if (g_conf->rgw_swift_account_in_url) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(user_str);
   }
 
-  s->cio->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),
-	        swift_prefix.c_str(), tenant_path.c_str());
+  STREAM_IO(s)->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),
+		swift_prefix.c_str(), tenant_path.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
@@ -219,8 +228,8 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    s->cio->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
-    s->cio->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
+    STREAM_IO(s)->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
+    STREAM_IO(s)->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
   }
 
   ret = STATUS_NO_CONTENT;
@@ -231,7 +240,8 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state, RGWClientIO *cio)
+int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
+				RGWClientIO *cio)
 {
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;

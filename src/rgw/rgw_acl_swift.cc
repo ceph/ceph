@@ -21,16 +21,18 @@ using namespace std;
 static int parse_list(string& uid_list, list<string>& uids)
 {
   char *s = strdup(uid_list.c_str());
-  if (!s)
+  if (!s) {
     return -ENOMEM;
+  }
 
-  const char *p = strtok(s, " ,");
+  char *tokctx;
+  const char *p = strtok_r(s, " ,", &tokctx);
   while (p) {
     if (*p) {
       string acl = p;
       uids.push_back(acl);
     }
-    p = strtok(NULL, " ,");
+    p = strtok_r(NULL, " ,", &tokctx);
   }
   free(s);
   return 0;

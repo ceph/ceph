@@ -34,8 +34,6 @@ bash_completion_DATA += \
 	$(srcdir)/bash_completion/rados \
 	$(srcdir)/bash_completion/radosgw-admin
 
-python_PYTHON += pybind/rados.py
-
 librados_config_SOURCES = librados-config.cc
 librados_config_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += librados-config
@@ -79,7 +77,7 @@ cephfs_SOURCES = cephfs.cc
 cephfs_LDADD = $(LIBCOMMON)
 bin_PROGRAMS += cephfs
 
-python_PYTHON += pybind/cephfs.py
+python_PYTHON += pybind/ceph_volume_client.py
 
 # libcephfs (this should go somewhere else in the future)
 

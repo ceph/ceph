@@ -9,5 +9,6 @@
 /var/lib/ceph(/.*)?		gen_context(system_u:object_r:ceph_var_lib_t,s0)
 
 /var/log/ceph(/.*)?		gen_context(system_u:object_r:ceph_log_t,s0)
+/var/log/radosgw(/.*)?		gen_context(system_u:object_r:ceph_log_t,s0)
 
 /var/run/ceph(/.*)?		gen_context(system_u:object_r:ceph_var_run_t,s0)

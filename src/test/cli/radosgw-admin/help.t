@@ -25,16 +25,44 @@
     object rm                  remove object
     object unlink              unlink object from bucket index
     objects expire             run expired objects cleanup
+    period prepare             prepare a new period
+    period delete              delete a period
+    period get                 get period info
+    period get-current         get current period info
+    period pull                pull a period
+    period push                push a period
+    period list                list all periods
+    period update              update the staging period
+    period commit              commit the staging period
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
-    region get                 show region info
-    regions list               list all regions set on this cluster
-    region set                 set region info (requires infile)
-    region default             set default region
-    region-map get             show region-map
-    region-map set             set region-map (requires infile)
+    realm create               create a new realm
+    realm delete               delete a realm
+    realm get                  show realm info
+    realm get-default          get default realm name
+    realm list                 list realms
+    realm list-periods         list all realm periods
+    realm remove               remove a zonegroup from the realm
+    realm rename               rename a realm
+    realm set                  set realm info (requires infile)
+    realm default              set realm as default
+    realm pull                 pull a realm and its current period
+    zonegroup add              add a zone to a zonegroup
+    zonegroup create           create a new zone group info
+    zonegroup default          set default zone group
+    zonegroup delete           delete a zone group info
+    zonegroup get              show zone group info
+    zonegroup modify           set/clear zonegroup master status
+    zonegroup set              set zone group info (requires infile)
+    zonegroup rename           rename a zone group
+    zonegroup list             list all zone groups set on this cluster
+    zonegroup-map get          show zonegroup-map
+    zonegroup-map set          set zonegroup-map (requires infile)
+    zone create                create a new zone
+    zone delete                delete a zone
     zone get                   show zone cluster params
+    zone modify                set/clear zone master status
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
@@ -44,6 +72,8 @@
     log list                   list log objects
     log show                   dump a log from specific object or (bucket + date
                                + bucket-id)
+                               (NOTE: required to specify formatting of date
+                               to "YYYY-MM-DD-hh")
     log rm                     remove log object
     usage show                 show usage (by user, date range)
     usage trim                 trim usage (by user, date range)
@@ -59,10 +89,12 @@
     mdlog list                 list metadata log
     mdlog trim                 trim metadata log (use start-date, end-date or
                                start-marker, end-marker)
+    mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
     datalog list               list data log
     datalog trim               trim data log
+    datalog status             read data log status
     opstate list               list stateful operations entries (use client_id,
                                op_id, object)
     opstate set                set state on an entry (use client_id, op_id, object, state)
@@ -71,7 +103,10 @@
     replicalog get             get replica metadata log entry
     replicalog update          update replica metadata log entry
     replicalog delete          delete replica metadata log entry
+    orphans find               init and run search for leaked rados objects (use job-id, pool)
+    orphans finish             clean up search for leaked rados objects
   options:
+     --tenant=<tenant>         tenant name
      --uid=<id>                user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
@@ -100,8 +135,25 @@
                                  replica mdlog get/delete
                                  replica datalog get/delete
      --metadata-key=<key>      key to retrieve metadata from with metadata get
-     --rgw-region=<region>     region in which radosgw is running
+     --remote=<remote>         remote to pull period
+     --period=<id>             period id
+     --epoch=<number>          period epoch
+     --commit                  commit the period during 'period update'
+     --master                  set as master
+     --master-url              master url
+     --master-zonegroup=<id>   master zonegroup id
+     --master-zone=<id>        master zone id
+     --rgw-realm=<realm>       realm name
+     --realm-id=<realm id>     realm id
+     --realm-new-name=<realm new name> realm new name
+     --rgw-zonegroup=<zonegroup>   zonegroup name
      --rgw-zone=<zone>         zone in which radosgw is running
+     --zone-id=<zone id>       zone id
+     --zone-new-name=<zone>    zone new name
+     --source-zone             specify the source zone (for data sync)
+     --default                 set entity (realm, zonegroup, zone) as default
+     --read-only               set zone as read-only (when adding to zonegroup)
+     --endpoints=<list>        zone endpoints
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
@@ -119,7 +171,7 @@
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
-     --infile                  specify a file to read in when setting data
+     --infile=<file>           specify a file to read in when setting data
      --state=<state string>    specify a state for the opstate set command
      --replica-log-type        replica log type (metadata, data, bucket), required for
                                replica log operations
@@ -127,6 +179,7 @@
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
      --reset-regions           reset regionmap when regionmap update
+  
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
@@ -134,6 +187,12 @@
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in bytes, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
+  
+  Orphans search options:
+     --pool                    data pool to scan for leaked rados objects in
+     --num-shards              num of shards to use for keeping the temporary scan info
+     --job-id                  set the job id (for orphans find)
+     --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
@@ -144,4 +203,5 @@
     --version         show version and quit
   
   [1]
- 
+
+

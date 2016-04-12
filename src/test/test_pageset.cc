@@ -2,7 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 #include "gtest/gtest.h"
 
-#include "os/PageSet.h"
+#include "os/memstore/PageSet.h"
+
+template <typename T>
+bool is_aligned(T* ptr) {
+  const auto align_mask = alignof(T) - 1;
+  return (reinterpret_cast<uintptr_t>(ptr) & align_mask) == 0;
+}
 
 TEST(PageSet, AllocAligned)
 {
@@ -15,6 +21,12 @@ TEST(PageSet, AllocAligned)
   ASSERT_EQ(1u, range[1]->offset);
   ASSERT_EQ(2u, range[2]->offset);
   ASSERT_EQ(3u, range[3]->offset);
+
+  // verify that the Page pointers are properly aligned
+  ASSERT_TRUE(is_aligned(range[0].get()));
+  ASSERT_TRUE(is_aligned(range[1].get()));
+  ASSERT_TRUE(is_aligned(range[2].get()));
+  ASSERT_TRUE(is_aligned(range[3].get()));
 }
 
 TEST(PageSet, AllocUnaligned)

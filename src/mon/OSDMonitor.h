@@ -55,7 +55,7 @@ struct failure_reporter_t {
   MonOpRequestRef op;       ///< failure op request
 
   failure_reporter_t() {}
-  failure_reporter_t(utime_t s) : failed_since(s) {}
+  explicit failure_reporter_t(utime_t s) : failed_since(s) {}
   ~failure_reporter_t() { }
 };
 
@@ -226,10 +226,18 @@ public:
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
 			MonOpRequestRef req = MonOpRequestRef());
-private:
-  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
-			      const set<int64_t> *pools);
 
+private:
+  int reweight_by_utilization(int oload,
+			      double max_change,
+			      int max_osds,
+			      bool by_pg,
+			      const set<int64_t> *pools,
+			      bool no_increasing,
+			      bool dry_run,
+			      std::stringstream *ss,
+			      std::string *out_str,
+			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
@@ -386,7 +394,6 @@ private:
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 
-  CephContext *cct;
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
@@ -399,7 +406,8 @@ private:
   int parse_osd_id(const char *s, stringstream *pss);
 
   void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail) const;
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);

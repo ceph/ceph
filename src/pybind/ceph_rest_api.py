@@ -224,15 +224,6 @@ def generate_url_and_params(app, sig, flavor):
         # prefixes go in the URL path
         if desc.t == CephPrefix:
             url += '/' + desc.instance.prefix
-        # CephChoices with 1 required string (not --) do too, unless
-        # we've already started collecting params, in which case they
-        # too are params
-        elif (desc.t == CephChoices and
-              len(desc.instance.strings) == 1 and
-              desc.req and
-              not str(desc.instance).startswith('--') and
-              not params):
-            url += '/' + str(desc.instance)
         else:
             # tell/<target> is a weird case; the URL includes what
             # would everywhere else be a parameter

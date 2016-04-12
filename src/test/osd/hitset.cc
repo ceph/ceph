@@ -18,7 +18,7 @@ class HitSetTestStrap {
 public:
   HitSet *hitset;
 
-  HitSetTestStrap(HitSet *h) : hitset(h) {}
+  explicit HitSetTestStrap(HitSet *h) : hitset(h) {}
 
   void fill(unsigned count) {
     char buf[50];

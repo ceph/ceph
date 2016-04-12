@@ -2,14 +2,19 @@
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_RGW_REST_S3_H
+
 #define CEPH_RGW_REST_S3_H
 #define TIME_BUF_SIZE 128
+
+#include <mutex>
 
 #include "rgw_op.h"
 #include "rgw_http_errors.h"
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
 #include "rgw_keystone.h"
+#include "rgw_rest_conn.h"
+#include "rgw_ldap.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -39,9 +44,19 @@ public:
   virtual void send_response_end();
 };
 
-class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
+class RGWGetUsage_ObjStore_S3 : public RGWGetUsage_ObjStore {
 public:
-  RGWListBucket_ObjStore_S3() {
+  RGWGetUsage_ObjStore_S3() {}
+  ~RGWGetUsage_ObjStore_S3() {}
+
+  int get_params() ;
+  virtual void send_response();
+};
+
+class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
+  bool objs_container;
+public:
+  RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3() {}
@@ -84,6 +99,31 @@ public:
   void send_response();
 };
 
+class RGWGetBucketWebsite_ObjStore_S3 : public RGWGetBucketWebsite {
+public:
+  RGWGetBucketWebsite_ObjStore_S3() {}
+  ~RGWGetBucketWebsite_ObjStore_S3() {}
+
+  void send_response();
+};
+
+class RGWSetBucketWebsite_ObjStore_S3 : public RGWSetBucketWebsite {
+public:
+  RGWSetBucketWebsite_ObjStore_S3() {}
+  ~RGWSetBucketWebsite_ObjStore_S3() {}
+
+  int get_params();
+  void send_response();
+};
+
+class RGWDeleteBucketWebsite_ObjStore_S3 : public RGWDeleteBucketWebsite {
+public:
+  RGWDeleteBucketWebsite_ObjStore_S3() {}
+  ~RGWDeleteBucketWebsite_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWStatBucket_ObjStore_S3 : public RGWStatBucket_ObjStore {
 public:
   RGWStatBucket_ObjStore_S3() {}
@@ -115,6 +155,7 @@ public:
   ~RGWPutObj_ObjStore_S3() {}
 
   int get_params();
+  int get_data(bufferlist& bl);
   void send_response();
 };
 
@@ -170,6 +211,7 @@ public:
   RGWDeleteObj_ObjStore_S3() {}
   ~RGWDeleteObj_ObjStore_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -200,6 +242,7 @@ public:
 
   int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss);
   void send_response();
+  int get_params();
 };
 
 class RGWGetCORS_ObjStore_S3 : public RGWGetCORS_ObjStore {
@@ -266,6 +309,7 @@ public:
   RGWCompleteMultipart_ObjStore_S3() {}
   ~RGWCompleteMultipart_ObjStore_S3() {}
 
+  int get_params();
   void send_response();
 };
 
@@ -300,6 +344,7 @@ public:
   RGWDeleteMultiObj_ObjStore_S3() {}
   ~RGWDeleteMultiObj_ObjStore_S3() {}
 
+  int get_params();
   void send_status();
   void begin_response();
   void send_partial_response(rgw_obj_key& key, bool delete_marker,
@@ -326,7 +371,7 @@ private:
   }
 
 public:
-  RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
+  explicit RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
       : RGWHTTPClient(_cct) {
     get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
   }
@@ -359,14 +404,40 @@ public:
 };
 
 class RGW_Auth_S3 {
+private:
+  static std::mutex mtx;
+  static rgw::LDAPHelper* ldh;
+
+  static int authorize_v2(RGWRados *store, struct req_state *s);
+  static int authorize_v4(RGWRados *store, struct req_state *s);
+  static int authorize_v4_complete(RGWRados *store, struct req_state *s,
+				  const string& request_payload,
+				  bool unsigned_payload);
 public:
   static int authorize(RGWRados *store, struct req_state *s);
+  static int authorize_aws4_auth_complete(RGWRados *store, struct req_state *s);
+
+  static inline void init(RGWRados* store) {
+    if (! ldh) {
+      std::lock_guard<std::mutex> lck(mtx);
+      if (! ldh) {
+	init_impl(store);
+      }
+    }
+  }
+
+  static inline rgw::LDAPHelper* get_ldap_ctx(RGWRados* store) {
+    init(store);
+    return ldh;
+  }
+
+  static void init_impl(RGWRados* store);
 };
 
-class RGWHandler_Auth_S3 : public RGWHandler_ObjStore {
+class RGWHandler_Auth_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
 public:
-  RGWHandler_Auth_S3() : RGWHandler_ObjStore() {}
+  RGWHandler_Auth_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_Auth_S3() {}
 
   virtual int validate_bucket_name(const string& bucket) {
@@ -375,39 +446,47 @@ public:
 
   virtual int validate_object_name(const string& bucket) { return 0; }
 
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init() { return 0; }
 };
 
-class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
+class RGWHandler_REST_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
-  RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
-  virtual ~RGWHandler_ObjStore_S3() {}
+  RGWHandler_REST_S3() : RGWHandler_REST() {}
+  virtual ~RGWHandler_REST_S3() {}
 
-  int validate_bucket_name(const string& bucket, bool relaxed_names);
-  using RGWHandler_ObjStore::validate_bucket_name;
-  
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  int get_errordoc(const string& errordoc_key, string* error_content);  
+
+  virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init();
+  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+    *new_op = op;
+    return 0;
+  }
 };
 
-class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
+    bool is_usage_op() {
+    return s->info.args.exists("usage");
+  }
   RGWOp *op_get();
   RGWOp *op_head();
 public:
-  RGWHandler_ObjStore_Service_S3() {}
-  virtual ~RGWHandler_ObjStore_Service_S3() {}
+  RGWHandler_REST_Service_S3() {}
+  virtual ~RGWHandler_REST_Service_S3() {}
 };
 
-class RGWHandler_ObjStore_Bucket_S3 : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_Bucket_S3 : public RGWHandler_REST_S3 {
 protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
@@ -430,11 +509,11 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_ObjStore_Bucket_S3() {}
-  virtual ~RGWHandler_ObjStore_Bucket_S3() {}
+  RGWHandler_REST_Bucket_S3() {}
+  virtual ~RGWHandler_REST_Bucket_S3() {}
 };
 
-class RGWHandler_ObjStore_Obj_S3 : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_Obj_S3 : public RGWHandler_REST_S3 {
 protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
@@ -454,17 +533,95 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_ObjStore_Obj_S3() {}
-  virtual ~RGWHandler_ObjStore_Obj_S3() {}
+  RGWHandler_REST_Obj_S3() {}
+  virtual ~RGWHandler_REST_Obj_S3() {}
 };
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {
+private:
+  bool enable_s3website;
 public:
-  RGWRESTMgr_S3() {}
+  explicit RGWRESTMgr_S3(bool _enable_s3website = false)
+    : enable_s3website(_enable_s3website)
+    {}
+
   virtual ~RGWRESTMgr_S3() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler_REST *get_handler(struct req_state *s);
 };
 
+class RGWHandler_REST_Obj_S3Website;
 
-#endif
+static inline bool looks_like_ip_address(const char *bucket)
+{
+  int num_periods = 0;
+  bool expect_period = false;
+  for (const char *b = bucket; *b; ++b) {
+    if (*b == '.') {
+      if (!expect_period)
+	return false;
+      ++num_periods;
+      if (num_periods > 3)
+	return false;
+      expect_period = false;
+    }
+    else if (isdigit(*b)) {
+      expect_period = true;
+    }
+    else {
+      return false;
+    }
+  }
+  return (num_periods == 3);
+}
+
+static inline bool valid_s3_object_name(const string& name) {
+  if (name.size() > 1024) {
+    return false;
+  }
+  if (check_utf8(name.c_str(), name.size())) {
+    return false;
+  }
+  return true;
+}
+
+static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
+{
+  // This function enforces Amazon's spec for bucket names.
+  // (The requirements, not the recommendations.)
+  int len = name.size();
+  if (len < 3) {
+    // Name too short
+    return -ERR_INVALID_BUCKET_NAME;
+  } else if (len > 255) {
+    // Name too long
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  // bucket names must start with a number, letter, or underscore
+  if (!(isalpha(name[0]) || isdigit(name[0]))) {
+    if (!relaxed)
+      return -ERR_INVALID_BUCKET_NAME;
+    else if (!(name[0] == '_' || name[0] == '.' || name[0] == '-'))
+      return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  for (const char *s = name.c_str(); *s; ++s) {
+    char c = *s;
+    if (isdigit(c) || (c == '.'))
+      continue;
+    if (isalpha(c))
+      continue;
+    if ((c == '-') || (c == '_'))
+      continue;
+    // Invalid character
+    return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  if (looks_like_ip_address(name.c_str()))
+    return -ERR_INVALID_BUCKET_NAME;
+
+  return 0;
+}
+
+#endif /* CEPH_RGW_REST_S3_H */

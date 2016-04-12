@@ -21,6 +21,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/valgrind.h"
 #include "common/version.h"
 #include "include/color.h"
 
@@ -33,9 +34,11 @@
 #define STRINGIFY(x) _STR(x)
 
 CephContext *common_preinit(const CephInitParameters &iparams,
-			  enum code_environment_t code_env, int flags)
+			    enum code_environment_t code_env, int flags,
+			    const char *data_dir_option)
 {
   // set code environment
+  ANNOTATE_BENIGN_RACE_SIZED(&g_code_env, sizeof(g_code_env), "g_code_env");
   g_code_env = code_env;
 
   // Create a configuration object
@@ -46,6 +49,9 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   // Set up our entity name.
   conf->name = iparams.name;
+
+  if (data_dir_option)
+    conf->data_dir_option = data_dir_option;
 
   // Set some defaults based on code type
   switch (code_env) {

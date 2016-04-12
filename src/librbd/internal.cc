@@ -6,6 +6,7 @@
 #include <limits.h>
 
 #include "include/types.h"
+#include "include/uuid.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -18,6 +19,8 @@
 
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "cls/journal/cls_journal_types.h"
+#include "cls/journal/cls_journal_client.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
@@ -25,24 +28,22 @@
 #include "librbd/AioObjectRequest.h"
 #include "librbd/CopyupRequest.h"
 #include "librbd/DiffIterate.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/Types.h"
+#include "librbd/MirroringWatcher.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Operations.h"
 #include "librbd/parent_types.h"
-#include "librbd/operation/FlattenRequest.h"
-#include "librbd/operation/RebuildObjectMapRequest.h"
-#include "librbd/operation/RenameRequest.h"
-#include "librbd/operation/ResizeRequest.h"
-#include "librbd/operation/SnapshotCreateRequest.h"
-#include "librbd/operation/SnapshotProtectRequest.h"
-#include "librbd/operation/SnapshotRemoveRequest.h"
-#include "librbd/operation/SnapshotRenameRequest.h"
-#include "librbd/operation/SnapshotRollbackRequest.h"
-#include "librbd/operation/SnapshotUnprotectRequest.h"
+#include "librbd/Utils.h"
 #include "librbd/operation/TrimRequest.h"
 #include "include/util.h"
+
+#include "journal/Journaler.h"
 
 #include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
@@ -90,6 +91,7 @@ int remove_object_map(ImageCtx *ictx) {
   r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove object map: " << cpp_strerror(r) << dendl;
+    return r;
   }
   return 0;
 }
@@ -123,7 +125,6 @@ int create_object_map(ImageCtx *ictx) {
   return 0;
 }
 
-
 int update_all_flags(ImageCtx *ictx, uint64_t flags, uint64_t mask) {
   assert(ictx->snap_lock.is_locked());
   CephContext *cct = ictx->cct;
@@ -148,100 +149,263 @@ int update_all_flags(ImageCtx *ictx, uint64_t flags, uint64_t mask) {
   return 0;
 }
 
-int prepare_image_update(ImageCtx *ictx) {
-  assert(ictx->owner_lock.is_locked() && !ictx->owner_lock.is_wlocked());
-  if (ictx->image_watcher == NULL) {
-    return -EROFS;
-  } else if (!ictx->image_watcher->is_lock_supported() ||
-             ictx->image_watcher->is_lock_owner()) {
+int validate_pool(IoCtx &io_ctx, CephContext *cct) {
+  if (!cct->_conf->rbd_validate_pool) {
     return 0;
   }
 
-  // need to upgrade to a write lock
-  int r = 0;
-  bool acquired_lock = false;
-  ictx->owner_lock.put_read();
-  {
-    RWLock::WLocker l(ictx->owner_lock);
-    if (!ictx->image_watcher->is_lock_owner()) {
-      r = ictx->image_watcher->try_lock();
-      acquired_lock = ictx->image_watcher->is_lock_owner();
-    }
+  int r = io_ctx.stat(RBD_DIRECTORY, NULL, NULL);
+  if (r == 0) {
+    return 0;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to stat RBD directory: " << cpp_strerror(r) << dendl;
+    return r;
   }
-  if (acquired_lock) {
-    // finish any AIO that was previously waiting on acquiring the
-    // exclusive lock
-    ictx->flush_async_operations();
+
+  // allocate a self-managed snapshot id if this a new pool to force
+  // self-managed snapshot mode
+  uint64_t snap_id;
+  r = io_ctx.selfmanaged_snap_create(&snap_id);
+  if (r == -EINVAL) {
+    lderr(cct) << "pool not configured for self-managed RBD snapshot support"
+               << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to allocate self-managed snapshot: "
+               << cpp_strerror(r) << dendl;
+    return r;
   }
-  ictx->owner_lock.get_read();
-  return r;
+
+  r = io_ctx.selfmanaged_snap_remove(snap_id);
+  if (r < 0) {
+    lderr(cct) << "failed to release self-managed snapshot " << snap_id
+               << ": " << cpp_strerror(r) << dendl;
+  }
+  return 0;
 }
 
-int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
-                         bool permit_snapshot,
-                         const boost::function<void(Context*)>& local_request,
-                         const boost::function<int()>& remote_request) {
-  int r;
-  do {
-    C_SaferCond ctx;
-    {
-      RWLock::RLocker l(ictx->owner_lock);
-      {
-        RWLock::RLocker snap_locker(ictx->snap_lock);
-        if (ictx->read_only ||
-            (!permit_snapshot && ictx->snap_id != CEPH_NOSNAP)) {
-          return -EROFS;
-        }
+int validate_mirroring_enabled(ImageCtx *ictx) {
+  CephContext *cct = ictx->cct;
+  cls::rbd::MirrorImage mirror_image_internal;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+      &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+      << dendl;
+    return r;
+  } else if (mirror_image_internal.state !=
+               cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "mirroring is not currently enabled" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
+                        const std::string &id,
+                        const std::string &global_image_id) {
+  cls::rbd::MirrorImage mirror_image_internal;
+  int r = cls_client::mirror_image_get(&io_ctx, id, &mirror_image_internal);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (mirror_image_internal.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    // mirroring is already enabled
+    return 0;
+  } else if (r != -ENOENT) {
+    lderr(cct) << "cannot enable mirroring: currently disabling" << dendl;
+    return -EINVAL;
+  }
+
+  mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+  if (global_image_id.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    mirror_image_internal.global_image_id = uuid_gen.to_string();
+  } else {
+    mirror_image_internal.global_image_id = global_image_id;
+  }
+
+  r = cls_client::mirror_image_set(&io_ctx, id, mirror_image_internal);
+  if (r < 0) {
+    lderr(cct) << "cannot enable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = MirroringWatcher<>::notify_image_updated(
+    io_ctx, cls::rbd::MIRROR_IMAGE_STATE_ENABLED, id,
+    mirror_image_internal.global_image_id);
+  if (r < 0) {
+    lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
+    mirror_image_internal.global_image_id << dendl;
+
+  return 0;
+}
+
+int mirror_image_enable_internal(ImageCtx *ictx) {
+  CephContext *cct = ictx->cct;
+
+  if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
+    lderr(cct) << "cannot enable mirroring: journaling is not enabled"
+      << dendl;
+    return -EINVAL;
+  }
+
+  bool is_primary;
+  int r = Journal<>::is_tag_owner(ictx, &is_primary);
+  if (r < 0) {
+    lderr(cct) << "cannot enable mirroring: failed to check tag ownership: "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!is_primary) {
+    lderr(cct) <<
+      "cannot enable mirroring: last journal tag not owned by local cluster"
+      << dendl;
+    return -EINVAL;
+  }
+
+  r = mirror_image_enable(cct, ictx->md_ctx, ictx->id, "");
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
+  CephContext *cct = ictx->cct;
+
+  cls::rbd::MirrorImage mirror_image_internal;
+  std::vector<snap_info_t> snaps;
+  std::set<cls::journal::Client> clients;
+  std::string header_oid;
+
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+      &mirror_image_internal);
+  if (r == -ENOENT) {
+    // mirroring is not enabled for this image
+    ldout(cct, 20) << "ignoring disable command: mirroring is not enabled "
+      "for this image" << dendl;
+    return 0;
+  } else if (r == -EOPNOTSUPP) {
+    ldout(cct, 5) << "mirroring not supported by OSD" << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  bool is_primary;
+  r = Journal<>::is_tag_owner(ictx, &is_primary);
+  if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: failed to check tag ownership: "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!is_primary && !force) {
+    lderr(cct) << "Mirrored image is not the primary, add force option to"
+                  " disable mirroring" << dendl;
+    return -EINVAL;
+  }
+
+  mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
+  r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
+      mirror_image_internal);
+  if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!is_primary) {
+    goto remove_mirroring_image;
+  }
+
+  r = MirroringWatcher<>::notify_image_updated(
+    ictx->md_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
+    ictx->id, mirror_image_internal.global_image_id);
+  if (r < 0) {
+    lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  header_oid = ::journal::Journaler::header_oid(ictx->id);
+
+  while(true) {
+    clients.clear();
+    r = cls::journal::client::client_list(ictx->md_ctx, header_oid, &clients);
+    if (r < 0) {
+      lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    assert(clients.size() >= 1);
+
+    if (clients.size() == 1) {
+      // only local journal client remains
+      break;
+    }
+
+    for (auto client : clients) {
+      journal::ClientData client_data;
+      bufferlist::iterator bl = client.data.begin();
+      ::decode(client_data, bl);
+      journal::ClientMetaType type = client_data.get_client_meta_type();
+
+      if (type != journal::ClientMetaType::MIRROR_PEER_CLIENT_META_TYPE) {
+        continue;
       }
 
-      while (ictx->image_watcher->is_lock_supported()) {
-        r = prepare_image_update(ictx);
-        if (r < 0) {
-          return -EROFS;
-        } else if (ictx->image_watcher->is_lock_owner()) {
-          break;
-        }
+      journal::MirrorPeerClientMeta client_meta =
+        boost::get<journal::MirrorPeerClientMeta>(client_data.client_meta);
 
-        r = remote_request();
-        if (r != -ETIMEDOUT && r != -ERESTART) {
+      for (const auto& sync : client_meta.sync_points) {
+        r = ictx->operations->snap_remove(sync.snap_name.c_str());
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "cannot disable mirroring: failed to remove temporary"
+            " snapshot created by remote peer: " << cpp_strerror(r) << dendl;
           return r;
         }
-        ldout(ictx->cct, 5) << request_type << " timed out notifying lock owner"
-                            << dendl;
       }
 
-      local_request(&ctx);
+      r = cls::journal::client::client_unregister(ictx->md_ctx, header_oid,
+          client.id);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "cannot disable mirroring: failed to unregister remote"
+          " journal client: " << cpp_strerror(r) << dendl;
+        return r;
+      }
     }
+  }
 
-    r = ctx.wait();
-    if (r == -ERESTART) {
-      ldout(ictx->cct, 5) << request_type << " interrupted: restarting"
-                          << dendl;
-    }
-  } while (r == -ERESTART);
-  return r;
+remove_mirroring_image:
+  r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
+  if (r < 0) {
+    lderr(cct) << "failed to remove image from mirroring directory: "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  ldout(cct, 20) << "removed image state from rbd_mirroring object" << dendl;
+
+  if (is_primary) {
+    // TODO: send notification to mirroring object about update
+  }
+
+  return 0;
 }
 
 } // anonymous namespace
-
-  const string id_obj_name(const string &name)
-  {
-    return RBD_ID_PREFIX + name;
-  }
-
-  const string header_name(const string &image_id)
-  {
-    return RBD_HEADER_PREFIX + image_id;
-  }
-
-  const string old_header_name(const string &image_name)
-  {
-    return image_name + RBD_SUFFIX;
-  }
-
-  std::string unique_lock_name(const std::string &name, void *address) {
-    return name + " (" + stringify(address) + ")";
-  }
 
   int detect_format(IoCtx &io_ctx, const string &name,
 		    bool *old_format, uint64_t *size)
@@ -249,11 +413,11 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = (CephContext *)io_ctx.cct();
     if (old_format)
       *old_format = true;
-    int r = io_ctx.stat(old_header_name(name), size, NULL);
+    int r = io_ctx.stat(util::old_header_name(name), size, NULL);
     if (r == -ENOENT) {
       if (old_format)
 	*old_format = false;
-      r = io_ctx.stat(id_obj_name(name), size, NULL);
+      r = io_ctx.stat(util::id_obj_name(name), size, NULL);
       if (r < 0)
 	return r;
     } else if (r < 0) {
@@ -327,12 +491,12 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-	   ictx->image_watcher->is_lock_owner());
+    assert(ictx->exclusive_lock == nullptr ||
+	   ictx->exclusive_lock->is_lock_owner());
 
     C_SaferCond ctx;
     ictx->snap_lock.get_read();
-    operation::TrimRequest<> *req = new operation::TrimRequest<>(
+    operation::TrimRequest<> *req = operation::TrimRequest<>::create(
       *ictx, &ctx, ictx->size, newsize, prog_ctx);
     ictx->snap_lock.put_read();
     req->send();
@@ -368,20 +532,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     if (ver)
       *ver = io_ctx.get_last_version();
 
-    return 0;
-  }
-
-  int notify_change(IoCtx& io_ctx, const string& oid, ImageCtx *ictx)
-  {
-    if (ictx) {
-      ictx->refresh_lock.Lock();
-      ldout(ictx->cct, 20) << "notify_change refresh_seq = " << ictx->refresh_seq
-			   << " last_refresh = " << ictx->last_refresh << dendl;
-      ++ictx->refresh_seq;
-      ictx->refresh_lock.Unlock();
-    }
-
-    ImageWatcher::notify_header_update(io_ctx, oid);
     return 0;
   }
 
@@ -467,7 +617,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     os << "[";
 
     for (image_options_t::const_iterator i = (*opts_)->begin();
-	 i != (*opts_)->end(); i++) {
+	 i != (*opts_)->end(); ++i) {
       os << (i == (*opts_)->begin() ? "" : ", ") << image_option_name(i->first)
 	 << "=" << i->second;
     }
@@ -635,6 +785,38 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return (*opts_)->empty();
   }
 
+  int list_images_v2(IoCtx& io_ctx, map<string, string> &images) {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "list_images_v2 " << &io_ctx << dendl;
+
+    // new format images are accessed by class methods
+    int r;
+    int max_read = 1024;
+    string last_read = "";
+    do {
+      map<string, string> images_page;
+      r = cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
+			   last_read, max_read, &images_page);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "error listing image in directory: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      } else if (r == -ENOENT) {
+        break;
+      }
+      for (map<string, string>::const_iterator it = images_page.begin();
+	   it != images_page.end(); ++it) {
+	images.insert(*it);
+      }
+      if (!images_page.empty()) {
+	last_read = images_page.rbegin()->first;
+      }
+      r = images_page.size();
+    } while (r == max_read);
+
+    return 0;
+  }
+
   int list(IoCtx& io_ctx, vector<string>& names)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
@@ -657,22 +839,15 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
     }
 
-    // new format images are accessed by class methods
-    int max_read = 1024;
-    string last_read = "";
-    do {
-      map<string, string> images;
-      cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
-			   last_read, max_read, &images);
-      for (map<string, string>::const_iterator it = images.begin();
-	   it != images.end(); ++it) {
-	names.push_back(it->first);
-      }
-      if (!images.empty()) {
-	last_read = images.rbegin()->first;
-      }
-      r = images.size();
-    } while (r == max_read);
+    map<string, string> images;
+    r = list_images_v2(io_ctx, images);
+    if (r < 0) {
+      lderr(cct) << "error listing v2 images: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    for (const auto& img_pair : images) {
+      names.push_back(img_pair.first);
+    }
 
     return 0;
   }
@@ -682,7 +857,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "children list " << ictx->name << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -696,7 +871,11 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
     std::list<std::pair<int64_t, string> > pools;
-    rados.pool_list2(pools);
+    r = rados.pool_list2(pools);
+    if (r < 0) {
+      lderr(cct) << "error listing pools: " << cpp_strerror(r) << dendl; 
+      return r;
+    }
 
     for (std::list<std::pair<int64_t, string> >::const_iterator it =
          pools.begin(); it != pools.end(); ++it) {
@@ -752,377 +931,13 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  int snap_create(ImageCtx *ictx, const char *snap_name)
-  {
-    ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name << dendl;
-
-    if (ictx->read_only) {
-      return -EROFS;
-    }
-
-    int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
-
-    {
-      RWLock::RLocker l(ictx->snap_lock);
-      if (ictx->get_snap_id(snap_name) != CEPH_NOSNAP) {
-        return -EEXIST;
-      }
-    }
-
-    r = invoke_async_request(ictx, "snap_create", true,
-                             boost::bind(&snap_create_helper, ictx, _1,
-                                         snap_name),
-                             boost::bind(&ImageWatcher::notify_snap_create,
-                                         ictx->image_watcher, snap_name));
-    if (r < 0 && r != -EEXIST) {
-      return r;
-    }
-
-    ictx->perfcounter->inc(l_librbd_snap_create);
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    return 0;
-  }
-
-  void snap_create_helper(ImageCtx* ictx, Context* ctx, const char* snap_name) {
-    assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-	   ictx->image_watcher->is_lock_owner());
-
-    ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
-                         << dendl;
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    operation::SnapshotCreateRequest<> *req =
-      new operation::SnapshotCreateRequest<>(*ictx, ctx, snap_name);
-    req->send();
-  }
-
-  int snap_remove(ImageCtx *ictx, const char *snap_name)
-  {
-    ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << dendl;
-
-    if (ictx->read_only)
-      return -EROFS;
-
-    int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
-
-    bool proxy_op = false;
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (ictx->get_snap_id(snap_name) == CEPH_NOSNAP) {
-        return -ENOENT;
-      }
-      proxy_op = ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0 ||
-                  (ictx->features & RBD_FEATURE_JOURNALING) != 0);
-    }
-
-    if (proxy_op) {
-      r = invoke_async_request(ictx, "snap_remove", true,
-                               boost::bind(&snap_remove_helper, ictx, _1,
-                                           snap_name),
-                               boost::bind(&ImageWatcher::notify_snap_remove,
-                                           ictx->image_watcher, snap_name));
-      if (r < 0 && r != -EEXIST) {
-        return r;
-      }
-    } else {
-      RWLock::RLocker owner_lock(ictx->owner_lock);
-      C_SaferCond cond_ctx;
-      snap_remove_helper(ictx, &cond_ctx, snap_name);
-
-      r = cond_ctx.wait();
-      if (r < 0) {
-        return r;
-      }
-    }
-
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-
-    ictx->perfcounter->inc(l_librbd_snap_remove);
-    return 0;
-  }
-
-  void snap_remove_helper(ImageCtx *ictx, Context *ctx, const char *snap_name)
-  {
-    assert(ictx->owner_lock.is_locked());
-    {
-      if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
-        assert(!ictx->image_watcher->is_lock_supported() ||
-               ictx->image_watcher->is_lock_owner());
-      }
-    }
-
-    ldout(ictx->cct, 20) << "snap_remove_helper " << ictx << " " << snap_name
-                         << dendl;
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    uint64_t snap_id;
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      snap_id = ictx->get_snap_id(snap_name);
-      if (snap_id == CEPH_NOSNAP) {
-        lderr(ictx->cct) << "No such snapshot found." << dendl;
-        ctx->complete(-ENOENT);
-        return;
-      }
-
-      bool is_protected;
-      r = ictx->is_snap_protected(snap_id, &is_protected);
-      if (r < 0) {
-        ctx->complete(r);
-        return;
-      } else if (is_protected) {
-        lderr(ictx->cct) << "snapshot is protected" << dendl;
-        ctx->complete(-EBUSY);
-        return;
-      }
-    }
-
-    operation::SnapshotRemoveRequest<> *req =
-      new operation::SnapshotRemoveRequest<>(*ictx, ctx, snap_name, snap_id);
-    req->send();
-  }
-
-  int snap_rename(ImageCtx *ictx, const char *srcname, const char *dstname)
-  {
-    ldout(ictx->cct, 20) << "snap_rename " << ictx << " from " << srcname << " to " << dstname << dendl;
-
-    snapid_t snap_id;
-    if (ictx->read_only) {
-      return -EROFS;
-    }
-
-    int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
-
-    {
-      RWLock::RLocker l(ictx->snap_lock);
-      snap_id = ictx->get_snap_id(srcname);
-      if (snap_id == CEPH_NOSNAP) {
-        return -ENOENT;
-      }
-      if (ictx->get_snap_id(dstname) != CEPH_NOSNAP) {
-        return -EEXIST;
-      }
-    }
-
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      r = invoke_async_request(ictx, "snap_rename", true,
-                               boost::bind(&snap_rename_helper, ictx, _1,
-                                           snap_id, dstname),
-                               boost::bind(&ImageWatcher::notify_snap_rename,
-                                           ictx->image_watcher, snap_id,
-                                           dstname));
-      if (r < 0 && r != -EEXIST) {
-        return r;
-      }
-    } else {
-      RWLock::RLocker owner_lock(ictx->owner_lock);
-      C_SaferCond cond_ctx;
-      snap_rename_helper(ictx, &cond_ctx, snap_id, dstname);
-
-      r = cond_ctx.wait();
-      if (r < 0) {
-        return r;
-      }
-    }
-
-    ictx->perfcounter->inc(l_librbd_snap_rename);
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    return 0;
-  }
-
-  void snap_rename_helper(ImageCtx* ictx, Context* ctx,
-                          const uint64_t src_snap_id, const char* dst_name) {
-    assert(ictx->owner_lock.is_locked());
-    if ((ictx->features & RBD_FEATURE_JOURNALING) != 0) {
-      assert(!ictx->image_watcher->is_lock_supported() ||
-             ictx->image_watcher->is_lock_owner());
-    }
-    ldout(ictx->cct, 20) << __func__ << " " << ictx << " from "
-                         << src_snap_id << " to " << dst_name << dendl;
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    operation::SnapshotRenameRequest<> *req =
-      new operation::SnapshotRenameRequest<>(*ictx, ctx, src_snap_id, dst_name);
-    req->send();
-  }
-
-  int snap_protect(ImageCtx *ictx, const char *snap_name)
-  {
-    ldout(ictx->cct, 20) << "snap_protect " << ictx << " " << snap_name
-			 << dendl;
-
-    if (ictx->read_only) {
-      return -EROFS;
-    }
-
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      return r;
-    }
-
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      bool is_protected;
-      r = ictx->is_snap_protected(ictx->get_snap_id(snap_name), &is_protected);
-      if (r < 0) {
-        return r;
-      }
-
-      if (is_protected) {
-        return -EBUSY;
-      }
-    }
-
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      r = invoke_async_request(ictx, "snap_protect", true,
-                               boost::bind(&snap_protect_helper, ictx, _1,
-                                           snap_name),
-                               boost::bind(&ImageWatcher::notify_snap_protect,
-                                           ictx->image_watcher, snap_name));
-      if (r < 0 && r != -EBUSY) {
-        return r;
-      }
-    } else {
-      RWLock::RLocker owner_lock(ictx->owner_lock);
-      C_SaferCond cond_ctx;
-      snap_protect_helper(ictx, &cond_ctx, snap_name);
-
-      r = cond_ctx.wait();
-      if (r < 0) {
-        return r;
-      }
-    }
-
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    return 0;
-  }
-
-  void snap_protect_helper(ImageCtx *ictx, Context* ctx, const char *snap_name)
-  {
-    assert(ictx->owner_lock.is_locked());
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      assert(!ictx->image_watcher->is_lock_supported() ||
-             ictx->image_watcher->is_lock_owner());
-    }
-
-    ldout(ictx->cct, 20) << "snap_protect_helper " << ictx << " " << snap_name
-                         << dendl;
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    operation::SnapshotProtectRequest<> *request =
-      new operation::SnapshotProtectRequest<>(*ictx, ctx, snap_name);
-    request->send();
-  }
-
-  int snap_unprotect(ImageCtx *ictx, const char *snap_name)
-  {
-    ldout(ictx->cct, 20) << "snap_unprotect " << ictx << " " << snap_name
-			 << dendl;
-
-    if (ictx->read_only) {
-      return -EROFS;
-    }
-
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      return r;
-    }
-
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      bool is_unprotected;
-      r = ictx->is_snap_unprotected(ictx->get_snap_id(snap_name),
-                                    &is_unprotected);
-      if (r < 0) {
-        return r;
-      }
-
-      if (is_unprotected) {
-        return -EINVAL;
-      }
-    }
-
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      r = invoke_async_request(ictx, "snap_unprotect", true,
-                               boost::bind(&snap_unprotect_helper, ictx, _1,
-                                           snap_name),
-                               boost::bind(&ImageWatcher::notify_snap_unprotect,
-                                           ictx->image_watcher, snap_name));
-      if (r < 0 && r != -EINVAL) {
-        return r;
-      }
-    } else {
-      RWLock::RLocker owner_lock(ictx->owner_lock);
-      C_SaferCond cond_ctx;
-      snap_unprotect_helper(ictx, &cond_ctx, snap_name);
-
-      r = cond_ctx.wait();
-      if (r < 0) {
-        return r;
-      }
-    }
-
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    return 0;
-  }
-
-  void snap_unprotect_helper(ImageCtx *ictx, Context* ctx,
-                             const char *snap_name)
-  {
-    assert(ictx->owner_lock.is_locked());
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      assert(!ictx->image_watcher->is_lock_supported() ||
-             ictx->image_watcher->is_lock_owner());
-    }
-
-    ldout(ictx->cct, 20) << "snap_unprotect_helper " << ictx << " " << snap_name
-                         << dendl;
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    operation::SnapshotUnprotectRequest<> *request =
-      new operation::SnapshotUnprotectRequest<>(*ictx, ctx, snap_name);
-    request->send();
-  }
-
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected)
   {
     ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
 			 << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -1142,8 +957,14 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 		uint64_t size, int order)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
+
+    int r = validate_pool(io_ctx, cct);
+    if (r < 0) {
+      return r;
+    }
+
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-    int r = tmap_set(io_ctx, imgname);
+    r = tmap_set(io_ctx, imgname);
     if (r < 0) {
       lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
 		 << dendl;
@@ -1157,7 +978,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     bufferlist bl;
     bl.append((const char *)&header, sizeof(header));
 
-    string header_oid = old_header_name(imgname);
+    string header_oid = util::old_header_name(imgname);
     r = io_ctx.write(header_oid, bl, bl.length(), 0);
     if (r < 0) {
       lderr(cct) << "Error writing image header: " << cpp_strerror(r)
@@ -1166,7 +987,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       if (remove_r < 0) {
 	lderr(cct) << "Could not remove image from directory after "
 		   << "header creation failed: "
-		   << cpp_strerror(r) << dendl;
+		   << cpp_strerror(remove_r) << dendl;
       }
       return r;
     }
@@ -1178,8 +999,9 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
 		int order, uint64_t features, uint64_t stripe_unit,
 		uint64_t stripe_count, uint8_t journal_order,
-		uint8_t journal_splay_width,
-		const std::string &journal_pool)
+                uint8_t journal_splay_width, const std::string &journal_pool,
+                const std::string &non_primary_global_image_id,
+                const std::string &primary_mirror_uuid)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -1188,11 +1010,17 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ostringstream oss;
     CephContext *cct = (CephContext *)io_ctx.cct();
 
-    ceph_file_layout layout;
+    file_layout_t layout;
+    bool force_non_primary = !non_primary_global_image_id.empty();
 
-    id_obj = id_obj_name(imgname);
+    int r = validate_pool(io_ctx, cct);
+    if (r < 0) {
+      return r;
+    }
 
-    int r = io_ctx.create(id_obj, true);
+    id_obj = util::id_obj_name(imgname);
+
+    r = io_ctx.create(id_obj, true);
     if (r < 0) {
       lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
 		 << dendl;
@@ -1217,7 +1045,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     oss << RBD_DATA_PREFIX << id;
-    header_oid = header_name(id);
+    header_oid = util::header_name(id);
     r = cls_client::create_image(&io_ctx, header_oid, size, order,
 				 features, oss.str());
     if (r < 0) {
@@ -1246,14 +1074,14 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         goto err_remove_header;
       }
 
-      memset(&layout, 0, sizeof(layout));
-      layout.fl_object_size = 1ull << order;
+      layout = file_layout_t();
+      layout.object_size = 1ull << order;
       if (stripe_unit == 0 || stripe_count == 0) {
-        layout.fl_stripe_unit = layout.fl_object_size;
-        layout.fl_stripe_count = 1;
+        layout.stripe_unit = layout.object_size;
+        layout.stripe_count = 1;
       } else {
-        layout.fl_stripe_unit = stripe_unit;
-        layout.fl_stripe_count = stripe_count;
+        layout.stripe_unit = stripe_unit;
+        layout.stripe_count = stripe_count;
       }
 
       librados::ObjectWriteOperation op;
@@ -1273,16 +1101,46 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         goto err_remove_object_map;
       }
 
-      r = Journal::create(io_ctx, id, journal_order, journal_splay_width,
-			  journal_pool);
+      rbd_mirror_mode_t mirror_mode;
+      r = librbd::mirror_mode_get(io_ctx, &mirror_mode);
+      if (r < 0) {
+        lderr(cct) << "error in retrieving pool mirroring status: "
+                   << cpp_strerror(r) << dendl;
+        goto err_remove_object_map;
+      }
+
+      r = Journal<>::create(io_ctx, id, journal_order, journal_splay_width,
+			    journal_pool, force_non_primary,
+                            primary_mirror_uuid);
       if (r < 0) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
       }
+
+      if (mirror_mode == RBD_MIRROR_MODE_POOL || force_non_primary) {
+        r = mirror_image_enable(cct, io_ctx, id, non_primary_global_image_id);
+        if (r < 0) {
+          lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
+                     << dendl;
+          goto err_remove_journal;
+        }
+      }
+    } else if (force_non_primary) {
+      // journaling should have been enabled
+      assert(false);
     }
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
+
+  err_remove_journal:
+    if ((features & RBD_FEATURE_JOURNALING) != 0) {
+      remove_r = Journal<>::remove(io_ctx, id);
+      if (remove_r < 0) {
+        lderr(cct) << "error cleaning up journal after creation failed: "
+                   << cpp_strerror(remove_r) << dendl;
+      }
+    }
 
   err_remove_object_map:
     if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
@@ -1297,7 +1155,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     remove_r = io_ctx.remove(header_oid);
     if (remove_r < 0) {
       lderr(cct) << "error cleaning up image header after creation failed: "
-		 << dendl;
+		 << cpp_strerror(remove_r) << dendl;
     }
   err_remove_from_dir:
     remove_r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY,
@@ -1404,8 +1262,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     if (!order)
       order = cct->_conf->rbd_default_order;
-    if (!order)
-      order = RBD_DEFAULT_OBJ_ORDER;
 
     if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
@@ -1453,7 +1309,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       opts.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &journal_pool);
 
       r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
-		    stripe_count, journal_order, journal_splay_width, journal_pool);
+		    stripe_count, journal_order, journal_splay_width,
+                    journal_pool, "", "");
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1530,10 +1387,11 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     map<string, bufferlist> pairs;
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
-    r = open_image(p_imctx);
+    r = p_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(-r) << dendl;
+      delete p_imctx;
       return r;
     }
 
@@ -1549,12 +1407,18 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     p_imctx->snap_lock.get_read();
     p_features = p_imctx->features;
     size = p_imctx->get_image_size(p_imctx->snap_id);
-    p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
+    r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
     p_imctx->snap_lock.put_read();
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
       r = -ENOSYS;
+      goto err_close_parent;
+    }
+    
+    if (r < 0) {
+      // we lost the race with snap removal?
+      lderr(cct) << "unable to locate parent's snapshot" << dendl;
       goto err_close_parent;
     }
 
@@ -1576,9 +1440,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
-    r = open_image(c_imctx);
+    r = c_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
+      delete c_imctx;
       goto err_remove;
     }
 
@@ -1594,22 +1459,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       goto err_close_child;
     }
 
-    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
-    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << r << dendl;
-      goto err_close_child;
-    } else if (r == 0 && !pairs.empty()) {
-      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
-        goto err_close_child;
-      }
-    }
-
-    {
-      RWLock::RLocker owner_locker(p_imctx->owner_lock);
-      r = ictx_refresh(p_imctx);
-    }
+    r = p_imctx->state->refresh();
     if (r == 0) {
       p_imctx->snap_lock.get_read();
       r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
@@ -1621,9 +1471,22 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       goto err_remove_child;
     }
 
+    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
+    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
+      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
+      goto err_remove_child;
+    } else if (r == 0 && !pairs.empty()) {
+      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
+      if (r < 0) {
+        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
+        goto err_remove_child;
+      }
+    }
+
     ldout(cct, 2) << "done." << dendl;
-    r = close_image(c_imctx);
-    partial_r = close_image(p_imctx);
+    r = c_imctx->state->close();
+    partial_r = p_imctx->state->close();
+
     if (r == 0 && partial_r < 0) {
       r = partial_r;
     }
@@ -1637,7 +1500,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
                 << cpp_strerror(partial_r) << dendl;
     }
   err_close_child:
-    close_image(c_imctx);
+    c_imctx->state->close();
   err_remove:
     partial_r = remove(c_ioctx, c_name, no_op);
     if (partial_r < 0) {
@@ -1645,7 +1508,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 		 << cpp_strerror(partial_r) << dendl;
     }
   err_close_parent:
-    close_image(p_imctx);
+    p_imctx->state->close();
     return r;
   }
 
@@ -1656,80 +1519,25 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 		   << dstname << dendl;
 
     ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
-    int r = open_image(ictx);
+    int r = ictx->state->open();
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
+      delete ictx;
       return r;
     }
     BOOST_SCOPE_EXIT((ictx)) {
-      close_image(ictx);
+      ictx->state->close();
     } BOOST_SCOPE_EXIT_END
 
-    r = detect_format(io_ctx, dstname, NULL, NULL);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error checking for existing image called "
-		 << dstname << ":" << cpp_strerror(r) << dendl;
-      return r;
-    }
-    if (r == 0) {
-      lderr(cct) << "rbd image " << dstname << " already exists" << dendl;
-      return -EEXIST;
-    }
-
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      r = invoke_async_request(ictx, "rename", true,
-                               boost::bind(&rename_helper, ictx, _1,
-                                           dstname),
-                               boost::bind(&ImageWatcher::notify_rename,
-                                           ictx->image_watcher, dstname));
-      if (r < 0 && r != -EEXIST) {
-        return r;
-      }
-    } else {
-      RWLock::RLocker owner_lock(ictx->owner_lock);
-      C_SaferCond cond_ctx;
-      rename_helper(ictx, &cond_ctx, dstname);
-
-      r = cond_ctx.wait();
-      if (r < 0) {
-        return r;
-      }
-    }
-
-    if (ictx->old_format) {
-      notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    }
-    return 0;
-  }
-
-  void rename_helper(ImageCtx *ictx, Context *ctx, const char *dstname)
-  {
-    assert(ictx->owner_lock.is_locked());
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      assert(!ictx->image_watcher->is_lock_supported() ||
-	     ictx->image_watcher->is_lock_owner());
-    }
-
-    ldout(ictx->cct, 20) << "rename_helper " << ictx << " " << dstname
-                         << dendl;
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    operation::RenameRequest<> *req =
-      new operation::RenameRequest<>(*ictx, ctx, dstname);
-    req->send();
+    return ictx->operations->rename(dstname);
   }
 
   int info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   {
     ldout(ictx->cct, 20) << "info " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -1739,7 +1547,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int get_old_format(ImageCtx *ictx, uint8_t *old)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     *old = ictx->old_format;
@@ -1748,7 +1556,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int get_size(ImageCtx *ictx, uint64_t *size)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     RWLock::RLocker l2(ictx->snap_lock);
@@ -1758,7 +1566,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int get_features(ImageCtx *ictx, uint64_t *features)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     RWLock::RLocker l(ictx->snap_lock);
@@ -1768,7 +1576,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int update_features(ImageCtx *ictx, uint64_t features, bool enabled)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -1781,146 +1589,210 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       return -EINVAL;
     }
 
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker md_locker(ictx->md_lock);
-    r = ictx->flush();
-    if (r < 0) {
-      return r;
-    }
-
-    if ((features & RBD_FEATURES_MUTABLE) != features) {
-      lderr(cct) << "cannot update immutable features" << dendl;
-      return -EINVAL;
-    } else if (features == 0) {
-      lderr(cct) << "update requires at least one feature" << dendl;
-      return -EINVAL;
-    }
-
-    RWLock::WLocker snap_locker(ictx->snap_lock);
-    uint64_t new_features;
-    if (enabled) {
-      features &= ~ictx->features;
-      new_features = ictx->features | features;
-    } else {
-      features &= ictx->features;
-      new_features = ictx->features & ~features;
-    }
-
-    if (features == 0) {
-      return 0;
-    }
-
-    uint64_t features_mask = features;
-    uint64_t disable_flags = 0;
-    if (enabled) {
-      uint64_t enable_flags = 0;
-
-      if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-        if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-          lderr(cct) << "cannot enable object map" << dendl;
-          return -EINVAL;
-        }
-        enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
-        features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
-      }
-      if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
-        if ((new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-          lderr(cct) << "cannot enable fast diff" << dendl;
-          return -EINVAL;
-        }
-        enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
-        features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
-      }
-      if ((features & RBD_FEATURE_JOURNALING) != 0) {
-        if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-          lderr(cct) << "cannot enable journaling" << dendl;
-          return -EINVAL;
-        }
-        features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
-
-        r = Journal::create(ictx->md_ctx, ictx->id, ictx->journal_order,
-			    ictx->journal_splay_width,
-			    ictx->journal_pool);
-        if (r < 0) {
-          lderr(cct) << "error creating image journal: " << cpp_strerror(r)
-                     << dendl;
-          return r;
-        }
-      }
-
-      if (enable_flags != 0) {
-        r = update_all_flags(ictx, enable_flags, enable_flags);
-        if (r < 0) {
-          return r;
-        }
-      }
-    } else {
-      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
-        if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
-            (new_features & RBD_FEATURE_JOURNALING) != 0) {
-          lderr(cct) << "cannot disable exclusive lock" << dendl;
-          return -EINVAL;
-        }
-        features_mask |= RBD_FEATURE_OBJECT_MAP;
-      }
-      if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-        if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {
-          lderr(cct) << "cannot disable object map" << dendl;
-          return -EINVAL;
-        }
-
-        disable_flags = RBD_FLAG_OBJECT_MAP_INVALID;
-        r = remove_object_map(ictx);
-        if (r < 0) {
-          lderr(cct) << "failed to remove object map" << dendl;
-          return r;
-        }
-      }
-      if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
-        disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
-      }
-      if ((features & RBD_FEATURE_JOURNALING) != 0) {
-        r = Journal::remove(ictx->md_ctx, ictx->id);
-        if (r < 0) {
-          lderr(cct) << "error removing image journal: " << cpp_strerror(r)
-                     << dendl;
-          return r;
-        }
-      }
-    }
-
-    ldout(cct, 10) << "update_features: features=" << new_features << ", mask="
-                   << features_mask << dendl;
-    r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
-                                         new_features, features_mask);
-    if (r < 0) {
-      lderr(cct) << "failed to update features: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    }
-    if (((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) &&
-      ((features & RBD_FEATURE_OBJECT_MAP) != 0)) {
-      r = create_object_map(ictx);
-      if (r < 0) {
-        lderr(cct) << "failed to create object map" << dendl;
-        return r;
-      }
-    }
-
-    if (disable_flags != 0) {
-      r = update_all_flags(ictx, 0, disable_flags);
+    {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      RWLock::WLocker md_locker(ictx->md_lock);
+      r = ictx->flush();
       if (r < 0) {
         return r;
       }
-    }
 
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+      uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
+                               RBD_FEATURES_DISABLE_ONLY);
+      if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
+          (!enabled && (features & disable_mask) != features)) {
+        lderr(cct) << "cannot update immutable features" << dendl;
+        return -EINVAL;
+      } else if (features == 0) {
+        lderr(cct) << "update requires at least one feature" << dendl;
+        return -EINVAL;
+      }
+
+      RWLock::WLocker snap_locker(ictx->snap_lock);
+      uint64_t new_features;
+      if (enabled) {
+        features &= ~ictx->features;
+        new_features = ictx->features | features;
+      } else {
+        features &= ictx->features;
+        new_features = ictx->features & ~features;
+      }
+
+      if (features == 0) {
+        return 0;
+      }
+
+      bool enable_mirroring = false;
+      uint64_t features_mask = features;
+      uint64_t disable_flags = 0;
+      if (enabled) {
+        uint64_t enable_flags = 0;
+
+        if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+          if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+            lderr(cct) << "cannot enable object map" << dendl;
+            return -EINVAL;
+          }
+          enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+          features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+        }
+        if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
+          if ((new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
+            lderr(cct) << "cannot enable fast diff" << dendl;
+            return -EINVAL;
+          }
+          enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
+          features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
+        }
+        if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+            lderr(cct) << "cannot enable journaling" << dendl;
+            return -EINVAL;
+          }
+          features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+
+          r = Journal<>::create(ictx->md_ctx, ictx->id, ictx->journal_order,
+  			        ictx->journal_splay_width,
+  			        ictx->journal_pool, false, "");
+          if (r < 0) {
+            lderr(cct) << "error creating image journal: " << cpp_strerror(r)
+                       << dendl;
+            return r;
+          }
+
+          rbd_mirror_mode_t mirror_mode;
+          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "error in retrieving pool mirroring status: "
+              << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          enable_mirroring = (mirror_mode == RBD_MIRROR_MODE_POOL);
+        }
+
+        if (enable_flags != 0) {
+          r = update_all_flags(ictx, enable_flags, enable_flags);
+          if (r < 0) {
+            return r;
+          }
+        }
+      } else {
+        if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
+          if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
+              (new_features & RBD_FEATURE_JOURNALING) != 0) {
+            lderr(cct) << "cannot disable exclusive lock" << dendl;
+            return -EINVAL;
+          }
+          features_mask |= (RBD_FEATURE_OBJECT_MAP |
+                            RBD_FEATURE_JOURNALING);
+        }
+        if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+          if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {
+            lderr(cct) << "cannot disable object map" << dendl;
+            return -EINVAL;
+          }
+
+          disable_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+          r = remove_object_map(ictx);
+          if (r < 0) {
+            lderr(cct) << "failed to remove object map" << dendl;
+            return r;
+          }
+        }
+        if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
+          disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
+        }
+        if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          rbd_mirror_mode_t mirror_mode;
+          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "error in retrieving pool mirroring status: "
+              << cpp_strerror(r) << dendl;
+            return r;
+          }
+
+          if (mirror_mode == RBD_MIRROR_MODE_IMAGE) {
+            cls::rbd::MirrorImage mirror_image;
+            r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                             &mirror_image);
+            if (r < 0 && r != -ENOENT) {
+              lderr(cct) << "error retrieving mirroring state: "
+                << cpp_strerror(r) << dendl;
+            }
+
+            if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+              lderr(cct) << "cannot disable journaling: image mirroring "
+                " enabled and mirror pool mode set to image" << dendl;
+              return -EINVAL;
+            }
+          } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
+            r = mirror_image_disable_internal(ictx, false);
+            if (r < 0) {
+              lderr(cct) << "error disabling image mirroring: "
+                << cpp_strerror(r) << dendl;
+            }
+          }
+
+          r = Journal<>::remove(ictx->md_ctx, ictx->id);
+          if (r < 0) {
+            lderr(cct) << "error removing image journal: " << cpp_strerror(r)
+                       << dendl;
+            return r;
+          }
+        }
+      }
+
+      ldout(cct, 10) << "update_features: features=" << new_features << ", "
+                     << "mask=" << features_mask << dendl;
+      r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
+                                           new_features, features_mask);
+      if (r < 0) {
+        lderr(cct) << "failed to update features: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+      if (((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) &&
+        ((features & RBD_FEATURE_OBJECT_MAP) != 0)) {
+        r = create_object_map(ictx);
+        if (r < 0) {
+          lderr(cct) << "failed to create object map" << dendl;
+          return r;
+        }
+      }
+
+      if (disable_flags != 0) {
+        r = update_all_flags(ictx, 0, disable_flags);
+        if (r < 0) {
+          return r;
+        }
+      }
+
+      if (enable_mirroring) {
+        ImageCtx *img_ctx = new ImageCtx("", ictx->id, nullptr,
+            ictx->md_ctx, false);
+        r = img_ctx->state->open();
+        if (r < 0) {
+          lderr(cct) << "error opening image: " << cpp_strerror(r) << dendl;
+          delete img_ctx;
+        } else {
+          r = mirror_image_enable_internal(img_ctx);
+          if (r < 0) {
+            lderr(cct) << "error enabling mirroring: " << cpp_strerror(r)
+              << dendl;
+          }
+          img_ctx->state->close();
+        }
+      }
+   }
+
+    ictx->notify_update();
     return 0;
   }
 
   int get_overlap(ImageCtx *ictx, uint64_t *overlap)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     RWLock::RLocker l(ictx->snap_lock);
@@ -1928,87 +1800,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return ictx->get_parent_overlap(ictx->snap_id, overlap);
   }
 
-  int open_parent(ImageCtx *ictx)
-  {
-    assert(ictx->cache_lock.is_locked());
-    assert(ictx->snap_lock.is_wlocked());
-    assert(ictx->parent_lock.is_wlocked());
-
-    string pool_name;
-    Rados rados(ictx->md_ctx);
-
-    int64_t pool_id = ictx->get_parent_pool_id(ictx->snap_id);
-    string parent_image_id = ictx->get_parent_image_id(ictx->snap_id);
-    snap_t parent_snap_id = ictx->get_parent_snap_id(ictx->snap_id);
-    assert(parent_snap_id != CEPH_NOSNAP);
-
-    if (pool_id < 0)
-      return -ENOENT;
-    int r = rados.pool_reverse_lookup(pool_id, &pool_name);
-    if (r < 0) {
-      lderr(ictx->cct) << "error looking up name for pool id " << pool_id
-		       << ": " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    IoCtx p_ioctx;
-    r = rados.ioctx_create(pool_name.c_str(), p_ioctx);
-    if (r < 0) {
-      lderr(ictx->cct) << "error opening pool " << pool_name << ": "
-		       << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    // since we don't know the image and snapshot name, set their ids and
-    // reset the snap_name and snap_exists fields after we read the header
-    ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx, true);
-
-    // set rados flags for reading the parent image
-    if (ictx->balance_parent_reads)
-      ictx->parent->set_read_flag(librados::OPERATION_BALANCE_READS);
-    else if (ictx->localize_parent_reads)
-      ictx->parent->set_read_flag(librados::OPERATION_LOCALIZE_READS);
-
-    r = open_image(ictx->parent);
-    if (r < 0) {
-      lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
-		       << dendl;
-      ictx->parent = NULL;
-      return r;
-    }
-
-    {
-      RWLock::RLocker owner_locker(ictx->parent->owner_lock);
-      Mutex::Locker cache_locker(ictx->parent->cache_lock);
-      RWLock::WLocker snap_locker(ictx->parent->snap_lock);
-      r = ictx->parent->get_snap_name(parent_snap_id, &ictx->parent->snap_name);
-      if (r < 0) {
-        lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
-      } else {
-        ictx->parent->snap_set(ictx->parent->snap_name);
-
-        RWLock::WLocker parent_locker(ictx->parent->parent_lock);
-        r = refresh_parent(ictx->parent);
-        if (r < 0) {
-          lderr(ictx->cct) << "error refreshing parent snapshot "
-		           << ictx->parent->id << " "
-		           << ictx->parent->snap_name << dendl;
-        }
-      }
-    }
-
-    if (r < 0) {
-      close_parent(ictx);
-      return r;
-    }
-
-    return 0;
-  }
-
   int get_parent_info(ImageCtx *ictx, string *parent_pool_name,
 		      string *parent_name, string *parent_snap_name)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -2021,13 +1816,11 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     parent_spec parent_spec;
 
     if (ictx->snap_id == CEPH_NOSNAP) {
-      if (!ictx->parent)
-	return -ENOENT;
       parent_spec = ictx->parent_md.spec;
     } else {
       r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
       if (r < 0) {
-	lderr(ictx->cct) << "Can't find snapshot id" << ictx->snap_id << dendl;
+	lderr(ictx->cct) << "Can't find snapshot id = " << ictx->snap_id << dendl;
 	return r;
       }
       if (parent_spec.pool_id == -1)
@@ -2038,7 +1831,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       r = rados.pool_reverse_lookup(parent_spec.pool_id,
 				    parent_pool_name);
       if (r < 0) {
-	lderr(ictx->cct) << "error looking up pool name" << cpp_strerror(r)
+	lderr(ictx->cct) << "error looking up pool name: " << cpp_strerror(r)
 			 << dendl;
 	return r;
       }
@@ -2070,7 +1863,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int get_flags(ImageCtx *ictx, uint64_t *flags)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -2084,7 +1877,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << " " << ictx << " fd " << fd << " type" << type << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -2097,8 +1890,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner)
   {
     RWLock::RLocker l(ictx->owner_lock);
-    *is_owner = (ictx->image_watcher != NULL &&
-		 ictx->image_watcher->is_lock_owner());
+    *is_owner = (ictx->exclusive_lock != nullptr &&
+		 ictx->exclusive_lock->is_lock_owner());
     return 0;
   }
 
@@ -2111,9 +1904,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     bool old_format = false;
     bool unknown_format = true;
     ImageCtx *ictx = new ImageCtx(imgname, "", NULL, io_ctx, false);
-    int r = open_image(ictx);
+    int r = ictx->state->open();
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+      delete ictx;
     } else {
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
@@ -2121,12 +1915,12 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       id = ictx->id;
 
       ictx->owner_lock.get_read();
-      if (ictx->image_watcher->is_lock_supported()) {
-        r = prepare_image_update(ictx);
-        if (r < 0 || !ictx->image_watcher->is_lock_owner()) {
+      if (ictx->exclusive_lock != nullptr) {
+        r = ictx->operations->prepare_image_update();
+        if (r < 0 || !ictx->exclusive_lock->is_lock_owner()) {
 	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
 	  ictx->owner_lock.put_read();
-	  close_image(ictx);
+	  ictx->state->close();
           return -EBUSY;
         }
       }
@@ -2134,7 +1928,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       if (ictx->snaps.size()) {
 	lderr(cct) << "image has snapshots - not removing" << dendl;
 	ictx->owner_lock.put_read();
-	close_image(ictx);
+	ictx->state->close();
 	return -ENOTEMPTY;
       }
 
@@ -2143,13 +1937,13 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       if (r < 0) {
         lderr(cct) << "error listing watchers" << dendl;
 	ictx->owner_lock.put_read();
-        close_image(ictx);
+        ictx->state->close();
         return r;
       }
       if (watchers.size() > 1) {
         lderr(cct) << "image has watchers - not removing" << dendl;
 	ictx->owner_lock.put_read();
-        close_image(ictx);
+        ictx->state->close();
         return -EBUSY;
       }
 
@@ -2165,12 +1959,23 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
 	ictx->owner_lock.put_read();
-        close_image(ictx);
+        ictx->state->close();
 	return r;
       }
 
+      if (!old_format) {
+        r = mirror_image_disable_internal(ictx, false);
+        if (r < 0 && r != -EOPNOTSUPP) {
+          lderr(cct) << "error disabling image mirroring: " << cpp_strerror(r)
+                     << dendl;
+          ictx->owner_lock.put_read();
+          ictx->state->close();
+          return r;
+        }
+      }
+
       ictx->owner_lock.put_read();
-      close_image(ictx);
+      ictx->state->close();
 
       ldout(cct, 2) << "removing header..." << dendl;
       r = io_ctx.remove(header_oid);
@@ -2185,13 +1990,15 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       r = tmap_rm(io_ctx, imgname);
       old_format = (r == 0);
       if (r < 0 && !unknown_format) {
-	lderr(cct) << "error removing img from old-style directory: "
-		   << cpp_strerror(-r) << dendl;
+        if (r != -ENOENT) {
+	  lderr(cct) << "error removing img from old-style directory: "
+		     << cpp_strerror(-r) << dendl;
+        }
 	return r;
       }
     }
     if (!old_format) {
-      r = Journal::remove(io_ctx, id);
+      r = Journal<>::remove(io_ctx, id);
       if (r < 0 && r != -ENOENT) {
         lderr(cct) << "error removing image journal" << dendl;
         return r;
@@ -2204,7 +2011,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
 
       ldout(cct, 2) << "removing id object..." << dendl;
-      r = io_ctx.remove(id_obj_name(imgname));
+      r = io_ctx.remove(util::id_obj_name(imgname));
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing id object: " << cpp_strerror(r) << dendl;
 	return r;
@@ -2219,81 +2026,23 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       ldout(cct, 2) << "removing rbd image from directory..." << dendl;
       r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, imgname, id);
       if (r < 0) {
-	lderr(cct) << "error removing img from new-style directory: "
-		   << cpp_strerror(-r) << dendl;
+        if (r != -ENOENT) {
+	  lderr(cct) << "error removing img from new-style directory: "
+		     << cpp_strerror(-r) << dendl;
+        }
 	return r;
       }
-    } 
+    }
 
     ldout(cct, 2) << "done." << dendl;
     return 0;
-  }
-
-  int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
-  {
-    CephContext *cct = ictx->cct;
-
-    ictx->snap_lock.get_read();
-    ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
-		   << size << dendl;
-    ictx->snap_lock.put_read();
-
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      return r;
-    }
-
-    uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "resize", false,
-                             boost::bind(&async_resize, ictx, _1, size,
-                                         boost::ref(prog_ctx)),
-                             boost::bind(&ImageWatcher::notify_resize,
-                                         ictx->image_watcher, request_id, size,
-                                         boost::ref(prog_ctx)));
-
-    ictx->perfcounter->inc(l_librbd_resize);
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    ldout(cct, 2) << "resize finished" << dendl;
-    return r;
-  }
-
-  void async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
-                    ProgressContext &prog_ctx)
-  {
-    assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-	   ictx->image_watcher->is_lock_owner());
-
-    CephContext *cct = ictx->cct;
-    ictx->snap_lock.get_read();
-    ldout(cct, 20) << "async_resize " << ictx << " " << ictx->size << " -> "
-		   << size << dendl;
-    ictx->snap_lock.put_read();
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-        ctx->complete(-EROFS);
-        return;
-      }
-    }
-
-    operation::ResizeRequest<> *req = new operation::ResizeRequest<>(
-      *ictx, ctx, size, prog_ctx);
-    req->send();
   }
 
   int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)
   {
     ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -2310,363 +2059,21 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  bool snap_exists(ImageCtx *ictx, const char *snap_name)
+  int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists)
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
-    return ictx->get_snap_id(snap_name) != CEPH_NOSNAP;
-  }
-
-  int ictx_check(ImageCtx *ictx) {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    return ictx_check(ictx, ictx->owner_lock);
-  }
-
-  int ictx_check(ImageCtx *ictx, const RWLock &owner_lock)
-  {
-    assert(ictx->owner_lock.is_locked());
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "ictx_check " << ictx << dendl;
-
-    bool needs_refresh = false;
-    int refresh_seq;
-    {
-      Mutex::Locker refresh_locker(ictx->refresh_lock);
-      while (ictx->refresh_in_progress) {
-        ictx->refresh_cond.Wait(ictx->refresh_lock);
-      }
-
-      if (ictx->last_refresh != ictx->refresh_seq) {
-        ictx->refresh_in_progress = true;
-        needs_refresh = true;
-        refresh_seq = ictx->refresh_seq;
-      }
-    }
-
-    if (needs_refresh) {
-      int r = ictx_refresh(ictx);
-
-      Mutex::Locker refresh_locker(ictx->refresh_lock);
-      ictx->refresh_in_progress = false;
-      ictx->refresh_cond.Signal();
-
-      if (r < 0) {
-	lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r)
-		   << dendl;
-        return r;
-      }
-      ictx->last_refresh = refresh_seq;
-    }
+    *exists = ictx->get_snap_id(snap_name) != CEPH_NOSNAP; 
     return 0;
-  }
-
-  int refresh_parent(ImageCtx *ictx) {
-    assert(ictx->cache_lock.is_locked());
-    assert(ictx->snap_lock.is_wlocked());
-    assert(ictx->parent_lock.is_wlocked());
-
-    // close the parent if it changed or this image no longer needs
-    // to read from it
-    int r;
-    if (ictx->parent) {
-      uint64_t overlap;
-      r = ictx->get_parent_overlap(ictx->snap_id, &overlap);
-      if (r < 0 && r != -ENOENT) {
-	return r;
-      }
-      if (r == -ENOENT || overlap == 0 ||
-	  ictx->parent->md_ctx.get_id() !=
-            ictx->get_parent_pool_id(ictx->snap_id) ||
-	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
-	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
-	ictx->clear_nonexistence_cache();
-	close_parent(ictx);
-      }
-    }
-
-    if (ictx->get_parent_pool_id(ictx->snap_id) > -1 && !ictx->parent) {
-      r = open_parent(ictx);
-      if (r < 0) {
-	lderr(ictx->cct) << "error opening parent snapshot: "
-			 << cpp_strerror(r) << dendl;
-	return r;
-      }
-    }
-
-    return 0;
-  }
-
-  int ictx_refresh(ImageCtx *ictx)
-  {
-    assert(ictx->owner_lock.is_locked());
-    RWLock::WLocker md_locker(ictx->md_lock);
-
-    CephContext *cct = ictx->cct;
-
-    ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
-
-    ::SnapContext new_snapc;
-    bool new_snap = false;
-    vector<string> snap_names;
-    vector<uint64_t> snap_sizes;
-    vector<parent_info> snap_parents;
-    vector<uint8_t> snap_protection;
-    vector<uint64_t> snap_flags;
-    {
-      Mutex::Locker cache_locker(ictx->cache_lock);
-      RWLock::WLocker snap_locker(ictx->snap_lock);
-
-      {
-	int r;
-	RWLock::WLocker parent_locker(ictx->parent_lock);
-	ictx->lockers.clear();
-	if (ictx->old_format) {
-	  r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
-	  if (r < 0) {
-	    lderr(cct) << "Error reading header: " << cpp_strerror(r) << dendl;
-	    return r;
-	  }
-	  r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
-					    &snap_names, &snap_sizes, &new_snapc);
-	  if (r < 0) {
-	    lderr(cct) << "Error listing snapshots: " << cpp_strerror(r)
-		       << dendl;
-	    return r;
-	  }
-	  ClsLockType lock_type = LOCK_NONE;
-	  r = rados::cls::lock::get_lock_info(&ictx->md_ctx, ictx->header_oid,
-					      RBD_LOCK_NAME, &ictx->lockers,
-					      &lock_type, &ictx->lock_tag);
-
-	  // If EOPNOTSUPP, treat image as if there are no locks (we can't
-	  // query them).
-
-	  // Ugly: OSDs prior to eed28daaf8927339c2ecae1b1b06c1b63678ab03
-	  // return EIO when the class isn't present; should be EOPNOTSUPP.
-	  // Treat EIO or EOPNOTSUPP the same for now, as LOCK_NONE.  Blech.
-
-	  if (r < 0 && ((r != -EOPNOTSUPP) && (r != -EIO))) {
-	    lderr(cct) << "Error getting lock info: " << cpp_strerror(r)
-		       << dendl;
-	    return r;
-	  }
-	  ictx->exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
-	  ictx->order = ictx->header.options.order;
-	  ictx->size = ictx->header.image_size;
-	  ictx->object_prefix = ictx->header.block_name;
-	  ictx->init_layout();
-	} else {
-	  do {
-	    uint64_t incompatible_features;
-	    bool read_only = ictx->read_only || ictx->snap_id != CEPH_NOSNAP;
-	    r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
-						 read_only,
-						 &ictx->size, &ictx->features,
-						 &incompatible_features,
-						 &ictx->lockers,
-						 &ictx->exclusive_locked,
-						 &ictx->lock_tag,
-						 &new_snapc,
-						 &ictx->parent_md);
-	    if (r < 0) {
-	      lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
-			 << dendl;
-	      return r;
-	    }
-
-	    uint64_t unsupported = incompatible_features & ~RBD_FEATURES_ALL;
-	    if (unsupported) {
-	      lderr(ictx->cct) << "Image uses unsupported features: "
-			       << unsupported << dendl;
-	      return -ENOSYS;
-	    }
-
-	    r = cls_client::get_flags(&ictx->md_ctx, ictx->header_oid,
-				      &ictx->flags, new_snapc.snaps,
-				      &snap_flags);
-	    if (r == -EOPNOTSUPP || r == -EIO) {
-	      // Older OSD doesn't support RBD flags, need to assume the worst
-	      ldout(ictx->cct, 10) << "OSD does not support RBD flags"
-				   << "disabling object map optimizations"
-				   << dendl;
-	      ictx->flags = RBD_FLAG_OBJECT_MAP_INVALID;
-              if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
-                ictx->flags |= RBD_FLAG_FAST_DIFF_INVALID;
-              }
-
-	      vector<uint64_t> default_flags(new_snapc.snaps.size(), ictx->flags);
-	      snap_flags.swap(default_flags);
-            } else if (r == -ENOENT) {
-              ldout(ictx->cct, 10) << "Image at invalid snapshot" << dendl;
-	      continue;
-            } else if (r < 0) {
-              lderr(cct) << "Error reading flags: " << cpp_strerror(r) << dendl;
-              return r;
-            }
-
-	    r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
-					  new_snapc.snaps, &snap_names,
-                                          &snap_sizes, &snap_parents,
-                                          &snap_protection);
-	    // -ENOENT here means we raced with snapshot deletion
-	    if (r < 0 && r != -ENOENT) {
-	      lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
-	      lderr(ictx->cct) << "Error listing snapshots: " << cpp_strerror(r)
-			       << dendl;
-	      return r;
-	    }
-	  } while (r == -ENOENT);
-	}
-
-	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
-	  parent_info parent;
-	  if (!ictx->old_format)
-	    parent = snap_parents[i];
-	  vector<snap_t>::const_iterator it =
-	    find(ictx->snaps.begin(), ictx->snaps.end(), new_snapc.snaps[i].val);
-	  if (it == ictx->snaps.end()) {
-	    new_snap = true;
-	    ldout(cct, 20) << "new snapshot id=" << new_snapc.snaps[i].val
-			   << " name=" << snap_names[i]
-			   << " size=" << snap_sizes[i]
-			   << dendl;
-	  }
-	}
-
-	ictx->snaps.clear();
-	ictx->snap_info.clear();
-	ictx->snap_ids.clear();
-	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
-	  uint64_t flags = ictx->old_format ? 0 : snap_flags[i];
-	  uint8_t protection_status = ictx->old_format ?
-	    (uint8_t)RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
-	  parent_info parent;
-	  if (!ictx->old_format)
-	    parent = snap_parents[i];
-	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val, snap_sizes[i],
-			 parent, protection_status, flags);
-	}
-
-	r = refresh_parent(ictx);
-	if (r < 0)
-	  return r;
-      } // release parent_lock
-
-      if (!new_snapc.is_valid()) {
-	lderr(cct) << "image snap context is invalid!" << dendl;
-	return -EIO;
-      }
-
-      ictx->snapc = new_snapc;
-
-      if (ictx->snap_id != CEPH_NOSNAP &&
-	  ictx->get_snap_id(ictx->snap_name) != ictx->snap_id) {
-	lderr(cct) << "tried to read from a snapshot that no longer exists: "
-		   << ictx->snap_name << dendl;
-	ictx->snap_exists = false;
-      }
-
-      ictx->object_map.refresh(ictx->snap_id);
-
-      ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-
-      // dynamically enable/disable journaling support
-      if ((ictx->features & RBD_FEATURE_JOURNALING) != 0 &&
-          ictx->image_watcher != NULL && ictx->journal == NULL &&
-          ictx->snap_name.empty()) {
-        ictx->open_journal();
-      } else if ((ictx->features & RBD_FEATURE_JOURNALING) == 0 &&
-                 ictx->journal != NULL) {
-        // TODO journal needs to be disabled via proxied request to avoid race
-        //      between deleting journal and appending journal events
-      }
-    } // release snap_lock and cache_lock
-
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->refresh();
-    }
-
-    if (new_snap) {
-      ictx->flush();
-    }
-    return 0;
-  }
-
-  int snap_rollback(ImageCtx *ictx, const char *snap_name,
-		    ProgressContext& prog_ctx)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name
-		   << dendl;
-
-    int r = ictx_check(ictx);
-    if (r < 0)
-      return r;
-
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    snap_t snap_id;
-    uint64_t new_size;
-    {
-      {
-	// need to drop snap_lock before invalidating cache
-	RWLock::RLocker snap_locker(ictx->snap_lock);
-	if (!ictx->snap_exists) {
-	  return -ENOENT;
-	}
-
-	if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-	  return -EROFS;
-	}
-
-	snap_id = ictx->get_snap_id(snap_name);
-	if (snap_id == CEPH_NOSNAP) {
-	  lderr(cct) << "No such snapshot found." << dendl;
-	  return -ENOENT;
-	}
-      }
-
-      r = prepare_image_update(ictx);
-      if (r < 0) {
-	return -EROFS;
-      }
-      if (ictx->image_watcher->is_lock_supported() &&
-	  !ictx->image_watcher->is_lock_owner()) {
-	return -EROFS;
-      }
-
-      if (ictx->journal != NULL) {
-        ictx->journal->wait_for_journal_ready();
-      }
-
-      ictx->snap_lock.get_read();
-      new_size = ictx->get_image_size(snap_id);
-      ictx->snap_lock.put_read();
-    }
-
-    // TODO need to wait for journal replay to complete (if enabled)
-    C_SaferCond cond_ctx;
-    operation::SnapshotRollbackRequest<> *request =
-      new operation::SnapshotRollbackRequest<>(*ictx, &cond_ctx, snap_name,
-                                               snap_id, new_size, prog_ctx);
-    request->send();
-    r = cond_ctx.wait();
-    if (r < 0) {
-      return r;
-    }
-
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-
-    ictx->perfcounter->inc(l_librbd_snap_rollback);
-    return r;
   }
 
   struct CopyProgressCtx {
-    CopyProgressCtx(ProgressContext &p)
+    explicit CopyProgressCtx(ProgressContext &p)
       : destictx(NULL), src_size(0), prog_ctx(p)
     { }
 
@@ -2720,14 +2127,15 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
 					  dest_md_ctx, false);
-    r = open_image(dest);
+    r = dest->state->open();
     if (r < 0) {
+      delete dest;
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
 
     r = copy(src, dest, prog_ctx);
-    int close_r = close_image(dest);
+    int close_r = dest->state->close();
     if (r == 0 && close_r < 0) {
       r = close_r;
     }
@@ -2771,7 +2179,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       }
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
-      AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
+      AioCompletion *comp = AioCompletion::create(ctx);
 
       // coordinate through AIO WQ to ensure lock is acquired if needed
       m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
@@ -2798,7 +2206,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     CephContext *cct = src->cct;
     if (dest_size < src_size) {
-      lderr(cct) << " src size " << src_size << " >= dest size "
+      lderr(cct) << " src size " << src_size << " > dest size "
 		 << dest_size << dendl;
       return -EINVAL;
     }
@@ -2807,12 +2215,12 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     r = cls_client::metadata_list(&src->md_ctx, src->header_oid, "", 0, &pairs);
     if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
       return r;
     } else if (r == 0 && !pairs.empty()) {
       r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
       if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
         return r;
       }
     }
@@ -2829,9 +2237,9 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
-      AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::aio_read(src, comp, offset, len, NULL, bl,
-                                fadvise_flags);
+      AioCompletion *comp = AioCompletion::create(ctx);
+      AioImageRequest<>::aio_read(src, comp, offset, len, NULL, bl,
+                                  fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -2841,29 +2249,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return r;
   }
 
-  // common snap_set functionality for snap_set and open_image
-
-  int _snap_set(ImageCtx *ictx, const char *snap_name)
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    RWLock::RLocker md_locker(ictx->md_lock);
-    Mutex::Locker cache_locker(ictx->cache_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
-    RWLock::WLocker parent_locker(ictx->parent_lock);
-    int r;
-    if ((snap_name != NULL) && (strlen(snap_name) != 0)) {
-      r = ictx->snap_set(snap_name);
-    } else {
-      ictx->snap_unset();
-      r = 0;
-    }
-    if (r < 0) {
-      return r;
-    }
-    refresh_parent(ictx);
-    return 0;
-  }
-
   int snap_set(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
@@ -2871,346 +2256,22 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
-    ictx_check(ictx);
+    ictx->state->refresh_if_required();
 
-    int r;
-    bool snapshot_mode = (snap_name != NULL && strlen(snap_name) != 0);
-    if (snapshot_mode) {
-      {
-        RWLock::WLocker owner_locker(ictx->owner_lock);
-        if (ictx->image_watcher != NULL &&
-            ictx->image_watcher->is_lock_owner()) {
-          r = ictx->image_watcher->release_lock();
-          if (r < 0) {
-            return r;
-          }
-        }
-      }
+    C_SaferCond ctx;
+    std::string name(snap_name == nullptr ? "" : snap_name);
+    ictx->state->snap_set(name, &ctx);
 
-      ictx->cancel_async_requests();
-      {
-        RWLock::RLocker owner_locker(ictx->owner_lock);
-        r = ictx->flush();
-      }
-
-      {
-        RWLock::WLocker snap_locker(ictx->snap_lock);
-        if (ictx->journal != NULL) {
-          r = ictx->close_journal(false);
-          if (r < 0) {
-            return r;
-          }
-        }
-      }
-    }
-
-    r = _snap_set(ictx, snap_name);
+    int r = ctx.wait();
     if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(ictx->cct) << "failed to " << (name.empty() ? "un" : "") << "set "
+                         << "snapshot: " << cpp_strerror(r) << dendl;
+      }
       return r;
-    }
-
-    {
-      RWLock::WLocker snap_locker(ictx->snap_lock);
-      if ((ictx->features & RBD_FEATURE_JOURNALING) != 0 &&
-          ictx->journal == NULL && !snapshot_mode) {
-        ictx->open_journal();
-      }
-    }
-
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->refresh();
-    }
-    return r;
-  }
-
-  int open_image(ImageCtx *ictx)
-  {
-    ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
-			 << " name = '" << ictx->name
-			 << "' id = '" << ictx->id
-			 << "' snap_name = '"
-			 << ictx->snap_name << "'" << dendl;
-    int r = ictx->init();
-    if (r < 0)
-      goto err_close;
-
-    if (!ictx->read_only) {
-      r = ictx->register_watch();
-      if (r < 0) {
-	lderr(ictx->cct) << "error registering a watch: " << cpp_strerror(r)
-			 << dendl;
-	goto err_close;
-      }
-    }
-
-    {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      r = ictx_refresh(ictx);
-    }
-    if (r < 0)
-      goto err_close;
-
-    if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
-      goto err_close;
-
-    if (ictx->image_watcher != NULL) {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      ictx->image_watcher->refresh();
     }
 
     return 0;
-
-  err_close:
-    close_image(ictx);
-    return r;
-  }
-
-  int close_image(ImageCtx *ictx)
-  {
-    ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
-
-    if (!ictx->read_only) {
-      // finish all incoming IO operations
-      ictx->aio_work_queue->drain();
-    }
-
-    int r = 0;
-    {
-      // release the lock (and flush all in-flight IO)
-      RWLock::WLocker owner_locker(ictx->owner_lock);
-      if (ictx->image_watcher != NULL && ictx->image_watcher->is_lock_owner()) {
-        r = ictx->image_watcher->release_lock();
-        if (r < 0) {
-          lderr(ictx->cct) << "error releasing image lock: " << cpp_strerror(r)
-                           << dendl;
-        }
-      }
-    }
-
-    assert(!ictx->aio_work_queue->writes_blocked() ||
-           ictx->aio_work_queue->writes_empty());
-
-    ictx->cancel_async_requests();
-    ictx->clear_pending_completions();
-    ictx->flush_async_operations();
-    ictx->readahead.wait_for_pending();
-
-    if (ictx->object_cacher) {
-      int flush_r = ictx->shutdown_cache(); // implicitly flushes
-      if (flush_r < 0) {
-        lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(flush_r)
-                         << dendl;
-        if (r == 0) {
-          r = flush_r;
-        }
-      }
-    }
-
-    if (ictx->copyup_finisher != NULL) {
-      ictx->copyup_finisher->wait_for_empty();
-      ictx->copyup_finisher->stop();
-    }
-
-    if (ictx->journal != NULL) {
-      int close_r = ictx->close_journal(true);
-      if (close_r < 0 && r == 0) {
-        r = close_r;
-      }
-    }
-
-    ictx->op_work_queue->drain();
-
-    if (ictx->parent) {
-      RWLock::WLocker parent_locker(ictx->parent_lock);
-      int close_r = close_parent(ictx);
-      if (r == 0 && close_r < 0) {
-        r = close_r;
-      }
-    }
-
-    if (ictx->image_watcher) {
-      ictx->unregister_watch();
-    }
-
-    delete ictx;
-    return r;
-  }
-
-  int close_parent(ImageCtx *ictx)
-  {
-    assert(ictx->parent_lock.is_wlocked());
-    ImageCtx *parent_ictx = ictx->parent;
-
-    // AIO to the parent must be complete before closing
-    {
-      RWLock::RLocker owner_locker(parent_ictx->owner_lock);
-      parent_ictx->flush();
-    }
-    parent_ictx->readahead.wait_for_pending();
-    {
-      Mutex::Locker async_ops_locker(parent_ictx->async_ops_lock);
-      assert(parent_ictx->async_ops.empty());
-    }
-
-    // attempting to drain the work queues might result in deadlock
-    assert(parent_ictx->aio_work_queue->empty());
-    assert(parent_ictx->op_work_queue->empty());
-
-    int r = close_image(parent_ictx);
-    ictx->parent = NULL;
-    return r;
-  }
-
-  // 'flatten' child image by copying all parent's blocks
-  int flatten(ImageCtx *ictx, ProgressContext &prog_ctx)
-  {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "flatten" << dendl;
-
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      return r;
-    }
-
-    if (ictx->read_only) {
-      return -EROFS;
-    }
-
-    {
-      RWLock::RLocker parent_locker(ictx->parent_lock);
-      if (ictx->parent_md.spec.pool_id == -1) {
-	lderr(cct) << "image has no parent" << dendl;
-	return -EINVAL;
-      }
-    }
-
-    uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "flatten", false,
-                             boost::bind(&async_flatten, ictx, _1,
-                                         boost::ref(prog_ctx)),
-                             boost::bind(&ImageWatcher::notify_flatten,
-                                         ictx->image_watcher, request_id,
-                                         boost::ref(prog_ctx)));
-
-    if (r < 0 && r != -EINVAL) {
-      return r;
-    }
-
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    ldout(cct, 20) << "flatten finished" << dendl;
-    return 0;
-  }
-
-  void async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx)
-  {
-    assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-	   ictx->image_watcher->is_lock_owner());
-
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "flatten" << dendl;
-
-    int r;
-    // ictx_check also updates parent data
-    if ((r = ictx_check(ictx, ictx->owner_lock)) < 0) {
-      lderr(cct) << "ictx_check failed" << dendl;
-      ctx->complete(r);
-      return;
-    }
-
-    uint64_t object_size;
-    uint64_t overlap_objects;
-    ::SnapContext snapc;
-
-    {
-      uint64_t overlap;
-      RWLock::RLocker l(ictx->snap_lock);
-      RWLock::RLocker l2(ictx->parent_lock);
-
-      if (ictx->read_only) {
-        ctx->complete(-EROFS);
-        return;
-      }
-
-      // can't flatten a non-clone
-      if (ictx->parent_md.spec.pool_id == -1) {
-	lderr(cct) << "image has no parent" << dendl;
-        ctx->complete(-EINVAL);
-	return;
-      }
-      if (ictx->snap_id != CEPH_NOSNAP) {
-	lderr(cct) << "snapshots cannot be flattened" << dendl;
-        ctx->complete(-EROFS);
-	return;
-      }
-
-      snapc = ictx->snapc;
-      assert(ictx->parent != NULL);
-      r = ictx->get_parent_overlap(CEPH_NOSNAP, &overlap);
-      assert(r == 0);
-      assert(overlap <= ictx->size);
-
-      object_size = ictx->get_object_size();
-      overlap_objects = Striper::get_num_objects(ictx->layout, overlap);
-    }
-
-    operation::FlattenRequest<> *req = new operation::FlattenRequest<>(
-      *ictx, ctx, object_size, overlap_objects, snapc, prog_ctx);
-    req->send();
-  }
-
-  int rebuild_object_map(ImageCtx *ictx, ProgressContext &prog_ctx) {
-    CephContext *cct = ictx->cct;
-    ldout(cct, 10) << "rebuild_object_map" << dendl;
-
-    int r = ictx_check(ictx);
-    if (r < 0) {
-      return r;
-    }
-
-    uint64_t request_id = ictx->async_request_seq.inc();
-    r = invoke_async_request(ictx, "rebuild object map", true,
-                             boost::bind(&async_rebuild_object_map, ictx, _1,
-                                         boost::ref(prog_ctx)),
-                             boost::bind(&ImageWatcher::notify_rebuild_object_map,
-                                         ictx->image_watcher, request_id,
-                                         boost::ref(prog_ctx)));
-
-    ldout(cct, 10) << "rebuild object map finished" << dendl;
-    if (r < 0) {
-      notify_change(ictx->md_ctx, ictx->header_oid, ictx);
-    }
-    return r;
-  }
-
-  void async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
-                                ProgressContext &prog_ctx) {
-    assert(ictx->owner_lock.is_locked());
-    assert(!ictx->image_watcher->is_lock_supported() ||
-	   ictx->image_watcher->is_lock_owner());
-
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "async_rebuild_object_map " << ictx << dendl;
-
-    if (ictx->read_only) {
-      ctx->complete(-EROFS);
-      return;
-    }
-    if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-      ctx->complete(-EINVAL);
-      return;
-    }
-
-    int r = ictx_check(ictx, ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
-    operation::RebuildObjectMapRequest<> *req =
-      new operation::RebuildObjectMapRequest<>(*ictx, ctx, prog_ctx);
-    req->send();
   }
 
   int list_lockers(ImageCtx *ictx,
@@ -3220,7 +2281,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
   {
     ldout(ictx->cct, 20) << "list_locks on image " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3252,7 +2313,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 			 << " cookie='" << cookie << "' tag='" << tag << "'"
 			 << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3261,13 +2322,17 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
      * checks that we think we will succeed. But for now, let's not
      * duplicate that code.
      */
-    RWLock::RLocker locker(ictx->md_lock);
-    r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
-			       exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
-			       cookie, tag, "", utime_t(), 0);
-    if (r < 0)
-      return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    {
+      RWLock::RLocker locker(ictx->md_lock);
+      r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
+			         exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
+			         cookie, tag, "", utime_t(), 0);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    ictx->notify_update();
     return 0;
   }
 
@@ -3276,17 +2341,20 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "unlock image " << ictx
 			 << " cookie='" << cookie << "'" << dendl;
 
-
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
-    RWLock::RLocker locker(ictx->md_lock);
-    r = rados::cls::lock::unlock(&ictx->md_ctx, ictx->header_oid,
-				 RBD_LOCK_NAME, cookie);
-    if (r < 0)
-      return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    {
+      RWLock::RLocker locker(ictx->md_lock);
+      r = rados::cls::lock::unlock(&ictx->md_ctx, ictx->header_oid,
+				   RBD_LOCK_NAME, cookie);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    ictx->notify_update();
     return 0;
   }
 
@@ -3296,7 +2364,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "break_lock image " << ictx << " client='" << client
 			 << "' cookie='" << cookie << "'" << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3333,7 +2401,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       if (client_address.empty()) {
         return -ENOENT;
       }
-      
+
       RWLock::RLocker locker(ictx->md_lock);
       librados::Rados rados(ictx->md_ctx);
       r = rados.blacklist_add(client_address,
@@ -3349,7 +2417,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 				     RBD_LOCK_NAME, cookie, lock_client);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
+    ictx->notify_update();
     return 0;
   }
 
@@ -3370,7 +2438,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ldout(ictx->cct, 20) << "read_iterate " << ictx << " off = " << off
 			 << " len = " << len << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3393,26 +2461,19 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
       bufferlist bl;
 
-      Mutex mylock("IoCtxImpl::write::mylock");
-      Cond cond;
-      bool done;
-      int ret;
+      C_SaferCond ctx;
+      AioCompletion *c = AioCompletion::create(&ctx);
+      AioImageRequest<>::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
 
-      Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
-      AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
-
-      mylock.Lock();
-      while (!done)
-	cond.Wait(mylock);
-      mylock.Unlock();
-
-      if (ret < 0)
-	return ret;
+      int ret = ctx.wait();
+      if (ret < 0) {
+        return ret;
+      }
 
       r = cb(total_read, ret, bl.c_str(), arg);
-      if (r < 0)
+      if (r < 0) {
 	return r;
+      }
 
       total_read += ret;
       left -= ret;
@@ -3439,7 +2500,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       ictx->flush();
     }
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3455,18 +2516,6 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
                         whole_object, cb, arg);
     r = command.execute();
     return r;
-  }
-
-  void rados_req_cb(rados_completion_t c, void *arg)
-  {
-    AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
-    req->complete(rados_aio_get_return_value(c));
-  }
-
-  void rados_ctx_cb(rados_completion_t c, void *arg)
-  {
-    Context *comp = reinterpret_cast<Context *>(arg);
-    comp->complete(rados_aio_get_return_value(c));
   }
 
   // validate extent against image size; clip to image size if necessary
@@ -3499,7 +2548,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flush " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3518,7 +2567,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3552,7 +2601,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_get " << ictx << " key=" << key << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3565,7 +2614,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_set " << ictx << " key=" << key << " value=" << value << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3580,7 +2629,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_remove " << ictx << " key=" << key << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3593,7 +2642,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_list " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3601,69 +2650,524 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
 
-  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled) {
-    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << dendl;
+  int mirror_image_enable(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "mirror_image_enable " << ictx << dendl;
 
-    int r = cls_client::mirror_is_enabled(&io_ctx, enabled);
+    cls::rbd::MirrorMode mirror_mode;
+    int r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
     if (r < 0) {
-      lderr(cct) << "Failed to retrieve mirror flag: " << cpp_strerror(r)
+      lderr(cct) << "cannot enable mirroring: failed to retrieve mirror mode: "
+        << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
+      lderr(cct) << "cannot enable mirroring in the current pool mirroring "
+        "mode" << dendl;
+      return -EINVAL;
+    }
+
+    r = mirror_image_enable_internal(ictx);
+    if (r < 0) {
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_image_disable(ImageCtx *ictx, bool force) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "mirror_image_disable " << ictx << dendl;
+
+    cls::rbd::MirrorMode mirror_mode;
+    int r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
+    if (r < 0) {
+      lderr(cct) << "cannot disable mirroring: failed to retrieve pool "
+        "mirroring mode: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
+      lderr(cct) << "cannot disable mirroring in the current pool mirroring "
+        "mode" << dendl;
+      return -EINVAL;
+    }
+
+    r = mirror_image_disable_internal(ictx, force);
+    if (r < 0) {
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_image_promote(ImageCtx *ictx, bool force) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
+                   << "force=" << force << dendl;
+
+    int r = validate_mirroring_enabled(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    std::string mirror_uuid;
+    r = Journal<>::get_tag_owner(ictx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
+      lderr(cct) << "image is already primary" << dendl;
+      return -EINVAL;
+    } else if (mirror_uuid != Journal<>::ORPHAN_MIRROR_UUID && !force) {
+      lderr(cct) << "image is still primary within a remote cluster" << dendl;
+      return -EBUSY;
+    }
+
+    // TODO: need interlock with local rbd-mirror daemon to ensure it has stopped
+    //       replay
+
+    r = Journal<>::promote(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to promote image: " << cpp_strerror(r)
                  << dendl;
       return r;
     }
     return 0;
   }
 
-  int mirror_set_enabled(IoCtx& io_ctx, bool enabled) {
-    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << ": enabled=" << enabled << dendl;
+  int mirror_image_demote(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
-    int r = cls_client::mirror_set_enabled(&io_ctx, enabled);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "Failed to set mirror flag: " << cpp_strerror(r) << dendl;
+    int r = validate_mirroring_enabled(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    bool is_primary;
+    r = Journal<>::is_tag_owner(ictx, &is_primary);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    if (!is_primary) {
+      lderr(cct) << "image is not currently the primary" << dendl;
+      return -EINVAL;
+    }
+
+    RWLock::RLocker owner_lock(ictx->owner_lock);
+    if (ictx->exclusive_lock == nullptr) {
+      lderr(cct) << "exclusive lock is not active" << dendl;
+      return -EINVAL;
+    }
+
+    C_SaferCond lock_ctx;
+    ictx->exclusive_lock->request_lock(&lock_ctx);
+    r = lock_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
+      return r;
+    } else if (!ictx->exclusive_lock->is_lock_owner()) {
+      lderr(cct) << "failed to acquire exclusive lock" << dendl;
+      return -EROFS;
+    }
+
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    if (ictx->journal == nullptr) {
+      lderr(cct) << "journal is not active" << dendl;
+      return -EINVAL;
+    } else if (!ictx->journal->is_tag_owner()) {
+      lderr(cct) << "image is not currently the primary" << dendl;
+      return -EINVAL;
+    }
+
+    r = ictx->journal->demote();
+    if (r < 0) {
+      lderr(cct) << "failed to demote image: " << cpp_strerror(r)
+                 << dendl;
       return r;
     }
     return 0;
   }
 
-  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
-                      const std::string &cluster_name,
-                      const std::string &client_name) {
-    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << ", "
-                   << "name=" << cluster_name << ", "
-                   << "client=" << client_name << dendl;
+  int mirror_image_resync(ImageCtx *ictx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
-    std::string local_cluster_uuid;
-    librados::Rados rados(io_ctx);
-    int r = rados.cluster_fsid(&local_cluster_uuid);
+    int r = validate_mirroring_enabled(ictx);
     if (r < 0) {
-      lderr(cct) << "Failed to retreive cluster uuid" << dendl;
       return r;
     }
 
-    if (local_cluster_uuid == cluster_uuid) {
+    std::string mirror_uuid;
+    r = Journal<>::get_tag_owner(ictx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    } else if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
+      lderr(cct) << "image is primary, cannot resync to itself" << dendl;
+      return -EINVAL;
+    }
+
+    // flag the journal indicating that we want to rebuild the local image
+    r = Journal<>::request_resync(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    return 0;
+  }
+
+  int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
+                            size_t info_size) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+    if (info_size < sizeof(mirror_image_info_t)) {
+      return -ERANGE;
+    }
+
+    cls::rbd::MirrorImage mirror_image_internal;
+    int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+        &mirror_image_internal);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+        << dendl;
+      return r;
+    }
+
+    mirror_image_info->global_id = mirror_image_internal.global_image_id;
+    if (r == -ENOENT) {
+      mirror_image_info->state = RBD_MIRROR_IMAGE_DISABLED;
+    } else {
+      mirror_image_info->state =
+        static_cast<rbd_mirror_image_state_t>(mirror_image_internal.state);
+    }
+
+    if (mirror_image_info->state == RBD_MIRROR_IMAGE_ENABLED) {
+      r = Journal<>::is_tag_owner(ictx, &mirror_image_info->primary);
+      if (r < 0) {
+        lderr(cct) << "failed to check tag ownership: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+    } else {
+      mirror_image_info->primary = false;
+    }
+
+    return 0;
+  }
+
+  int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << dendl;
+
+    cls::rbd::MirrorMode mirror_mode_internal;
+    int r = cls_client::mirror_mode_get(&io_ctx, &mirror_mode_internal);
+    if (r < 0) {
+      lderr(cct) << "Failed to retrieve mirror mode: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    switch (mirror_mode_internal) {
+    case cls::rbd::MIRROR_MODE_DISABLED:
+    case cls::rbd::MIRROR_MODE_IMAGE:
+    case cls::rbd::MIRROR_MODE_POOL:
+      *mirror_mode = static_cast<rbd_mirror_mode_t>(mirror_mode_internal);
+      break;
+    default:
+      lderr(cct) << "Unknown mirror mode ("
+                 << static_cast<uint32_t>(mirror_mode_internal) << ")"
+                 << dendl;
+      return -EINVAL;
+    }
+    return 0;
+  }
+
+  int list_mirror_images(IoCtx& io_ctx,
+                         std::set<std::string>& mirror_image_ids) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+
+    std::string last_read = "";
+    int max_read = 1024;
+    int r;
+    do {
+      std::map<std::string, std::string> mirror_images;
+      r =  cls_client::mirror_image_list(&io_ctx, last_read, max_read,
+                                             &mirror_images);
+      if (r < 0) {
+        lderr(cct) << "error listing mirrored image directory: "
+             << cpp_strerror(r) << dendl;
+        return r;
+      }
+      for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
+        mirror_image_ids.insert(it->first);
+      }
+      if (!mirror_images.empty()) {
+        last_read = mirror_images.rbegin()->first;
+      }
+      r = mirror_images.size();
+    } while (r == max_read);
+
+    return 0;
+  }
+
+  int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << dendl;
+
+    cls::rbd::MirrorMode next_mirror_mode;
+    switch (mirror_mode) {
+    case RBD_MIRROR_MODE_DISABLED:
+    case RBD_MIRROR_MODE_IMAGE:
+    case RBD_MIRROR_MODE_POOL:
+      next_mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode);
+      break;
+    default:
+      lderr(cct) << "Unknown mirror mode ("
+                 << static_cast<uint32_t>(mirror_mode) << ")" << dendl;
+      return -EINVAL;
+    }
+
+    cls::rbd::MirrorMode current_mirror_mode;
+    int r = cls_client::mirror_mode_get(&io_ctx, &current_mirror_mode);
+    if (r < 0) {
+      lderr(cct) << "Failed to retrieve mirror mode: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    if (current_mirror_mode == next_mirror_mode) {
+      return 0;
+    } else if (current_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+      r = cls_client::mirror_uuid_set(&io_ctx, uuid_gen.to_string());
+      if (r < 0) {
+        lderr(cct) << "Failed to allocate mirroring uuid: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+    }
+
+    if (current_mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
+      r = cls_client::mirror_mode_set(&io_ctx, cls::rbd::MIRROR_MODE_IMAGE);
+      if (r < 0) {
+        lderr(cct) << "Failed to set mirror mode to image: "
+          << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      r = MirroringWatcher<>::notify_mode_updated(io_ctx,
+                                                  cls::rbd::MIRROR_MODE_IMAGE);
+      if (r < 0) {
+        lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+    }
+
+    if (next_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
+      return 0;
+    }
+
+    struct rollback_state_t {
+      IoCtx *io_ctx;
+      bool do_rollback;
+      cls::rbd::MirrorMode mirror_mode;
+      bool enable;
+      std::vector<std::pair<ImageCtx *, bool> > img_ctxs;
+
+      rollback_state_t(IoCtx *io_ctx, cls::rbd::MirrorMode mirror_mode, bool enable) :
+        io_ctx(io_ctx),
+        do_rollback(true),
+        mirror_mode(mirror_mode),
+        enable(enable) {
+      }
+      ~rollback_state_t() {
+        CephContext *cct = reinterpret_cast<CephContext *>(io_ctx->cct());
+        if (do_rollback && mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
+          int r = cls_client::mirror_mode_set(io_ctx, mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "Failed to rollback mirror mode: " << cpp_strerror(r)
+              << dendl;
+          }
+
+          r = MirroringWatcher<>::notify_mode_updated(*io_ctx, mirror_mode);
+          if (r < 0) {
+            lderr(cct) << "failed to send update notification: "
+                       << cpp_strerror(r) << dendl;
+          }
+        }
+        for (const auto& pair : img_ctxs) {
+          if (do_rollback && pair.second) {
+            int r = enable ? mirror_image_disable(pair.first, false) :
+              mirror_image_enable(pair.first);
+            if (r < 0) {
+              lderr(cct) << "Failed to rollback mirroring state for image id "
+                << pair.first->id << ": " << cpp_strerror(r) << dendl;
+            }
+          }
+
+          int r = pair.first->state->close();
+          if (r < 0) {
+            lderr(cct) << "error closing image " << pair.first->id << ": "
+              << cpp_strerror(r) << dendl;
+          }
+        }
+      }
+    } rb_state(&io_ctx, current_mirror_mode,
+                     next_mirror_mode == cls::rbd::MIRROR_MODE_POOL);
+
+
+    if (next_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
+
+      map<string, string> images;
+      r = list_images_v2(io_ctx, images);
+      if (r < 0) {
+        lderr(cct) << "Failed listing images: " << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      for (const auto& img_pair : images) {
+        uint64_t features;
+        r = cls_client::get_features(&io_ctx, util::header_name(img_pair.second),
+                                     CEPH_NOSNAP, &features);
+        if (r < 0) {
+          lderr(cct) << "error getting features for image " << img_pair.first
+            << ": " << cpp_strerror(r) << dendl;
+          return r;
+        }
+
+        if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          ImageCtx *img_ctx = new ImageCtx("", img_pair.second, nullptr,
+                                           io_ctx, false);
+          r = img_ctx->state->open();
+          if (r < 0) {
+            lderr(cct) << "error opening image "<< img_pair.first << ": "
+              << cpp_strerror(r) << dendl;
+            delete img_ctx;
+            return r;
+          }
+
+          r = mirror_image_enable(img_ctx);
+          if (r < 0) {
+            lderr(cct) << "error enabling mirroring for image "
+              << img_pair.first << ": " << cpp_strerror(r) << dendl;
+            rb_state.img_ctxs.push_back(std::make_pair(img_ctx, false));
+            return r;
+          }
+
+          rb_state.img_ctxs.push_back(std::make_pair(img_ctx, true));
+        }
+      }
+    } else if (next_mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+
+      std::set<std::string> image_ids;
+      r = list_mirror_images(io_ctx, image_ids);
+      if (r < 0) {
+        lderr(cct) << "Failed listing images: " << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      for (const auto& img_id : image_ids) {
+        if (current_mirror_mode == cls::rbd::MIRROR_MODE_IMAGE) {
+          cls::rbd::MirrorImage mirror_image;
+          r = cls_client::mirror_image_get(&io_ctx, img_id, &mirror_image);
+          if (r < 0 && r != -ENOENT) {
+            lderr(cct) << "failed to retrieve mirroring state for image id "
+              << img_id << ": " << cpp_strerror(r) << dendl;
+            return r;
+          }
+          if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+            lderr(cct) << "Failed to disable mirror mode: there are still "
+              "images with mirroring enabled" << dendl;
+            return -EINVAL;
+          }
+        } else {
+          ImageCtx *img_ctx = new ImageCtx("", img_id, nullptr, io_ctx, false);
+          r = img_ctx->state->open();
+          if (r < 0) {
+            lderr(cct) << "error opening image id "<< img_id << ": "
+              << cpp_strerror(r) << dendl;
+            delete img_ctx;
+            return r;
+          }
+
+          r = mirror_image_disable(img_ctx, false);
+          if (r < 0) {
+            lderr(cct) << "error disabling mirroring for image id " << img_id
+              << cpp_strerror(r) << dendl;
+            rb_state.img_ctxs.push_back(std::make_pair(img_ctx, false));
+            return r;
+          }
+
+          rb_state.img_ctxs.push_back(std::make_pair(img_ctx, true));
+        }
+      }
+    }
+
+    rb_state.do_rollback = false;
+
+    r = cls_client::mirror_mode_set(&io_ctx, next_mirror_mode);
+    if (r < 0) {
+      lderr(cct) << "Failed to set mirror mode: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    r = MirroringWatcher<>::notify_mode_updated(io_ctx, next_mirror_mode);
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << ": "
+                   << "name=" << cluster_name << ", "
+                   << "client=" << client_name << dendl;
+
+    if (cct->_conf->cluster == cluster_name) {
       lderr(cct) << "Cannot add self as remote peer" << dendl;
       return -EINVAL;
     }
 
-    r = cls_client::mirror_peer_add(&io_ctx, cluster_uuid, cluster_name,
-                                    client_name);
-    if (r < 0) {
-      lderr(cct) << "Failed to add mirror peer '" << cluster_uuid << "': "
-                 << cpp_strerror(r) << dendl;
-      return r;
-    }
+    int r;
+    do {
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+
+      *uuid = uuid_gen.to_string();
+      r = cls_client::mirror_peer_add(&io_ctx, *uuid, cluster_name,
+                                      client_name);
+      if (r == -ESTALE) {
+        ldout(cct, 5) << "Duplicate UUID detected, retrying" << dendl;
+      } else if (r < 0) {
+        lderr(cct) << "Failed to add mirror peer '" << uuid << "': "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+    } while (r == -ESTALE);
     return 0;
   }
 
-  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid) {
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &uuid) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << dendl;
+    ldout(cct, 20) << __func__ << ": uuid=" << uuid << dendl;
 
-    int r = cls_client::mirror_peer_remove(&io_ctx, cluster_uuid);
+    int r = cls_client::mirror_peer_remove(&io_ctx, uuid);
     if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "Failed to remove peer '" << cluster_uuid << "': "
+      lderr(cct) << "Failed to remove peer '" << uuid << "': "
                  << cpp_strerror(r) << dendl;
       return r;
     }
@@ -3685,7 +3189,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     peers->reserve(mirror_peers.size());
     for (auto &mirror_peer : mirror_peers) {
       mirror_peer_t peer;
-      peer.cluster_uuid = mirror_peer.cluster_uuid;
+      peer.uuid = mirror_peer.uuid;
       peer.cluster_name = mirror_peer.cluster_name;
       peer.client_name = mirror_peer.client_name;
       peers->push_back(peer);
@@ -3693,32 +3197,30 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return 0;
   }
 
-  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &uuid,
                              const std::string &client_name) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << ", "
+    ldout(cct, 20) << __func__ << ": uuid=" << uuid << ", "
                    << "client=" << client_name << dendl;
 
-    int r = cls_client::mirror_peer_set_client(&io_ctx, cluster_uuid,
-                                               client_name);
+    int r = cls_client::mirror_peer_set_client(&io_ctx, uuid, client_name);
     if (r < 0) {
-      lderr(cct) << "Failed to update client '" << cluster_uuid << "': "
+      lderr(cct) << "Failed to update client '" << uuid << "': "
                  << cpp_strerror(r) << dendl;
       return r;
     }
     return 0;
   }
 
-  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
-    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << ", "
+    ldout(cct, 20) << __func__ << ": uuid=" << uuid << ", "
                    << "cluster=" << cluster_name << dendl;
 
-    int r = cls_client::mirror_peer_set_cluster(&io_ctx, cluster_uuid,
-                                                cluster_name);
+    int r = cls_client::mirror_peer_set_cluster(&io_ctx, uuid, cluster_name);
     if (r < 0) {
-      lderr(cct) << "Failed to update cluster '" << cluster_uuid << "': "
+      lderr(cct) << "Failed to update cluster '" << uuid << "': "
                  << cpp_strerror(r) << dendl;
       return r;
     }
@@ -3754,17 +3256,20 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 	 ++p) {
       total_bytes += p->second;
     }
+    
     ictx->md_lock.get_write();
     bool abort = ictx->readahead_disable_after_bytes != 0 &&
       ictx->total_bytes_read > ictx->readahead_disable_after_bytes;
+    if (abort) {
+      ictx->md_lock.put_write();
+      return;
+    }
     ictx->total_bytes_read += total_bytes;
     ictx->snap_lock.get_read();
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     ictx->snap_lock.put_read();
     ictx->md_lock.put_write();
-    if (abort) {
-      return;
-    }
+    
     pair<uint64_t, uint64_t> readahead_extent = ictx->readahead.update(image_extents, image_size);
     uint64_t readahead_offset = readahead_extent.first;
     uint64_t readahead_length = readahead_extent.second;
@@ -3788,23 +3293,5 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       ictx->perfcounter->inc(l_librbd_readahead);
       ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
     }
-  }
-
-  AioCompletion *aio_create_completion() {
-    AioCompletion *c = new AioCompletion();
-    return c;
-  }
-
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete) {
-    AioCompletion *c = new AioCompletion();
-    c->set_complete_cb(cb_arg, cb_complete);
-    return c;
-  }
-
-  AioCompletion *aio_create_completion_internal(void *cb_arg,
-						callback_t cb_complete) {
-    AioCompletion *c = aio_create_completion(cb_arg, cb_complete);
-    c->rbd_comp = c;
-    return c;
   }
 }

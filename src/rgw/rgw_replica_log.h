@@ -45,7 +45,7 @@ protected:
   RGWRados *store;
   int open_ioctx(librados::IoCtx& ctx, const string& pool);
 
-  RGWReplicaLogger(RGWRados *_store);
+  explicit RGWReplicaLogger(RGWRados *_store);
 
   int update_bound(const string& oid, const string& pool,
                    const string& daemon_id, const string& marker,
@@ -105,7 +105,7 @@ class RGWReplicaBucketLogger : private RGWReplicaLogger {
   string obj_name(const rgw_bucket& bucket, int shard_id, bool index_by_instance);
 
 public:
-  RGWReplicaBucketLogger(RGWRados *_store);
+  explicit RGWReplicaBucketLogger(RGWRados *_store);
   int update_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id,
                    const string& marker, const utime_t& time,
                    const list<RGWReplicaItemMarker> *entries);

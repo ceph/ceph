@@ -11,6 +11,34 @@ using std::string;
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
+#define dout_subsys ceph_subsys_leveldb
+#undef dout_prefix
+#define dout_prefix *_dout << "leveldb: "
+
+class CephLevelDBLogger : public leveldb::Logger {
+  CephContext *cct;
+public:
+  explicit CephLevelDBLogger(CephContext *c) : cct(c) {
+    cct->get();
+  }
+  ~CephLevelDBLogger() {
+    cct->put();
+  }
+
+  // Write an entry to the log file with the specified format.
+  void Logv(const char* format, va_list ap) {
+    dout(1);
+    char buf[65536];
+    vsnprintf(buf, sizeof(buf), format, ap);
+    *_dout << buf << dendl;
+  }
+};
+
+leveldb::Logger *create_leveldb_ceph_logger()
+{
+  return new CephLevelDBLogger(g_ceph_context);
+}
+
 int LevelDBStore::init(string option_str)
 {
   // init defaults.  caller can override these if they want
@@ -62,6 +90,11 @@ int LevelDBStore::do_open(ostream &out, bool create_if_missing)
   ldoptions.paranoid_checks = options.paranoid_checks;
   ldoptions.create_if_missing = create_if_missing;
 
+  if (g_conf->leveldb_log_to_ceph_log) {
+    ceph_logger = new CephLevelDBLogger(g_ceph_context);
+    ldoptions.info_log = ceph_logger;
+  }
+  
   if (options.log_file.length()) {
     leveldb::Env *env = leveldb::Env::Default();
     env->NewLogger(options.log_file, &ldoptions.info_log);
@@ -110,6 +143,7 @@ LevelDBStore::~LevelDBStore()
 {
   close();
   delete logger;
+  delete ceph_logger;
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   db.reset();
@@ -233,12 +267,13 @@ int LevelDBStore::get(const string &prefix,
 		  const string &key,
 		  bufferlist *value)
 {
+  assert(value && (value->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
   KeyValueDB::Iterator it = get_iterator(prefix);
   it->lower_bound(key);
   if (it->valid() && it->key() == key) {
-    *value = it->value();
+    value->append(it->value_as_ptr());
   } else {
     r = -ENOENT;
   }
@@ -344,6 +379,6 @@ void LevelDBStore::compact_range_async(const string& start, const string& end)
   }
   compact_queue_cond.Signal();
   if (!compact_thread.is_started()) {
-    compact_thread.create();
+    compact_thread.create("levdbst_compact");
   }
 }

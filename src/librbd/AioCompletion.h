@@ -21,11 +21,13 @@ namespace librbd {
   class AioObjectRead;
 
   typedef enum {
-    AIO_TYPE_READ = 0,
+    AIO_TYPE_NONE = 0,
+    AIO_TYPE_OPEN,
+    AIO_TYPE_CLOSE,
+    AIO_TYPE_READ,
     AIO_TYPE_WRITE,
     AIO_TYPE_DISCARD,
     AIO_TYPE_FLUSH,
-    AIO_TYPE_NONE,
   } aio_type_t;
 
   /**
@@ -67,6 +69,30 @@ namespace librbd {
     uint64_t journal_tid;
     xlist<AioCompletion*>::item m_xlist_item;
     bool event_notify;
+
+    template <typename T, void (T::*MF)(int)>
+    static void callback_adapter(completion_t cb, void *arg) {
+      AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
+      T *t = reinterpret_cast<T *>(arg);
+      (t->*MF)(comp->get_return_value());
+      comp->release();
+    }
+
+    static AioCompletion *create(void *cb_arg, callback_t cb_complete,
+                                 rbd_completion_t rbd_comp) {
+      AioCompletion *comp = new AioCompletion();
+      comp->set_complete_cb(cb_arg, cb_complete);
+      comp->rbd_comp = (rbd_comp != nullptr ? rbd_comp : comp);
+      return comp;
+    }
+
+    template <typename T, void (T::*MF)(int) = &T::complete>
+    static AioCompletion *create(T *obj) {
+      AioCompletion *comp = new AioCompletion();
+      comp->set_complete_cb(obj, &callback_adapter<T, MF>);
+      comp->rbd_comp = comp;
+      return comp;
+    }
 
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
@@ -132,11 +158,17 @@ namespace librbd {
       int n = --ref;
       lock.Unlock();
       if (!n) {
-        if (ictx && event_notify) {
-          ictx->completed_reqs_lock.Lock();
-          m_xlist_item.remove_myself();
-          ictx->completed_reqs_lock.Unlock();
-        }
+        if (ictx) {
+	  if (event_notify) {
+	    ictx->completed_reqs_lock.Lock();
+	    m_xlist_item.remove_myself();
+	    ictx->completed_reqs_lock.Unlock();
+	  }
+	  if (aio_type == AIO_TYPE_CLOSE || (aio_type == AIO_TYPE_OPEN &&
+					     rval < 0)) {
+	    delete ictx;
+	  }
+	}
         delete this;
       }
     }

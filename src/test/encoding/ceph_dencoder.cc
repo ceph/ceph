@@ -30,16 +30,18 @@
 #define TYPE_FEATUREFUL(t)
 #define TYPE_FEATUREFUL_STRAYDATA(t)
 #define TYPE_FEATUREFUL_NONDETERMINISTIC(t)
+#define TYPE_FEATUREFUL_NOCOPY(t)
 #define TYPE_NOCOPY(t)
 #define MESSAGE(t)
 #include "types.h"
 #undef TYPE
 #undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
+#undef TYPE_NOCOPY
 #undef TYPE_FEATUREFUL
 #undef TYPE_FEATUREFUL_STRAYDATA
 #undef TYPE_FEATUREFUL_NONDETERMINISTIC
-#undef TYPE_NOCOPY
+#undef TYPE_FEATUREFUL_NOCOPY
 #undef MESSAGE
 
 #define MB(m) ((m) * 1024 * 1024)
@@ -180,9 +182,9 @@ public:
 };
 
 template<class T>
-class DencoderImplFeatureful : public DencoderBase<T> {
+class DencoderImplFeaturefulNoCopy : public DencoderBase<T> {
 public:
-  DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
+  DencoderImplFeaturefulNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
   virtual void encode(bufferlist& out, uint64_t features) {
     out.clear();
@@ -190,6 +192,23 @@ public:
   }
 };
 
+template<class T>
+class DencoderImplFeatureful : public DencoderImplFeaturefulNoCopy<T> {
+public:
+  DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
+    : DencoderImplFeaturefulNoCopy<T>(stray_ok, nondeterministic) {}
+  void copy() {
+    T *n = new T;
+    *n = *this->m_object;
+    delete this->m_object;
+    this->m_object = n;
+  }
+  void copy_ctor() {
+    T *n = new T(*this->m_object);
+    delete this->m_object;
+    this->m_object = n;
+  }
+};
 
 template<class T>
 class MessageDencoderImpl : public Dencoder {
@@ -280,15 +299,18 @@ int main(int argc, const char **argv)
 #define TYPE_FEATUREFUL(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, false);
 #define TYPE_FEATUREFUL_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(true, false);
 #define TYPE_FEATUREFUL_NONDETERMINISTIC(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, true);
+#define TYPE_FEATUREFUL_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeaturefulNoCopy<t>(false, false);
 #define TYPE_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeatureNoCopy<t>(false, false);
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
 #undef TYPE_STRAYDATA
 #undef TYPE_NONDETERMINISTIC
+#undef TYPE_NOCOPY
 #undef TYPE_FEATUREFUL
 #undef TYPE_FEATUREFUL_STRAYDATA
 #undef TYPE_FEATUREFUL_NONDETERMINISTIC
+#undef TYPE_FEATUREFUL_NOCOPY
 #undef T_STR
 #undef T_STRINGIFY
 
@@ -349,7 +371,6 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       features = atoi(*i);
-
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
@@ -449,6 +470,11 @@ int main(int argc, const char **argv)
       int n = atoi(*i);
       err = den->select_generated(n);
     } else if (*i == string("is_deterministic")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       if (den->is_deterministic())
 	exit(0);
       else

@@ -81,6 +81,7 @@ void OpRequest::_dump_op_descriptor_unlocked(ostream& stream) const
 void OpRequest::_unregistered() {
   request->clear_data();
   request->clear_payload();
+  request->release_message_throttle();
 }
 
 bool OpRequest::check_rmw(int flag) {

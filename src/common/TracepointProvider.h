@@ -45,7 +45,7 @@ public:
   template <const Traits &traits>
   class TypedSingleton : public Singleton {
   public:
-    TypedSingleton(CephContext *cct)
+    explicit TypedSingleton(CephContext *cct)
       : Singleton(cct, traits.library, traits.config_key) {
     }
   };
@@ -56,7 +56,7 @@ public:
 
   template <const Traits &traits>
   static void initialize(CephContext *cct) {
-#if WITH_LTTNG
+#ifdef WITH_LTTNG
     TypedSingleton<traits> *singleton;
     cct->lookup_or_create_singleton_object(singleton, traits.library);
 #endif

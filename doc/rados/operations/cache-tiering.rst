@@ -64,6 +64,23 @@ configure how this migration takes place. There are two main scenarios:
   might contain out-of-date data provides weak consistency. Do not use 
   ``readonly`` mode for mutable data.
 
+And the modes above are accomodated to adapt different configurations:
+
+- **Read-forward Mode:** this mode is the same as the ``writeback`` mode
+  when serving write requests. But when Ceph clients is trying to read objects
+  not yet copied to the cache tier, Ceph **forward** them to the backing tier by
+  replying with a "redirect" message. And the clients will instead turn to the
+  backing tier for the data. If the read performance of the backing tier is on
+  a par with that of its cache tier, while its write performance or endurance
+  falls far behind, this mode might be a better choice.
+
+- **Read-proxy Mode:** this mode is similar to ``readforward`` mode: both
+  of them do not promote/copy the data when the requested object does not
+  exist in the cache tier. But instead of redirecting the Ceph clients to the
+  backing tier when cache misses, the cache tier reads from the backing tier
+  on behalf of the clients. Under some circumstances, this mode can help to
+  reduce the latency.
+
 Since all Ceph clients can use cache tiering, it has the potential to 
 improve I/O performance for Ceph Block Devices, Ceph Object Storage, 
 the Ceph Filesystem and native bindings.
@@ -218,13 +235,44 @@ The cache tiering agent performs two main functions:
   (or clean) and evicts the least recently used among them from the cache.
 
 
+Absolute Sizing
+~~~~~~~~~~~~~~~
+
+The cache tiering agent can flush or evict objects based upon the total number
+of bytes or the total number of objects. To specify a maximum number of bytes,
+execute the following::
+
+	ceph osd pool set {cachepool} target_max_bytes {#bytes}
+
+For example, to flush or evict at 1 TB, execute the following::
+
+	ceph osd pool set hot-storage target_max_bytes 1099511627776
+
+
+To specify the maximum number of objects, execute the following::
+
+	ceph osd pool set {cachepool} target_max_objects {#objects}
+
+For example, to flush or evict at 1M objects, execute the following::
+
+	ceph osd pool set hot-storage target_max_objects 1000000
+
+.. note:: Ceph is not able to determine the size of a cache pool automatically, so
+   the configuration on the absolute size is required here, otherwise the
+   flush/evict will not work. If you specify both limits, the cache tiering
+   agent will begin flushing or evicting when either threshold is triggered.
+
+.. note:: All client requests will be blocked only when  ``target_max_bytes`` or
+   ``target_max_objects`` reached
+
 Relative Sizing
 ~~~~~~~~~~~~~~~
 
 The cache tiering agent can flush or evict objects relative to the size of the
-cache pool. When the cache pool consists of a certain percentage of
+cache pool(specified by ``target_max_bytes`` / ``target_max_objects`` in
+`Absolute sizing`_).  When the cache pool consists of a certain percentage of
 modified (or dirty) objects, the cache tiering agent will flush them to the
-storage pool. To set the ``cache_target_dirty_ratio``, execute the following:: 
+storage pool. To set the ``cache_target_dirty_ratio``, execute the following::
 
 	ceph osd pool set {cachepool} cache_target_dirty_ratio {0.0..1.0}
 
@@ -238,7 +286,7 @@ objects with a higher speed. To set the ``cache_target_dirty_high_ratio``::
 
 	ceph osd pool set {cachepool} cache_target_dirty_high_ratio {0.0..1.0}
 
-For example, setting the value to ``0.6`` will begin aggressively flush diryt objects
+For example, setting the value to ``0.6`` will begin aggressively flush dirty objects
 when they reach 60% of the cache pool's capacity. obviously, we'd better set the value
 between dirty_ratio and full_ratio::
 
@@ -254,32 +302,6 @@ For example, setting the value to ``0.8`` will begin flushing unmodified
 (clean) objects when they reach 80% of the cache pool's capacity:: 
 
 	ceph osd pool set hot-storage cache_target_full_ratio 0.8
-
-
-Absolute Sizing
-~~~~~~~~~~~~~~~
-
-The cache tiering agent can flush or evict objects based upon the total number 
-of bytes or the total number of objects. To specify a maximum number of bytes,
-execute the following::
-
-	ceph osd pool set {cachepool} target_max_bytes {#bytes}
-
-For example, to flush or evict at 1 TB, execute the following:: 
-
-	ceph osd pool set hot-storage target_max_bytes 1000000000000
-
-
-To specify the maximum number of objects, execute the following:: 
-
-	ceph osd pool set {cachepool} target_max_objects {#objects}
-	
-For example, to flush or evict at 1M objects, execute the following::
-
-	ceph osd pool set hot-storage target_max_objects 1000000
-
-.. note:: If you specify both limits, the cache tiering agent will 
-   begin flushing or evicting when either threshold is triggered.
 
 
 Cache Age
@@ -303,7 +325,6 @@ the cache tier::
 For example, to evict objects after 30 minutes, execute the following:: 
 
 	ceph osd pool set hot-storage cache_min_evict_age 1800
-
 
 
 Removing a Cache Tier
@@ -388,3 +409,4 @@ disable and remove it.
 .. _Placing Different Pools on Different OSDs: ../crush-map/#placing-different-pools-on-different-osds
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
 .. _CRUSH Maps: ../crush-map
+.. _Absolute Sizing: #absolute-sizing

@@ -39,7 +39,7 @@ class Trace {
   string line;
 
  public:
-  Trace(const char* f) : _line(0), filename(f), fs(0) {}
+  explicit Trace(const char* f) : _line(0), filename(f), fs(0) {}
   ~Trace() { 
     delete fs; 
   }

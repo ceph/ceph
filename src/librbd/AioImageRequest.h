@@ -18,43 +18,45 @@ namespace librbd {
 class AioObjectRequest;
 class ImageCtx;
 
+template <typename ImageCtxT = ImageCtx>
 class AioImageRequest {
 public:
   typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
   virtual ~AioImageRequest() {}
 
-  static void aio_read(ImageCtx *ictx, AioCompletion *c,
+  static void aio_read(ImageCtxT *ictx, AioCompletion *c,
                        const std::vector<std::pair<uint64_t,uint64_t> > &extents,
                        char *buf, bufferlist *pbl, int op_flags);
-  static void aio_read(ImageCtx *ictx, AioCompletion *c, uint64_t off,
+  static void aio_read(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                        size_t len, char *buf, bufferlist *pbl, int op_flags);
-  static void aio_write(ImageCtx *ictx, AioCompletion *c, uint64_t off,
+  static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                         size_t len, const char *buf, int op_flags);
-  static void aio_discard(ImageCtx *ictx, AioCompletion *c, uint64_t off,
+  static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                           uint64_t len);
-  static void aio_flush(ImageCtx *ictx, AioCompletion *c);
+  static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
 
   virtual bool is_write_op() const {
     return false;
   }
 
   void send();
+  void fail(int r);
 
 protected:
   typedef std::list<AioObjectRequest *> AioObjectRequests;
 
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
 
-  AioImageRequest(ImageCtx &image_ctx, AioCompletion *aio_comp)
+  AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp)
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp) {}
 
   virtual void send_request() = 0;
   virtual const char *get_request_type() const = 0;
 };
 
-class AioImageRead : public AioImageRequest {
+class AioImageRead : public AioImageRequest<> {
 public:
   AioImageRead(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
                size_t len, char *buf, bufferlist *pbl, int op_flags)
@@ -82,7 +84,7 @@ private:
   int m_op_flags;
 };
 
-class AbstractAioImageWrite : public AioImageRequest {
+class AbstractAioImageWrite : public AioImageRequest<> {
 public:
   virtual bool is_write_op() const {
     return true;
@@ -193,7 +195,7 @@ protected:
   virtual void update_stats(size_t length);
 };
 
-class AioImageFlush : public AioImageRequest {
+class AioImageFlush : public AioImageRequest<> {
 public:
   AioImageFlush(ImageCtx &image_ctx, AioCompletion *aio_comp)
     : AioImageRequest(image_ctx, aio_comp) {
@@ -211,5 +213,7 @@ protected:
 };
 
 } // namespace librbd
+
+extern template class librbd::AioImageRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_AIO_IMAGE_REQUEST_H

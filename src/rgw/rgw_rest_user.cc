@@ -8,6 +8,7 @@
 #include "rgw_rest_user.h"
 
 #include "include/str_list.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -92,7 +93,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
-  if (!s->user.system && system) {
+  if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
@@ -192,7 +193,7 @@ void RGWOp_User_Modify::execute()
 
   RESTArgs::get_bool(s, "system", false, &system);
 
-  if (!s->user.system && system) {
+  if (!s->user->system && system) {
     ldout(s->cct, 0) << "cannot set system flag by non-system user" << dendl;
     http_ret = -EINVAL;
     return;
@@ -646,7 +647,7 @@ struct UserQuotas {
 
   UserQuotas() {}
 
-  UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
+  explicit UserQuotas(RGWUserInfo& info) : bucket_quota(info.bucket_quota), 
 				  user_quota(info.user_quota) {}
 
   void dump(Formatter *f) const {

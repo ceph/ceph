@@ -19,6 +19,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 #include "include/ceph_features.h"
+#include <atomic>
 
 /*
  * OSD op
@@ -48,8 +49,10 @@ private:
   pg_t pgid;
   bufferlist::iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
-  bool partial_decode_needed;
-  bool final_decode_needed;
+  // Transition from true -> false without locks being held
+  // Can never see final_decode_needed == false and partial_decode_needed == true
+  atomic<bool> partial_decode_needed;
+  atomic<bool> final_decode_needed;
   //
 public:
   vector<OSDOp> ops;
@@ -179,6 +182,9 @@ private:
 public:
   void set_version(eversion_t v) { reassert_version = v; }
   void set_mtime(utime_t mt) { mtime = mt; }
+  void set_mtime(ceph::real_time mt) {
+    mtime = ceph::real_clock::to_timespec(mt);
+  }
 
   // ops
   void add_simple_op(int o, uint64_t off, uint64_t len) {
@@ -312,7 +318,13 @@ struct ceph_osd_request_head {
 
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
-      ::encode(reqid, payload);
+      if (reqid.name != entity_name_t() || reqid.tid != 0) {
+	::encode(reqid, payload);
+      } else {
+	// don't include client_inc in the reqid for the legacy v6
+	// encoding or else we'll confuse older peers.
+	::encode(osd_reqid_t(), payload);
+      }
     } else {
       // new, reordered, v7 message encoding
       header.version = HEAD_VERSION;

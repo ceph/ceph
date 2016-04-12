@@ -44,7 +44,6 @@ Makefile
 /ceph_rgw_multiparser
 /ceph_scratchtool
 /ceph_scratchtoolpp
-/ceph_streamtest
 /ceph_test_*
 /ceph_tpbench
 /ceph_xattr_bench
@@ -58,12 +57,14 @@ Makefile
 /ceph-monstore-tool
 /ceph-osdomap-tool
 /ceph-kvstore-tool
+/ceph-bluefs-tool
 /ceph_ver.h
 /dev
 /get_command_descriptions
 /init-ceph
 /keyring
 /librados-config
+/librgw_file*
 /massif.out.*
 /mnt
 /monmaptool
@@ -73,8 +74,10 @@ Makefile
 /rados
 /radosgw
 /radosgw-admin
+/radosgw-token
 /radosgw-object-expirer
 /rbd
+/rbd-mirror
 /rbd-nbd
 /rbd-fuse
 /rbd-replay

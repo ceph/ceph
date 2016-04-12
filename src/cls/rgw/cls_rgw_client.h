@@ -8,6 +8,7 @@
 #include "cls_rgw_ops.h"
 #include "common/RefCountedObj.h"
 #include "include/compat.h"
+#include "common/ceph_time.h"
 
 // Forward declaration
 class BucketIndexAioManager;
@@ -315,7 +316,9 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
                                 uint16_t bilog_op);
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes);
+void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const string& attr);
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist);
+void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time& mtime, bool high_precision_time, RGWCheckMTimeType type);
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, cls_rgw_obj_key& key,
@@ -328,9 +331,9 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch, bool log_op);
+                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op);
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, const string& op_tag,
-                                   uint64_t olh_epoch, bool log_op);
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const string& olh_tag,
                         map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > *log, bool *is_truncated);

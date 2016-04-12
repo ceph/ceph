@@ -8,6 +8,9 @@
 #include "Cond.h"
 #include <list>
 #include <map>
+#include <iostream>
+#include <condition_variable>
+#include <chrono>
 #include "include/atomic.h"
 #include "include/Context.h"
 
@@ -109,6 +112,105 @@ public:
     Mutex::Locker l(lock);
     _reset_max(m);
   }
+};
+
+/**
+ * BackoffThrottle
+ *
+ * Creates a throttle which gradually induces delays when get() is called
+ * based on params low_threshhold, high_threshhold, expected_throughput,
+ * high_multiple, and max_multiple.
+ *
+ * In [0, low_threshhold), we want no delay.
+ *
+ * In [low_threshhold, high_threshhold), delays should be injected based
+ * on a line from 0 at low_threshhold to
+ * high_multiple * (1/expected_throughput) at high_threshhold.
+ *
+ * In [high_threshhold, 1), we want delays injected based on a line from
+ * (high_multiple * (1/expected_throughput)) at high_threshhold to
+ * (high_multiple * (1/expected_throughput)) +
+ * (max_multiple * (1/expected_throughput)) at 1.
+ *
+ * Let the current throttle ratio (current/max) be r, low_threshhold be l,
+ * high_threshhold be h, high_delay (high_multiple / expected_throughput) be e,
+ * and max_delay (max_muliple / expected_throughput) be m.
+ *
+ * delay = 0, r \in [0, l)
+ * delay = (r - l) * (e / (h - l)), r \in [l, h)
+ * delay = h + (r - h)((m - e)/(1 - h))
+ */
+class BackoffThrottle {
+  std::mutex lock;
+  using locker = std::unique_lock<std::mutex>;
+
+  unsigned next_cond = 0;
+
+  /// allocated once to avoid constantly allocating new ones
+  vector<std::condition_variable> conds;
+
+  /// pointers into conds
+  list<std::condition_variable*> waiters;
+
+  std::list<std::condition_variable*>::iterator _push_waiter() {
+    unsigned next = next_cond++;
+    if (next_cond == conds.size())
+      next_cond = 0;
+    return waiters.insert(waiters.end(), &(conds[next]));
+  }
+
+  void _kick_waiters() {
+    if (!waiters.empty())
+      waiters.front()->notify_all();
+  }
+
+  /// see above, values are in [0, 1].
+  double low_threshhold = 0;
+  double high_threshhold = 1;
+
+  /// see above, values are in seconds
+  double high_delay_per_count = 0;
+  double max_delay_per_count = 0;
+
+  /// Filled in in set_params
+  double s0 = 0; ///< e / (h - l), l != h, 0 otherwise
+  double s1 = 0; ///< (m - e)/(1 - h), 1 != h, 0 otherwise
+
+  /// max
+  uint64_t max = 0;
+  uint64_t current = 0;
+
+  std::chrono::duration<double> _get_delay(uint64_t c) const;
+
+public:
+  /**
+   * set_params
+   *
+   * Sets params.  If the params are invalid, returns false
+   * and populates errstream (if non-null) with a user compreshensible
+   * explanation.
+   */
+  bool set_params(
+    double low_threshhold,
+    double high_threshhold,
+    double expected_throughput,
+    double high_multiple,
+    double max_multiple,
+    uint64_t throttle_max,
+    ostream *errstream);
+
+  std::chrono::duration<double> get(uint64_t c = 1);
+  std::chrono::duration<double> wait() {
+    return get(0);
+  }
+  uint64_t put(uint64_t c = 1);
+  uint64_t take(uint64_t c = 1);
+  uint64_t get_current();
+  uint64_t get_max();
+
+  BackoffThrottle(
+    unsigned expected_concurrency ///< [in] determines size of conds
+    ) : conds(expected_concurrency) {}
 };
 
 

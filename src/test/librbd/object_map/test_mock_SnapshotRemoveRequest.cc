@@ -5,7 +5,9 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/object_map/SnapshotRemoveRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -16,6 +18,7 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapSnapshotRemoveRequest : public TestMockFixture {
 public:
@@ -23,11 +26,11 @@ public:
     std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(snap_oid, _, "rbd", "object_map_load", _, _, _))
+                  exec(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _))
                     .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(snap_oid, _, "rbd", "object_map_load", _, _, _))
+                  exec(snap_oid, _, StrEq("rbd"), StrEq("object_map_load"), _, _, _))
                     .WillOnce(DoDefault());
     }
   }
@@ -36,14 +39,14 @@ public:
     std::string oid(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "lock", "assert_locked", _, _, _))
+                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                     .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "lock", "assert_locked", _, _, _))
+                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                     .WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, "rbd", "object_map_snap_remove", _, _, _))
+                  exec(oid, _, StrEq("rbd"), StrEq("object_map_snap_remove"), _, _, _))
                     .WillOnce(DoDefault());
     }
   }
@@ -51,20 +54,20 @@ public:
   void expect_remove_map(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
     std::string snap_oid(ObjectMap::object_map_name(ictx->id, snap_id));
     if (r < 0) {
-      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid))
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(Return(r));
     } else {
-      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid))
+      EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx), remove(snap_oid, _))
                     .WillOnce(DoDefault());
     }
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+                exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                   .Times(0);
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .WillOnce(DoDefault());
   }
 };
@@ -74,8 +77,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, Success) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
@@ -103,8 +106,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_load_map(ictx, snap_id, -EINVAL);
@@ -130,8 +133,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveSnapshotMissing) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_load_map(ictx, snap_id, 0);
@@ -157,8 +160,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveSnapshotError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_load_map(ictx, snap_id, 0);
@@ -185,8 +188,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapMissing) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
@@ -214,8 +217,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
@@ -243,8 +246,8 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, ScrubCleanObjects) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
 

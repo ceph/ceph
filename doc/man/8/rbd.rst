@@ -56,9 +56,9 @@ Parameters
 
    Specifies which object layout to use. The default is 1.
 
-   * format 1 - Use the original format for a new rbd image. This format is
-     understood by all versions of librbd and the kernel rbd module, but
-     does not support newer features like cloning.
+   * format 1 - (deprecated) Use the original format for a new rbd image. This
+     format is understood by all versions of librbd and the kernel rbd module,
+     but does not support newer features like cloning.
 
    * format 2 - Use the second rbd format, which is supported by
      librbd and kernel since version 3.11 (except for striping). This adds

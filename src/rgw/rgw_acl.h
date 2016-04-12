@@ -195,7 +195,7 @@ protected:
   multimap<string, ACLGrant> grant_map;
   void _add_grant(ACLGrant *grant);
 public:
-  RGWAccessControlList(CephContext *_cct) : cct(_cct) {}
+  explicit RGWAccessControlList(CephContext *_cct) : cct(_cct) {}
   RGWAccessControlList() : cct(NULL) {}
 
   void set_ctx(CephContext *ctx) {
@@ -293,7 +293,7 @@ protected:
   ACLOwner owner;
 
 public:
-  RGWAccessControlPolicy(CephContext *_cct) : cct(_cct), acl(_cct) {}
+  explicit RGWAccessControlPolicy(CephContext *_cct) : cct(_cct), acl(_cct) {}
   RGWAccessControlPolicy() : cct(NULL), acl(NULL) {}
   virtual ~RGWAccessControlPolicy() {}
 

@@ -18,7 +18,7 @@
 #include <map>
 #include <boost/scoped_ptr.hpp>
 #include "common/debug.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "common/config.h"
 
 class FileStoreDiff {

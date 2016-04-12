@@ -30,16 +30,41 @@ using namespace std;
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#if defined(__linux__)
 #include "common/linux_version.h"
+#endif
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/safe_io.h"
        
 #include <sys/types.h>
 #include <fcntl.h>
 
+#include <fuse.h>
+
+static void fuse_usage()
+{
+  const char **argv = (const char **) malloc((2) * sizeof(char *));
+  argv[0] = "ceph-fuse";
+  argv[1] = "-h";
+  struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
+  if (fuse_parse_cmdline(&args, NULL, NULL, NULL) == -1) {
+    derr << "fuse_parse_cmdline failed." << dendl;
+    fuse_opt_free_args(&args);
+  }
+
+  assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
+  free(argv);
+}
 void usage()
 {
-  cerr << "usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point>" << std::endl;
+  cout <<
+"usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point> [OPTIONS]\n"
+"  --client_mountpoint/-r <root_directory>\n"
+"                    use root_directory as the mounted root, rather than the full Ceph tree.\n"
+"\n";
+  fuse_usage();
+  generic_client_usage();
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
@@ -47,6 +72,10 @@ int main(int argc, const char **argv, const char *envp[]) {
   //cerr << "ceph-fuse starting " << myrank << "/" << world << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    usage();
+    return 0;
+  }
   env_to_vec(args);
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
@@ -57,6 +86,9 @@ int main(int argc, const char **argv, const char *envp[]) {
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)NULL)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      assert(0);
     } else {
       ++i;
     }
@@ -110,7 +142,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     public:
       CephFuse *cfuse;
       Client *client;
-      RemountTest() : Thread() {}
+      RemountTest() : cfuse(NULL), client(NULL) {}
       void init(CephFuse *cf, Client *cl) {
 	cfuse = cf;
 	client = cl;
@@ -192,6 +224,9 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_messenger_start_failed;
     }
 
+    init_async_signal_handler();
+    register_async_signal_handler(SIGHUP, sighup_handler);
+
     // start client
     r = client->init();
     if (r < 0) {
@@ -219,7 +254,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
     tester.init(cfuse, client);
-    tester.create();
+    tester.create("tester");
     r = cfuse->loop();
     tester.join(&tester_rp);
     tester_r = static_cast<int>(reinterpret_cast<uint64_t>(tester_rp));
@@ -237,6 +272,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   out_shutdown:
     client->shutdown();
   out_init_failed:
+    unregister_async_signal_handler(SIGHUP, sighup_handler);
+    shutdown_async_signal_handler();
+
     // wait for messenger to finish
     messenger->shutdown();
     messenger->wait();

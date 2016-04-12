@@ -68,7 +68,7 @@ protected:
 public:
   LogSegment *_segment;
 
-  LogEvent(int t)
+  explicit LogEvent(int t)
     : _type(t), _start_off(0), _segment(0) { }
   virtual ~LogEvent() { }
 
@@ -84,16 +84,16 @@ public:
   void set_stamp(utime_t t) { stamp = t; }
 
   // encoding
-  virtual void encode(bufferlist& bl) const = 0;
+  virtual void encode(bufferlist& bl, uint64_t features) const = 0;
   virtual void decode(bufferlist::iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
   virtual void dump(Formatter *f) const = 0;
 
-  void encode_with_header(bufferlist& bl) {
+  void encode_with_header(bufferlist& bl, uint64_t features) {
     ::encode(EVENT_NEW_ENCODING, bl);
     ENCODE_START(1, 1, bl)
     ::encode(_type, bl);
-    encode(bl);
+    encode(bl, features);
     ENCODE_FINISH(bl);
   }
 

@@ -36,6 +36,7 @@ static void usage()
 // helper class for bytes with units
 struct byte_units {
   size_t v;
+  // cppcheck-suppress noExplicitConstructor
   byte_units(size_t v) : v(v) {}
 
   bool parse(const std::string &val, std::string *err);
@@ -111,7 +112,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     uint64_t offset = starting_offset;
     size_t len = cfg.size;
 
-    list<ObjectStore::Transaction*> tls;
+    vector<ObjectStore::Transaction> tls;
 
     std::cout << "Write cycle " << i << std::endl;
     while (len) {
@@ -119,7 +120,8 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
 
       auto t = new ObjectStore::Transaction;
       t->write(cid, oid, offset, count, data);
-      tls.push_back(t);
+      tls.push_back(std::move(*t));
+      delete t;
 
       offset += count;
       if (offset > cfg.size)
@@ -139,11 +141,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     cond.wait(lock, [&done](){ return done; });
     lock.unlock();
 
-    while (!tls.empty()) {
-      auto t = tls.front();
-      tls.pop_front();
-      delete t;
-    }
+
   }
   sequencer.flush();
 }
@@ -261,7 +259,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(&osr, t);
+    os->apply_transaction(&osr, std::move(t));
   }
 
   // create the objects
@@ -271,21 +269,21 @@ int main(int argc, const char *argv[])
     for (int i = 0; i < cfg.threads; i++) {
       std::stringstream oss;
       oss << "osbench-thread-" << i;
-      oids.emplace_back(pg.make_temp_object(oss.str()));
+      oids.emplace_back(pg.make_temp_hobject(oss.str()));
 
       ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(&osr, t);
+      int r = os->apply_transaction(&osr, std::move(t));
       assert(r == 0);
     }
   } else {
-    oids.emplace_back(pg.make_temp_object("osbench"));
+    oids.emplace_back(pg.make_temp_hobject("osbench"));
 
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(&osr, t);
+    int r = os->apply_transaction(&osr, std::move(t));
     assert(r == 0);
   }
 
@@ -318,7 +316,7 @@ int main(int argc, const char *argv[])
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(&osr,t);
+  os->apply_transaction(&osr,std::move(t));
 
   os->umount();
   return 0;

@@ -36,7 +36,7 @@ void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
 
 class EncodeVisitor : public boost::static_visitor<void> {
 public:
-  EncodeVisitor(bufferlist &bl) : m_bl(bl) {
+  explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
 
   template <typename Action>
@@ -65,7 +65,7 @@ private:
 
 class DumpVisitor : public boost::static_visitor<void> {
 public:
-  DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
   template <typename Action>
   inline void operator()(const Action &action) const {
@@ -218,6 +218,32 @@ void OpenImageAction::dump(Formatter *f) const {
   f->dump_bool("read_only", read_only);
 }
 
+void AioOpenImageAction::encode(bufferlist &bl) const {
+  ImageActionBase::encode(bl);
+  ::encode(name, bl);
+  ::encode(snap_name, bl);
+  ::encode(read_only, bl);
+}
+
+void AioOpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
+  ImageActionBase::decode(version, it);
+  if (byte_swap_required(version)) {
+    decode_big_endian_string(name, it);
+    decode_big_endian_string(snap_name, it);
+  } else {
+    ::decode(name, it);
+    ::decode(snap_name, it);
+  }
+  ::decode(read_only, it);
+}
+
+void AioOpenImageAction::dump(Formatter *f) const {
+  ImageActionBase::dump(f);
+  f->dump_string("name", name);
+  f->dump_string("snap_name", snap_name);
+  f->dump_bool("read_only", read_only);
+}
+
 void UnknownAction::encode(bufferlist &bl) const {
   assert(false);
 }
@@ -274,6 +300,12 @@ void ActionEntry::decode(__u8 version, bufferlist::iterator &it) {
   case ACTION_TYPE_CLOSE_IMAGE:
     action = CloseImageAction();
     break;
+  case ACTION_TYPE_AIO_OPEN_IMAGE:
+    action = AioOpenImageAction();
+    break;
+  case ACTION_TYPE_AIO_CLOSE_IMAGE:
+    action = AioCloseImageAction();
+    break;
   }
 
   boost::apply_visitor(DecodeVisitor(version, it), action);
@@ -311,6 +343,13 @@ void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
                                               true)));
   o.push_back(new ActionEntry(CloseImageAction()));
   o.push_back(new ActionEntry(CloseImageAction(1, 123456789, dependencies, 3)));
+
+  o.push_back(new ActionEntry(AioOpenImageAction()));
+  o.push_back(new ActionEntry(AioOpenImageAction(1, 123456789, dependencies, 3,
+                                              "image_name", "snap_name",
+                                              true)));
+  o.push_back(new ActionEntry(AioCloseImageAction()));
+  o.push_back(new ActionEntry(AioCloseImageAction(1, 123456789, dependencies, 3)));
 }
 
 } // namespace action
@@ -344,6 +383,12 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case ACTION_TYPE_CLOSE_IMAGE:
     out << "CloseImage";
+    break;
+  case ACTION_TYPE_AIO_OPEN_IMAGE:
+    out << "AioOpenImage";
+    break;
+  case ACTION_TYPE_AIO_CLOSE_IMAGE:
+    out << "AioCloseImage";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

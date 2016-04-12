@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <thread>
 #include "include/types.h"
 #include "Messenger.h"
 
@@ -23,13 +24,14 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
 			     uint64_t nonce, uint64_t features)
 {
   int r = -1;
-  srand(time(NULL));
-  if (type == "random")
-    r = rand() % 2; // random does not include xio
+  if (type == "random") {
+    thread_local unsigned seed = (unsigned) time(nullptr) +
+      (unsigned) std::hash<std::thread::id>()(std::this_thread::get_id());
+    r = rand_r(&seed) % 2; // random does not include xio
+  }
   if (r == 0 || type == "simple")
     return new SimpleMessenger(cct, name, lname, nonce, features);
-  else if ((r == 1 || type == "async") &&
-	   cct->check_experimental_feature_enabled("ms-type-async"))
+  else if (r == 1 || type == "async")
     return new AsyncMessenger(cct, name, lname, nonce, features);
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
@@ -37,7 +39,7 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
     return new XioMessenger(cct, name, lname, nonce, features);
 #endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
-  return NULL;
+  return nullptr;
 }
 
 /*

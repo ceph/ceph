@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "common/valgrind.h"
 #include "auth/Crypto.h"
 #include "include/Spinlock.h"
 
@@ -53,6 +54,8 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     timeout(0),
     local_connection(new PipeConnection(cct, this))
 {
+  ANNOTATE_BENIGN_RACE_SIZED(&timeout, sizeof(timeout),
+                             "SimpleMessenger read timeout");
   ceph_spin_init(&global_seq_lock);
   local_features = features;
   init_local_connection();
@@ -67,6 +70,7 @@ SimpleMessenger::~SimpleMessenger()
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(!reaper_started); // the reaper thread is stopped
+  ceph_spin_destroy(&global_seq_lock);
 }
 
 void SimpleMessenger::ready()
@@ -329,7 +333,7 @@ int SimpleMessenger::start()
   lock.Unlock();
 
   reaper_started = true;
-  reaper_thread.create();
+  reaper_thread.create("ms_reaper");
   return 0;
 }
 
@@ -701,6 +705,8 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
+    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr.addr, sizeof(my_inst.addr.addr),
+                               "SimpleMessenger learned addr");
     my_inst.addr.addr = t.addr;
     ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;

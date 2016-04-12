@@ -14,6 +14,7 @@ namespace rbd {
 
 class Shell {
 public:
+  typedef std::vector<const char *> Arguments;
   typedef std::vector<std::string> CommandSpec;
 
   struct Action {
@@ -36,22 +37,22 @@ public:
         : command_spec(command_spec), alias_command_spec(alias_command_spec),
           description(description), help(help), get_arguments(args),
           execute(execute) {
-      Shell::s_actions.push_back(this);
+      Shell::get_actions().push_back(this);
     }
 
   };
 
   struct SwitchArguments {
     SwitchArguments(const std::initializer_list<std::string> &arguments) {
-      Shell::s_switch_arguments.insert(arguments.begin(), arguments.end());
+      Shell::get_switch_arguments().insert(arguments.begin(), arguments.end());
     }
   };
 
-  int execute(int arg_count, const char **arg_values);
+  int execute(const Arguments &argument);
 
 private:
-  static std::vector<Action *> s_actions;
-  static std::set<std::string> s_switch_arguments;
+  static std::vector<Action *>& get_actions();
+  static std::set<std::string>& get_switch_arguments();
 
   void get_command_spec(const std::vector<std::string> &arguments,
                         std::vector<std::string> *command_spec);
@@ -59,8 +60,6 @@ private:
                       CommandSpec **matching_spec);
 
   void get_global_options(boost::program_options::options_description *opts);
-  void prune_command_line_arguments(int arg_count, const char **arg_values,
-                                    std::vector<std::string> *args);
 
   void print_help();
   void print_action_help(Action *action);

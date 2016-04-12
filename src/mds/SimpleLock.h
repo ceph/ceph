@@ -58,7 +58,7 @@ struct LockType {
   int type;
   const sm_t *sm;
 
-  LockType(int t) : type(t) {
+  explicit LockType(int t) : type(t) {
     switch (type) {
     case CEPH_LOCK_DN:
     case CEPH_LOCK_IAUTH:

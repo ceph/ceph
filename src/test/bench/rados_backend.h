@@ -10,7 +10,7 @@
 class RadosBackend : public Backend {
   librados::IoCtx *ioctx;
 public:
-  RadosBackend(
+  explicit RadosBackend(
     librados::IoCtx *ioctx)
     : ioctx(ioctx) {}
   void write(

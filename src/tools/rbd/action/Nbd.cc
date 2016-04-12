@@ -66,7 +66,7 @@ static int call_nbd_cmd(const po::variables_map &vm,
   }
 
   for (std::vector<const char*>::const_iterator p = args.begin();
-       p != args.end(); p++)
+       p != args.end(); ++p)
     process.add_cmd_arg(*p);
 
   if (process.spawn()) {

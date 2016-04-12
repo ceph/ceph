@@ -8,6 +8,14 @@ def choose_init():
 
     Returns the name of a init system (upstart, sysvinit ...).
     """
+    assert(distro and codename)
     if distro.lower() in ('ubuntu', 'linuxmint'):
-        return 'upstart'
-    return 'sysvinit'
+        if codename >= 'vivid':
+            return 'systemd'
+        else:
+            return 'upstart'
+    if distro.lower() == 'debian':
+        if codename in ('squeeze', 'wheezy'):
+            return 'sysvinit'
+        else:
+            return 'systemd'

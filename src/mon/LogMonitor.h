@@ -30,6 +30,12 @@ class MMonCommand;
 
 static const string LOG_META_CHANNEL = "$channel";
 
+namespace ceph {
+namespace log {
+  class Graylog;
+}
+}
+
 class LogMonitor : public PaxosService,
                    public md_config_obs_t {
 private:
@@ -44,6 +50,13 @@ private:
     map<string,string> log_file;
     map<string,string> expanded_log_file;
     map<string,string> log_file_level;
+    map<string,string> log_to_graylog;
+    map<string,string> log_to_graylog_host;
+    map<string,string> log_to_graylog_port;
+
+    map<string, shared_ptr<ceph::log::Graylog>> graylogs;
+    uuid_d fsid;
+    string host;
 
     void clear() {
       log_to_syslog.clear();
@@ -52,6 +65,10 @@ private:
       log_file.clear();
       expanded_log_file.clear();
       log_file_level.clear();
+      log_to_graylog.clear();
+      log_to_graylog_host.clear();
+      log_to_graylog_port.clear();
+      graylogs.clear();
     }
 
     /** expands $channel meta variable on all maps *EXCEPT* log_file
@@ -102,6 +119,13 @@ private:
       return get_str_map_key(log_file_level, channel,
                              &CLOG_CONFIG_DEFAULT_KEY);
     }
+
+    bool do_log_to_graylog(const string &channel) {
+      return (get_str_map_key(log_to_graylog, channel,
+			      &CLOG_CONFIG_DEFAULT_KEY) == "true");
+    }
+
+    shared_ptr<ceph::log::Graylog> get_graylog(const string &channel);
   } channels;
 
   void update_log_channels();
@@ -182,6 +206,9 @@ private:
       "mon_cluster_log_to_syslog_facility",
       "mon_cluster_log_file",
       "mon_cluster_log_file_level",
+      "mon_cluster_log_to_graylog",
+      "mon_cluster_log_to_graylog_host",
+      "mon_cluster_log_to_graylog_port",
       NULL
     };
     return KEYS;

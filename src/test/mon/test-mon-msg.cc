@@ -59,7 +59,7 @@ protected:
 
 public:
 
-  MonClientHelper(CephContext *cct_)
+  explicit MonClientHelper(CephContext *cct_)
     : Dispatcher(cct_),
       cct(cct_),
       monc(cct_),

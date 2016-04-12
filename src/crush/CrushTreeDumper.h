@@ -63,7 +63,7 @@ namespace CrushTreeDumper {
   template <typename F>
   class Dumper : public list<Item> {
   public:
-    Dumper(const CrushWrapper *crush_) : crush(crush_) {
+    explicit Dumper(const CrushWrapper *crush_) : crush(crush_) {
       crush->find_roots(roots);
       root = roots.begin();
     }
@@ -155,7 +155,7 @@ namespace CrushTreeDumper {
 
   class FormattingDumper : public Dumper<Formatter> {
   public:
-    FormattingDumper(const CrushWrapper *crush) : Dumper<Formatter>(crush) {}
+    explicit FormattingDumper(const CrushWrapper *crush) : Dumper<Formatter>(crush) {}
 
   protected:
     virtual void dump_item(const Item &qi, Formatter *f) {

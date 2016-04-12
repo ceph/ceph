@@ -74,7 +74,7 @@ struct MDSCapMatch {
 
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
   MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
-  MDSCapMatch(std::string path_)
+  explicit MDSCapMatch(std::string path_)
     : uid(MDS_AUTH_UID_ANY), path(path_) {
     normalize_path();
   }
@@ -94,6 +94,14 @@ struct MDSCapMatch {
   bool match(const std::string &target_path,
 	     const int caller_uid,
 	     const int caller_gid) const;
+
+  /**
+   * Check whether this path *might* be accessible (actual permission
+   * depends on the stronger check in match()).
+   *
+   * @param target_path filesystem path without leading '/'
+   */
+  bool match_path(const std::string &target_path) const;
 };
 
 struct MDSCapGrant {
@@ -111,11 +119,11 @@ class MDSAuthCaps
   std::vector<MDSCapGrant> grants;
 
 public:
-  MDSAuthCaps(CephContext *cct_=NULL)
+  explicit MDSAuthCaps(CephContext *cct_=NULL)
     : cct(cct_) { }
 
   // this ctor is used by spirit/phoenix; doesn't need cct.
-  MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
+  explicit MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
     : cct(NULL), grants(grants_) { }
 
   void set_allow_all();
@@ -126,6 +134,7 @@ public:
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, unsigned mask,
 		  uid_t new_uid, gid_t new_gid) const;
+  bool path_capable(const std::string &inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

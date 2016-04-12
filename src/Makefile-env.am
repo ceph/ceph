@@ -16,8 +16,8 @@ sbin_SCRIPTS =
 su_sbin_PROGRAMS =
 su_sbin_SCRIPTS =
 dist_bin_SCRIPTS =
-lib_LTLIBRARIES = 
-noinst_LTLIBRARIES = 
+lib_LTLIBRARIES =
+noinst_LTLIBRARIES =
 noinst_LIBRARIES =
 radoslib_LTLIBRARIES =
 
@@ -63,7 +63,7 @@ HARDENING_CFLAGS = \
                    --param=ssp-buffer-size=4 \
                    -fPIE
 
-SET_STACK_PROTECTOR_STRONG = $(shell expr `gcc -dumpversion` \>= 4.9)
+SET_STACK_PROTECTOR_STRONG = $(shell expr `$(CC) -dumpversion` \>= 4.9)
 
 		ifeq ($(SET_STACK_PROTECTOR_STRONG),1)
 				HARDENING_CFLAGS += -fstack-protector-strong
@@ -201,7 +201,7 @@ LIBPERFGLUE = libperfglue.la
 LIBAUTH = libauth.la
 LIBMSG = libmsg.la
 LIBCRUSH = libcrush.la
-LIBCOMPRESSOR = libcompressor.la -lsnappy
+LIBCOMPRESSOR = libcompressor.la
 LIBJSON_SPIRIT = libjson_spirit.la
 LIBKV = libkv.a
 LIBLOG = liblog.la
@@ -233,6 +233,10 @@ if WITH_LIBZFS
 LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
+if WITH_SPDK
+LIBOS += ${LIBSPDK_LIBS} ${LIBDPDK_LIBS} ${LIBPCIACCESS_LIBS}
+endif # WITH_SPDK
+
 if WITH_TCMALLOC_MINIMAL
 LIBPERFGLUE += -ltcmalloc_minimal
 endif # WITH_TCMALLOC_MINIMAL
@@ -252,6 +256,8 @@ if ENABLE_COVERAGE
 EXTRALIBS += -lgcov
 endif # ENABLE_COVERAGE
 
+LIBCOMMON += -luuid
+
 # Libosd always needs osdc and os
 LIBOSD += $(LIBOSDC) $(LIBOS)
 
@@ -266,9 +272,15 @@ LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 # libkv/libos linking order is ornery
 if WITH_SLIBROCKSDB
 LIBKV += rocksdb/librocksdb.a
+if HAVE_BZLIB
+LIBKV += -lbz2
 endif
-LIBKV += -lbz2 -lz -lleveldb -lsnappy
-LIBOS += $(LIBOS_TYPES) $(LIBKV)
+if HAVE_LZ4
+LIBKV += -llz4
+endif
+endif # WITH_SLIBROCKSDB
+LIBKV += -lz -lleveldb -lsnappy
+LIBOS += $(LIBOS_TYPES) $(LIBKV) $(LIBFUSE_LIBS)
 
 LIBMON += $(LIBMON_TYPES)
 
@@ -279,11 +291,16 @@ CEPH_GLOBAL = $(LIBGLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXT
 LIBCOMMON_DEPS =
 LIBRADOS_DEPS =
 LIBRGW_DEPS =
+LIBCIVETWEB_DEPS =
 
 # This is used by the dencoder test
 DENCODER_SOURCES =
 DENCODER_DEPS =
 
+# put virtualenvs in this directory
+# otherwise it may overflow #! 80 kernel limit
+# beware that some build environments might not be able to write to /tmp
+export TMPDIR ?= /tmp
+export CEPH_BUILD_VIRTUALENV = $(TMPDIR)
 
 radoslibdir = $(libdir)/rados-classes
-

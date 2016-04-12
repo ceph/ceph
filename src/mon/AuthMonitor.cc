@@ -98,11 +98,17 @@ void AuthMonitor::create_initial()
     KeyRing keyring;
     bufferlist bl;
     int ret = mon->store->get("mkfs", "keyring", bl);
-    assert(ret == 0);
-    bufferlist::iterator p = bl.begin();
-    ::decode(keyring, p);
+    // fail hard only if there's an error we're not expecting to see
+    assert((ret == 0) || (ret == -ENOENT));
+    
+    // try importing only if there's a key
+    if (ret == 0) {
+      KeyRing keyring;
+      bufferlist::iterator p = bl.begin();
 
-    import_keyring(keyring);
+      ::decode(keyring, p);
+      import_keyring(keyring);
+    }
   }
 
   max_global_id = MIN_GLOBAL_ID;
@@ -531,6 +537,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix == "auth add" ||
       prefix == "auth del" ||
+      prefix == "auth rm" ||
       prefix == "auth get-or-create" ||
       prefix == "auth get-or-create-key" ||
       prefix == "auth import" ||
@@ -984,7 +991,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "auth del" && !entity_name.empty()) {
+  } else if ((prefix == "auth del" || prefix == "auto rm") &&
+             !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
     auth_inc.name = entity;
     if (!mon->key_server.contains(auth_inc.name)) {

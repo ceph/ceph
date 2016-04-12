@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_RENAME_REQUEST_HH
+#ifndef CEPH_LIBRBD_RENAME_REQUEST_H
 #define CEPH_LIBRBD_RENAME_REQUEST_H
 
 #include "librbd/operation/Request.h"
@@ -59,8 +59,8 @@ protected:
   virtual void send_op();
   virtual bool should_complete(int r);
 
-  virtual journal::Event create_event() const {
-    return journal::RenameEvent(0, m_dest_name);
+  virtual journal::Event create_event(uint64_t op_tid) const {
+    return journal::RenameEvent(op_tid, m_dest_name);
   }
 
 private:
@@ -80,6 +80,7 @@ private:
   void send_update_directory();
   void send_remove_source_header();
 
+  void apply();
 };
 
 } // namespace operation

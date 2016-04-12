@@ -28,6 +28,7 @@ class CephContext;
 class ThreadPool : public md_config_obs_t {
   CephContext *cct;
   string name;
+  string thread_name;
   string lockname;
   Mutex _lock;
   Cond _cond;
@@ -125,10 +126,7 @@ public:
     }
 
   protected:
-    virtual void _process(const list<T*> &) { assert(0); }
-    virtual void _process(const list<T*> &items, TPHandle &handle) {
-      _process(items);
-    }
+    virtual void _process(const list<T*> &items, TPHandle &handle) = 0;
 
   public:
     BatchWorkQueue(string n, time_t ti, time_t sti, ThreadPool* p)
@@ -256,10 +254,7 @@ public:
     void unlock() {
       pool->unlock();
     }
-    virtual void _process(U) { assert(0); }
-    virtual void _process(U u, TPHandle &) {
-      _process(u);
-    }
+    virtual void _process(U u, TPHandle &) = 0;
   };
 
   /** @brief Template by-pointer work queue.
@@ -292,10 +287,7 @@ public:
 
   protected:
     /// Process a work item. Called from the worker threads.
-    virtual void _process(T *t) { assert(0); }
-    virtual void _process(T *t, TPHandle &) {
-      _process(t);
-    }
+    virtual void _process(T *t, TPHandle &) = 0;
 
   public:
     WorkQueue(string n, time_t ti, time_t sti, ThreadPool* p) : WorkQueue_(n, ti, sti), pool(p) {
@@ -353,10 +345,6 @@ public:
   template<typename T>
   class PointerWQ : public WorkQueue_ {
   public:
-    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
-      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
-      m_pool->add_work_queue(this);
-    }
     ~PointerWQ() {
       m_pool->remove_work_queue(this);
       assert(m_processing == 0);
@@ -382,6 +370,9 @@ public:
       return _empty();
     }
   protected:
+    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
+      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
+    }
     virtual void _clear() {
       assert(m_pool->_lock.is_locked());
       m_items.clear();
@@ -411,6 +402,10 @@ public:
     }
 
     virtual void process(T *item) = 0;
+    void process_finish() {
+      Mutex::Locker locker(m_pool->_lock);
+      _void_process_finish(nullptr);
+    }
 
     T *front() {
       assert(m_pool->_lock.is_locked());
@@ -422,6 +417,9 @@ public:
     void signal() {
       Mutex::Locker pool_locker(m_pool->_lock);
       m_pool->_cond.SignalOne();
+    }
+    Mutex &get_pool_lock() {
+      return m_pool->_lock;
     }
   private:
     ThreadPool *m_pool;
@@ -436,6 +434,7 @@ private:
   // threads
   struct WorkThread : public Thread {
     ThreadPool *pool;
+    // cppcheck-suppress noExplicitConstructor
     WorkThread(ThreadPool *p) : pool(p) {}
     void *entry() {
       pool->worker(this);
@@ -452,7 +451,7 @@ private:
   void worker(WorkThread *wt);
 
 public:
-  ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
+  ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option = NULL);
   virtual ~ThreadPool();
 
   /// return number of threads currently running
@@ -548,8 +547,8 @@ public:
     _queue.pop_front();
     return c;
   }
-  using ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
-  void _process(GenContext<ThreadPool::TPHandle&> *c, ThreadPool::TPHandle &tp) {
+  void _process(GenContext<ThreadPool::TPHandle&> *c,
+		ThreadPool::TPHandle &tp) override {
     c->complete(tp);
   }
 };
@@ -572,6 +571,7 @@ public:
   ContextWQ(const string &name, time_t ti, ThreadPool *tp)
     : ThreadPool::PointerWQ<Context>(name, ti, 0, tp),
       m_lock("ContextWQ::m_lock") {
+    tp->add_work_queue(this);
   }
 
   void queue(Context *ctx, int result = 0) {
@@ -611,6 +611,7 @@ class ShardedThreadPool {
 
   CephContext *cct;
   string name;
+  string thread_name;
   string lockname;
   Mutex shardedpool_lock;
   Cond shardedpool_cond;
@@ -691,7 +692,7 @@ private:
 
 public:
 
-  ShardedThreadPool(CephContext *cct_, string nm, uint32_t pnum_threads);
+  ShardedThreadPool(CephContext *cct_, string nm, string tn, uint32_t pnum_threads);
 
   ~ShardedThreadPool(){};
 

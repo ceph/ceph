@@ -14,6 +14,11 @@ rados_include_DATA = \
 	$(srcdir)/include/crc32c.h \
 	$(srcdir)/include/memory.h
 
+if WITH_RADOSGW
+rados_include_DATA += \
+	$(srcdir)/include/rados/librgw.h \
+	$(srcdir)/include/rados/rgw_file.h
+endif # WITH_RADOSGW
 
 if WITH_RBD
 librbd_includedir = $(includedir)/rbd
@@ -52,6 +57,7 @@ noinst_HEADERS += \
 	include/atomic.h \
 	include/bitmapper.h \
 	include/blobhash.h \
+	include/btree_interval_set.h \
 	include/buffer.h \
 	include/buffer_fwd.h \
 	include/byteorder.h \
@@ -63,13 +69,18 @@ noinst_HEADERS += \
 	include/cmp.h \
 	include/color.h \
 	include/compat.h \
+	include/cpp-btree/btree.h \
+	include/cpp-btree/btree_container.h \
+	include/cpp-btree/btree_map.h \
 	include/sock_compat.h \
 	include/crc32c.h \
 	include/encoding.h \
+	include/encoding_btree.h \
 	include/err.h \
 	include/error.h \
 	include/filepath.h \
 	include/frag.h \
+	include/fs_types.h \
 	include/hash.h \
 	include/inline_memory.h \
 	include/intarith.h \
@@ -105,6 +116,7 @@ noinst_HEADERS += \
 	include/rados/crc32c.h \
 	include/rados/buffer.h \
 	include/rados/buffer_fwd.h \
+	include/rados/rgw_file.h \
 	include/radosstriper/libradosstriper.h \
 	include/radosstriper/libradosstriper.hpp \
 	include/rbd/features.h \

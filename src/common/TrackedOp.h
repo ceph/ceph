@@ -22,6 +22,7 @@
 #include "msg/Message.h"
 #include "include/memory.h"
 #include "common/RWLock.h"
+#include <atomic>
 
 class TrackedOp;
 typedef ceph::shared_ptr<TrackedOp> TrackedOpRef;
@@ -56,7 +57,7 @@ class OpTracker {
   class RemoveOnDelete {
     OpTracker *tracker;
   public:
-    RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
+    explicit RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
     void operator()(TrackedOp *op);
   };
   friend class RemoveOnDelete;
@@ -65,7 +66,7 @@ class OpTracker {
   struct ShardedTrackingData {
     Mutex ops_in_flight_lock_sharded;
     xlist<TrackedOp *> ops_in_flight_sharded;
-    ShardedTrackingData(string lock_name):
+    explicit ShardedTrackingData(string lock_name):
         ops_in_flight_lock_sharded(lock_name.c_str()) {}
   };
   vector<ShardedTrackingData*> sharded_in_flight_list;
@@ -74,16 +75,16 @@ class OpTracker {
   float complaint_time;
   int log_threshold;
   void _mark_event(TrackedOp *op, const string &evt, utime_t now);
+  bool tracking_enabled;
+  RWLock       lock;
 
 public:
-  bool tracking_enabled;
   CephContext *cct;
-  RWLock       lock;
   OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards) : seq(0), 
                                      num_optracker_shards(num_shards),
 				     complaint_time(0), log_threshold(0),
-				     tracking_enabled(tracking), cct(cct_),
-				     lock("OpTracker::lock") {
+				     tracking_enabled(tracking),
+				     lock("OpTracker::lock"), cct(cct_) {
 
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
       char lock_name[32] = {0};
@@ -104,9 +105,9 @@ public:
     RWLock::WLocker l(lock);
     tracking_enabled = enable;
   }
-  void dump_ops_in_flight(Formatter *f);
-  void dump_historic_ops(Formatter *f);
-  void register_inflight_op(xlist<TrackedOp*>::item *i);
+  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
+  bool dump_historic_ops(Formatter *f);
+  bool register_inflight_op(xlist<TrackedOp*>::item *i);
   void unregister_inflight_op(TrackedOp *i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
@@ -139,6 +140,7 @@ public:
   {
     typename T::Ref retval(new T(params, this),
 			   RemoveOnDelete(this));
+    retval->tracking_start();
     return retval;
   }
 };
@@ -158,7 +160,8 @@ protected:
   uint64_t seq; /// a unique value set by the OpTracker
 
   uint32_t warn_interval_multiplier; // limits output of a given op warning
-  bool is_tracked; //whether in tracker
+  // Transitions from false -> true without locks being held
+  atomic<bool> is_tracked; //whether in tracker and out of constructor
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
     tracker(_tracker),
@@ -167,14 +170,7 @@ protected:
     seq(0),
     warn_interval_multiplier(1),
     is_tracked(false)
-  {
-    RWLock::RLocker l(tracker->lock);
-    if (tracker->tracking_enabled) {
-      tracker->register_inflight_op(&xitem);
-      events.push_back(make_pair(initiated_at, "initiated"));
-      is_tracked = true;
-    }
-  }
+  { }
 
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(utime_t now, Formatter *f) const {}
@@ -193,6 +189,7 @@ public:
   }
 
   double get_duration() const {
+    Mutex::Locker l(lock);
     if (!events.empty() && events.rbegin()->second.compare("done") == 0)
       return events.rbegin()->first - get_initiated();
     else
@@ -201,9 +198,16 @@ public:
 
   void mark_event(const string &event);
   virtual const char *state_string() const {
+    Mutex::Locker l(lock);
     return events.rbegin()->second.c_str();
   }
   void dump(utime_t now, Formatter *f) const;
+  void tracking_start() {
+    if (tracker->register_inflight_op(&xitem)) {
+      events.push_back(make_pair(initiated_at, "initiated"));
+      is_tracked = true;
+    }
+  }
 };
 
 #endif

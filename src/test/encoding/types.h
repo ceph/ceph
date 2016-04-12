@@ -14,6 +14,9 @@ TYPE(BitVector<2>)
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
 
+#include "test_ceph_time.h"
+TYPE(real_time_wrapper)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
@@ -108,8 +111,17 @@ TYPE(HitSet::Params)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
-#include "os/SequencerPosition.h"
+#include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
+
+#include "os/bluestore/bluestore_types.h"
+TYPE(bluestore_cnode_t)
+TYPE(bluestore_extent_t)
+TYPE(bluestore_extent_ref_map_t)
+TYPE(bluestore_overlay_t)
+TYPE(bluestore_onode_t)
+TYPE(bluestore_wal_op_t)
+TYPE(bluestore_wal_transaction_t)
 
 #include "common/hobject.h"
 TYPE(hobject_t)
@@ -135,7 +147,7 @@ TYPE(MonCap)
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
 
-#include "os/DBObjectMap.h"
+#include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
@@ -154,8 +166,8 @@ TYPE(sr_t)
 TYPE(frag_info_t)
 TYPE(nest_info_t)
 TYPE(client_writeable_range_t)
-TYPE(inode_t)
-TYPE(old_inode_t)
+TYPE_FEATUREFUL(inode_t)
+TYPE_FEATUREFUL(old_inode_t)
 TYPE(fnode_t)
 TYPE(old_rstat_t)
 TYPE(session_info_t)
@@ -169,10 +181,12 @@ TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
 TYPE(quota_info_t)
-TYPE(ceph_file_layout_wrapper)
+
+#include "include/fs_types.h"
+TYPE_FEATUREFUL(file_layout_t)
 
 #include "mds/CInode.h"
-TYPE(InodeStore)
+TYPE_FEATUREFUL(InodeStore)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
@@ -188,46 +202,51 @@ TYPE(InoTable)
 TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
-TYPE(ECommitted)
+TYPE_FEATUREFUL(ECommitted)
 #include "mds/events/EExport.h"
-TYPE(EExport)
+TYPE_FEATUREFUL(EExport)
 #include "mds/events/EFragment.h"
-TYPE(EFragment)
+TYPE_FEATUREFUL(EFragment)
 #include "mds/events/EImportFinish.h"
-TYPE(EImportFinish)
+TYPE_FEATUREFUL(EImportFinish)
 #include "mds/events/EImportStart.h"
-TYPE(EImportStart)
+TYPE_FEATUREFUL(EImportStart)
 #include "mds/events/EMetaBlob.h"
-TYPE_NOCOPY(EMetaBlob::fullbit)
+TYPE_FEATUREFUL_NOCOPY(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
-TYPE(EMetaBlob::dirlump)
-TYPE(EMetaBlob)
+TYPE_FEATUREFUL(EMetaBlob::dirlump)
+TYPE_FEATUREFUL(EMetaBlob)
 #include "mds/events/EOpen.h"
-TYPE(EOpen)
+TYPE_FEATUREFUL(EOpen)
 #include "mds/events/EResetJournal.h"
-TYPE(EResetJournal)
+TYPE_FEATUREFUL(EResetJournal)
 #include "mds/events/ESession.h"
-TYPE(ESession)
+TYPE_FEATUREFUL(ESession)
 #include "mds/events/ESessions.h"
-TYPE(ESessions)
+TYPE_FEATUREFUL(ESessions)
 #include "mds/events/ESlaveUpdate.h"
 TYPE(link_rollback)
 TYPE(rmdir_rollback)
 TYPE(rename_rollback::drec)
 TYPE(rename_rollback)
-TYPE(ESlaveUpdate)
+TYPE_FEATUREFUL(ESlaveUpdate)
 #include "mds/events/ESubtreeMap.h"
-TYPE(ESubtreeMap)
+TYPE_FEATUREFUL(ESubtreeMap)
 #include "mds/events/ETableClient.h"
-TYPE(ETableClient)
+TYPE_FEATUREFUL(ETableClient)
 #include "mds/events/ETableServer.h"
-TYPE(ETableServer)
+TYPE_FEATUREFUL(ETableServer)
 #include "mds/events/EUpdate.h"
-TYPE(EUpdate)
+TYPE_FEATUREFUL(EUpdate)
 
-#include "librbd/JournalTypes.h"
+#ifdef WITH_RBD
+#include "librbd/journal/Types.h"
 TYPE(librbd::journal::EventEntry)
+TYPE(librbd::journal::ClientData)
+TYPE(librbd::journal::TagData)
+#include "librbd/mirroring_watcher/Types.h"
+TYPE(librbd::mirroring_watcher::NotifyMessage)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)
@@ -235,6 +254,7 @@ TYPE(librbd::watch_notify::ResponseMessage)
 #include "rbd_replay/ActionTypes.h"
 TYPE(rbd_replay::action::Dependency)
 TYPE(rbd_replay::action::ActionEntry);
+#endif
 
 #ifdef WITH_RADOSGW
 
@@ -242,7 +262,7 @@ TYPE(rbd_replay::action::ActionEntry);
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
 TYPE(RGWOLHInfo)
-TYPE(RGWRegion)
+TYPE(RGWZoneGroup)
 TYPE(RGWZone)
 TYPE(RGWZoneParams)     
    
@@ -314,7 +334,7 @@ TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
 #include "cls/journal/cls_journal_types.h"
-TYPE(cls::journal::EntryPosition)
+TYPE(cls::journal::ObjectPosition)
 TYPE(cls::journal::ObjectSetPosition)
 TYPE(cls::journal::Client)
 
@@ -331,12 +351,15 @@ TYPE(rgw_obj)
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)
 
+#ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
 TYPE(cls::rbd::MirrorPeer)
+TYPE(cls::rbd::MirrorImage)
+#endif
 
 #endif
 

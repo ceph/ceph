@@ -1,5 +1,20 @@
 include Makefile-env.am
 
+# a workaround for http://debbugs.gnu.org/cgi/bugreport.cgi?bug=18744, this
+# bug was fixed in automake 1.15, but automake 1.13 is supported by us.  so
+# we can not just require 1.15 using `AM_INIT_AUTOMAKE`
+am__is_gnu_make = { \
+  if test -z '$(MAKELEVEL)'; then \
+    false; \
+  elif test -n '$(MAKE_HOST)'; then \
+    true; \
+  elif test -n '$(MAKE_VERSION)' && test -n '$(CURDIR)'; then \
+    true; \
+  else \
+    false; \
+  fi; \
+}
+
 SUBDIRS += ocf java
 DIST_SUBDIRS += gmock ocf java
 
@@ -18,6 +33,7 @@ include arch/Makefile.am
 include auth/Makefile.am
 include brag/Makefile.am
 include ceph-detect-init/Makefile.am
+include ceph-disk/Makefile.am
 include crush/Makefile.am
 include kv/Makefile.am
 include mon/Makefile.am
@@ -25,6 +41,7 @@ include mds/Makefile.am
 include os/Makefile.am
 include osd/Makefile.am
 include erasure-code/Makefile.am
+include compressor/Makefile.am
 include osdc/Makefile.am
 include client/Makefile.am
 include global/Makefile.am
@@ -46,7 +63,7 @@ include rbd_replay/Makefile.am
 include test/Makefile.am
 include tools/Makefile.am
 include Makefile-rocksdb.am
-include compressor/Makefile.am
+include Makefile-spdk.am
 include tracing/Makefile.am
 include pybind/Makefile.am
 
@@ -60,6 +77,7 @@ editpaths = sed \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g' \
+	-e 's|@libexecdir[@]|$(libexecdir)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 shell_scripts = ceph-debugpack ceph-post-file ceph-crush-location
 $(shell_scripts): Makefile
@@ -89,6 +107,7 @@ EXTRA_DIST += \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/tools/ceph-monstore-update-crush.sh \
+	$(srcdir)/script/subman \
 	$(srcdir)/upstart/ceph-all.conf \
 	$(srcdir)/upstart/ceph-disk.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
@@ -101,12 +120,14 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/ceph-mds.conf \
 	$(srcdir)/upstart/ceph-mds-all.conf \
 	$(srcdir)/upstart/ceph-mds-all-starter.conf \
+	$(srcdir)/upstart/ceph-rbd-mirror.conf \
+	$(srcdir)/upstart/ceph-rbd-mirror-all.conf \
+	$(srcdir)/upstart/ceph-rbd-mirror-all-starter.conf \
 	$(srcdir)/upstart/radosgw.conf \
 	$(srcdir)/upstart/radosgw-all.conf \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
 	$(srcdir)/upstart/rbdmap.conf \
 	ceph.in \
-	ceph-disk \
 	ceph-disk-udev \
 	ceph-create-keys \
 	ceph-rest-api \
@@ -127,14 +148,15 @@ docdir ?= ${datadir}/doc/ceph
 doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 
-# various scripts
-
-shell_commondir = $(libdir)/ceph
-shell_common_SCRIPTS = ceph_common.sh
+# various scripts in $(libexecdir)
 
 ceph_libexecdir = $(libexecdir)/ceph
-ceph_libexec_SCRIPTS = ceph-osd-prestart.sh
+ceph_libexec_SCRIPTS = ceph_common.sh ceph-osd-prestart.sh
 
+if ENABLE_SUBMAN
+submandir = /etc/cron.hourly
+subman_DATA = script/subman
+endif
 
 # tests to actually run on "make check"; if you need extra, non-test,
 # executables built, you need to replace this with manual assignments

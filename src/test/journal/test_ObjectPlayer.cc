@@ -27,8 +27,8 @@ public:
 TEST_F(TestObjectPlayer, Fetch) {
   std::string oid = get_temp_oid();
 
-  journal::Entry entry1("tag1", 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2("tag1", 124, create_payload(std::string(24, '1')));
+  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, create_payload(std::string(24, '1')));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -52,9 +52,9 @@ TEST_F(TestObjectPlayer, Fetch) {
 TEST_F(TestObjectPlayer, FetchLarge) {
   std::string oid = get_temp_oid();
 
-  journal::Entry entry1("tag1", 123,
+  journal::Entry entry1(234, 123,
                         create_payload(std::string(8192 - 33, '1')));
-  journal::Entry entry2("tag1", 124, create_payload(""));
+  journal::Entry entry2(234, 124, create_payload(""));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -78,8 +78,8 @@ TEST_F(TestObjectPlayer, FetchLarge) {
 TEST_F(TestObjectPlayer, FetchDeDup) {
   std::string oid = get_temp_oid();
 
-  journal::Entry entry1("tag1", 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2("tag1", 123, create_payload(std::string(24, '2')));
+  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 123, create_payload(std::string(24, '2')));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -128,8 +128,8 @@ TEST_F(TestObjectPlayer, FetchError) {
 TEST_F(TestObjectPlayer, FetchCorrupt) {
   std::string oid = get_temp_oid();
 
-  journal::Entry entry1("tag1", 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2("tag1", 124, create_payload(std::string(24, '2')));
+  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, create_payload(std::string(24, '2')));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -141,7 +141,7 @@ TEST_F(TestObjectPlayer, FetchCorrupt) {
 
   C_SaferCond cond;
   object->fetch(&cond);
-  ASSERT_EQ(-EINVAL, cond.wait());
+  ASSERT_EQ(-EBADMSG, cond.wait());
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -154,8 +154,8 @@ TEST_F(TestObjectPlayer, FetchCorrupt) {
 TEST_F(TestObjectPlayer, FetchAppend) {
   std::string oid = get_temp_oid();
 
-  journal::Entry entry1("tag1", 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2("tag1", 124, create_payload(std::string(24, '2')));
+  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, create_payload(std::string(24, '2')));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -192,8 +192,8 @@ TEST_F(TestObjectPlayer, FetchAppend) {
 TEST_F(TestObjectPlayer, PopEntry) {
   std::string oid = get_temp_oid();
 
-  journal::Entry entry1("tag1", 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2("tag1", 124, create_payload(std::string(24, '1')));
+  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, create_payload(std::string(24, '1')));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -227,8 +227,8 @@ TEST_F(TestObjectPlayer, Watch) {
   C_SaferCond cond1;
   object->watch(&cond1, 0.1);
 
-  journal::Entry entry1("tag1", 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2("tag1", 124, create_payload(std::string(24, '1')));
+  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, create_payload(std::string(24, '1')));
 
   bufferlist bl;
   ::encode(entry1, bl);
@@ -267,7 +267,7 @@ TEST_F(TestObjectPlayer, Unwatch) {
   bool done = false;
   int rval = 0;
   C_SafeCond *ctx = new C_SafeCond(&mutex, &cond, &done, &rval);
-  object->watch(ctx, 0.1);
+  object->watch(ctx, 600);
 
   usleep(200000);
   ASSERT_FALSE(done);

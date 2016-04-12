@@ -194,26 +194,122 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
 	CEPH_SNAPDIR, 910, 1, "n2"));
 }
 
+static void append_out_escaped(const string &in, string *out)
+{
+  for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
+    if (*i == '%' || *i == ':' || *i == '/' || *i < 32 || *i >= 127) {
+      out->push_back('%');
+      char buf[3];
+      snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)*i);
+      out->append(buf);
+    } else {
+      out->push_back(*i);
+    }
+  }
+}
+
+static const char *decode_out_escaped(const char *in, string *out)
+{
+  while (*in && *in != ':') {
+    if (*in == '%') {
+      ++in;
+      char buf[3];
+      buf[0] = *in;
+      ++in;
+      buf[1] = *in;
+      buf[2] = 0;
+      int v = strtol(buf, NULL, 16);
+      out->push_back(v);
+    } else {
+      out->push_back(*in);
+    }
+    ++in;
+  }
+  return in;
+}
+
 ostream& operator<<(ostream& out, const hobject_t& o)
 {
   if (o == hobject_t())
     return out << "MIN";
   if (o.is_max())
     return out << "MAX";
-  out << o.pool << '/';
+  out << o.pool << ':';
   out << std::hex;
   out.width(8);
   out.fill('0');
-  out << o.get_hash();
+  out << o.get_bitwise_key_u32(); // << '~' << o.get_hash();
   out.width(0);
   out.fill(' ');
   out << std::dec;
-  if (o.nspace.length())
-    out << ":" << o.nspace;
-  if (o.get_key().length())
-    out << "." << o.get_key();
-  out << "/" << o.oid << "/" << o.snap;
+  out << ':';
+  string v;
+  append_out_escaped(o.nspace, &v);
+  v.push_back(':');
+  append_out_escaped(o.get_key(), &v);
+  v.push_back(':');
+  append_out_escaped(o.oid.name, &v);
+  out << v << ':' << o.snap;
   return out;
+}
+
+bool hobject_t::parse(const string &s)
+{
+  if (s == "MIN") {
+    *this = hobject_t();
+    return true;
+  }
+  if (s == "MAX") {
+    *this = hobject_t::get_max();
+    return true;
+  }
+
+  const char *start = s.c_str();
+  long long po;
+  unsigned h;
+  int r = sscanf(start, "%lld:%x:", &po, &h);
+  if (r != 2)
+    return false;
+  for (; *start && *start != ':'; ++start) ;
+  for (++start; *start && isxdigit(*start); ++start) ;
+  if (*start != ':')
+    return false;
+
+  string ns, k, name;
+  const char *p = decode_out_escaped(start + 1, &ns);
+  if (*p != ':')
+    return false;
+  p = decode_out_escaped(p + 1, &k);
+  if (*p != ':')
+    return false;
+  p = decode_out_escaped(p + 1, &name);
+  if (*p != ':')
+    return false;
+  start = p + 1;
+
+  unsigned long long sn;
+  if (strncmp(start, "head", 4) == 0) {
+    sn = CEPH_NOSNAP;
+    start += 4;
+    if (*start != 0)
+      return false;
+  } else {
+    r = sscanf(start, "%llx", &sn);
+    if (r != 1)
+      return false;
+    for (++start; *start && isxdigit(*start); ++start) ;
+    if (*start)
+      return false;
+  }
+
+  max = false;
+  pool = po;
+  set_hash(_reverse_bits(h));
+  nspace = ns;
+  oid.name = name;
+  set_key(k);
+  snap = sn;
+  return true;
 }
 
 int cmp_nibblewise(const hobject_t& l, const hobject_t& r)
@@ -288,6 +384,7 @@ int cmp_bitwise(const hobject_t& l, const hobject_t& r)
 // version 5.
 void ghobject_t::encode(bufferlist& bl) const
 {
+  // when changing this, remember to update encoded_size() too.
   ENCODE_START(6, 3, bl);
   ::encode(hobj.key, bl);
   ::encode(hobj.oid, bl);
@@ -300,6 +397,47 @@ void ghobject_t::encode(bufferlist& bl) const
   ::encode(shard_id, bl);
   ::encode(max, bl);
   ENCODE_FINISH(bl);
+}
+
+size_t ghobject_t::encoded_size() const
+{
+  // this is not in order of encoding or appearance, but rather
+  // in order of known constants first, so it can be (mostly) computed
+  // at compile time.
+  //  - encoding header + 3 string lengths
+  size_t r = sizeof(ceph_le32) + 2 * sizeof(__u8) + 3 * sizeof(__u32);
+
+  // hobj.snap
+  r += sizeof(uint64_t);
+
+  // hobj.hash
+  r += sizeof(uint32_t);
+
+  // hobj.max
+  r += sizeof(bool);
+
+  // hobj.pool
+  r += sizeof(uint64_t);
+
+  // hobj.generation
+  r += sizeof(uint64_t);
+
+  // hobj.shard_id
+  r += sizeof(int8_t);
+
+  // max
+  r += sizeof(bool);
+
+  // hobj.key
+  r += hobj.key.size();
+
+  // hobj.oid
+  r += hobj.oid.name.size();
+
+  // hobj.nspace
+  r += hobj.nspace.size();
+
+  return r;
 }
 
 void ghobject_t::decode(bufferlist::iterator& bl)
@@ -402,12 +540,63 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
   if (o.is_max())
     return out << "GHMAX";
   if (o.shard_id != shard_id_t::NO_SHARD)
-    out << std::hex << o.shard_id << std::dec << ":";
-  out << o.hobj;
-  if (o.generation != ghobject_t::NO_GEN) {
-    out << "/" << std::hex << (unsigned)(o.generation) << std::dec;
-  }
+    out << std::hex << o.shard_id << std::dec;
+  out << '#' << o.hobj << '#';
+  if (o.generation != ghobject_t::NO_GEN)
+    out << std::hex << (unsigned long long)(o.generation) << std::dec;
   return out;
+}
+
+bool ghobject_t::parse(const string& s)
+{
+  if (s == "GHMIN") {
+    *this = ghobject_t();
+    return true;
+  }
+  if (s == "GHMAX") {
+    *this = ghobject_t::get_max();
+    return true;
+  }
+
+  // look for shard# prefix
+  const char *start = s.c_str();
+  const char *p;
+  int sh = shard_id_t::NO_SHARD;
+  for (p = start; *p && isxdigit(*p); ++p) ;
+  if (!*p && *p != '#')
+    return false;
+  if (p > start) {
+    int r = sscanf(s.c_str(), "%x", &sh);
+    if (r < 1)
+      return false;
+    start = p + 1;
+  } else {
+    ++start;
+  }
+
+  // look for #generation suffix
+  long long unsigned g = NO_GEN;
+  const char *last = start + strlen(start) - 1;
+  p = last;
+  while (isxdigit(*p))
+    p--;
+  if (*p != '#')
+    return false;
+  if (p < last) {
+    sscanf(p + 1, "%llx", &g);
+  }
+
+  string inner(start, p - start);
+  hobject_t h;
+  if (!h.parse(inner)) {
+    return false;
+  }
+
+  shard_id = shard_id_t(sh);
+  hobj = h;
+  generation = g;
+  max = false;
+  return true;
 }
 
 int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r)

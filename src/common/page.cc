@@ -14,6 +14,6 @@ namespace ceph {
 
   unsigned _page_size = sysconf(_SC_PAGESIZE);
   unsigned long _page_mask = ~(unsigned long)(_page_size - 1);
-  unsigned _page_shift = _get_bits_of(_page_size);
+  unsigned _page_shift = _get_bits_of(_page_size - 1);
 
 }

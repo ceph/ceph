@@ -23,6 +23,7 @@ struct SnapRealm;
 struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
+class UserGroups;
 
 struct Cap {
   MetaSession *session;
@@ -65,7 +66,7 @@ struct CapSnap {
   uint64_t flush_tid;
   xlist<CapSnap*>::item flushing_item;
 
-  CapSnap(Inode *i)
+  explicit CapSnap(Inode *i)
     : in(i), issued(0), dirty(0),
       size(0), time_warp_seq(0), mode(0), uid(0), gid(0), xattr_version(0),
       inline_version(0), writing(false), dirty_data(false), flush_tid(0),
@@ -94,7 +95,7 @@ private:
   }
   ~QuotaTree() {}
 public:
-  QuotaTree(Inode *i) :
+  explicit QuotaTree(Inode *i) :
     _in(i),
     _ancestor_ref(0),
     _ancestor(NULL),
@@ -176,7 +177,7 @@ struct Inode {
 
   // file (data access)
   ceph_dir_layout dir_layout;
-  ceph_file_layout layout;
+  file_layout_t layout;
   uint64_t   size;        // on directory, # dentries
   uint32_t   truncate_seq;
   uint64_t   truncate_size;
@@ -204,10 +205,7 @@ struct Inode {
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   bool has_dir_layout() const {
-    for (unsigned c = 0; c < sizeof(layout); c++)
-      if (*((const char *)&layout + c))
-	return true;
-    return false;
+    return layout != file_layout_t();
   }
 
   __u32 hash_dentry_name(const string &dn) {
@@ -295,9 +293,9 @@ struct Inode {
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
 
-  xlist<MetaRequest*> unsafe_dir_ops;
+  xlist<MetaRequest*> unsafe_ops;
 
-  Inode(Client *c, vinodeno_t vino, ceph_file_layout *newlayout)
+  Inode(Client *c, vinodeno_t vino, file_layout_t *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
@@ -311,14 +309,13 @@ struct Inode {
       snap_caps(0), snap_cap_refs(0),
       cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
-      oset((void *)this, newlayout->fl_pg_pool, ino),
+      oset((void *)this, newlayout->pool_id, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dir(0), dn_set(),
       fcntl_locks(NULL), flock_locks(NULL),
       async_err(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&layout, 0, sizeof(layout));
     memset(&quota, 0, sizeof(quota));
   }
   ~Inode() { }
@@ -334,7 +331,7 @@ struct Inode {
     }
   };
 
-  bool check_mode(uid_t uid, gid_t gid, gid_t *sgids, int sgid_count, uint32_t flags);
+  bool check_mode(uid_t uid, UserGroups& groups, unsigned want);
 
   // CAPS --------
   void get_open_ref(int mode);

@@ -5,6 +5,8 @@
 #ifndef CEPH_RGW_SWIFT_H
 #define CEPH_RGW_SWIFT_H
 
+#include "include/assert.h"
+
 #include "rgw_common.h"
 #include "common/Cond.h"
 
@@ -12,13 +14,12 @@ class RGWRados;
 class KeystoneToken;
 
 struct rgw_swift_auth_info {
-  int status;
   string auth_groups;
   rgw_user user;
   string display_name;
   long long ttl;
 
-  rgw_swift_auth_info() : status(0), ttl(0) {}
+  rgw_swift_auth_info() : ttl(0) {}
 };
 
 class RGWSwift {
@@ -26,10 +27,12 @@ class RGWSwift {
   atomic_t down_flag;
 
   int validate_token(const char *token, struct rgw_swift_auth_info *info);
-  int validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
+  int validate_keystone_token(RGWRados *store, const string& token,
 			      RGWUserInfo& rgw_user);
 
-  int parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info,
+  int parse_keystone_token_response(const string& token,
+                                    bufferlist& bl,
+                                    struct rgw_swift_auth_info *info,
 		                    KeystoneToken& t);
   int update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info);
   int get_keystone_url(std::string& url);
@@ -61,7 +64,7 @@ protected:
   int check_revoked();
 public:
 
-  RGWSwift(CephContext *_cct) : cct(_cct), keystone_revoke_thread(NULL) {
+  explicit RGWSwift(CephContext *_cct) : cct(_cct), keystone_revoke_thread(NULL) {
     init();
   }
   ~RGWSwift() {
@@ -70,6 +73,10 @@ public:
 
   bool verify_swift_token(RGWRados *store, req_state *s);
   bool going_down();
+
+  /* Static methods shared between Swift API and S3. */
+  static int get_keystone_url(CephContext *cct, std::string& url);
+  static int get_keystone_admin_token(CephContext *cct, std::string& token);
 };
 
 extern RGWSwift *rgw_swift;

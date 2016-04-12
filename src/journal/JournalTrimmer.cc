@@ -5,7 +5,6 @@
 #include "journal/Utils.h"
 #include "common/Cond.h"
 #include "common/errno.h"
-#include "common/Finisher.h"
 #include <limits>
 
 #define dout_subsys ceph_subsys_journaler
@@ -18,13 +17,18 @@ JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const std::string &object_oid_prefix,
                                const JournalMetadataPtr &journal_metadata)
     : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
-      m_journal_metadata(journal_metadata), m_lock("JournalTrimmer::m_lock"),
-      m_remove_set_pending(false), m_remove_set(0), m_remove_set_ctx(NULL) {
+      m_journal_metadata(journal_metadata), m_metadata_listener(this),
+      m_lock("JournalTrimmer::m_lock"), m_remove_set_pending(false),
+      m_remove_set(0), m_remove_set_ctx(NULL) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
+
+  m_journal_metadata->add_listener(&m_metadata_listener);
 }
 
 JournalTrimmer::~JournalTrimmer() {
+  m_journal_metadata->remove_listener(&m_metadata_listener);
+
   m_journal_metadata->flush_commit_position();
   m_async_op_tracker.wait_for_ops();
 }
@@ -63,19 +67,8 @@ int JournalTrimmer::remove_objects(bool force) {
 
 void JournalTrimmer::committed(uint64_t commit_tid) {
   ldout(m_cct, 20) << __func__ << ": commit_tid=" << commit_tid << dendl;
-
-  ObjectSetPosition object_set_position;
-  if (!m_journal_metadata->committed(commit_tid, &object_set_position)) {
-    return;
-  }
-
-  {
-    Mutex::Locker locker(m_lock);
-    m_async_op_tracker.start_op();
-  }
-
-  Context *ctx = new C_CommitPositionSafe(this, object_set_position);
-  m_journal_metadata->set_commit_position(object_set_position, ctx);
+  m_journal_metadata->committed(commit_tid,
+                                m_create_commit_position_safe_context);
 }
 
 void JournalTrimmer::trim_objects(uint64_t minimum_set) {
@@ -121,38 +114,43 @@ void JournalTrimmer::remove_set(uint64_t object_set) {
   }
 }
 
-void JournalTrimmer::handle_commit_position_safe(
-    int r, const ObjectSetPosition &object_set_position) {
-  ldout(m_cct, 20) << __func__ << ": r=" << r << ", pos="
-                   << object_set_position << dendl;
+void JournalTrimmer::handle_metadata_updated() {
+  ldout(m_cct, 20) << __func__ << dendl;
 
   Mutex::Locker locker(m_lock);
-  if (r == 0) {
-    uint8_t splay_width = m_journal_metadata->get_splay_width();
-    uint64_t object_set = object_set_position.object_number / splay_width;
 
-    JournalMetadata::RegisteredClients registered_clients;
-    m_journal_metadata->get_registered_clients(&registered_clients);
+  JournalMetadata::RegisteredClients registered_clients;
+  m_journal_metadata->get_registered_clients(&registered_clients);
 
-    bool trim_permitted = true;
-    for (JournalMetadata::RegisteredClients::iterator it =
-           registered_clients.begin();
-         it != registered_clients.end(); ++it) {
-      const JournalMetadata::Client &client = *it;
-      uint64_t client_object_set = client.commit_position.object_number /
-                                   splay_width;
-      if (client.id != m_journal_metadata->get_client_id() &&
-          client_object_set < object_set) {
-        ldout(m_cct, 20) << "object set " << client_object_set << " still "
-                         << "in-use by client " << client.id << dendl;
-        trim_permitted = false;
-        break;
+  uint8_t splay_width = m_journal_metadata->get_splay_width();
+  uint64_t minimum_set = m_journal_metadata->get_minimum_set();
+  uint64_t active_set = m_journal_metadata->get_active_set();
+  uint64_t minimum_commit_set = active_set;
+  std::string minimum_client_id;
+
+  // TODO: add support for trimming past "laggy" clients
+  for (auto &client : registered_clients) {
+    if (client.commit_position.object_positions.empty()) {
+      // client hasn't recorded any commits
+      minimum_commit_set = minimum_set;
+      minimum_client_id = client.id;
+      break;
+    }
+
+    for (auto &position : client.commit_position.object_positions) {
+      uint64_t object_set = position.object_number / splay_width;
+      if (object_set < minimum_commit_set) {
+        minimum_client_id = client.id;
+        minimum_commit_set = object_set;
       }
     }
+  }
 
-    if (trim_permitted) {
-      trim_objects(object_set_position.object_number / splay_width);
-    }
+  if (minimum_commit_set > minimum_set) {
+    trim_objects(minimum_commit_set);
+  } else {
+    ldout(m_cct, 20) << "object set " << minimum_commit_set << " still "
+                     << "in-use by client " << minimum_client_id << dendl;
   }
 }
 
@@ -163,23 +161,26 @@ void JournalTrimmer::handle_set_removed(int r, uint64_t object_set) {
   Mutex::Locker locker(m_lock);
   m_remove_set_pending = false;
 
-  if (r == 0 || (r == -ENOENT && m_remove_set_ctx == NULL)) {
-    // advance the minimum set to the next set
-    m_journal_metadata->set_minimum_set(object_set + 1);
-    uint64_t minimum_set = m_journal_metadata->get_minimum_set();
-
-    if (m_remove_set > minimum_set) {
-      m_remove_set_pending = true;
-      remove_set(minimum_set);
-    }
-  } else if (r == -ENOENT) {
+  if (r == -ENOENT) {
     // no objects within the set existed
     r = 0;
   }
+  if (r == 0) {
+    // advance the minimum set to the next set
+    m_journal_metadata->set_minimum_set(object_set + 1);
+    uint64_t active_set = m_journal_metadata->get_active_set();
+    uint64_t minimum_set = m_journal_metadata->get_minimum_set();
 
-  if (m_remove_set_ctx != NULL && !m_remove_set_pending) {
+    if (m_remove_set > minimum_set && minimum_set <= active_set) {
+      m_remove_set_pending = true;
+      remove_set(minimum_set);
+    }
+  }
+
+  if (m_remove_set_ctx != nullptr && !m_remove_set_pending) {
     ldout(m_cct, 20) << "completing remove set context" << dendl;
     m_remove_set_ctx->complete(r);
+    m_remove_set_ctx = nullptr;
   }
 }
 
@@ -193,7 +194,8 @@ JournalTrimmer::C_RemoveSet::C_RemoveSet(JournalTrimmer *_journal_trimmer,
 
 void JournalTrimmer::C_RemoveSet::complete(int r) {
   lock.Lock();
-  if (r < 0 && r != -ENOENT && return_value == -ENOENT) {
+  if (r < 0 && r != -ENOENT &&
+      (return_value == -ENOENT || return_value == 0)) {
     return_value = r;
   } else if (r == 0 && return_value == -ENOENT) {
     return_value = 0;

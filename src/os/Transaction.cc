@@ -323,6 +323,20 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+	coll_t cid;
+	ghobject_t oldoid;
+	ghobject_t newoid;
+
+	::decode(cid, p);
+	::decode(oldoid, p);
+	::decode(newoid, p);
+
+	try_rename(cid, oldoid, newoid);
+      }
+      break;
+
     case Transaction::OP_COLL_SETATTR:
       {
 	coll_t cid;
@@ -908,6 +922,17 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_TRY_RENAME:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t old_oid = i.get_oid(op->oid);
+        ghobject_t new_oid = i.get_oid(op->dest_oid);
+	f->dump_string("op_name", "op_coll_move_rename");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("old_oid") << old_oid;
+	f->dump_stream("new_oid") << new_oid;
+      }
+	
     case Transaction::OP_SETALLOCHINT:
       {
         coll_t cid = i.get_cid(op->cid);

@@ -277,7 +277,7 @@ test_omap() {
 	else
             echo -n "$i" | $RADOS_TOOL -p $POOL setomapval $OBJ $i
 	fi
-        $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "\\: $i\$"
+        $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "|$i|\$"
     done
     $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 600
     cleanup
@@ -285,7 +285,7 @@ test_omap() {
 
 test_xattr() {
     cleanup
-    $RADOS_TOOL -p $POOL put $OBJ /etc/pass
+    $RADOS_TOOL -p $POOL put $OBJ /etc/passwd
     V1=`mktemp fooattrXXXXXXX`
     V2=`mktemp fooattrXXXXXXX`
     echo -n fooval > $V1
@@ -304,9 +304,24 @@ test_xattr() {
     rm $V1 $V2
     cleanup
 }
+test_rmobj() {
+    p=`uuidgen`
+    ceph osd pool create $p 1
+    ceph osd pool set-quota $p max_objects 1
+    V1=`mktemp fooattrXXXXXXX`
+    rados put $OBJ $V1 -p $p
+    while ! ceph osd dump | grep 'full max_objects'
+    do
+	sleep 2
+    done
+    rados -p $p rm $OBJ --force-full
+    rados rmpool $p $p --yes-i-really-really-mean-it
+    rm $V1
+}
 
 test_xattr
 test_omap
+test_rmobj
 
 echo "SUCCESS!"
 exit 0

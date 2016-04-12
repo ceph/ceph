@@ -234,6 +234,9 @@ struct ltstr
 };
 
 
+namespace ceph {
+  class Formatter;
+}
 
 #include "encoding.h"
 
@@ -244,7 +247,8 @@ WRITE_RAW_ENCODER(ceph_mds_session_head)
 WRITE_RAW_ENCODER(ceph_mds_request_head)
 WRITE_RAW_ENCODER(ceph_mds_request_release)
 WRITE_RAW_ENCODER(ceph_filelock)
-WRITE_RAW_ENCODER(ceph_mds_caps)
+WRITE_RAW_ENCODER(ceph_mds_caps_head)
+WRITE_RAW_ENCODER(ceph_mds_caps_body_legacy)
 WRITE_RAW_ENCODER(ceph_mds_cap_peer)
 WRITE_RAW_ENCODER(ceph_mds_cap_release)
 WRITE_RAW_ENCODER(ceph_mds_cap_item)
@@ -252,7 +256,7 @@ WRITE_RAW_ENCODER(ceph_mds_lease)
 WRITE_RAW_ENCODER(ceph_mds_snap_head)
 WRITE_RAW_ENCODER(ceph_mds_snap_realm)
 WRITE_RAW_ENCODER(ceph_mds_reply_head)
-WRITE_RAW_ENCODER(ceph_mds_reply_inode)
+WRITE_RAW_ENCODER(ceph_mds_reply_cap)
 WRITE_RAW_ENCODER(ceph_mds_cap_reconnect)
 WRITE_RAW_ENCODER(ceph_mds_snaprealm_reconnect)
 WRITE_RAW_ENCODER(ceph_frag_tree_split)
@@ -280,6 +284,7 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 struct client_t {
   int64_t v;
 
+  // cppcheck-suppress noExplicitConstructor
   client_t(int64_t _v = -2) : v(_v) {}
   
   void encode(bufferlist& bl) const {
@@ -307,65 +312,11 @@ inline ostream& operator<<(ostream& out, const client_t& c) {
 
 
 
-// --------------------------------------
-// ino
-
-typedef uint64_t _inodeno_t;
-
-struct inodeno_t {
-  _inodeno_t val;
-  inodeno_t() : val(0) {}
-  inodeno_t(_inodeno_t v) : val(v) {}
-  inodeno_t operator+=(inodeno_t o) { val += o.val; return *this; }
-  operator _inodeno_t() const { return val; }
-
-  void encode(bufferlist& bl) const {
-    ::encode(val, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(val, p);
-  }
-} __attribute__ ((__may_alias__));
-WRITE_CLASS_ENCODER(inodeno_t)
-
-inline ostream& operator<<(ostream& out, inodeno_t ino) {
-  return out << hex << ino.val << dec;
-}
-
-namespace std {
-  template<> struct hash< inodeno_t >
-  {
-    size_t operator()( const inodeno_t& x ) const
-    {
-      static rjhash<uint64_t> H;
-      return H(x.val);
-    }
-  };
-} // namespace std
-
-
-// file modes
-
-static inline bool file_mode_is_readonly(int mode) {
-  return (mode & CEPH_FILE_MODE_WR) == 0;
-}
-
-
-// dentries
-#define MAX_DENTRY_LEN 255
-
-// --
-namespace ceph {
-  class Formatter;
-}
-void dump(const ceph_file_layout& l, ceph::Formatter *f);
-void dump(const ceph_dir_layout& l, ceph::Formatter *f);
-
-
 // --
 
 struct prettybyte_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   prettybyte_t(uint64_t _v) : v(_v) {}
 };
 
@@ -389,6 +340,7 @@ inline ostream& operator<<(ostream& out, const prettybyte_t& b)
 
 struct si_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   si_t(uint64_t _v) : v(_v) {}
 };
 
@@ -412,6 +364,7 @@ inline ostream& operator<<(ostream& out, const si_t& b)
 
 struct pretty_si_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   pretty_si_t(uint64_t _v) : v(_v) {}
 };
 
@@ -435,6 +388,7 @@ inline ostream& operator<<(ostream& out, const pretty_si_t& b)
 
 struct kb_t {
   uint64_t v;
+  // cppcheck-suppress noExplicitConstructor
   kb_t(uint64_t _v) : v(_v) {}
 };
 
@@ -483,6 +437,7 @@ inline ostream& operator<<(ostream &oss, health_status_t status) {
 
 struct weightf_t {
   float v;
+  // cppcheck-suppress noExplicitConstructor
   weightf_t(float _v) : v(_v) {}
 };
 
@@ -530,6 +485,7 @@ struct errorcode32_t {
   int32_t code;
 
   errorcode32_t() {}
+  // cppcheck-suppress noExplicitConstructor
   errorcode32_t(int32_t i) : code(i) {}
 
   operator int() const { return code; }

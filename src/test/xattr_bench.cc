@@ -17,7 +17,7 @@
 #include <string.h>
 #include <iostream>
 #include <sstream>
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -106,7 +106,7 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
     }
     collections[coll] = make_pair(objects, new ObjectStore::Sequencer(coll.to_str()));
   }
-  store->apply_transaction(&osr, t);
+  store->apply_transaction(&osr, std::move(t));
 
   bufferlist bl;
   for (int i = 0; i < attrsize; ++i) {
@@ -135,9 +135,10 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 		   bl);
       }
     }
-    store->queue_transaction(iter->second.second, t,
+    store->queue_transaction(iter->second.second, std::move(*t),
 			     new OnApplied(&lock, &cond, &in_flight,
 					   t));
+    delete t;
   }
   {
     Mutex::Locker l(lock);
@@ -153,14 +154,6 @@ int main(int argc, char **argv) {
 
   global_init(0, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  if (args[0] == string("omap")) {
-    std::cerr << "using omap xattrs" << std::endl;
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "true");
-  } else {
-    std::cerr << "not using omap xattrs" << std::endl;
-    g_ceph_context->_conf->set_val("filestore_xattr_use_omap", "false");
-  }
-  g_ceph_context->_conf->apply_changes(NULL);
 
   std::cerr << "args: " << args << std::endl;
   if (args.size() < 3) {

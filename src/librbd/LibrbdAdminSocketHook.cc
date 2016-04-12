@@ -21,7 +21,7 @@ public:
 
 class FlushCacheCommand : public LibrbdAdminSocketCommand {
 public:
-  FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
+  explicit FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
   bool call(stringstream *ss) {
     int r = flush(ictx);
@@ -38,7 +38,7 @@ private:
 
 struct InvalidateCacheCommand : public LibrbdAdminSocketCommand {
 public:
-  InvalidateCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
+  explicit InvalidateCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
   bool call(stringstream *ss) {
     int r = invalidate_cache(ictx);
@@ -57,19 +57,22 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
   admin_socket(ictx->cct->get_admin_socket()) {
 
   std::string command;
+  std::string imagename;
   int r;
 
-  command = "rbd cache flush " + ictx->name;
+  imagename = ictx->md_ctx.get_pool_name() + "/" + ictx->name;
+  command = "rbd cache flush " + imagename;
+
   r = admin_socket->register_command(command, command, this,
-				     "flush rbd image " + ictx->name +
+				     "flush rbd image " + imagename +
 				     " cache");
   if (r == 0) {
     commands[command] = new FlushCacheCommand(ictx);
   }
 
-  command = "rbd cache invalidate " + ictx->name;
+  command = "rbd cache invalidate " + imagename;
   r = admin_socket->register_command(command, command, this,
-				     "invalidate rbd image " + ictx->name +
+				     "invalidate rbd image " + imagename + 
 				     " cache");
   if (r == 0) {
     commands[command] = new InvalidateCacheCommand(ictx);
@@ -78,7 +81,7 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
 
 LibrbdAdminSocketHook::~LibrbdAdminSocketHook() {
   for (Commands::const_iterator i = commands.begin(); i != commands.end();
-       i++) {
+       ++i) {
     (void)admin_socket->unregister_command(i->first);
     delete i->second;
   }

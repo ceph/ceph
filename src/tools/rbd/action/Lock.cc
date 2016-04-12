@@ -189,7 +189,7 @@ int execute_add(const po::variables_map &vm) {
   if (r < 0) {
     if (r == -EBUSY || r == -EEXIST) {
       if (!lock_tag.empty()) {
-        std::cerr << "rbd: lock is alrady held by someone else"
+        std::cerr << "rbd: lock is already held by someone else"
                   << " with a different tag" << std::endl;
       } else {
         std::cerr << "rbd: lock is already held by someone else" << std::endl;

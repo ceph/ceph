@@ -92,8 +92,8 @@ struct librados::IoCtxImpl {
 
   const string& get_cached_pool_name();
 
-  uint32_t get_object_hash_position(const std::string& oid);
-  uint32_t get_object_pg_hash_position(const std::string& oid);
+  int get_object_hash_position(const std::string& oid, uint32_t *hash_postion);
+  int get_object_pg_hash_position(const std::string& oid, uint32_t *pg_hash_position);
 
   ::ObjectOperation *prepare_assert_ops(::ObjectOperation *op);
 
@@ -115,6 +115,14 @@ struct librados::IoCtxImpl {
   uint32_t nlist_seek(Objecter::NListContext *context, uint32_t pos);
   int list(Objecter::ListContext *context, int max_entries);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
+  void object_list_slice(
+    const hobject_t start,
+    const hobject_t finish,
+    const size_t n,
+    const size_t m,
+    hobject_t *split_start,
+    hobject_t *split_finish);
+
   int create(const object_t& oid, bool exclusive);
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(const object_t& oid, bufferlist& bl, size_t len);
@@ -127,7 +135,9 @@ struct librados::IoCtxImpl {
   int sparse_read(const object_t& oid, std::map<uint64_t,uint64_t>& m,
 		  bufferlist& bl, size_t len, uint64_t off);
   int remove(const object_t& oid);
+  int remove(const object_t& oid, int flags);
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
+  int stat2(const object_t& oid, uint64_t *psize, struct timespec *pts);
   int trunc(const object_t& oid, uint64_t size);
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
@@ -142,7 +152,7 @@ struct librados::IoCtxImpl {
   int getxattrs(const object_t& oid, map<string, bufferlist>& attrset);
   int rmxattr(const object_t& oid, const char *name);
 
-  int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime, int flags=0);
+  int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0);
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
@@ -152,21 +162,29 @@ struct librados::IoCtxImpl {
 
   struct C_aio_Ack : public Context {
     librados::AioCompletionImpl *c;
-    C_aio_Ack(AioCompletionImpl *_c);
+    explicit C_aio_Ack(AioCompletionImpl *_c);
     void finish(int r);
   };
 
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
     time_t *pmtime;
-    utime_t mtime;
+    ceph::real_time mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
+    void finish(int r);
+  };
+
+  struct C_aio_stat2_Ack : public Context {
+    librados::AioCompletionImpl *c;
+    struct timespec *pts;
+    ceph::real_time mtime;
+    C_aio_stat2_Ack(AioCompletionImpl *_c, struct timespec *pts);
     void finish(int r);
   };
 
   struct C_aio_Safe : public Context {
     AioCompletionImpl *c;
-    C_aio_Safe(AioCompletionImpl *_c);
+    explicit C_aio_Safe(AioCompletionImpl *_c);
     void finish(int r);
   };
 
@@ -187,6 +205,7 @@ struct librados::IoCtxImpl {
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
+  int aio_stat2(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, struct timespec *pts);
   int aio_cancel(AioCompletionImpl *c);
 
   int pool_change_auid(unsigned long long auid);
@@ -197,11 +216,28 @@ struct librados::IoCtxImpl {
   int hit_set_get(uint32_t hash, AioCompletionImpl *c, time_t stamp,
 		  bufferlist *pbl);
 
+  int get_inconsistent_objects(const pg_t& pg,
+			       const librados::object_id_t& start_after,
+			       uint64_t max_to_get,
+			       AioCompletionImpl *c,
+			       std::vector<inconsistent_obj_t>* objects,
+			       uint32_t* interval);
+
+  int get_inconsistent_snapsets(const pg_t& pg,
+				const librados::object_id_t& start_after,
+				uint64_t max_to_get,
+				AioCompletionImpl *c,
+				std::vector<inconsistent_snapset_t>* snapsets,
+				uint32_t* interval);
+
   void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
 	    librados::WatchCtx2 *ctx2);
+  int aio_watch(const object_t& oid, AioCompletionImpl *c, uint64_t *cookie,
+                librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
   int watch_check(uint64_t cookie);
   int unwatch(uint64_t cookie);
+  int aio_unwatch(uint64_t cookie, AioCompletionImpl *c);
   int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms,
 	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
   int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,

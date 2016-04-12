@@ -8,6 +8,7 @@
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "include/rados/librados.hpp"
 #include "common/bit_vector.hpp"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
 #include "gmock/gmock.h"
@@ -25,6 +26,7 @@ using ::testing::DoDefault;
 using ::testing::Return;
 using ::testing::SetArgReferee;
 using ::testing::SetArgPointee;
+using ::testing::StrEq;
 using ::testing::WithArg;
 
 class TestMockOperationSnapshotUnprotectRequest : public TestMockFixture {
@@ -53,8 +55,8 @@ public:
     ::encode(status, bl);
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(mock_image_ctx.header_oid, _, "rbd",
-                                    "set_protection_status", ContentsEqual(bl),
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("set_protection_status"), ContentsEqual(bl),
                                     _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
@@ -88,7 +90,7 @@ public:
     ::encode(children, bl);
 
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                               exec(RBD_CHILDREN, _, "rbd", "get_children", _,
+                               exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("get_children"), _,
                                _, _));
     if (r < 0) {
       expect.WillRepeatedly(Return(r));
@@ -104,8 +106,8 @@ TEST_F(TestMockOperationSnapshotUnprotectRequest, Success) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -137,8 +139,8 @@ TEST_F(TestMockOperationSnapshotUnprotectRequest, GetSnapIdMissing) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -162,8 +164,8 @@ TEST_F(TestMockOperationSnapshotUnprotectRequest, IsSnapUnprotectedError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -188,8 +190,8 @@ TEST_F(TestMockOperationSnapshotUnprotectRequest, SnapAlreadyUnprotected) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -214,8 +216,8 @@ TEST_F(TestMockOperationSnapshotUnprotectRequest, SetProtectionStatusError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -243,8 +245,8 @@ TEST_F(TestMockOperationSnapshotUnprotectRequest, ChildrenExist) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 

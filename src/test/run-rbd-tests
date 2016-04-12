@@ -5,6 +5,9 @@
 CEPH_SRC=$(pwd)
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CEPH_SRC/.libs"
 export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
+for x in $CEPH_SRC/build/lib* ; do
+  export PYTHONPATH="${PYTHONPATH}:${x}"
+done
 PATH="$CEPH_SRC:$PATH"
 
 recreate_pool() {
@@ -23,6 +26,16 @@ run_cli_tests() {
     $CEPH_SRC/../qa/workunits/rbd/journal.sh
 }
 
+# tests that do not depend on image format / features
+run_generic_tests() {
+    $CEPH_SRC/../qa/workunits/rbd/verify_pool.sh
+
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/journal.sh
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/test_admin_socket.sh
+}
+
 run_api_tests() {
     # skip many_snaps since it takes several minutes
     nosetests -v test_rbd -e '.*many_snaps'
@@ -30,20 +43,15 @@ run_api_tests() {
     ceph_test_librbd
 }
 
-run_admin_socket_tests() {
-    recreate_pool rbd
-    $CEPH_SRC/../qa/workunits/rbd/test_admin_socket.sh
-}
-
 ceph_test_cls_rbd
+run_generic_tests
 run_api_tests
 run_cli_tests
-run_admin_socket_tests
 
 export RBD_CREATE_ARGS="--image-format 2"
 run_cli_tests
 
-for i in 0 1 5 13 29 109
+for i in 0 1 61 109
 do
     export RBD_FEATURES=$i
     run_api_tests

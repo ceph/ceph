@@ -121,8 +121,9 @@ void SnapshotRollbackRequest::send_invalidate_map() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
   m_state = STATE_INVALIDATE_MAP;
 
-  InvalidateRequest *req = new InvalidateRequest(m_image_ctx, m_snap_id, false,
-                                                 create_callback_context());
+  InvalidateRequest<> *req = new InvalidateRequest<>(m_image_ctx, m_snap_id,
+                                                     false,
+                                                     create_callback_context());
   req->send();
 }
 

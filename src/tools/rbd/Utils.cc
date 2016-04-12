@@ -144,6 +144,8 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     at::DEST_POOL_NAME : at::POOL_NAME);
   std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+  std::string snap_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+	at::DEST_SNAPSHOT_NAME : at::SNAPSHOT_NAME);
 
   if (vm.count(pool_key) && pool_name != nullptr) {
     *pool_name = vm[pool_key].as<std::string>();
@@ -151,11 +153,10 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   if (vm.count(image_key) && image_name != nullptr) {
     *image_name = vm[image_key].as<std::string>();
   }
-  if (vm.count(at::SNAPSHOT_NAME) && snap_name != nullptr &&
-      mod != at::ARGUMENT_MODIFIER_DEST) {
-    *snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
-  }
-
+  if (vm.count(snap_key) && snap_name != nullptr) {
+     *snap_name = vm[snap_key].as<std::string>();
+   }
+  
   if (image_name != nullptr && !image_name->empty()) {
     // despite the separate pool and snapshot name options,
     // we can also specify them via the image option
@@ -328,7 +329,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
     order = std::round(std::log2(object_size)); 
   } else {
-    order = 22;
+    order = g_conf->rbd_default_order;
   }
 
   if (vm.count(at::IMAGE_FEATURES)) {
@@ -355,10 +356,21 @@ int get_image_options(const boost::program_options::variables_map &vm,
     std::cerr << "must specify both (or neither) of stripe-unit and stripe-count"
               << std::endl;
     return -EINVAL;
-  } else if ((stripe_unit || stripe_count) &&
-             (stripe_unit != (1ull << order) && stripe_count != 1)) {
+  } else if (stripe_unit || stripe_count) {
+    if ((1ull << order) % stripe_unit || stripe_unit >= (1ull << order)) {
+      std::cerr << "stripe unit is not a factor of the object size" << std::endl;
+      return -EINVAL;
+    }
+    if (stripe_count == 1) {
+      std::cerr << "stripe count not allowed to be 1" << std::endl;
+      return -EINVAL;
+    }
     features |= RBD_FEATURE_STRIPINGV2;
   } else {
+    if (features_specified && ((features & RBD_FEATURE_STRIPINGV2) != 0)) {
+      std::cerr << "must specify both of stripe-unit and stripe-count when specify striping features" << std::endl;
+      return -EINVAL;
+    }
     features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
@@ -377,6 +389,9 @@ int get_image_options(const boost::program_options::variables_map &vm,
       format_specified = true;
     } else {
       format = g_conf->rbd_default_format;
+    }
+    if (format == 1) {
+      std::cerr << "rbd: image format 1 is deprecated" << std::endl;
     }
 
     if (features_specified && features != 0) {
@@ -580,7 +595,7 @@ int init_and_open_image(const std::string &pool_name,
   return 0;
 }
 
-int snap_set(librbd::Image &image, const std::string snap_name) {
+int snap_set(librbd::Image &image, const std::string &snap_name) {
   int r = image.snap_set(snap_name.c_str());
   if (r < 0) {
     std::cerr << "error setting snapshot context: " << cpp_strerror(r)
@@ -602,6 +617,19 @@ std::string image_id(librbd::Image& image) {
   prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
 
   return string(prefix + strlen(RBD_DATA_PREFIX));
+}
+
+std::string mirror_image_state(rbd_mirror_image_state_t mirror_image_state) {
+  switch (mirror_image_state) {
+    case RBD_MIRROR_IMAGE_DISABLING:
+      return "disabling";
+    case RBD_MIRROR_IMAGE_ENABLED:
+      return "enabled";
+    case RBD_MIRROR_IMAGE_DISABLED:
+      return "disabled";
+    default:
+      return "unknown";
+  }
 }
 
 } // namespace utils

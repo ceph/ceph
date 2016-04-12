@@ -57,8 +57,10 @@
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
+  #define CEPH_BUFFER_DETAILS __attribute__ ((visibility ("hidden")))
 #else
   #define CEPH_BUFFER_API
+  #define CEPH_BUFFER_DETAILS
 #endif
 
 #if defined(HAVE_XIO)
@@ -67,8 +69,6 @@ class XioDispatchHook;
 #endif
 
 namespace ceph {
-
-const static int CEPH_BUFFER_APPEND_SIZE(4096);
 
 namespace buffer CEPH_BUFFER_API {
   /*
@@ -134,6 +134,7 @@ namespace buffer CEPH_BUFFER_API {
   class raw_char;
   class raw_pipe;
   class raw_unshareable; // diagnostic, unshareable char buffer
+  class raw_combined;
 
 
   class xio_mempool;
@@ -154,7 +155,7 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_unshareable(unsigned len);
 
 #if defined(HAVE_XIO)
-  static raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
+  raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
 
   /*
@@ -168,12 +169,16 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     ptr() : _raw(0), _off(0), _len(0) {}
+    // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
+    // cppcheck-suppress noExplicitConstructor
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
+    ptr(ptr&& p);
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
+    ptr& operator= (ptr&& p);
     ~ptr() {
       release();
     }
@@ -197,6 +202,9 @@ namespace buffer CEPH_BUFFER_API {
       return (length() % align) == 0;
     }
     bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
+    bool is_partial() const {
+      return have_raw() && (start() > 0 || end() < raw_length());
+    }
 
     // accessors
     raw *get_raw() const { return _raw; }
@@ -257,8 +265,13 @@ namespace buffer CEPH_BUFFER_API {
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
+  public:
+    class iterator;
+
+  private:
     template <bool is_const>
-    class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
+    class CEPH_BUFFER_DETAILS iterator_impl
+      : public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,
 					const list,
@@ -274,17 +287,16 @@ namespace buffer CEPH_BUFFER_API {
       unsigned off; // in bl
       list_iter_t p;
       unsigned p_off;   // in *p
+      friend class iterator_impl<true>;
 
     public:
       // constructor.  position.
       iterator_impl()
 	: bl(0), ls(0), off(0), p_off(0) {}
-      iterator_impl(bl_t *l, unsigned o=0)
-	: bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
-	advance(o);
-      }
+      iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
 	: bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) {}
+      iterator_impl(const list::iterator& i);
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
@@ -300,12 +312,11 @@ namespace buffer CEPH_BUFFER_API {
 
       void advance(int o);
       void seek(unsigned o);
-      bool operator!=(const iterator_impl& rhs) const;
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
 
-      bl_t& get_bl() { return *bl; }
+      bl_t& get_bl() const { return *bl; }
 
       // copy data out.
       // note that these all _append_ to dest!
@@ -314,6 +325,15 @@ namespace buffer CEPH_BUFFER_API {
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
+
+      friend bool operator==(const iterator_impl& lhs,
+			     const iterator_impl& rhs) {
+	return &lhs.get_bl() == &rhs.get_bl() && lhs.get_off() == rhs.get_off();
+      }
+      friend bool operator!=(const iterator_impl& lhs,
+			     const iterator_impl& rhs) {
+	return &lhs.get_bl() != &rhs.get_bl() || lhs.get_off() != rhs.get_off();
+      }
     };
 
   public:
@@ -321,11 +341,9 @@ namespace buffer CEPH_BUFFER_API {
 
     class CEPH_BUFFER_API iterator : public iterator_impl<false> {
     public:
-      iterator(): iterator_impl() {}
-      iterator(bl_t *l, unsigned o=0) :
-	iterator_impl(l, o) {}
-      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po) :
-	iterator_impl(l, o, ip, po) {}
+      iterator() = default;
+      iterator(bl_t *l, unsigned o=0);
+      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
       void advance(int o);
       void seek(unsigned o);
@@ -344,6 +362,13 @@ namespace buffer CEPH_BUFFER_API {
       void copy_in(unsigned len, const char *src);
       void copy_in(unsigned len, const char *src, bool crc_reset);
       void copy_in(unsigned len, const list& otherl);
+
+      bool operator==(const iterator& rhs) const {
+	return bl == rhs.bl && off == rhs.off;
+      }
+      bool operator!=(const iterator& rhs) const {
+	return bl != rhs.bl || off != rhs.off;
+      }
     };
 
   private:
@@ -353,6 +378,7 @@ namespace buffer CEPH_BUFFER_API {
   public:
     // cons/des
     list() : _len(0), _memcopy_count(0), last_p(this) {}
+    // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
@@ -371,6 +397,20 @@ namespace buffer CEPH_BUFFER_API {
       }
       return *this;
     }
+
+    list& operator= (list&& other) {
+      _buffers = std::move(other._buffers);
+      _len = other._len;
+      _memcopy_count = other._memcopy_count;
+      last_p = begin();
+      append_buffer.swap(other.append_buffer);
+      other.clear();
+      return *this;
+    }
+
+    unsigned get_num_buffers() const { return _buffers.size(); }
+    const ptr& front() const { return _buffers.front(); }
+    const ptr& back() const { return _buffers.back(); }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
@@ -393,6 +433,7 @@ namespace buffer CEPH_BUFFER_API {
     bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
+    bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
     bool is_n_align_sized(unsigned align) const;
@@ -413,9 +454,14 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.push_front(bp);
       _len += bp.length();
     }
+    void push_front(ptr&& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_front(std::move(bp));
+    }
     void push_front(raw *r) {
-      ptr bp(r);
-      push_front(bp);
+      push_front(ptr(r));
     }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
@@ -423,9 +469,14 @@ namespace buffer CEPH_BUFFER_API {
       _buffers.push_back(bp);
       _len += bp.length();
     }
+    void push_back(ptr&& bp) {
+      if (bp.length() == 0)
+	return;
+      _len += bp.length();
+      _buffers.push_back(std::move(bp));
+    }
     void push_back(raw *r) {
-      ptr bp(r);
-      push_back(bp);
+      push_back(ptr(r));
     }
 
     void zero();
@@ -496,6 +547,7 @@ namespace buffer CEPH_BUFFER_API {
       append(s.data(), s.length());
     }
     void append(const ptr& bp);
+    void append(ptr&& bp);
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
@@ -527,6 +579,7 @@ namespace buffer CEPH_BUFFER_API {
     int read_fd_zero_copy(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
+    int write_fd(int fd, uint64_t offset) const;
     int write_fd_zero_copy(int fd) const;
     void prepare_iov(std::vector<iovec> *piov) const;
     uint32_t crc32c(uint32_t crc) const;
@@ -542,6 +595,7 @@ namespace buffer CEPH_BUFFER_API {
 
   public:
     hash() : crc(0) { }
+    // cppcheck-suppress noExplicitConstructor
     hash(uint32_t init) : crc(init) { }
 
     void update(buffer::list& bl) {
@@ -600,6 +654,7 @@ inline bufferhash& operator<<(bufferhash& l, bufferlist &r) {
   l.update(r);
   return l;
 }
+
 }
 
 #if defined(HAVE_XIO)

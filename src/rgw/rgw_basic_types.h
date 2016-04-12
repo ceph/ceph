@@ -10,6 +10,7 @@ struct rgw_user {
   std::string id;
 
   rgw_user() {}
+  // cppcheck-suppress noExplicitConstructor
   rgw_user(const std::string& s) {
     from_str(s);
   }
@@ -40,7 +41,7 @@ struct rgw_user {
     id.clear();
   }
 
-  bool empty() {
+  bool empty() const {
     return id.empty();
   }
 

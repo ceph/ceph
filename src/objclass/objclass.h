@@ -9,6 +9,7 @@
 #include "../include/types.h"
 #include "msg/msg_types.h"
 #include "common/hobject.h"
+#include "common/ceph_time.h"
 
 extern "C" {
 #endif
@@ -142,8 +143,13 @@ extern int cls_register_cxx_filter(cls_handle_t hclass,
 extern int cls_cxx_create(cls_method_context_t hctx, bool exclusive);
 extern int cls_cxx_remove(cls_method_context_t hctx);
 extern int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime);
+extern int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mtime);
 extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
+                         bufferlist *bl, uint32_t op_flags);
 extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
+                          bufferlist *bl, uint32_t op_flags);
 extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
 extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                             bufferlist *outbl);

@@ -55,9 +55,6 @@ public:
 protected:
   virtual bool should_complete(int r);
 
-  virtual void finish() {
-  }
-
 private:
   State m_state;
   uint64_t m_snap_id;

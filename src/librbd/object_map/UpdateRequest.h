@@ -33,7 +33,7 @@ public:
   virtual void send();
 
 protected:
-  virtual void finish();
+  virtual void finish_request() override;
 
 private:
   ceph::BitVector<2> &m_object_map;

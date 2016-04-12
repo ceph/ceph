@@ -18,9 +18,11 @@
 
 #include "assert.h"
 #include "Formatter.h"
+#include "HTMLFormatter.h"
 #include "common/escape.h"
 #include "include/buffer.h"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <stdarg.h>
@@ -32,6 +34,9 @@
 #include <boost/format.hpp>
 
 
+static char tolower_underscore(const char b) {
+  return ' ' == b ? '_' : std::tolower(b);
+}
 
 // -----------------------
 namespace ceph {
@@ -84,6 +89,10 @@ Formatter *Formatter::create(const std::string &type,
     return new TableFormatter();
   else if (mytype == "table-kv")
     return new TableFormatter(true);
+  else if (mytype == "html")
+    return new HTMLFormatter(false);
+  else if (mytype == "html-pretty")
+    return new HTMLFormatter(true);
   else if (fallback != "")
     return create(fallback, "", "");
   else
@@ -135,8 +144,6 @@ void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
-  if (m_pretty)
-    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
@@ -247,6 +254,8 @@ void JSONFormatter::close_section()
   }
   m_ss << (entry.is_array ? ']' : '}');
   m_stack.pop_back();
+  if (m_pretty && m_stack.empty())
+    m_ss << "\n";
 }
 
 void JSONFormatter::finish_pending_string()
@@ -317,8 +326,9 @@ void JSONFormatter::write_raw_data(const char *data)
 const char *XMLFormatter::XML_1_DTD =
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
 
-XMLFormatter::XMLFormatter(bool pretty)
-: m_pretty(pretty)
+XMLFormatter::XMLFormatter(bool pretty, bool lowercased_underscored)
+: m_pretty(pretty),
+  m_lowercased_underscored(lowercased_underscored)
 {
   reset();
 }
@@ -326,8 +336,11 @@ XMLFormatter::XMLFormatter(bool pretty)
 void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
-  os << m_ss.str();
-  if (m_pretty)
+  std::string m_ss_str = m_ss.str();
+  os << m_ss_str;
+  /* There is a small catch here. If the rest of the formatter had NO output,
+   * we should NOT output a newline. This primarily triggers on HTTP redirects */
+  if (m_pretty && !m_ss_str.empty())
     os << "\n";
   m_ss.clear();
   m_ss.str("");
@@ -341,6 +354,24 @@ void XMLFormatter::reset()
   m_pending_string.str("");
   m_sections.clear();
   m_pending_string_name.clear();
+  m_header_done = false;
+}
+
+void XMLFormatter::output_header()
+{
+  if(!m_header_done) {
+    m_header_done = true;
+    write_raw_data(XMLFormatter::XML_1_DTD);;
+    if (m_pretty)
+      m_ss << "\n";
+  }
+}
+
+void XMLFormatter::output_footer()
+{
+  while(!m_sections.empty()) {
+    close_section();
+  }
 }
 
 void XMLFormatter::open_object_section(const char *name)
@@ -379,6 +410,10 @@ void XMLFormatter::close_section()
   finish_pending_string();
 
   std::string section = m_sections.back();
+  if (m_lowercased_underscored) {
+    std::transform(section.begin(), section.end(), section.begin(),
+          tolower_underscore);
+  }
   m_sections.pop_back();
   print_spaces();
   m_ss << "</" << section << ">";
@@ -389,6 +424,9 @@ void XMLFormatter::close_section()
 void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
   std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
   print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -398,6 +436,9 @@ void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 void XMLFormatter::dump_int(const char *name, int64_t u)
 {
   std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
   print_spaces();
   m_ss << "<" << e << ">" << u << "</" << e << ">";
   if (m_pretty)
@@ -407,6 +448,9 @@ void XMLFormatter::dump_int(const char *name, int64_t u)
 void XMLFormatter::dump_float(const char *name, double d)
 {
   std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
   print_spaces();
   m_ss << "<" << e << ">" << d << "</" << e << ">";
   if (m_pretty)
@@ -416,6 +460,9 @@ void XMLFormatter::dump_float(const char *name, double d)
 void XMLFormatter::dump_string(const char *name, const std::string& s)
 {
   std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
   print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(s.c_str()) << "</" << e << ">";
   if (m_pretty)
@@ -425,6 +472,9 @@ void XMLFormatter::dump_string(const char *name, const std::string& s)
 void XMLFormatter::dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs)
 {
   std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
@@ -447,6 +497,9 @@ void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted,
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
   std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
   print_spaces();
   if (ns) {
     m_ss << "<" << e << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
@@ -490,10 +543,15 @@ void XMLFormatter::open_section_in_ns(const char *name, const char *ns, const Fo
     get_attrs_str(attrs, attrs_str);
   }
 
+  std::string e(name);
+  if (m_lowercased_underscored) {
+    std::transform(e.begin(), e.end(), e.begin(), tolower_underscore);
+  }
+
   if (ns) {
-    m_ss << "<" << name << attrs_str << " xmlns=\"" << ns << "\">";
+    m_ss << "<" << e << attrs_str << " xmlns=\"" << ns << "\">";
   } else {
-    m_ss << "<" << name << attrs_str << ">";
+    m_ss << "<" << e << attrs_str << ">";
   }
   if (m_pretty)
     m_ss << "\n";

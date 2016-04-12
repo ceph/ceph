@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include "os/chain_xattr.h"
+#include "os/filestore/chain_xattr.h"
 #include "include/Context.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -120,8 +120,8 @@ TEST(chain_xattr, get_and_set) {
   {
     int x;
     const string name = user + string(CHAIN_XATTR_MAX_NAME_LEN * 2, '@');
-    ASSERT_THROW(chain_setxattr(file, name.c_str(), &x, sizeof(x)), FailedAssertion);
-    ASSERT_THROW(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), FailedAssertion);
+    ASSERT_DEATH(chain_setxattr(file, name.c_str(), &x, sizeof(x)), "");
+    ASSERT_DEATH(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), "");
   }
 
   {
@@ -229,7 +229,7 @@ TEST(chain_xattr, listxattr) {
   const string name2 = user + string(CHAIN_XATTR_MAX_NAME_LEN - user.size(), '@');
   const string x(LARGE_BLOCK_LEN, 'X');
   const int y = 1234;
-  
+
   ASSERT_EQ(LARGE_BLOCK_LEN, chain_setxattr(file, name1.c_str(), x.c_str(), LARGE_BLOCK_LEN));
   ASSERT_EQ((int)sizeof(y), chain_setxattr(file, name2.c_str(), &y, sizeof(y)));
 
@@ -256,6 +256,120 @@ TEST(chain_xattr, listxattr) {
   ASSERT_EQ(0, chain_removexattr(file, name2.c_str()));
 
   free(expected);
+  ::unlink(file);
+}
+
+list<string> get_xattrs(int fd)
+{
+  char _buf[1024];
+  char *buf = _buf;
+  int len = sys_flistxattr(fd, _buf, sizeof(_buf));
+  if (len < 0)
+    return list<string>();
+  list<string> ret;
+  while (len > 0) {
+    size_t next_len = strlen(buf);
+    ret.push_back(string(buf, buf + next_len));
+    assert(len >= (int)(next_len + 1));
+    buf += (next_len + 1);
+    len -= (next_len + 1);
+  }
+  return ret;
+}
+
+list<string> get_xattrs(string fn)
+{
+  int fd = ::open(fn.c_str(), O_RDONLY);
+  if (fd < 0)
+    return list<string>();
+  auto ret = get_xattrs(fd);
+  ::close(fd);
+  return ret;
+}
+
+TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
+{
+  const char *name = "user.foo";
+  const char *file = FILENAME;
+  ::unlink(file);
+  int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+
+  char buf[800];
+  memset(buf, sizeof(buf), 0x1F);
+  // set chunked without either
+  {
+    int r = chain_fsetxattr(fd, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_GT(get_xattrs(fd).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  // overwrite
+  {
+    int r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof (buf));
+    ASSERT_EQ(get_xattrs(fd).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  ::close(fd);
+  ::unlink(file);
+}
+
+TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
+{
+  const char *name = "user.foo";
+  const char *file = FILENAME;
+  ::unlink(file);
+  int fd = ::open(file, O_CREAT|O_RDWR|O_TRUNC, 0700);
+  ::close(fd);
+
+  char buf[3000];
+  memset(buf, sizeof(buf), 0x1F);
+  // set chunked without either
+  {
+    int r = chain_setxattr(file, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_GT(get_xattrs(file).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_getxattr(file, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
+  // overwrite
+  {
+    int r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof (buf));
+    ASSERT_EQ(get_xattrs(file).size(), 1);
+  }
+
+  // verify
+  {
+    char buf2[sizeof(buf)*2];
+    int r = chain_getxattr(file, name, buf2, sizeof(buf2));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+  }
+
   ::unlink(file);
 }
 

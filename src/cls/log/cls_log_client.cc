@@ -10,7 +10,7 @@ using namespace librados;
 
 
 
-void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries)
+void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc)
 {
   bufferlist in;
   cls_log_add_op call;
@@ -127,7 +127,7 @@ void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
 class LogInfoCtx : public ObjectOperationCompletion {
   cls_log_header *header;
 public:
-  LogInfoCtx(cls_log_header *_header) : header(_header) {}
+  explicit LogInfoCtx(cls_log_header *_header) : header(_header) {}
   void handle_completion(int r, bufferlist& outbl) {
     if (r >= 0) {
       cls_log_info_ret ret;

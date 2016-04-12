@@ -13,8 +13,14 @@ usage_exit() {
 instance=$1
 shift
 
+vstart_path=`dirname $0`
+
 root_path=`dirname $0`
 root_path=`(cd $root_path; pwd)`
+
+if [ -e CMakeCache.txt ]; then
+    root_path=$PWD
+fi
 RUN_ROOT_PATH=${root_path}/run
 CLUSTERS_LIST=$RUN_ROOT_PATH/.clusters.list
 
@@ -32,14 +38,17 @@ if [ $? -ne 0 ]; then
 fi
 
 pos=`echo $pos | cut -d: -f1`
-base_port=$((6800+pos*10))
+base_port=$((6800+pos*20))
+rgw_port=$((8000+pos*1))
 
 export VSTART_DEST=$RUN_ROOT_PATH/$instance
 export CEPH_PORT=$base_port
+export CEPH_RGW_PORT=$rgw_port
 
 mkdir -p $VSTART_DEST
 
 echo "Cluster dest path: $VSTART_DEST"
 echo "monitors base port: $CEPH_PORT"
+echo "rgw base port: $CEPH_RGW_PORT"
 
-$root_path/vstart.sh "$@"
+$vstart_path/vstart.sh "$@"

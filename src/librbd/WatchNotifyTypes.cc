@@ -11,9 +11,17 @@ namespace watch_notify {
 
 namespace {
 
+class CheckForRefreshVisitor  : public boost::static_visitor<bool> {
+public:
+  template <typename Payload>
+  inline bool operator()(const Payload &payload) const {
+    return Payload::CHECK_FOR_REFRESH;
+  }
+};
+
 class EncodePayloadVisitor : public boost::static_visitor<void> {
 public:
-  EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
+  explicit EncodePayloadVisitor(bufferlist &bl) : m_bl(bl) {}
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {
@@ -42,7 +50,7 @@ private:
 
 class DumpPayloadVisitor : public boost::static_visitor<void> {
 public:
-  DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
+  explicit DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {
@@ -123,11 +131,15 @@ void ReleasedLockPayload::dump(Formatter *f) const {
 
 void RequestLockPayload::encode(bufferlist &bl) const {
   ::encode(client_id, bl);
+  ::encode(force, bl);
 }
 
 void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
   if (version >= 2) {
     ::decode(client_id, iter);
+  }
+  if (version >= 3) {
+    ::decode(force, iter);
   }
 }
 
@@ -135,6 +147,7 @@ void RequestLockPayload::dump(Formatter *f) const {
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
+  f->dump_bool("force", force);
 }
 
 void HeaderUpdatePayload::encode(bufferlist &bl) const {
@@ -257,8 +270,12 @@ void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
 void UnknownPayload::dump(Formatter *f) const {
 }
 
+bool NotifyMessage::check_for_refresh() const {
+  return boost::apply_visitor(CheckForRefreshVisitor(), payload);
+}
+
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -332,7 +349,7 @@ void NotifyMessage::dump(Formatter *f) const {
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(AcquiredLockPayload(ClientId(1, 2))));
   o.push_back(new NotifyMessage(ReleasedLockPayload(ClientId(1, 2))));
-  o.push_back(new NotifyMessage(RequestLockPayload(ClientId(1, 2))));
+  o.push_back(new NotifyMessage(RequestLockPayload(ClientId(1, 2), true)));
   o.push_back(new NotifyMessage(HeaderUpdatePayload()));
   o.push_back(new NotifyMessage(AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));

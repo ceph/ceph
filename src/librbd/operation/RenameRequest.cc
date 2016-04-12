@@ -7,6 +7,7 @@
 #include "include/rados/librados.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -46,10 +47,10 @@ template <typename I>
 RenameRequest<I>::RenameRequest(I &image_ctx, Context *on_finish,
 				const std::string &dest_name)
   : Request<I>(image_ctx, on_finish), m_dest_name(dest_name),
-    m_source_oid(image_ctx.old_format ? old_header_name(image_ctx.name) :
-                                        id_obj_name(image_ctx.name)),
-    m_dest_oid(image_ctx.old_format ? old_header_name(dest_name) :
-                                      id_obj_name(dest_name)) {
+    m_source_oid(image_ctx.old_format ? util::old_header_name(image_ctx.name) :
+                                        util::id_obj_name(image_ctx.name)),
+    m_dest_oid(image_ctx.old_format ? util::old_header_name(dest_name) :
+                                      util::id_obj_name(dest_name)) {
 }
 
 template <typename I>
@@ -69,8 +70,12 @@ bool RenameRequest<I>::should_complete(int r) {
     return true;
   }
 
+  if (m_state == STATE_REMOVE_SOURCE_HEADER) {
+    apply();
+    return true;
+  }
+
   RWLock::RLocker owner_lock(image_ctx.owner_lock);
-  bool finished = false;
   switch (m_state) {
   case STATE_READ_SOURCE_HEADER:
     send_write_destination_header();
@@ -81,14 +86,11 @@ bool RenameRequest<I>::should_complete(int r) {
   case STATE_UPDATE_DIRECTORY:
     send_remove_source_header();
     break;
-  case STATE_REMOVE_SOURCE_HEADER:
-    finished = true;
-    break;
   default:
     assert(false);
     break;
   }
-  return finished;
+  return false;
 }
 
 template <typename I>
@@ -184,6 +186,12 @@ void RenameRequest<I>::send_remove_source_header() {
   int r = image_ctx.md_ctx.aio_operate(m_source_oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
+}
+
+template <typename I>
+void RenameRequest<I>::apply() {
+  I &image_ctx = this->m_image_ctx;
+  image_ctx.set_image_name(m_dest_name);
 }
 
 } // namespace operation

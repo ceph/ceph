@@ -39,7 +39,7 @@ class MDSTableIOContext : public MDSIOContextBase
     MDSTable *ida;
     MDSRank *get_mds() {return ida->mds;}
   public:
-    MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
+    explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
       assert(ida != NULL);
     }
 };
@@ -81,7 +81,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, ceph_clock_now(g_ceph_context), 0,
+			    bl, ceph::real_clock::now(g_ceph_context), 0,
 			    NULL,
 			    new C_OnFinisher(new C_IO_MT_Save(this, version),
 					     mds->finisher));

@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OBJECT_MAP_SNAPSHOT_REMOVE_REQUEST_H
 
 #include "include/int_types.h"
+#include "include/buffer.h"
 #include "common/bit_vector.hpp"
 #include "librbd/AsyncRequest.h"
 
@@ -63,9 +64,6 @@ protected:
     return r;
   }
 
-  virtual void finish() {
-  }
-
 private:
   State m_state;
   ceph::BitVector<2> &m_object_map;
@@ -73,6 +71,7 @@ private:
   uint64_t m_next_snap_id;
 
   ceph::BitVector<2> m_snap_object_map;
+  bufferlist m_out_bl;
 
   void send_load_map();
   void send_remove_snapshot();

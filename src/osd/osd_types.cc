@@ -441,11 +441,24 @@ bool spg_t::parse(const char *s)
   return true;
 }
 
+char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
+{
+  while (*suffix_backwords)
+    *--buf = *suffix_backwords++;
+
+  if (!is_no_shard()) {
+    buf = ritoa<uint8_t, 10>((uint8_t)shard.id, buf);
+    *--buf = 's';
+  }
+
+  return pgid.calc_name(buf, "");
+}
+
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
-  out << pg.pgid;
-  if (!pg.is_no_shard())
-    out << "s" << (unsigned)pg.shard;
+  char buf[spg_t::calc_name_buf_size];
+  buf[spg_t::calc_name_buf_size - 1] = '\0';
+  out << pg.calc_name(buf + spg_t::calc_name_buf_size - 1, "");
   return out;
 }
 
@@ -522,6 +535,30 @@ pg_t pg_t::get_parent() const
   return retval;
 }
 
+hobject_t pg_t::get_hobj_start() const
+{
+  return hobject_t(object_t(), string(), CEPH_NOSNAP, m_seed, m_pool,
+		   string());
+}
+
+hobject_t pg_t::get_hobj_end(unsigned pg_num) const
+{
+  // note: this assumes a bitwise sort; with the legacy nibblewise
+  // sort a PG did not always cover a single contiguous range of the
+  // (bit-reversed) hash range.
+  unsigned bits = get_split_bits(pg_num);
+  uint64_t rev_start = hobject_t::_reverse_bits(m_seed);
+  uint64_t rev_end = (rev_start | (0xffffffff >> bits)) + 1;
+  if (rev_end >= 0x100000000) {
+    assert(rev_end == 0x100000000);
+    return hobject_t::get_max();
+  } else {
+    return hobject_t(object_t(), string(), CEPH_NOSNAP,
+		   hobject_t::_reverse_bits(rev_end), m_pool,
+		   string());
+  }
+}
+
 void pg_t::dump(Formatter *f) const
 {
   f->dump_unsigned("pool", m_pool);
@@ -537,15 +574,26 @@ void pg_t::generate_test_instances(list<pg_t*>& o)
   o.push_back(new pg_t(131223, 4, 23));
 }
 
+char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
+{
+  while (*suffix_backwords)
+    *--buf = *suffix_backwords++;
+
+  if (m_preferred >= 0)
+    *--buf ='p';
+
+  buf = ritoa<uint32_t, 16>(m_seed, buf);
+
+  *--buf = '.';
+
+  return  ritoa<uint64_t, 10>(m_pool, buf);
+}
+
 ostream& operator<<(ostream& out, const pg_t &pg)
 {
-  out << pg.pool() << '.';
-  out << hex << pg.ps() << dec;
-
-  if (pg.preferred() >= 0)
-    out << 'p' << pg.preferred();
-
-  //out << "=" << hex << (__uint64_t)pg << dec;
+  char buf[pg_t::calc_name_buf_size];
+  buf[pg_t::calc_name_buf_size - 1] = '\0';
+  out << pg.calc_name(buf + pg_t::calc_name_buf_size - 1, "");
   return out;
 }
 
@@ -556,18 +604,16 @@ void coll_t::calc_str()
 {
   switch (type) {
   case TYPE_META:
-    _str = "meta";
+    strcpy(_str_buff, "meta");
+    _str = _str_buff;
     break;
   case TYPE_PG:
-    _str = stringify(pgid) + "_head";
+    _str_buff[spg_t::calc_name_buf_size - 1] = '\0';
+    _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "daeh_");
     break;
   case TYPE_PG_TEMP:
-    _str = stringify(pgid) + "_TEMP";
-    break;
-  case TYPE_PG_REMOVAL:
-    _str = string("FORREMOVAL_") +
-      stringify(removal_seq) + "_" +
-      stringify(pgid);
+    _str_buff[spg_t::calc_name_buf_size - 1] = '\0';
+    _str = pgid.calc_name(_str_buff + spg_t::calc_name_buf_size - 1, "PMET_");
     break;
   default:
     assert(0 == "unknown collection type");
@@ -600,29 +646,13 @@ bool coll_t::parse(const std::string& s)
     assert(s == _str);
     return true;
   }
-  if (s.find("FORREMOVAL_") == 0) {
-    type = TYPE_PG_REMOVAL;
-    stringstream ss(s.substr(11));
-    ss >> removal_seq;
-    char sep;
-    ss >> sep;
-    assert(sep == '_');
-    string pgid_str;
-    ss >> pgid_str;
-    if (!pgid.parse(pgid_str.c_str())) {
-      assert(0);
-      return false;
-    }
-    calc_str();
-    assert(s == _str);
-    return true;
-  }
   return false;
 }
 
 void coll_t::encode(bufferlist& bl) const
 {
-  if (is_removal() || is_temp()) {
+  // when changing this, remember to update encoded_size() too.
+  if (is_temp()) {
     // can't express this as v2...
     __u8 struct_v = 3;
     ::encode(struct_v, bl);
@@ -635,6 +665,33 @@ void coll_t::encode(bufferlist& bl) const
     snapid_t snap = CEPH_NOSNAP;
     ::encode(snap, bl);
   }
+}
+
+size_t coll_t::encoded_size() const
+{
+  size_t r = sizeof(__u8);
+  if (is_temp()) {
+    // v3
+    r += sizeof(__u32);
+    if (_str) {
+      r += strlen(_str);
+    }
+  } else {
+      // v2
+      // 1. type
+      r += sizeof(__u8);
+      // 2. pgid
+      //  - encoding header
+      r += sizeof(ceph_le32) + 2 * sizeof(__u8);
+      // - pg_t
+      r += sizeof(__u8) + sizeof(uint64_t) + 2 * sizeof(uint32_t);
+      // - shard_id_t
+      r += sizeof(int8_t);
+      // 3. snapid_t
+      r += sizeof(uint64_t);
+  }
+
+  return r;
 }
 
 void coll_t::decode(bufferlist::iterator& bl)
@@ -706,8 +763,6 @@ void coll_t::generate_test_instances(list<coll_t*>& o)
   o.push_back(new coll_t(spg_t(pg_t(3, 2), shard_id_t(12))));
   o.push_back(new coll_t(o.back()->get_temp()));
   o.push_back(new coll_t());
-  o.back()->parse("FORREMOVAL_0_0.1");
-  o.back()->parse("FORREMOVAL_123_2.2a3f");
 }
 
 // ---
@@ -833,6 +888,10 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_RECOVERY_WAIT;
   else if (state == "undersized")
     type = PG_STATE_UNDERSIZED;
+  else if (state == "activating")
+    type = PG_STATE_ACTIVATING;
+  else if (state == "peered")
+    type = PG_STATE_PEERED;
   else
     type = -1;
   return type;
@@ -841,9 +900,12 @@ int pg_string_state(const std::string& state)
 // -- eversion_t --
 string eversion_t::get_key_name() const
 {
-  char key[40];
-  snprintf(
-    key, sizeof(key), "%010u.%020llu", epoch, (long long unsigned)version);
+  char key[32];
+  // Below is equivalent of sprintf("%010u.%020llu");
+  key[31] = 0;
+  ritoa<uint64_t, 10, 20>(version, key + 31);
+  key[10] = '.';
+  ritoa<uint32_t, 10, 10>(epoch, key + 10);
   return string(key);
 }
 
@@ -904,7 +966,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("recovery_priority", pool_opts_t::opt_desc_t(
              pool_opts_t::RECOVERY_PRIORITY, pool_opts_t::INT))
            ("recovery_op_priority", pool_opts_t::opt_desc_t(
-             pool_opts_t::RECOVERY_OP_PRIORITY, pool_opts_t::INT));
+             pool_opts_t::RECOVERY_OP_PRIORITY, pool_opts_t::INT))
+           ("scrub_priority", pool_opts_t::opt_desc_t(
+             pool_opts_t::SCRUB_PRIORITY, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.find(name) != opt_mapping.end();
@@ -964,7 +1028,7 @@ void pool_opts_t::dump(const std::string& name, Formatter* f) const
 void pool_opts_t::dump(Formatter* f) const
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const opt_desc_t& desc = i->second;
     opts_t::const_iterator j = opts.find(desc.key);
@@ -978,7 +1042,7 @@ void pool_opts_t::dump(Formatter* f) const
 class pool_opts_encoder_t : public boost::static_visitor<>
 {
 public:
-  pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+  explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
 
   void operator()(std::string s) const {
     ::encode(static_cast<int32_t>(pool_opts_t::STR), bl);
@@ -1039,7 +1103,7 @@ void pool_opts_t::decode(bufferlist::iterator& bl) {
 ostream& operator<<(ostream& out, const pool_opts_t& opts)
 {
   for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
-       i++) {
+       ++i) {
     const std::string& name = i->first;
     const pool_opts_t::opt_desc_t& desc = i->second;
     pool_opts_t::opts_t::const_iterator j = opts.opts.find(desc.key);
@@ -1062,8 +1126,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("min_size", get_min_size());
   f->dump_int("crush_ruleset", get_crush_ruleset());
   f->dump_int("object_hash", get_object_hash());
-  f->dump_int("pg_num", get_pg_num());
-  f->dump_int("pg_placement_num", get_pgp_num());
+  f->dump_unsigned("pg_num", get_pg_num());
+  f->dump_unsigned("pg_placement_num", get_pgp_num());
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
@@ -1079,11 +1143,11 @@ void pg_pool_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_stream("removed_snaps") << removed_snaps;
-  f->dump_int("quota_max_bytes", quota_max_bytes);
-  f->dump_int("quota_max_objects", quota_max_objects);
+  f->dump_unsigned("quota_max_bytes", quota_max_bytes);
+  f->dump_unsigned("quota_max_objects", quota_max_objects);
   f->open_array_section("tiers");
   for (set<uint64_t>::const_iterator p = tiers.begin(); p != tiers.end(); ++p)
-    f->dump_int("pool_id", *p);
+    f->dump_unsigned("pool_id", *p);
   f->close_section();
   f->dump_int("tier_of", tier_of);
   f->dump_int("read_tier", read_tier);
@@ -1790,6 +1854,9 @@ void object_stat_sum_t::dump(Formatter *f) const
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
   ENCODE_START(15, 3, bl);
+#if defined(CEPH_LITTLE_ENDIAN)
+  bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
+#else
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1824,108 +1891,118 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_evict_mode_full, bl);
   ::encode(num_objects_pinned, bl);
   ::encode(num_objects_missing, bl);
+#endif
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
+  bool decode_finish = false;
   DECODE_START_LEGACY_COMPAT_LEN(14, 3, 3, bl);
-  ::decode(num_bytes, bl);
-  if (struct_v < 3) {
-    uint64_t num_kb;
-    ::decode(num_kb, bl);
-  }
-  ::decode(num_objects, bl);
-  ::decode(num_object_clones, bl);
-  ::decode(num_object_copies, bl);
-  ::decode(num_objects_missing_on_primary, bl);
-  ::decode(num_objects_degraded, bl);
-  if (struct_v >= 2)
-    ::decode(num_objects_unfound, bl);
-  ::decode(num_rd, bl);
-  ::decode(num_rd_kb, bl);
-  ::decode(num_wr, bl);
-  ::decode(num_wr_kb, bl);
-  if (struct_v >= 4)
-    ::decode(num_scrub_errors, bl);
-  else
-    num_scrub_errors = 0;
-  if (struct_v >= 5) {
-    ::decode(num_objects_recovered, bl);
-    ::decode(num_bytes_recovered, bl);
-    ::decode(num_keys_recovered, bl);
-  } else {
-    num_objects_recovered = 0;
-    num_bytes_recovered = 0;
-    num_keys_recovered = 0;
-  }
-  if (struct_v >= 6) {
-    ::decode(num_shallow_scrub_errors, bl);
-    ::decode(num_deep_scrub_errors, bl);
-  } else {
-    num_shallow_scrub_errors = 0;
-    num_deep_scrub_errors = 0;
-  }
-  if (struct_v >= 7) {
-    ::decode(num_objects_dirty, bl);
-    ::decode(num_whiteouts, bl);
-  } else {
-    num_objects_dirty = 0;
-    num_whiteouts = 0;
-  }
-  if (struct_v >= 8) {
-    ::decode(num_objects_omap, bl);
-  } else {
-    num_objects_omap = 0;
-  }
-  if (struct_v >= 9) {
-    ::decode(num_objects_hit_set_archive, bl);
-  } else {
-    num_objects_hit_set_archive = 0;
-  }
-  if (struct_v >= 10) {
-    ::decode(num_objects_misplaced, bl);
-  } else {
-    num_objects_misplaced = 0;
-  }
-  if (struct_v >= 11) {
-    ::decode(num_bytes_hit_set_archive, bl);
-  } else {
-    num_bytes_hit_set_archive = 0;
-  }
-  if (struct_v >= 12) {
-    ::decode(num_flush, bl);
-    ::decode(num_flush_kb, bl);
-    ::decode(num_evict, bl);
-    ::decode(num_evict_kb, bl);
-    ::decode(num_promote, bl);
-  } else {
-    num_flush = 0;
-    num_flush_kb = 0;
-    num_evict = 0;
-    num_evict_kb = 0;
-    num_promote = 0;
-  }
-  if (struct_v >= 13) {
-    ::decode(num_flush_mode_high, bl);
-    ::decode(num_flush_mode_low, bl);
-    ::decode(num_evict_mode_some, bl);
-    ::decode(num_evict_mode_full, bl);
-  } else {
-    num_flush_mode_high = 0;
-    num_flush_mode_low = 0;
-    num_evict_mode_some = 0;
-    num_evict_mode_full = 0;
-  }
-  if (struct_v >= 14) {
-    ::decode(num_objects_pinned, bl);
-  } else {
-    num_objects_pinned = 0;
-  }
+#if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 15) {
-    ::decode(num_objects_missing, bl);
-  } else {
-    num_objects_missing = 0;
+    bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
+    decode_finish = true;
+  }
+#endif
+  if (!decode_finish) {
+    ::decode(num_bytes, bl);
+    if (struct_v < 3) {
+      uint64_t num_kb;
+      ::decode(num_kb, bl);
+    }
+    ::decode(num_objects, bl);
+    ::decode(num_object_clones, bl);
+    ::decode(num_object_copies, bl);
+    ::decode(num_objects_missing_on_primary, bl);
+    ::decode(num_objects_degraded, bl);
+    if (struct_v >= 2)
+      ::decode(num_objects_unfound, bl);
+    ::decode(num_rd, bl);
+    ::decode(num_rd_kb, bl);
+    ::decode(num_wr, bl);
+    ::decode(num_wr_kb, bl);
+    if (struct_v >= 4)
+      ::decode(num_scrub_errors, bl);
+    else
+      num_scrub_errors = 0;
+    if (struct_v >= 5) {
+      ::decode(num_objects_recovered, bl);
+      ::decode(num_bytes_recovered, bl);
+      ::decode(num_keys_recovered, bl);
+    } else {
+      num_objects_recovered = 0;
+      num_bytes_recovered = 0;
+      num_keys_recovered = 0;
+    }
+    if (struct_v >= 6) {
+      ::decode(num_shallow_scrub_errors, bl);
+      ::decode(num_deep_scrub_errors, bl);
+    } else {
+      num_shallow_scrub_errors = 0;
+      num_deep_scrub_errors = 0;
+    }
+    if (struct_v >= 7) {
+      ::decode(num_objects_dirty, bl);
+      ::decode(num_whiteouts, bl);
+    } else {
+      num_objects_dirty = 0;
+      num_whiteouts = 0;
+    }
+    if (struct_v >= 8) {
+      ::decode(num_objects_omap, bl);
+    } else {
+      num_objects_omap = 0;
+    }
+    if (struct_v >= 9) {
+      ::decode(num_objects_hit_set_archive, bl);
+    } else {
+      num_objects_hit_set_archive = 0;
+    }
+    if (struct_v >= 10) {
+      ::decode(num_objects_misplaced, bl);
+    } else {
+      num_objects_misplaced = 0;
+    }
+    if (struct_v >= 11) {
+      ::decode(num_bytes_hit_set_archive, bl);
+    } else {
+      num_bytes_hit_set_archive = 0;
+    }
+    if (struct_v >= 12) {
+      ::decode(num_flush, bl);
+      ::decode(num_flush_kb, bl);
+      ::decode(num_evict, bl);
+      ::decode(num_evict_kb, bl);
+      ::decode(num_promote, bl);
+    } else {
+      num_flush = 0;
+      num_flush_kb = 0;
+      num_evict = 0;
+      num_evict_kb = 0;
+      num_promote = 0;
+    }
+    if (struct_v >= 13) {
+      ::decode(num_flush_mode_high, bl);
+      ::decode(num_flush_mode_low, bl);
+      ::decode(num_evict_mode_some, bl);
+      ::decode(num_evict_mode_full, bl);
+    } else {
+      num_flush_mode_high = 0;
+      num_flush_mode_low = 0;
+      num_evict_mode_some = 0;
+      num_evict_mode_full = 0;
+    }
+    if (struct_v >= 14) {
+      ::decode(num_objects_pinned, bl);
+    } else {
+      num_objects_pinned = 0;
+    }
+    if (struct_v >= 15) {
+      ::decode(num_objects_missing, bl);
+    } else {
+      num_objects_missing = 0;
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2169,9 +2246,14 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_deep_scrub") << last_deep_scrub;
   f->dump_stream("last_deep_scrub_stamp") << last_deep_scrub_stamp;
   f->dump_stream("last_clean_scrub_stamp") << last_clean_scrub_stamp;
-  f->dump_unsigned("log_size", log_size);
-  f->dump_unsigned("ondisk_log_size", ondisk_log_size);
-  f->dump_stream("stats_invalid") << stats_invalid;
+  f->dump_int("log_size", log_size);
+  f->dump_int("ondisk_log_size", ondisk_log_size);
+  f->dump_bool("stats_invalid", stats_invalid);
+  f->dump_bool("dirty_stats_invalid", dirty_stats_invalid);
+  f->dump_bool("omap_stats_invalid", omap_stats_invalid);
+  f->dump_bool("hitset_stats_invalid", hitset_stats_invalid);
+  f->dump_bool("hitset_bytes_stats_invalid", hitset_bytes_stats_invalid);
+  f->dump_bool("pin_stats_invalid", pin_stats_invalid);
   stats.dump(f);
   f->open_array_section("up");
   for (vector<int32_t>::const_iterator p = up.begin(); p != up.end(); ++p)
@@ -2462,6 +2544,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.last_fresh == r.last_fresh &&
     l.last_change == r.last_change &&
     l.last_active == r.last_active &&
+    l.last_peered == r.last_peered &&
     l.last_clean == r.last_clean &&
     l.last_unstale == r.last_unstale &&
     l.last_undegraded == r.last_undegraded &&
@@ -2486,6 +2569,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.mapping_epoch == r.mapping_epoch &&
     l.blocked_by == r.blocked_by &&
     l.last_became_active == r.last_became_active &&
+    l.last_became_peered == r.last_became_peered &&
     l.dirty_stats_invalid == r.dirty_stats_invalid &&
     l.omap_stats_invalid == r.omap_stats_invalid &&
     l.hitset_stats_invalid == r.hitset_stats_invalid &&
@@ -3113,20 +3197,14 @@ ostream& operator<<(ostream& out, const pg_interval_t& i)
 // -- pg_query_t --
 
 void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
-  if (features & CEPH_FEATURE_QUERY_T) {
-    ENCODE_START(3, 2, bl);
-    ::encode(type, bl);
-    ::encode(since, bl);
-    history.encode(bl);
-    ::encode(epoch_sent, bl);
-    ::encode(to, bl);
-    ::encode(from, bl);
-    ENCODE_FINISH(bl);
-  } else {
-    ::encode(type, bl);
-    ::encode(since, bl);
-    history.encode(bl);
-  }
+  ENCODE_START(3, 2, bl);
+  ::encode(type, bl);
+  ::encode(since, bl);
+  history.encode(bl);
+  ::encode(epoch_sent, bl);
+  ::encode(to, bl);
+  ::encode(from, bl);
+  ENCODE_FINISH(bl);
 }
 
 void pg_query_t::decode(bufferlist::iterator &bl) {
@@ -3216,6 +3294,12 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	visitor->update_snaps(snaps);
 	break;
       }
+      case TRY_DELETE: {
+	version_t old_version;
+	::decode(old_version, bp);
+	visitor->try_rmobject(old_version);
+	break;
+      }
       default:
 	assert(0 == "Invalid rollback code");
       }
@@ -3228,7 +3312,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 
 struct DumpVisitor : public ObjectModDesc::Visitor {
   Formatter *f;
-  DumpVisitor(Formatter *f) : f(f) {}
+  explicit DumpVisitor(Formatter *f) : f(f) {}
   void append(uint64_t old_size) {
     f->open_object_section("op");
     f->dump_string("code", "APPEND");
@@ -3985,28 +4069,6 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
 
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
-  if ((features & CEPH_FEATURE_OSD_OBJECT_DIGEST) == 0) {
-    ENCODE_START(4, 1, bl);
-    ::encode(size, bl);
-    ::encode(mtime, bl);
-    ::encode((__u32)0, bl);  // was category; no longer used
-    ::encode(attrs, bl);
-    ::encode(data, bl);
-    if (omap_data.length())
-      bl.append(omap_data);
-    else
-      ::encode((__u32)0, bl);
-    ::encode(cursor, bl);
-    ::encode(omap_header, bl);
-    ::encode(snaps, bl);
-    ::encode(snap_seq, bl);
-    ::encode(flags, bl);
-    ::encode(data_digest, bl);
-    ::encode(omap_digest, bl);
-    ENCODE_FINISH(bl);
-    return;
-  }
-
   ENCODE_START(7, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
@@ -5277,7 +5339,7 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 2, bl);
+  ENCODE_START(7, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5288,12 +5350,13 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
   ::encode(read_error, bl);
+  ::encode(stat_error, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
   ::decode(size, bl);
   bool tmp;
   ::decode(tmp, bl);
@@ -5320,6 +5383,10 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
   if (struct_v >= 6) {
     ::decode(tmp, bl);
     read_error = tmp;
+  }
+  if (struct_v >= 7) {
+    ::decode(tmp, bl);
+    stat_error = tmp;
   }
   DECODE_FINISH(bl);
 }
@@ -5436,6 +5503,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_PG_HITSET_GET:
       out << " " << utime_t(op.op.hit_set_get.stamp);
+      break;
+    case CEPH_OSD_OP_SCRUBLS:
       break;
     }
   } else if (ceph_osd_op_type_multi(op.op.op)) {

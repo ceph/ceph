@@ -116,7 +116,6 @@ protected:
    virtual void _done() {
      on_finish->complete(rval);
      on_finish = NULL;
-     delete this;
      return;
    }
 
@@ -149,6 +148,7 @@ private:
     if (done ||
         (reported_done && stages_processing.empty())) {
       _done();
+      delete this;
     }
   }
 

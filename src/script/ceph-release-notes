@@ -82,14 +82,29 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
         if merge:
             number = merge.group(1)
             pr = gh.repos("ceph")("ceph").pulls(number).get()
+            title = pr['title']
             message_lines = commit.message.split('\n')
-            if len(message_lines) > 2 and message_lines[2].strip() != pr['title'].strip():
+            if not strict and len(message_lines) > 1:
                 lines = []
-                for line in message_lines[2:]:
+                for line in message_lines[1:]:
                     if 'Reviewed-by' in line:
                         continue
-                    lines.append(line.strip())
-                message = "\n".join(lines)
+                    line = line.strip()
+                    if line:
+                        lines.append(line)
+                duplicates_pr_title = lines[0] == pr['title'].strip()
+                if duplicates_pr_title:
+                    lines.pop(0)
+                if len(lines) == 0:
+                    if duplicates_pr_title:
+                        message = None
+                elif len(lines) == 1:
+                    # assume that a single line means the intention is to
+                    # re-write the PR title
+                    title = lines[0]
+                    message = None
+                else:
+                    message = "    " + "\n    ".join(lines)
             else:
                 message = None
             issues = []
@@ -110,29 +125,30 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
                 print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
                 continue    
             
-            title = pr['title']
-
             if strict:
-                title_re = '^(cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
-                if not re.match(title_re, title):
-                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
+                title_re = '^(?:hammer|infernalis|jewel|kraken): (cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
+                match = re.match(title_re, title)
+                if not match:
+                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
+                else:
+                    title = match.group(1) + match.group(2)
 
             pr2info[number] = (author, title, message)
 
             for issue in set(issues):
                 issue = get_original_issue(issue, verbose)
-                issue2prs.setdefault(issue, []).append(number)
-                pr2issues.setdefault(number, []).append(issue)
-                sys.stdout.write('.')
+                issue2prs.setdefault(issue, set([])).add(number)
+                pr2issues.setdefault(number, set([])).add(issue)
+            sys.stdout.write('.')
 
     print (" done collecting merges.")
 
     if strict:
         for (issue, prs) in issue2prs.iteritems():
             if len(prs) > 1:
-                print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue)
+                print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue + " " + str(prs))
 
-    for (pr, (author, title, message)) in sorted(pr2info.iteritems(), key=lambda (k,v): v[1]):
+    for (pr, (author, title, message)) in sorted(pr2info.iteritems(), key=lambda (k,v): (v[2], v[1])):
         if pr in pr2issues:
             if plaintext:
                 issues = map(lambda issue: '#' + str(issue), pr2issues[pr])
@@ -142,9 +158,9 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict):
         else:
             issues = ''
         if plaintext:
-            print (u"* {title} ({issues}{author})".format(title=title, issues=issues, author=author))
+            print ("* {title} ({issues}{author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8")))
         else:
-            print (u"* {title} ({issues}`pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title, issues=issues, author=author, pr=pr))
+            print ("* {title} ({issues}`pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8"), pr=pr))
         if message:
             print (message)
 

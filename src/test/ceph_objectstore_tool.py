@@ -44,9 +44,10 @@ def wait_for_health():
     print "Wait for health_ok...",
     tries = 0
     while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
-        if ++tries == 30:
+        tries += 1
+        if tries == 150:
             raise Exception("Time exceeded to go to health")
-        time.sleep(5)
+        time.sleep(1)
     print "DONE"
 
 
@@ -400,6 +401,9 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
             logging.error("Can't find imported object {name}".format(name=file))
             ERRORS += 1
         for obj_loc in obj_locs:
+            # For btrfs skip snap_* dirs
+            if re.search("/snap_[0-9]*/", obj_loc) is not None:
+                continue
             repcount += 1
             cmd = "diff -q {src} {obj_loc}".format(src=path, obj_loc=obj_loc)
             logging.debug(cmd)
@@ -417,7 +421,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
                                                                         osdmap_file=osdmap_file.name)
     output = check_output(cmd, shell=True)
     epoch = int(re.findall('#(\d+)', output)[0])
-    
+
     new_crush_file = tempfile.NamedTemporaryFile(delete=False)
     old_crush_file = tempfile.NamedTemporaryFile(delete=False)
     ret = call("./osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
@@ -592,7 +596,7 @@ def main(argv):
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
+    CFSD_PREFIX = "./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} "
     PROFNAME = "testecprofile"
 
     os.environ['CEPH_CONF'] = CEPH_CONF
@@ -872,7 +876,7 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
     ERRORS += test_failure(cmd, "file: {FOO}: No such file or directory".format(FOO=OTHERFILE))
 
-    cmd = "./ceph-objectstore-tool --data-path BAD_DATA_PATH --journal-path " + OSDDIR + "/{osd}.journal --op list".format(osd=ONEOSD)
+    cmd = "./ceph-objectstore-tool --data-path BAD_DATA_PATH --op list".format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
 
     cmd = "./ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal"
@@ -887,16 +891,13 @@ def main(argv):
     ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
 
     # Specify a bad --type
-    cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore)")
+    os.mkdir(OSDDIR + "/fakeosd")
+    cmd = ("./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --type foobar --op list --pgid {pg}").format(osd="fakeosd", pg=ONEPG)
+    ERRORS += test_failure(cmd, "Unable to create store of type foobar")
 
     # Don't specify a data-path
-    cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
-
-    # Don't specify a journal-path for filestore
-    cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide pgid")
@@ -907,7 +908,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
@@ -1799,15 +1800,11 @@ def main(argv):
         vstart(new=False)
         wait_for_health()
 
-        time.sleep(20)
-
         cmd = "./ceph osd pool set {pool} pg_num 2".format(pool=SPLIT_POOL)
         logging.debug(cmd)
         ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
         time.sleep(5)
         wait_for_health()
-
-        time.sleep(15)
 
         kill_daemons()
 
@@ -1860,11 +1857,27 @@ def main(argv):
         print "TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS)
         return 1
 
+
+def remove_btrfs_subvolumes(path):
+    result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
+    filesystem = result.stdout.readlines()[0]
+    if filesystem.rstrip('\n') == "btrfs":
+        result = subprocess.Popen("btrfs subvolume list %s" % path, shell=True, stdout=subprocess.PIPE)
+        for line in result.stdout.readlines():
+            subvolume=line.split()[8]
+            # extracting the relative volume name
+            m = re.search(".*(%s.*)" % path, subvolume)
+            if m:
+                found = m.group(1)
+                call("btrfs subvolume delete %s" % found, shell=True)
+
+
 if __name__ == "__main__":
     status = 1
     try:
         status = main(sys.argv[1:])
     finally:
         kill_daemons()
+        remove_btrfs_subvolumes(CEPH_DIR)
         call("/bin/rm -fr {dir}".format(dir=CEPH_DIR), shell=True)
     sys.exit(status)

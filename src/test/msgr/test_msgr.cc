@@ -76,7 +76,7 @@ class FakeDispatcher : public Dispatcher {
     uint64_t count;
     ConnectionRef con;
 
-    Session(ConnectionRef c): RefCountedObject(g_ceph_context), lock("FakeDispatcher::Session::lock"), count(0), con(c) {
+    explicit Session(ConnectionRef c): RefCountedObject(g_ceph_context), lock("FakeDispatcher::Session::lock"), count(0), con(c) {
     }
     uint64_t get_count() { return count; }
   };
@@ -89,7 +89,7 @@ class FakeDispatcher : public Dispatcher {
   bool got_connect;
   bool loopback;
 
-  FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
+  explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {}
   bool ms_can_fast_dispatch_any() const { return true; }
@@ -1048,7 +1048,7 @@ TEST_P(MessengerTest, SyntheticStressTest) {
     test_msg.generate_connection();
   }
   gen_type rng(time(NULL));
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 5000; ++i) {
     if (!(i % 10)) {
       cerr << "Op " << i << ": ";
       test_msg.print_internal_state();
@@ -1238,7 +1238,7 @@ class MarkdownDispatcher : public Dispatcher {
   bool last_mark;
  public:
   atomic_t count;
-  MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
+  explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false), count(0) {}
   bool ms_can_fast_dispatch_any() const { return false; }
   bool ms_can_fast_dispatch(Message *m) const {

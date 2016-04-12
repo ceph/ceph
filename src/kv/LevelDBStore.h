@@ -45,12 +45,17 @@ enum {
   l_leveldb_last,
 };
 
+extern leveldb::Logger *create_leveldb_ceph_logger();
+
+class CephLevelDBLogger;
+
 /**
  * Uses LevelDB to implement the KeyValueDB interface
  */
 class LevelDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
+  CephLevelDBLogger *ceph_logger;
   string path;
   boost::scoped_ptr<leveldb::Cache> db_cache;
 #ifdef HAVE_LEVELDB_FILTER_POLICY
@@ -68,7 +73,7 @@ class LevelDBStore : public KeyValueDB {
   class CompactThread : public Thread {
     LevelDBStore *db;
   public:
-    CompactThread(LevelDBStore *d) : db(d) {}
+    explicit CompactThread(LevelDBStore *d) : db(d) {}
     void *entry() {
       db->compact_thread_entry();
       return NULL;
@@ -148,6 +153,7 @@ public:
   LevelDBStore(CephContext *c, const string &path) :
     cct(c),
     logger(NULL),
+    ceph_logger(NULL),
     path(path),
     db_cache(NULL),
 #ifdef HAVE_LEVELDB_FILTER_POLICY
@@ -179,7 +185,7 @@ public:
   public:
     leveldb::WriteBatch bat;
     LevelDBStore *db;
-    LevelDBTransactionImpl(LevelDBStore *db) : db(db) {}
+    explicit LevelDBTransactionImpl(LevelDBStore *db) : db(db) {}
     void set(
       const string &prefix,
       const string &k,
@@ -193,8 +199,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return ceph::shared_ptr< LevelDBTransactionImpl >(
-      new LevelDBTransactionImpl(this));
+    return std::make_shared<LevelDBTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);
@@ -214,7 +219,7 @@ public:
   protected:
     boost::scoped_ptr<leveldb::Iterator> dbiter;
   public:
-    LevelDBWholeSpaceIteratorImpl(leveldb::Iterator *iter) :
+    explicit LevelDBWholeSpaceIteratorImpl(leveldb::Iterator *iter) :
       dbiter(iter) { }
     virtual ~LevelDBWholeSpaceIteratorImpl() { }
 
@@ -292,6 +297,12 @@ public:
     bufferlist value() {
       return to_bufferlist(dbiter->value());
     }
+
+    bufferptr value_as_ptr() {
+      leveldb::Slice data = dbiter->value();
+      return bufferptr(data.data(), data.size());
+    }
+
     int status() {
       return dbiter->status().ok() ? 0 : -1;
     }
@@ -390,11 +401,8 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() {
-    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-      new LevelDBWholeSpaceIteratorImpl(
-	db->NewIterator(leveldb::ReadOptions())
-      )
-    );
+    return std::make_shared<LevelDBWholeSpaceIteratorImpl>(
+	db->NewIterator(leveldb::ReadOptions()));
   }
 
   WholeSpaceIterator _get_snapshot_iterator() {
@@ -404,10 +412,9 @@ protected:
     snapshot = db->GetSnapshot();
     options.snapshot = snapshot;
 
-    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-      new LevelDBSnapshotIteratorImpl(db.get(), snapshot,
-	db->NewIterator(options))
-    );
+    return std::make_shared<LevelDBSnapshotIteratorImpl>(
+        db.get(), snapshot,
+	db->NewIterator(options));
   }
 
 };

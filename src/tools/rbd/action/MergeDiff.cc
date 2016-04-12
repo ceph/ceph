@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "include/compat.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -290,9 +291,9 @@ static int do_merge_diff(const char *first, const char *second,
       uint64_t last_off = s_off;
 
       r = parse_diff_body(sd, &s_tag, &s_off, &s_len);
-      dout(2) << "second diff data chunk: tag=" << f_tag << ", "
-              << "off=" << f_off << ", "
-              << "len=" << f_len << dendl;
+      dout(2) << "second diff data chunk: tag=" << s_tag << ", "
+              << "off=" << s_off << ", "
+              << "len=" << s_len << dendl;
       if (r < 0) {
         std::cerr << "rbd: failed to read second diff data chunk header"
                   << std::endl;
@@ -377,7 +378,7 @@ static int do_merge_diff(const char *first, const char *second,
 done:
   if (pd > 2)
     close(pd);
-  if (sd > 2)
+  if (sd)
     close(sd);
   if (fd > 2)
     close(fd);

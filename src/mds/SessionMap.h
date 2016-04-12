@@ -303,8 +303,8 @@ public:
     completed_requests_dirty = false;
   }
 
-  bool check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
-		    int new_uid, int new_gid);
+  int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
+		   int new_uid, int new_gid);
 
 
   Session() : 
@@ -428,7 +428,7 @@ public:
   uint64_t set_state(Session *session, int state);
   map<version_t, list<MDSInternalContextBase*> > commit_waiters;
 
-  SessionMap(MDSRank *m) : mds(m),
+  explicit SessionMap(MDSRank *m) : mds(m),
 		       projected(0), committing(0), committed(0),
                        loaded_legacy(false)
   { }

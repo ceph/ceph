@@ -6,8 +6,9 @@ libclient_la_SOURCES = \
 	client/MetaRequest.cc \
 	client/ClientSnapRealm.cc \
 	client/MetaSession.cc \
-	client/Trace.cc
-libclient_la_LIBADD = $(LIBOSDC) $(LIBEDIT_LIBS)
+	client/Trace.cc \
+	client/posix_acl.cc
+libclient_la_LIBADD = $(LIBOSDC)
 noinst_LTLIBRARIES += libclient.la
 
 noinst_HEADERS += \
@@ -23,7 +24,9 @@ noinst_HEADERS += \
 	client/SyntheticClient.h \
 	client/Trace.h \
 	client/ioctl.h \
-	client/ObjecterWriteback.h
+	client/ObjecterWriteback.h \
+	client/posix_acl.h \
+	client/UserGroups.h
 
 if WITH_FUSE
 libclient_fuse_la_SOURCES = client/fuse_ll.cc

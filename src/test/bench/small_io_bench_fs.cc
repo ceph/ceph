@@ -20,7 +20,7 @@
 #include "detailed_stat_collector.h"
 #include "distribution.h"
 #include "global/global_init.h"
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "testfilestore_backend.h"
 #include "common/perf_counters.h"
 
@@ -29,7 +29,7 @@ using namespace std;
 
 struct MorePrinting : public DetailedStatCollector::AdditionalPrinting {
   CephContext *cct;
-  MorePrinting(CephContext *cct) : cct(cct) {}
+  explicit MorePrinting(CephContext *cct) : cct(cct) {}
   void operator()(std::ostream *out) {
     bufferlist bl;
     Formatter *f = Formatter::create("json-pretty");
@@ -173,12 +173,12 @@ int main(int argc, char **argv)
     std::cout << "collection " << pgid << std::endl;
     ObjectStore::Transaction t;
     t.create_collection(coll_t(pgid), 0);
-    fs.apply_transaction(&osr, t);
+    fs.apply_transaction(&osr, std::move(t));
   }
   {
     ObjectStore::Transaction t;
     t.create_collection(coll_t(), 0);
-    fs.apply_transaction(&osr, t);
+    fs.apply_transaction(&osr, std::move(t));
   }
 
   vector<ceph::shared_ptr<Bencher> > benchers(
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
-    (*i)->create();
+    (*i)->create("bencher");
   }
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();

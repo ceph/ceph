@@ -23,7 +23,8 @@ namespace librbd {
     void append_request(AioObjectRequest *req);
 
     void send();
-    void queue_send();
+
+    void complete(int r);
 
   private:
     /**
@@ -74,15 +75,12 @@ namespace librbd {
 
     void complete_requests(int r);
 
-    void complete(int r);
     bool should_complete(int r);
 
     void remove_from_list();
 
     bool send_object_map();
     bool send_copyup();
-
-    Context *create_callback_context();
   };
 }
 

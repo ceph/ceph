@@ -61,7 +61,7 @@ void UpdateRequest::send() {
   rados_completion->release();
 }
 
-void UpdateRequest::finish() {
+void UpdateRequest::finish_request() {
   ldout(m_image_ctx.cct, 20) << &m_image_ctx << " on-disk object map updated"
                              << dendl;
 }

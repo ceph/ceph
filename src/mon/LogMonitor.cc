@@ -26,6 +26,7 @@
 #include "messages/MLogAck.h"
 
 #include "common/Timer.h"
+#include "common/Graylog.h"
 
 #include "osd/osd_types.h"
 #include "common/errno.h"
@@ -150,6 +151,15 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
         }
         le.log_to_syslog(channels.get_level(channel),
                          channels.get_facility(channel));
+      }
+
+      if (channels.do_log_to_graylog(channel)) {
+	ceph::log::Graylog::Ref graylog = channels.get_graylog(channel);
+	if (graylog) {
+	  graylog->log_log_entry(&le);
+	}
+	dout(7) << "graylog: " << channel << " " << graylog
+		<< " host:" << channels.log_to_graylog_host << dendl;
       }
 
       string log_file = channels.get_log_file(channel);
@@ -505,7 +515,11 @@ void LogMonitor::check_sub(Subscription *s)
 	  << " with " << mlog->entries.size() << " entries"
 	  << " (version " << mlog->version << ")" << dendl;
   
-  s->session->con->send_message(mlog);
+  if (!mlog->entries.empty()) {
+    s->session->con->send_message(mlog);
+  } else {
+    mlog->put();
+  }
   if (s->onetime)
     mon->session_map.remove_sub(s);
   else
@@ -646,6 +660,33 @@ void LogMonitor::update_log_channels()
     return;
   }
 
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog, oss,
+                              &channels.log_to_graylog,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_host, oss,
+                              &channels.log_to_graylog_host,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_host'"
+         << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->mon_cluster_log_to_graylog_port, oss,
+                              &channels.log_to_graylog_port,
+                              CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_port'"
+         << dendl;
+    return;
+  }
+
   channels.expand_channel_meta();
 }
 
@@ -703,6 +744,32 @@ bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
   return ret;
 }
 
+ceph::log::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
+    const string &channel)
+{
+  generic_dout(25) << __func__ << " for channel '"
+		   << channel << "'" << dendl;
+
+  if (graylogs.count(channel) == 0) {
+    ceph::log::Graylog::Ref graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("mon"));
+
+    graylog->set_fsid(g_conf->fsid);
+    graylog->set_hostname(g_conf->host);
+    graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
+					     &CLOG_CONFIG_DEFAULT_KEY),
+			     atoi(get_str_map_key(log_to_graylog_port, channel,
+						  &CLOG_CONFIG_DEFAULT_KEY).c_str()));
+
+    graylogs[channel] = graylog;
+    generic_dout(20) << __func__ << " for channel '"
+		     << channel << "' to graylog host '"
+		     << log_to_graylog_host[channel] << ":"
+		     << log_to_graylog_port[channel]
+		     << "'" << dendl;
+  }
+  return graylogs[channel];
+}
+
 void LogMonitor::handle_conf_change(const struct md_config_t *conf,
                                     const std::set<std::string> &changed)
 {
@@ -710,7 +777,12 @@ void LogMonitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("mon_cluster_log_to_syslog_level") ||
       changed.count("mon_cluster_log_to_syslog_facility") ||
       changed.count("mon_cluster_log_file") ||
-      changed.count("mon_cluster_log_file_level")) {
+      changed.count("mon_cluster_log_file_level") ||
+      changed.count("mon_cluster_log_to_graylog") ||
+      changed.count("mon_cluster_log_to_graylog_host") ||
+      changed.count("mon_cluster_log_to_graylog_port") ||
+      changed.count("fsid") ||
+      changed.count("host")) {
     update_log_channels();
   }
 }

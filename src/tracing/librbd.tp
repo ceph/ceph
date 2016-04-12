@@ -172,6 +172,32 @@ TRACEPOINT_EVENT(librbd, open_image_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, aio_open_image_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, id,
+        const char*, snap_name,
+        int, read_only,
+        const void*, completion),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(id, id)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(uint8_t, read_only, read_only ? 1 : 0)
+        ctf_integer_hex(const void*, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, aio_open_image_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, close_image_enter,
     TP_ARGS(
         void*, imagectx,
@@ -185,6 +211,27 @@ TRACEPOINT_EVENT(librbd, close_image_enter,
 )
 
 TRACEPOINT_EVENT(librbd, close_image_exit,
+    TP_ARGS(
+	int, retval),
+    TP_FIELDS(
+	ctf_integer(int, retval, retval))
+)
+
+TRACEPOINT_EVENT(librbd, aio_close_image_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, id,
+        const void*, completion),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(id, id)
+        ctf_integer_hex(const void*, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, aio_close_image_exit,
     TP_ARGS(
 	int, retval),
     TP_FIELDS(
@@ -1214,6 +1261,32 @@ TRACEPOINT_EVENT(librbd, snap_is_protected_exit,
     TP_FIELDS(
         ctf_integer(int, retval, retval)
         ctf_integer(int, is_protected, is_protected)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_exists_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        const char*, snap_name_to_check),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_string(snap_name_to_check, snap_name_to_check)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_exists_exit,
+    TP_ARGS(
+        int, retval,
+        int, exists),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int, exists, exists)
     )
 )
 

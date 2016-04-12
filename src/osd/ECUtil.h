@@ -33,12 +33,11 @@ const uint64_t CHUNK_PADDING = 8;
 const uint64_t CHUNK_OVERHEAD = 16; // INFO + PADDING
 
 class stripe_info_t {
-  const uint64_t stripe_size;
   const uint64_t stripe_width;
   const uint64_t chunk_size;
 public:
   stripe_info_t(uint64_t stripe_size, uint64_t stripe_width)
-    : stripe_size(stripe_size), stripe_width(stripe_width),
+    : stripe_width(stripe_width),
       chunk_size(stripe_width / stripe_size) {
     assert(stripe_width % stripe_size == 0);
   }
@@ -109,7 +108,7 @@ class HashInfo {
   vector<uint32_t> cumulative_shard_hashes;
 public:
   HashInfo() : total_chunk_size(0) {}
-  HashInfo(unsigned num_chunks)
+  explicit HashInfo(unsigned num_chunks)
   : total_chunk_size(0),
     cumulative_shard_hashes(num_chunks, -1) {}
   void append(uint64_t old_size, map<int, bufferlist> &to_append);

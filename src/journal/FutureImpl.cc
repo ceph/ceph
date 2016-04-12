@@ -2,14 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/FutureImpl.h"
-#include "common/Finisher.h"
 #include "journal/Utils.h"
 
 namespace journal {
 
-FutureImpl::FutureImpl(Finisher &finisher, const std::string &tag, uint64_t tid,
+FutureImpl::FutureImpl(uint64_t tag_tid, uint64_t entry_tid,
                        uint64_t commit_tid)
-  : RefCountedObject(NULL, 0), m_finisher(finisher), m_tag(tag), m_tid(tid),
+  : RefCountedObject(NULL, 0), m_tag_tid(tag_tid), m_entry_tid(entry_tid),
     m_commit_tid(commit_tid),
     m_lock(utils::unique_lock_name("FutureImpl::m_lock", this)), m_safe(false),
     m_consistent(false), m_return_value(0), m_flush_state(FLUSH_STATE_NONE),
@@ -51,7 +50,7 @@ void FutureImpl::flush(Context *on_safe) {
   }
 
   if (complete && on_safe != NULL) {
-    m_finisher.queue(on_safe, m_return_value);
+    on_safe->complete(m_return_value);
   } else if (flush_handler) {
     // attached to journal object -- instruct it to flush all entries through
     // this one.  possible to become detached while lock is released, so flush
@@ -69,7 +68,8 @@ void FutureImpl::wait(Context *on_safe) {
       return;
     }
   }
-  m_finisher.queue(on_safe, m_return_value);
+
+  on_safe->complete(m_return_value);
 }
 
 bool FutureImpl::is_complete() const {
@@ -137,7 +137,9 @@ void FutureImpl::finish_unlock() {
 }
 
 std::ostream &operator<<(std::ostream &os, const FutureImpl &future) {
-  os << "Future[tag=" << future.m_tag << ", tid=" << future.m_tid << "]";
+  os << "Future[tag_tid=" << future.m_tag_tid << ", "
+     << "entry_tid=" << future.m_entry_tid << ", "
+     << "commit_tid=" << future.m_commit_tid << "]";
   return os;
 }
 

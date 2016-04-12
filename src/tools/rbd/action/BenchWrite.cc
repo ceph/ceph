@@ -64,7 +64,7 @@ struct rbd_bencher {
   Cond cond;
   int in_flight;
 
-  rbd_bencher(librbd::Image *i)
+  explicit rbd_bencher(librbd::Image *i)
     : image(i),
       lock("rbd_bencher::lock"),
       in_flight(0)

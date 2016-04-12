@@ -11,7 +11,7 @@
 using std::string;
 #include "common/perf_counters.h"
 
-#define dout_subsys ceph_subsys_keyvaluestore
+#define dout_subsys ceph_subsys_kinetic
 
 int KineticStore::init()
 {

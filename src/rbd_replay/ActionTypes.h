@@ -62,14 +62,16 @@ WRITE_CLASS_ENCODER(Dependency);
 typedef std::vector<Dependency> Dependencies;
 
 enum ActionType {
-  ACTION_TYPE_START_THREAD = 0,
-  ACTION_TYPE_STOP_THREAD  = 1,
-  ACTION_TYPE_READ         = 2,
-  ACTION_TYPE_WRITE        = 3,
-  ACTION_TYPE_AIO_READ     = 4,
-  ACTION_TYPE_AIO_WRITE    = 5,
-  ACTION_TYPE_OPEN_IMAGE   = 6,
-  ACTION_TYPE_CLOSE_IMAGE  = 7
+  ACTION_TYPE_START_THREAD    = 0,
+  ACTION_TYPE_STOP_THREAD     = 1,
+  ACTION_TYPE_READ            = 2,
+  ACTION_TYPE_WRITE           = 3,
+  ACTION_TYPE_AIO_READ        = 4,
+  ACTION_TYPE_AIO_WRITE       = 5,
+  ACTION_TYPE_OPEN_IMAGE      = 6,
+  ACTION_TYPE_CLOSE_IMAGE     = 7,
+  ACTION_TYPE_AIO_OPEN_IMAGE  = 8,
+  ACTION_TYPE_AIO_CLOSE_IMAGE = 9,
 };
 
 struct ActionBase {
@@ -225,6 +227,39 @@ struct CloseImageAction : public ImageActionBase {
   }
 };
 
+struct AioOpenImageAction : public ImageActionBase {
+  static const ActionType ACTION_TYPE = ACTION_TYPE_AIO_OPEN_IMAGE;
+
+  std::string name;
+  std::string snap_name;
+  bool read_only;
+
+  AioOpenImageAction() : read_only(false) {
+  }
+  AioOpenImageAction(action_id_t id, thread_id_t thread_id,
+		     const Dependencies &dependencies, imagectx_id_t imagectx_id,
+		     const std::string &name, const std::string &snap_name,
+		     bool read_only)
+    : ImageActionBase(id, thread_id, dependencies, imagectx_id),
+      name(name), snap_name(snap_name), read_only(read_only) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+};
+
+struct AioCloseImageAction : public ImageActionBase {
+  static const ActionType ACTION_TYPE = ACTION_TYPE_AIO_CLOSE_IMAGE;
+
+  AioCloseImageAction() {
+  }
+  AioCloseImageAction(action_id_t id, thread_id_t thread_id,
+		      const Dependencies &dependencies, imagectx_id_t imagectx_id)
+    : ImageActionBase(id, thread_id, dependencies, imagectx_id) {
+  }
+};
+
 struct UnknownAction {
   static const ActionType ACTION_TYPE = static_cast<ActionType>(-1);
 
@@ -241,6 +276,8 @@ typedef boost::variant<StartThreadAction,
                        AioWriteAction,
                        OpenImageAction,
                        CloseImageAction,
+                       AioOpenImageAction,
+                       AioCloseImageAction,
                        UnknownAction> Action;
 
 class ActionEntry {

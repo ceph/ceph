@@ -127,7 +127,7 @@ public:
 class Uniform : public Distribution<uint64_t> {
   uint64_t val;
 public:
-  Uniform(uint64_t val) : val(val) {}
+  explicit Uniform(uint64_t val) : val(val) {}
   virtual uint64_t operator()() {
     return val;
   }

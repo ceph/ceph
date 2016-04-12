@@ -81,8 +81,14 @@
 /* Define to 1 if you have the `snappy' library (-lsnappy). */
 #cmakedefine HAVE_LIBSNAPPY 1
 
+/* Define if you have jemalloc */
+#cmakedefine HAVE_LIBJEMALLOC
+
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
+
+/* Define if you have tcmalloc */
+#cmakedefine HAVE_LIBTCMALLOC_MINIMAL
 
 /* Define to 1 if you have the <memory.h> header file. */
 #cmakedefine HAVE_MEMORY_H 1
@@ -116,6 +122,9 @@
 
 /* Define to 1 if you have the `syncfs' function. */
 #cmakedefine HAVE_SYNCFS 1
+
+/* Define to 1 if you have the `pwritev' function. */
+#cmakedefine HAVE_PWRITEV 1
 
 /* sync_file_range(2) is supported */
 #cmakedefine HAVE_SYNC_FILE_RANGE
@@ -176,6 +185,9 @@
 /* Define to 1 if you have the <utime.h> header file. */
 #cmakedefine HAVE_UTIME_H
 
+/* Define if you have the <execinfo.h> header file. */
+#cmakedefine HAVE_EXECINFO_H
+
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
 
@@ -235,6 +247,21 @@
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
 
+/* Defined if LTTNG */
+#cmakedefine WITH_LTTNG 1
+
+/* Defined if Babeltrace */
+#cmakedefine WITH_BABELTRACE 1
+
+/* Define to 1 if you have the <babeltrace/babeltrace.h> header file. */
+#cmakedefine HAVE_BABELTRACE_BABELTRACE_H 1
+
+/* Define to 1 if you have the <babeltrace/ctf/events.h> header file. */
+#cmakedefine HAVE_BABELTRACE_CTF_EVENTS_H 1
+
+/* Defined if you have librocksdb enabled */
+#cmakedefine HAVE_LIBROCKSDB
+
 /* Defined if new gperftools */
 #cmakedefine HAVE_GPERFTOOLS_HEAP_PROFILER_H
 #cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H
@@ -245,5 +272,14 @@
 
 /* res_query is thread safe */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
+
+/* Define if HAVE_REENTRANT_STRSIGNAL */
+#cmakedefine HAVE_REENTRANT_STRSIGNAL
+
+/* Defined if curl headers define curl_multi_wait() */
+#cmakedefine HAVE_CURL_MULTI_WAIT 1
+
+/* Define if you have spdk */
+#cmakedefine HAVE_SPDK 1
 
 #endif /* CONFIG_H */

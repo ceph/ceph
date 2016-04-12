@@ -207,7 +207,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   state = STATE_RECOVERING;
 
   if (collect->first_committed > last_committed+1) {
-    dout(5) << __func__
+    dout(2) << __func__
             << " leader's lowest version is too high for our last committed"
             << " (theirs: " << collect->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
@@ -425,24 +425,7 @@ bool Paxos::store_state(MMonPaxos *m)
     changed = true;
   }
 
-  remove_legacy_versions();
-
   return changed;
-}
-
-void Paxos::remove_legacy_versions()
-{
-  if (get_store()->exists(get_name(), "conversion_first")) {
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-    version_t v = get_store()->get(get_name(), "conversion_first");
-    dout(10) << __func__ << " removing pre-conversion paxos states from " << v
-	     << " until " << first_committed << dendl;
-    for (; v < first_committed; ++v) {
-      t->erase(get_name(), v);
-    }
-    t->erase(get_name(), "conversion_first");
-    get_store()->apply_transaction(t);
-  }
 }
 
 void Paxos::_sanity_check_store()
@@ -809,7 +792,7 @@ void Paxos::accept_timeout()
 
 struct C_Committed : public Context {
   Paxos *paxos;
-  C_Committed(Paxos *p) : paxos(p) {}
+  explicit C_Committed(Paxos *p) : paxos(p) {}
   void finish(int r) {
     assert(r >= 0);
     Mutex::Locker l(paxos->mon->lock);
@@ -900,8 +883,6 @@ void Paxos::commit_finish()
 
   // get ready for a new round.
   new_value.clear();
-
-  remove_legacy_versions();
 
   // WRITING -> REFRESH
   // among other things, this lets do_refresh() -> mon->bootstrap() know

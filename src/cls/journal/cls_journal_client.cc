@@ -223,28 +223,96 @@ void set_active_set(librados::ObjectWriteOperation *op, uint64_t object_set) {
   op->exec("journal", "set_active_set", bl);
 }
 
-void client_register(librados::ObjectWriteOperation *op,
-                     const std::string &id, const std::string &description) {
+int get_client(librados::IoCtx &ioctx, const std::string &oid,
+               const std::string &id, cls::journal::Client *client) {
+  librados::ObjectReadOperation op;
+  get_client_start(&op, id);
+
+  bufferlist out_bl;
+  int r = ioctx.operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist::iterator iter = out_bl.begin();
+  r = get_client_finish(&iter, client);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void get_client_start(librados::ObjectReadOperation *op,
+                      const std::string &id) {
   bufferlist bl;
   ::encode(id, bl);
-  ::encode(description, bl);
-  op->exec("journal", "client_register", bl);
+  op->exec("journal", "get_client", bl);
+}
+
+int get_client_finish(bufferlist::iterator *iter,
+                      cls::journal::Client *client) {
+  try {
+    ::decode(*client, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
 }
 
 int client_register(librados::IoCtx &ioctx, const std::string &oid,
-                    const std::string &id, const std::string &description) {
+                    const std::string &id, const bufferlist &data) {
   librados::ObjectWriteOperation op;
-  client_register(&op, id, description);
+  client_register(&op, id, data);
+  return ioctx.operate(oid, &op);
+}
+
+void client_register(librados::ObjectWriteOperation *op,
+                     const std::string &id, const bufferlist &data) {
+  bufferlist bl;
+  ::encode(id, bl);
+  ::encode(data, bl);
+  op->exec("journal", "client_register", bl);
+}
+
+int client_update_data(librados::IoCtx &ioctx, const std::string &oid,
+                       const std::string &id, const bufferlist &data) {
+  librados::ObjectWriteOperation op;
+  client_update_data(&op, id, data);
+  return ioctx.operate(oid, &op);
+}
+
+void client_update_data(librados::ObjectWriteOperation *op,
+                        const std::string &id, const bufferlist &data) {
+  bufferlist bl;
+  ::encode(id, bl);
+  ::encode(data, bl);
+  op->exec("journal", "client_update_data", bl);
+}
+
+int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
+                        const std::string &id, cls::journal::ClientState state) {
+  bufferlist bl;
+  ::encode(id, bl);
+  ::encode(static_cast<uint8_t>(state), bl);
+
+  librados::ObjectWriteOperation op;
+  op.exec("journal", "client_update_state", bl);
   return ioctx.operate(oid, &op);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                        const std::string &id) {
-  bufferlist inbl;
-  ::encode(id, inbl);
+  librados::ObjectWriteOperation op;
+  client_unregister(&op, id);
+  return ioctx.operate(oid, &op);
+}
 
-  bufferlist outbl;
-  return ioctx.exec(oid, "journal", "client_unregister", inbl, outbl);
+void client_unregister(librados::ObjectWriteOperation *op,
+		       const std::string &id) {
+
+  bufferlist bl;
+  ::encode(id, bl);
+  op->exec("journal", "client_unregister", bl);
 }
 
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
@@ -261,6 +329,145 @@ int client_list(librados::IoCtx &ioctx, const std::string &oid,
   C_ClientList *client_list = new C_ClientList(ioctx, oid, clients, &cond);
   client_list->send("");
   return cond.wait();
+}
+
+int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,
+                     uint64_t *tag_tid) {
+  librados::ObjectReadOperation op;
+  get_next_tag_tid_start(&op);
+
+  bufferlist out_bl;
+  int r = ioctx.operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist::iterator iter = out_bl.begin();
+  r = get_next_tag_tid_finish(&iter, tag_tid);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void get_next_tag_tid_start(librados::ObjectReadOperation *op) {
+  bufferlist bl;
+  op->exec("journal", "get_next_tag_tid", bl);
+}
+
+int get_next_tag_tid_finish(bufferlist::iterator *iter,
+                            uint64_t *tag_tid) {
+  try {
+    ::decode(*tag_tid, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int get_tag(librados::IoCtx &ioctx, const std::string &oid,
+            uint64_t tag_tid, cls::journal::Tag *tag) {
+  librados::ObjectReadOperation op;
+  get_tag_start(&op, tag_tid);
+
+  bufferlist out_bl;
+  int r = ioctx.operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist::iterator iter = out_bl.begin();
+  r = get_tag_finish(&iter, tag);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void get_tag_start(librados::ObjectReadOperation *op,
+                   uint64_t tag_tid) {
+  bufferlist bl;
+  ::encode(tag_tid, bl);
+  op->exec("journal", "get_tag", bl);
+}
+
+int get_tag_finish(bufferlist::iterator *iter, cls::journal::Tag *tag) {
+  try {
+    ::decode(*tag, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int tag_create(librados::IoCtx &ioctx, const std::string &oid,
+               uint64_t tag_tid, uint64_t tag_class,
+               const bufferlist &data) {
+  librados::ObjectWriteOperation op;
+  tag_create(&op, tag_tid, tag_class, data);
+  return ioctx.operate(oid, &op);
+}
+
+void tag_create(librados::ObjectWriteOperation *op, uint64_t tag_tid,
+                uint64_t tag_class, const bufferlist &data) {
+  bufferlist bl;
+  ::encode(tag_tid, bl);
+  ::encode(tag_class, bl);
+  ::encode(data, bl);
+  op->exec("journal", "tag_create", bl);
+}
+
+int tag_list(librados::IoCtx &ioctx, const std::string &oid,
+             const std::string &client_id, boost::optional<uint64_t> tag_class,
+             std::set<cls::journal::Tag> *tags) {
+  tags->clear();
+  uint64_t start_after_tag_tid = 0;
+  while (true) {
+    librados::ObjectReadOperation op;
+    tag_list_start(&op, start_after_tag_tid, JOURNAL_MAX_RETURN, client_id,
+                   tag_class);
+
+    bufferlist out_bl;
+    int r = ioctx.operate(oid, &op, &out_bl);
+    if (r < 0) {
+      return r;
+    }
+
+    bufferlist::iterator iter = out_bl.begin();
+    std::set<cls::journal::Tag> decode_tags;
+    r = tag_list_finish(&iter, &decode_tags);
+    if (r < 0) {
+      return r;
+    }
+
+    tags->insert(decode_tags.begin(), decode_tags.end());
+    if (decode_tags.size() < JOURNAL_MAX_RETURN) {
+      break;
+    }
+  }
+  return 0;
+}
+
+void tag_list_start(librados::ObjectReadOperation *op,
+                    uint64_t start_after_tag_tid, uint64_t max_return,
+                    const std::string &client_id,
+                    boost::optional<uint64_t> tag_class) {
+  bufferlist bl;
+  ::encode(start_after_tag_tid, bl);
+  ::encode(max_return, bl);
+  ::encode(client_id, bl);
+  ::encode(tag_class, bl);
+  op->exec("journal", "tag_list", bl);
+}
+
+int tag_list_finish(bufferlist::iterator *iter,
+                    std::set<cls::journal::Tag> *tags) {
+  try {
+    ::decode(*tags, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
 }
 
 void guard_append(librados::ObjectWriteOperation *op, uint64_t soft_max_size) {

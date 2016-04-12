@@ -19,7 +19,7 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
-#include "os/DBObjectMap.h"
+#include "os/filestore/DBObjectMap.h"
 #include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;

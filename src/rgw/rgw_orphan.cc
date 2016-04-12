@@ -165,17 +165,13 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     return r;
   }
 
-  uint64_t num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
   if (r == 0) {
-    if (num_shards != state.info.num_shards) {
-      return -EINVAL;
-    }
     search_info = state.info;
     search_stage = state.stage;
-  } else { /* r == -ENOENT */
+  } else if (info) { /* r == -ENOENT, initiate a new job if info was provided */ 
     search_info = *info;
     search_info.job_name = job_name;
-    search_info.num_shards = num_shards;
+    search_info.num_shards = (info->num_shards ? info->num_shards : DEFAULT_NUM_SHARDS);
     search_info.start_time = ceph_clock_now(store->ctx());
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
 
@@ -184,6 +180,9 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
       lderr(store->ctx()) << "ERROR: failed to write state ret=" << r << dendl;
       return r;
     }
+  } else {
+      lderr(store->ctx()) << "ERROR: job not found" << dendl;
+      return r;
   }
 
   index_objs_prefix = RGW_ORPHAN_INDEX_PREFIX + string(".");
@@ -455,7 +454,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
     return ret;
   }
 
-  RGWRados::Bucket target(store, bucket_info.bucket);
+  RGWRados::Bucket target(store, bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   string marker;
@@ -579,7 +578,11 @@ int RGWOrphanSearch::build_linked_oids_index()
     return ret;
   }
 
-  save_state();
+  ret = save_state();
+  if (ret < 0) {
+    cerr << __func__ << ": ERROR: failed to write state ret=" << ret << std::endl;
+    return ret;
+  }
 
   return 0;
 }

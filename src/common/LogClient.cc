@@ -16,6 +16,7 @@
 
 #include "include/types.h"
 #include "include/str_map.h"
+#include "include/uuid.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -34,6 +35,9 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
+#include "common/Graylog.h"
+// wipe the assert() introduced by boost headers included by Graylog.h
+#include "include/assert.h"
 #include "common/LogClient.h"
 
 #include "common/config.h"
@@ -44,7 +48,12 @@ int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
 			     map<string,string> &log_to_syslog,
 			     map<string,string> &log_channels,
-			     map<string,string> &log_prios)
+			     map<string,string> &log_prios,
+			     map<string,string> &log_to_graylog,
+			     map<string,string> &log_to_graylog_host,
+			     map<string,string> &log_to_graylog_port,
+			     uuid_d &fsid,
+			     string &host)
 {
   ostringstream oss;
 
@@ -75,6 +84,30 @@ int parse_log_client_options(CephContext *cct,
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
     return r;
   }
+
+  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog, oss,
+                              &log_to_graylog, CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_graylog'" << dendl;
+    return r;
+  }
+
+  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog_host, oss,
+                              &log_to_graylog_host, CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_graylog_host'" << dendl;
+    return r;
+  }
+
+  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog_port, oss,
+                              &log_to_graylog_port, CLOG_CONFIG_DEFAULT_KEY);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_graylog_port'" << dendl;
+    return r;
+  }
+
+  fsid = cct->_conf->fsid;
+  host = cct->_conf->host;
   return 0;
 }
 
@@ -130,7 +163,12 @@ LogClientTemp::~LogClientTemp()
 void LogChannel::update_config(map<string,string> &log_to_monitors,
 			       map<string,string> &log_to_syslog,
 			       map<string,string> &log_channels,
-			       map<string,string> &log_prios)
+			       map<string,string> &log_prios,
+			       map<string,string> &log_to_graylog,
+			       map<string,string> &log_to_graylog_host,
+			       map<string,string> &log_to_graylog_port,
+			       uuid_d &fsid,
+			       string &host)
 {
   ldout(cct, 20) << __func__ << " log_to_monitors " << log_to_monitors
 		 << " log_to_syslog " << log_to_syslog
@@ -145,17 +183,43 @@ void LogChannel::update_config(map<string,string> &log_to_monitors,
 					   &CLOG_CONFIG_DEFAULT_KEY);
   string prio = get_str_map_key(log_prios, log_channel,
 				&CLOG_CONFIG_DEFAULT_KEY);
+  bool to_graylog = (get_str_map_key(log_to_graylog, log_channel,
+				     &CLOG_CONFIG_DEFAULT_KEY) == "true");
+  string graylog_host = get_str_map_key(log_to_graylog_host, log_channel,
+				       &CLOG_CONFIG_DEFAULT_KEY);
+  string graylog_port_str = get_str_map_key(log_to_graylog_port, log_channel,
+					    &CLOG_CONFIG_DEFAULT_KEY);
+  int graylog_port = atoi(graylog_port_str.c_str());
 
   set_log_to_monitors(to_monitors);
   set_log_to_syslog(to_syslog);
   set_syslog_facility(syslog_facility);
   set_log_prio(prio);
 
+  if (to_graylog && !graylog) { /* should but isn't */
+    graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("clog"));
+  } else if (!to_graylog && graylog) { /* shouldn't but is */
+    graylog.reset();
+  }
+
+  if (to_graylog && graylog) {
+    graylog->set_fsid(fsid);
+    graylog->set_hostname(host);
+  }
+
+  if (graylog && (!graylog_host.empty()) && (graylog_port != 0)) {
+    graylog->set_destination(graylog_host, graylog_port);
+  }
+
   ldout(cct, 10) << __func__
 		 << " to_monitors: " << (to_monitors ? "true" : "false")
 		 << " to_syslog: " << (to_syslog ? "true" : "false")
 		 << " syslog_facility: " << syslog_facility
-		 << " prio: " << prio << ")" << dendl;
+		 << " prio: " << prio
+		 << " to_graylog: " << (to_graylog ? "true" : "false")
+		 << " graylog_host: " << graylog_host
+		 << " graylog_port: " << graylog_port
+		 << ")" << dendl;
 }
 
 void LogChannel::do_log(clog_type prio, std::stringstream& ss)
@@ -187,6 +251,12 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   if (do_log_to_syslog()) {
     ldout(cct,0) << __func__ << " log to syslog"  << dendl;
     e.log_to_syslog(get_log_prio(), get_syslog_facility());
+  }
+
+  // log to graylog?
+  if (do_log_to_graylog()) {
+    ldout(cct,0) << __func__ << " log to graylog"  << dendl;
+    graylog->log_log_entry(&e);
   }
 
   // log to monitor?

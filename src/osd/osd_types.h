@@ -33,6 +33,7 @@
 #include "include/CompatSet.h"
 #include "common/histogram.h"
 #include "include/interval_set.h"
+#include "include/inline_memory.h"
 #include "common/Formatter.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
@@ -276,7 +277,7 @@ enum {
 
 // pg stuff
 
-#define OSD_SUPERBLOCK_POBJECT ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)))
+#define OSD_SUPERBLOCK_GOBJECT ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)))
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
@@ -302,9 +303,11 @@ struct pg_t {
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
   pg_t(ps_t seed, uint64_t pool, int pref=-1) :
     m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  // cppcheck-suppress noExplicitConstructor
   pg_t(const ceph_pg& cpg) :
     m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
 
+  // cppcheck-suppress noExplicitConstructor
   pg_t(const old_pg_t& opg) {
     *this = opg.v;
   }
@@ -327,6 +330,9 @@ struct pg_t {
   int32_t preferred() const {
     return m_preferred;
   }
+
+  static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
+  char *calc_name(char *buf, const char *suffix_backwords) const;
 
   void set_ps(ps_t p) {
     m_seed = p;
@@ -355,6 +361,9 @@ struct pg_t {
   bool contains(int bits, const ghobject_t& oid) {
     return oid.match(bits, ps());
   }
+
+  hobject_t get_hobj_start() const;
+  hobject_t get_hobj_end(unsigned pg_num) const;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
@@ -445,6 +454,10 @@ struct spg_t {
   int32_t preferred() const {
     return pgid.preferred();
   }
+
+  static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
+  char *calc_name(char *buf, const char *suffix_backwords) const;
+ 
   bool parse(const char *s);
   bool parse(const std::string& s) {
     return parse(s.c_str());
@@ -484,10 +497,19 @@ struct spg_t {
     DECODE_FINISH(bl);
   }
 
-  hobject_t make_temp_object(const string& name) {
+  hobject_t make_temp_hobject(const string& name) const {
     return hobject_t(object_t(name), "", CEPH_NOSNAP,
 		     pgid.ps(),
 		     hobject_t::POOL_TEMP_START - pgid.pool(), "");
+  }
+
+  ghobject_t make_temp_ghobject(const string& name) const {
+    return ghobject_t(
+      hobject_t(object_t(name), "", CEPH_NOSNAP,
+		pgid.ps(),
+		hobject_t::POOL_TEMP_START - pgid.pool(), ""),
+      ghobject_t::NO_GEN,
+      shard);
   }
 };
 WRITE_CLASS_ENCODER(spg_t)
@@ -515,13 +537,13 @@ class coll_t {
     TYPE_LEGACY_TEMP = 1,  /* no longer used */
     TYPE_PG = 2,
     TYPE_PG_TEMP = 3,
-    TYPE_PG_REMOVAL = 4,   /* note: deprecated, not encoded */
   };
   type_t type;
   spg_t pgid;
   uint64_t removal_seq;  // note: deprecated, not encoded
 
-  string _str;  // cached string
+  char _str_buff[spg_t::calc_name_buf_size];
+  char *_str;
 
   void calc_str();
 
@@ -547,6 +569,15 @@ public:
     calc_str();
   }
 
+  coll_t& operator=(const coll_t& rhs)
+  {
+    this->type = rhs.type;
+    this->pgid = rhs.pgid;
+    this->removal_seq = rhs.removal_seq;
+    this->calc_str();
+    return *this;
+  }
+
   // named constructors
   static coll_t meta() {
     return coll_t();
@@ -555,12 +586,13 @@ public:
     return coll_t(p);
   }
 
-  const std::string& to_str() const {
-    return _str;
+  const std::string to_str() const {
+    return string(_str);
   }
   const char *c_str() const {
-    return _str.c_str();
+    return _str;
   }
+
   bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
@@ -572,7 +604,7 @@ public:
     return type == TYPE_META;
   }
   bool is_pg_prefix(spg_t *pgid_) const {
-    if (type == TYPE_PG || type == TYPE_PG_TEMP || type == TYPE_PG_REMOVAL) {
+    if (type == TYPE_PG || type == TYPE_PG_TEMP) {
       *pgid_ = pgid;
       return true;
     }
@@ -598,19 +630,10 @@ public:
     }
     return false;
   }
-  bool is_removal() const {
-    return type == TYPE_PG_REMOVAL;
-  }
-  bool is_removal(spg_t *pgid_) const {
-    if (type == TYPE_PG_REMOVAL) {
-      *pgid_ = pgid;
-      return true;
-    }
-    return false;
-  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+  size_t encoded_size() const;
 
   inline bool operator==(const coll_t& rhs) const {
     // only compare type if meta
@@ -629,6 +652,22 @@ public:
   coll_t get_temp() const {
     assert(type == TYPE_PG);
     return coll_t(TYPE_PG_TEMP, pgid, 0);
+  }
+
+  ghobject_t get_min_hobj() const {
+    ghobject_t o;
+    switch (type) {
+    case TYPE_PG:
+      o.hobj.pool = pgid.pool();
+      o.set_shard(pgid.shard);
+      break;
+    case TYPE_META:
+      o.hobj.pool = -1;
+      break;
+    default:
+      break;
+    }
+    return o;
   }
 
   void dump(Formatter *f) const;
@@ -673,6 +712,10 @@ inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 
 
 // compound rados version type
+/* WARNING: If add member in eversion_t, please make sure the encode/decode function
+ * work well. For little-endian machine, we should make sure there is no padding
+ * in 32-bit machine and 64-bit machine.
+ */
 class eversion_t {
 public:
   version_t version;
@@ -681,12 +724,13 @@ public:
   eversion_t() : version(0), epoch(0), __pad(0) {}
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
+  // cppcheck-suppress noExplicitConstructor
   eversion_t(const ceph_eversion& ce) : 
     version(ce.version),
     epoch(ce.epoch),
     __pad(0) { }
 
-  eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
+  explicit eversion_t(bufferlist& bl) : __pad(0) { decode(bl); }
 
   static eversion_t max() {
     eversion_t max;
@@ -705,12 +749,20 @@ public:
   string get_key_name() const;
 
   void encode(bufferlist &bl) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
+#else
     ::encode(version, bl);
     ::encode(epoch, bl);
+#endif
   }
   void decode(bufferlist::iterator &bl) {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
+#else
     ::decode(version, bl);
     ::decode(epoch, bl);
+#endif
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -911,7 +963,8 @@ public:
     SCRUB_MAX_INTERVAL,
     DEEP_SCRUB_INTERVAL,
     RECOVERY_PRIORITY,
-    RECOVERY_OP_PRIORITY
+    RECOVERY_OP_PRIORITY,
+    SCRUB_PRIORITY
   };
 
   enum type_t {
@@ -1073,7 +1126,8 @@ struct pg_pool_t {
     CACHEMODE_FORWARD = 2,               ///< forward if not in cache
     CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
     CACHEMODE_READFORWARD = 4,           ///< forward reads, write to cache flush later
-    CACHEMODE_READPROXY = 5              ///< proxy reads, write to cache flush later
+    CACHEMODE_READPROXY = 5,             ///< proxy reads, write to cache flush later
+    CACHEMODE_PROXY = 6,                 ///< proxy if not in cache
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
@@ -1083,6 +1137,7 @@ struct pg_pool_t {
     case CACHEMODE_READONLY: return "readonly";
     case CACHEMODE_READFORWARD: return "readforward";
     case CACHEMODE_READPROXY: return "readproxy";
+    case CACHEMODE_PROXY: return "proxy";
     default: return "unknown";
     }
   }
@@ -1099,6 +1154,8 @@ struct pg_pool_t {
       return CACHEMODE_READFORWARD;
     if (s == "readproxy")
       return CACHEMODE_READPROXY;
+    if (s == "proxy")
+      return CACHEMODE_PROXY;
     return (cache_mode_t)-1;
   }
   const char *get_cache_mode_name() const {
@@ -1109,6 +1166,7 @@ struct pg_pool_t {
     case CACHEMODE_NONE:
     case CACHEMODE_FORWARD:
     case CACHEMODE_READONLY:
+    case CACHEMODE_PROXY:
       return false;
     case CACHEMODE_WRITEBACK:
     case CACHEMODE_READFORWARD:
@@ -1435,6 +1493,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p);
  * a summation of object stats
  *
  * This is just a container for object stats; we don't know what for.
+ *
+ * If you add members in object_stat_sum_t, you should make sure there are
+ * not padding among these members.
+ * You should also modify the padding_check function.
+
  */
 struct object_stat_sum_t {
   /**************************************************************************
@@ -1446,24 +1509,23 @@ struct object_stat_sum_t {
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
   int64_t num_objects_missing_on_primary;
-  int64_t num_objects_missing;
   int64_t num_objects_degraded;
-  int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
   int64_t num_rd;
   int64_t num_rd_kb;
   int64_t num_wr;
   int64_t num_wr_kb;
   int64_t num_scrub_errors;	// total deep and shallow scrub errors
-  int64_t num_shallow_scrub_errors;
-  int64_t num_deep_scrub_errors;
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
+  int64_t num_shallow_scrub_errors;
+  int64_t num_deep_scrub_errors;
   int64_t num_objects_dirty;
   int64_t num_whiteouts;
   int64_t num_objects_omap;
   int64_t num_objects_hit_set_archive;
+  int64_t num_objects_misplaced;
   int64_t num_bytes_hit_set_archive;
   int64_t num_flush;
   int64_t num_flush_kb;
@@ -1475,24 +1537,25 @@ struct object_stat_sum_t {
   int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
   int64_t num_objects_pinned;
+  int64_t num_objects_missing;
 
   object_stat_sum_t()
     : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
-      num_objects_missing_on_primary(0), num_objects_missing(0),
-      num_objects_degraded(0),
-      num_objects_misplaced(0),
+      num_objects_missing_on_primary(0), num_objects_degraded(0),
       num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-      num_scrub_errors(0), num_shallow_scrub_errors(0),
-      num_deep_scrub_errors(0),
+      num_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
       num_keys_recovered(0),
+      num_shallow_scrub_errors(0),
+      num_deep_scrub_errors(0),
       num_objects_dirty(0),
       num_whiteouts(0),
       num_objects_omap(0),
       num_objects_hit_set_archive(0),
+      num_objects_misplaced(0),
       num_bytes_hit_set_archive(0),
       num_flush(0),
       num_flush_kb(0),
@@ -1501,7 +1564,8 @@ struct object_stat_sum_t {
       num_promote(0),
       num_flush_mode_high(0), num_flush_mode_low(0),
       num_evict_mode_some(0), num_evict_mode_full(0),
-      num_objects_pinned(0)
+      num_objects_pinned(0),
+      num_objects_missing(0)
   {}
 
   void floor(int64_t f) {
@@ -1598,14 +1662,53 @@ struct object_stat_sum_t {
   }
 
   bool is_zero() const {
-    object_stat_sum_t zero;
-    return memcmp(this, &zero, sizeof(zero)) == 0;
+    return mem_is_zero((char*)this, sizeof(*this));
   }
 
   void add(const object_stat_sum_t& o);
   void sub(const object_stat_sum_t& o);
 
   void dump(Formatter *f) const;
+  void padding_check() {
+    static_assert(
+      sizeof(object_stat_sum_t) ==
+        sizeof(num_bytes) +
+        sizeof(num_objects) +
+        sizeof(num_object_clones) +
+        sizeof(num_object_copies) +
+        sizeof(num_objects_missing_on_primary) +
+        sizeof(num_objects_degraded) +
+        sizeof(num_objects_unfound) +
+        sizeof(num_rd) +
+        sizeof(num_rd_kb) +
+        sizeof(num_wr) +
+        sizeof(num_wr_kb) +
+        sizeof(num_scrub_errors) +
+        sizeof(num_objects_recovered) +
+        sizeof(num_bytes_recovered) +
+        sizeof(num_keys_recovered) +
+        sizeof(num_shallow_scrub_errors) +
+        sizeof(num_deep_scrub_errors) +
+        sizeof(num_objects_dirty) +
+        sizeof(num_whiteouts) +
+        sizeof(num_objects_omap) +
+        sizeof(num_objects_hit_set_archive) +
+        sizeof(num_objects_misplaced) +
+        sizeof(num_bytes_hit_set_archive) +
+        sizeof(num_flush) +
+        sizeof(num_flush_kb) +
+        sizeof(num_evict) +
+        sizeof(num_evict_kb) +
+        sizeof(num_promote) +
+        sizeof(num_flush_mode_high) +
+        sizeof(num_flush_mode_low) +
+        sizeof(num_evict_mode_some) +
+        sizeof(num_evict_mode_full) +
+        sizeof(num_objects_pinned) +
+        sizeof(num_objects_missing)
+      ,
+      "object_stat_sum_t have padding");
+  }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<object_stat_sum_t*>& o);
@@ -1679,7 +1782,7 @@ struct pg_stat_t {
   utime_t last_fresh;   // last reported
   utime_t last_change;  // new state != previous state
   utime_t last_active;  // state & PG_STATE_ACTIVE
-  utime_t last_peered;  // state & PG_STATE_ACTIVE || state & PG_STATE_ACTIVE
+  utime_t last_peered;  // state & PG_STATE_ACTIVE || state & PG_STATE_PEERED
   utime_t last_clean;   // state & PG_STATE_CLEAN
   utime_t last_unstale; // (state & PG_STATE_STALE) == 0
   utime_t last_undegraded; // (state & PG_STATE_DEGRADED) == 0
@@ -1855,7 +1958,7 @@ struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
   bool using_gmt;	///< use gmt for creating the hit_set archive object name
-  pg_hit_set_info_t(bool using_gmt = true)
+  explicit pg_hit_set_info_t(bool using_gmt = true)
     : using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
@@ -2016,6 +2119,7 @@ struct pg_info_t {
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
   { }
+  // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
     : pgid(p),
       last_epoch_started(0), last_user_version(0),
@@ -2272,6 +2376,15 @@ public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(map<string, boost::optional<bufferlist> > &attrs) {}
     virtual void rmobject(version_t old_version) {}
+    /**
+     * Used to support the unfound_lost_delete log event: if the stashed
+     * version exists, we unstash it, otherwise, we do nothing.  This way
+     * each replica rolls back to whatever state it had prior to the attempt
+     * at mark unfound lost delete
+     */
+    virtual void try_rmobject(version_t old_version) {
+      rmobject(old_version);
+    }
     virtual void create() {}
     virtual void update_snaps(set<snapid_t> &old_snaps) {}
     virtual ~Visitor() {}
@@ -2283,7 +2396,8 @@ public:
     SETATTRS = 2,
     DELETE = 3,
     CREATE = 4,
-    UPDATE_SNAPS = 5
+    UPDATE_SNAPS = 5,
+    TRY_DELETE = 6
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
   void claim(ObjectModDesc &other) {
@@ -2338,6 +2452,16 @@ public:
       return false;
     ENCODE_START(1, 1, bl);
     append_id(DELETE);
+    ::encode(deletion_version, bl);
+    ENCODE_FINISH(bl);
+    rollback_info_completed = true;
+    return true;
+  }
+  bool try_rmobject(version_t deletion_version) {
+    if (!can_local_rollback || rollback_info_completed)
+      return false;
+    ENCODE_START(1, 1, bl);
+    append_id(TRY_DELETE);
     ::encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
@@ -2632,7 +2756,7 @@ struct pg_missing_t {
   struct item {
     eversion_t need, have;
     item() {}
-    item(eversion_t n) : need(n) {}  // have no old version
+    explicit item(eversion_t n) : need(n) {}  // have no old version
     item(eversion_t n, eversion_t h) : need(n), have(h) {}
 
     void encode(bufferlist& bl) const {
@@ -3024,7 +3148,7 @@ struct SnapSet {
   map<snapid_t, uint64_t> clone_size;
 
   SnapSet() : seq(0), head_exists(false) {}
-  SnapSet(bufferlist& bl) {
+  explicit SnapSet(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
@@ -3248,14 +3372,14 @@ struct object_info_t {
       data_digest(-1), omap_digest(-1)
   {}
 
-  object_info_t(const hobject_t& s)
+  explicit object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0),
       data_digest(-1), omap_digest(-1)
   {}
 
-  object_info_t(bufferlist& bl) {
+  explicit object_info_t(bufferlist& bl) {
     decode(bl);
   }
   object_info_t operator=(bufferlist& bl) {
@@ -3282,7 +3406,7 @@ struct SnapSetContext {
   bool registered : 1;
   bool exists : 1;
 
-  SnapSetContext(const hobject_t& o) :
+  explicit SnapSetContext(const hobject_t& o) :
     oid(o), ref(0), registered(false), exists(true) { }
 };
 
@@ -3567,6 +3691,22 @@ public:
       *requeue_snaptrimmer = true;
     }
   }
+  void put_lock_type(
+    ObjectContext::RWState::State type,
+    list<OpRequestRef> *to_wake,
+    bool *requeue_recovery,
+    bool *requeue_snaptrimmer) {
+    switch (type) {
+    case ObjectContext::RWState::RWWRITE:
+      return put_write(to_wake, requeue_recovery, requeue_snaptrimmer);
+    case ObjectContext::RWState::RWREAD:
+      return put_read(to_wake);
+    case ObjectContext::RWState::RWEXCL:
+      return put_excl(to_wake, requeue_recovery, requeue_snaptrimmer);
+    default:
+      assert(0 == "invalid lock type");
+    }
+  }
   bool is_request_pending() {
     return (rwstate.count > 0);
   }
@@ -3661,6 +3801,104 @@ inline ostream& operator<<(ostream& out, const ObjectContext& obc)
 
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
+
+class ObcLockManager {
+  struct ObjectLockState {
+    ObjectContextRef obc;
+    ObjectContext::RWState::State type;
+    ObjectLockState(
+      ObjectContextRef obc,
+      ObjectContext::RWState::State type)
+      : obc(obc), type(type) {}
+  };
+  map<hobject_t, ObjectLockState, hobject_t::BitwiseComparator> locks;
+public:
+  ObcLockManager() = default;
+  ObcLockManager(ObcLockManager &&) = default;
+  ObcLockManager(const ObcLockManager &) = delete;
+  bool empty() const {
+    return locks.empty();
+  }
+  bool get_lock_type(
+    ObjectContext::RWState::State type,
+    const hobject_t &hoid,
+    ObjectContextRef obc,
+    OpRequestRef op) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->get_lock_type(op, type)) {
+      locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock, ignore starvation
+  bool take_write_lock(
+    const hobject_t &hoid,
+    ObjectContextRef obc) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->rwstate.take_write_lock()) {
+      locks.insert(
+	make_pair(
+	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock for snap trim
+  bool get_snaptrimmer_write(
+    const hobject_t &hoid,
+    ObjectContextRef obc) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->get_snaptrimmer_write()) {
+      locks.insert(
+	make_pair(
+	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock greedy
+  bool get_write_greedy(
+    const hobject_t &hoid,
+    ObjectContextRef obc,
+    OpRequestRef op) {
+    assert(locks.find(hoid) == locks.end());
+    if (obc->get_write_greedy(op)) {
+      locks.insert(
+	make_pair(
+	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  void put_locks(
+    list<pair<hobject_t, list<OpRequestRef> > > *to_requeue,
+    bool *requeue_recovery,
+    bool *requeue_snaptrimmer) {
+    for (auto p: locks) {
+      list<OpRequestRef> _to_requeue;
+      p.second.obc->put_lock_type(
+	p.second.type,
+	&_to_requeue,
+	requeue_recovery,
+	requeue_snaptrimmer);
+      if (to_requeue) {
+	to_requeue->push_back(
+	  make_pair(
+	    p.second.obc->obs.oi.soid,
+	    std::move(_to_requeue)));
+      }
+    }
+    locks.clear();
+  }
+  ~ObcLockManager() {
+    assert(locks.empty());
+  }
+};
 
 
 
@@ -3784,12 +4022,13 @@ struct ScrubMap {
     bool digest_present:1;
     bool omap_digest_present:1;
     bool read_error:1;
+    bool stat_error:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0), nlinks(0), 
       negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false) {}
+      read_error(false), stat_error(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
@@ -4073,4 +4312,29 @@ enum scrub_error_type {
   DEEP_ERROR,
   SHALLOW_ERROR
 };
+
+// PromoteCounter
+
+struct PromoteCounter {
+  atomic64_t attempts, objects, bytes;
+
+  void attempt() {
+    attempts.inc();
+  }
+
+  void finish(uint64_t size) {
+    objects.inc();
+    bytes.add(size);
+  }
+
+  void sample_and_attenuate(uint64_t *a, uint64_t *o, uint64_t *b) {
+    *a = attempts.read();
+    *o = objects.read();
+    *b = bytes.read();
+    attempts.set(*a / 2);
+    objects.set(*o / 2);
+    bytes.set(*b / 2);
+  }
+};
+
 #endif

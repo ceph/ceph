@@ -171,17 +171,17 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
-    Incremental(epoch_t e=0) :
+    explicit Incremental(epoch_t e=0) :
       encode_features(0),
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1),
       have_crc(false), full_crc(0), inc_crc(0) {
       memset(&fsid, 0, sizeof(fsid));
     }
-    Incremental(bufferlist &bl) {
+    explicit Incremental(bufferlist &bl) {
       bufferlist::iterator p = bl.begin();
       decode(p);
     }
-    Incremental(bufferlist::iterator &p) {
+    explicit Incremental(bufferlist::iterator &p) {
       decode(p);
     }
 
@@ -270,15 +270,15 @@ private:
 	     flags(0),
 	     num_osd(0), num_up_osd(0), num_in_osd(0),
 	     max_osd(0),
-	     osd_addrs(new addrs_s),
-	     pg_temp(new map<pg_t,vector<int32_t> >),
-	     primary_temp(new map<pg_t,int32_t>),
-	     osd_uuid(new vector<uuid_d>),
+	     osd_addrs(std::make_shared<addrs_s>()),
+	     pg_temp(std::make_shared<map<pg_t,vector<int32_t>>>()),
+	     primary_temp(std::make_shared<map<pg_t,int32_t>>()),
+	     osd_uuid(std::make_shared<vector<uuid_d>>()),
 	     cluster_snapshot_epoch(0),
 	     new_blacklist_entries(false),
 	     cached_up_osd_features(0),
 	     crc_defined(false), crc(0),
-	     crush(new CrushWrapper) {
+	     crush(std::make_shared<CrushWrapper>()) {
     memset(&fsid, 0, sizeof(fsid));
   }
 
@@ -295,6 +295,9 @@ public:
     primary_temp.reset(new map<pg_t,int32_t>(*o.primary_temp));
     pg_temp.reset(new map<pg_t,vector<int32_t> >(*o.pg_temp));
     osd_uuid.reset(new vector<uuid_d>(*o.osd_uuid));
+
+    if (o.osd_primary_affinity)
+      osd_primary_affinity.reset(new vector<__u32>(*o.osd_primary_affinity));
 
     // NOTE: this still references shared entity_addr_t's.
     osd_addrs.reset(new addrs_s(*o.osd_addrs));
@@ -368,9 +371,6 @@ public:
   void set_state(int o, unsigned s) {
     assert(o < max_osd);
     osd_state[o] = s;
-  }
-  void set_weightf(int o, float w) {
-    set_weight(o, (int)((float)CEPH_OSD_IN * w));
   }
   void set_weight(int o, unsigned w) {
     assert(o < max_osd);
@@ -466,7 +466,7 @@ public:
   bool have_addr(const entity_addr_t& addr) const {
     return identify_osd(addr) >= 0;
   }
-  bool find_osd_on_ip(const entity_addr_t& ip) const;
+  int find_osd_on_ip(const entity_addr_t& ip) const;
   bool have_inst(int osd) const {
     return exists(osd) && is_up(osd); 
   }
@@ -608,17 +608,17 @@ public:
     return pg;
   }
 
-  static object_locator_t file_to_object_locator(const ceph_file_layout& layout) {
-    return object_locator_t(layout.fl_pg_pool);
+  static object_locator_t file_to_object_locator(const file_layout_t& layout) {
+    return object_locator_t(layout.pool_id, layout.pool_ns);
   }
 
-  // XXX: not used, mentioned in psim.cc comment
-  // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout, string nspace) const {
-    return make_object_layout(oid, layout.fl_pg_pool, nspace);
+  ceph_object_layout file_to_object_layout(object_t oid,
+					   file_layout_t& layout) const {
+    return make_object_layout(oid, layout.pool_id, layout.pool_ns);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool, string nspace) const;
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool,
+					string nspace) const;
 
   int get_pg_num(int pg_pool) const
   {
@@ -751,14 +751,16 @@ public:
     return p->second.get_size();
   }
   int get_pg_type(pg_t pg) const {
-    assert(pools.count(pg.pool()));
-    return pools.find(pg.pool())->second.get_type();
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.get_type();
   }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
-    assert(pools.count(pg.pool()));
-    return pools.find(pg.pool())->second.raw_pg_to_pg(pg);
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.raw_pg_to_pg(pg);
   }
 
   // pg -> acting primary osd
@@ -775,6 +777,15 @@ public:
     if (nrep > 0)
       return group[group.size()-1];
     return -1;  // we fail!
+  }
+  bool is_acting_osd_shard(pg_t pg, int osd, shard_id_t shard) const {
+    vector<int> acting;
+    int nrep = pg_to_acting_osds(pg, acting);
+    if (shard == shard_id_t::NO_SHARD)
+      return calc_pg_role(osd, acting, nrep) >= 0;
+    if (shard >= (int)acting.size())
+      return false;
+    return acting[shard] == osd;
   }
 
 
@@ -855,6 +866,12 @@ public:
   void print_summary(Formatter *f, ostream& out) const;
   void print_oneline_summary(ostream& out) const;
   void print_tree(Formatter *f, ostream *out) const;
+
+  int summarize_mapping_stats(
+    OSDMap *newmap,
+    const set<int64_t> *pools,
+    std::string *out,
+    Formatter *f) const;
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);

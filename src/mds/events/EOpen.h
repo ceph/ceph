@@ -24,7 +24,7 @@ public:
   vector<inodeno_t> inos;
 
   EOpen() : LogEvent(EVENT_OPEN) { }
-  EOpen(MDLog *mdlog) : 
+  explicit EOpen(MDLog *mdlog) :
     LogEvent(EVENT_OPEN), metablob(mdlog) { }
 
   void print(ostream& out) const {
@@ -44,7 +44,7 @@ public:
     inos.push_back(ino);
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EOpen*>& ls);
@@ -52,5 +52,6 @@ public:
   void update_segment();
   void replay(MDSRank *mds);
 };
+WRITE_CLASS_ENCODER_FEATURES(EOpen)
 
 #endif

@@ -5,7 +5,14 @@
 root=`dirname $0`
 run_name=$1
 command=$2
+CEPH_BIN=$root
+CEPH_CONF_PATH=$root/run/$run_name
+
+if [ -e CMakeCache.txt ]; then
+    CEPH_BIN=$PWD/bin
+    CEPH_CONF_PATH=$PWD/run/$run_name
+fi
 
 shift 2
 
-$root/$command -c $root/run/$run_name/ceph.conf "$@"
+$CEPH_BIN/$command -c $CEPH_CONF_PATH/ceph.conf "$@"

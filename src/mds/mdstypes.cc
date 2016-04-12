@@ -7,24 +7,6 @@
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
-void dump(const ceph_file_layout& l, Formatter *f)
-{
-  f->dump_unsigned("stripe_unit", l.fl_stripe_unit);
-  f->dump_unsigned("stripe_count", l.fl_stripe_count);
-  f->dump_unsigned("object_size", l.fl_object_size);
-  if (l.fl_cas_hash)
-    f->dump_unsigned("cas_hash", l.fl_cas_hash);
-  if (l.fl_object_stripe_unit)
-    f->dump_unsigned("object_stripe_unit", l.fl_object_stripe_unit);
-  if (l.fl_pg_pool)
-    f->dump_unsigned("pg_pool", l.fl_pg_pool);
-}
-
-void dump(const ceph_dir_layout& l, Formatter *f)
-{
-  f->dump_unsigned("dir_hash", l.dl_dir_hash);
-}
-
 
 /*
  * frag_info_t
@@ -254,7 +236,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
 /*
  * inode_t
  */
-void inode_t::encode(bufferlist &bl) const
+void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(13, 6, bl);
 
@@ -274,7 +256,7 @@ void inode_t::encode(bufferlist &bl) const
   }
 
   ::encode(dir_layout, bl);
-  ::encode(layout, bl);
+  ::encode(layout, bl, features);
   ::encode(size, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
@@ -399,9 +381,7 @@ void inode_t::dump(Formatter *f) const
   ::dump(dir_layout, f);
   f->close_section();
 
-  f->open_object_section("layout");
-  ::dump(layout, f);
-  f->close_section();
+  f->dump_object("layout", layout);
 
   f->open_array_section("old_pools");
   for (compact_set<int64_t>::const_iterator i = old_pools.begin();
@@ -468,7 +448,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         gid != other.gid ||
         nlink != other.nlink ||
         memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
-        memcmp(&layout, &other.layout, sizeof(layout)) ||
+        layout != other.layout ||
         old_pools != other.old_pools ||
         size != other.size ||
         max_size_ever != other.max_size_ever ||
@@ -520,11 +500,11 @@ bool inode_t::older_is_consistent(const inode_t &other) const
 /*
  * old_inode_t
  */
-void old_inode_t::encode(bufferlist& bl) const
+void old_inode_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(first, bl);
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   ::encode(xattrs, bl);
   ENCODE_FINISH(bl);
 }
@@ -1118,8 +1098,10 @@ void MDSCacheObject::dump_states(Formatter *f) const
     f->dump_string("state", "rejoinundef");
 }
 
-void ceph_file_layout_wrapper::dump(Formatter *f) const
+
+ostream& operator<<(ostream &out, const mds_role_t &role)
 {
-  ::dump(static_cast<const ceph_file_layout&>(*this), f);
+  out << role.fscid << ":" << role.rank;
+  return out;
 }
 

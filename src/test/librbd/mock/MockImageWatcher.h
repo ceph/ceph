@@ -6,12 +6,19 @@
 
 #include "gmock/gmock.h"
 
+class Context;
+
 namespace librbd {
 
 struct MockImageWatcher {
-  MOCK_CONST_METHOD0(is_lock_owner, bool());
-  MOCK_CONST_METHOD1(is_lock_supported, bool(const RWLock &));
-  MOCK_METHOD1(assert_header_locked, void (librados::ObjectWriteOperation *));
+  MOCK_METHOD0(unregister_watch, void());
+  MOCK_METHOD1(flush, void(Context *));
+
+  MOCK_CONST_METHOD0(get_watch_handle, uint64_t());
+
+  MOCK_METHOD0(notify_acquired_lock, void());
+  MOCK_METHOD0(notify_released_lock, void());
+  MOCK_METHOD0(notify_request_lock, void());
 };
 
 } // namespace librbd

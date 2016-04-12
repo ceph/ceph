@@ -7,10 +7,31 @@ if (NOT (CMAKE_MAJOR_VERSION LESS 3))
   # Tweak policies (this one disables "missing" dependency warning)
   cmake_policy(SET CMP0046 OLD)
 endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
+# we use LINK_PRIVATE keyword instead of PRIVATE, but do not specify the LINK_PUBLIC
+# for target_link_libraries() command when PUBLIC should be used instead, it's just
+# for backward compatibility with cmake 2.8.11.
+if (POLICY CMP0022)
+cmake_policy(SET CMP0022 OLD)
+endif (POLICY CMP0022)
+if (POLICY CMP0023)
+cmake_policy(SET CMP0023 OLD)
+endif (POLICY CMP0023)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
-include_directories(  
+option(WITH_CCACHE "Build with ccache.")
+if(WITH_CCACHE)
+  find_program(CCACHE_FOUND ccache)
+  if(CCACHE_FOUND)
+    message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+  else(CCACHE_FOUND)
+    message(FATAL_ERROR "Can't find ccache. Is it installed?")
+  endif(CCACHE_FOUND)
+endif(WITH_CCACHE)
+
+include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${OFED_PREFIX}/include
   ${LEVELDB_PREFIX}/include
@@ -27,14 +48,21 @@ include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
 
+#put all the libs and binaries in one place
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
 CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
-CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS) 
+CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
 CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
+CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
 CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
 CHECK_INCLUDE_FILES("boost/random/discrete_distribution.hpp" HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION)
+CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 CHECK_INCLUDE_FILES("dirent.h" HAVE_DIRENT_H)
 CHECK_INCLUDE_FILES("dlfcn.h" HAVE_DLFCN_H)
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
@@ -75,8 +103,8 @@ CHECK_INCLUDE_FILES("fcgimisc.h" HAVE_FASTCGI_MISC_H)
 CHECK_INCLUDE_FILES("fcgio.h" HAVE_FASTCGIO_H)
 CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
 CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
-CHECK_INCLUDE_FILES("openssl/ssl.h" HAVE_SSL_H)
 CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
+CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
 
 include(CheckSymbolExists)
 CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
@@ -100,6 +128,8 @@ else(${ENABLE_SHARED})
  set(CEPH_SHARED STATIC)
 endif(${ENABLE_SHARED})
 
+find_package(execinfo)
+
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
 
@@ -110,10 +140,27 @@ set(HAVE_LIBAIO ${AIO_FOUND})
 message(STATUS "${AIO_LIBS}")
 endif(${WITH_AIO})
 
+option(WITH_OPENLDAP "OPENLDAP is here" ON)
+if(${WITH_OPENLDAP})
+find_package(OpenLdap REQUIRED)
+set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
+message(STATUS "${OPENLDAP_LIBS}")
+endif(${WITH_OPENLDAP})
+
+option(WITH_OPENSSL "OPENSSL is here" ON)
+if(${WITH_OPENSSL})
+find_package(OpenSSL REQUIRED)
+set(HAVE_OPENSSL ON)
+#message(STATUS "${OPENSSL_LIBRARIES}")
+else(${WITH_OPENSSL})
+set(HAVE_OPENSSL OFF)
+set(OPENSSL_LIBRARIES)
+endif(${WITH_OPENSSL})
+
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
 find_package(fuse)
-set(HAVE_FUSE ${FUSE_FOUND})
+set(HAVE_LIBFUSE ${FUSE_FOUND})
 CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
@@ -122,6 +169,13 @@ if(${WITH_XFS})
 find_package(xfs)
 set(HAVE_XFS ${XFS_FOUND})
 endif(${WITH_XFS})
+
+option(WITH_SPDK "Enable SPDK" OFF)
+if(WITH_SPDK)
+  find_package(pciaccess REQUIRED)
+  find_package(dpdk REQUIRED)
+  set(HAVE_SPDK TRUE)
+endif(WITH_SPDK)
 
 find_package(blkid REQUIRED)
 set(HAVE_LIBBLKID ${BLKID_FOUND})
@@ -152,6 +206,7 @@ find_package(expat REQUIRED)
 set(HAVE_EXPAT ${EXPAT_FOUND})
 endif(${WITH_EXPAT})
 
+find_package(Cython REQUIRED)
 find_package(fcgi REQUIRED)
 
 find_package(atomic_ops REQUIRED)
@@ -171,19 +226,29 @@ endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
-option(WITH_TCMALLOC "Use TCMalloc as Allocator" ON)
-if(${WITH_TCMALLOC})
-find_package(tcmalloc REQUIRED)
-set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-endif(${WITH_TCMALLOC})
+#if allocator is set on command line make sure it matches below strings
+if(ALLOCATOR)
+  if(${ALLOCATOR} STREQUAL "tcmalloc")
+    find_package(tcmalloc REQUIRED)
+    set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  elseif(${ALLOCATOR} STREQUAL "jemalloc")
+    find_package(JeMalloc REQUIRED)
+  endif()
+else(ALLOCATOR)
+  find_package(tcmalloc)
+  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  find_package(JeMalloc)
+  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    set(ALLOCATOR "libc")
+  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
 
 find_package(libuuid REQUIRED)
 
 find_package(libcurl REQUIRED)
-
-find_package(libedit REQUIRED)
 
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
@@ -206,9 +271,9 @@ else()
 	endif(NSS_FOUND)
 endif(CRYPTOPP_FOUND)
 
-option(WITH_XIO "Enable XIO messaging" ON)
+option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
-find_package(xio)
+  find_package(xio REQUIRED)
 set(HAVE_XIO ${Xio_FOUND})
 endif(WITH_XIO)
 
@@ -222,6 +287,33 @@ option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
 if(WITH_THREAD_SAFE_RES_QUERY)
     set(HAVE_THREAD_SAFE_RES_QUERY 1 CACHE INTERNAL "Thread safe res_query supported.")
 endif(WITH_THREAD_SAFE_RES_QUERY)
+
+option(WITH_REENTRANT_STRSIGNAL "strsignal is reentrant" OFF)
+if(WITH_REENTRANT_STRSIGNAL)
+    set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
+endif(WITH_REENTRANT_STRSIGNAL)
+
+set(HAVE_LIBROCKSDB 1)
+
+# -lz link into kv
+find_package(ZLIB REQUIRED)
+
+#option for LTTng
+#currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
+option(WITH_LTTNG "LTTng tracing is enabled" OFF)
+if(${WITH_LTTNG})
+  find_package(lttng-ust)
+  set(WITH_LTTNG ${LTTNG_FOUND})
+endif(${WITH_LTTNG})
+
+#option for Babeltrace
+option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(${HAVE_BABELTRACE})
+  find_package(babeltrace REQUIRED)
+  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
+endif(${HAVE_BABELTRACE})
 
 # Now create a useable config.h
 configure_file(
@@ -239,7 +331,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random REQUIRED)
+find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)
@@ -253,7 +345,7 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
 # find out which platform we are building on
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-set(OperatingSystem "Mac OS X")  
+set(OperatingSystem "Mac OS X")
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # enables testing and creates Make check command

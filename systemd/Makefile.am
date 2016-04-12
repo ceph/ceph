@@ -4,11 +4,13 @@ unitfiles = \
         ceph-mon.target \
         ceph-mds.target \
         ceph-radosgw.target \
+	ceph-rbd-mirror.target \
 	ceph-mds@.service \
 	ceph-mon@.service \
 	ceph-create-keys@.service \
 	ceph-osd@.service \
 	ceph-radosgw@.service \
+	ceph-rbd-mirror@.service \
 	ceph-disk@.service \
 	rbdmap.service
 
@@ -19,5 +21,4 @@ unit_DATA = $(unitfiles)
 EXTRA_DIST = \
 	$(unitfiles) \
 	ceph \
-	ceph.tmpfiles.d \
-	ceph-radosgw-prestart.sh
+	ceph.tmpfiles.d

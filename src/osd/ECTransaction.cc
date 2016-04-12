@@ -24,7 +24,7 @@
 
 struct AppendObjectsGenerator: public boost::static_visitor<void> {
   set<hobject_t, hobject_t::BitwiseComparator> *out;
-  AppendObjectsGenerator(set<hobject_t, hobject_t::BitwiseComparator> *out) : out(out) {}
+  explicit AppendObjectsGenerator(set<hobject_t, hobject_t::BitwiseComparator> *out) : out(out) {}
   void operator()(const ECTransaction::AppendOp &op) {
     out->insert(op.oid);
   }

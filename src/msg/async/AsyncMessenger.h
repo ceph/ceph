@@ -45,6 +45,7 @@ enum {
   l_msgr_first = 94000,
   l_msgr_recv_messages,
   l_msgr_send_messages,
+  l_msgr_send_messages_inline,
   l_msgr_recv_bytes,
   l_msgr_send_bytes,
   l_msgr_created_connections,
@@ -74,10 +75,11 @@ class Worker : public Thread {
 
     plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
     plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
+    plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent inline messages");
     plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
     plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_created_connections, "msgr_active_connections", "Active connection number");
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_created_connections", "Created connection number");
+    plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
+    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
@@ -103,9 +105,22 @@ class Processor {
   Worker *worker;
   int listen_sd;
   uint64_t nonce;
+  EventCallbackRef listen_handler;
+
+  class C_processor_accept : public EventCallback {
+    Processor *pro;
+
+   public:
+    explicit C_processor_accept(Processor *p): pro(p) {}
+    void do_request(int id) {
+      pro->accept();
+    }
+  };
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n): msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n) {}
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
+          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
+  ~Processor() { delete listen_handler; };
 
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
@@ -130,16 +145,17 @@ class WorkerPool {
   class C_barrier : public EventCallback {
     WorkerPool *pool;
    public:
-    C_barrier(WorkerPool *p): pool(p) {}
+    explicit C_barrier(WorkerPool *p): pool(p) {}
     void do_request(int id) {
       Mutex::Locker l(pool->barrier_lock);
       pool->barrier_count.dec();
       pool->barrier_cond.Signal();
+      delete this;
     }
   };
   friend class C_barrier;
  public:
-  WorkerPool(CephContext *c);
+  explicit WorkerPool(CephContext *c);
   virtual ~WorkerPool();
   void start();
   Worker *get_worker() {
@@ -307,10 +323,25 @@ private:
   int _send_message(Message *m, const entity_inst_t& dest);
 
  private:
+  static const uint64_t ReapDeadConnectionThreshold = 5;
+
   WorkerPool *pool;
 
   Processor processor;
   friend class Processor;
+
+  class C_handle_reap : public EventCallback {
+    AsyncMessenger *msgr;
+
+   public:
+    explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
+    void do_request(int id) {
+      // judge whether is a time event
+      msgr->reap_dead();
+    }
+  };
+  // the worker run messenger's cron jobs
+  Worker *local_worker;
 
   /// overall lock used for AsyncMessenger data structures
   Mutex lock;
@@ -327,7 +358,6 @@ private:
    *  the only writers.
    */
 
-  int listen_sd;
   /**
    *  false; set to true if the AsyncMessenger bound to a specific address;
    *  and set false again by Accepter::stop().
@@ -351,7 +381,6 @@ private:
    *
    * These are not yet in the conns map.
    */
-  // FIXME clear up
   set<AsyncConnectionRef> accepting_conns;
 
   /**
@@ -367,6 +396,8 @@ private:
    */
   Mutex deleted_lock;
   set<AsyncConnectionRef> deleted_conns;
+
+  EventCallbackRef reap_handler;
 
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
@@ -495,7 +526,21 @@ public:
   void unregister_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(deleted_lock);
     deleted_conns.insert(conn);
+
+    if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
+      local_worker->center.dispatch_event_external(reap_handler);
+    }
   }
+
+  /**
+   * Reap dead connection from `deleted_conns`
+   *
+   * @return the number of dead connections
+   *
+   * See "deleted_conns"
+   */
+  int reap_dead();
+
   /**
    * @} // AsyncMessenger Internals
    */

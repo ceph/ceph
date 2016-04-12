@@ -258,9 +258,9 @@ public:
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
-  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating=false,
+  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating=false,
+  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
   void stat_osd_add(const osd_stat_t &s);
@@ -282,8 +282,9 @@ public:
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
 			   bool brief) const;
-  void get_stuck_stats(int types, utime_t cutoff,
+  void get_stuck_stats(int types, const utime_t cutoff,
 		       ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
+  bool get_stuck_counts(const utime_t cutoff, map<string, int>& note) const;
   void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
 

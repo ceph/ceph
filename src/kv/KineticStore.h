@@ -45,7 +45,7 @@ class KineticStore : public KeyValueDB {
   int do_open(ostream &out, bool create_if_missing);
 
 public:
-  KineticStore(CephContext *c);
+  explicit KineticStore(CephContext *c);
   ~KineticStore();
 
   static int _test_init(CephContext *c);
@@ -81,7 +81,7 @@ public:
     vector<KineticOp> ops;
     KineticStore *db;
 
-    KineticTransactionImpl(KineticStore *db) : db(db) {}
+    explicit KineticTransactionImpl(KineticStore *db) : db(db) {}
     void set(
       const string &prefix,
       const string &k,
@@ -95,8 +95,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return ceph::shared_ptr< KineticTransactionImpl >(
-      new KineticTransactionImpl(this));
+    return std::make_shared<KineticTransactionImpl>(this);
   }
 
   int submit_transaction(KeyValueDB::Transaction t);
@@ -106,6 +105,7 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  using KeyValueDB::get;
 
   class KineticWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
@@ -114,7 +114,7 @@ public:
     kinetic::BlockingKineticConnection *kinetic_conn;
     kinetic::KineticStatus kinetic_status;
   public:
-    KineticWholeSpaceIteratorImpl(kinetic::BlockingKineticConnection *conn);
+    explicit KineticWholeSpaceIteratorImpl(kinetic::BlockingKineticConnection *conn);
     virtual ~KineticWholeSpaceIteratorImpl() { }
 
     int seek_to_first() {
@@ -147,8 +147,7 @@ public:
 
 protected:
   WholeSpaceIterator _get_iterator() {
-    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
-								new KineticWholeSpaceIteratorImpl(kinetic_conn.get()));
+    return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
 
   // TODO: remove snapshots from interface

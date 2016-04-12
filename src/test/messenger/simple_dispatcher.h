@@ -24,7 +24,7 @@ private:
   Messenger *messenger;
   uint64_t dcount;
 public:
-  SimpleDispatcher(Messenger *msgr);
+  explicit SimpleDispatcher(Messenger *msgr);
   virtual ~SimpleDispatcher();
 
   uint64_t get_dcount() { return dcount; }

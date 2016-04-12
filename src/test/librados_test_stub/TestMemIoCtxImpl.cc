@@ -46,7 +46,8 @@ TestIoCtxImpl *TestMemIoCtxImpl::clone() {
 
 int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c) {
   m_client->add_aio_operation(oid, true,
-                              boost::bind(&TestMemIoCtxImpl::remove, this, oid),
+                              boost::bind(&TestMemIoCtxImpl::remove, this, oid,
+                                          get_snap_context()),
                               c);
   return 0;
 }
@@ -270,18 +271,17 @@ int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
   return len;
 }
 
-int TestMemIoCtxImpl::remove(const std::string& oid) {
+int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
   }
 
   RWLock::WLocker l(m_pool->file_lock);
-  TestMemRadosClient::SharedFile file = get_file(oid, false,
-                                                 get_snap_context());
+  TestMemRadosClient::SharedFile file = get_file(oid, false, snapc);
   if (file == NULL) {
     return -ENOENT;
   }
-  file = get_file(oid, true, get_snap_context());
+  file = get_file(oid, true, snapc);
 
   RWLock::WLocker l2(file->lock);
   file->exists = false;

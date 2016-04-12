@@ -15,6 +15,7 @@ namespace object_map {
 using ::testing::_;
 using ::testing::DoDefault;
 using ::testing::Return;
+using ::testing::StrEq;
 
 class TestMockObjectMapInvalidateRequest : public TestMockFixture {
 public:
@@ -28,10 +29,10 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
   ASSERT_FALSE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *request = new InvalidateRequest(*ictx, CEPH_NOSNAP, false, &cond_ctx);
+  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .Times(0);
 
   {
@@ -52,13 +53,13 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *request = new InvalidateRequest(*ictx, CEPH_NOSNAP, false, &cond_ctx);
+  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+              exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                 .WillOnce(DoDefault());
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(DoDefault());
 
   {
@@ -77,18 +78,18 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, librbd::snap_set(ictx, "snap1"));
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *request = new InvalidateRequest(*ictx, ictx->snap_id, false,
+  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, ictx->snap_id, false,
                                                 &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+              exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                 .Times(0);
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(DoDefault());
 
   {
@@ -106,10 +107,10 @@ TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *request = new InvalidateRequest(*ictx, CEPH_NOSNAP, false, &cond_ctx);
+  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .Times(0);
 
   {
@@ -130,13 +131,13 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
   C_SaferCond cond_ctx;
-  AsyncRequest<> *request = new InvalidateRequest(*ictx, CEPH_NOSNAP, false, &cond_ctx);
+  AsyncRequest<> *request = new InvalidateRequest<>(*ictx, CEPH_NOSNAP, false, &cond_ctx);
 
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "lock", "assert_locked", _, _, _))
+              exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
                 .WillOnce(DoDefault());
   EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-              exec(ictx->header_oid, _, "rbd", "set_flags", _, _, _))
+              exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                 .WillOnce(Return(-EINVAL));
 
   {

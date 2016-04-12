@@ -35,7 +35,7 @@ class SessionMapIOContext : public MDSIOContextBase
     SessionMap *sessionmap;
     MDSRank *get_mds() {return sessionmap->mds;}
   public:
-    SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
+    explicit SessionMapIOContext(SessionMap *sessionmap_) : sessionmap(sessionmap_) {
       assert(sessionmap != NULL);
     }
 };
@@ -253,7 +253,7 @@ void SessionMap::load(MDSInternalContextBase *onload)
 class C_IO_SM_LoadLegacy : public SessionMapIOContext {
 public:
   bufferlist bl;
-  C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
+  explicit C_IO_SM_LoadLegacy(SessionMap *cm) : SessionMapIOContext(cm) {}
   void finish(int r) {
     sessionmap->_load_legacy_finish(r, bl);
   }
@@ -402,8 +402,10 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   dirty_sessions.clear();
   null_sessions.clear();
 
-  mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version), mds->finisher));
+  mds->objecter->mutate(oid, oloc, op, snapc,
+			ceph::real_clock::now(g_ceph_context),
+      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version),
+				mds->finisher));
 }
 
 void SessionMap::_save_finish(version_t v)
@@ -723,8 +725,11 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       object_t oid = get_object_name();
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
-      mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
-          0, NULL, new C_OnFinisher(new C_IO_SM_Save_One(this, on_safe), mds->finisher));
+      mds->objecter->mutate(oid, oloc, op, snapc,
+			    ceph::real_clock::now(g_ceph_context),
+			    0, NULL, new C_OnFinisher(
+			      new C_IO_SM_Save_One(this, on_safe),
+			      mds->finisher));
     }
   }
 }
@@ -837,9 +842,9 @@ void Session::decode(bufferlist::iterator &p)
   _update_human_name();
 }
 
-bool Session::check_access(CInode *in, unsigned mask,
-			   int caller_uid, int caller_gid,
-			   int new_uid, int new_gid)
+int Session::check_access(CInode *in, unsigned mask,
+			  int caller_uid, int caller_gid,
+			  int new_uid, int new_gid)
 {
   string path;
   CInode *diri = NULL;
@@ -855,12 +860,20 @@ bool Session::check_access(CInode *in, unsigned mask,
   if (path.length())
     path = path.substr(1);    // drop leading /
 
-  if (auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
-			   caller_uid, caller_gid, mask,
-			   new_uid, new_gid)) {
-    return true;
+  if (in->inode.is_dir() &&
+      in->inode.has_layout() &&
+      in->inode.layout.pool_ns.length() &&
+      !connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
+    dout(10) << __func__ << " client doesn't support FS_FILE_LAYOUT_V2" << dendl;
+    return -EIO;
   }
-  return false;
+
+  if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
+			    caller_uid, caller_gid, mask,
+			    new_uid, new_gid)) {
+    return -EACCES;
+  }
+  return 0;
 }
 
 int SessionFilter::parse(

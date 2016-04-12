@@ -16,7 +16,7 @@ COPYING for a full inventory of licenses by file.
 
 Code contributions must include a valid "Signed-off-by" acknowledging
 the license for the modified or contributed file.  Please see the file
-SubmittingPatches for details on what that means and on how to
+SubmittingPatches.rst for details on what that means and on how to
 generate and submit patches.
 
 We do not require assignment of copyright to contribute code; code is

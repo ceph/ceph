@@ -20,14 +20,16 @@ fi
 sudo ceph osd crush rm osd.0 || true
 sudo ceph osd crush rm osd.1 || true
 
-PATH=$(dirname $0)/..:$PATH
+perl -pi -e 's|pid file.*|pid file = /var/run/ceph/\$cluster-\$name.pid|' /etc/ceph/ceph.conf
+
+PATH=$(dirname $0):$(dirname $0)/..:$PATH
 
 if ! which py.test > /dev/null; then
     echo "py.test not installed"
     exit 1
 fi
 
-sudo env PATH=$(dirname $0)/..:$PATH py.test -v $(dirname $0)/ceph-disk-test.py
+sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH py.test -s -v $(dirname $0)/ceph-disk-test.py
 result=$?
 
 # own whatever was created as a side effect of the py.test run

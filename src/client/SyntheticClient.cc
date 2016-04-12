@@ -934,6 +934,7 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   assert(thread_id);
+  pthread_setname_np(thread_id, "client");
   return 0;
 }
 
@@ -1205,7 +1206,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->fsync(fd, b);
     } else if (strcmp(op, "chdir") == 0) {
       const char *a = t.get_string(buf, p);
-      client->chdir(a);
+      // Client users should remember their path, but since this
+      // is just a synthetic client we ignore it.
+      std::string ignore;
+      client->chdir(a, ignore);
     } else if (strcmp(op, "statfs") == 0) {
       struct statvfs stbuf;
       client->statfs("/", &stbuf);
@@ -1347,7 +1351,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       dir_result_t *dirp;
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	if (client->ll_opendir(i1, &dirp) == 0)
+	if (client->ll_opendir(i1, O_RDONLY, &dirp) == 0)
 	  ll_dirs[r] = dirp;
 	client->ll_put(i1);
       }
@@ -1441,7 +1445,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       uint64_t size;
-      utime_t mtime;
+      ceph::real_time mtime;
       client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
@@ -1471,7 +1475,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       bufferlist bl;
       bl.push_back(bp);
       SnapContext snapc;
-      client->objecter->write(oid, oloc, off, len, snapc, bl, ceph_clock_now(client->cct), 0,
+      client->objecter->write(oid, oloc, off, len, snapc, bl,
+			      ceph::real_clock::now(client->cct), 0,
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg.new_sub());
       safeg.activate();
@@ -1487,7 +1492,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       lock.Lock();
       SnapContext snapc;
-      client->objecter->zero(oid, oloc, off, len, snapc, ceph_clock_now(client->cct), 0,
+      client->objecter->zero(oid, oloc, off, len, snapc,
+			     ceph::real_clock::now(client->cct), 0,
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg.new_sub());
       safeg.activate();
@@ -1636,7 +1642,7 @@ int SyntheticClient::full_walk(string& basedir)
 	actual.nsubdirs++;
       else
 	actual.nfiles++;
-      
+
       // print
       char *tm = ctime(&st.st_mtime);
       tm[strlen(tm)-1] = 0;
@@ -1711,19 +1717,15 @@ int SyntheticClient::dump_placement(string& fn) {
   // run through all the object extents
   dout(0) << "file size is " << filesize << dendl;
   dout(0) << "(osd, start, length) tuples for file " << fn << dendl;
-  for (vector<ObjectExtent>::iterator i = extents.begin(); 
-       i != extents.end(); ++i) {
-    
-    const OSDMap *osdmap = client->objecter->get_osdmap_read();
-    int osd = osdmap->get_pg_acting_primary(osdmap->object_locator_to_pg(i->oid, i->oloc));
-    client->objecter->put_osdmap_read();
+  for (const auto& x : extents) {
+    int osd = client->objecter->with_osdmap([&](const OSDMap& o) {
+	return o.get_pg_acting_primary(o.object_locator_to_pg(x.oid, x.oloc));
+      });
 
     // run through all the buffer extents
-    for (vector<pair<uint64_t, uint64_t> >::iterator j = i->buffer_extents.begin();
-	 j != i->buffer_extents.end(); ++j) {
-      dout(0) << "OSD " << osd << ", offset " << (*j).first
-	      << ", length " << (*j).second << dendl;    
-    }
+    for (const auto& be : x.buffer_extents)
+      dout(0) << "OSD " << osd << ", offset " << be.first
+	      << ", length " << be.second << dendl;
   }
   return 0;
 }
@@ -1996,12 +1998,11 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 int SyntheticClient::check_first_primary(int fh)
 {
   vector<ObjectExtent> extents;
-  client->enumerate_layout(fh, extents, 1, 0);  
-  const OSDMap *osdmap = client->objecter->get_osdmap_read();
-  int primary = osdmap->get_pg_acting_primary(osdmap->object_locator_to_pg(extents.begin()->oid,
-									   extents.begin()->oloc));
-  client->objecter->put_osdmap_read();
-  return primary;
+  client->enumerate_layout(fh, extents, 1, 0);
+  return client->objecter->with_osdmap([&](const OSDMap& o) {
+      return o.get_pg_acting_primary(
+	o.object_locator_to_pg(extents.begin()->oid, extents.begin()->oloc));
+    });
 }
 
 int SyntheticClient::rm_file(string& fn)
@@ -2264,10 +2265,11 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
       dout(6) << "create_objects " << i << "/" << (nobj+1) << dendl;
     }
     dout(10) << "writing " << oid << dendl;
-    
+
     starts.push_back(ceph_clock_now(client->cct));
     client->client_lock.Lock();
-    client->objecter->write(oid, oloc, 0, osize, snapc, bl, ceph_clock_now(client->cct), 0,
+    client->objecter->write(oid, oloc, 0, osize, snapc, bl,
+			    ceph::real_clock::now(client->cct), 0,
 			    new C_Ref(lock, cond, &unack),
 			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();
@@ -2370,7 +2372,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       op.op.extent.length = osize;
       op.indata = bl;
       m.ops.push_back(op);
-      client->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(client->cct), 0,
+      client->objecter->mutate(oid, oloc, m, snapc,
+			       ceph::real_clock::now(client->cct), 0,
 			       NULL, new C_Ref(lock, cond, &unack));
     } else {
       dout(10) << "read from " << oid << dendl;
@@ -2401,13 +2404,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
-
   int fd = client->open(fn.c_str(), O_RDWR);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
-   
- // dout(0) << "READING FROM  " << fn << " fd " << fd << dendl;
-
- // dout(0) << "filename " << fn << " size:" << size  << " read size|" << rdsize << "|" <<  "\ chunks: |" << chunks <<"|" <<  dendl;
 
   if (fd < 0) return fd;
   int offset = 0;
@@ -2425,97 +2423,70 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
     // use rand instead ??
     double x = drand48();
 
-    //dout(0) << "RANDOM NUMBER RETURN |" << x << "|" << dendl;
-
     // cleanup before call 'new'
     if (buf != NULL) {
 	delete[] buf;
 	buf = NULL;
     }
-    if ( x < 0.5) 
-    {
-        //dout(0) << "DECIDED TO READ " << x << dendl;
+    if (x < 0.5) {
         buf = new char[rdsize]; 
         memset(buf, 1, rdsize);
         read=true;
-    }
-    else
-    {
-       // dout(0) << "DECIDED TO WRITE " << x << dendl;
+    } else {
         buf = new char[rdsize+100];   // 1 MB
         memset(buf, 7, rdsize);
     }
-
-    //double  y  = drand48() ;
-
-    //dout(0) << "OFFSET is |" << offset << "| chunks |" << chunks<<  dendl;
     
-    if ( read)
-    {
+    if (read) {
         offset=(rand())%(chunks+1);
         dout(2) << "reading block " << offset << "/" << chunks << dendl;
 
-        int r = client->read(fd, buf, rdsize,
-                        offset*rdsize);
+        int r = client->read(fd, buf, rdsize, offset*rdsize);
         if (r < rdsize) {
-                  dout(1) << "read_file got r = " << r << ", probably end of file" << dendl;
-    }
-    }
-    else
-    {
-        dout(2) << "writing block " << offset << "/" << chunks << dendl;
+	  dout(1) << "read_file got r = " << r << ", probably end of file" << dendl;
+	}
+    } else {
+      dout(2) << "writing block " << offset << "/" << chunks << dendl;
 
-    // fill buf with a 16 byte fingerprint
-    // 64 bits : file offset
-    // 64 bits : client id
-    // = 128 bits (16 bytes)
-
-      //if (true )
-      //{
-      //int count = rand()%10;
-
-      //for ( int j=0;j<count; j++ )
-      //{
+      // fill buf with a 16 byte fingerprint
+      // 64 bits : file offset
+      // 64 bits : client id
+      // = 128 bits (16 bytes)
 
       offset=(rand())%(chunks+1);
-    uint64_t *p = (uint64_t*)buf;
-    while ((char*)p < buf + rdsize) {
-      *p = offset*rdsize + (char*)p - buf;      
-      p++;
-      *p = client->get_nodeid().v;
-      p++;
-    }
+      uint64_t *p = (uint64_t*)buf;
+      while ((char*)p < buf + rdsize) {
+	*p = offset*rdsize + (char*)p - buf;      
+	p++;
+	*p = client->get_nodeid().v;
+	p++;
+      }
 
       client->write(fd, buf, rdsize,
                         offset*rdsize);
-      //}
-      //}
     }
 
     // verify fingerprint
-    if ( read )
-    {
-    int bad = 0;
-    int64_t *p = (int64_t*)buf;
-    int64_t readoff, readclient;
-    while ((char*)p + 32 < buf + rdsize) {
-      readoff = *p;
-      int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
-      p++;
-      readclient = *p;
-      p++;
-      if (readoff != wantoff ||
-	  readclient != client->get_nodeid()) {
-        if (!bad)
-          dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
-		  << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
-		  << dendl;
-        bad++;
+    if (read) {
+      int bad = 0;
+      int64_t *p = (int64_t*)buf;
+      while ((char*)p + 32 < buf + rdsize) {
+	int64_t readoff = *p;
+	int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
+	p++;
+	int64_t readclient = *p;
+	p++;
+	if (readoff != wantoff || readclient != client->get_nodeid()) {
+	  if (!bad)
+	    dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
+		    << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		    << dendl;
+	  bad++;
+	}
       }
+      if (bad) 
+	dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << dendl;
     }
-    if (bad) 
-      dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << dendl;
-  }
   }
   
   client->close(fd);
@@ -2523,19 +2494,6 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
 
   return 0;
 }
-
-
-//#include<stdio.h>
-//#include<stdlib.h>
-
-int normdist(int min, int max, int stdev) /* specifies input values */;
-//main()
-//{
- // for ( int i=0; i < 10; i++ )
- //  normdist ( 0 , 10, 1 );
-   
-//}
-
 
 int normdist(int min, int max, int stdev) /* specifies input values */
 {
@@ -2574,13 +2532,8 @@ int normdist(int min, int max, int stdev) /* specifies input values */
 int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
-  
   int fd = client->open(fn.c_str(), O_RDWR);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
-  
-  // dout(0) << "READING FROM  " << fn << " fd " << fd << dendl;
-  
-  // dout(0) << "filename " << fn << " size:" << size  << " read size|" << rdsize << "|" <<  "\ chunks: |" << chunks <<"|" <<  dendl;
   
   if (fd < 0) return fd;
   int offset = 0;
@@ -2598,53 +2551,29 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
     // use rand instead ??
     double x = drand48();
     
-    //dout(0) << "RANDOM NUMBER RETURN |" << x << "|" << dendl;
-    
     // cleanup before call 'new'
     if (buf != NULL) {
-	delete[] buf;
-	buf = NULL;
+      delete[] buf;
+      buf = NULL;
     }
-    if ( x < 0.5) 
-      {
-        //dout(0) << "DECIDED TO READ " << x << dendl;
-        buf = new char[rdsize]; 
-        memset(buf, 1, rdsize);
-        read=true;
-      }
-    else
-      {
-	// dout(0) << "DECIDED TO WRITE " << x << dendl;
-        buf = new char[rdsize+100];   // 1 MB
-        memset(buf, 7, rdsize);
-      }
+    if (x < 0.5) {
+      buf = new char[rdsize]; 
+      memset(buf, 1, rdsize);
+      read=true;
+    } else {
+      buf = new char[rdsize+100];   // 1 MB
+      memset(buf, 7, rdsize);
+    }
     
-    //double  y  = drand48() ;
-    
-    //dout(0) << "OFFSET is |" << offset << "| chunks |" << chunks<<  dendl;
-    
-    if ( read)
-      {
-        //offset=(rand())%(chunks+1);
+    if (read) {
+      dout(2) << "reading block " << offset << "/" << chunks << dendl;
 	
-	/*    if ( chunks > 10000 ) 
-	      offset= normdist( 0 , chunks/1000 , 5  )*1000;
-	      else if ( chunks > 1000 )
-	      offset= normdist( 0 , chunks/100 , 5  )*100;
-	      else if ( chunks > 100 )
-	      offset= normdist( 0 , chunks/20 , 5  )*20;*/
-	
-	
-        dout(2) << "reading block " << offset << "/" << chunks << dendl;
-	
-        int r = client->read(fd, buf, rdsize,
+      int r = client->read(fd, buf, rdsize,
 			     offset*rdsize);
-        if (r < rdsize) {
-	  dout(1) << "read_file got r = " << r << ", probably end of file" << dendl;
-	}
+      if (r < rdsize) {
+	dout(1) << "read_file got r = " << r << ", probably end of file" << dendl;
       }
-    else
-      {
+    } else {
         dout(2) << "writing block " << offset << "/" << chunks << dendl;
 	
 	// fill buf with a 16 byte fingerprint
@@ -2652,52 +2581,43 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
 	// 64 bits : client id
 	// = 128 bits (16 bytes)
 	
-	//if (true )
-	//{
 	int count = rand()%10;
 	
-	for ( int j=0;j<count; j++ )
-	  {
-	    
-	    offset=(rand())%(chunks+1);
-	    uint64_t *p = (uint64_t*)buf;
-	    while ((char*)p < buf + rdsize) {
-	      *p = offset*rdsize + (char*)p - buf;      
-	      p++;
-	      *p = client->get_nodeid().v;
-	      p++;
-	    }
-	    
-	    client->write(fd, buf, rdsize,
-			  offset*rdsize);
+	for ( int j=0;j<count; j++ ) {
+	  offset=(rand())%(chunks+1);
+	  uint64_t *p = (uint64_t*)buf;
+	  while ((char*)p < buf + rdsize) {
+	    *p = offset*rdsize + (char*)p - buf;      
+	    p++;
+	    *p = client->get_nodeid().v;
+	    p++;
 	  }
-	//}
-      }
+	    
+	  client->write(fd, buf, rdsize, offset*rdsize);
+	}
+    }
     
     // verify fingerprint
-    if ( read )
-      {
-	int bad = 0;
-	int64_t *p = (int64_t*)buf;
-	int64_t readoff, readclient;
-	while ((char*)p + 32 < buf + rdsize) {
-	  readoff = *p;
-	  int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
-	  p++;
-	  readclient = *p;
-	  p++;
-	  if (readoff != wantoff ||
-	      readclient != client->get_nodeid()) {
-	    if (!bad)
-	      dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
-		      << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
-		      << dendl;
-	    bad++;
-	  }
+    if (read) {
+      int bad = 0;
+      int64_t *p = (int64_t*)buf;
+      while ((char*)p + 32 < buf + rdsize) {
+	int64_t readoff = *p;
+	int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
+	p++;
+	int64_t readclient = *p;
+	p++;
+	if (readoff != wantoff || readclient != client->get_nodeid()) { 
+	  if (!bad)
+	    dout(0) << "WARNING: wrong data from OSD, block says fileoffset=" << readoff << " client=" << readclient
+		    << ", should be offset " << wantoff << " clietn " << client->get_nodeid()
+		    << dendl;
+	  bad++;
 	}
-	if (bad) 
-	  dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << dendl;
       }
+      if (bad) 
+	dout(0) << " + " << (bad-1) << " other bad 16-byte bits in this block" << dendl;
+    }
   }
   
   client->close(fd);

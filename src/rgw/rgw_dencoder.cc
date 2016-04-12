@@ -419,11 +419,11 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
   o.push_back(new RGWBucketInfo);
 }
 
-void RGWRegion::generate_test_instances(list<RGWRegion*>& o)
+void RGWZoneGroup::generate_test_instances(list<RGWZoneGroup*>& o)
 {
-  RGWRegion *r = new RGWRegion;
+  RGWZoneGroup *r = new RGWZoneGroup;
   o.push_back(r);
-  o.push_back(new RGWRegion);
+  o.push_back(new RGWZoneGroup);
 }
 
 void RGWZone::generate_test_instances(list<RGWZone*> &o)

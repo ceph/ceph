@@ -84,7 +84,8 @@ private:
 
 TestRadosClient::TestRadosClient(CephContext *cct)
   : m_cct(cct->get()),
-    m_watch_notify(m_cct),
+    m_aio_finisher(new Finisher(m_cct)),
+    m_watch_notify(m_cct, m_aio_finisher),
     m_transaction_lock("TestRadosClient::m_transaction_lock")
 {
   get();
@@ -97,7 +98,6 @@ TestRadosClient::TestRadosClient(CephContext *cct)
   }
 
   // replicate AIO callback processing
-  m_aio_finisher = new Finisher(m_cct);
   m_aio_finisher->start();
 }
 
@@ -187,15 +187,15 @@ void TestRadosClient::add_aio_operation(const std::string& oid,
 struct WaitForFlush {
   int flushed() {
     if (count.dec() == 0) {
-      if (c != NULL) {
-	finish_aio_completion(c, 0);
-      }
+      aio_finisher->queue(new FunctionContext(boost::bind(
+        &finish_aio_completion, c, 0)));
       delete this;
     }
     return 0;
   }
 
   atomic_t count;
+  Finisher *aio_finisher;
   AioCompletionImpl *c;
 };
 
@@ -211,14 +211,23 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
 
   WaitForFlush *wait_for_flush = new WaitForFlush();
   wait_for_flush->count.set(m_finishers.size());
+  wait_for_flush->aio_finisher = m_aio_finisher;
   wait_for_flush->c = c;
 
   for (size_t i = 0; i < m_finishers.size(); ++i) {
     AioFunctionContext *ctx = new AioFunctionContext(
       boost::bind(&WaitForFlush::flushed, wait_for_flush),
-      m_aio_finisher, NULL);
+      nullptr, nullptr);
     m_finishers[i]->queue(ctx);
   }
+}
+
+int TestRadosClient::aio_watch_flush(AioCompletionImpl *c) {
+  c->get();
+  Context *ctx = new FunctionContext(boost::bind(
+    &TestRadosClient::finish_aio_completion, this, c, _1));
+  get_watch_notify().aio_flush(ctx);
+  return 0;
 }
 
 void TestRadosClient::finish_aio_completion(AioCompletionImpl *c, int r) {

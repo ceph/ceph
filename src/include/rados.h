@@ -144,6 +144,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_NOTIERAGENT (1<<13) /* disable tiering agent */
 #define CEPH_OSDMAP_NOREBALANCE (1<<14) /* block osd backfill unless pg is degraded */
 #define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
+#define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -293,7 +294,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_LS,	__CEPH_OSD_OP(RD, PG, 3),	"pg-hitset-ls")	    \
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
-	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")
+	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")     \
+	f(SCRUBLS, __CEPH_OSD_OP(RD, PG, 7), "scrubls")
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -444,10 +446,6 @@ enum {
 };
 
 enum {
-	CEPH_OSD_COPY_GET_FLAG_NOTSUPP_OMAP = 1, /* mean dest pool don't support omap*/
-};
-
-enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
 
@@ -514,7 +512,6 @@ struct ceph_osd_op {
 		} __attribute__ ((packed)) clonerange;
 		struct {
 			__le64 max;     /* max data in reply */
-			__le32 flags;
 		} __attribute__ ((packed)) copy_get;
 		struct {
 			__le64 snapid;
