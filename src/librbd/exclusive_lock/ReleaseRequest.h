@@ -33,10 +33,10 @@ private:
    * <start>
    *    |
    *    v
-   * BLOCK_WRITES
+   * CANCEL_OP_REQUESTS
    *    |
    *    v
-   * CANCEL_OP_REQUESTS
+   * BLOCK_WRITES
    *    |
    *    v
    * FLUSH_NOTIFIES . . . . . . . . . . . . . .
@@ -67,11 +67,11 @@ private:
   decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
-  void send_block_writes();
-  Context *handle_block_writes(int *ret_val);
-
   void send_cancel_op_requests();
   Context *handle_cancel_op_requests(int *ret_val);
+
+  void send_block_writes();
+  Context *handle_block_writes(int *ret_val);
 
   void send_flush_notifies();
   Context *handle_flush_notifies(int *ret_val);

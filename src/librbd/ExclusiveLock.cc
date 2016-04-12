@@ -61,6 +61,7 @@ bool ExclusiveLock<I>::is_lock_owner() const {
   case STATE_LOCKED:
   case STATE_POST_ACQUIRING:
   case STATE_PRE_RELEASING:
+  case STATE_PRE_SHUTTING_DOWN:
     lock_owner = true;
     break;
   default:
@@ -214,6 +215,7 @@ bool ExclusiveLock<I>::is_transition_state() const {
   case STATE_POST_ACQUIRING:
   case STATE_PRE_RELEASING:
   case STATE_RELEASING:
+  case STATE_PRE_SHUTTING_DOWN:
   case STATE_SHUTTING_DOWN:
     return true;
   case STATE_UNINITIALIZED:
@@ -471,13 +473,13 @@ void ExclusiveLock<I>::send_shutdown() {
   if (m_state == STATE_UNLOCKED) {
     m_state = STATE_SHUTTING_DOWN;
     m_image_ctx.op_work_queue->queue(util::create_context_callback<
-      ExclusiveLock<I>, &ExclusiveLock<I>::handle_unlocked_shutdown>(this), 0);
+      ExclusiveLock<I>, &ExclusiveLock<I>::handle_shutdown>(this), 0);
     return;
   }
 
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
   assert(m_state == STATE_LOCKED);
-  m_state = STATE_SHUTTING_DOWN;
+  m_state = STATE_PRE_SHUTTING_DOWN;
 
   m_lock.Unlock();
   m_image_ctx.op_work_queue->queue(new C_ShutDownRelease(this), 0);
@@ -494,13 +496,26 @@ void ExclusiveLock<I>::send_shutdown_release() {
 
   using el = ExclusiveLock<I>;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(
-    m_image_ctx, cookie, nullptr,
-    util::create_context_callback<el, &el::handle_locked_shutdown>(this));
+    m_image_ctx, cookie,
+    util::create_context_callback<el, &el::handle_shutdown_releasing>(this),
+    util::create_context_callback<el, &el::handle_shutdown_released>(this));
   req->send();
 }
 
 template <typename I>
-void ExclusiveLock<I>::handle_locked_shutdown(int r) {
+void ExclusiveLock<I>::handle_shutdown_releasing(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  assert(r == 0);
+  assert(m_state == STATE_PRE_SHUTTING_DOWN);
+
+  // all IO and ops should be blocked/canceled by this point
+  m_state = STATE_SHUTTING_DOWN;
+}
+
+template <typename I>
+void ExclusiveLock<I>::handle_shutdown_released(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
@@ -522,7 +537,7 @@ void ExclusiveLock<I>::handle_locked_shutdown(int r) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::handle_unlocked_shutdown(int r) {
+void ExclusiveLock<I>::handle_shutdown(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
