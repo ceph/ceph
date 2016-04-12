@@ -717,6 +717,10 @@ public:
 		 supplied_md5_b64(NULL), supplied_etag(NULL),
 		 data_pending(false) {}
 
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(key, bl); /* key and bl are r-value refs */
+  }
+
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
@@ -766,6 +770,7 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
+  map<string, buffer::list> attrs;
   set<string> rmattr_names;
   bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
@@ -778,10 +783,15 @@ public:
     : has_policy(false), has_cors(false)
   {}
 
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(key, bl); /* key and bl are r-value refs */
+  }
+
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
+
   int verify_permission();
   void pre_exec();
   void execute();
