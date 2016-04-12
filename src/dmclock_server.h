@@ -33,6 +33,8 @@
 
 #include "boost/variant.hpp"
 
+#include "queue_ifc.h"
+
 #include "indirect_intrusive_heap.h"
 #include "run_every.h"
 #include "dmclock_util.h"
@@ -46,6 +48,7 @@ namespace crimson {
   namespace dmclock {
 
     namespace c = crimson;
+    namespace pq = crimson::priority_queue;
 
     struct ClientInfo {
       const double reservation;  // minimum
@@ -276,6 +279,13 @@ namespace crimson {
 
       using ClientRecRef = std::shared_ptr<ClientRec>;
 
+      // a function to see whether the server can handle another request
+      using CanHandleRequestFunc = std::function<bool(void)>;
+
+      // a function to submit a request to the server; the second
+      // parameter is a callback when it's completed
+      using HandleRequestFunc =
+	std::function<void(const C&,RequestRef,PhaseType)>;
 
     public:
 
@@ -319,14 +329,6 @@ namespace crimson {
 
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
-
-      // a function to see whether the server can handle another request
-      using CanHandleRequestFunc = std::function<bool(void)>;
-
-      // a function to submit a request to the server; the second
-      // parameter is a callback when it's completed
-      using HandleRequestFunc =
-	std::function<void(const C&,RequestRef,PhaseType)>;
 
     protected:
 

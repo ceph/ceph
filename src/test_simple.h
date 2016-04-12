@@ -6,9 +6,7 @@
  */
 
 
-#include "dmclock_recs.h"
-#include "dmclock_server.h"
-#include "dmclock_client.h"
+#include "simple_server.h"
 
 #include "test_recs.h"
 #include "test_server.h"
@@ -17,23 +15,26 @@
 #include "simulate.h"
 
 
-namespace test_dmc {
-    namespace dmc = crimson::dmclock;
+namespace test_simple {
 
-    using DmcServerAddInfo = crimson::dmclock::PhaseType;
+  namespace simp = crimson::simple_scheduler;
 
-    struct DmcAccum {
-        uint64_t reservation_count = 0;
-        uint64_t proportion_count = 0;
-    };
+  struct ClientInfo {
+  };
 
-    using DmcServer = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
-                                 dmc::ClientInfo,
-                                 dmc::ReqParams<ClientId>,
-                                 dmc::RespParams<ServerId>,
-                                 DmcServerAddInfo,
-                                 DmcAccum>;
+  struct SimpleAddInfo {
+  };
 
+  struct SimpleAccum {
+  };
+
+  using SimpleServer = TestServer<simp::SimpleQueue<ClientId,TestRequest>,
+				  ClientInfo,
+				  dmc::ReqParams<ClientId>,
+				  dmc::RespParams<ServerId>,
+				  SimpleAddInfo,
+				  SimpleAccum>;
+#if 0
     using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
                                  dmc::ReqParams<ClientId>,
                                  dmc::RespParams<ServerId>,
@@ -43,9 +44,11 @@ namespace test_dmc {
 
     using SubmitFunc = DmcClient::SubmitFunc;
 
-    extern void dmc_server_accumulate_f(DmcAccum& a,
-                                        const DmcServerAddInfo& add_info);
+#endif
 
-    extern void dmc_client_accumulate_f(DmcAccum& a,
-                                        const dmc::RespParams<ServerId>& r);
-}; // namespace test_dmc
+  extern void simple_server_accumulate_f(SimpleAccum& a,
+					 const SimpleServerAddInfo& add_info);
+
+  extern void simple_client_accumulate_f(SimpleAccum& a,
+					 const dmc::RespParams<ServerId>& r);
+}; // namespace test_simple

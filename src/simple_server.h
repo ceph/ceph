@@ -8,52 +8,78 @@
 #pragma once
 
 
+#include "queue_ifc.h"
+
+#include "test_recs.h"
+#include "simple_recs.h"
+
+
 namespace crimson {
   namespace simple_scheduler {
-    struct ClientInfo {
-      // empty
-    };
 
     template<typename C, typename R>
-    class Queue {
+    class SimpleQueue {
 
     public:
 
       using RequestRef = std::unique_ptr<R>;
 
-      enum class Mechanism { push, pull };
+      using ClientRecRef = std::shared_ptr<ClientRec>;
 
-      enum class NextReqType { returning, future, none };
+      // a function to see whether the server can handle another request
+      using CanHandleRequestFunc = std::function<bool(void)>;
+
+      // a function to submit a request to the server; the second
+      // parameter is a callback when it's completed
+      using HandleRequestFunc = std::function<void(const C&,RequestRef)>;
+
 
       struct PullReq {
+	enum class Type { returning, none };
+
 	struct Retn {
 	  C           client;
 	  RequestRef  request;
 	};
 
-	NextReqType               type;
-	boost::variant<Retn,Time> data;
+	Type                 type;
+	boost::variant<Retn> data;
       };
 
     protected:
 
+      struct QRequest {
+	C          client;
+	RequestRef request;
+      };
+
       bool finishing = false;
+      Mechanism mechanism;
+
+      CanHandleRequestFunc can_handle_f;
+      HandleRequestFunc handle_f;
 
       mutable std::mutex queue_mtx;
       using DataGuard = std::lock_guard<decltype(queue_mtx)>;
 
-      std::deque<RequestRef> queue;
-      Mechanism mechanism;
+      std::deque<QRequest> queue;
 
     public:
 
       // push full constructor
-      Queue(ClientInfoFunc _client_info_f,
-	    CanHandleRequestFunc _can_handle_f,
-	    HandleRequestFunc _handle_f) {
+      Queue(CanHandleRequestFunc _can_handle_f,
+	    HandleRequestFunc _handle_f) :
+	mechanism(Mechanism::push),
+	can_handle_f(_can_handle_f),
+	handle_f(_handle_f)
+      {
+	// empty
       }
 
-      Queue(ClientInfoFunc _client_info_f) {
+      Queue() :
+	mechanism(Mechanism::pull),
+      {
+	// empty
       }
 
       ~Queue() {
@@ -81,7 +107,7 @@ namespace crimson {
 		       const Time time) {
 	const C& client_id = req_params.client;
 	DataGuard g(queue_mtx);
-	queue.enqueue_back(request);
+	queue.enqueue_back(QRequest{client_id, std::move(request)});
 
 	if (Mechanism::push == mechanism) {
 	  schedule_request();
@@ -106,7 +132,7 @@ namespace crimson {
 	} else {
 	  auto front = queue.front();
 	  result.type = NextReqType::returning;
-	  result.data = PullReq::Ret{client, std::move(front)};
+	  result.data = PullReq::Ret{front.client, std::move(front.request)};
 	  queue.pop();
 	  return result;
 	}

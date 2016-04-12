@@ -126,7 +126,7 @@ public:
 
   void post(const TestRequest& request,
 	    const ReqPm& req_params) {
-    auto now = crimson::dmclock::get_time();
+    auto now = crimson::queue_testing::get_time();
     priority_queue.add_request(request, req_params, now);
   }
 
@@ -172,9 +172,7 @@ protected:
 	std::this_thread::sleep_for(op_time);
 
 	TestResponse resp(req->epoch);
-	sendResponse(client,
-		     resp,
-		     crimson::dmclock::RespParams<ServerId>(id, phase));
+	sendResponse(client, resp, RespPm(id, phase));
 
 	priority_queue.request_completed();
 

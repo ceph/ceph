@@ -13,6 +13,27 @@ using ClientId = uint;
 using ServerId = uint;
 
 
+namespace crimson {
+  namespace queue_testing {
+    using Time = double;
+    static const Time TimeZero = 0.0;
+    static const Time TimeMax = std::numeric_limits<Time>::max();
+    static const double NaN = nan("");
+
+
+    inline Time get_time() {
+      struct timeval now;
+      assert(0 == gettimeofday(&now, NULL));
+      return now.tv_sec + (now.tv_usec / 1000000.0);
+    }
+
+    std::string format_time(const Time& time, uint modulo = 1000);
+
+    void debugger();
+  }; // namespace queue_testing
+}; // namespace crimson
+
+
 struct TestRequest {
   ServerId server; // allows debugging
   uint32_t epoch;

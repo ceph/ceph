@@ -6,35 +6,27 @@
  */
 
 
-#include "dmclock_recs.h"
-#include "dmclock_server.h"
-#include "dmclock_client.h"
-
 #include "test_recs.h"
 #include "test_server.h"
 #include "test_client.h"
 
-#include "test_dmclock.h"
+#include "simple_recs.h"
+#include "simple_server.h"
+
+#include "test_simple.h"
 
 
-namespace test = test_dmc;
+namespace test = test_simple;
+namespace simp = crimson::simple_scheduler;
 
 
-void test::dmc_server_accumulate_f(test::DmcAccum& a,
-				   const test::DmcServerAddInfo& add_info) {
-  if (test::dmc::PhaseType::reservation == add_info) {
-    ++a.reservation_count;
-  } else {
-    ++a.proportion_count;
-  }
+void test::simple_server_accumulate_f(test::SimpleAccum& a,
+				      const test::SimpleServerAddInfo& add_info) {
+  // empty
 }
 
 
-void test::dmc_client_accumulate_f(test::DmcAccum& a,
-				   const test::dmc::RespParams<ServerId>& r) {
-  if (test::dmc::PhaseType::reservation == r.phase) {
-    ++a.reservation_count;
-  } else {
-    ++a.proportion_count;
-  }
+void test::simple_client_accumulate_f(test::SimpleAccum& a,
+				      const simp::RespParams<ServerId>& r) {
+  // empty
 }
