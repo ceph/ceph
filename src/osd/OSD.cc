@@ -2022,6 +2022,25 @@ int OSD::init()
   int rotating_auth_attempts = 0;
   const int max_rotating_auth_attempts = 10;
 
+  // sanity check long object name handling
+  {
+    hobject_t l;
+    l.oid.name = string(g_conf->osd_max_object_name_len, 'n');
+    l.set_key(string(g_conf->osd_max_object_name_len, 'k'));
+    l.nspace = string(g_conf->osd_max_object_namespace_len, 's');
+    r = store->validate_hobject_key(l);
+    if (r < 0) {
+      derr << "backend (" << store->get_type() << ") is unable to support max "
+	   << "object name[space] len" << dendl;
+      derr << "   osd max object name len = "
+	   << g_conf->osd_max_object_name_len << dendl;
+      derr << "   osd max object namespace len = "
+	   << g_conf->osd_max_object_namespace_len << dendl;
+      derr << cpp_strerror(r) << dendl;
+      goto out;
+    }
+  }
+
   // read superblock
   r = read_superblock();
   if (r < 0) {
