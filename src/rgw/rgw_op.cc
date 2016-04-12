@@ -1879,9 +1879,8 @@ static void populate_with_generic_attrs(const req_state * const s,
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
-  map<string, bufferlist> attrs;
-  bufferlist aclbl;
-  bufferlist corsbl;
+  buffer::list aclbl;
+  buffer::list corsbl;
   bool existed;
   string bucket_name;
   rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_name);
@@ -1974,17 +1973,17 @@ void RGWCreateBucket::execute()
   }
 
   policy.encode(aclbl);
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (has_cors) {
     cors_config.encode(corsbl);
-    attrs[RGW_ATTR_CORS] = corsbl;
+    emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
   }
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
-  op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id, placement_rule,
-                                swift_ver_location,
-				attrs, info, pobjv, &ep_objv, creation_time,
+  op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
+				placement_rule, swift_ver_location, attrs,
+				info, pobjv, &ep_objv, creation_time,
 				pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
@@ -3219,8 +3218,8 @@ int RGWCopyObj::init_common()
 
   bufferlist aclbl;
   dest_policy.encode(aclbl);
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  attrs[RGW_ATTR_ACL] = aclbl;
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   map<string, string>::iterator iter;
