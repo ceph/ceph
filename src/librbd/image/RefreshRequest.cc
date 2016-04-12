@@ -581,7 +581,8 @@ Context *RefreshRequest<I>::send_v2_shut_down_exclusive_lock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  // exclusive lock feature was dynamically disabled
+  // exclusive lock feature was dynamically disabled. in-flight IO will be
+  // flushed and in-flight requests will be canceled before releasing lock
   using klass = RefreshRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_v2_shut_down_exclusive_lock>(this);
@@ -598,6 +599,11 @@ Context *RefreshRequest<I>::handle_v2_shut_down_exclusive_lock(int *result) {
     lderr(cct) << "failed to shut down exclusive lock: "
                << cpp_strerror(*result) << dendl;
     save_result(result);
+  }
+
+  {
+    RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    assert(m_image_ctx.exclusive_lock == nullptr);
   }
 
   assert(m_exclusive_lock != nullptr);
@@ -784,9 +790,11 @@ void RefreshRequest<I>::apply() {
                                    m_image_ctx.snap_lock)) {
       // disabling exclusive lock will automatically handle closing
       // object map and journaling
-      std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
+      assert(m_exclusive_lock == nullptr);
+      m_exclusive_lock = m_image_ctx.exclusive_lock;
     } else {
       if (m_exclusive_lock != nullptr) {
+        assert(m_image_ctx.exclusive_lock == nullptr);
         std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
