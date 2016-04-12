@@ -6038,6 +6038,11 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
     CInode *in = p->second;
     if (!in->is_auth())
       continue;
+
+    // Only normal files need file size recovery
+    if (!in->is_file()) {
+      continue;
+    }
     
     bool recover = false;
     for (map<client_t,client_writeable_range_t>::iterator p = in->inode.client_ranges.begin();
