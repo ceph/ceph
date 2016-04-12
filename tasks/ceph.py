@@ -292,6 +292,13 @@ def cephfs_setup(ctx, config):
             'adjust-ulimits',
             'ceph-coverage',
             coverage_dir,
+            'ceph', 'mds', 'set', 'allow_multimds', 'true',
+            '--yes-i-really-mean-it'])
+        mon_remote.run(args=[
+            'sudo',
+            'adjust-ulimits',
+            'ceph-coverage',
+            coverage_dir,
             'ceph',
             'mds', 'set_max_mds', str(num_active)])
 
