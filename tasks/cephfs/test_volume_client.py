@@ -273,3 +273,26 @@ vc.disconnect()
         #  it at some point as/when the logic gets fancier)
         created_pg_num = self.fs.mon_manager.get_pool_property(list(new_pools)[0], "pg_num")
         self.assertEqual(expected_pg_num, created_pg_num)
+
+    def test_15303(self):
+        """
+        Reproducer for #15303 "Client holds incorrect complete flag on dir
+        after losing caps" (http://tracker.ceph.com/issues/15303)
+        """
+        for m in self.mounts:
+            m.umount_wait()
+
+        # Create a dir on mount A
+        self.mount_a.mount()
+        self.mount_a.run_shell(["mkdir", "parent1"])
+        self.mount_a.run_shell(["mkdir", "parent2"])
+        self.mount_a.run_shell(["mkdir", "parent1/mydir"])
+
+        # Put some files in it from mount B
+        self.mount_b.mount()
+        self.mount_b.run_shell(["touch", "parent1/mydir/afile"])
+        self.mount_b.umount_wait()
+
+        # List the dir's contents on mount A
+        self.assertListEqual(self.mount_a.ls("parent1/mydir"),
+                             ["afile"])
