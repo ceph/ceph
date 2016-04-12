@@ -2194,6 +2194,10 @@ public:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    if (op.size() == 1 && op.out_bl[0]->length())
+	o->outbl = op.out_bl[0];
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->reqid = reqid;
     return o;
