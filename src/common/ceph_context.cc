@@ -250,9 +250,6 @@ public:
     get_str_set(conf->enable_experimental_unrecoverable_data_corrupting_features,
 		cct->_experimental_features);
     ceph_spin_unlock(&cct->_feature_lock);
-    if (!cct->_experimental_features.empty())
-      lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
-		 << cct->_experimental_features << dendl;
   }
 };
 
