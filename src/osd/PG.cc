@@ -2298,6 +2298,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   // Info
   child->info.history = info.history;
+  child->info.history.epoch_created = get_osdmap()->get_epoch();
   child->info.purged_snaps = info.purged_snaps;
 
   if (info.last_backfill.is_max()) {
@@ -2313,6 +2314,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   }
 
   child->info.stats = info.stats;
+  child->info.stats.parent_split_bits = split_bits;
   info.stats.stats_invalid = true;
   child->info.stats.stats_invalid = true;
   child->info.last_epoch_started = info.last_epoch_started;
