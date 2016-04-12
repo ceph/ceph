@@ -270,7 +270,7 @@ namespace buffer CEPH_BUFFER_API {
 
   private:
     template <bool is_const>
-    class CEPH_BUFFER_DETAILS iterator_impl
+    class CEPH_BUFFER_API iterator_impl
       : public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,

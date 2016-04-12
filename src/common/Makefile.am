@@ -174,8 +174,10 @@ LIBCOMMON_DEPS += -lrt -lblkid
 endif # LINUX
 
 libcommon_la_SOURCES = common/buffer.cc
-libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
-noinst_LTLIBRARIES += libcommon.la
+libcommon_la_LIBADD = $(LIBCOMMON_DEPS) $(CRYPTO_LIBS)
+libcommon_la_CXXFLAGS = ${AM_CXXFLAGS}
+libcommon_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+lib_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
 	common/BackTrace.h \
