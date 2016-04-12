@@ -411,7 +411,6 @@ namespace rgw {
 	rc = rc2;
     }
 
-  out:
     rgw_fh->mtx.unlock(); /* !LOCKED */
     get<1>(mkr) = rc;
 
