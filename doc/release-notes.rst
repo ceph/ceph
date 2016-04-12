@@ -223,6 +223,9 @@ Major Changes from Infernalis
     query results in detail, including the nature of inconsistencies
     found, the ability to fetch alternate versions of the same
     specific object (if any), and fine-grained control over repair.
+  * We have revised our documentation to recommend *against* using
+    ext4 as the underlying filesystem for Ceph OSD daemons due to
+    problems supporting our long object name handling.
 
 Major Changes from Hammer
 -------------------------
@@ -419,6 +422,12 @@ Upgrading from Hammer
 
 Upgrading from Infernalis
 -------------------------
+
+* We now recommend against using ``ext4`` as the underlying file system for
+  Ceph OSDs, especially when RGW or other users of long RADOS object names
+  are used.  For more information, please see `Filesystem Recommendations`_.
+
+.. _Filesystem Recommendations: ../configuration/filesystem-recommendations
 
 * There are no major compatibility changes since Infernalis.  Simply
   upgrading the daemons on each host and restarting all daemons is
