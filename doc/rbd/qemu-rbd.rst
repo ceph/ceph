@@ -154,7 +154,7 @@ Enabling Discard/TRIM
 Since Ceph version 0.46 and QEMU version 1.1, Ceph Block Devices support the
 discard operation. This means that a guest can send TRIM requests to let a Ceph
 block device reclaim unused space. This can be enabled in the guest by mounting
-``ext4`` or XFS with the ``discard`` option.
+``ext4`` or ``XFS`` with the ``discard`` option.
 
 For this to be available to the guest, it must be explicitly enabled
 for the block device. To do this, you must specify a

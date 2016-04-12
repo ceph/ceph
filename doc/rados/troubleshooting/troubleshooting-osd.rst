@@ -288,8 +288,8 @@ write throughput can bottleneck if other processes share the drive, including
 journals, operating systems, monitors, other OSDs and non-Ceph processes.
 
 Ceph acknowledges writes *after* journaling, so fast SSDs are an attractive
-option to accelerate the response time--particularly when using the ``ext4`` or
-XFS filesystems. By contrast, the ``btrfs`` filesystem can write and journal
+option to accelerate the response time--particularly when using the ``XFS`` or
+``ext4`` filesystems. By contrast, the ``btrfs`` filesystem can write and journal
 simultaneously.
 
 .. note:: Partitioning a drive does not change its total throughput or
