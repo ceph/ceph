@@ -16,6 +16,7 @@
 %bcond_with ocf
 %bcond_without cephfs_java
 %bcond_with tests
+%bcond_with xio
 %bcond_without tcmalloc
 %bcond_without libs_compat
 %bcond_with lowmem_builder
@@ -212,6 +213,10 @@ BuildRequires:	python-sphinx
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
 %endif
+# Accelio IB/RDMA
+%if 0%{with xio}
+BuildRequires:  libxio-devel
+%endif
 
 %description
 Ceph is a massively scalable, open-source, distributed storage system that runs
@@ -250,6 +255,9 @@ Requires:      lsb-release
 %if 0%{?fedora} || 0%{?rhel}
 Requires:      redhat-lsb-core
 %endif
+%if 0%{with xio}
+Requires:      libxio
+%endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
 
@@ -273,6 +281,9 @@ Requires(pre):	shadow
 # python-argparse is only needed in distros with Python 2.6 or lower
 %if (0%{?rhel} && 0%{?rhel} <= 6)
 Requires:	python-argparse
+%endif
+%if 0%{with xio}
+Requires:       libxio
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
@@ -696,6 +707,9 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--with-debug \
 %if 0%{with cephfs_java}
 		--enable-cephfs-java \
+%endif
+%if 0%{with xio}
+		--enable-xio \
 %endif
 %if 0%{with selinux}
 		--with-selinux \
