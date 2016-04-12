@@ -15,7 +15,7 @@ tasks:
       force-branch: master
 overrides:
   ceph:
-    fs: ext4
+    fs: xfs
     conf:
       client:
         debug rgw: 20
