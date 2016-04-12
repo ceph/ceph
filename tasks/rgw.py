@@ -987,7 +987,7 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
         if client != master_client:
             host, port = role_endpoints[master_client]
             endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
-            log.debug("endpoint: %s"), endpoint
+            log.debug("endpoint: %s", endpoint)
             rgwadmin(ctx, client,
                 cmd=['-n', client, 'realm', 'pull', '--rgw-realm', realm, '--default', '--url',
                      endpoint, '--access_key',
@@ -1015,7 +1015,8 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
 
 @contextlib.contextmanager
 def wait_for_master():
-    time.sleep(10)
+    log.debug("wait_for_master")
+    time.sleep(20)
     yield
 
 @contextlib.contextmanager
