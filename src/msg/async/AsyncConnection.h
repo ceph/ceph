@@ -17,6 +17,7 @@
 #ifndef CEPH_MSG_ASYNCCONNECTION_H
 #define CEPH_MSG_ASYNCCONNECTION_H
 
+#include <atomic>
 #include <pthread.h>
 #include <signal.h>
 #include <climits>
@@ -130,8 +131,7 @@ class AsyncConnection : public Connection {
   ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() override {
-    Mutex::Locker l(lock);
-    return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
+    return can_write.load() == WriteStatus::CANWRITE;
   }
 
   // Only call when AsyncConnection first construct
@@ -240,11 +240,12 @@ class AsyncConnection : public Connection {
   Messenger::Policy policy;
 
   Mutex write_lock;
-  enum {
+  enum class WriteStatus {
     NOWRITE,
     CANWRITE,
     CLOSED
-  } can_write;
+  };
+  std::atomic<WriteStatus> can_write;
   bool open_write;
   map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
   list<Message*> sent; // the first bufferlist need to inject seq
