@@ -381,6 +381,21 @@ namespace librbd {
     return r;
   }
 
+  int RBD::list_cgs(IoCtx& io_ctx, vector<string>& names)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id());
+
+    int r = librbd::list_cgs(io_ctx, names);
+    if (r >= 0) {
+      for (auto itr : names) {
+	tracepoint(librbd, list_cgs_entry, itr.c_str());
+      }
+    }
+    tracepoint(librbd, list_cgs_exit, r, r);
+    return r;
+  }
+
   int RBD::rename(IoCtx& src_io_ctx, const char *srcname, const char *destname)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(src_io_ctx));

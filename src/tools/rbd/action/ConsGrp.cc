@@ -16,14 +16,30 @@ namespace po = boost::program_options;
 
 int execute_list(const po::variables_map &vm) {
 
-  int r;
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
   at::Format::Formatter formatter;
-  r = utils::get_formatter(vm, &formatter);
+  int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
     return r;
   }
   Formatter * f = formatter.get();
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  std::vector<std::string> names;
+  r = rbd.list_cgs(io_ctx, names);
+
+  for (auto i : names) {
+    std::cout << i << std::endl;
+  }
 
   std::cout << "value of f is:" << f << std::endl;
   if (f != 0) {
@@ -67,6 +83,7 @@ int execute_create(const po::variables_map &vm) {
 
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
+  add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
 }
 

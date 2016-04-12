@@ -580,6 +580,18 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     return (*opts_)->empty();
   }
 
+  int list_cgs(IoCtx& io_ctx, vector<string>& names)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "list_cgs " << &io_ctx << dendl;
+
+    names.push_back("name1");
+    names.push_back("name2");
+    names.push_back("name3");
+
+    return 0;
+  }
+
   int list(IoCtx& io_ctx, vector<string>& names)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
