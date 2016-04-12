@@ -927,8 +927,8 @@ class CephManager:
             check_status=False
         ).exitstatus
 
-    def osd_admin_socket(self, osd_id, command, check_status=True):
-        return self.admin_socket('osd', osd_id, command, check_status)
+    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0):
+        return self.admin_socket('osd', osd_id, command, check_status, timeout)
 
     def find_remote(self, service_type, service_id):
         """
@@ -949,7 +949,7 @@ class CephManager:
                                                           service_id))
 
     def admin_socket(self, service_type, service_id,
-                     command, check_status=True):
+                     command, check_status=True, timeout=0):
         """
         Remotely start up ceph specifying the admin socket
         :param command: a list of words to use as the command
@@ -962,6 +962,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            str(timeout),
             'ceph',
             '--admin-daemon',
             '/var/run/ceph/ceph-{type}.{id}.asok'.format(
