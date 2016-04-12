@@ -85,18 +85,25 @@ namespace rgw {
       }
     }
 #endif
-    std::string object_name{path};
-    for (auto ix : { 0, 1 }) {
+
+    /* XXX the need for two round-trip operations to identify file or
+     * directory leaf objects is unecessary--the current proposed
+     * mechanism to avoid this is to store leaf object names with an
+     * object locator w/o trailing slash */
+
+    /* mutating path */
+    std::string obj_path{parent->relative_object_name()};
+    if ((obj_path.length() > 0) &&
+	(obj_path.back() != '/'))
+      obj_path += "/";
+    obj_path += path;
+
+    for (auto ix : { 0, 1, 2 }) {
       switch (ix) {
       case 0:
       {
-	std::string obj_name{parent->relative_object_name()};
-	if ((obj_name.length() > 0) &&
-	    (obj_name.back() != '/'))
-	  obj_name += "/";
-	obj_name += path;
 	RGWStatObjRequest req(cct, get_user(),
-			      parent->bucket_name(), obj_name,
+			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc == 0) &&
@@ -118,6 +125,32 @@ namespace rgw {
       break;
       case 1:
       {
+	/* try dir form */
+	obj_path += "/";
+	RGWStatObjRequest req(cct, get_user(),
+			      parent->bucket_name(), obj_path,
+			      RGWStatObjRequest::FLAG_NONE);
+	int rc = rgwlib.get_fe()->execute_req(&req);
+	if ((rc == 0) &&
+	    (req.get_ret() == 0)) {
+	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_DIRECTORY);
+	  if (get<0>(fhr)) {
+	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    rgw_fh->set_size(req.get_size());
+	    rgw_fh->set_mtime(real_clock::to_timespec(req.get_mtime()));
+	    /* restore attributes */
+	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
+	    if (ux_attrs) {
+	      rgw_fh->decode_attrs(ux_attrs);
+	    }
+	  }
+	  goto done;
+	}
+      }
+      break;
+      case 2:
+      {
+	std::string object_name{path};
 	RGWStatLeafRequest req(cct, get_user(), parent, object_name);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc == 0) &&
