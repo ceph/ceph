@@ -96,6 +96,8 @@ class TestSessionMap(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         # I would like two MDSs, so that I can do an export dir later
+        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "allow_multimds",
+                                                   "true", "--yes-i-really-mean-it")
         self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "2")
         self.fs.wait_for_daemons()
 
