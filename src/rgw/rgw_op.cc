@@ -2517,8 +2517,7 @@ void RGWPutObj::execute()
   }
 
   policy.encode(aclbl);
-
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (dlo_manifest) {
     op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
@@ -2533,7 +2532,7 @@ void RGWPutObj::execute()
   if (slo_info) {
     bufferlist manifest_bl;
     ::encode(*slo_info, manifest_bl);
-    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+    emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
     hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
     complete_etag(hash, &etag);
@@ -2545,7 +2544,7 @@ void RGWPutObj::execute()
     goto done;
   }
   bl.append(etag.c_str(), etag.size() + 1);
-  attrs[RGW_ATTR_ETAG] = bl;
+  emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
        ++iter) {
@@ -2563,11 +2562,11 @@ void RGWPutObj::execute()
   if (slo_info) {
     bufferlist slo_userindicator_bl;
     ::encode("True", slo_userindicator_bl);
-    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+    emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
-  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at, if_match,
-			       if_nomatch);
+  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
+			      if_match, if_nomatch);
 
 done:
   dispose_processor(processor);
