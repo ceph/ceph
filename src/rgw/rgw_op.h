@@ -536,6 +536,7 @@ protected:
   bool has_cors;
   RGWCORSConfiguration cors_config;
   string swift_ver_location;
+  map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
   bufferlist in_data;
@@ -544,6 +545,10 @@ protected:
 
 public:
   RGWCreateBucket() : has_cors(false) {}
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(key, bl); /* key and bl are r-value refs */
+  }
 
   int verify_permission();
   void pre_exec();
@@ -875,7 +880,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, bufferlist> attrs;
+  map<string, buffer::list> attrs;
   string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
   rgw_obj_key src_object;
@@ -922,6 +927,10 @@ public:
   static bool parse_copy_location(const string& src,
                                   string& bucket_name,
                                   rgw_obj_key& object);
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(key, bl); /* key and bl are r-value refs */
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
