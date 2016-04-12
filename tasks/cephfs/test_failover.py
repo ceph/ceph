@@ -162,9 +162,6 @@ class TestMultiFilesystems(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd("fs", "flag", "set",
                                             "enable_multiple", "true",
                                             "--yes-i-really-mean-it")
-        self.fs.mon_manager.raw_cluster_cmd("mds", "set",
-                                            "allow_multimds", "true",
-                                            "--yes-i-really-mean-it")
 
     def _setup_two(self):
         fs_a = self.mds_cluster.get_filesystem("alpha")
@@ -265,6 +262,13 @@ class TestMultiFilesystems(CephFSTestCase):
     def test_grow_shrink(self):
         # Usual setup...
         fs_a, fs_b = self._setup_two()
+        fs_a.mon_manager.raw_cluster_cmd("fs", "set", fs_a.name,
+                                         "allow_multimds", "true",
+                                         "--yes-i-really-mean-it")
+
+        fs_b.mon_manager.raw_cluster_cmd("fs", "set", fs_b.name,
+                                         "allow_multimds", "true",
+                                         "--yes-i-really-mean-it")
 
         # Increase max_mds on fs_b, see a standby take up the role
         fs_b.mon_manager.raw_cluster_cmd('fs', 'set', fs_b.name, 'max_mds', "2")
@@ -435,8 +439,16 @@ class TestMultiFilesystems(CephFSTestCase):
         # Create two filesystems which should have two ranks each
         fs_a = self.mds_cluster.get_filesystem("alpha")
         fs_a.create()
+        fs_a.mon_manager.raw_cluster_cmd("fs", "set", fs_a.name,
+                                         "allow_multimds", "true",
+                                         "--yes-i-really-mean-it")
+
         fs_b = self.mds_cluster.get_filesystem("bravo")
         fs_b.create()
+        fs_b.mon_manager.raw_cluster_cmd("fs", "set", fs_b.name,
+                                         "allow_multimds", "true",
+                                         "--yes-i-really-mean-it")
+
         fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name,
                                          'max_mds', "2")
         fs_b.mon_manager.raw_cluster_cmd('fs', 'set', fs_b.name,
