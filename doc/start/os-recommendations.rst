@@ -84,8 +84,6 @@ Firefly (0.80)
 +----------+----------+--------------------+--------------+---------+------------+
 | CentOS   | 7        | N/A                | linux-3.10.0 |         | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
-+----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 | Fedora   | 19       | Schrödinger's Cat  | linux-3.10.0 |         | B          |
@@ -106,16 +104,11 @@ Notes
 
 - **1**: The default kernel has an older version of ``btrfs`` that we do not
   recommend for ``ceph-osd`` storage nodes.  Upgrade to a recommended
-  kernel or use ``XFS`` or ``ext4``.
+  kernel or use ``XFS``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
-
-- **3**: The default kernel or installed version of ``glibc`` does not
-  support the ``syncfs(2)`` system call.  Putting multiple
-  ``ceph-osd`` daemons using ``XFS`` or ``ext4`` on the same host will
-  not perform as well as they could.
 
 
 Testing
