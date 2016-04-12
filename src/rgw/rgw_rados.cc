@@ -1147,7 +1147,7 @@ int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
   if (zonegroup.realm_id != realm_id) {
     return 0;
   }
-  int ret = period_map.update(zonegroup);
+  int ret = period_map.update(zonegroup, cct);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1184,9 +1184,8 @@ int RGWPeriod::update()
       master_zone = zg.master_zone;
     }
 
-    int ret = period_map.update(zg);
+    int ret = period_map.update(zg, cct);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
@@ -1623,9 +1622,11 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
   }
 }
 
-int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
+int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
 {
   if (zonegroup.is_master && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
+    ldout(cct,0) << "Error updating periodmap, multiple master zonegroups configured "<< dendl;
+    ldout(cct,0) << "master zonegroup: " << master_zonegroup << " and  " << zonegroup.get_id() <<dendl;
     return -EINVAL;
   }
   map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.get_id());
