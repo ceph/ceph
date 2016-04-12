@@ -380,6 +380,7 @@ namespace rgw {
 
       string uri = "/" + bname; /* XXX get rid of URI some day soon */
       RGWCreateBucketRequest req(get_context(), get_user(), uri);
+      req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
       rc = rgwlib.get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     } else {
@@ -395,6 +396,7 @@ namespace rgw {
       dir_name += "/";
       RGWPutObjRequest req(get_context(), get_user(), parent->bucket_name(),
 			  dir_name, bl);
+      req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
       rc = rgwlib.get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     }
