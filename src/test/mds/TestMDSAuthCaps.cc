@@ -29,6 +29,7 @@ const char *parse_good[] = {
   "allow rw uid=1 gids=1",
   "allow * path=\"/foo\"",
   "allow * path=/foo",
+  "allow * path=/foo-bar_baz",
   "allow * path=\"/foo bar/baz\"",
   "allow * uid=1",
   "allow * path=\"/foo\" uid=1",
