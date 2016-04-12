@@ -547,7 +547,7 @@ public:
   RGWCreateBucket() : has_cors(false) {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(key, bl); /* key and bl are r-value refs */
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   int verify_permission();
@@ -680,7 +680,7 @@ public:
   }
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(key, bl); /* key and bl are r-value refs */
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
@@ -723,7 +723,7 @@ public:
 		 data_pending(false) {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(key, bl); /* key and bl are r-value refs */
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -789,7 +789,7 @@ public:
   {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(key, bl); /* key and bl are r-value refs */
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -929,7 +929,7 @@ public:
                                   rgw_obj_key& object);
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(key, bl); /* key and bl are r-value refs */
+    attrs.emplace(std::move(key), std::move(bl));
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
