@@ -35,6 +35,11 @@ void FSMap::dump(Formatter *f) const
   compat.dump(f);
   f->close_section();
 
+  f->open_object_section("feature flags");
+  f->dump_bool("enable_multiple", enable_multiple);
+  f->dump_bool("ever_enabled_multiple", ever_enabled_multiple);
+  f->close_section();
+
   f->open_array_section("standbys");
   for (const auto &i : standby_daemons) {
     f->open_object_section("info");
@@ -76,8 +81,9 @@ void FSMap::generate_test_instances(list<FSMap*>& ls)
 void FSMap::print(ostream& out) const
 {
   out << "e" << epoch << std::endl;
-  out << "enable_multiple: " << enable_multiple << std::endl;
-  out << "compat: " << enable_multiple << std::endl;
+  out << "enable_multiple, ever_enabled_multiple: " << enable_multiple << ","
+      << ever_enabled_multiple << std::endl;
+  out << "compat: " << compat << std::endl;
   out << " " << std::endl;
 
   if (filesystems.empty()) {
@@ -231,7 +237,7 @@ void FSMap::get_health(list<pair<health_status_t,string> >& summary,
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
   if (features & CEPH_FEATURE_SERVER_JEWEL) {
-    ENCODE_START(6, 6, bl);
+    ENCODE_START(7, 6, bl);
     ::encode(epoch, bl);
     ::encode(next_filesystem_id, bl);
     ::encode(legacy_client_fscid, bl);
@@ -245,6 +251,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(mds_roles, bl);
     ::encode(standby_daemons, bl, features);
     ::encode(standby_epochs, bl);
+    ::encode(ever_enabled_multiple, bl);
     ENCODE_FINISH(bl);
   } else {
     if (filesystems.empty()) {
@@ -280,7 +287,7 @@ void FSMap::decode(bufferlist::iterator& p)
   // MDSMonitor to store an FSMap instead of an MDSMap was
   // 5, so anything older than 6 is decoded as an MDSMap,
   // and anything newer is decoded as an FSMap.
-  DECODE_START_LEGACY_COMPAT_LEN_16(6, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(7, 4, 4, p);
   if (struct_v < 6) {
     // Decoding an MDSMap (upgrade)
     ::decode(epoch, p);
@@ -334,11 +341,28 @@ void FSMap::decode(bufferlist::iterator& p)
     if (ev >= 4)
       ::decode(legacy_mds_map.last_failure_osd_epoch, p);
     if (ev >= 6) {
-      ::decode(legacy_mds_map.ever_allowed_snaps, p);
-      ::decode(legacy_mds_map.explicitly_allowed_snaps, p);
+      if (ev < 10) {
+	// previously this was a bool about snaps, not a flag map
+	bool flag;
+	::decode(flag, p);
+	legacy_mds_map.ever_allowed_features = flag ?
+	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
+	::decode(flag, p);
+	legacy_mds_map.explicitly_allowed_features = flag ?
+	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
+	if (legacy_mds_map.max_mds > 1) {
+	  legacy_mds_map.set_multimds_allowed();
+	}
+      } else {
+	::decode(legacy_mds_map.ever_allowed_features, p);
+	::decode(legacy_mds_map.explicitly_allowed_features, p);
+      }
     } else {
-      legacy_mds_map.ever_allowed_snaps = true;
-      legacy_mds_map.explicitly_allowed_snaps = false;
+      legacy_mds_map.ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
+      legacy_mds_map.explicitly_allowed_features = 0;
+      if (legacy_mds_map.max_mds > 1) {
+	legacy_mds_map.set_multimds_allowed();
+      }
     }
     if (ev >= 7)
       ::decode(legacy_mds_map.inline_data_enabled, p);
@@ -416,6 +440,7 @@ void FSMap::decode(bufferlist::iterator& p)
     ::decode(mds_roles, p);
     ::decode(standby_daemons, p);
     ::decode(standby_epochs, p);
+    ::decode(ever_enabled_multiple, p);
   }
 
   DECODE_FINISH(p);
@@ -512,13 +537,18 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
   return result;
 }
 
-mds_gid_t FSMap::find_unused(bool force_standby_active) const {
+mds_gid_t FSMap::find_unused(fs_cluster_id_t fscid,
+			     bool force_standby_active) const {
   for (const auto &i : standby_daemons) {
     const auto &gid = i.first;
     const auto &info = i.second;
     assert(info.state == MDSMap::STATE_STANDBY);
 
     if (info.laggy() || info.rank >= 0)
+      continue;
+
+    if (info.standby_for_fscid != FS_CLUSTER_ID_NONE &&
+        info.standby_for_fscid != fscid)
       continue;
 
     if ((info.standby_for_rank == MDSMap::MDS_NO_STANDBY_PREF ||
@@ -537,7 +567,7 @@ mds_gid_t FSMap::find_replacement_for(mds_role_t role, const std::string& name,
   if (standby)
     return standby;
   else
-    return find_unused(force_standby_active);
+    return find_unused(role.fscid, force_standby_active);
 }
 
 void FSMap::sanity() const

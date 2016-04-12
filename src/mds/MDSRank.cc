@@ -502,7 +502,8 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
     frag_t fg = dir->get_frag();
-    if (fg == frag_t() || (rand() % (1 << fg.bits()) == 0))
+    if (mdsmap->allows_dirfrags() &&
+	(fg == frag_t() || (rand() % (1 << fg.bits()) == 0)))
       mdcache->split_dir(dir, 1);
     else
       balancer->queue_merge(dir);
@@ -2166,6 +2167,11 @@ bool MDSRank::command_dirfrag_split(
     cmdmap_t cmdmap,
     std::ostream &ss)
 {
+  if (!mdsmap->allows_dirfrags()) {
+    ss << "dirfrags are disallowed by the mds map!";
+    return false;
+  }
+
   int64_t by = 0;
   if (!cmd_getval(g_ceph_context, cmdmap, "bits", by)) {
     ss << "missing bits argument";
@@ -2467,25 +2473,27 @@ bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
   } else if (args[0] == "fragment_dir") {
-    if (args.size() == 4) {
-      filepath fp(args[1].c_str());
-      CInode *in = mdcache->cache_traverse(fp);
-      if (in) {
-	frag_t fg;
-	if (fg.parse(args[2].c_str())) {
-	  CDir *dir = in->get_dirfrag(fg);
-	  if (dir) {
-	    if (dir->is_auth()) {
-	      int by = atoi(args[3].c_str());
-	      if (by)
-		mdcache->split_dir(dir, by);
-	      else
-		dout(0) << "need to split by >0 bits" << dendl;
-	    } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
-	  } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
-	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-      } else dout(0) << "path " << fp << " not found" << dendl;
-    } else dout(0) << "bad syntax" << dendl;
+    if (!mdsmap->allows_dirfrags()) {
+      if (args.size() == 4) {
+	filepath fp(args[1].c_str());
+	CInode *in = mdcache->cache_traverse(fp);
+	if (in) {
+	  frag_t fg;
+	  if (fg.parse(args[2].c_str())) {
+	    CDir *dir = in->get_dirfrag(fg);
+	    if (dir) {
+	      if (dir->is_auth()) {
+		int by = atoi(args[3].c_str());
+		if (by)
+		  mdcache->split_dir(dir, by);
+		else
+		  dout(0) << "need to split by >0 bits" << dendl;
+	      } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
+	    } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
+	  } else dout(0) << " frag " << args[2] << " does not parse" << dendl;
+	} else dout(0) << "path " << fp << " not found" << dendl;
+      } else dout(0) << "bad syntax" << dendl;
+    } else dout(0) << "dirfrags are disallowed by the mds map!" << dendl;
   } else if (args[0] == "merge_dir") {
     if (args.size() == 3) {
       filepath fp(args[1].c_str());
