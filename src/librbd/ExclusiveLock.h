@@ -151,7 +151,8 @@ private:
 
   void send_shutdown();
   void send_shutdown_release();
-  void handle_shutdown(int r);
+  void handle_locked_shutdown(int r);
+  void handle_unlocked_shutdown(int r);
   void complete_shutdown(int r);
 };
 

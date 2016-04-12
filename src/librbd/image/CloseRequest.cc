@@ -87,9 +87,10 @@ template <typename I>
 void CloseRequest<I>::send_shut_down_exclusive_lock() {
   {
     RWLock::WLocker owner_locker(m_image_ctx->owner_lock);
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
-    std::swap(m_exclusive_lock, m_image_ctx->exclusive_lock);
+    m_exclusive_lock = m_image_ctx->exclusive_lock;
 
+    // if reading a snapshot -- possible object map is open
+    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
     if (m_exclusive_lock == nullptr) {
       delete m_image_ctx->object_map;
       m_image_ctx->object_map = nullptr;
@@ -104,6 +105,8 @@ void CloseRequest<I>::send_shut_down_exclusive_lock() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
+  // in-flight IO will be flushed and in-flight requests will be canceled
+  // before releasing lock
   m_exclusive_lock->shut_down(create_context_callback<
     CloseRequest<I>, &CloseRequest<I>::handle_shut_down_exclusive_lock>(this));
 }
@@ -113,10 +116,18 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  // object map and journal closed during exclusive lock shutdown
-  assert(m_image_ctx->journal == nullptr);
-  assert(m_image_ctx->object_map == nullptr);
+  {
+    RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
+    assert(m_image_ctx->exclusive_lock == nullptr);
+
+    // object map and journal closed during exclusive lock shutdown
+    RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+    assert(m_image_ctx->journal == nullptr);
+    assert(m_image_ctx->object_map == nullptr);
+  }
+
   delete m_exclusive_lock;
+  m_exclusive_lock = nullptr;
 
   save_result(r);
   if (r < 0) {

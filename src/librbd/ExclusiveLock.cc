@@ -111,28 +111,31 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
 
 template <typename I>
 void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
+  int r = 0;
   {
     Mutex::Locker locker(m_lock);
     assert(m_image_ctx.owner_lock.is_locked());
-    assert(!is_shutdown());
-
-    if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
+    if (is_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_TRY_LOCK, on_tried_lock);
       return;
     }
   }
 
-  on_tried_lock->complete(0);
+  on_tried_lock->complete(r);
 }
 
 template <typename I>
 void ExclusiveLock<I>::request_lock(Context *on_locked) {
+  int r = 0;
   {
     Mutex::Locker locker(m_lock);
     assert(m_image_ctx.owner_lock.is_locked());
-    assert(!is_shutdown());
-    if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
+    if (is_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_REQUEST_LOCK, on_locked);
       return;
@@ -140,25 +143,26 @@ void ExclusiveLock<I>::request_lock(Context *on_locked) {
   }
 
   if (on_locked != nullptr) {
-    on_locked->complete(0);
+    on_locked->complete(r);
   }
 }
 
 template <typename I>
 void ExclusiveLock<I>::release_lock(Context *on_released) {
+  int r = 0;
   {
     Mutex::Locker locker(m_lock);
     assert(m_image_ctx.owner_lock.is_locked());
-    assert(!is_shutdown());
-
-    if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
+    if (is_shutdown()) {
+      r = -ESHUTDOWN;
+    } else if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
       ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_RELEASE_LOCK, on_released);
       return;
     }
   }
 
-  on_released->complete(0);
+  on_released->complete(r);
 }
 
 template <typename I>
@@ -466,10 +470,8 @@ void ExclusiveLock<I>::send_shutdown() {
   assert(m_lock.is_locked());
   if (m_state == STATE_UNLOCKED) {
     m_state = STATE_SHUTTING_DOWN;
-    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
-    m_image_ctx.aio_work_queue->unblock_writes();
-    m_image_ctx.image_watcher->flush(util::create_context_callback<
-      ExclusiveLock<I>, &ExclusiveLock<I>::complete_shutdown>(this));
+    m_image_ctx.op_work_queue->queue(util::create_context_callback<
+      ExclusiveLock<I>, &ExclusiveLock<I>::handle_unlocked_shutdown>(this), 0);
     return;
   }
 
@@ -493,14 +495,19 @@ void ExclusiveLock<I>::send_shutdown_release() {
   using el = ExclusiveLock<I>;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(
     m_image_ctx, cookie, nullptr,
-    util::create_context_callback<el, &el::handle_shutdown>(this));
+    util::create_context_callback<el, &el::handle_locked_shutdown>(this));
   req->send();
 }
 
 template <typename I>
-void ExclusiveLock<I>::handle_shutdown(int r) {
+void ExclusiveLock<I>::handle_locked_shutdown(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  {
+    RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.exclusive_lock = nullptr;
+  }
 
   if (r < 0) {
     lderr(cct) << "failed to shut down exclusive lock: " << cpp_strerror(r)
@@ -512,6 +519,22 @@ void ExclusiveLock<I>::handle_shutdown(int r) {
 
   m_image_ctx.image_watcher->notify_released_lock();
   complete_shutdown(r);
+}
+
+template <typename I>
+void ExclusiveLock<I>::handle_unlocked_shutdown(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  {
+    RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.exclusive_lock = nullptr;
+  }
+
+  m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+  m_image_ctx.aio_work_queue->unblock_writes();
+  m_image_ctx.image_watcher->flush(util::create_context_callback<
+    ExclusiveLock<I>, &ExclusiveLock<I>::complete_shutdown>(this));
 }
 
 template <typename I>
