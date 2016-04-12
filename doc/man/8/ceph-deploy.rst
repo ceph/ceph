@@ -569,7 +569,7 @@ Options
 
 .. option:: --fs-type
 
-	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.
+	Filesystem to use to format disk (e.g., ``xfs``, ``btrfs``).
 
 .. option:: --dmcrypt
 
