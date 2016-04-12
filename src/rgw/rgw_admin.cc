@@ -2791,6 +2791,34 @@ int main(int argc, char **argv)
 	  }
 	}
 
+	// Perform zone sync as well.
+	// TODO: Should we only do this if above realm.udpate() was successful?
+	const RGWPeriodMap& p_map = period.get_map();
+	for (map<string, RGWZoneGroup>::const_iterator zg_it = p_map.zonegroups.begin(); zg_it != p_map.zonegroups.end(); ++zg_it) {
+	  const RGWZoneGroup zg = zg_it->second;
+	  ldout(store->ctx(), 20) << "Creating missing zones for zonegroup: " << zg.get_name() << ":" << zg.get_id() << dendl;
+	  for (map<string, RGWZone>::const_iterator z_it = zg.zones.begin(); z_it != zg.zones.end(); ++z_it) {
+	    const RGWZone z = z_it->second;
+	    ldout(store->ctx(), 20) << "Creating zone: " << z.name << ":" << z.id << dendl;
+	    // Let's try to create the zone.
+	    RGWZoneParams zp(z.id, z.name, zg.realm_id);
+	    ret = zp.init(g_ceph_context, store, false);
+	    if (ret < 0 && ret != -EEXIST) {
+	      cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	      return -ret;
+	    }
+	    // Will attach access keys to zone.
+	    zp.system_key.id = access_key;
+	    zp.system_key.key = secret_key;
+	    zp.realm_id = zg.realm_id;
+	    ret = zp.create();
+	    if (ret < 0 && ret != -EEXIST) {
+	      cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
+	      return ret;
+	    }
+	  }
+	}
+
         if (set_default) {
           ret = realm.set_as_default();
           if (ret < 0) {
