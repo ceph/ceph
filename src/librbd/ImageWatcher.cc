@@ -459,6 +459,9 @@ Context *ImageWatcher::remove_async_request(const AsyncRequestId &id) {
 }
 
 void ImageWatcher::schedule_async_request_timed_out(const AsyncRequestId &id) {
+  ldout(m_image_ctx.cct, 20) << "scheduling async request time out: " << id
+                             << dendl;
+
   Context *ctx = new FunctionContext(boost::bind(
     &ImageWatcher::async_request_timed_out, this, id));
 
@@ -896,6 +899,11 @@ void ImageWatcher::reregister_watch() {
   int r;
   if (releasing_lock) {
     r = release_lock_ctx.wait();
+    if (r == -EBLACKLISTED) {
+      lderr(m_image_ctx.cct) << this << " client blacklisted" << dendl;
+      return;
+    }
+
     assert(r == 0);
   }
 
