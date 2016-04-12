@@ -1390,6 +1390,24 @@ TEST(BufferList, buffers) {
   ASSERT_EQ((unsigned)1, bl.get_num_buffers());
 }
 
+TEST(BufferList, to_str) {
+  {
+    bufferlist bl;
+    bl.append("foo");
+    ASSERT_EQ(bl.to_str(), string("foo"));
+  }
+  {
+    bufferptr a("foobarbaz", 9);
+    bufferptr b("123456789", 9);
+    bufferptr c("ABCDEFGHI", 9);
+    bufferlist bl;
+    bl.append(a);
+    bl.append(b);
+    bl.append(c);
+    ASSERT_EQ(bl.to_str(), string("foobarbaz123456789ABCDEFGHI"));
+  }
+}
+
 TEST(BufferList, get_contiguous) {
   {
     bufferptr a("foobarbaz", 9);
