@@ -4,6 +4,7 @@ add_custom_target(cython_cephfs
   CC=${PY_CC}
   CXX=${PY_CXX}
   LDSHARED=${PY_LDSHARED}
+  OPT=\"-DNDEBUG -g -fwrapv -O2 -Wall\"
   LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
   CYTHON_BUILD_DIR=${CMAKE_BINARY_DIR}/src/pybind/cephfs
   CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
