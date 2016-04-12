@@ -346,6 +346,7 @@ namespace rgw {
 
     LookupFHResult fhr;
     RGWFileHandle* rgw_fh = nullptr;
+    buffer::list ux_attrs;
 
     fhr = lookup_fh(parent, name,
 		    RGWFileHandle::FLAG_CREATE|
@@ -353,9 +354,10 @@ namespace rgw {
 		    RGWFileHandle::FLAG_LOCK);
     rgw_fh = get<0>(fhr);
     if (rgw_fh) {
-      /* XXX unify timestamps */
       rgw_fh->create_stat(st, mask);
       rgw_fh->set_times(real_clock::now());
+      /* save attrs */
+      rgw_fh->encode_attrs(ux_attrs);
       rgw_fh->stat(st);
       get<0>(mkr) = rgw_fh;
     } else {
