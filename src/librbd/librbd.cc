@@ -1538,6 +1538,17 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
   return (int)expected_size;
 }
 
+extern "C" int rbd_create_cg(rados_ioctx_t p, const char *name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
+  int r = librbd::create_cg(io_ctx, name);
+  tracepoint(librbd, create_cg_exit, r);
+  return r;
+}
+
 extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int *order)
 {
   librados::IoCtx io_ctx;
