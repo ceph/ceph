@@ -54,7 +54,11 @@ namespace rgw {
 		      RGWFileHandle::FLAG_BUCKET);
       if (get<0>(fhr)) {
 	RGWFileHandle* rgw_fh = get<0>(fhr);
-	rgw_fh->set_times(req.get_ctime());
+	/* restore attributes */
+	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
+	if (ux_attrs) {
+	  rgw_fh->decode_attrs(ux_attrs);
+	}
       }
     }
     return fhr;
@@ -376,15 +380,16 @@ namespace rgw {
 	   (rc2 == 0))) {
       /* op failed */
       rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-      rgw_fh->mtx.unlock();
+      rgw_fh->mtx.unlock(); /* !LOCKED */
       unref(rgw_fh);
       get<0>(mkr) = nullptr;
       /* fixup rc */
       if (!rc)
 	rc = rc2;
+    } else {
+      rgw_fh->mtx.unlock(); /* !LOCKED */
     }
 
-    rgw_fh->mtx.unlock(); /* !LOCKED */
     get<1>(mkr) = rc;
 
     return mkr;

@@ -524,6 +524,7 @@ namespace rgw {
 
     void encode(buffer::list& bl) const {
       ENCODE_START(1, 1, bl);
+      ::encode(uint32_t(fh.fh_type), bl);
       ::encode(fh.fh_hk.bucket, bl);
       ::encode(fh.fh_hk.object, bl);
       ::encode(state.dev, bl);
@@ -541,6 +542,9 @@ namespace rgw {
     void decode(bufferlist::iterator& bl) {
       DECODE_START(1, bl);
       struct rgw_file_handle tfh;
+      uint32_t fh_type;
+      ::decode(fh_type, bl);
+      tfh.fh_type = static_cast<enum rgw_fh_type>(fh_type);
       ::decode(tfh.fh_hk.bucket, bl);
       ::decode(tfh.fh_hk.object, bl);
       assert(fh.fh_hk == tfh.fh_hk);
@@ -551,9 +555,9 @@ namespace rgw {
       ::decode(state.owner_gid, bl);
       ::decode(state.unix_mode, bl);
       ceph::real_time enc_time;
-      for (auto& t : { state.ctime, state.mtime, state.atime }) {
+      for (auto t : { &(state.ctime), &(state.mtime), &(state.atime) }) {
 	::decode(enc_time, bl);
-	const_cast<struct timespec&>(t) = real_clock::to_timespec(enc_time);
+	*t = real_clock::to_timespec(enc_time);
       }
       DECODE_FINISH(bl);
     }
@@ -1677,12 +1681,18 @@ class RGWStatBucketRequest : public RGWLibRequest,
 {
 public:
   std::string uri;
+  std::map<std::string, buffer::list> attrs;
 
   RGWStatBucketRequest(CephContext* _cct, RGWUserInfo *_user,
 		       const std::string& _path)
     : RGWLibRequest(_cct, _user) {
     uri = "/" + _path;
     op = this;
+  }
+
+  buffer::list* get_attr(const std::string& k) {
+    auto iter = attrs.find(k);
+    return (iter != attrs.end()) ? &(iter->second) : nullptr;
   }
 
   virtual bool only_bucket() { return false; }
@@ -1727,6 +1737,7 @@ public:
 
   virtual void send_response() {
     bucket.creation_time = get_state()->bucket_info.creation_time;
+    std::swap(attrs, get_state()->bucket_attrs);
   }
 
   bool matched() {
