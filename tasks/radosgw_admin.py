@@ -90,6 +90,9 @@ def task(ctx, config):
     # the role_endpoints that were assigned by the rgw task
     (remote_host, remote_port) = ctx.rgw.role_endpoints[client]
 
+    realm = ctx.rgw.realm
+    log.debug('radosgw-admin: realm %r', realm)
+    
     ##
     user1='foo'
     user2='fud'
@@ -996,7 +999,10 @@ def task(ctx, config):
     # TESTCASE 'zone-info', 'zone', 'get', 'get zone info', 'succeeds, has default placement rule'
     #
 
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
+    if realm is None:
+        (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
+    else:
+        (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
     orig_placement_pools = len(out['placement_pools'])
 
     # removed this test, it is not correct to assume that zone has default placement, it really
@@ -1016,6 +1022,9 @@ def task(ctx, config):
         stdin=StringIO(json.dumps(out)),
         check_status=True)
 
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
+    if realm is None:
+        (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
+    else:
+        (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
     assert len(out) > 0
     assert len(out['placement_pools']) == orig_placement_pools + 1
