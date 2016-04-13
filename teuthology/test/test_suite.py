@@ -103,7 +103,7 @@ class TestSuiteOffline(object):
         mock_resp.ok = True
         mock_resp.text = "the_hash"
         m_get.return_value = mock_resp
-        result = suite.get_hash()
+        result = suite.get_gitbuilder_hash()
         m_get.assert_called_with("http://baseurl.com/ref/master/sha1")
         assert result == "the_hash"
 
@@ -114,7 +114,7 @@ class TestSuiteOffline(object):
         mock_resp = Mock()
         mock_resp.ok = False
         m_get.return_value = mock_resp
-        result = suite.get_hash()
+        result = suite.get_gitbuilder_hash()
         assert result is None
 
     @patch('teuthology.suite.get_gitbuilder_url')
@@ -874,7 +874,6 @@ class TestSuiteMain(object):
                 suite,
                 fetch_repos=DEFAULT,
                 prepare_and_schedule=prepare_and_schedule,
-                get_hash=fake_str,
                 package_version_for_hash=fake_str,
                 git_branch_exists=fake_bool,
                 git_ls_remote=fake_str,
@@ -916,8 +915,8 @@ class TestSuiteMain(object):
                 teuthology_schedule=DEFAULT,
                 sleep=DEFAULT,
                 get_arch=lambda x: 'x86_64',
+                get_gitbuilder_hash=DEFAULT,
                 git_ls_remote=lambda *args: '1234',
-                get_hash=DEFAULT,
                 package_version_for_hash=lambda *args: 'fake-9.5',
                 ) as m:
             config.suite_verify_ceph_hash = False
@@ -926,4 +925,4 @@ class TestSuiteMain(object):
                   '--throttle', throttle,
                   '--machine-type', machine_type])
             m['sleep'].assert_called_with(int(throttle))
-            m['get_hash'].assert_not_called()
+            m['get_gitbuilder_hash'].assert_not_called()

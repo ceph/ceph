@@ -239,8 +239,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     elif kernel_branch is None:
         kernel_hash = None
     else:
-        kernel_hash = get_hash('kernel', kernel_branch, kernel_flavor,
-                               machine_type, distro)
+        kernel_hash = get_gitbuilder_hash('kernel', kernel_branch,
+                                          kernel_flavor, machine_type, distro)
         if not kernel_hash:
             schedule_fail(message="Kernel branch '{branch}' not found".format(
                 branch=kernel_branch), name=name)
@@ -423,8 +423,8 @@ def get_worker(machine_type):
         return machine_type
 
 
-def get_hash(project='ceph', branch='master', flavor='basic',
-             machine_type='plana', distro='ubuntu'):
+def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
+                        machine_type='plana', distro='ubuntu'):
     """
     Find the hash representing the head of the project's repository via
     querying a gitbuilder repo.
