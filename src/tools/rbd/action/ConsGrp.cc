@@ -24,7 +24,7 @@ int execute_list(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
-  Formatter * f = formatter.get();
+  Formatter *f = formatter.get();
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
@@ -37,22 +37,26 @@ int execute_list(const po::variables_map &vm) {
   std::vector<std::string> names;
   r = rbd.list_cgs(io_ctx, names);
 
-  for (auto i : names) {
-    std::cout << i << std::endl;
-  }
+  if (r == -ENOENT)
+    r = 0;
+  if (r < 0)
+    return r;
 
-  std::cout << "value of f is:" << f << std::endl;
-  if (f != 0) {
-    f->open_object_section("snapshot");
-    f->dump_unsigned("id", 5);
-    f->dump_string("name", "botva");
-    f->dump_unsigned("size", 1234);
+  // TODO Implement long listing format
+
+  if (f)
+    f->open_array_section("consistency_groups");
+  for (auto i : names) {
+     if (f)
+       f->dump_string("name", i);
+     else
+       std::cout << i << std::endl;
+  }
+  if (f) {
     f->close_section();
     f->flush(std::cout);
-
-    f->write_raw_data("Hello botva\n");
-    f->flush(std::cout);
   }
+
 
   return 0;
 }
