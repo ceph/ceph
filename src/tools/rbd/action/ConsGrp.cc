@@ -83,6 +83,27 @@ int execute_create(const po::variables_map &vm) {
   return 0;
 }
 
+int execute_remove(const po::variables_map &vm) {
+  std::string cg_name = utils::get_positional_argument(vm, 0);
+  std::string pool_name;
+  if (vm.count(at::POOL_NAME)) {
+    pool_name = vm[at::POOL_NAME].as<std::string>();
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+
+  int r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+  librbd::RBD rbd;
+
+  //TODO implement removal of the group
+
+  return 0;
+}
+
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
@@ -95,12 +116,21 @@ void get_create_arguments(po::options_description *positional,
   positional->add_options()(at::CG_NAME.c_str(), "Name of consistency group");
 }
 
+void get_remove_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  positional->add_options()(at::CG_NAME.c_str(), "Name of consistency group");
+}
+
 Shell::Action action_list(
   {"cg", "list"}, {"cg", "ls"}, "Dump list of consistency groups.", "",
   &get_list_arguments, &execute_list);
 Shell::Action action_create(
   {"cg", "create"}, {}, "Create a consistency group.", "",
   &get_create_arguments, &execute_create);
+Shell::Action action_remove(
+  {"cg", "remove"}, {"cg", "rm"}, "Delete a consistency group.", "",
+  &get_remove_arguments, &execute_remove);
 } // namespace snap
 } // namespace action
 } // namespace rbd
