@@ -176,6 +176,13 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
   virtual bool need_object_expiration() { return false; }
+  /**
+   * calculates filter used to decrypt RGW objects data
+   */
+  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb) {
+    *filter = NULL;
+    return 0;
+  }
 };
 
 class RGWGetObj_CB : public RGWGetDataCB
@@ -187,6 +194,36 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
     return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+};
+
+class RGWGetObj_Filter : public RGWGetDataCB
+{
+protected:
+  RGWGetDataCB& next;
+public:
+  RGWGetObj_Filter(RGWGetDataCB& next): next(next) {}
+  virtual ~RGWGetObj_Filter() {}
+  /**
+   * Passes data through filter.
+   * Filter can modify content of bl.
+   * When bl_len == 0 , it means 'flush
+   */
+  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    return next.handle_data(bl, bl_ofs, bl_len);
+  }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    return next.flush();
+  }
+  /**
+   * Allows filter to extend range required for successful filtering
+   */
+  virtual void fixup_range(off_t& bl_ofs, off_t& bl_len) {
+    next.fixup_range(bl_ofs, bl_len);
   }
 };
 

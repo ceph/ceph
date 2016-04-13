@@ -1182,7 +1182,7 @@ void RGWGetObj::execute()
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
   RGWGetObj_CB cb(this);
-
+  RGWGetDataCB* decrypt = nullptr;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
@@ -1261,7 +1261,21 @@ void RGWGetObj::execute()
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  op_ret = read_op.iterate(ofs, end, &cb);
+  op_ret = this->get_decrypt_filter(&decrypt, cb);
+  if (op_ret < 0) {
+    goto done_err;
+  }
+  if (decrypt != nullptr) {
+    off_t tmp_ofs = ofs;
+    off_t tmp_end = end;
+    decrypt->fixup_range(tmp_ofs, tmp_end);
+    op_ret = read_op.iterate(tmp_ofs, tmp_end, decrypt);
+    if (op_ret >= 0)
+      op_ret = decrypt->flush();
+    delete decrypt;
+  }
+  else
+    op_ret = read_op.iterate(ofs, end, &cb);
 
   perfcounter->tinc(l_rgw_get_lat,
                    (ceph_clock_now(s->cct) - start_time));
