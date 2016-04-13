@@ -76,9 +76,33 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bu
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
+struct compression_block {
+  uint64_t old_ofs;
+  uint64_t new_ofs;
+  uint64_t len;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(old_ofs, bl);
+    ::encode(new_ofs, bl);
+    ::encode(len, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(old_ofs, bl);
+     ::decode(new_ofs, bl);
+     ::decode(len, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(compression_block)
+
 struct RGWCompressionInfo {
   string compression_type;
   uint64_t orig_size;
+  vector<compression_block> blocks;
 
   RGWCompressionInfo() : compression_type("none"), orig_size(0) {}
 
@@ -86,6 +110,7 @@ struct RGWCompressionInfo {
     ENCODE_START(1, 1, bl);
     ::encode(compression_type, bl);
     ::encode(orig_size, bl);
+    ::encode(blocks, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -93,6 +118,7 @@ struct RGWCompressionInfo {
      DECODE_START(1, bl);
      ::decode(compression_type, bl);
      ::decode(orig_size, bl);
+     ::decode(blocks, bl);
      DECODE_FINISH(bl);
   }
 };
@@ -3267,6 +3293,7 @@ protected:
   bool compressed;
   RGWBucketInfo bucket_info;
   bool canceled;
+  vector<compression_block> blocks;
 
   virtual int do_complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
@@ -3292,6 +3319,7 @@ public:
 
   bool is_canceled() { return canceled; }
   bool is_compressed() { return compressed; }
+  const vector<compression_block>& get_compression_blocks() { return blocks; }
 }; /* RGWPutObjProcessor */
 
 struct put_obj_aio_info {

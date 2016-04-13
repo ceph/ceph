@@ -1267,7 +1267,8 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   }
   // compression stuff
   if (need_decompress) {
-    ldout(s->cct, 10) << "Compression for rgw is enabled, decompress part" << dendl;
+    ldout(s->cct, 10) << "Compression for rgw is enabled, decompress part " << bl_len << dendl;
+
     CompressorRef compressor = Compressor::create(s->cct, cs_info.compression_type);
     if (!compressor.get()) {
       // if compressor isn't available - error, because cannot return decompressed data?
@@ -1275,12 +1276,47 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
                        << "for rgw, check rgw_compression_type config option" << dendl;
       return -EIO;
     } else {
-      bufferlist out_bl;
-      int cr = compressor->decompress(bl, out_bl);
-      if (cr < 0) {
-        lderr(s->cct) << "Compression failed with exit code " << cr << dendl;
-        return cr;
+      bufferlist out_bl, in_bl;
+      bl_ofs = 0;
+      if (waiting.length() != 0) {
+        in_bl.append(waiting);
+        in_bl.append(bl);        
+        waiting.clear();
+      } else {
+        in_bl.claim(bl);
       }
+      bl_len = in_bl.length();
+      
+      while (first_block <= last_block) {
+        bufferlist tmp, tmp_out;
+        int ofs_in_bl = cs_info.blocks[first_block].new_ofs - cur_ofs;
+        if (ofs_in_bl + cs_info.blocks[first_block].len > bl.length()) {
+          // not complete block, put it to waiting
+          int tail = bl.length() - ofs_in_bl;
+          bl.copy(ofs_in_bl, tail, waiting);
+          cur_ofs -= tail;
+          break;
+        }
+        bl.copy(ofs_in_bl, cs_info.blocks[first_block].len, tmp);
+        int cr = compressor->decompress(tmp, tmp_out);
+        if (cr < 0) {
+          lderr(s->cct) << "Compression failed with exit code " << cr << dendl;
+          return cr;
+        }
+        if (first_block == last_block && partial_content)
+          out_bl.append(tmp_out.c_str(), q_len);
+        else
+          out_bl.append(tmp_out);
+        first_block++;
+      }
+
+      if (first_data && partial_content && out_bl.length() != 0)
+        bl_ofs =  q_ofs;
+
+      if (first_data && out_bl.length() != 0)
+        first_data = false;
+
+      cur_ofs += bl_len;
       return send_response_data(out_bl, bl_ofs, out_bl.length());
     }
   }
@@ -1440,7 +1476,7 @@ void RGWGetObj::execute()
     lderr(s->cct) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
     goto done_err;
   }
-  if (need_decompress) {
+  if (need_decompress && !partial_content) {
     total_len = cs_info.orig_size;
   }
 
@@ -1456,6 +1492,44 @@ void RGWGetObj::execute()
   end = new_end;
 
   start = ofs;
+
+  if (need_decompress) {
+    if (partial_content) {
+      // if user set range, we need to calculate it in decompressed data
+      first_block = 0; last_block = 0;
+      if (cs_info.blocks.size() > 1) {
+        off_t i = 1;
+        while (i < cs_info.blocks.size() && cs_info.blocks[i].old_ofs <= new_ofs) i++;
+        first_block = i - 1;
+        while (i < cs_info.blocks.size() && cs_info.blocks[i].old_ofs < new_end) i++;
+        last_block = i - 1;
+      }
+    } else {
+      first_block = 0; last_block = cs_info.blocks.size() - 1;
+    }
+
+    ofs = cs_info.blocks[first_block].new_ofs;
+    end = cs_info.blocks[last_block].new_ofs + cs_info.blocks[last_block].len;
+
+    // check user range for correctness
+    if (new_ofs < 0) {
+      ldout(s->cct, 5) << "WARNING: uncorrect begin of the bytes range, get 0 instead" <<  dendl;
+      new_ofs = 0;
+    }
+    if (new_end >= cs_info.orig_size) {
+      ldout(s->cct, 5) << "WARNING: end of the bytes range more than object size (" << cs_info.orig_size
+                       << ")" <<  dendl;
+      new_end = cs_info.orig_size - 1;
+    }
+
+    q_ofs = new_ofs - cs_info.blocks[first_block].old_ofs;
+    q_len = new_end - cs_info.blocks[last_block].old_ofs + 1;
+
+    first_data = true;
+    cur_ofs = ofs;
+    waiting.clear();
+
+  }
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
@@ -3020,6 +3094,7 @@ void RGWPutObj::execute()
     RGWCompressionInfo cs_info;
     cs_info.compression_type = s->cct->_conf->rgw_compression_type;
     cs_info.orig_size = s->obj_size;
+    cs_info.blocks = processor->get_compression_blocks();
     ::encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
