@@ -895,19 +895,15 @@ class TestSuiteMain(object):
                 teuthology_schedule=DEFAULT,
                 sleep=DEFAULT,
                 get_arch=lambda x: 'x86_64',
-                git_ls_remote=lambda *args: '1234',
-                get_hash=DEFAULT,
+                git_ls_remote=lambda *args: '12345',
                 package_version_for_hash=lambda *args: 'fake-9.5',
                 ) as m:
             config.suite_verify_ceph_hash = True
-            m['get_hash'].return_value = '12345'
             main(['--suite', suite_name,
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
             m['sleep'].assert_called_with(int(throttle))
-            m['get_hash'].assert_called_with('ceph', 'master', 'basic',
-                                             machine_type, None)
 
     def test_schedule_suite_noverify(self):
         suite_name = 'noop'
