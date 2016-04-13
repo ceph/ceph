@@ -266,12 +266,21 @@ You may set values for the following keys:
               
 :Type: Integer
 
+.. _pg_num:
+
+``pg_num``
+
+:Description: The effective number of placement groups to use when calculating 
+              data placement.
+:Type: Integer
+:Valid Range: Superior to ``pg_num`` current value.
+
 .. _pgp_num:
 
 ``pgp_num``
 
-:Description: The effective number of placement groups to use when calculating 
-              data placement.
+:Description: The effective number of placement groups for placement to use 
+              when calculating data placement.
 
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
@@ -550,6 +559,12 @@ You may get values for the following keys:
 
 :Description: see crash_replay_interval_
               
+:Type: Integer
+
+``pg_num``
+
+:Description: see pg_num_
+
 :Type: Integer
 
 
