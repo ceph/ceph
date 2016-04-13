@@ -360,10 +360,10 @@ void Watch::got_ping(utime_t t)
 void Watch::connect(ConnectionRef con, bool _will_ping)
 {
   if (conn == con) {
-    dout(10) << "connecting - already connected" << dendl;
+    dout(10) << __func__ << " con " << con << " - already connected" << dendl;
     return;
   }
-  dout(10) << "connecting" << dendl;
+  dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
   OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
@@ -386,7 +386,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
 
 void Watch::disconnect()
 {
-  dout(10) << "disconnect" << dendl;
+  dout(10) << "disconnect (con was " << conn << ")" << dendl;
   conn = ConnectionRef();
   if (!will_ping)
     register_cb();
