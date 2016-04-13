@@ -45,6 +45,7 @@ public:
 class XioMsgHdr
 {
 public:
+  char tag;
   __le32 msg_cnt;
   __le32 peer_type;
   entity_addr_t addr; /* XXX hack! */
@@ -53,7 +54,7 @@ public:
   buffer::list bl;
 public:
   XioMsgHdr(ceph_msg_header& _hdr, ceph_msg_footer& _ftr)
-    : msg_cnt(0), hdr(&_hdr), ftr(&_ftr)
+    : tag(CEPH_MSGR_TAG_MSG), msg_cnt(0), hdr(&_hdr), ftr(&_ftr)
     { }
 
   XioMsgHdr(ceph_msg_header& _hdr, ceph_msg_footer &_ftr, buffer::ptr p)
@@ -69,6 +70,7 @@ public:
   const buffer::list& get_bl() { encode(bl); return bl; };
 
   inline void encode_hdr(buffer::list& bl) const {
+    ::encode(tag, bl);
     ::encode(msg_cnt, bl);
     ::encode(peer_type, bl);
     ::encode(addr, bl);
@@ -101,6 +103,7 @@ public:
   }
 
   inline void decode_hdr(buffer::list::iterator& bl) {
+    ::decode(tag, bl);
     ::decode(msg_cnt, bl);
     ::decode(peer_type, bl);
     ::decode(addr, bl);

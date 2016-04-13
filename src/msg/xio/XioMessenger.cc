@@ -860,6 +860,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   }
 
   ldout(cct,4) << __func__ << " " << m << " new XioMsg " << xmsg
+       << " tag " << (int)xmsg->hdr.tag
        << " req_0 " << &xmsg->req_0.msg << " msg type " << m->get_type()
        << " features: " << xcon->get_features()
        << " conn " << xcon->conn << " sess " << xcon->session << dendl;
