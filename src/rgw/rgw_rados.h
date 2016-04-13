@@ -140,6 +140,17 @@ public:
   virtual void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    return 0;
+  }
+  /**
+   * Allows to extend fetch range of RGW object. Used by RGWGetObjFilter.
+   */
+  virtual void fixup_range(off_t& bl_ofs, off_t& bl_end) {}
 };
 
 class RGWAccessListFilter {
