@@ -215,16 +215,22 @@ class CephFSVolumeClient(object):
         self.cluster_name = cluster_name
         self.auth_id = auth_id
 
-    def evict(self, auth_id, timeout=30):
+    def evict(self, auth_id, timeout=30, volume_path=None):
         """
-        Evict all clients using this authorization ID. Assumes that the
-        authorisation key has been revoked prior to calling this function.
+        Evict all clients based on the authorization ID and optionally based on
+        the volume path mounted.  Assumes that the authorization key has been
+        revoked prior to calling this function.
 
         This operation can throw an exception if the mon cluster is unresponsive, or
         any individual MDS daemon is unresponsive for longer than the timeout passed in.
         """
 
-        log.info("evict: {0}".format(auth_id))
+        client_spec = ["auth_name={0}".format(auth_id), ]
+        if volume_path:
+            client_spec.append("client_metadata.root={0}".
+                               format(self._get_path(volume_path)))
+
+        log.info("evict clients with {0}".format(', '.join(client_spec)))
 
         mds_map = self._rados_command("mds dump", {})
 
@@ -239,7 +245,8 @@ class CephFSVolumeClient(object):
         # the latter doesn't give us per-mds output
         threads = []
         for rank, gid in up.items():
-            thread = RankEvicter(self, ["auth_name={0}".format(auth_id)], rank, gid, mds_map, timeout)
+            thread = RankEvicter(self, client_spec, rank, gid, mds_map,
+                                 timeout)
             thread.start()
             threads.append(thread)
 
@@ -250,9 +257,9 @@ class CephFSVolumeClient(object):
 
         for t in threads:
             if not t.success:
-                msg = "Failed to evict client {0} from mds {1}/{2}: {3}".format(
-                    auth_id, t.rank, t.gid, t.exception
-                )
+                msg = ("Failed to evict client with {0} from mds {1}/{2}: {3}".
+                       format(', '.join(client_spec), t.rank, t.gid, t.exception)
+                      )
                 log.error(msg)
                 raise EvictionError(msg)
 
