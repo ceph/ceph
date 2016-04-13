@@ -1440,6 +1440,7 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
   }
 
   if (c) add_waiter(WAIT_COMPLETE, c);
+  if (!want_dn.empty()) wanted_items.insert(want_dn);
   
   // already fetching?
   if (state_test(CDir::STATE_FETCHING)) {
@@ -1452,25 +1453,23 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
 
   if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_fetch);
 
-  _omap_fetch(want_dn);
+  _omap_fetch();
 }
 
 class C_IO_Dir_TMAP_Fetched : public CDirIOContext {
- protected:
-  string want_dn;
  public:
   bufferlist bl;
 
-  C_IO_Dir_TMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
+  C_IO_Dir_TMAP_Fetched(CDir *d) : CDirIOContext(d) { }
   void finish(int r) {
-    dir->_tmap_fetched(bl, want_dn, r);
+    dir->_tmap_fetched(bl, r);
   }
 };
 
-void CDir::_tmap_fetch(const string& want_dn)
+void CDir::_tmap_fetch()
 {
   // start by reading the first hunk of it
-  C_IO_Dir_TMAP_Fetched *fin = new C_IO_Dir_TMAP_Fetched(this, want_dn);
+  C_IO_Dir_TMAP_Fetched *fin = new C_IO_Dir_TMAP_Fetched(this);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
@@ -1479,11 +1478,10 @@ void CDir::_tmap_fetch(const string& want_dn)
 			     new C_OnFinisher(fin, cache->mds->finisher));
 }
 
-void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
+void CDir::_tmap_fetched(bufferlist& bl, int r)
 {
   LogChannelRef clog = cache->mds->clog;
-  dout(10) << "_tmap_fetched " << bl.length()  << " bytes for " << *this
-	   << " want_dn=" << want_dn << dendl;
+  dout(10) << "_tmap_fetched " << bl.length()  << " bytes for " << *this << dendl;
 
   assert(r == 0 || r == -ENOENT);
   assert(is_auth());
@@ -1506,20 +1504,18 @@ void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
     bl.clear();
   }
 
-  _omap_fetched(header, omap, want_dn, r);
+  _omap_fetched(header, omap, r);
 }
 
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
- protected:
-  string want_dn;
  public:
   bufferlist hdrbl;
   map<string, bufferlist> omap;
   bufferlist btbl;
   int ret1, ret2, ret3;
 
-  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : 
-    CDirIOContext(d), want_dn(w),
+  C_IO_Dir_OMAP_Fetched(CDir *d) : 
+    CDirIOContext(d),
     ret1(0), ret2(0), ret3(0) {}
   void finish(int r) {
     // check the correctness of backtrace
@@ -1527,13 +1523,13 @@ class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
       dir->inode->verify_diri_backtrace(btbl, ret3);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
-    dir->_omap_fetched(hdrbl, omap, want_dn, r);
+    dir->_omap_fetched(hdrbl, omap, r);
   }
 };
 
-void CDir::_omap_fetch(const string& want_dn)
+void CDir::_omap_fetch()
 {
-  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this, want_dn);
+  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
@@ -1729,12 +1725,11 @@ CDentry *CDir::_load_dentry(
 }
 
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
-			 const string& want_dn, int r)
+			 int r)
 {
   LogChannelRef clog = cache->mds->clog;
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
-	   << omap.size() << " keys for " << *this
-	   << " want_dn=" << want_dn << dendl;
+	   << omap.size() << " keys for " << *this << dendl;
 
   assert(r == 0 || r == -ENOENT || r == -ENODATA);
   assert(is_auth());
@@ -1743,7 +1738,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   if (hdrbl.length() == 0) {
     if (r != -ENODATA) { // called by _tmap_fetched() ?
       dout(10) << "_fetched 0 byte from omap, retry tmap" << dendl;
-      _tmap_fetch(want_dn);
+      _tmap_fetch();
       return;
     }
 
@@ -1843,7 +1838,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       continue;
     }
 
-    if (dn && want_dn.length() && want_dn == dname) {
+    if (dn && wanted_items.count(dname) > 0) {
       dout(10) << " touching wanted dn " << *dn << dendl;
       inode->mdcache->touch_dentry(dn);
     }
@@ -1878,6 +1873,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
 
   // mark complete, !fetching
+  wanted_items.clear();
   mark_complete();
   state_clear(STATE_FETCHING);
 
