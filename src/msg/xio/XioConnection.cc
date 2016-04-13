@@ -196,7 +196,7 @@ static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   return xhook;
 }
 
-int XioConnection::on_msg(struct xio_session *session,
+int XioConnection::handle_data_msg(struct xio_session *session,
 			      struct xio_msg *msg,
 			      int more_in_batch,
 			      void *cb_user_context)
@@ -212,9 +212,10 @@ int XioConnection::on_msg(struct xio_session *session,
 	xio_release_msg(msg);
 	return 0;
     }
+    const size_t sizeof_tag = 1;
     XioMsgCnt msg_cnt(
-      buffer::create_static(tmsg->in.header.iov_len,
-			    (char*) tmsg->in.header.iov_base));
+      buffer::create_static(tmsg->in.header.iov_len-sizeof_tag,
+			    ((char*) tmsg->in.header.iov_base)+sizeof_tag));
     ldout(msgr->cct,10) << __func__ << " receive msg " << "tmsg " << tmsg
       << " msg_cnt " << msg_cnt.msg_cnt
       << " iov_base " << tmsg->in.header.iov_base
@@ -421,6 +422,31 @@ int XioConnection::on_msg(struct xio_session *session,
 
   return 0;
 }
+
+int XioConnection::on_msg(struct xio_session *session,
+			      struct xio_msg *msg,
+			      int more_in_batch,
+			      void *cb_user_context)
+{
+  char tag = CEPH_MSGR_TAG_MSG;
+  if (msg->in.header.iov_len)
+    tag = *(char*)msg->in.header.iov_base;
+
+  ldout(msgr->cct,8) << __func__ << " receive msg with iov_len "
+    << (int) msg->in.header.iov_len << " tag " << (int)tag << dendl;
+
+  switch(tag) {
+  case CEPH_MSGR_TAG_MSG:
+    ldout(msgr->cct, 20) << __func__ << " got data message" << dendl;
+    return handle_data_msg(session, msg, more_in_batch, cb_user_context);
+
+  default:
+    assert(! "unrecognized message tag");
+  }
+
+  return 0;
+}
+
 
 int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
 					   struct xio_msg *req,

@@ -311,6 +311,8 @@ public:
 
   int passive_setup(); /* XXX */
 
+  int handle_data_msg(struct xio_session *session, struct xio_msg *msg,
+		 int more_in_batch, void *cb_user_context);
   int on_msg(struct xio_session *session, struct xio_msg *msg,
 		 int more_in_batch, void *cb_user_context);
   int on_ow_msg_send_complete(struct xio_session *session, struct xio_msg *msg,
