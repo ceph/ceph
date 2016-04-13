@@ -1096,7 +1096,7 @@ Reducing the number of tests
 The ``rados`` suite generates thousands of tests out of a few hundred
 files. For instance, all tests in the `rados/thrash suite
 <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash>`_
-run for ``ext4``, ``xfs`` and ``btrfs`` because they are combined (via
+run for ``xfs``, ``btrfs`` and ``ext4`` because they are combined (via
 special file ``%``) with the `fs directory
 <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash/fs>`_
 
@@ -1107,11 +1107,12 @@ reduce the number of tests that are triggered. For instance::
 
   teuthology-suite --suite rados --subset 0/4000
 
-will run as few tests as possible. The tradeoff in this case is that some tests
-will only run on ``ext4`` and not on ``btrfs``, but no matter how small a
-ratio is provided in the ``--subset``, teuthology will still ensure that
-all files in the suite are in at least one test. Understanding the actual
-logic that drives this requires reading the teuthology source code.
+will run as few tests as possible. The tradeoff in this case is that
+some tests will only run on ``xfs`` and not on ``ext4`` or ``btrfs``,
+but no matter how small a ratio is provided in the ``--subset``,
+teuthology will still ensure that all files in the suite are in at
+least one test. Understanding the actual logic that drives this
+requires reading the teuthology source code.
 
 The ``--limit`` option only runs the first ``N`` tests in the suite:
 this is rarely useful, however, because there is no way to control which
