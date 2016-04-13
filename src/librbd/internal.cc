@@ -989,6 +989,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
   {
     ostringstream bid_ss;
     uint32_t extra;
+    int remove_r;
     string id, id_cg, header_oid;
 
     CephContext *cct = (CephContext *)io_ctx.cct();
@@ -1037,8 +1038,22 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
 
     return 0;
 
-err_remove_id:
 err_remove_from_dir:
+    remove_r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
+					 cg_name, id);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up consistency group from rbd_directory object "
+		 << "after creation failed: " << cpp_strerror(remove_r)
+		 << dendl;
+    }
+err_remove_id:
+    remove_r = io_ctx.remove(id_cg);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up id object after creation failed: "
+		 << cpp_strerror(remove_r) << dendl;
+    }
+
+    return r;
 
     return r;
   }

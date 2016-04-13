@@ -168,6 +168,8 @@ namespace librbd {
 		      const std::string &name, const std::string &id);
     int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
 	           const std::string &name, const std::string &id);
+    int dir_remove_cg(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id);
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
     // atomic remove and add

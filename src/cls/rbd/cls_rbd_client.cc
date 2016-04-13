@@ -856,6 +856,15 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "dir_add_image", in, out);
     }
 
+    int dir_remove_cg(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_remove_cg", in, out);
+    }
+
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id)
     {

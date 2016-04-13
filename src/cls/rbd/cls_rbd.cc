@@ -99,6 +99,7 @@ cls_method_handle_t h_dir_list_cgs;
 cls_method_handle_t h_dir_add_image;
 cls_method_handle_t h_dir_add_cg;
 cls_method_handle_t h_dir_remove_image;
+cls_method_handle_t h_dir_remove_cg;
 cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
 cls_method_handle_t h_object_map_save;
@@ -2259,6 +2260,57 @@ int dir_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return dir_add_image_helper(hctx, name, id, true);
 }
 
+int dir_remove_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_remove_cg name=%s id=%s", name.c_str(), id.c_str());
+
+  string stored_name, stored_id;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+
+  int r = read_key(hctx, name_key, &stored_id);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  r = read_key(hctx, id_key, &stored_name);
+  if (r < 0) {
+    CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  // check if this op raced with a rename
+  if (stored_name != name || stored_id != id) {
+    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
+	    stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
+    return -ESTALE;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, name_key);
+  if (r < 0) {
+    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, id_key);
+  if (r < 0) {
+    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 /**
  * Remove an image from the rbd directory.
  *
@@ -3837,6 +3889,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "dir_remove_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_remove_image, &h_dir_remove_image);
+  cls_register_cxx_method(h_class, "dir_remove_cg",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  dir_remove_cg, &h_dir_remove_cg);
   cls_register_cxx_method(h_class, "dir_rename_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_rename_image, &h_dir_rename_image);
