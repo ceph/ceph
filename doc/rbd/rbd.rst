@@ -29,9 +29,9 @@ interact with OSDs using kernel modules or the ``librbd`` library.
    applications, Ceph supports `RBD Caching`_.
 
 Ceph's block devices deliver high performance with infinite scalability to
-`kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `Qemu`_, and
+`kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `QEMU`_, and
 cloud-based computing systems like `OpenStack`_ and `CloudStack`_ that rely on
-libvirt and Qemu to integrate with Ceph block devices. You can use the same cluster
+libvirt and QEMU to integrate with Ceph block devices. You can use the same cluster
 to operate the `Ceph RADOS Gateway`_, the `Ceph FS filesystem`_, and Ceph block
 devices simultaneously.
 
