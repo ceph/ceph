@@ -216,6 +216,9 @@ namespace rgw {
     static constexpr uint32_t FLAG_LOCK =   0x0040;
     static constexpr uint32_t FLAG_DELETED = 0x0080;
 
+#define CREATE_FLAGS(x) \
+    ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
+
     friend class RGWLibFS;
 
   private:
@@ -784,7 +787,7 @@ namespace rgw {
 
     /* find or create an RGWFileHandle */
     LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name,
-			     const uint32_t cflags = RGWFileHandle::FLAG_NONE) {
+			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
@@ -822,19 +825,19 @@ namespace rgw {
 	  goto retry; /* !LATCHED */
 	}
 	/* LATCHED, LOCKED */
-	if (! (fh->flags & RGWFileHandle::FLAG_LOCK))
+	if (! (flags & RGWFileHandle::FLAG_LOCK))
 	  fh->mtx.unlock(); /* ! LOCKED */
       } else {
 	/* make or re-use handle */
 	RGWFileHandle::Factory prototype(this, get_inst(), parent, fhk,
-					 obj_name, cflags);
+					 obj_name, CREATE_FLAGS(flags));
 	fh = static_cast<RGWFileHandle*>(
 	  fh_lru.insert(&prototype,
 			cohort::lru::Edge::MRU,
 			cohort::lru::FLAG_INITIAL));
 	if (fh) {
 	  /* lock fh (LATCHED) */
-	  if (fh->flags & RGWFileHandle::FLAG_LOCK)
+	  if (flags & RGWFileHandle::FLAG_LOCK)
 	    fh->mtx.lock();
 	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
