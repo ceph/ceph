@@ -1,3 +1,7 @@
 overrides:
   ceph:
     fs: ext4
+    conf:
+      global:
+        osd max object name len: 512
+        osd max object namespace len: 64
