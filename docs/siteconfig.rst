@@ -126,6 +126,10 @@ Here is a sample configuration with many of the options set and documented::
     # demand.
     suite_verify_ceph_hash: True
 
+    # If true, teuthology-suite will schedule jobs even if the required
+    # packages are not built.
+    suite_allow_missing_packages: False
+
     # The rsync destination to upload the job results, when --upload is
     # is provided to teuthology-suite.
     #

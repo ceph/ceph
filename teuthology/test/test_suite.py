@@ -895,8 +895,9 @@ class TestSuiteMain(object):
                 sleep=DEFAULT,
                 get_arch=lambda x: 'x86_64',
                 git_ls_remote=lambda *args: '12345',
-                package_version_for_hash=lambda *args: 'fake-9.5',
+                package_version_for_hash=DEFAULT,
                 ) as m:
+            m['package_version_for_hash'].return_value = 'fake-9.5'
             config.suite_verify_ceph_hash = True
             main(['--suite', suite_name,
                   '--suite-dir', 'teuthology/test',

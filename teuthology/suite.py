@@ -469,7 +469,10 @@ def get_distro_defaults(distro, machine_type):
     And ('x86_64', 'centos7', 'rpm') when passed anything else
     """
     arch = 'x86_64'
-    if distro in (None, 'None', 'rhel', 'centos'):
+    if distro in (None, 'None'):
+        release = 'centos7'
+        pkg_type = 'rpm'
+    elif distro in ('rhel', 'centos'):
         release = 'centos7'
         pkg_type = 'rpm'
     elif distro == 'ubuntu':
@@ -679,7 +682,7 @@ def schedule_suite(job_config,
             args=arg
         )
 
-        if dry_run and config.suite_verify_ceph_hash:
+        if config.suite_verify_ceph_hash:
             full_job_config = dict()
             deep_merge(full_job_config, job_config.to_dict())
             deep_merge(full_job_config, parsed_yaml)
@@ -698,7 +701,7 @@ def schedule_suite(job_config,
                                            package_versions):
                 m = "Packages for os_type '{os}', flavor {flavor} and " + \
                     "ceph hash '{ver}' not found"
-                log.info(m.format(os=os_type, flavor=flavor, ver=sha1))
+                log.error(m.format(os=os_type, flavor=flavor, ver=sha1))
                 jobs_missing_packages.append(job)
 
         jobs_to_schedule.append(job)
@@ -709,8 +712,13 @@ def schedule_suite(job_config,
         )
 
         log_prefix = ''
-        if dry_run and job in jobs_missing_packages:
+        if job in jobs_missing_packages:
             log_prefix = "Missing Packages: "
+            if not dry_run and not config.suite_allow_missing_packages:
+                schedule_fail(
+                    "At least one job needs packages that don't exist. "
+                    "See above."
+                )
         teuthology_schedule(
             args=job['args'],
             dry_run=dry_run,
@@ -726,9 +734,9 @@ def schedule_suite(job_config,
     log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
     log.info('Suite %s in %s -- %d jobs were filtered out.' %
              (suite_name, path, len(configs) - count))
-    if dry_run:
-        log.info('Suite %s in %s scheduled %d jobs with missing packages.' %
-                 (suite_name, path, missing_count))
+    if missing_count:
+        log.warn('Scheduled %d/%d jobs that are missing packages!',
+                 missing_count, count)
     return count
 
 

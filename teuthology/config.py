@@ -155,6 +155,7 @@ class TeuthologyConfig(YamlConfig):
         'baseurl_template': 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}',
         'teuthology_path': None,
         'suite_verify_ceph_hash': True,
+        'suite_allow_missing_packages': False,
         'openstack': {
             'clone': 'git clone http://github.com/ceph/teuthology',
             'user-data': 'teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt',
