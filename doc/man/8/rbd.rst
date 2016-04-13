@@ -17,7 +17,7 @@ Description
 ===========
 
 **rbd** is a utility for manipulating rados block device (RBD) images,
-used by the Linux rbd driver and the rbd storage driver for Qemu/KVM.
+used by the Linux rbd driver and the rbd storage driver for QEMU/KVM.
 RBD images are simple block devices that are striped over objects and
 stored in a RADOS object store. The size of the objects the image is
 striped over must be a power of two.
