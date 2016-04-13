@@ -6,3 +6,6 @@ ditaa
 libxml2-dev
 libxslt-dev
 graphviz
+ant
+zlib1g-dev
+cython
