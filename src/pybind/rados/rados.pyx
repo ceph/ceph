@@ -2799,7 +2799,9 @@ returned %d, but should return zero on success." % (self.name, ret))
             int _flags = flags
 
         with nogil:
-            rados_write_op_operate(_write_op.write_op, self.io, _oid, &_mtime, _flags)
+            ret = rados_write_op_operate(_write_op.write_op, self.io, _oid, &_mtime, _flags)
+        if (ret != 0):
+            raise make_ex(ret, "Failed to operate write op for oid %s" % oid)
 
     @requires(('read_op', ReadOp), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=LIBRADOS_OPERATION_NOFLAG):
@@ -2819,7 +2821,9 @@ returned %d, but should return zero on success." % (self.name, ret))
             int _flag = flag
 
         with nogil:
-            rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
+            ret = rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
+        if (ret != 0):
+            raise make_ex(ret, "Failed to operate read op for oid %s" % oid)
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
     def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):
@@ -2871,7 +2875,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return
-            int prval
+            int prval = 0
 
         with nogil:
             rados_read_op_omap_get_keys(_read_op.read_op, _start_after,
@@ -2896,7 +2900,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             rados_omap_iter_t iter_addr
             char **_keys = to_bytes_array(keys)
             size_t key_num = len(keys)
-            int prval
+            int prval = 0
 
         try:
             with nogil:
