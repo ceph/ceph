@@ -789,7 +789,7 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
 
     (zonegroup, zone, zone_info, user_info) = role_zones[master_client]
     zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
-    log.debug("zone info is: %s", zone_json)
+    log.debug("zone info is: %r", zone_json)
     rgwadmin(ctx, master_client,
              cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
                   '--rgw-zone', zone],
@@ -909,7 +909,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
                         remote, pool_info['val']['data_pool'],
                         64)
             zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
-            log.debug('zone info is: %s', zone_json)
+            log.debug('zone info is: %r', zone_json)
             rgwadmin(ctx, client,
                  cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
                       '--rgw-zone', zone],
@@ -1002,7 +1002,7 @@ def pull_configuration(ctx, config, regions, role_endpoints, realm, master_clien
 
             (zonegroup, zone, zone_info, zone_user_info) = role_zones[client]
             zone_json = json.dumps(dict(zone_info.items() + zone_user_info.items()))
-            log.debug("zone info is: %s"), zone_json
+            log.debug("zone info is: %r"), zone_json
             rgwadmin(ctx, client,
                      cmd=['zone', 'set', '--rgw-zonegroup', zonegroup,
                           '--rgw-zone', zone],
