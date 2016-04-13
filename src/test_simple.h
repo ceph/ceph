@@ -19,6 +19,8 @@ namespace test_simple {
 
   namespace simp = crimson::simple_scheduler;
 
+  using Time = double;
+
   struct ClientInfo {
   };
 
@@ -28,7 +30,7 @@ namespace test_simple {
   struct SimpleAccum {
   };
 
-  using SimpleServer = TestServer<simp::SimpleQueue<ClientId,TestRequest>,
+  using SimpleServer = TestServer<simp::SimpleQueue<ClientId,TestRequest,Time>,
 				  ClientInfo,
 				  dmc::ReqParams<ClientId>,
 				  dmc::RespParams<ServerId>,
