@@ -100,7 +100,23 @@ namespace rgw {
       fh_hk.bucket = XXH64(_b.c_str(), _o.length(), seed);
       fh_hk.object = XXH64(_o.c_str(), _o.length(), seed);
     }
+
+    void encode(buffer::list& bl) const {
+      ENCODE_START(1, 1, bl);
+      ::encode(fh_hk.bucket, bl);
+      ::encode(fh_hk.object, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::iterator& bl) {
+      DECODE_START(1, bl);
+      ::decode(fh_hk.bucket, bl);
+      ::decode(fh_hk.object, bl);
+      DECODE_FINISH(bl);
+    }
   }; /* fh_key */
+
+  WRITE_CLASS_ENCODER(fh_key);
 
   inline bool operator<(const fh_key& lhs, const fh_key& rhs)
   {
@@ -326,10 +342,10 @@ namespace rgw {
       if (mask & RGW_SETATTR_MODE)  {
 	switch (fh.fh_type) {
 	case RGW_FS_TYPE_DIRECTORY:
-	  st->st_mode = state.unix_mode|S_IFDIR;
+	  state.unix_mode = st->st_mode|S_IFDIR;
 	  break;
 	case RGW_FS_TYPE_FILE:
-	  st->st_mode = state.unix_mode|S_IFREG;
+	  state.unix_mode = st->st_mode|S_IFREG;
       default:
 	break;
 	}
@@ -353,11 +369,11 @@ namespace rgw {
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
-	st->st_mode = RGW_RWXMODE|S_IFDIR;
+	st->st_mode = RGW_RWXMODE|S_IFDIR /* state.unix_mode|S_IFDIR */;
 	st->st_nlink = 3;
 	break;
       case RGW_FS_TYPE_FILE:
-	st->st_mode = RGW_RWMODE|S_IFREG;
+	st->st_mode = RGW_RWMODE|S_IFREG /* state.unix_mode|S_IFREG */;
 	st->st_nlink = 1;
 	st->st_blksize = 4096;
 	st->st_size = state.size;
@@ -430,7 +446,7 @@ namespace rgw {
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
 	std::string key_name = make_key_name(name.c_str());
-	return fh_key(fhk.fh_hk.object, key_name.c_str());
+	return fh_key(fhk.fh_hk.bucket, key_name.c_str());
       }
     }
 
@@ -528,8 +544,6 @@ namespace rgw {
     void encode(buffer::list& bl) const {
       ENCODE_START(1, 1, bl);
       ::encode(uint32_t(fh.fh_type), bl);
-      ::encode(fh.fh_hk.bucket, bl);
-      ::encode(fh.fh_hk.object, bl);
       ::encode(state.dev, bl);
       ::encode(state.size, bl);
       ::encode(state.nlink, bl);
@@ -544,13 +558,9 @@ namespace rgw {
 
     void decode(bufferlist::iterator& bl) {
       DECODE_START(1, bl);
-      struct rgw_file_handle tfh;
       uint32_t fh_type;
       ::decode(fh_type, bl);
-      tfh.fh_type = static_cast<enum rgw_fh_type>(fh_type);
-      ::decode(tfh.fh_hk.bucket, bl);
-      ::decode(tfh.fh_hk.object, bl);
-      assert(fh.fh_hk == tfh.fh_hk);
+      assert(fh.fh_type == fh_type);
       ::decode(state.dev, bl);
       ::decode(state.size, bl);
       ::decode(state.nlink, bl);
@@ -565,9 +575,11 @@ namespace rgw {
       DECODE_FINISH(bl);
     }
 
-    void decode_attrs(const ceph::buffer::list* bl);
+    void encode_attrs(ceph::buffer::list& ux_key1,
+		      ceph::buffer::list& ux_attrs1);
 
-    void encode_attrs(ceph::buffer::list& bl);
+    void decode_attrs(const ceph::buffer::list* ux_key1,
+		      const ceph::buffer::list* ux_attrs1);
 
     virtual bool reclaim();
 
@@ -800,6 +812,12 @@ namespace rgw {
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
+
+      lsubdout(get_context(), rgw, 10)
+	<< __func__ << " lookup called on "
+	<< parent->object_name() << " for " << key_name
+	<< " (" << obj_name << ")"
+	<< dendl;
 
       fh_key fhk = parent->make_fhk(key_name);
 
@@ -1972,7 +1990,11 @@ public:
 		    const std::string& _src_name, const std::string& _dst_name)
     : RGWLibRequest(_cct, _user), src_parent(_src_parent),
       dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name) {
+    /* all requests have this */
     op = this;
+
+    /* allow this request to replace selected attrs */
+    attrs_mod = RGWRados::ATTRSMOD_MERGE;
   }
 
   virtual bool only_bucket() { return true; }
@@ -2007,6 +2029,14 @@ public:
 
     if (! valid_s3_object_name(dest_object))
       return -ERR_INVALID_OBJECT_NAME;
+
+    /* XXX and fixup key attr (could optimize w/string ref and
+     * dest_object) */
+    buffer::list ux_key;
+    std::string key_name{dst_parent->make_key_name(dst_name.c_str())};
+    fh_key fhk = dst_parent->make_fhk(key_name);
+    rgw::encode(fhk, ux_key);
+    emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
 
 #if 0 /* XXX needed? */
     s->relative_uri = uri;

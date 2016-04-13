@@ -96,7 +96,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
 /* RGW File Attributes */
-#define RGW_ATTR_UNIX1     RGW_ATTR_PREFIX "unix1"
+#define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
+#define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
 
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 

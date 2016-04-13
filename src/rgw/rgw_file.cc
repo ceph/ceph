@@ -55,9 +55,10 @@ namespace rgw {
       if (get<0>(fhr)) {
 	RGWFileHandle* rgw_fh = get<0>(fhr);
 	/* restore attributes */
+	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-	if (ux_attrs) {
-	  rgw_fh->decode_attrs(ux_attrs);
+	if (ux_key && ux_attrs) {
+	  rgw_fh->decode_attrs(ux_key, ux_attrs);
 	}
       }
     }
@@ -118,9 +119,10 @@ namespace rgw {
 	    rgw_fh->set_size(req.get_size());
 	    rgw_fh->set_mtime(real_clock::to_timespec(req.get_mtime()));
 	    /* restore attributes */
+	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-	    if (ux_attrs) {
-	      rgw_fh->decode_attrs(ux_attrs);
+	    if (ux_key && ux_attrs) {
+	      rgw_fh->decode_attrs(ux_key, ux_attrs);
 	    }
 	  }
 	  goto done;
@@ -143,9 +145,10 @@ namespace rgw {
 	    rgw_fh->set_size(req.get_size());
 	    rgw_fh->set_mtime(real_clock::to_timespec(req.get_mtime()));
 	    /* restore attributes */
+	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
-	    if (ux_attrs) {
-	      rgw_fh->decode_attrs(ux_attrs);
+	    if (ux_key && ux_attrs) {
+	      rgw_fh->decode_attrs(ux_key, ux_attrs);
 	    }
 	  }
 	  goto done;
@@ -321,7 +324,7 @@ namespace rgw {
 
     LookupFHResult fhr;
     RGWFileHandle* rgw_fh = nullptr;
-    buffer::list ux_attrs;
+    buffer::list ux_key, ux_attrs;
 
     fhr = lookup_fh(parent, name,
 		    RGWFileHandle::FLAG_CREATE|
@@ -332,7 +335,7 @@ namespace rgw {
       rgw_fh->create_stat(st, mask);
       rgw_fh->set_times(real_clock::now());
       /* save attrs */
-      rgw_fh->encode_attrs(ux_attrs);
+      rgw_fh->encode_attrs(ux_key, ux_attrs);
       rgw_fh->stat(st);
       get<0>(mkr) = rgw_fh;
     } else {
@@ -355,7 +358,11 @@ namespace rgw {
 
       string uri = "/" + bname; /* XXX get rid of URI some day soon */
       RGWCreateBucketRequest req(get_context(), get_user(), uri);
+
+      /* save attrs */
+      req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
       rc = rgwlib.get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     } else {
@@ -369,9 +376,14 @@ namespace rgw {
 	dir_name += "/";
       dir_name += name;
       dir_name += "/";
+
       RGWPutObjRequest req(get_context(), get_user(), parent->bucket_name(),
 			  dir_name, bl);
+
+      /* save attrs */
+      req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
       rc = rgwlib.get_fe()->execute_req(&req);
       rc2 = req.get_ret();
     }
@@ -549,15 +561,24 @@ namespace rgw {
     } while (! stop);
   } /* RGWLibFS::gc */
 
-  void RGWFileHandle::encode_attrs(buffer::list& bl)
+  void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
+				   ceph::buffer::list& ux_attrs1)
   {
-    rgw::encode(*this, bl);
-  } /* RGWFileHandle::decode_attrs */
+    fh_key fhk(this->fh.fh_hk);
+    rgw::encode(fhk, ux_key1);
+    rgw::encode(*this, ux_attrs1);
+  } /* RGWFileHandle::encode_attrs */
 
-  void RGWFileHandle::decode_attrs(const buffer::list* cbl)
+  void RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
+				   const ceph::buffer::list* ux_attrs1)
   {
-    auto bl_iter = const_cast<buffer::list*>(cbl)->begin();
-    rgw::decode(*this, bl_iter);
+    fh_key fhk;
+    auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
+    rgw::decode(fhk, bl_iter_key1);
+    assert(this->fh.fh_hk == fhk.fh_hk);
+
+    auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
+    rgw::decode(*this, bl_iter_unix1);
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
@@ -779,7 +800,7 @@ namespace rgw {
 
   int RGWWriteRequest::exec_finish()
   {
-    buffer::list bl, aclbl, bl_unix;
+    buffer::list bl, aclbl, ux_key, ux_attrs;
     map<string, string>::iterator iter;
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
@@ -806,8 +827,9 @@ namespace rgw {
     policy.encode(aclbl);
     emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-    rgw_fh->encode_attrs(bl_unix);
-    emplace_attr(RGW_ATTR_UNIX1, std::move(bl_unix));
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+    emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+    emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
     for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
 	 ++iter) {
