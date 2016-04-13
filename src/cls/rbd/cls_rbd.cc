@@ -95,6 +95,7 @@ cls_method_handle_t h_set_id;
 cls_method_handle_t h_dir_get_id;
 cls_method_handle_t h_dir_get_name;
 cls_method_handle_t h_dir_list;
+cls_method_handle_t h_dir_list_cgs;
 cls_method_handle_t h_dir_add_image;
 cls_method_handle_t h_dir_add_cg;
 cls_method_handle_t h_dir_remove_image;
@@ -2106,6 +2107,59 @@ int dir_get_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int dir_list_cgs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  map<string, string> cgs;
+  string last_read = dir_key_for_name(start_after);
+
+  while (r == max_read && cgs.size() < max_return) {
+    map<string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end(); ++it) {
+      string id;
+      bufferlist::iterator iter = it->second.begin();
+      try {
+	::decode(id, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode id of consistency group '%s'", it->first.c_str());
+	return -EIO;
+      }
+      CLS_LOG(20, "adding '%s' -> '%s'", dir_name_from_key(it->first).c_str(), id.c_str());
+      cgs[dir_name_from_key(it->first)] = id;
+      if (cgs.size() >= max_return)
+	break;
+    }
+    if (!vals.empty()) {
+      last_read = dir_key_for_name(cgs.rbegin()->first);
+    }
+  }
+
+  ::encode(cgs, *out);
+
+  return 0;
+}
+
 /**
  * List the names and ids of the images in the directory, sorted by
  * name.
@@ -3768,6 +3822,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "dir_get_name",
 			  CLS_METHOD_RD,
 			  dir_get_name, &h_dir_get_name);
+  cls_register_cxx_method(h_class, "dir_list_cgs",
+			  CLS_METHOD_RD,
+			  dir_list_cgs, &h_dir_list_cgs);
   cls_register_cxx_method(h_class, "dir_list",
 			  CLS_METHOD_RD,
 			  dir_list, &h_dir_list);

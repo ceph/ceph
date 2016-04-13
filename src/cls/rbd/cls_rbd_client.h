@@ -161,6 +161,9 @@ namespace librbd {
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		 const std::string &start, uint64_t max_return,
 		 map<string, string> *images);
+    int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &start, uint64_t max_return,
+		     map<string, string> *cgs);
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::string &name, const std::string &id);
     int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,

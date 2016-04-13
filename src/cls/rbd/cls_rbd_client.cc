@@ -817,6 +817,27 @@ namespace librbd {
       return 0;
     }
 
+    int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
+	             const std::string &start, uint64_t max_return,
+		     map<string, string> *cgs)
+    {
+      bufferlist in, out;
+      ::encode(start, in);
+      ::encode(max_return, in);
+      int r = ioctx->exec(oid, "rbd", "dir_list_cgs", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*cgs, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
     int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
 		   const std::string &name, const std::string &id)
     {
