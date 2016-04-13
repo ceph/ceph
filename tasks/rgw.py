@@ -602,14 +602,7 @@ def configure_users_for_client(ctx, config, client, everywhere=False):
     log.info('Configuring users...')
     log.info('for client %s', client)
     log.info('everywhere %s', everywhere)
-    # extract the user info and append it to the payload tuple for the given
-    # client
-    c_config = config.get(client)
-    if not c_config:
-        yield
-    user_info = extract_user_info(c_config)
-    if not user_info:
-        yield
+
     # For data sync the master zones and regions must have the
     # system users of the secondary zones. To keep this simple,
     # just create the system users on every client if regions are
@@ -618,21 +611,29 @@ def configure_users_for_client(ctx, config, client, everywhere=False):
     if everywhere:
         clients_to_create_as = config.keys()
 
-    for client_name in clients_to_create_as:
-        log.debug('Creating user {user} on {client}'.format(
-            user=user_info['system_key']['user'], client=client_name))
-        rgwadmin(ctx, client_name,
-                 cmd=[
-                     'user', 'create',
-                     '--uid', user_info['system_key']['user'],
-                     '--access-key', user_info['system_key']['access_key'],
-                     '--secret', user_info['system_key']['secret_key'],
-                     '--display-name', user_info['system_key']['user'],
-                     '--system',
-                 ],
-                 check_status=True,
-        )
+    # extract the user info and append it to the payload tuple for the given
+    # client
+    for client, c_config in config.iteritems():
+        if not c_config:
+            continue
+        user_info = extract_user_info(c_config)
+        if not user_info:
+            continue
 
+        for client_name in clients_to_create_as:
+            log.debug('Creating user {user} on {client}'.format(
+                user=user_info['system_key']['user'], client=client_name))
+            rgwadmin(ctx, client_name,
+                     cmd=[
+                         'user', 'create',
+                         '--uid', user_info['system_key']['user'],
+                         '--access-key', user_info['system_key']['access_key'],
+                         '--secret', user_info['system_key']['secret_key'],
+                         '--display-name', user_info['system_key']['user'],
+                         '--system',
+                     ],
+                     check_status=True,
+            )
     yield
 
 @contextlib.contextmanager
@@ -1292,16 +1293,14 @@ def task(ctx, config):
             ),
         ])
 
-        for client in config.iterkeys():
-            if client != master_client:
-                subtasks.extend([
-                    lambda: configure_users_for_client(
-                        ctx=ctx,
-                        config=config,
-                        client=client,
-                        everywhere=False
-                    ),
-                ])
+        subtasks.extend([
+            lambda: configure_users_for_client(
+                ctx=ctx,
+                config=config,
+                client=master_client,
+                everywhere=True
+            ),
+        ])
 
         if ctx.rgw.frontend == 'apache':
             subtasks.insert(0,
