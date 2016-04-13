@@ -80,6 +80,10 @@ void RGWRealmReloader::reload()
   frontends->pause();
 
   ldout(cct, 1) << "Frontends paused" << dendl;
+
+  // TODO: make RGWRados responsible for rgw_log_usage lifetime
+  rgw_log_usage_finalize();
+
   // destroy the existing store
   RGWStoreManager::close_storage(store);
   store = nullptr;
