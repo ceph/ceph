@@ -732,8 +732,9 @@ def schedule_suite(job_config,
     count = len(jobs_to_schedule)
     missing_count = len(jobs_missing_packages)
     log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
-    log.info('Suite %s in %s -- %d jobs were filtered out.' %
-             (suite_name, path, len(configs) - count))
+    log.info('%d/%d jobs were filtered out.',
+             (len(configs) - count),
+             len(configs))
     if missing_count:
         log.warn('Scheduled %d/%d jobs that are missing packages!',
                  missing_count, count)
