@@ -513,7 +513,7 @@ void WatchConState::removeWatch(WatchRef watch)
   watches.erase(watch);
 }
 
-void WatchConState::reset()
+void WatchConState::reset(Connection *con)
 {
   set<WatchRef> _watches;
   {
@@ -526,7 +526,11 @@ void WatchConState::reset()
     boost::intrusive_ptr<ReplicatedPG> pg((*i)->get_pg());
     pg->lock();
     if (!(*i)->is_discarded()) {
-      (*i)->disconnect();
+      if ((*i)->is_connected(con)) {
+	(*i)->disconnect();
+      } else {
+	generic_derr << __func__ << " not still connected to " << (*i) << dendl;
+      }
     }
     pg->unlock();
   }
