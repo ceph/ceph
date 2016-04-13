@@ -149,7 +149,7 @@ waitall() { # PID...
          errors=$(($errors + 1))
        fi
      done
-     (("$#" > 0)) || break
+     [ $# -eq 0 ] && break
      sleep ${WAITALL_DELAY:-1}
     done
    [ $errors -eq 0 ]
