@@ -552,9 +552,14 @@ void JournalPlayer::schedule_watch() {
 
 void JournalPlayer::handle_watch(int r) {
   ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
+  if (r == -ECANCELED) {
+    // unwatch of object player(s)
+    return;
+  }
 
   Mutex::Locker locker(m_lock);
   m_watch_scheduled = false;
+
   std::set<uint64_t> object_numbers;
   for (auto &players : m_object_players) {
     object_numbers.insert(
