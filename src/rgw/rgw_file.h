@@ -794,7 +794,6 @@ namespace rgw {
 	return fhr;
 
       RGWFileHandle::FHCache::Latch lat;
-      memset(&lat, 0, sizeof(lat)); // XXXX testing
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
