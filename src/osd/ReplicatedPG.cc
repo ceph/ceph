@@ -4593,10 +4593,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EBUSY;
 	  break;
 	}
-	if (!oi.watchers.empty()) {
+
+	// return EBUSY if we have legacy watcher. For v2 watch, the watchers
+	// are disconnected in _delete_oid, clients will reconnect to the object
+	// in the base after the eviction.
+	bool have_legacy_watcher = false;
+        for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator it =
+	     ctx->obc->watchers.begin(); it != ctx->obc->watchers.end(); ++it) {
+	  if (it->second->is_legacy_watch()) {
+	    have_legacy_watcher = true;
+	    break;
+	  }
+        }
+	if (have_legacy_watcher) {
 	  result = -EBUSY;
 	  break;
 	}
+
 	if (soid.snap == CEPH_NOSNAP) {
 	  result = _verify_no_head_clones(soid, ssc->snapset);
 	  if (result < 0)

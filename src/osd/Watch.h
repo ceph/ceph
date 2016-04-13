@@ -227,6 +227,7 @@ public:
   entity_name_t get_entity() const { return entity; }
   entity_addr_t get_peer_addr() const { return addr; }
   uint32_t get_timeout() const { return timeout; }
+  bool is_legacy_watch() const { return !will_ping; }
 
   /// Generates context for use if watch timeout is delayed by scrub or recovery
   Context *get_delayed_cb();
