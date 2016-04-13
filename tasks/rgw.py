@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import time
+import errno
 import util.rgw as rgw_utils
 
 from cStringIO import StringIO
@@ -879,9 +880,12 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
     log.debug('master client = %r', master_client)
     log.debug('config %r ', config)
 
-    rgwadmin(ctx, master_client,
-             cmd=['realm', 'create', '--rgw-realm', realm, '--default'],
-             check_status=True)
+    (ret, out)=rgwadmin(ctx, master_client,
+                        cmd=['realm', 'create', '--rgw-realm', realm, '--default'])
+    log.debug('realm create ret %r exists %r', -ret, errno.EEXIST)
+    assert ret == 0 or ret != -errno.EEXIST
+    if ret is -errno.EEXIST:
+        log.debug('realm %r exists', realm)
 
     for client in config.iterkeys():
         for role, (zonegroup, zone, zone_info, user_info) in role_zones.iteritems():
