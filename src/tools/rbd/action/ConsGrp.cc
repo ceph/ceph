@@ -42,8 +42,6 @@ int execute_list(const po::variables_map &vm) {
   if (r < 0)
     return r;
 
-  // TODO Implement long listing format
-
   if (f)
     f->open_array_section("consistency_groups");
   for (auto i : names) {
