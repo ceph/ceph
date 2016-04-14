@@ -46,6 +46,10 @@ namespace {
 
   uint32_t owner_uid = 867;
   uint32_t owner_gid = 5309;
+
+  uint32_t magic_uid = 1701;
+  uint32_t magic_gid = 9876;
+
   uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
   string bucket_name("nfsroot");
@@ -74,6 +78,11 @@ namespace {
 	    struct rgw_file_handle* _parent_fh, RGWFileHandle* _rgw_fh)
       : name(std::move(_name)), fh(_fh), parent_fh(_parent_fh),
 	rgw_fh(_rgw_fh) {}
+
+    void clear() {
+      fh = nullptr;
+      rgw_fh = nullptr;
+    }
 
     void sync() {
       if (fh)
@@ -146,6 +155,7 @@ namespace {
   bool do_create = false;
   bool do_delete = false;
   bool do_rename = false;
+  bool do_setattr = false;
   bool verbose = false;
 
   string marker_dir("nfs_marker");
@@ -368,6 +378,104 @@ TEST(LibRGW, SETUP_DIRS1) {
       dirs_vec.push_back(dirs1_rec{dir, ovec});
     }
   } /* dirs1 top-level !exist */
+}
+
+TEST(LibRGW, SETATTR) {
+  if (do_dirs1) {
+    if (do_setattr) {
+
+      int rc;
+      struct stat st;
+
+      st.st_uid = owner_uid;
+      st.st_gid = owner_gid;
+      st.st_mode = 755;
+
+      std::string dname{"dir_0"};
+      obj_rec dir{dname, nullptr, dirs1_b.fh, nullptr};
+
+      /* dir_0 MUST exist and MUST be resident */
+      (void) rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
+			RGW_LOOKUP_FLAG_NONE);
+
+      ASSERT_NE(dir.fh, nullptr);
+      dir.sync();
+      ASSERT_NE(dir.rgw_fh, nullptr);
+      ASSERT_TRUE(dir.rgw_fh->is_dir());
+
+      /* child file */
+      std::string sfname{"setattr_file_0"};
+      obj_rec sf{sfname, nullptr, dir.fh, nullptr};
+
+      (void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			RGW_LOOKUP_FLAG_NONE);
+
+      if (! sf.fh) {
+	/* make a new file object (the hard way) */
+	rc = rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			RGW_LOOKUP_FLAG_CREATE);
+	ASSERT_EQ(rc, 0);
+	sf.sync();
+	ASSERT_TRUE(sf.rgw_fh->is_file());
+
+	/* because we made it the hard way, fixup attributes */
+	st.st_uid = owner_uid;
+	st.st_gid = owner_gid;
+	st.st_mode = 644;
+	sf.rgw_fh->create_stat(&st, create_mask);
+
+	/* open handle */
+	rc = rgw_open(fs, sf.fh, 0 /* flags */);
+	ASSERT_EQ(rc, 0);
+	ASSERT_TRUE(sf.rgw_fh->is_open());
+	/* stage seq write */
+	size_t nbytes;
+	string data = "data for " + sf.name;
+	rc = rgw_write(fs, sf.fh, 0, data.length(), &nbytes,
+		      (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	ASSERT_EQ(nbytes, data.length());
+	/* commit write transaction */
+	rc = rgw_close(fs, sf.fh, 0 /* flags */);
+	ASSERT_EQ(rc, 0);
+      } else {
+	sf.sync();
+	ASSERT_TRUE(sf.rgw_fh->is_file());
+      }
+
+      /* sf MUST now be materialized--now change it's attributes */
+      st.st_uid = magic_uid;
+      st.st_gid = magic_gid;
+
+      rc = rgw_setattr(fs, sf.fh, &st, create_mask, RGW_SETATTR_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+
+      /* force evict--subsequent lookups must reload */
+      static_cast<RGWLibFS*>(fs->fs_private)->release_evict(sf.rgw_fh);
+
+      sf.clear();
+
+      /* revalidate -- expect magic uid and gid */
+      (void) rgw_lookup(fs, sf.parent_fh, sf.name.c_str(), &sf.fh,
+			RGW_LOOKUP_FLAG_NONE);
+      sf.sync();
+      ASSERT_NE(sf.fh, nullptr);
+
+      memset(&st, 0, sizeof(struct stat)); /* nothing up my sleeve... */
+
+      rc =  rgw_getattr(fs, sf.fh, &st, RGW_GETATTR_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+
+      ASSERT_EQ(st.st_uid, magic_uid);
+      ASSERT_EQ(st.st_gid, magic_gid);
+
+      /* release 1 ref on sf */
+      rgw_fh_rele(fs, sf.fh, RGW_FH_RELE_FLAG_NONE);
+
+      /* release 1 ref on dir */
+      rgw_fh_rele(fs, dir.fh, RGW_FH_RELE_FLAG_NONE);
+    } /* dirs1 */
+  }
 }
 
 TEST(LibRGW, RGW_CREATE_DIRS1) {
@@ -1042,6 +1150,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--marker1",
 					    (char*) nullptr)) {
       do_marker1 = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--setattr",
+					    (char*) nullptr)) {
+      do_setattr = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--create",
 					    (char*) nullptr)) {
       do_create = true;
