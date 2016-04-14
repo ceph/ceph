@@ -28,6 +28,8 @@ Notable Changes since v10.1.1
 * mailmap update (`pr#8522 <http://github.com/ceph/ceph/pull/8522>`_, M Ranga Swami Reddy)
 * mds: Add cmapv to ESessions default constructor initializer list (`pr#8403 <http://github.com/ceph/ceph/pull/8403>`_, John Coyle)
 * mds: fix file_layout_t legacy encoding snafu (`pr#8455 <http://github.com/ceph/ceph/pull/8455>`_, Sage Weil)
+mds: Protect a number of unstable/experimental features behind durable flags (`pr#8383 <https://github.com/ceph/ceph/pull/8383>`_, Greg Farnum)
+mds: Extend the existing pool access checking to include specific RADOS namespacse. (`pr#8444 <https://github.com/ceph/ceph/pull/8444>`_, Yan, Zheng)
 * os/ObjectStore: make device uuid probe output something friendly (`pr#8418 <http://github.com/ceph/ceph/pull/8418>`_, Sage Weil)
 * os/bluestore: revamp BlueFS bdev management and add perfcounters (`issue#15376 <http://tracker.ceph.com/issues/15376>`_, `pr#8431 <http://github.com/ceph/ceph/pull/8431>`_, Sage Weil)
 * os/filestore: force lfn attrs to be written atomically, restructure name length limits (`pr#8496 <http://github.com/ceph/ceph/pull/8496>`_, Samuel Just)
