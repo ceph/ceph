@@ -209,7 +209,6 @@ public:
     // and push them in FIFO order to front of the input queue,
     // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
-    XioMsg *xmsg;
 
     while (q_iter != send_q.end()) {
       XioSubmit *xs = &(*q_iter);
@@ -218,9 +217,8 @@ public:
 	q_iter++;
 	continue;
       }
-      xmsg = static_cast<XioMsg*>(xs);
       q_iter = send_q.erase(q_iter);
-      requeue_q.push_back(*xmsg);
+      requeue_q.push_back(*xs);
     }
     pthread_spin_lock(&xcon->sp);
     XioSubmit::Queue::const_iterator i1 = xcon->outgoing.requeue.begin();
