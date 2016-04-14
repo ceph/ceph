@@ -292,8 +292,13 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   }
 
   int r = process(new_info.method, new_url.c_str());
-  if (r < 0)
+  if (r < 0){
+    if (r == -EINVAL){
+      // curl_easy has errored, generally means the service is not available
+      r = -ERR_SERVICE_UNAVAILABLE;
+    }
     return r;
+  }
 
   response.append((char)0); /* NULL terminate response */
 
