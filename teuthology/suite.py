@@ -239,8 +239,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     elif kernel_branch is None:
         kernel_hash = None
     else:
-        kernel_hash = get_hash('kernel', kernel_branch, kernel_flavor,
-                               machine_type, distro)
+        kernel_hash = get_gitbuilder_hash('kernel', kernel_branch,
+                                          kernel_flavor, machine_type, distro)
         if not kernel_hash:
             schedule_fail(message="Kernel branch '{branch}' not found".format(
                 branch=kernel_branch), name=name)
@@ -253,11 +253,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         kernel_dict = dict()
 
     # Get the ceph hash
-    if config.suite_verify_ceph_hash:
-        ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
-                             distro)
-    else:
-        ceph_hash = git_ls_remote('ceph', ceph_branch)
+    ceph_hash = git_ls_remote('ceph', ceph_branch)
 
     if not ceph_hash:
         exc = BranchNotFoundError(ceph_branch, 'ceph.git')
@@ -427,8 +423,8 @@ def get_worker(machine_type):
         return machine_type
 
 
-def get_hash(project='ceph', branch='master', flavor='basic',
-             machine_type='plana', distro='ubuntu'):
+def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
+                        machine_type='plana', distro='ubuntu'):
     """
     Find the hash representing the head of the project's repository via
     querying a gitbuilder repo.
@@ -473,7 +469,10 @@ def get_distro_defaults(distro, machine_type):
     And ('x86_64', 'centos7', 'rpm') when passed anything else
     """
     arch = 'x86_64'
-    if distro in (None, 'None', 'rhel', 'centos'):
+    if distro in (None, 'None'):
+        release = 'centos7'
+        pkg_type = 'rpm'
+    elif distro in ('rhel', 'centos'):
         release = 'centos7'
         pkg_type = 'rpm'
     elif distro == 'ubuntu':
@@ -539,14 +538,21 @@ def package_version_for_hash(hash, kernel_flavor='basic',
     if resp.ok:
         return resp.text.strip()
 
+
 def git_ls_remote(project, branch, project_owner='ceph'):
-    ls_remote = subprocess.check_output(
-        "git ls-remote " + build_git_url(project, project_owner) + " " +
-        branch, shell=True).split()
-    if ls_remote:
-        return ls_remote[0]
-    else:
-        return None
+    """
+    Find the latest sha1 for a given project's branch.
+
+    :returns: The sha1 if found; else None
+    """
+    url = build_git_url(project, project_owner)
+    cmd = "git ls-remote {} {}".format(url, branch)
+    result = subprocess.check_output(
+        cmd, shell=True).split()
+    sha1 = result[0] if result else None
+    log.debug("{} -> {}".format(cmd, sha1))
+    return sha1
+
 
 def build_git_url(project, project_owner='ceph'):
     """
@@ -676,7 +682,7 @@ def schedule_suite(job_config,
             args=arg
         )
 
-        if dry_run and config.suite_verify_ceph_hash:
+        if config.suite_verify_ceph_hash:
             full_job_config = dict()
             deep_merge(full_job_config, job_config.to_dict())
             deep_merge(full_job_config, parsed_yaml)
@@ -695,7 +701,7 @@ def schedule_suite(job_config,
                                            package_versions):
                 m = "Packages for os_type '{os}', flavor {flavor} and " + \
                     "ceph hash '{ver}' not found"
-                log.info(m.format(os=os_type, flavor=flavor, ver=sha1))
+                log.error(m.format(os=os_type, flavor=flavor, ver=sha1))
                 jobs_missing_packages.append(job)
 
         jobs_to_schedule.append(job)
@@ -706,8 +712,13 @@ def schedule_suite(job_config,
         )
 
         log_prefix = ''
-        if dry_run and job in jobs_missing_packages:
+        if job in jobs_missing_packages:
             log_prefix = "Missing Packages: "
+            if not dry_run and not config.suite_allow_missing_packages:
+                schedule_fail(
+                    "At least one job needs packages that don't exist. "
+                    "See above."
+                )
         teuthology_schedule(
             args=job['args'],
             dry_run=dry_run,
@@ -721,11 +732,12 @@ def schedule_suite(job_config,
     count = len(jobs_to_schedule)
     missing_count = len(jobs_missing_packages)
     log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
-    log.info('Suite %s in %s -- %d jobs were filtered out.' %
-             (suite_name, path, len(configs) - count))
-    if dry_run:
-        log.info('Suite %s in %s scheduled %d jobs with missing packages.' %
-                 (suite_name, path, missing_count))
+    log.info('%d/%d jobs were filtered out.',
+             (len(configs) - count),
+             len(configs))
+    if missing_count:
+        log.warn('Scheduled %d/%d jobs that are missing packages!',
+                 missing_count, count)
     return count
 
 
