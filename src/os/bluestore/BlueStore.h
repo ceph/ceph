@@ -609,7 +609,7 @@ private:
 		    uint64_t offset, uint64_t length,
 		    bool shared);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
-  int _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
   void _txc_update_fm(TransContext *txc);
