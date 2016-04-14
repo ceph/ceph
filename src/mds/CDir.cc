@@ -1453,7 +1453,32 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
 
   if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_fetch);
 
-  _omap_fetch();
+  std::set<dentry_key_t> empty;
+  _omap_fetch(NULL, empty);
+}
+
+void CDir::fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys)
+{
+  dout(10) << "fetch " << keys.size() << " keys on " << *this << dendl;
+
+  assert(is_auth());
+  assert(!is_complete());
+
+  if (!can_auth_pin()) {
+    dout(7) << "fetch keys waiting for authpinnable" << dendl;
+    add_waiter(WAIT_UNFREEZE, c);
+    return;
+  }
+  if (state_test(CDir::STATE_FETCHING)) {
+    dout(7) << "fetch keys waiting for full fetch" << dendl;
+    add_waiter(WAIT_COMPLETE, c);
+    return;
+  }
+
+  auth_pin(this);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_fetch);
+
+  _omap_fetch(c, keys);
 }
 
 class C_IO_Dir_TMAP_Fetched : public CDirIOContext {
@@ -1504,37 +1529,51 @@ void CDir::_tmap_fetched(bufferlist& bl, int r)
     bl.clear();
   }
 
-  _omap_fetched(header, omap, r);
+  _omap_fetched(header, omap, true, r);
 }
 
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
- public:
+  MDSInternalContextBase *fin;
+public:
   bufferlist hdrbl;
   map<string, bufferlist> omap;
   bufferlist btbl;
   int ret1, ret2, ret3;
 
-  C_IO_Dir_OMAP_Fetched(CDir *d) : 
-    CDirIOContext(d),
-    ret1(0), ret2(0), ret3(0) {}
+  C_IO_Dir_OMAP_Fetched(CDir *d, MDSInternalContextBase *f) :
+    CDirIOContext(d), fin(f), ret1(0), ret2(0), ret3(0) { }
   void finish(int r) {
     // check the correctness of backtrace
     if (r >= 0 && ret3 != -ECANCELED)
       dir->inode->verify_diri_backtrace(btbl, ret3);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
-    dir->_omap_fetched(hdrbl, omap, r);
+    dir->_omap_fetched(hdrbl, omap, !fin, r);
+    if (fin)
+      fin->complete(r);
   }
 };
 
-void CDir::_omap_fetch()
+void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys)
 {
-  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this);
+  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this, c);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
-  rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->ret2);
+  if (keys.empty()) {
+    assert(!c);
+    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->ret2);
+  } else {
+    assert(c);
+    std::set<std::string> str_keys;
+    for (auto p = keys.begin(); p != keys.end(); ++p) {
+      string str;
+      p->encode(str);
+      str_keys.insert(str);
+    }
+    rd.omap_get_vals_by_keys(str_keys, &fin->omap, &fin->ret2);
+  }
   // check the correctness of backtrace
   if (g_conf->mds_verify_backtrace > 0 && frag == frag_t()) {
     rd.getxattr("parent", &fin->btbl, &fin->ret3);
@@ -1692,9 +1731,7 @@ CDentry *CDir::_load_dentry(
           in->mark_dirty_rstat();
 
         if (inode->is_stray()) {
-          dn->state_set(CDentry::STATE_STRAY);
-          if (in->inode.nlink == 0)
-            in->state_set(CInode::STATE_ORPHAN);
+	  cache->notify_stray_loaded(dn);
         }
 
         //in->hack_accessed = false;
@@ -1725,7 +1762,7 @@ CDentry *CDir::_load_dentry(
 }
 
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
-			 int r)
+			 bool complete, int r)
 {
   LogChannelRef clog = cache->mds->clog;
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
@@ -1745,7 +1782,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(0) << "_fetched missing object for " << *this << dendl;
     clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
-    go_bad();
+    go_bad(complete);
     return;
   }
 
@@ -1759,13 +1796,13 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
         << ": " << err << dendl;
       clog->warn() << "Corrupt fnode header in " << dirfrag() << ": "
 		  << err;
-      go_bad();
+      go_bad(complete);
       return;
     }
     if (!p.end()) {
       clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes\n";
-      go_bad();
+      go_bad(complete);
       return;
     }
   }
@@ -1838,7 +1875,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       continue;
     }
 
-    if (dn && wanted_items.count(dname) > 0) {
+    if (dn && (wanted_items.count(dname) > 0 || !complete)) {
       dout(10) << " touching wanted dn " << *dn << dendl;
       inode->mdcache->touch_dentry(dn);
     }
@@ -1873,13 +1910,15 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
 
   // mark complete, !fetching
-  wanted_items.clear();
-  mark_complete();
-  state_clear(STATE_FETCHING);
+  if (complete) {
+    wanted_items.clear();
+    mark_complete();
+    state_clear(STATE_FETCHING);
 
-  if (scrub_infop && scrub_infop->need_scrub_local) {
-    scrub_infop->need_scrub_local = false;
-    scrub_local();
+    if (scrub_infop && scrub_infop->need_scrub_local) {
+      scrub_infop->need_scrub_local = false;
+      scrub_local();
+    }
   }
 
   // open & force frags
@@ -1896,8 +1935,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   else
     auth_unpin(this);
 
-  // kick waiters
-  finish_waiting(WAIT_COMPLETE, 0);
+  if (complete) {
+    // kick waiters
+    finish_waiting(WAIT_COMPLETE, 0);
+  }
 }
 
 void CDir::_go_bad()
@@ -1924,7 +1965,7 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
   }
 }
 
-void CDir::go_bad()
+void CDir::go_bad(bool complete)
 {
   const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
   if (fatal) {
@@ -1932,7 +1973,10 @@ void CDir::go_bad()
     assert(0);  // unreachable, damaged() respawns us
   }
 
-  _go_bad();
+  if (complete)
+    _go_bad();
+  else
+    auth_unpin(this);
 }
 
 // -----------------------
