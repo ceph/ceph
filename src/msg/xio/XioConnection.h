@@ -37,7 +37,7 @@ namespace bi = boost::intrusive;
 
 class XioPortal;
 class XioMessenger;
-class XioMsg;
+class XioSend;
 
 class XioConnection : public Connection
 {
@@ -231,7 +231,7 @@ private:
   friend class XioMessenger;
   friend class XioDispatchHook;
   friend class XioMarkDownHook;
-  friend class XioMsg;
+  friend class XioSend;
 
   int on_disconnect_event() {
     connected.set(false);
@@ -319,7 +319,7 @@ public:
 			      void *conn_user_context);
   int on_msg_error(struct xio_session *session, enum xio_status error,
 		   struct xio_msg  *msg, void *conn_user_context);
-  void msg_send_fail(XioMsg *xmsg, int code);
+  void msg_send_fail(XioSend *xsend, int code);
   void msg_release_fail(struct xio_msg *msg, int code);
   int flush_out_queues(uint32_t flags);
   int discard_input_queue(uint32_t flags);

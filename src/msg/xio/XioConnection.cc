@@ -455,17 +455,22 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
   /* requester send complete (one-way) */
   uint64_t rc = ++scount;
 
-  XioMsg* xmsg = static_cast<XioMsg*>(req->user_context);
+  XioSend* xsend = static_cast<XioSend*>(req->user_context);
   if (unlikely(magic & MSG_MAGIC_TRACE_CTR)) {
     if (unlikely((rc % 1000000) == 0)) {
       std::cout << "xio finished " << rc << " " << time(0) << std::endl;
     }
   } /* trace ctr */
 
-  ldout(msgr->cct,11) << "on_msg_delivered xcon: " << xmsg->xcon <<
-    " session: " << session << " msg: " << req << " sn: " << req->sn <<
-    " type: " << xmsg->m->get_type() << " tid: " << xmsg->m->get_tid() <<
-    " seq: " << xmsg->m->get_seq() << dendl;
+  ldout(msgr->cct,11) << "on_msg_delivered xcon: " << xsend->xcon <<
+    " session: " << session << " msg: " << req << " sn: " << req->sn << dendl;
+
+  XioMsg *xmsg = dynamic_cast<XioMsg*>(xsend);
+  if (xmsg) {
+    ldout(msgr->cct,11) << "on_msg_delivered xcon: " <<
+      " type: " << xmsg->m->get_type() << " tid: " << xmsg->m->get_tid() <<
+      " seq: " << xmsg->m->get_seq() << dendl;
+  }
 
   --send_ctr; /* atomic, because portal thread */
 
@@ -475,29 +480,29 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
     if ((send_ctr <= uint32_t(xio_qdepth_low_mark())) &&
 	(1 /* XXX memory <= memory low-water mark */))  {
       cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
-      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xmsg->xcon <<
+      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xsend->xcon <<
         " session: " << session << " up_ready from flow_controlled" << dendl;
     }
   }
 
-  xmsg->put();
+  xsend->put();
 
   return 0;
 }  /* on_msg_delivered */
 
-void XioConnection::msg_send_fail(XioMsg *xmsg, int code)
+void XioConnection::msg_send_fail(XioSend *xsend, int code)
 {
   ldout(msgr->cct,2) << "xio_send_msg FAILED xcon: " << this <<
-    " xmsg: " << xmsg->get_xio_msg() << " code=" << code <<
+    " msg: " << xsend->get_xio_msg() << " code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
   /* return refs taken for each xio_msg */
-  xmsg->put_msg_refs();
+  xsend->put_msg_refs();
 } /* msg_send_fail */
 
 void XioConnection::msg_release_fail(struct xio_msg *msg, int code)
 {
   ldout(msgr->cct,2) << "xio_release_msg FAILED xcon: " << this <<
-    " xmsg: " << msg <<  "code=" << code <<
+    " msg: " << msg <<  "code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
 } /* msg_release_fail */
 
@@ -533,7 +538,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
 
   /* the two send queues contain different objects:
    * - anything on the mqueue is a Message
-   * - anything on the requeue is an XioMsg
+   * - anything on the requeue is an XioSend
    */
   Message::Queue::const_iterator i1 = disc_q.end();
   disc_q.splice(i1, outgoing.mqueue);
@@ -556,13 +561,13 @@ int XioConnection::discard_input_queue(uint32_t flags)
   while (!deferred_q.empty()) {
     XioSubmit::Queue::iterator q_iter = deferred_q.begin();
     XioSubmit* xs = &(*q_iter);
-    XioMsg* xmsg;
+    XioSend* xsend;
     switch (xs->type) {
       case XioSubmit::OUTGOING_MSG:
-	xmsg = static_cast<XioMsg*>(xs);
+	xsend = static_cast<XioSend*>(xs);
 	deferred_q.erase(q_iter);
 	// release once for each chained xio_msg
-	xmsg->put(xmsg->get_msg_count());
+	xsend->put(xsend->get_msg_count());
 	break;
       case XioSubmit::INCOMING_MSG_RELEASE:
 	deferred_q.erase(q_iter);
@@ -606,9 +611,9 @@ int XioConnection::on_msg_error(struct xio_session *session,
 				struct xio_msg  *msg,
 				void *conn_user_context)
 {
-  XioMsg *xmsg = static_cast<XioMsg*>(msg->user_context);
-  if (xmsg)
-    xmsg->put();
+  XioSend *xsend = static_cast<XioSend*>(msg->user_context);
+  if (xsend)
+    xsend->put();
 
   --send_ctr; /* atomic, because portal thread */
   return 0;
