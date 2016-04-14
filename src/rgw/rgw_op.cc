@@ -3450,8 +3450,6 @@ void RGWGetACLs::execute()
   acls = ss.str();
 }
 
-
-
 int RGWPutACLs::verify_permission()
 {
   bool perm;
@@ -4658,6 +4656,46 @@ void RGWBulkDelete::execute()
   } while (!op_ret && is_truncated);
 
   return;
+}
+
+int RGWSetAttrs::verify_permission()
+{
+  bool perm;
+  if (!s->object.empty()) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE);
+  }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetAttrs::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  rgw_obj obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  if (!s->object.empty()) {
+    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &attrs);
+  } else {
+    for (auto& iter : attrs) {
+      s->bucket_attrs[iter.first] = std::move(iter.second);
+    }
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
+				  &s->bucket_info.objv_tracker);
+  }
 }
 
 RGWHandler::~RGWHandler()

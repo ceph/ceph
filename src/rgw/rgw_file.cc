@@ -477,6 +477,27 @@ namespace rgw {
     return rgw_fh->stat(st);
   } /* RGWLibFS::getattr */
 
+  int RGWLibFS::setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
+			uint32_t flags)
+  {
+    int rc, rc2;
+    buffer::list ux_key, ux_attrs;
+    string obj_name{rgw_fh->relative_object_name()};
+
+    RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
+
+    rgw_fh->create_stat(st, mask);
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+
+    /* save attrs */
+    req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+
+    return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
+  } /* RGWLibFS::setattr */
+
   void RGWLibFS::close()
   {
     state.flags |= FLAG_CLOSED;
@@ -1158,8 +1179,10 @@ int rgw_setattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st,
 		uint32_t mask, uint32_t flags)
 {
-  /* XXX no-op */
-  return 0;
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  return fs->setattr(rgw_fh, st, mask, flags);
 }
 
 /*
@@ -1347,8 +1370,8 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 /*
    write data to file (vector)
 */
-  int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		 rgw_uio *uio, uint32_t flags)
+int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	      rgw_uio *uio, uint32_t flags)
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
