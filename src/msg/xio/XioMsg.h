@@ -181,22 +181,65 @@ struct xio_msg_ex
   }
 };
 
-struct XioMsg : public XioSubmit
+class XioSend : public XioSubmit
+{
+public:
+  virtual void print_debug(CephContext *cct, const char *tag) const {};
+  const struct xio_msg * get_xio_msg() const {return &req_0.msg;}
+  struct xio_msg * get_xio_msg() {return &req_0.msg;}
+  virtual size_t get_msg_count() const {return 1;}
+
+  XioSend(XioConnection *_xcon, struct xio_reg_mem& _mp, int _ex_cnt) :
+    XioSubmit(XioSubmit::OUTGOING_MSG, _xcon),
+    req_0(this), mp_this(_mp), nrefs(_ex_cnt+1)
+  {
+    xpool_inc_msgcnt();
+    xcon->get();
+  }
+
+  XioSend* get() { nrefs.inc(); return this; };
+
+  void put(int n) {
+    int refs = nrefs.sub(n);
+    if (refs == 0) {
+      struct xio_reg_mem *mp = &this->mp_this;
+      this->~XioSend();
+      xpool_free(sizeof(XioSend), mp);
+    }
+  }
+
+  void put() {
+    put(1);
+  }
+
+  void put_msg_refs() {
+    put(get_msg_count());
+  }
+
+  virtual ~XioSend() {
+    xpool_dec_msgcnt();
+    xcon->put();
+  }
+
+private:
+  xio_msg_ex req_0;
+  struct xio_reg_mem mp_this;
+  atomic_t nrefs;
+};
+
+struct XioMsg : public XioSend
 {
 public:
   Message* m;
   XioMsgHdr hdr;
-  xio_msg_ex req_0;
   xio_msg_ex* req_arr;
-  struct xio_reg_mem mp_this;
-  atomic_t nrefs;
 
 public:
   XioMsg(Message *_m, XioConnection *_xcon, struct xio_reg_mem& _mp,
 	 int _ex_cnt) :
-    XioSubmit(XioSubmit::OUTGOING_MSG, _xcon),
+    XioSend(_xcon, _mp, _ex_cnt),
     m(_m), hdr(m->get_header(), m->get_footer()),
-    req_0(this), req_arr(NULL), mp_this(_mp), nrefs(_ex_cnt+1)
+    req_arr(NULL)
     {
       const entity_inst_t &inst = xcon->get_messenger()->get_myinst();
       hdr.peer_type = inst.name.type();
@@ -208,35 +251,11 @@ public:
       if (unlikely(_ex_cnt > 0)) {
 	alloc_trailers(_ex_cnt);
       }
-
-      xpool_inc_msgcnt();
-
-      // submit queue ref
-      xcon->get();
     }
 
-  void print_debug(CephContext *cct, const char *tag) const;
-  const struct xio_msg * get_xio_msg() const {return &req_0.msg;}
-  struct xio_msg * get_xio_msg() {return &req_0.msg;}
-  size_t get_msg_count() const {return hdr.msg_cnt;}
-
-  XioMsg* get() { nrefs.inc(); return this; };
-
-  void put(int n) {
-    int refs = nrefs.sub(n);
-    if (refs == 0) {
-      struct xio_reg_mem *mp = &this->mp_this;
-      this->~XioMsg();
-      xpool_free(sizeof(XioMsg), mp);
-    }
-  }
-
-  void put() {
-    put(1);
-  }
-
-  void put_msg_refs() {
-    put(get_msg_count());
+  void print_debug(CephContext *cct, const char *tag) const override;
+  size_t get_msg_count() const override {
+    return hdr.msg_cnt;
   }
 
   void alloc_trailers(int cnt) {
@@ -272,11 +291,6 @@ public:
 	  /* the normal case: done with message */
 	  m->put();
       }
-
-      xpool_dec_msgcnt();
-
-      /* submit queue ref */
-      xcon->put();
     }
 };
 
