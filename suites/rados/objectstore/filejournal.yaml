@@ -3,6 +3,7 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
 - exec:
     client.0:
       - ceph_test_filejournal
