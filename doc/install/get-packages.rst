@@ -263,6 +263,8 @@ You can download the RPMs directly from::
 
 .. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
 
+
+Add Ceph Development
 ====================
 
 Development repositories use the ``autobuild.asc`` key to verify packages.
