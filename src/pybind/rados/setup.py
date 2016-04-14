@@ -43,7 +43,6 @@ setup(
         Extension("rados",
             ["rados.pyx"],
             libraries=["rados"],
-            language="c++"
             )
     ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)),
     cmdclass={
