@@ -215,6 +215,11 @@ public:
       xcon->get();
     }
 
+  void print_debug(CephContext *cct, const char *tag) const;
+  const struct xio_msg * get_xio_msg() const {return &req_0.msg;}
+  struct xio_msg * get_xio_msg() {return &req_0.msg;}
+  size_t get_msg_count() const {return hdr.msg_cnt;}
+
   XioMsg* get() { nrefs.inc(); return this; };
 
   void put(int n) {
@@ -231,7 +236,7 @@ public:
   }
 
   void put_msg_refs() {
-    put(hdr.msg_cnt);
+    put(get_msg_count());
   }
 
   void alloc_trailers(int cnt) {
@@ -247,7 +252,7 @@ public:
   ~XioMsg()
     {
       if (unlikely(!!req_arr)) {
-	for (unsigned int ix = 0; ix < hdr.msg_cnt-1; ++ix) {
+	for (unsigned int ix = 0; ix < get_msg_count()-1; ++ix) {
 	  xio_msg_ex* xreq = &(req_arr[ix]);
 	  xreq->~xio_msg_ex();
 	}

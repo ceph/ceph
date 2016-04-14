@@ -269,18 +269,17 @@ public:
 		 * on Accelio's check on below, but this assures that
 		 * all chained xio_msg are accounted) */
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
-		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
+		if (unlikely((xcon->send_ctr + xmsg->get_msg_count()) >
 			     xio_qdepth_high)) {
 		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 
-		msg = &xmsg->req_0.msg;
+		msg = xmsg->get_xio_msg();
 		code = xio_send_msg(xcon->conn, msg);
 		/* header trace moved here to capture xio serial# */
 		if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
-		  print_xio_msg_hdr(msgr->cct, "xio_send_msg", xmsg->hdr, msg);
-		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
+		  xmsg->print_debug(msgr->cct, "xio_send_msg");
 		}
 		/* get the right Accelio's errno code */
 		if (unlikely(code)) {
@@ -313,7 +312,7 @@ public:
 		};
 	      } else {
 		xcon->send.set(msg->timestamp); // need atomic?
-		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
+		xcon->send_ctr += xmsg->get_msg_count(); // only inc if cb promised
 	      }
 	      break;
 	    default:

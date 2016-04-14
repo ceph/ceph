@@ -861,7 +861,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
 
   ldout(cct,4) << __func__ << " " << m << " new XioMsg " << xmsg
        << " tag " << (int)xmsg->hdr.tag
-       << " req_0 " << &xmsg->req_0.msg << " msg type " << m->get_type()
+       << " req_0 " << xmsg->get_xio_msg() << " msg type " << m->get_type()
        << " features: " << xcon->get_features()
        << " conn " << xcon->conn << " sess " << xcon->session << dendl;
 
@@ -878,7 +878,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
     }
   }
 
-  struct xio_msg *req = &xmsg->req_0.msg;
+  struct xio_msg *req = xmsg->get_xio_msg();
   struct xio_iovec_ex *msg_iov = req->out.pdata_iov.sglist;
 
   if (magic & (MSG_MAGIC_XIO)) {
@@ -907,14 +907,14 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   xio_place_buffers(data, xmsg, req, msg_iov, req_size, ex_cnt, msg_off,
 		    req_off, BUFFER_DATA);
   ldout(cct,10) << "ex_cnt " << ex_cnt << ", req_off " << req_off
-    << ", msg_cnt " << xmsg->hdr.msg_cnt << dendl;
+    << ", msg_cnt " << xmsg->get_msg_count() << dendl;
 
   /* finalize request */
   if (msg_off)
     req->out.pdata_iov.nents = msg_off;
 
   /* fixup first msg */
-  req = &xmsg->req_0.msg;
+  req = xmsg->get_xio_msg();
 
   const std::list<buffer::ptr>& header = xmsg->hdr.get_bl().buffers();
   assert(header.size() == 1); /* XXX */
@@ -923,10 +923,10 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   req->out.header.iov_len = pb->length();
 
   /* deliver via xio, preserve ordering */
-  if (xmsg->hdr.msg_cnt > 1) {
-    struct xio_msg *head = &xmsg->req_0.msg;
+  if (xmsg->get_msg_count() > 1) {
+    struct xio_msg *head = xmsg->get_xio_msg();
     struct xio_msg *tail = head;
-    for (req_off = 0; ((unsigned) req_off) < xmsg->hdr.msg_cnt-1; ++req_off) {
+    for (req_off = 0; ((unsigned) req_off) < xmsg->get_msg_count()-1; ++req_off) {
       req = &xmsg->req_arr[req_off].msg;
 assert(!req->in.pdata_iov.nents);
 assert(req->out.pdata_iov.nents || !nbuffers);
