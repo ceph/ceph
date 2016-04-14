@@ -4,5 +4,6 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
 - ceph_objectstore_tool:
     objects: 20
