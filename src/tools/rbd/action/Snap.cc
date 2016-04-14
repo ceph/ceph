@@ -161,7 +161,7 @@ int execute_list(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -202,7 +202,7 @@ int execute_create(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_SNAP);
   if (r < 0) {
     return r;
   }
@@ -237,7 +237,7 @@ int execute_remove(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -278,7 +278,7 @@ int execute_purge(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -316,7 +316,7 @@ int execute_rollback(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -351,7 +351,7 @@ int execute_protect(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -386,7 +386,7 @@ int execute_unprotect(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -422,7 +422,8 @@ int execute_rename(const po::variables_map &vm) {
   std::string src_snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &src_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &src_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return -r;
   }
@@ -432,7 +433,8 @@ int execute_rename(const po::variables_map &vm) {
   std::string dest_snap_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dest_pool_name,
-    &dest_image_name, &dest_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+    &dest_image_name, &dest_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_SNAP);
   if (r < 0) {
     return -r;
   }

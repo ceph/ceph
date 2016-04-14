@@ -80,8 +80,28 @@ int read_string(int fd, unsigned max, std::string *out) {
 }
 
 int extract_spec(const std::string &spec, std::string *pool_name,
-                 std::string *image_name, std::string *snap_name) {
-  boost::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+                 std::string *image_name, std::string *snap_name,
+                 SpecValidation spec_validation) {
+  boost::regex pattern;
+  switch (spec_validation) {
+  case SPEC_VALIDATION_FULL:
+    // disallow "/" and "@" in image and snap name
+    pattern = "^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$";
+    break;
+  case SPEC_VALIDATION_SNAP:
+    // disallow "/" and "@" in snap name
+    pattern = "^(?:([^/]+)/)?([^@]+)(?:@([^/@]+))?$";
+    break;
+  case SPEC_VALIDATION_NONE:
+    // relaxed pattern assumes pool is before first "/" and snap
+    // name is after first "@"
+    pattern = "^(?:([^/]+)/)?([^@]+)(?:@(.+))?$";
+    break;
+  default:
+    assert(false);
+    break;
+  }
+
   boost::smatch match;
   if (!boost::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
@@ -139,6 +159,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
                                   std::string *image_name,
                                   std::string *snap_name,
                                   SnapshotPresence snapshot_presence,
+                                  SpecValidation spec_validation,
                                   bool image_required) {
   std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_POOL_NAME : at::POOL_NAME);
@@ -156,12 +177,13 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   if (vm.count(snap_key) && snap_name != nullptr) {
      *snap_name = vm[snap_key].as<std::string>();
    }
-  
+
   if (image_name != nullptr && !image_name->empty()) {
     // despite the separate pool and snapshot name options,
     // we can also specify them via the image option
     std::string image_name_copy(*image_name);
-    extract_spec(image_name_copy, pool_name, image_name, snap_name);
+    extract_spec(image_name_copy, pool_name, image_name, snap_name,
+                 spec_validation);
   }
 
   int r;
@@ -169,7 +191,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
       image_name->empty()) {
     std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
     if (!spec.empty()) {
-      r = extract_spec(spec, pool_name, image_name, snap_name);
+      r = extract_spec(spec, pool_name, image_name, snap_name, spec_validation);
       if (r < 0) {
         return r;
       }
@@ -225,14 +247,16 @@ int get_pool_journal_names(const po::variables_map &vm,
     // despite the separate pool option,
     // we can also specify them via the journal option
     std::string journal_name_copy(*journal_name);
-    extract_spec(journal_name_copy, pool_name, journal_name, nullptr);
+    extract_spec(journal_name_copy, pool_name, journal_name, nullptr,
+                 SPEC_VALIDATION_FULL);
   }
 
   if (!image_name.empty()) {
     // despite the separate pool option,
     // we can also specify them via the image option
     std::string image_name_copy(image_name);
-    extract_spec(image_name_copy, pool_name, &image_name, nullptr);
+    extract_spec(image_name_copy, pool_name, &image_name, nullptr,
+                 SPEC_VALIDATION_NONE);
   }
 
   int r;
@@ -240,7 +264,8 @@ int get_pool_journal_names(const po::variables_map &vm,
       journal_name->empty()) {
     std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
     if (!spec.empty()) {
-      r = extract_spec(spec, pool_name, journal_name, nullptr);
+      r = extract_spec(spec, pool_name, journal_name, nullptr,
+                       SPEC_VALIDATION_FULL);
       if (r < 0) {
         return r;
       }
