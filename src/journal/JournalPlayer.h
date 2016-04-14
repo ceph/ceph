@@ -70,24 +70,26 @@ private:
 
   struct C_Watch : public Context {
     JournalPlayer *player;
+    Mutex lock;
     uint8_t pending_fetches = 1;
     int ret_val = 0;
 
-    C_Watch(JournalPlayer *player) : player(player) {
+    C_Watch(JournalPlayer *player)
+      : player(player), lock("JournalPlayer::C_Watch::lock") {
     }
 
     virtual void complete(int r) override {
-      player->m_lock.Lock();
+      lock.Lock();
       if (ret_val == 0 && r < 0) {
         ret_val = r;
       }
 
       assert(pending_fetches > 0);
       if (--pending_fetches == 0) {
-        player->m_lock.Unlock();
+        lock.Unlock();
         Context::complete(ret_val);
       } else {
-        player->m_lock.Unlock();
+        lock.Unlock();
       }
     }
 
