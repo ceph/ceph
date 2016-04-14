@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    fs: xfs
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
