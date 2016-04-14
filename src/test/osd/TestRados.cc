@@ -56,10 +56,7 @@ public:
       oid << m_op;
       if (m_op % 2) {
 	// make it a long name
-	oid << " ";
-	for (unsigned i = 0; i < 300; ++i) {
-	  oid << i;
-	}
+	oid << " " << string(300, 'o');
       }
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
