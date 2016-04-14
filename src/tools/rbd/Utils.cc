@@ -182,15 +182,18 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
      *snap_name = vm[snap_key].as<std::string>();
    }
 
+  int r;
   if (image_name != nullptr && !image_name->empty()) {
     // despite the separate pool and snapshot name options,
     // we can also specify them via the image option
     std::string image_name_copy(*image_name);
-    extract_spec(image_name_copy, pool_name, image_name, snap_name,
-                 spec_validation);
+    r = extract_spec(image_name_copy, pool_name, image_name, snap_name,
+                     spec_validation);
+    if (r < 0) {
+      return r;
+    }
   }
 
-  int r;
   if (image_name != nullptr && spec_arg_index != nullptr &&
       image_name->empty()) {
     std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
@@ -247,23 +250,29 @@ int get_pool_journal_names(const po::variables_map &vm,
     image_name = vm[image_key].as<std::string>();
   }
 
+  int r;
   if (journal_name != nullptr && !journal_name->empty()) {
     // despite the separate pool option,
     // we can also specify them via the journal option
     std::string journal_name_copy(*journal_name);
-    extract_spec(journal_name_copy, pool_name, journal_name, nullptr,
-                 SPEC_VALIDATION_FULL);
+    r = extract_spec(journal_name_copy, pool_name, journal_name, nullptr,
+                     SPEC_VALIDATION_FULL);
+    if (r < 0) {
+      return r;
+    }
   }
 
   if (!image_name.empty()) {
     // despite the separate pool option,
     // we can also specify them via the image option
     std::string image_name_copy(image_name);
-    extract_spec(image_name_copy, pool_name, &image_name, nullptr,
-                 SPEC_VALIDATION_NONE);
+    r = extract_spec(image_name_copy, pool_name, &image_name, nullptr,
+                     SPEC_VALIDATION_NONE);
+    if (r < 0) {
+      return r;
+    }
   }
 
-  int r;
   if (journal_name != nullptr && spec_arg_index != nullptr &&
       journal_name->empty()) {
     std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
