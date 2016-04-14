@@ -3,4 +3,5 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
 - filestore_idempotent:
