@@ -526,6 +526,14 @@ Upgrading from Infernalis
   This flag is important for the new object enumeration API and for
   new backends like BlueStore.
 
+* The rbd CLI no longer permits creating images and snapshots with potentially
+  ambiguous names (e.g. the '/' and '@' characters are disallowed). The
+  validation can be temporarily disabled by adding "--rbd-validate-names=false"
+  to the rbd CLI when creating an image or snapshot. It can also be disabled
+  by adding the following to the client section of the Ceph configuration file::
+
+    rbd validate names = false
+
 Notable Changes since v10.0.4
 -----------------------------
 
