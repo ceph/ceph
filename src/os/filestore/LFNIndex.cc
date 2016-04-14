@@ -786,6 +786,12 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
       if (hardlink) {
 	struct stat st;
 	r = ::stat(candidate_path.c_str(), &st);
+        if (r < 0) {
+          if (errno == ENOENT)
+            *hardlink = 0;
+          else
+            return -errno;
+        }
 	*hardlink = st.st_nlink;
       }
       return 0;
