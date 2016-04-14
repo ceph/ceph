@@ -2,6 +2,55 @@
  Release Notes
 ===============
 
+v10.1.2
+=======
+
+Notable Changes since v10.1.1
+-----------------------------
+
+* Jewel nfs fixes 3 (`pr#8460 <http://github.com/ceph/ceph/pull/8460>`_, Matt Benjamin)
+* PG: set epoch_created and parent_split_bits for child pg (`issue#15426 <http://tracker.ceph.com/issues/15426>`_, `pr#8552 <http://github.com/ceph/ceph/pull/8552>`_, Kefu Chai)
+* rgw: signature mismatch with escaped characters in url query portion (`issue#15358 <http://tracker.ceph.com/issues/15358>`_, `pr#8445 <http://github.com/ceph/ceph/pull/8445>`_, Javier M. Mellid)
+* authtool: update --help and manpage to match code. (`pr#8456 <http://github.com/ceph/ceph/pull/8456>`_, Robin H. Johnson)
+* build: Respect TMPDIR for virtualenv. (`pr#8457 <http://github.com/ceph/ceph/pull/8457>`_, Robin H. Johnson)
+* ceph-disk: do not always fail when re-using a partition (`pr#8508 <http://github.com/ceph/ceph/pull/8508>`_, You Ji)
+* ceph-fuse: rotate log file (`pr#8485 <http://github.com/ceph/ceph/pull/8485>`_, Sage Weil)
+* ceph-rest-api: fix fs/flag/set (`pr#8428 <http://github.com/ceph/ceph/pull/8428>`_, Sage Weil)
+* check-generated.sh: can't source bash from sh (`pr#8521 <http://github.com/ceph/ceph/pull/8521>`_, Michal Jarzabek)
+* common: buffer: put a guard for stat() syscall during read_file (`pr#7956 <http://github.com/ceph/ceph/pull/7956>`_, xie xingguo)
+* common: fix time_t cast in decode (`issue#15330 <http://tracker.ceph.com/issues/15330>`_, `pr#8419 <http://github.com/ceph/ceph/pull/8419>`_, Adam C. Emerson)
+* crush: fix typo (`pr#8518 <http://github.com/ceph/ceph/pull/8518>`_, Wei Jin)
+* doc: rgw admin uses "region list" not "regions list" (`pr#8517 <http://github.com/ceph/ceph/pull/8517>`_, Kris Jurka)
+* journal: fix final result for JournalTrimmer::C_RemoveSet (`pr#8516 <http://github.com/ceph/ceph/pull/8516>`_, runsisi)
+* journal: fix race condition between Future and journal shutdown (`issue#15364 <http://tracker.ceph.com/issues/15364>`_, `pr#8477 <http://github.com/ceph/ceph/pull/8477>`_, Jason Dillaman)
+* librados: Revert "rados: Add new field flags for ceph_osd_op.copy_get." (`pr#8486 <http://github.com/ceph/ceph/pull/8486>`_, Sage Weil)
+* librbd: disallow unsafe rbd_op_threads values (`issue#15034 <http://tracker.ceph.com/issues/15034>`_, `pr#8459 <http://github.com/ceph/ceph/pull/8459>`_, Josh Durgin)
+* mailmap update (`pr#8522 <http://github.com/ceph/ceph/pull/8522>`_, M Ranga Swami Reddy)
+* mds: Add cmapv to ESessions default constructor initializer list (`pr#8403 <http://github.com/ceph/ceph/pull/8403>`_, John Coyle)
+* mds: fix file_layout_t legacy encoding snafu (`pr#8455 <http://github.com/ceph/ceph/pull/8455>`_, Sage Weil)
+* os/ObjectStore: make device uuid probe output something friendly (`pr#8418 <http://github.com/ceph/ceph/pull/8418>`_, Sage Weil)
+* os/bluestore: revamp BlueFS bdev management and add perfcounters (`issue#15376 <http://tracker.ceph.com/issues/15376>`_, `pr#8431 <http://github.com/ceph/ceph/pull/8431>`_, Sage Weil)
+* os/filestore: force lfn attrs to be written atomically, restructure name length limits (`pr#8496 <http://github.com/ceph/ceph/pull/8496>`_, Samuel Just)
+* osd/ReplicatedPG::_rollback_to: update the OMAP flag (`issue#14777 <http://tracker.ceph.com/issues/14777>`_, `pr#8495 <http://github.com/ceph/ceph/pull/8495>`_, Samuel Just)
+* osd: clean up temp object if copy-from fails (`pr#8487 <http://github.com/ceph/ceph/pull/8487>`_, Sage Weil)
+* osd: fix two scrub relevant issues (`pr#8462 <http://github.com/ceph/ceph/pull/8462>`_, xie xingguo)
+* osd: fix/clean up full map request handling (`pr#8446 <http://github.com/ceph/ceph/pull/8446>`_, Sage Weil)
+* osdc/Objecter: fix narrow race with tid assignment (`issue#14364 <http://tracker.ceph.com/issues/14364>`_, `pr#7981 <http://github.com/ceph/ceph/pull/7981>`_, Sage Weil)
+* radosgw-admin: allow (`pr#8529 <http://github.com/ceph/ceph/pull/8529>`_, Orit Wasserman)
+* rbd-mirror: workaround for intermingled lockdep singletons (`pr#8476 <http://github.com/ceph/ceph/pull/8476>`_, Jason Dillaman)
+* rbd: journal reset should disable/re-enable journaling feature (`issue#15097 <http://tracker.ceph.com/issues/15097>`_, `pr#8490 <http://github.com/ceph/ceph/pull/8490>`_, Jason Dillaman)
+* rgw-admin: remove unused iterator and fix error message (`pr#8507 <http://github.com/ceph/ceph/pull/8507>`_, Karol Mroz)
+* rgw: aws4 subdomain calling bugfix (`issue#15369 <http://tracker.ceph.com/issues/15369>`_, `pr#8472 <http://github.com/ceph/ceph/pull/8472>`_, Javier M. Mellid)
+* rgw: fix a typo in error message (`pr#8434 <http://github.com/ceph/ceph/pull/8434>`_, Abhishek Lekshmanan)
+* rgw: fix problem deleting objects begining with double underscores (`issue#15318 <http://tracker.ceph.com/issues/15318>`_, `pr#8488 <http://github.com/ceph/ceph/pull/8488>`_, Orit Wasserman)
+* rgw: retry RGWRemoteMetaLog::read_log_info() while master is down (`pr#8453 <http://github.com/ceph/ceph/pull/8453>`_, Casey Bodley)
+* rgw: the map 'headers' is assigned a wrong value (`pr#8481 <http://github.com/ceph/ceph/pull/8481>`_, weiqiaomiao)
+* rgw_ldap: make ldap.h inclusion conditional (`pr#8500 <http://github.com/ceph/ceph/pull/8500>`_, Matt Benjamin)
+* systemd: drop any systemd imposed process/thread limits (`pr#8450 <http://github.com/ceph/ceph/pull/8450>`_, James Page)
+* test: fix ut test failure caused by lfn change (`issue#15464 <http://tracker.ceph.com/issues/15464>`_, `pr#8544 <http://github.com/ceph/ceph/pull/8544>`_, xie xingguo)
+* test: fix valgrind memcheck issues for rbd-mirror test cases (`issue#15354 <http://tracker.ceph.com/issues/15354>`_, `pr#8493 <http://github.com/ceph/ceph/pull/8493>`_, Jason Dillaman)
+* tests: add Ubuntu 16.04 xenial dockerfile (`pr#8519 <http://github.com/ceph/ceph/pull/8519>`_, Loic Dachary)
+
 v10.1.1
 =======
 
