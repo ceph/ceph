@@ -3720,7 +3720,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 	   p->state == TransContext::STATE_IO_DONE);
 }
 
-int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 {
   dout(20) << __func__ << " osr " << osr << " txc " << txc
 	   << " onodes " << txc->onodes << dendl;
@@ -3764,8 +3764,6 @@ int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     get_wal_key(txc->wal_txn->seq, &key);
     txc->t->set(PREFIX_WAL, key, bl);
   }
-
-  return 0;
 }
 
 void BlueStore::_txc_finish_kv(TransContext *txc)
@@ -4262,7 +4260,6 @@ int BlueStore::queue_transactions(
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  int r;
 
   // set up the sequencer
   OpSequencer *osr;
@@ -4290,8 +4287,7 @@ int BlueStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  r = _txc_finalize(osr, txc);
-  assert(r == 0);
+  _txc_finalize(osr, txc);
 
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
