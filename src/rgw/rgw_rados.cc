@@ -6970,6 +6970,12 @@ bool RGWRados::is_meta_master()
   */
 bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
 {
+
+  /* no current period  */
+  if (current_period.get_id().empty()) {
+    return false;
+  }
+
   /* zonegroup is not master zonegroup */
   if (!get_zonegroup().is_master) {
     return false;
