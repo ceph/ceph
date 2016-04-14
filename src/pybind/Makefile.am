@@ -6,6 +6,9 @@ CYTHON_BUILD_DIR="$(shell readlink -f $(builddir))/build"
 
 PY_DISTUTILS = \
 	mkdir -p $(CYTHON_BUILD_DIR); \
+	CC="${CC}" \
+	CXX="${CXX}" \
+	LDSHARED="${CC} -shared" \
 	CPPFLAGS="-iquote \${abs_srcdir}/include ${AM_CPPFLAGS} ${CPPFLAGS}" \
 	CFLAGS="-iquote \${abs_srcdir}/include ${AM_CFLAGS} ${PYTHON_CFLAGS}" \
 	LDFLAGS="-L\${abs_builddir}/.libs $(subst -pie,,${AM_LDFLAGS}) ${PYTHON_LDFLAGS}" \
