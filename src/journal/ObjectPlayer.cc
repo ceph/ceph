@@ -32,6 +32,7 @@ ObjectPlayer::~ObjectPlayer() {
     Mutex::Locker timer_locker(m_timer_lock);
     Mutex::Locker locker(m_lock);
     assert(!m_fetch_in_progress);
+    assert(!m_watch_in_progress);
     assert(m_watch_ctx == NULL);
   }
 }
@@ -64,23 +65,28 @@ void ObjectPlayer::watch(Context *on_fetch, double interval) {
   assert(m_watch_ctx == NULL);
   m_watch_ctx = on_fetch;
 
-  schedule_watch();
+  // watch callback might lead to re-scheduled watch
+  if (!m_watch_in_progress) {
+    schedule_watch();
+  }
 }
 
 void ObjectPlayer::unwatch() {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << " unwatch" << dendl;
-  Mutex::Locker timer_locker(m_timer_lock);
-
-  cancel_watch();
-
   Context *watch_ctx = nullptr;
-  std::swap(watch_ctx, m_watch_ctx);
-  if (watch_ctx != nullptr) {
-    delete watch_ctx;
+  {
+    Mutex::Locker timer_locker(m_timer_lock);
+
+    cancel_watch();
+
+    std::swap(watch_ctx, m_watch_ctx);
+    while (m_watch_in_progress) {
+      m_watch_in_progress_cond.Wait(m_timer_lock);
+    }
   }
 
-  while (m_watch_in_progress) {
-    m_watch_in_progress_cond.Wait(m_timer_lock);
+  if (watch_ctx != nullptr) {
+    watch_ctx->complete(-ECANCELED);
   }
 }
 
@@ -199,6 +205,7 @@ void ObjectPlayer::handle_watch_task() {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " polling" << dendl;
   assert(m_watch_ctx != NULL);
 
+  assert(!m_watch_in_progress);
   m_watch_in_progress = true;
   m_watch_task = NULL;
   fetch(new C_WatchFetch(this));
@@ -224,6 +231,13 @@ void ObjectPlayer::handle_watch_fetched(int r) {
 
   {
     Mutex::Locker locker(m_timer_lock);
+    assert(m_watch_in_progress);
+
+    // callback might have attempted to re-schedule the watch -- complete now
+    if (m_watch_ctx != nullptr) {
+      schedule_watch();
+    }
+
     m_watch_in_progress = false;
     m_watch_in_progress_cond.Signal();
   }

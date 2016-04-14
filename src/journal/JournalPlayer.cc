@@ -535,24 +535,31 @@ void JournalPlayer::schedule_watch() {
   // poll first splay offset and active splay offset since
   // new records should only appear in those two objects
   C_Watch *ctx = new C_Watch(this);
-  ObjectPlayerPtr object_player = get_object_player();
-  object_player->watch(ctx, m_watch_interval);
 
+  ObjectPlayerPtr object_player = get_object_player();
   uint8_t splay_width = m_journal_metadata->get_splay_width();
   if (object_player->get_object_number() % splay_width != 0) {
     ++ctx->pending_fetches;
 
-    object_player = m_object_players.begin()->second.begin()->second;
-    object_player->watch(ctx, m_watch_interval);
+    ObjectPlayerPtr first_object_player =
+      m_object_players.begin()->second.begin()->second;
+    first_object_player->watch(ctx, m_watch_interval);
   }
+
+  object_player->watch(ctx, m_watch_interval);
   m_watch_scheduled = true;
 }
 
 void JournalPlayer::handle_watch(int r) {
   ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
+  if (r == -ECANCELED) {
+    // unwatch of object player(s)
+    return;
+  }
 
   Mutex::Locker locker(m_lock);
   m_watch_scheduled = false;
+
   std::set<uint64_t> object_numbers;
   for (auto &players : m_object_players) {
     object_numbers.insert(
