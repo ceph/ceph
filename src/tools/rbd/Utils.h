@@ -22,6 +22,12 @@ enum SnapshotPresence {
   SNAPSHOT_PRESENCE_REQUIRED
 };
 
+enum SpecValidation {
+  SPEC_VALIDATION_FULL,
+  SPEC_VALIDATION_SNAP,
+  SPEC_VALIDATION_NONE
+};
+
 struct ProgressContext : public librbd::ProgressContext {
   const char *operation;
   bool progress;
@@ -41,7 +47,8 @@ void aio_context_callback(librbd::completion_t completion, void *arg);
 int read_string(int fd, unsigned max, std::string *out);
 
 int extract_spec(const std::string &spec, std::string *pool_name,
-                 std::string *image_name, std::string *snap_name);
+                 std::string *image_name, std::string *snap_name,
+                 SpecValidation spec_validation);
 
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
@@ -53,7 +60,8 @@ int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
     std::string *pool_name, std::string *image_name, std::string *snap_name,
-    SnapshotPresence snapshot_presence, bool image_required = true);
+    SnapshotPresence snapshot_presence, SpecValidation spec_validation,
+    bool image_required = true);
 
 int get_pool_journal_names(
     const boost::program_options::variables_map &vm,

@@ -231,7 +231,7 @@ int execute(const po::variables_map &vm) {
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    false);
+    utils::SPEC_VALIDATION_NONE, false);
   if (r < 0) {
     return r;
   }
