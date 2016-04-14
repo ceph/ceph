@@ -366,7 +366,7 @@ private:
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_release(TransContext *txc, uint64_t offset, uint64_t length);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
-  int _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);

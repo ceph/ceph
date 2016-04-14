@@ -2219,7 +2219,7 @@ void KStore::_txc_state_proc(TransContext *txc)
   }
 }
 
-int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+void KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 {
   dout(20) << __func__ << " osr " << osr << " txc " << txc
 	   << " onodes " << txc->onodes << dendl;
@@ -2236,8 +2236,6 @@ int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
   }
-
-  return 0;
 }
 
 void KStore::_txc_finish_kv(TransContext *txc)
@@ -2392,7 +2390,6 @@ int KStore::queue_transactions(
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  int r;
 
   // set up the sequencer
   OpSequencer *osr;
@@ -2420,8 +2417,7 @@ int KStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  r = _txc_finalize(osr, txc);
-  assert(r == 0);
+  _txc_finalize(osr, txc);
 
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
