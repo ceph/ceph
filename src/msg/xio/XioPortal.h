@@ -46,7 +46,7 @@ private:
     struct Lane
     {
       uint32_t size;
-      XioMsg::Queue q;
+      XioSubmit::Queue q;
       pthread_spinlock_t sp;
       CACHE_PAD(0);
     };
