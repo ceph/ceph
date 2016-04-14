@@ -10,7 +10,7 @@ Notable Changes since v10.1.1
 
 * Jewel nfs fixes 3 (`pr#8460 <http://github.com/ceph/ceph/pull/8460>`_, Matt Benjamin)
 * PG: set epoch_created and parent_split_bits for child pg (`issue#15426 <http://tracker.ceph.com/issues/15426>`_, `pr#8552 <http://github.com/ceph/ceph/pull/8552>`_, Kefu Chai)
-* Review-by: Orit Wasserman <owasserm@redhat.com> (`issue#15358 <http://tracker.ceph.com/issues/15358>`_, `pr#8445 <http://github.com/ceph/ceph/pull/8445>`_, Javier M. Mellid)
+* rgw: signature mismatch with escaped characters in url query portion (`issue#15358 <http://tracker.ceph.com/issues/15358>`_, `pr#8445 <http://github.com/ceph/ceph/pull/8445>`_, Javier M. Mellid)
 * authtool: update --help and manpage to match code. (`pr#8456 <http://github.com/ceph/ceph/pull/8456>`_, Robin H. Johnson)
 * build: Respect TMPDIR for virtualenv. (`pr#8457 <http://github.com/ceph/ceph/pull/8457>`_, Robin H. Johnson)
 * ceph-disk: do not always fail when re-using a partition (`pr#8508 <http://github.com/ceph/ceph/pull/8508>`_, You Ji)
@@ -39,7 +39,6 @@ Notable Changes since v10.1.1
 * radosgw-admin: allow (`pr#8529 <http://github.com/ceph/ceph/pull/8529>`_, Orit Wasserman)
 * rbd-mirror: workaround for intermingled lockdep singletons (`pr#8476 <http://github.com/ceph/ceph/pull/8476>`_, Jason Dillaman)
 * rbd: journal reset should disable/re-enable journaling feature (`issue#15097 <http://tracker.ceph.com/issues/15097>`_, `pr#8490 <http://github.com/ceph/ceph/pull/8490>`_, Jason Dillaman)
-* releases: update the v10.1.0 release link (`pr#8501 <http://github.com/ceph/ceph/pull/8501>`_, Loic Dachary)
 * rgw-admin: remove unused iterator and fix error message (`pr#8507 <http://github.com/ceph/ceph/pull/8507>`_, Karol Mroz)
 * rgw: aws4 subdomain calling bugfix (`issue#15369 <http://tracker.ceph.com/issues/15369>`_, `pr#8472 <http://github.com/ceph/ceph/pull/8472>`_, Javier M. Mellid)
 * rgw: fix a typo in error message (`pr#8434 <http://github.com/ceph/ceph/pull/8434>`_, Abhishek Lekshmanan)
