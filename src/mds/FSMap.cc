@@ -440,7 +440,9 @@ void FSMap::decode(bufferlist::iterator& p)
     ::decode(mds_roles, p);
     ::decode(standby_daemons, p);
     ::decode(standby_epochs, p);
-    ::decode(ever_enabled_multiple, p);
+    if (struct_v >= 7) {
+      ::decode(ever_enabled_multiple, p);
+    }
   }
 
   DECODE_FINISH(p);
