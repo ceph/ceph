@@ -180,6 +180,7 @@ using ceph::crypto::MD5;
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
+#define ERR_SERVICE_UNAVAILABLE  2202
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
