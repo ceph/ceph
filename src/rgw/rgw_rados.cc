@@ -1204,6 +1204,14 @@ int RGWPeriod::reflect()
       ldout(cct, 0) << "ERROR: failed to store zonegroup info for zonegroup=" << iter.first << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
+    if (zg.is_master_zonegroup()) {
+      // set master as default if no default exists
+      r = zg.set_as_default(true);
+      if (r == 0) {
+        ldout(cct, 1) << "Set the period's master zonegroup " << zg.get_id()
+            << " as the default" << dendl;
+      }
+    }
   }
   return 0;
 }
