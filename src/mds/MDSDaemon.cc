@@ -1104,6 +1104,10 @@ void MDSDaemon::suicide()
 {
   assert(mds_lock.is_locked());
 
+  // make sure we don't suicide twice
+  assert(stopping == false);
+  stopping = true;
+
   dout(1) << "suicide.  wanted state "
           << ceph_mds_state_name(beacon.get_want_state()) << dendl;
 
