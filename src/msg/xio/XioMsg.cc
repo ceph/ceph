@@ -43,3 +43,8 @@ int XioDispatchHook::release_msgs()
   assert(hdr_buffers.size() == 1); /* accelio header is small without scatter gather */
   return hdr_buffers.begin()->length();
 }
+
+void XioMsg::print_debug(CephContext *cct, const char *tag) const {
+  print_xio_msg_hdr(cct, tag, hdr, get_xio_msg());
+  print_ceph_msg(cct, tag, m);
+}

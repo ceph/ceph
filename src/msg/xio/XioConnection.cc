@@ -488,7 +488,7 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
 void XioConnection::msg_send_fail(XioMsg *xmsg, int code)
 {
   ldout(msgr->cct,2) << "xio_send_msg FAILED xcon: " << this <<
-    " xmsg: " << &xmsg->req_0.msg << " code=" << code <<
+    " xmsg: " << xmsg->get_xio_msg() << " code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
   /* return refs taken for each xio_msg */
   xmsg->put_msg_refs();
@@ -562,7 +562,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
 	xmsg = static_cast<XioMsg*>(xs);
 	deferred_q.erase(q_iter);
 	// release once for each chained xio_msg
-	xmsg->put(xmsg->hdr.msg_cnt);
+	xmsg->put(xmsg->get_msg_count());
 	break;
       case XioSubmit::INCOMING_MSG_RELEASE:
 	deferred_q.erase(q_iter);
