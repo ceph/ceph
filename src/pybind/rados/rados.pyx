@@ -2800,7 +2800,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             ret = rados_write_op_operate(_write_op.write_op, self.io, _oid, &_mtime, _flags)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "Failed to operate write op for oid %s" % oid)
 
     @requires(('read_op', ReadOp), ('oid', str_type), ('flag', opt(int)))
@@ -2822,7 +2822,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             ret = rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "Failed to operate read op for oid %s" % oid)
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
