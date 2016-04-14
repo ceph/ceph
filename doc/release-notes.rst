@@ -270,10 +270,8 @@ Major Changes from Infernalis
   * BlueStore, a new OSD backend, is included as an experimental
     feature.  The plan is for it to become the default backend in the
     K or L release.
-  * The OSD now persists scrub results and provides a librados to
-    query results in detail, including the nature of inconsistencies
-    found, the ability to fetch alternate versions of the same
-    specific object (if any), and fine-grained control over repair.
+  * The OSD now persists scrub results and provides a librados API to
+    query results in detail.
   * We have revised our documentation to recommend *against* using
     ext4 as the underlying filesystem for Ceph OSD daemons due to
     problems supporting our long object name handling.
