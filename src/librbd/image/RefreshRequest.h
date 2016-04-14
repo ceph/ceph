@@ -67,6 +67,9 @@ private:
    *            V2_OPEN_JOURNAL (skip if journal              |
    *                |            active or disabled)          |
    *                v                                         |
+   *            V2_BLOCK_WRITES (skip if journal not          |
+   *                |            disabled)                    |
+   *                v                                         |
    *             <apply>                                      |
    *                |                                         |
    *                v                                         |
@@ -125,6 +128,8 @@ private:
   std::string m_lock_tag;
   bool m_exclusive_locked;
 
+  bool m_blocked_writes = false;
+
   void send_v1_read_header();
   Context *handle_v1_read_header(int *result);
 
@@ -151,6 +156,9 @@ private:
 
   Context *send_v2_open_journal();
   Context *handle_v2_open_journal(int *result);
+
+  Context *send_v2_block_writes();
+  Context *handle_v2_block_writes(int *result);
 
   Context *send_v2_open_object_map();
   Context *handle_v2_open_object_map(int *result);

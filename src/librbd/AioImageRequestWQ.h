@@ -104,6 +104,9 @@ private:
     return (m_queued_writes.read() == 0);
   }
 
+  void finish_queued_op(AioImageRequest<ImageCtx> *req);
+  void finish_in_progress_write();
+
   int start_in_flight_op(AioCompletion *c);
   void finish_in_flight_op();
 

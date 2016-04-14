@@ -277,6 +277,17 @@ public:
                           const std::string &snap_name, uint64_t snap_id) {
     EXPECT_CALL(mock_image_ctx, get_snap_id(snap_name)).WillOnce(Return(snap_id));
   }
+
+  void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
+                  .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
+  void expect_unblock_writes(MockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes())
+                  .Times(1);
+  }
+
 };
 
 TEST_F(TestMockImageRefreshRequest, SuccessV1) {
@@ -615,8 +626,10 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   expect_get_mutable_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  expect_block_writes(mock_image_ctx, 0);
   expect_clear_require_lock_on_read(mock_image_ctx);
   expect_close_journal(mock_image_ctx, *mock_journal, 0);
+  expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &ctx);

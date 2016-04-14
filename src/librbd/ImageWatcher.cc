@@ -403,6 +403,11 @@ void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
 void ImageWatcher::notify_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+
+  // ExclusiveLock state machine can be dynamically disabled
+  if (m_image_ctx.exclusive_lock == nullptr) {
+    return;
+  }
   assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
@@ -417,8 +422,11 @@ void ImageWatcher::handle_request_lock(int r) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
 
-  // ExclusiveLock state machine cannot transition
-  assert(!m_image_ctx.exclusive_lock->is_lock_owner());
+  // ExclusiveLock state machine cannot transition -- but can be
+  // dynamically disabled
+  if (m_image_ctx.exclusive_lock == nullptr) {
+    return;
+  }
 
   if (r == -ETIMEDOUT) {
     ldout(m_image_ctx.cct, 5) << this << " timed out requesting lock: retrying"
