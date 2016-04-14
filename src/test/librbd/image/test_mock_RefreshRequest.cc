@@ -75,6 +75,7 @@ ACTION_P(TestFeatures, image_ctx) {
 
 ACTION_P(ShutDownExclusiveLock, image_ctx) {
   // shutting down exclusive lock will close object map and journal
+  image_ctx->exclusive_lock = nullptr;
   image_ctx->object_map = nullptr;
   image_ctx->journal = nullptr;
 }

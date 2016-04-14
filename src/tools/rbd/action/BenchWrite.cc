@@ -105,7 +105,7 @@ void rbd_bencher_completion(void *vc, void *pc)
   int ret = c->get_return_value();
   if (ret != 0) {
     cout << "write error: " << cpp_strerror(ret) << std::endl;
-    assert(0 == ret);
+    exit(ret < 0 ? -ret : ret);
   }
   b->lock.Lock();
   b->in_flight--;
