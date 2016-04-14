@@ -156,6 +156,10 @@ public:
     stray_manager.eval_stray(dn);
   }
 
+  void notify_stray_loaded(CDentry *dn) {
+    stray_manager.notify_stray_loaded(dn);
+  }
+
   void handle_conf_change(const struct md_config_t *conf,
                           const std::set <std::string> &changed);
 

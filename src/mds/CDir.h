@@ -606,10 +606,11 @@ private:
   }
   void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
   void fetch(MDSInternalContextBase *c, const std::string& want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
 protected:
   compact_set<string> wanted_items;
 
-  void _omap_fetch();
+  void _omap_fetch(MDSInternalContextBase *fin, const std::set<dentry_key_t>& keys);
   CDentry *_load_dentry(
       const std::string &key,
       const std::string &dname,
@@ -633,9 +634,10 @@ protected:
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
-  void go_bad();
+  void go_bad(bool complete);
 
-  void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap, int r);
+  void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
+		     bool complete, int r);
   void _tmap_fetch();
   void _tmap_fetched(bufferlist &bl, int r);
 
