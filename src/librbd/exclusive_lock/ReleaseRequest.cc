@@ -50,7 +50,29 @@ ReleaseRequest<I>::~ReleaseRequest() {
 
 template <typename I>
 void ReleaseRequest<I>::send() {
+  send_cancel_op_requests();
+}
+
+template <typename I>
+void ReleaseRequest<I>::send_cancel_op_requests() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  using klass = ReleaseRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_cancel_op_requests>(this);
+  m_image_ctx.cancel_async_requests(ctx);
+}
+
+template <typename I>
+Context *ReleaseRequest<I>::handle_cancel_op_requests(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  assert(*ret_val == 0);
+
   send_block_writes();
+  return nullptr;
 }
 
 template <typename I>
@@ -80,28 +102,6 @@ Context *ReleaseRequest<I>::handle_block_writes(int *ret_val) {
     m_image_ctx.aio_work_queue->unblock_writes();
     return m_on_finish;
   }
-
-  send_cancel_op_requests();
-  return nullptr;
-}
-
-template <typename I>
-void ReleaseRequest<I>::send_cancel_op_requests() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
-
-  using klass = ReleaseRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_cancel_op_requests>(this);
-  m_image_ctx.cancel_async_requests(ctx);
-}
-
-template <typename I>
-Context *ReleaseRequest<I>::handle_cancel_op_requests(int *ret_val) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
-
-  assert(*ret_val == 0);
 
   if (m_on_releasing != nullptr) {
     // alert caller that we no longer own the exclusive lock

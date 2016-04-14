@@ -93,8 +93,8 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_block_writes(mock_image_ctx, 0);
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, 0);
   expect_flush_notifies(mock_image_ctx);
 
   MockJournal *mock_journal = new MockJournal();
@@ -183,6 +183,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, BlockWritesError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_cancel_op_requests(mock_image_ctx, 0);
   expect_block_writes(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
 
@@ -204,8 +205,8 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  expect_block_writes(mock_image_ctx, 0);
   expect_cancel_op_requests(mock_image_ctx, 0);
+  expect_block_writes(mock_image_ctx, 0);
   expect_flush_notifies(mock_image_ctx);
 
   expect_unlock(mock_image_ctx, -EINVAL);
