@@ -883,6 +883,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            '120',
             'ceph',
         ]
         ceph_args.extend(args)
@@ -902,6 +904,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            '120',
             'ceph',
         ]
         ceph_args.extend(args)
