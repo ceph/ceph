@@ -82,6 +82,10 @@ int read_string(int fd, unsigned max, std::string *out) {
 int extract_spec(const std::string &spec, std::string *pool_name,
                  std::string *image_name, std::string *snap_name,
                  SpecValidation spec_validation) {
+  if (!g_ceph_context->_conf->rbd_validate_names) {
+    spec_validation = SPEC_VALIDATION_NONE;
+  }
+
   boost::regex pattern;
   switch (spec_validation) {
   case SPEC_VALIDATION_FULL:
