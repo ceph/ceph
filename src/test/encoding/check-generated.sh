@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 dir=$1
 
@@ -15,8 +15,8 @@ failed=0
 numtests=0
 echo "checking ceph-dencoder generated test instances..."
 echo "numgen type"
-for type in `./ceph-dencoder list_types`; do
-    num=`./ceph-dencoder type $type count_tests`
+for type in `ceph-dencoder list_types`; do
+    num=`ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 1 $num 2>/dev/null`; do
 	safe_type=$type
@@ -26,10 +26,10 @@ for type in `./ceph-dencoder list_types`; do
 	fi
 
 	pids=""
-	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n dump_json > $tmp1"
-	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n encode decode dump_json > $tmp2"
-	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n copy dump_json > $tmp3"
-	run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n copy_ctor dump_json > $tmp4"
+	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n dump_json > $tmp1"
+	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n encode decode dump_json > $tmp2"
+	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n copy dump_json > $tmp3"
+	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n copy_ctor dump_json > $tmp4"
 	wait_background pids
 
 	if [ $? -ne 0 ]; then
@@ -43,7 +43,7 @@ for type in `./ceph-dencoder list_types`; do
 	# the sorted json output.  this is a weaker test, but is better
 	# than nothing.
 	deterministic=0
-	if ./ceph-dencoder type $type is_deterministic; then
+	if ceph-dencoder type $type is_deterministic; then
 	    deterministic=1
 	fi
 
@@ -57,37 +57,37 @@ for type in `./ceph-dencoder list_types`; do
 
 	if ! cmp $tmp1 $tmp2; then
 	    echo "**** $type test $n dump_json check failed ****"
-	    echo "   ./ceph-dencoder type $type select_test $n dump_json > $tmp1"
-	    echo "   ./ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
 
 	if ! cmp $tmp1 $tmp3; then
 	    echo "**** $type test $n copy dump_json check failed ****"
-	    echo "   ./ceph-dencoder type $type select_test $n dump_json > $tmp1"
-	    echo "   ./ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
 
 	if ! cmp $tmp1 $tmp4; then
 	    echo "**** $type test $n copy_ctor dump_json check failed ****"
-	    echo "   ./ceph-dencoder type $type select_test $n dump_json > $tmp1"
-	    echo "   ./ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
 
 	if [ $deterministic -ne 0 ]; then
-	    run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n encode export $tmp1"
-	    run_in_background pids bash -c "./ceph-dencoder type $safe_type select_test $n encode decode encode export $tmp2"
+	    run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n encode export $tmp1"
+	    run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n encode decode encode export $tmp2"
 	    wait_background pids
 
 	    if ! cmp $tmp1 $tmp2; then
 		echo "**** $type test $n binary reencode check failed ****"
-		echo "   ./ceph-dencoder type $type select_test $n encode export $tmp1"
-		echo "   ./ceph-dencoder type $type select_test $n encode decode encode export $tmp2"
+		echo "   ceph-dencoder type $type select_test $n encode export $tmp1"
+		echo "   ceph-dencoder type $type select_test $n encode decode encode export $tmp2"
 		echo "   cmp $tmp1 $tmp2"
 		failed=$(($failed + 1))
 	    fi

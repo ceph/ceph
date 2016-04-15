@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <gtest/gtest.h>
 #include "global/global_init.h"
@@ -26,7 +27,7 @@
 TEST(CompressionZlib, compress_decompress)
 {
   CompressionZlib sp;
-  EXPECT_EQ(sp.get_method_name(), "zlib");
+  EXPECT_STREQ(sp.get_method_name(), "zlib");
   const char* test = "This is test text";
   int len = strlen(test);
   bufferlist in, out;
@@ -44,7 +45,7 @@ TEST(CompressionZlib, compress_decompress)
 TEST(CompressionZlib, compress_decompress_chunk)
 {
   CompressionZlib sp;
-  EXPECT_EQ(sp.get_method_name(), "zlib");
+  EXPECT_STREQ(sp.get_method_name(), "zlib");
   const char* test = "This is test text";
   buffer::ptr test2 ("1234567890", 10);
   int len = strlen(test);
@@ -68,7 +69,9 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  g_conf->set_val("compression_dir", ".libs", false, false);
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : "lib");
+  g_conf->set_val("compression_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

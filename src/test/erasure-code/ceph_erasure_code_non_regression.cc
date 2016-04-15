@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <stdlib.h>
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options/option.hpp>
@@ -99,7 +100,9 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
-  g_conf->set_val("erasure_code_dir", ".libs", false, false);
+  const char* env = getenv("CEPH_LIB");
+  std::string libs_dir(env ? env : "lib");
+  g_conf->set_val("erasure_code_dir", libs_dir, false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;

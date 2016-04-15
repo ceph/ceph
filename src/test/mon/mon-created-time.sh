@@ -12,7 +12,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source ../qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -36,13 +36,13 @@ function TEST_mon_created_time() {
 
     run_mon $dir a || return 1
 
-    ./ceph mon dump || return 1
+    ceph mon dump || return 1
 
-    if test "$(./ceph mon dump 2>/dev/null | sed -n '/created/p' | awk '{print $NF}')"x = ""x ; then
+    if test "$(ceph mon dump 2>/dev/null | sed -n '/created/p' | awk '{print $NF}')"x = ""x ; then
         return 1
     fi
  
-    if test "$(./ceph mon dump 2>/dev/null | sed -n '/created/p' | awk '{print $NF}')"x = "0.000000"x ; then
+    if test "$(ceph mon dump 2>/dev/null | sed -n '/created/p' | awk '{print $NF}')"x = "0.000000"x ; then
         return 1
     fi
 }
