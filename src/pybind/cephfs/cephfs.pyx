@@ -433,11 +433,11 @@ cdef class LibCephFS(object):
                 ret_buf = <char *>realloc_chk(ret_buf, length)
                 with nogil:
                     ret = ceph_conf_get(self.cluster, _option, ret_buf, length)
-                if (ret == 0):
+                if ret == 0:
                     return decode_cstr(ret_buf)
-                elif (ret == -errno.ENAMETOOLONG):
+                elif ret == -errno.ENAMETOOLONG:
                     length = length * 2
-                elif (ret == -errno.ENOENT):
+                elif ret == -errno.ENOENT:
                     return None
                 else:
                     raise make_ex(ret, "error calling conf_get")
@@ -455,7 +455,7 @@ cdef class LibCephFS(object):
 
         with nogil:
             ret = ceph_conf_set(self.cluster, _option, _val)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error calling conf_set")
 
     def init(self):
