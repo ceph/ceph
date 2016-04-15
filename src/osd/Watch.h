@@ -202,6 +202,9 @@ public:
   bool is_connected() {
     return conn.get() != NULL;
   }
+  bool is_connected(Connection *con) {
+    return conn.get() == con;
+  }
 
   /// NOTE: must be called with pg lock held
   ~Watch();
@@ -290,7 +293,7 @@ public:
     );
 
   /// Called on session reset, disconnects watchers
-  void reset();
+  void reset(Connection *con);
 };
 
 #endif
