@@ -32,8 +32,8 @@ namespace test_simple {
 
   using SimpleServer = TestServer<simp::SimpleQueue<ClientId,TestRequest,Time>,
 				  ClientInfo,
-				  dmc::ReqParams<ClientId>,
-				  dmc::RespParams<ServerId>,
+				  simp::ReqParams<ClientId>,
+				  simp::RespParams<ServerId>,
 				  SimpleAddInfo,
 				  SimpleAccum>;
 #if 0
@@ -45,12 +45,11 @@ namespace test_simple {
     using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 
     using SubmitFunc = DmcClient::SubmitFunc;
-
 #endif
 
   extern void simple_server_accumulate_f(SimpleAccum& a,
-					 const SimpleServerAddInfo& add_info);
+					 const SimpleAddInfo& add_info);
 
   extern void simple_client_accumulate_f(SimpleAccum& a,
-					 const dmc::RespParams<ServerId>& r);
+					 const simp::RespParams<ServerId>& r);
 }; // namespace test_simple

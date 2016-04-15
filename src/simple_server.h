@@ -33,8 +33,6 @@ namespace crimson {
       // parameter is a callback when it's completed
       using HandleRequestFunc = std::function<void(const C&,RequestRef)>;
 
-
-#if 0
       struct PullReq {
 	enum class Type { returning, none };
 
@@ -46,8 +44,6 @@ namespace crimson {
 	Type                 type;
 	boost::variant<Retn> data;
       };
-#endif
-
 
     protected:
 
@@ -112,22 +108,22 @@ namespace crimson {
 	}
       }
 
-
-      pq::PullReq pull_request() {
+      PullReq pull_request() {
 	assert(pq::Mechanism::pull == mechanism);
 	PullReq result;
 	DataGuard g(queue_mtx);
 	if (queue.empty()) {
-	  result.type = pq::PullReq::Type::none;
+	  result.type = PullReq::Type::none;
 	  return result;
 	} else {
 	  auto front = queue.front();
-	  result.type = pq::PullReq::Type::returning;
-	  result.data = PullReq::Ret{front.client, std::move(front.request)};
+	  result.type = PullReq::Type::returning;
+	  result.data =
+	    typename PullReq::Retn{front.client, std::move(front.request)};
 	  queue.pop();
 	  return result;
 	}
-      };
+      }
 
     protected:
 

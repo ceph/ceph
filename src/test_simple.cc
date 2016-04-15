@@ -21,7 +21,7 @@ namespace simp = crimson::simple_scheduler;
 
 
 void test::simple_server_accumulate_f(test::SimpleAccum& a,
-				      const test::SimpleServerAddInfo& add_info) {
+				      const test::SimpleAddInfo& add_info) {
   // empty
 }
 

@@ -46,6 +46,7 @@ namespace crimson {
 }; // namespace crimson
 
 
+// TODO : move into namespace above
 struct TestRequest {
   ServerId server; // allows debugging
   uint32_t epoch;
@@ -69,6 +70,7 @@ struct TestRequest {
 }; // struct TestRequest
 
 
+// TODO : move into namespace above
 struct TestResponse {
   uint32_t epoch;
 

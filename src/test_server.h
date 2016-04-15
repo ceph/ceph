@@ -126,8 +126,7 @@ public:
 
   void post(const TestRequest& request,
 	    const ReqPm& req_params) {
-    auto now = crimson::queue_testing::get_time();
-    priority_queue.add_request(request, req_params, now);
+    priority_queue.add_request(request, req_params);
   }
 
   bool has_avail_thread() {
