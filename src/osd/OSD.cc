@@ -2037,7 +2037,13 @@ int OSD::init()
       derr << "   osd max object namespace len = "
 	   << g_conf->osd_max_object_namespace_len << dendl;
       derr << cpp_strerror(r) << dendl;
-      goto out;
+      if (g_conf->osd_check_max_object_name_len_on_startup) {
+	goto out;
+      }
+      derr << "osd_check_max_object_name_len_on_startup = false, starting anyway"
+	   << dendl;
+    } else {
+      dout(20) << "configured osd_max_object_name[space]_len looks ok" << dendl;
     }
   }
 
