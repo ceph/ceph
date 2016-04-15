@@ -8,6 +8,10 @@ overrides:
 tasks:
 - install:
 - ceph:
+    conf:
+      global:
+        osd max object name len: 460
+        osd max object namespace len: 64
 - exec:
     client.0:
       - ceph osd pool create ec-ca 1 1

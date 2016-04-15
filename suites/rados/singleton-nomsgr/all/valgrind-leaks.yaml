@@ -8,6 +8,8 @@ overrides:
       global:
         osd heartbeat grace: 40
         debug deliberately leak memory: true
+        osd max object name len: 460
+        osd max object namespace len: 64
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
