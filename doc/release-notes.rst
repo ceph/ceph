@@ -128,15 +128,24 @@ C++11).  Although it is still possible to build Ceph on older
 distributions by installing backported development tools, we are not
 building and publishing release packages for ceph.com.
 
-We now build packages for:
+We now build packages for the following distributions and architectures:
 
-* CentOS 7.x.  We have dropped support for CentOS 6 (and other RHEL 6
-  derivatives, like Scientific Linux 6).
-* Debian Jessie 8.x.  Debian Wheezy 7.x's g++ has incomplete support
-  for C++11 (and no systemd).
-* Ubuntu Trusty 14.04 and Ubuntu Xenial.  Ubuntu Precise 12.04 is no
-  longer supported.
-* Fedora 22 or later.
+- x86_64:
+
+  * CentOS 7.x.  We have dropped support for CentOS 6 (and other RHEL 6
+    derivatives, like Scientific Linux 6).
+  * Debian Jessie 8.x.  Debian Wheezy 7.x's g++ has incomplete support
+    for C++11 (and no systemd).
+  * Ubuntu Xenial 16.04 and Trusty 14.04.  Ubuntu Precise 12.04 is no
+    longer supported.
+  * Fedora 22 or later.
+
+- aarch64 / arm64:
+
+  * Ubuntu Xenial 16.04.
+  * CentOS 7.x.  However, note that we have a few dependencies that are
+    not in core CentOS and will need to be found from other resources.
+    We expect the situation here to improve soon.
 
 Upgrading from Infernalis or Hammer
 -----------------------------------
