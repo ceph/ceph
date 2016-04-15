@@ -557,7 +557,7 @@ OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous 
 OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
 
 // verify backend can support configured max object name length
-OPTION(osd_check_max_object_name_len_on_sthartup, OPT_BOOL, true)
+OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL, true)
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
