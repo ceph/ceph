@@ -107,8 +107,8 @@ int main(int argc, const char **argv)
       break;
     }
     else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
+      // exit(1) will be called in the usage()
       usage();
-      break;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
       int r = parse_rank("journal-check", val);
