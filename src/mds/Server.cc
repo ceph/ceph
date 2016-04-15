@@ -2893,8 +2893,8 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
 
-  // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir())
+  // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
+  if (!cur->inode.is_file())
     cmode = CEPH_FILE_MODE_PIN;
 
   dout(10) << "open flags = " << flags
