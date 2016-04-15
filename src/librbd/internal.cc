@@ -1058,6 +1058,12 @@ err_remove_id:
     return r;
   }
 
+  int cg_add_image(librados::IoCtx& cg_io_ctx, const char *cg_name,
+                   librados::IoCtx& image_io_ctx, const char *image_name)
+  {
+    return 0;
+  }
+
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {

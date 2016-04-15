@@ -112,6 +112,8 @@ struct JournalObjectSize {};
 std::string get_name_prefix(ArgumentModifier modifier);
 std::string get_description_prefix(ArgumentModifier modifier);
 
+void add_cg_option(boost::program_options::options_description *opt);
+
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix = "");

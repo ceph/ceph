@@ -56,6 +56,15 @@ std::string get_description_prefix(ArgumentModifier modifier) {
   }
 }
 
+void add_cg_option(po::options_description *opt)
+{
+  std::string name = CG_NAME;
+  std::string description = "consistency group name";
+
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
 void add_pool_option(po::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix) {
