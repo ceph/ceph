@@ -6692,9 +6692,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (superblock.oldest_map) {
     int num = 0;
-    epoch_t min(
-      MIN(m->oldest_map,
-	  service.map_cache.cached_key_lower_bound()));
+    epoch_t cache_lb = service.map_cache.cached_key_lower_bound();
+    epoch_t min = MIN(m->oldest_map, cache_lb);
+    dout(20) << __func__ << " oldest_map " << m->oldest_map
+	     << " cache lb " << cache_lb
+	     << " min " << min << dendl;
     for (epoch_t e = superblock.oldest_map; e < min; ++e) {
       dout(20) << " removing old osdmap epoch " << e << dendl;
       t.remove(coll_t::meta(), get_osdmap_pobject_name(e));
