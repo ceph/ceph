@@ -141,11 +141,28 @@ We now build packages for:
 Upgrading from Infernalis or Hammer
 -----------------------------------
 
-* We now recommend against using ``ext4`` as the underlying file system for
-  Ceph OSDs, especially when RGW or other users of long RADOS object names
-  are used.  For more information, please see `Filesystem Recommendations`_.
+* We now recommend against using ``ext4`` as the underlying file
+  system for Ceph OSDs, especially when RGW or other users of long
+  RADOS object names are used.  For more information about why, please
+  see `Filesystem Recommendations`_.
+
+  If you have an existing cluster that uses ext4 for the OSDs but uses only
+  RBD and/or CephFS, then the ext4 limitations will not affect you.  Before
+  upgrading, be sure add the following to ``ceph.conf`` to allow the OSDs to
+  start::
+
+    osd max object name len = 256
+    osd max object namespace len = 64
+
+  Keep in mind that if you set these lower object name limits and
+  later decide to use RGW on this cluster, it will have problems
+  storing S3/Swift objects with long names.  This startup check can also be
+  disabled via the below option, although this is not recommended::
+
+    osd check max object name len on startup = false
 
 .. _Filesystem Recommendations: ../configuration/filesystem-recommendations
+
 
 * There are no major compatibility changes since Infernalis.  Simply
   upgrading the daemons on each host and restarting all daemons is
