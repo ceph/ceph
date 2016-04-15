@@ -39,6 +39,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::InvokeWithoutArgs;
 using ::testing::Return;
+using ::testing::SetArgPointee;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
@@ -76,6 +77,36 @@ public:
                             })));
   }
 
+  void expect_snap_protect(librbd::MockImageCtx &mock_image_ctx,
+                           const std::string &snap_name, int r) {
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(StrEq(snap_name), _))
+                  .WillOnce(WithArg<1>(Invoke([this, r](Context *ctx) {
+                              m_threads->work_queue->queue(ctx, r);
+                            })));
+  }
+
+  void expect_snap_unprotect(librbd::MockImageCtx &mock_image_ctx,
+                             const std::string &snap_name, int r) {
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(StrEq(snap_name), _))
+                  .WillOnce(WithArg<1>(Invoke([this, r](Context *ctx) {
+                              m_threads->work_queue->queue(ctx, r);
+                            })));
+  }
+
+  void expect_snap_is_protected(librbd::MockImageCtx &mock_image_ctx,
+                                uint64_t snap_id, bool is_protected, int r) {
+    EXPECT_CALL(mock_image_ctx, is_snap_protected(snap_id, _))
+                  .WillOnce(DoAll(SetArgPointee<1>(is_protected),
+                                  Return(r)));
+  }
+
+  void expect_snap_is_unprotected(librbd::MockImageCtx &mock_image_ctx,
+                                  uint64_t snap_id, bool is_unprotected, int r) {
+    EXPECT_CALL(mock_image_ctx, is_snap_unprotected(snap_id, _))
+                  .WillOnce(DoAll(SetArgPointee<1>(is_unprotected),
+                                  Return(r)));
+  }
+
   void expect_update_client(journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, update_client(_, _))
                   .WillOnce(WithArg<1>(CompleteContext(r)));
@@ -96,10 +127,18 @@ public:
                                        on_finish);
   }
 
-  int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name) {
+  int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,
+                  bool protect = false) {
     int r = image_ctx->operations->snap_create(snap_name.c_str());
     if (r < 0) {
       return r;
+    }
+
+    if (protect) {
+      r = image_ctx->operations->snap_protect(snap_name.c_str());
+      if (r < 0) {
+        return r;
+      }
     }
 
     r = image_ctx->state->refresh();
@@ -163,6 +202,9 @@ TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapCreate) {
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1"));
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap2"));
 
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+  uint64_t remote_snap_id2 = m_remote_image_ctx->snap_ids["snap2"];
+
   librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
@@ -170,6 +212,8 @@ TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapCreate) {
   InSequence seq;
   expect_snap_create(mock_local_image_ctx, "snap1", 12, 0);
   expect_snap_create(mock_local_image_ctx, "snap2", 14, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, false, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id2, false, 0);
   expect_update_client(mock_journaler, 0);
 
   C_SaferCond ctx;
@@ -179,10 +223,8 @@ TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapCreate) {
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
-  uint64_t snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
-  uint64_t snap_id2 = m_remote_image_ctx->snap_ids["snap2"];
-  validate_snap_map({{snap_id1, {12}}, {snap_id2, {14, 12}}});
-  validate_snap_seqs({{snap_id1, 12}, {snap_id2, 14}});
+  validate_snap_map({{remote_snap_id1, {12}}, {remote_snap_id2, {14, 12}}});
+  validate_snap_seqs({{remote_snap_id1, 12}, {remote_snap_id2, 14}});
 }
 
 TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapCreateError) {
@@ -203,17 +245,22 @@ TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapCreateError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapRemove) {
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapRemoveAndCreate) {
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1"));
   ASSERT_EQ(0, create_snap(m_local_image_ctx, "snap1"));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
 
   librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx,
+                             m_local_image_ctx->snap_ids["snap1"], true, 0);
   expect_snap_remove(mock_local_image_ctx, "snap1", 0);
   expect_snap_create(mock_local_image_ctx, "snap1", 12, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, false, 0);
   expect_update_client(mock_journaler, 0);
 
   C_SaferCond ctx;
@@ -223,9 +270,8 @@ TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapRemove) {
   request->send();
   ASSERT_EQ(0, ctx.wait());
 
-  uint64_t snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
-  validate_snap_map({{snap_id1, {12}}});
-  validate_snap_seqs({{snap_id1, 12}});
+  validate_snap_map({{remote_snap_id1, {12}}});
+  validate_snap_seqs({{remote_snap_id1, 12}});
 }
 
 TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapRemoveError) {
@@ -236,7 +282,177 @@ TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapRemoveError) {
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx,
+                             m_local_image_ctx->snap_ids["snap1"], true, 0);
   expect_snap_remove(mock_local_image_ctx, "snap1", -EINVAL);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                    mock_local_image_ctx,
+                                                    mock_journaler, &ctx);
+  request->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapUnprotect) {
+  ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1", true));
+  ASSERT_EQ(0, create_snap(m_local_image_ctx, "snap1", true));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+  uint64_t local_snap_id1 = m_local_image_ctx->snap_ids["snap1"];
+  m_client_meta.snap_seqs[remote_snap_id1] = local_snap_id1;
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx, local_snap_id1, false, 0);
+  expect_snap_is_unprotected(mock_remote_image_ctx, remote_snap_id1, true, 0);
+  expect_snap_unprotect(mock_local_image_ctx, "snap1", 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, false, 0);
+  expect_update_client(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                    mock_local_image_ctx,
+                                                    mock_journaler, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  validate_snap_map({{remote_snap_id1, {local_snap_id1}}});
+  validate_snap_seqs({{remote_snap_id1, local_snap_id1}});
+}
+
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapUnprotectError) {
+  ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1", true));
+  ASSERT_EQ(0, create_snap(m_local_image_ctx, "snap1", true));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+  uint64_t local_snap_id1 = m_local_image_ctx->snap_ids["snap1"];
+  m_client_meta.snap_seqs[remote_snap_id1] = local_snap_id1;
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx, local_snap_id1, false, 0);
+  expect_snap_is_unprotected(mock_remote_image_ctx, remote_snap_id1, true, 0);
+  expect_snap_unprotect(mock_local_image_ctx, "snap1", -EBUSY);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                    mock_local_image_ctx,
+                                                    mock_journaler, &ctx);
+  request->send();
+  ASSERT_EQ(-EBUSY, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapUnprotectRemove) {
+  ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1", true));
+  ASSERT_EQ(0, create_snap(m_local_image_ctx, "snap1", true));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx,
+                             m_local_image_ctx->snap_ids["snap1"], false, 0);
+  expect_snap_unprotect(mock_local_image_ctx, "snap1", 0);
+  expect_snap_remove(mock_local_image_ctx, "snap1", 0);
+  expect_snap_create(mock_local_image_ctx, "snap1", 12, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, false, 0);
+  expect_update_client(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                    mock_local_image_ctx,
+                                                    mock_journaler, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  validate_snap_map({{remote_snap_id1, {12}}});
+  validate_snap_seqs({{remote_snap_id1, 12}});
+}
+
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapCreateProtect) {
+  ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1", true));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_snap_create(mock_local_image_ctx, "snap1", 12, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, true, 0);
+  expect_snap_is_protected(mock_local_image_ctx, 12, false, 0);
+  expect_snap_protect(mock_local_image_ctx, "snap1", 0);
+  expect_update_client(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                    mock_local_image_ctx,
+                                                    mock_journaler, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  validate_snap_map({{remote_snap_id1, {12}}});
+  validate_snap_seqs({{remote_snap_id1, 12}});
+}
+
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapProtect) {
+  ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1", true));
+  ASSERT_EQ(0, create_snap(m_local_image_ctx, "snap1", true));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+  uint64_t local_snap_id1 = m_local_image_ctx->snap_ids["snap1"];
+  m_client_meta.snap_seqs[remote_snap_id1] = local_snap_id1;
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx, local_snap_id1, true, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, true, 0);
+  expect_snap_is_protected(mock_local_image_ctx, local_snap_id1, false, 0);
+  expect_snap_protect(mock_local_image_ctx, "snap1", 0);
+  expect_update_client(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                    mock_local_image_ctx,
+                                                    mock_journaler, &ctx);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  validate_snap_map({{remote_snap_id1, {local_snap_id1}}});
+  validate_snap_seqs({{remote_snap_id1, local_snap_id1}});
+}
+
+TEST_F(TestMockImageSyncSnapshotCopyRequest, SnapProtectError) {
+  ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap1", true));
+  ASSERT_EQ(0, create_snap(m_local_image_ctx, "snap1", true));
+
+  uint64_t remote_snap_id1 = m_remote_image_ctx->snap_ids["snap1"];
+  uint64_t local_snap_id1 = m_local_image_ctx->snap_ids["snap1"];
+  m_client_meta.snap_seqs[remote_snap_id1] = local_snap_id1;
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_snap_is_unprotected(mock_local_image_ctx, local_snap_id1, true, 0);
+  expect_snap_is_protected(mock_remote_image_ctx, remote_snap_id1, true, 0);
+  expect_snap_is_protected(mock_local_image_ctx, local_snap_id1, false, 0);
+  expect_snap_protect(mock_local_image_ctx, "snap1", -EINVAL);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_remote_image_ctx,
