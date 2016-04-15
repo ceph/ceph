@@ -8,6 +8,7 @@
 #
 Aaron Bassett <abassett@gmail.com>
 Abhishek Lekshmanan <abhishek.lekshmanan@ril.com> <abhishek.lekshmanan@gmail.com>
+Abhishek Lekshmanan <abhishek@suse.com> <alekshmanan@suse.com>
 Adam C. Emerson <aemerson@redhat.com>
 Adam Twardowski <adam.twardowski@gmail.com>
 Ahoussi Armand <ahoussi.say@telecom-bretagne.eu> <delco225>
@@ -133,6 +134,7 @@ Jenkins <jenkins@ceph.com> <jenkins-build@jenkins-slave-wheezy.localdomain>
 Jenkins <jenkins@ceph.com> Jenkins <jenkins@inktank.com>
 Jenkins <jenkins@ceph.com> <jenkins-build@trusty-small-unique--5c6e9c4e-81af-43d3-957d-c650c692c441.localdomain>
 Jenkins <jenkins@ceph.com> <jenkins-build@trusty-small-unique--e64d6d03-305d-46bd-9a2c-9b546e06937e.localdomain>
+Jenkins <jenkins@ceph.com> Jenkins Build Slave User <jenkins-build@trusty-small-unique--a7f82f5f-8832-433e-a632-928924f47e04.localdomain>
 Jiang Heng <jiangheng0511@gmail.com>
 Jiantao He <hejiantao5@gmail.com>
 Jian Wen <wenjian@letv.com> <wenjianhn@gmail.com>
@@ -172,6 +174,7 @@ Kévin Caradant <kevin.caradant@gmail.com>
 Kiseleva Alyona <akiselyova@mirantis.com>
 Kongming Wu <wu.kongming@h3c.com>
 Laszlo Boszormenyi <gcs@debian.hu>
+Luo Runbing <runsisi@zte.com.cn>
 Li Wang <li.wang@kylin-cloud.com> <liwang@ubuntukylin.com>
 Liu Peiyan <liu.peiyang@h3c.com>
 Li Tianqing <tianqing@unitedstack.com>
@@ -317,6 +320,7 @@ Wei Qian <weiq@dtdream.com>
 Wenjun Huang <wenjunhuang@tencent.com>
 Wido den Hollander <wido@42on.com> <wido@widodh.nl>
 Wu Xingyi <wuxingyi@letv.com>
+Wei Qiaomiao <wei.qiaomiao@zte.com.cn>
 Xan Peng <xanpeng@gmail.com>
 Xavier Roche <roche+git@exalead.com> <roche@httrack.com>
 Xiangwei Wu <wuxiangwei@h3c.com>
