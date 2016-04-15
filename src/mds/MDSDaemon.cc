@@ -541,6 +541,9 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
+    dout(4) << __func__ << ": terminated already, dropping out" << dendl;
+    mds_lock.Unlock();
+    return 0;
   }
 
   timer.init();
@@ -560,6 +563,8 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
       // uh-oh, must specify one or the other!
       dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
       suicide();
+      mds_lock.Unlock();
+      return -EINVAL;
     }
     standby_type = wanted_state;
     wanted_state = MDSMap::STATE_BOOT;
