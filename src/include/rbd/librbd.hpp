@@ -60,6 +60,15 @@ namespace librbd {
     bool primary;
   } mirror_image_info_t;
 
+  typedef rbd_mirror_image_status_state_t mirror_image_status_state_t;
+
+  typedef struct {
+    mirror_image_status_state_t state;
+    std::string description;
+    time_t last_update;
+    bool up;
+  } mirror_image_status_t;
+
   typedef rbd_image_info_t image_info_t;
 
   class CEPH_RBD_API ProgressContext
@@ -132,6 +141,11 @@ public:
                              const std::string &client_name);
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
+  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start,
+      size_t max, std::map<std::string, mirror_image_info_t> *images,
+      std::map<std::string, mirror_image_status_t> *statuses);
+  int mirror_image_status_summary(IoCtx& io_ctx,
+      std::map<mirror_image_status_state_t, int> *states);
 
 private:
   /* We don't allow assignment or copying */
@@ -337,6 +351,8 @@ public:
   int mirror_image_resync();
   int mirror_image_get_info(mirror_image_info_t *mirror_image_info,
                             size_t info_size);
+  int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
+			      size_t status_size);
 
 private:
   friend class RBD;
