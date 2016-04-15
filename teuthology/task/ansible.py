@@ -371,6 +371,15 @@ class CephLab(Ansible):
                                           'ceph-cm-ansible.git')
         super(CephLab, self).__init__(ctx, config)
 
+    def begin(self):
+        # Emulate 'touch ~/.vault_pass.txt' to avoid ansible failing;
+        # in almost all cases we don't need the actual vault password
+        vault_pass_path = os.path.expanduser('~/.vault_pass.txt')
+        if not os.path.exists(vault_pass_path):
+            with open(vault_pass_path, 'a'):
+                pass
+        super(CephLab, self).begin()
+
 
 task = Ansible
 cephlab = CephLab
