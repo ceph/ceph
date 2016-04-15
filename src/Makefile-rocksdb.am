@@ -1,3 +1,6 @@
+
+## include rocksdb sources no matter what current build options are
+DIST_SUBDIRS += rocksdb
 if WITH_SLIBROCKSDB
   SUBDIRS += rocksdb
 else
