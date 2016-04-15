@@ -702,7 +702,7 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_
 	       << info.history.last_epoch_clean << dendl;
       return false;
     }
-    *end = past_intervals.begin()->first;
+    *end = pif->first;
   }
 
   *start = MAX(MAX(info.history.epoch_created,
