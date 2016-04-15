@@ -2893,9 +2893,13 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
 
-  // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
-  if (!cur->inode.is_file())
+  if (!cur->inode.is_file()) {
+    // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
     cmode = CEPH_FILE_MODE_PIN;
+    // the inode is symlink and client wants to follow it, ignore the O_TRUNC flag.
+    if (cur->inode.is_symlink() && !(flags & O_NOFOLLOW))
+      flags &= ~O_TRUNC;
+  }
 
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
@@ -2911,6 +2915,13 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if ((flags & O_DIRECTORY) && !cur->inode.is_dir()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  if ((flags & O_TRUNC) && !cur->inode.is_file()) {
+    dout(7) << "specified O_TRUNC on !(file|symlink) " << *cur << dendl;
+    // we should return -EISDIR for directory, return -EINVAL for other non-regular
+    respond_to_request(mdr, cur->inode.is_dir() ? EISDIR : -EINVAL);
     return;
   }
 
@@ -2945,7 +2956,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   // O_TRUNC
-  if ((flags & O_TRUNC) && !mdr->has_completed) {
+  if ((flags & O_TRUNC) && !mdr->has_completed && cur->inode.is_file()) {
     assert(cur->is_auth());
 
     xlocks.insert(&cur->filelock);
