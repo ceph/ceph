@@ -1,7 +1,8 @@
 # snappy
 
+# absolute path because $snappy_sources used outside of this directory
 set(snappy_sources
-  CompressionPluginSnappy.cc
+  ${CMAKE_SOURCE_DIR}/src/compressor/snappy/CompressionPluginSnappy.cc
   $<TARGET_OBJECTS:compressor_objs>
 )
 

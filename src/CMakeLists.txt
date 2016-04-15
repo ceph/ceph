@@ -525,11 +525,13 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
   DESTINATION ${PYTHON_INSTDIR})
 
 add_subdirectory(pybind)
+add_subdirectory(ceph-disk)
+add_subdirectory(ceph-detect-init)
 
 ## dencoder
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
-  krbd.cc
+  $<TARGET_OBJECTS:krbd_objs>
   common/secret.c
   common/TextTable.cc
   )
@@ -741,7 +743,6 @@ set(osd_srcs
   osd/ECBackend.cc
   osd/ECTransaction.cc
   osd/PGBackend.cc
-  osd/OSD.cc
   osd/OSDCap.cc
   osd/Watch.cc
   osd/ClassHandler.cc
@@ -840,11 +841,7 @@ target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
 
-set(compressor_srcs
-  compressor/Compressor.cc
-  compressor/AsyncCompressor.cc)
-add_library(compressor STATIC ${compressor_srcs})
-target_link_libraries(compressor common snappy)
+add_subdirectory(compressor)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
 target_link_libraries(ceph-client-debug cephfs librados global common)
@@ -885,19 +882,19 @@ target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
@@ -996,81 +993,46 @@ set(journal_srcs
   journal/Utils.cc)
 add_library(journal ${journal_srcs})
 
+add_library(krbd_objs OBJECT krbd.cc)
+
 if(${WITH_RBD})
-  set(librbd_srcs
-    krbd.cc
-    common/ContextCompletion.cc
-    librbd/AioCompletion.cc
-    librbd/AioImageRequest.cc
-    librbd/AioImageRequestWQ.cc
-    librbd/AioObjectRequest.cc
-    librbd/AsyncObjectThrottle.cc
-    librbd/AsyncOperation.cc
-    librbd/AsyncRequest.cc
-    librbd/CopyupRequest.cc
-    librbd/DiffIterate.cc
-    librbd/ExclusiveLock.cc
-    librbd/ImageCtx.cc
-    librbd/ImageState.cc
-    librbd/ImageWatcher.cc
-    librbd/internal.cc
-    librbd/Journal.cc
-    librbd/librbd.cc
-    librbd/LibrbdAdminSocketHook.cc
-    librbd/LibrbdWriteback.cc
-    librbd/MirroringWatcher.cc
-    librbd/ObjectMap.cc
-    librbd/ObjectWatcher.cc
-    librbd/Operations.cc
-    librbd/Utils.cc
-    librbd/exclusive_lock/AcquireRequest.cc
-    librbd/exclusive_lock/ReleaseRequest.cc
-    librbd/exclusive_lock/StandardPolicy.cc
-    librbd/image/CloseRequest.cc
-    librbd/image/OpenRequest.cc
-    librbd/image/RefreshParentRequest.cc
-    librbd/image/RefreshRequest.cc
-    librbd/image/SetSnapRequest.cc
-    librbd/image_watcher/Notifier.cc
-    librbd/image_watcher/NotifyLockOwner.cc
-    librbd/journal/Replay.cc
-    librbd/journal/StandardPolicy.cc
-    librbd/journal/Types.cc
-    librbd/mirroring_watcher/Types.cc
-    librbd/object_map/InvalidateRequest.cc
-    librbd/object_map/LockRequest.cc
-    librbd/object_map/Request.cc
-    librbd/object_map/RefreshRequest.cc
-    librbd/object_map/ResizeRequest.cc
-    librbd/object_map/SnapshotCreateRequest.cc
-    librbd/object_map/SnapshotRemoveRequest.cc
-    librbd/object_map/SnapshotRollbackRequest.cc
-    librbd/object_map/UnlockRequest.cc
-    librbd/object_map/UpdateRequest.cc
-    librbd/operation/FlattenRequest.cc
-    librbd/operation/RebuildObjectMapRequest.cc
-    librbd/operation/RenameRequest.cc
-    librbd/operation/Request.cc
-    librbd/operation/ResizeRequest.cc
-    librbd/operation/SnapshotCreateRequest.cc
-    librbd/operation/SnapshotProtectRequest.cc
-    librbd/operation/SnapshotRemoveRequest.cc
-    librbd/operation/SnapshotRenameRequest.cc
-    librbd/operation/SnapshotRollbackRequest.cc
-    librbd/operation/SnapshotUnprotectRequest.cc
-    librbd/operation/TrimRequest.cc
-    librbd/WatchNotifyTypes.cc)
-  add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
-    $<TARGET_OBJECTS:osdc_rbd_objs>
-    $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(librbd LINK_PRIVATE librados common journal
-    cls_lock_client cls_rbd_client cls_journal_client udev
-    ${CMAKE_DL_LIBS})
-  if(${ENABLE_SHARED})
-    set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
-      OUTPUT_NAME rbd)
-  endif(${ENABLE_SHARED})
-  install(TARGETS librados librbd DESTINATION lib)
+  add_subdirectory(librbd)
+
+  set(rbd_mirror_internal
+    tools/rbd_mirror/ClusterWatcher.cc 
+    tools/rbd_mirror/ImageReplayer.cc
+    tools/rbd_mirror/ImageSync.cc
+    tools/rbd_mirror/Mirror.cc 
+    tools/rbd_mirror/PoolWatcher.cc 
+    tools/rbd_mirror/Replayer.cc 
+    tools/rbd_mirror/Threads.cc
+    tools/rbd_mirror/types.cc
+    tools/rbd_mirror/image_replayer/BootstrapRequest.cc
+    tools/rbd_mirror/image_replayer/CloseImageRequest.cc
+    tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc
+    tools/rbd_mirror/image_sync/ImageCopyRequest.cc
+    tools/rbd_mirror/image_sync/ObjectCopyRequest.cc
+    tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc
+    tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
+    tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
+  add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
+  
+  add_executable(rbd-mirror
+    tools/rbd_mirror/main.cc
+    common/ContextCompletion.cc)
+  target_link_libraries(rbd-mirror
+    rbd_mirror_internal
+    rbd_internal
+    rbd_api
+    rbd_types
+    journal
+    librados
+    osdc
+    cls_rbd_client
+    cls_lock_client
+    cls_journal_client
+    global)
+
   set(rbd_srcs
     tools/rbd/rbd.cc
     tools/rbd/ArgumentTypes.cc

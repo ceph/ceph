@@ -1,6 +1,6 @@
 #!/bin/bash -x
 
-source $(dirname $0)/../ceph-helpers.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 set -e
 set -o functrace
@@ -1078,7 +1078,7 @@ function test_mon_osd()
     ceph osd set $f
     ceph osd unset $f
   done
-  ceph osd set sortbitwise  # new backends can't handle nibblewise
+  ceph osd set sortbitwise  # new backends cant handle nibblewise
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
 
