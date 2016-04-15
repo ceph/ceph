@@ -256,7 +256,7 @@ class CephIPAddr(CephArgtype):
             type = 4
         if type == 4:
             port = s.find(':')
-            if (port != -1):
+            if port != -1:
                 a = s[:port]
                 p = s[port + 1:]
                 if int(p) > 65535:
@@ -540,7 +540,7 @@ class CephPrefix(CephArgtype):
                 self.val = s
                 return
         else:
-            if (s == self.prefix):
+            if s == self.prefix:
                 self.val = s
                 return
 
@@ -980,7 +980,7 @@ def validate_command(sigdict, args, verbose=False):
         for cmdtag, cmd in sigdict.iteritems():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
-            if (matched > best_match_cnt):
+            if matched > best_match_cnt:
                 if verbose:
                     print >> sys.stderr, \
                         "better match: {0} > {1}: {2}:{3} ".\
