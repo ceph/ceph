@@ -429,8 +429,6 @@ public:
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
-  CephContext *cct;
-
   int cur_shard;
   int current_running;
   int max_concurrent;
