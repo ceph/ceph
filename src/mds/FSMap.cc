@@ -35,7 +35,7 @@ void FSMap::dump(Formatter *f) const
   compat.dump(f);
   f->close_section();
 
-  f->open_object_section("feature flags");
+  f->open_object_section("feature_flags");
   f->dump_bool("enable_multiple", enable_multiple);
   f->dump_bool("ever_enabled_multiple", ever_enabled_multiple);
   f->close_section();
