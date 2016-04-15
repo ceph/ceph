@@ -126,72 +126,47 @@ class AsyncConnection : public Connection {
     assert(write_lock.is_locked());
     return !out_q.empty();
   }
-  
+
    /**
    * The DelayedDelivery is for injecting delays into Message delivery off
    * the socket. It is only enabled if delays are requested, and if they
    * are then it pulls Messages off the DelayQueue and puts them into the
    * AsyncMessenger event queue.
-   * This is a nearly direct copy & paste from SimpleMessenger, and as
-   * such, there was a problem during AsyncConnection shutdown, fixed by
-   * checking whether delay_thread isn't already stopped and refraining
-   * from stopping it again.
    */
-  class DelayedDelivery: public Thread {
-    AsyncConnection *connection;
-    std::deque< pair<utime_t,Message*> > delay_queue;
+  class DelayedDelivery : public EventCallback {
+    std::set<uint64_t> register_time_events; // need to delete it if stop
+    std::deque<std::pair<utime_t, Message*> > delay_queue;
     Mutex delay_lock;
-    Cond delay_cond;
-    int flush_count;
     AsyncMessenger *msgr;
-    bool active_flush;
-    bool stop_delayed_delivery;
-    bool delay_dispatching; // we are in fast dispatch now
-    bool stop_fast_dispatching_flag; // we need to stop fast dispatching
+    EventCenter *center;
 
-    public:
-    explicit DelayedDelivery(AsyncConnection *p, AsyncMessenger *omsgr)
-      : connection(p),
-        delay_lock("AsyncConnection::DelayedDelivery::delay_lock"), flush_count(0),
-        msgr(omsgr),
-        active_flush(false),
-        stop_delayed_delivery(false),
-        delay_dispatching(false),
-        stop_fast_dispatching_flag(false) { }
-    ~DelayedDelivery() { discard(); }
-    void *entry();
-    void queue(utime_t release, Message *m) {
-      Mutex::Locker l(delay_lock);
-      delay_queue.push_back(make_pair(release, m));
-      delay_cond.Signal();
+   public:
+    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c)
+      : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
+        msgr(omsgr), center(c) { }
+    ~DelayedDelivery() {
+      assert(register_time_events.empty());
+      assert(delay_queue.empty());
     }
-    void discard();
+    void do_request(int id) override;
+    void queue(double delay_period, utime_t release, Message *m) {
+      Mutex::Locker l(delay_lock);
+      delay_queue.push_back(std::make_pair(release, m));
+      register_time_events.insert(center->create_time_event(delay_period*1000000, this));
+    }
+    void discard() {
+      Mutex::Locker l(delay_lock);
+      while (!delay_queue.empty()) {
+        Message *m = delay_queue.front().second;
+        m->put();
+        delay_queue.pop_front();
+      }
+      for (auto i : register_time_events)
+        center->delete_time_event(i);
+      register_time_events.clear();
+    }
     void flush();
-    bool is_flushing() {
-      Mutex::Locker l(delay_lock);
-      return flush_count > 0 || active_flush;
-    }
-    void wait_for_flush() {
-      Mutex::Locker l(delay_lock);
-      while (flush_count > 0 || active_flush)
-        delay_cond.Wait(delay_lock);
-    }
-    void stop() {
-      delay_lock.Lock();
-      stop_delayed_delivery = true;
-      delay_cond.Signal();
-      delay_lock.Unlock();
-    }
-    void steal_for_pipe(AsyncConnection *new_owner) {
-      Mutex::Locker l(delay_lock);
-      connection = new_owner;
-    }
-    /**
-     * We need to stop fast dispatching before we need to stop putting
-     * normal messages into the DispatchQueue.
-     */
-    void stop_fast_dispatching();
-  } *delay_thread;
+  } *delay_state;
 
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
@@ -401,6 +376,10 @@ class AsyncConnection : public Connection {
     delete connect_handler;
     delete local_deliver_handler;
     delete wakeup_handler;
+    if (delay_state) {
+      delete delay_state;
+      delay_state = NULL;
+    }
   }
   PerfCounters *get_perf_counter() {
     return logger;
