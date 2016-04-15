@@ -53,7 +53,7 @@ public:
 protected:
 
   const ServerId                 id;
-  Q                              priority_queue;
+  Q&                             priority_queue;
   ClientRespFunc                 client_resp_f;
   int                            iops;
   size_t                         thread_pool_size;
@@ -75,26 +75,31 @@ protected:
   ServerAccumFunc accum_f;
   Accum accumulator;
 
+#if 0 // TODO remove
   uint32_t reservation_counter = 0;
   uint32_t proportion_counter = 0;
+#endif
 
 public:
+
+  using CanHandleRequestFunc = std::function<bool(void)>;
+  using HandleRequestFunc =
+    std::function<void(const ClientId&,std::unique_ptr<TestRequest>,RespPm)>;
+  using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
+					
 
   TestServer(ServerId _id,
 	     int _iops,
 	     size_t _thread_pool_size,
-	     const ClientInfoFunc& _client_info_f,
 	     const ClientRespFunc& _client_resp_f,
 	     const ServerAccumFunc& _accum_f,
-	     bool use_soft_limit = false) :
+	     CreateQueueF _create_queue_f) :
     id(_id),
-    priority_queue(_client_info_f,
-		   std::bind(&TestServer::has_avail_thread, this),
-		   std::bind(&TestServer::inner_post, this,
-			     std::placeholders::_1,
-			     std::placeholders::_2,
-			     std::placeholders::_3),
-		   use_soft_limit),
+    priority_queue(_create_queue_f(std::bind(&TestServer::has_avail_thread, this),
+				   std::bind(&TestServer::inner_post, this,
+					     std::placeholders::_1,
+					     std::placeholders::_2,
+					     std::placeholders::_3))),
     client_resp_f(_client_resp_f),
     iops(_iops),
     thread_pool_size(_thread_pool_size),

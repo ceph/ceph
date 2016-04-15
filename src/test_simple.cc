@@ -12,6 +12,7 @@
 
 #include "simple_recs.h"
 #include "simple_server.h"
+#include "simple_client.h"
 
 #include "test_simple.h"
 

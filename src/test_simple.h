@@ -7,6 +7,7 @@
 
 
 #include "simple_server.h"
+#include "simple_client.h"
 
 #include "test_recs.h"
 #include "test_server.h"
@@ -36,16 +37,14 @@ namespace test_simple {
 				  simp::RespParams<ServerId>,
 				  SimpleAddInfo,
 				  SimpleAccum>;
-#if 0
-    using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
-                                 dmc::ReqParams<ClientId>,
-                                 dmc::RespParams<ServerId>,
-                                 DmcAccum>;
+  using SimpleClient = TestClient<simp::ServiceTracker<ServerId>,
+				  simp::ReqParams<ClientId>,
+				  simp::RespParams<ServerId>,
+				  SimpleAccum>;
 
-    using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
-
-    using SubmitFunc = DmcClient::SubmitFunc;
-#endif
+  using MySim = Simulation<ServerId,ClientId,SimpleServer,SimpleClient>;
+  
+  using SubmitFunc = SimpleClient::SubmitFunc;
 
   extern void simple_server_accumulate_f(SimpleAccum& a,
 					 const SimpleAddInfo& add_info);

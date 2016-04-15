@@ -27,7 +27,9 @@ namespace test_dmc {
         uint64_t proportion_count = 0;
     };
 
-    using DmcServer = TestServer<dmc::PriorityQueue<ClientId,TestRequest>,
+    using DmcQueue = dmc::PriorityQueue<ClientId,TestRequest>;
+
+    using DmcServer = TestServer<DmcQueue,
                                  dmc::ClientInfo,
                                  dmc::ReqParams<ClientId>,
                                  dmc::RespParams<ServerId>,
@@ -38,6 +40,10 @@ namespace test_dmc {
                                  dmc::ReqParams<ClientId>,
                                  dmc::RespParams<ServerId>,
                                  DmcAccum>;
+
+    using foobar = std::function<int(double, char*)>;
+    using CreateQueueF = std::function<DmcQueue*(dmc::CanHandleRequestF,
+                                                 dmc::HandleRequestF)>;
 
     using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 

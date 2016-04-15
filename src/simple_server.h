@@ -7,6 +7,10 @@
 
 #pragma once
 
+#include <memory>
+// #include <functional>
+#include <mutex>
+#include <deque>
 
 #include "queue_ifc.h"
 

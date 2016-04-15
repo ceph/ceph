@@ -6,10 +6,12 @@
  */
 
 
-#include "test_dmclock.h"
+#include "test_simple.h"
 
 
-namespace test = test_dmc;
+namespace test = test_simple;
+namespace simp = crimson::simple_scheduler;
+
 using namespace std::placeholders;
 
 
@@ -17,6 +19,7 @@ void server_data(std::ostream& out,
 		 test::MySim* sim,
 		 test::MySim::ServerFilter server_disp_filter,
 		 int head_w, int data_w, int data_prec);
+
 
 void client_data(std::ostream& out,
 		 test::MySim* sim,
@@ -47,6 +50,7 @@ int main(int argc, char* argv[]) {
   const double client_limit = 60.0;
   const double client_weight = 1.0;
 
+#if 0 // REMOVE
   test::dmc::ClientInfo client_info =
       { client_weight, client_reservation, client_limit };
 
@@ -54,7 +58,6 @@ int main(int argc, char* argv[]) {
       return client_info;
   };
 
-#if 0 // REMOVE
   test::dmc::ClientInfo test::client_info_f(const ClientId& c) {
       return client_info;
   }
@@ -73,11 +76,11 @@ int main(int argc, char* argv[]) {
 
   // lambda to post a request to the identified server; called by client
   test::SubmitFunc server_post_f =
-    [&simulation](const ServerId& server,
+    [&simulation](const ServerId& server_id,
 		  const TestRequest& request,
-		  const test::dmc::ReqParams<ClientId>& req_params) {
-    test::DmcServer& s = simulation->get_server(server);
-    s.post(request, req_params);
+		  const simp::ReqParams<ClientId>& req_params) {
+    auto& server = simulation->get_server(server_id);
+    server.post(request, req_params);
   };
 
   static std::vector<CliInst> no_wait =
@@ -91,29 +94,27 @@ int main(int argc, char* argv[]) {
   test::MySim::ClientBasedServerSelectFunc server_select_f =
     simulation->make_server_select_alt_range(8);
 
-  test::DmcServer::ClientRespFunc client_response_f =
+  test::SimpleServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
 		  const TestResponse& resp,
-		  const test::dmc::RespParams<ServerId>& resp_params) {
+		  const simp::RespParams<ServerId>& resp_params) {
     simulation->get_client(client_id).receive_response(resp, resp_params);
   };
 
-  auto create_server_f = [&](ServerId id) -> test::DmcServer* {
-    return new test::DmcServer(id,
-			       server_iops, server_threads,
-			       client_info_f,
-			       client_response_f,
-			       test::dmc_server_accumulate_f,
-			       server_soft_limit);
+  auto create_server_f = [&](ServerId id) -> test::SimpleServer* {
+    return new test::SimpleServer(id,
+				  server_iops, server_threads,
+				  client_response_f,
+				  test::simple_server_accumulate_f);
   };
 
-  auto create_client_f = [&](ClientId id) -> test::DmcClient* {
-    return new test::DmcClient(id,
-			       server_post_f,
-			       std::bind(server_select_f, _1, id),
-			       test::dmc_client_accumulate_f,
-			       id < (client_count - client_wait_count)
-			       ? no_wait : wait);
+  auto create_client_f = [&](ClientId id) -> test::SimpleClient* {
+    return new test::SimpleClient(id,
+				  server_post_f,
+				  std::bind(server_select_f, _1, id),
+				  test::dmc_client_accumulate_f,
+				  id < (client_count - client_wait_count)
+				  ? no_wait : wait);
   };
 
   simulation->add_servers(server_count, create_server_f);
