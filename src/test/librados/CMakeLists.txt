@@ -57,7 +57,7 @@ add_executable(ceph_test_rados_api_list
 set_target_properties(ceph_test_rados_api_list PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_list
-  librados ${UNITTEST_LIBS} radostest)
+  librados global ${UNITTEST_LIBS} radostest)
 
 # ceph_test_rados_api_nlist
 add_executable(ceph_test_rados_api_nlist
