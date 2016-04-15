@@ -9288,8 +9288,10 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
     objects_blocked_on_snap_promotion.erase(i);
   }
 
-  if (obc->requeue_scrub_on_unblock)
+  if (obc->requeue_scrub_on_unblock) {
+    obc->requeue_scrub_on_unblock = false;
     requeue_scrub();
+  }
 }
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
