@@ -230,7 +230,7 @@ Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
 PreReq:         permissions
-Requires(pre):	pwdutils
+Requires(pre):	shadow
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
