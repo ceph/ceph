@@ -244,10 +244,11 @@ Upgrading from Hammer
   14.04.  (The next Ubuntu LTS, 16.04, will use systemd instead of upstart.)
 
 * Ceph daemons now run as user and group ``ceph`` by default.  The
-  ceph user has a static UID assigned by Fedora and Debian (also used
-  by derivative distributions like RHEL/CentOS and Ubuntu).  On SUSE
-  the ceph user will currently get a dynamically assigned UID when the
-  user is created.
+  ceph user has a static UID assigned by Fedora and Debian (also used by
+  derivative distributions like RHEL/CentOS and Ubuntu).  On SUSE the same
+  UID/GID as in Fedora and Debian will be used, *provided it is not already
+  assigned*. In the unlikely event the preferred UID or GID is assigned to a
+  different user/group, ceph will get a dynamically assigned UID/GID.
 
   If your systems already have a ceph user, upgrading the package will cause
   problems.  We suggest you first remove or rename the existing 'ceph' user
