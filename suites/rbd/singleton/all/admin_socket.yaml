@@ -3,6 +3,7 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
 - workunit:
     clients:
       all: [rbd/test_admin_socket.sh]
