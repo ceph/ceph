@@ -268,7 +268,7 @@ Requires:	python-requests
 %endif
 %if 0%{?suse_version}
 PreReq:         permissions
-Requires(pre):	pwdutils
+Requires(pre):	shadow
 %endif
 # python-argparse is only needed in distros with Python 2.6 or lower
 %if (0%{?rhel} && 0%{?rhel} <= 6)
