@@ -2966,7 +2966,7 @@ extern "C" int rados_ping_monitor(rados_t cluster, const char *mon_id,
   }
 
   int ret = client->ping_monitor(mon_id, &str);
-  if (ret == 0 && !str.empty() && outstr && outstrlen) {
+  if (ret == 0) {
     do_out_buffer(str, outstr, outstrlen);
   }
   tracepoint(librados, rados_ping_monitor_exit, ret, ret < 0 ? NULL : outstr, ret < 0 ? NULL : outstrlen);
