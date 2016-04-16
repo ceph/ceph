@@ -1917,7 +1917,7 @@ public:
     if (id == get_zonegroup().get_id()) {
       zonegroup = get_zonegroup();
     } else if (!current_period.get_id().empty()) {
-      ret = current_period.get_zonegroup(zonegroup, zonegroup_id);
+      ret = current_period.get_zonegroup(zonegroup, id);
     }
     return ret;
   }
