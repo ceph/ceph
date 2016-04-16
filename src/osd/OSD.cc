@@ -631,7 +631,8 @@ void OSDService::promote_throttle_recalibrate()
     unsigned po = (double)target_obj_sec * dur * 1000.0 / (double)attempts;
     unsigned pb = (double)target_bytes_sec / (double)avg_size * dur * 1000.0
       / (double)attempts;
-    derr << __func__ << "  po " << po << " pb " << pb << " avg_size " << avg_size << dendl;
+    dout(20) << __func__ << "  po " << po << " pb " << pb << " avg_size "
+	     << avg_size << dendl;
     if (target_obj_sec && target_bytes_sec)
       new_prob = MIN(po, pb);
     else if (target_obj_sec)
