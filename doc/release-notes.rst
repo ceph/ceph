@@ -15,7 +15,7 @@ Major Changes from Infernalis
   * This is the first release in which CephFS is declared stable and
     production ready!  Several features are disabled by default, including
     snapshots and multiple active MDS servers.
-  * The repair and disaster recovery tools are now feature complete.
+  * The repair and disaster recovery tools are now feature-complete.
   * A new cephfs-volume-manager module is included that provides a
     high-level interface for creating "shares" for OpenStack Manila
     and similar projects.
@@ -31,7 +31,7 @@ Major Changes from Infernalis
   * The AWS4 authentication protocol is now supported.
   * There is now support for S3 request payer buckets.
   * The new multitenancy infrastructure improves compatibility with
-    Swift, which provides separate container namespace for each
+    Swift, which provides a separate container namespace for each
     user/tenant.
   * The OpenStack Keystone v3 API is now supported.  There are a range
     of other small Swift API features and compatibility improvements
@@ -45,8 +45,8 @@ Major Changes from Infernalis
     and a new rbd-mirror daemon that performs the cross-cluster
     replication.
   * The exclusive-lock, object-map, fast-diff, and journaling features
-    can be enabled or disabled dynamically. The deep-flatten can be
-    disabled dynamically but not re-enabled.
+    can be enabled or disabled dynamically. The deep-flatten features 
+    can be disabled dynamically but not re-enabled.
   * The RBD CLI has been rewritten to provide command-specific help
     and full bash completion support.
   * RBD snapshots can now be renamed.
@@ -69,7 +69,7 @@ Major Changes from Hammer
 
   * Ceph daemons are now managed via systemd (with the exception of
     Ubuntu Trusty, which still uses upstart).
-  * Ceph daemons run as 'ceph' user instead root.
+  * Ceph daemons run as 'ceph' user instead of 'root'.
   * On Red Hat distros, there is also an SELinux policy.
 
 - *RADOS*:
@@ -85,7 +85,7 @@ Major Changes from Hammer
   * There have been many improvements to low-level repair tooling
     (ceph-objectstore-tool).
   * The internal ObjectStore API has been significantly cleaned up in order
-    to faciliate new storage backends like NewStore.
+    to faciliate new storage backends like BlueStore.
 
 - *RGW*:
 
@@ -97,7 +97,7 @@ Major Changes from Hammer
   * The ``rbd du`` command shows actual usage (quickly, when
     object-map is enabled).
   * The object-map feature has seen many stability improvements.
-  * Object-map and exclusive-lock features can be enabled or disabled
+  * The object-map and exclusive-lock features can be enabled or disabled
     dynamically.
   * You can now store user metadata and set persistent librbd options
     associated with individual images.
@@ -172,7 +172,6 @@ Upgrading from Infernalis or Hammer
 
 .. _Filesystem Recommendations: ../configuration/filesystem-recommendations
 
-
 * There are no major compatibility changes since Infernalis.  Simply
   upgrading the daemons on each host and restarting all daemons is
   sufficient.
@@ -193,7 +192,7 @@ Upgrading from Infernalis or Hammer
   restricted by 'mon_lease'.
 
 * CephFS filesystems created using versions older than Firefly (0.80) must
-  use the new "cephfs-data-scan tmap_upgrade" command after upgrading to
+  use the new 'cephfs-data-scan tmap_upgrade' command after upgrading to
   Jewel.  See 'Upgrading' in the CephFS documentation for more information.
 
 * The 'ceph mds setmap' command has been removed.
@@ -201,10 +200,10 @@ Upgrading from Infernalis or Hammer
 * The default RBD image features for new images have been updated to
   enable the following: exclusive lock, object map, fast-diff, and
   deep-flatten. These features are not currently supported by the RBD
-  kernel driver nor older RBD clients. These features can be disabled on
-  a per-image basis via the RBD CLI or the default features can be
-  updated to the pre-Jewel setting by adding the following to the client
-  section of the Ceph configuration file::
+  kernel driver nor older RBD clients. They can be disabled on a per-image
+  basis via the RBD CLI, or the default features can be updated to the
+  pre-Jewel setting by adding the following to the client section of the Ceph
+  configuration file::
 
     rbd default features = 1
 
@@ -300,7 +299,7 @@ Upgrading from Hammer
 
 * When a pool quota is reached, librados operations now block indefinitely,
   the same way they do when the cluster fills up.  (Previously they would return
-  -ENOSPC).  By default, a full cluster or pool will now block.  If your
+  -ENOSPC.)  By default, a full cluster or pool will now block.  If your
   librados application can handle ENOSPC or EDQUOT errors gracefully, you can
   get error returns instead by using the new librados OPERATION_FULL_TRY flag.
 
@@ -327,7 +326,7 @@ Upgrading from Firefly
 Upgrading directly from Firefly v0.80.z is not recommended.  It is
 possible to do a direct upgrade, but not without downtime, as all OSDs
 must be stopped, upgraded, and then restarted.  We recommend that
-clusters are first upgraded to Hammer v0.94.6 or a later v0.94.z
+clusters be first upgraded to Hammer v0.94.6 or a later v0.94.z
 release; only then is it possible to upgrade to Jewel 10.2.z for an
 online upgrade (see below).
 
