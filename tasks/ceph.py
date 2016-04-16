@@ -287,13 +287,16 @@ def cephfs_setup(ctx, config):
         is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
-        mon_remote.run(args=[
-            'sudo',
-            'adjust-ulimits',
-            'ceph-coverage',
-            coverage_dir,
-            'ceph', 'mds', 'set', 'allow_multimds', 'true',
-            '--yes-i-really-mean-it'])
+        mon_remote.run(
+            args=[
+                'sudo',
+                'adjust-ulimits',
+                'ceph-coverage',
+                coverage_dir,
+                'ceph', 'mds', 'set', 'allow_multimds', 'true',
+                '--yes-i-really-mean-it'],
+	    check_status=False,  # probably old version, upgrade test
+        )
         mon_remote.run(args=[
             'sudo',
             'adjust-ulimits',
