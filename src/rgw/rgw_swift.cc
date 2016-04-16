@@ -757,7 +757,8 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return (ret >= 0);
   }
 
-  if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
+  if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0 ||
+      strncmp(s->os_auth_token, "AUTH_rgwts", 10) == 0) {
     int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token,
 					    *(s->user), &s->swift_user);
     return (ret >= 0);

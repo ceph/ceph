@@ -1473,6 +1473,14 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
+bool is_account_in_url(const char *token)
+{
+  if (strncmp(token, "AUTH_rgwts", 10) == 0) {
+    return true;
+  }
+  return false;
+}
+
 int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
 {
   string req;
@@ -1538,11 +1546,13 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
   if (ret < 0)
     return ret;
 
+  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
+
   string ver;
 
   next_tok(req, ver, '/');
 
-  if (!tenant_path.empty() || g_conf->rgw_swift_account_in_url) {
+  if (!tenant_path.empty() || is_account_in_url(s->os_auth_token)) {
     string account_name;
     next_tok(req, account_name, '/');
 
@@ -1565,7 +1575,6 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
     }
   }
 
-  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 
   dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
