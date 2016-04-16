@@ -209,12 +209,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
 
   if (!probe->fwd) {
     // reverse
-    vector<ObjectExtent> r;
-    for (vector<ObjectExtent>::reverse_iterator p = probe->probing.rbegin();
-	 p != probe->probing.rend();
-	 ++p)
-      r.push_back(*p);
-    probe->probing.swap(r);
+    std::reverse(probe->probing.begin(),probe->probing.end());
   }
 
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
