@@ -228,7 +228,7 @@ Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
 PreReq:         permissions
-Requires(pre):	pwdutils
+Requires(pre):	shadow
 %endif
 %if 0%{with xio}
 Requires:       libxio
