@@ -1500,9 +1500,9 @@ daemons throughout the cluster.
 Thin-provisioned snapshottable Ceph Block Devices are an attractive option for
 virtualization and cloud computing. In virtual machine scenarios, people
 typically deploy a Ceph Block Device with the ``rbd`` network storage driver in
-Qemu/KVM, where the host machine uses ``librbd`` to provide a block device
+QEMU/KVM, where the host machine uses ``librbd`` to provide a block device
 service to the guest. Many cloud computing stacks use ``libvirt`` to integrate
-with hypervisors. You can use thin-provisioned Ceph Block Devices with Qemu and
+with hypervisors. You can use thin-provisioned Ceph Block Devices with QEMU and
 ``libvirt`` to support OpenStack and CloudStack among other solutions.
 
 While we do not provide ``librbd`` support with other hypervisors at this time,
