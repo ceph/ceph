@@ -4,6 +4,7 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
     conf:
       client:
         rbd cache: false

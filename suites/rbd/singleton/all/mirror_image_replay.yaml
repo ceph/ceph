@@ -3,6 +3,7 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
 - workunit:
     clients:
       all: [rbd/rbd_mirror_image_replay.sh]
