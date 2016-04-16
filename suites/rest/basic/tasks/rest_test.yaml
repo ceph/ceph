@@ -12,6 +12,7 @@ roles:
 tasks:
 - install:
 - ceph:
+    fs: xfs
     log-whitelist:
     - wrongly marked me down
     conf:
