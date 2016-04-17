@@ -805,7 +805,8 @@ void ReplicatedBackend::be_deep_scrub(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
   uint64_t keys_scanned = 0;
-  for (iter->seek_to_first(); iter->valid() ; iter->next(false)) {
+  for (iter->seek_to_first(); iter->status() == 0 && iter->valid();
+    iter->next(false)) {
     if (cct->_conf->osd_scan_list_ping_tp_interval &&
 	(keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
       handle.reset_tp_timeout();
@@ -821,12 +822,14 @@ void ReplicatedBackend::be_deep_scrub(
     oh << bl;
     bl.clear();
   }
-  if (iter->status() == -EIO) {
-    dout(25) << __func__ << "  " << poid << " got "
-	     << r << " on omap scan, read_error" << dendl;
+
+  if (iter->status() < 0) {
+    dout(25) << __func__ << "  " << poid
+             << " on omap scan, db status error" << dendl;
     o.read_error = true;
     return;
   }
+
   //Store final calculated CRC32 of omap header & key/values
   o.omap_digest = oh.digest();
   o.omap_digest_present = true;
