@@ -290,6 +290,8 @@ namespace cohort {
 	Partition* p;
 	LK* lock;
 	insert_commit_data commit_data;
+
+	Latch() : p(nullptr), lock(nullptr) {}
       };
 
       Partition& partition_of_scalar(uint64_t x) {

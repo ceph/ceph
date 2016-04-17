@@ -536,6 +536,7 @@ protected:
   bool has_cors;
   RGWCORSConfiguration cors_config;
   string swift_ver_location;
+  map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
   bufferlist in_data;
@@ -544,6 +545,10 @@ protected:
 
 public:
   RGWCreateBucket() : has_cors(false) {}
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+  }
 
   int verify_permission();
   void pre_exec();
@@ -647,7 +652,7 @@ protected:
   RGWAccessControlPolicy policy;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
-
+  map<string, bufferlist> attrs;
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
@@ -672,6 +677,10 @@ public:
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
+  }
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
@@ -712,6 +721,10 @@ public:
   RGWPostObj() : min_len(0), max_len(LLONG_MAX), len(0), ofs(0),
 		 supplied_md5_b64(NULL), supplied_etag(NULL),
 		 data_pending(false) {}
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -762,6 +775,7 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
+  map<string, buffer::list> attrs;
   set<string> rmattr_names;
   bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
@@ -774,10 +788,15 @@ public:
     : has_policy(false), has_cors(false)
   {}
 
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+  }
+
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
+
   int verify_permission();
   void pre_exec();
   void execute();
@@ -861,7 +880,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, bufferlist> attrs;
+  map<string, buffer::list> attrs;
   string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
   rgw_obj_key src_object;
@@ -908,6 +927,10 @@ public:
   static bool parse_copy_location(const string& src,
                                   string& bucket_name,
                                   rgw_obj_key& object);
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl));
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
