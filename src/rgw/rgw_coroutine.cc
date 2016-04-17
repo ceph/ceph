@@ -812,6 +812,7 @@ int RGWSimpleCoroutine::operate()
     yield return state_request_complete();
     yield return state_all_complete();
     drain_all();
+    request_cleanup();
     return set_state(RGWCoroutine_Done, ret);
   }
   return 0;
@@ -821,6 +822,7 @@ int RGWSimpleCoroutine::state_init()
 {
   int ret = init();
   if (ret < 0) {
+    request_cleanup();
     return set_state(RGWCoroutine_Error, ret);
   }
   return 0;
@@ -830,6 +832,7 @@ int RGWSimpleCoroutine::state_send_request()
 {
   int ret = send_request();
   if (ret < 0) {
+    request_cleanup();
     return set_state(RGWCoroutine_Error, ret);
   }
   return io_block(0);
@@ -839,6 +842,7 @@ int RGWSimpleCoroutine::state_request_complete()
 {
   int ret = request_complete();
   if (ret < 0) {
+    request_cleanup();
     return set_state(RGWCoroutine_Error, ret);
   }
   return 0;
@@ -848,6 +852,7 @@ int RGWSimpleCoroutine::state_all_complete()
 {
   int ret = finish();
   if (ret < 0) {
+    request_cleanup();
     return set_state(RGWCoroutine_Error, ret);
   }
   return 0;

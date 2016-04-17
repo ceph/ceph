@@ -536,6 +536,7 @@ public:
     }
   }
   virtual ~RGWCoroutinesManager() {
+    stop();
     completion_mgr->put();
     if (cr_registry) {
       cr_registry->remove(this);
@@ -545,8 +546,9 @@ public:
   int run(list<RGWCoroutinesStack *>& ops);
   int run(RGWCoroutine *op);
   void stop() {
-    going_down.set(1);
-    completion_mgr->go_down();
+    if (going_down.inc() == 1) {
+      completion_mgr->go_down();
+    }
   }
 
   virtual void report_error(RGWCoroutinesStack *op);
@@ -576,7 +578,7 @@ public:
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
-
+  virtual void request_cleanup() {}
 };
 
 #endif
