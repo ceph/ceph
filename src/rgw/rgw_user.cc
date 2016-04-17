@@ -41,11 +41,6 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
-bool rgw_user_is_authenticated(RGWUserInfo& info)
-{
-  return (info.user_id.id != RGW_USER_ANON_ID);
-}
-
 int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 {
   CephContext *cct = store->ctx();
