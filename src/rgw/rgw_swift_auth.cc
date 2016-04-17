@@ -10,7 +10,6 @@
 #include "auth/Crypto.h"
 
 #include "rgw_client_io.h"
-#include "rgw_swift.h"
 #include "rgw_http_client.h"
 #include "include/str_list.h"
 
@@ -342,83 +341,6 @@ static int encode_token(CephContext *cct, string& swift_user, string& key,
   ret = build_token(swift_user, key, nonce, expiration, bl);
 
   return ret;
-}
-
-int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
-				  const char *token, RGWUserInfo& info,
-				  string *pswift_user)
-{
-  if (strncmp(token, "AUTH_rgwtk", 10) != 0)
-    return -EINVAL;
-
-  token += 10;
-
-  int len = strlen(token);
-  if (len & 1) {
-    dout(0) << "NOTICE: failed to verify token: invalid token length len="
-	    << len << dendl;
-    return -EINVAL;
-  }
-
-  bufferptr p(len/2);
-  int ret = hex_to_buf(token, p.c_str(), len);
-  if (ret < 0)
-    return ret;
-
-  bufferlist bl;
-  bl.append(p);
-
-  bufferlist::iterator iter = bl.begin();
-
-  uint64_t nonce;
-  utime_t expiration;
-  string swift_user;
-
-  try {
-    ::decode(swift_user, iter);
-    ::decode(nonce, iter);
-    ::decode(expiration, iter);
-  } catch (buffer::error& err) {
-    dout(0) << "NOTICE: failed to decode token: caught exception" << dendl;
-    return -EINVAL;
-  }
-  utime_t now = ceph_clock_now(cct);
-  if (expiration < now) {
-    dout(0) << "NOTICE: old timed out token was used now=" << now
-	    << " token.expiration=" << expiration << dendl;
-    return -EPERM;
-  }
-
-  if ((ret = rgw_get_user_info_by_swift(store, swift_user, info)) < 0)
-    return ret;
-
-  dout(10) << "swift_user=" << swift_user << dendl;
-
-  map<string, RGWAccessKey>::iterator siter = info.swift_keys.find(swift_user);
-  if (siter == info.swift_keys.end())
-    return -EPERM;
-  RGWAccessKey& swift_key = siter->second;
-
-  bufferlist tok;
-  ret = build_token(swift_user, swift_key.key, nonce, expiration, tok);
-  if (ret < 0)
-    return ret;
-
-  if (tok.length() != bl.length()) {
-    dout(0) << "NOTICE: tokens length mismatch: bl.length()=" << bl.length()
-	    << " tok.length()=" << tok.length() << dendl;
-    return -EPERM;
-  }
-
-  if (memcmp(tok.c_str(), bl.c_str(), tok.length()) != 0) {
-    char buf[tok.length() * 2 + 1];
-    buf_to_hex((const unsigned char *)tok.c_str(), tok.length(), buf);
-    dout(0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
-    return -EPERM;
-  }
-  *pswift_user = swift_user;
-
-  return 0;
 }
 
 
