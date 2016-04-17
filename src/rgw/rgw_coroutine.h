@@ -578,7 +578,7 @@ public:
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
-
+  virtual void request_cleanup() {}
 };
 
 #endif
