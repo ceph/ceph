@@ -75,13 +75,13 @@ public:
 public:
   // FIXME: default ctor needs to be eradicated here
   KeystoneToken() = default;
-  time_t get_expires() { return token.expires; }
-  string get_domain_id() {return project.domain.id;};
-  string get_domain_name()  {return project.domain.name;};
-  string get_project_id() {return project.id;};
-  string get_project_name() {return project.name;};
-  string get_user_id() {return user.id;};
-  string get_user_name() {return user.name;};
+  time_t get_expires() const { return token.expires; }
+  string get_domain_id() const {return project.domain.id;};
+  string get_domain_name() const {return project.domain.name;};
+  string get_project_id() const {return project.id;};
+  string get_project_name() const {return project.name;};
+  string get_user_id() const {return user.id;};
+  string get_user_name() const {return user.name;};
   bool has_role(const string& r) const;
   bool expired() {
     uint64_t now = ceph_clock_now(NULL).sec();
