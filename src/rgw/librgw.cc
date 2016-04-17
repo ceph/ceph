@@ -41,6 +41,7 @@
 #include "rgw_rest_user.h"
 #include "rgw_rest_s3.h"
 #include "rgw_os_lib.h"
+#include "rgw_auth.h"
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
@@ -227,6 +228,12 @@ namespace rgw {
       goto done;
     }
 
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (nullptr == s->auth_identity) {
+      s->auth_identity = rgw_auth_transform_old_authinfo(s);
+    }
+
     req->log(s, "reading op permissions");
     ret = req->read_permissions(op);
     if (ret < 0) {
@@ -329,6 +336,12 @@ namespace rgw {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
       goto done;
+    }
+
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (nullptr == s->auth_identity) {
+      s->auth_identity = rgw_auth_transform_old_authinfo(s);
     }
 
     req->log(s, "reading op permissions");

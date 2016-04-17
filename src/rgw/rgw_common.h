@@ -1205,6 +1205,8 @@ struct req_init_state {
 /* XXX why don't RGWRequest (or descendants) hold this state? */
 class RGWRequest;
 
+#include "rgw_auth.h"
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
@@ -1258,6 +1260,12 @@ struct req_state {
   bool has_bad_meta;
 
   RGWUserInfo *user;
+
+  /* Object having the knowledge about an authenticated identity and allowing
+   * to apply it during the authorization phase (verify_permission() methods
+   * of a given RGWOp). Thus, it bounds authentication and authorization steps
+   * through a well-defined interface. For more details, see rgw_auth.h. */
+  std::unique_ptr<RGWIdentityApplier> auth_identity;
 
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;

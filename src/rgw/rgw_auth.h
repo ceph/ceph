@@ -48,4 +48,7 @@ inline ostream& operator<<(ostream& out, const RGWIdentityApplier &id) {
   return out;
 }
 
+std::unique_ptr<RGWIdentityApplier>
+rgw_auth_transform_old_authinfo(req_state * const s);
+
 #endif /* CEPH_RGW_AUTH_H */
