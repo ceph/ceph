@@ -136,6 +136,7 @@ public:
   int read_job(const string& job_name, RGWOrphanSearchState& state);
   int write_job(const string& job_name, const RGWOrphanSearchState& state);
   int remove_job(const string& job_name);
+  int list_jobs(map<string,RGWOrphanSearchState> &job_list);
 
 
   int store_entries(const string& oid, const map<string, bufferlist>& entries);
