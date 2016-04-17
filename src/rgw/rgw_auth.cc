@@ -64,5 +64,7 @@ rgw_auth_transform_old_authinfo(req_state * const s)
         new RGWDummyIdentityApplier(s->cct,
                                     s->user->user_id,
                                     s->perm_mask,
+  /* System user has admin permissions by default - it's supposed to pass
+   * through any security check. */
                                     s->system_request));
 }
