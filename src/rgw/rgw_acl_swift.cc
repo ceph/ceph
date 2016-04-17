@@ -194,12 +194,14 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
       id = SWIFT_GROUP_ALL_USERS;
     }
     if (perm & SWIFT_PERM_READ) {
-      if (!read.empty())
-        read.append(", ");
+      if (!read.empty()) {
+        read.append(",");
+      }
       read.append(id.to_str());
     } else if (perm & SWIFT_PERM_WRITE) {
-      if (!write.empty())
-        write.append(", ");
+      if (!write.empty()) {
+        write.append(",");
+      }
       write.append(id.to_str());
     }
   }
