@@ -2563,10 +2563,13 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     for (; it != raw_data.end(); ++it)
       data[metadata_name_from_key(it->first)].swap(it->second);
 
+    if (r < max_read)
+      break;
+
     last_read = raw_data.rbegin()->first;
     if (max_return)
       max_read = MIN(RBD_MAX_KEYS_READ, max_return-data.size());
-  } while (max_return && max_read);
+  } while (max_read);
 
   ::encode(data, *out);
   return 0;
