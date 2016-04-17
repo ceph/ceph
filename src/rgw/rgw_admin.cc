@@ -153,6 +153,7 @@ void _usage()
   cout << "  replicalog delete          delete replica metadata log entry\n";
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
+  cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -239,6 +240,8 @@ void _usage()
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
+  cout << "\nOrphans list-jobs options:\n";
+  cout << "   --extra-info              provide extra info in job list\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -300,6 +303,7 @@ enum {
   OPT_GC_PROCESS,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
+  OPT_ORPHANS_LIST_JOBS,
   OPT_ZONEGROUP_ADD,
   OPT_ZONEGROUP_CREATE,
   OPT_ZONEGROUP_DEFAULT,
@@ -648,6 +652,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ORPHANS_FIND;
     if (strcmp(cmd, "finish") == 0)
       return OPT_ORPHANS_FINISH;
+    if (strcmp(cmd, "list-jobs") == 0)
+      return OPT_ORPHANS_LIST_JOBS;
   } else if (strcmp(prev_cmd, "metadata") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_METADATA_GET;
@@ -4661,6 +4667,32 @@ next:
     if (ret < 0) {
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT_ORPHANS_LIST_JOBS){
+    RGWOrphanStore orphan_store(store);
+    int ret = orphan_store.init();
+    if (ret < 0){
+      cerr << "connection to cluster failed!" << std::endl;
+      return -ret;
+    }
+
+    map <string,RGWOrphanSearchState> m;
+    ret = orphan_store.list_jobs(m);
+    if (ret < 0) {
+      cerr << "job list failed" << std::endl;
+      return -ret;
+    }
+    formatter->open_array_section("entries");
+    for (const auto &it: m){
+      if (!extra_info){
+	formatter->dump_string("job-id",it.first);
+      } else {
+	encode_json("orphan_search_state", it.second, formatter);
+      }
+    }
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_USER_CHECK) {
