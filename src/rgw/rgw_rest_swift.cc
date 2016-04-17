@@ -7,7 +7,6 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 
-#include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
 #include "rgw_cors_swift.h"

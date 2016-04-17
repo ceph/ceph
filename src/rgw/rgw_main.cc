@@ -46,7 +46,6 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_swift_auth.h"
-#include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
@@ -328,7 +327,6 @@ int main(int argc, const char **argv)
   RGWREST rest;
 
   list<string> apis;
-  bool do_swift = false;
 
   get_str_list(g_conf->rgw_enable_apis, apis);
 
@@ -343,8 +341,6 @@ int main(int argc, const char **argv)
     rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
 
   if (apis_map.count("swift") > 0) {
-    do_swift = true;
-    swift_init(g_ceph_context);
     rest.register_resource(g_conf->rgw_swift_url_prefix,
 			   set_logging(new RGWRESTMgr_SWIFT));
   }
@@ -472,10 +468,6 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGINT, handle_sigterm);
   unregister_async_signal_handler(SIGUSR1, handle_sigterm);
   shutdown_async_signal_handler();
-
-  if (do_swift) {
-    swift_finalize();
-  }
 
   rgw_log_usage_finalize();
 
