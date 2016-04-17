@@ -184,7 +184,7 @@ public:
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
-  void set_canon(const rgw_user& _id, string& _name, int perm) {
+  void set_canon(const rgw_user& _id, const string& _name, const  int perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;

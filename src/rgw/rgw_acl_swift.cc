@@ -138,6 +138,8 @@ void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados * const store,
       if (rgw_get_user_info_by_uid(store, user, grant_user) < 0) {
         ldout(cct, 10) << "grant user does not exist: " << uid << dendl;
         /* skipping silently */
+        grant.set_canon(user, std::string(), perm);
+        acl.add_grant(&grant);
       } else {
         grant.set_canon(user, grant_user.display_name, perm);
         acl.add_grant(&grant);
@@ -224,6 +226,8 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
       if (rgw_get_user_info_by_uid(store, user, grant_user) < 0) {
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping silently */
+        grant.set_canon(user, std::string(), perm);
+        acl.add_grant(&grant);
       } else {
         grant.set_canon(user, grant_user.display_name, perm);
         acl.add_grant(&grant);
