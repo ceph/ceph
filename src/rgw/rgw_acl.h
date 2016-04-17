@@ -186,6 +186,8 @@ public:
 };
 WRITE_CLASS_ENCODER(ACLGrant)
 
+class RGWIdentityApplier;
+
 class RGWAccessControlList
 {
 protected:
@@ -204,7 +206,8 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  int get_perm(rgw_user& id, int perm_mask);
+  int get_perm(const RGWIdentityApplier& auth_identity,
+               int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 3, bl);
@@ -302,9 +305,12 @@ public:
     acl.set_ctx(ctx);
   }
 
-  int get_perm(rgw_user& id, int perm_mask);
+  int get_perm(const RGWIdentityApplier& auth_identity,
+               int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
-  bool verify_permission(rgw_user& uid, int user_perm_mask, int perm);
+  bool verify_permission(const RGWIdentityApplier& auth_identity,
+                         int user_perm_mask,
+                         int perm);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
