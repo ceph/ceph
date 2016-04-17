@@ -260,6 +260,8 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
@@ -370,6 +372,8 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
