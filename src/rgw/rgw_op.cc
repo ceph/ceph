@@ -1879,9 +1879,8 @@ static void populate_with_generic_attrs(const req_state * const s,
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
-  map<string, bufferlist> attrs;
-  bufferlist aclbl;
-  bufferlist corsbl;
+  buffer::list aclbl;
+  buffer::list corsbl;
   bool existed;
   string bucket_name;
   rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_name);
@@ -1974,17 +1973,17 @@ void RGWCreateBucket::execute()
   }
 
   policy.encode(aclbl);
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (has_cors) {
     cors_config.encode(corsbl);
-    attrs[RGW_ATTR_CORS] = corsbl;
+    emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
   }
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
-  op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id, placement_rule,
-                                swift_ver_location,
-				attrs, info, pobjv, &ep_objv, creation_time,
+  op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
+				placement_rule, swift_ver_location, attrs,
+				info, pobjv, &ep_objv, creation_time,
 				pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
@@ -2332,13 +2331,11 @@ void RGWPutObj::execute()
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   bufferlist bl, aclbl;
-  map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
   bool multipart;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
-
 
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;
@@ -2519,8 +2516,7 @@ void RGWPutObj::execute()
   }
 
   policy.encode(aclbl);
-
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (dlo_manifest) {
     op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
@@ -2535,7 +2531,7 @@ void RGWPutObj::execute()
   if (slo_info) {
     bufferlist manifest_bl;
     ::encode(*slo_info, manifest_bl);
-    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+    emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
     hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
     complete_etag(hash, &etag);
@@ -2547,7 +2543,7 @@ void RGWPutObj::execute()
     goto done;
   }
   bl.append(etag.c_str(), etag.size() + 1);
-  attrs[RGW_ATTR_ETAG] = bl;
+  emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
        ++iter) {
@@ -2565,11 +2561,11 @@ void RGWPutObj::execute()
   if (slo_info) {
     bufferlist slo_userindicator_bl;
     ::encode("True", slo_userindicator_bl);
-    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+    emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
-  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at, if_match,
-			       if_nomatch);
+  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
+			      if_match, if_nomatch);
 
 done:
   dispose_processor(processor);
@@ -2609,7 +2605,7 @@ void RGWPostObj::execute()
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  bufferlist bl, aclbl;
+  buffer::list bl, aclbl;
   int len = 0;
 
   // read in the data from the POST form
@@ -2677,17 +2673,17 @@ void RGWPostObj::execute()
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
-  policy.encode(aclbl);
   etag = calc_md5;
-
   bl.append(etag.c_str(), etag.size() + 1);
-  attrs[RGW_ATTR_ETAG] = bl;
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+  policy.encode(aclbl);
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (content_type.size()) {
     bufferlist ct_bl;
     ct_bl.append(content_type.c_str(), content_type.size() + 1);
-    attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
+    emplace_attr(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
   }
 
   op_ret = processor->complete(etag, NULL, real_time(), attrs, delete_at);
@@ -2822,7 +2818,7 @@ void RGWPutMetadataBucket::pre_exec()
 
 void RGWPutMetadataBucket::execute()
 {
-  map<string, bufferlist> attrs, orig_attrs;
+  map<string, buffer::list> orig_attrs;
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -2837,26 +2833,27 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  orig_attrs = s->bucket_attrs;
+  orig_attrs = s->bucket_attrs; /* XXX map copy */
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
   if (has_policy) {
-    bufferlist bl;
+    buffer::list bl;
     policy.encode(bl);
-    attrs[RGW_ATTR_ACL] = bl;
+    emplace_attr(RGW_ATTR_ACL, std::move(bl));
   }
 
   if (has_cors) {
-    bufferlist bl;
+    buffer::list bl;
     cors_config.encode(bl);
-    attrs[RGW_ATTR_CORS] = bl;
+    emplace_attr(RGW_ATTR_CORS, std::move(bl));
   }
 
   s->bucket_info.swift_ver_location = swift_ver_location;
   s->bucket_info.swift_versioning = (!swift_ver_location.empty());
 
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				&s->bucket_info.objv_tracker);
 }
 
 int RGWPutMetadataObject::verify_permission()
@@ -3221,8 +3218,8 @@ int RGWCopyObj::init_common()
 
   bufferlist aclbl;
   dest_policy.encode(aclbl);
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  attrs[RGW_ATTR_ACL] = aclbl;
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   map<string, string>::iterator iter;

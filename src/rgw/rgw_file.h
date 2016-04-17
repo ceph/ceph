@@ -100,7 +100,23 @@ namespace rgw {
       fh_hk.bucket = XXH64(_b.c_str(), _o.length(), seed);
       fh_hk.object = XXH64(_o.c_str(), _o.length(), seed);
     }
+
+    void encode(buffer::list& bl) const {
+      ENCODE_START(1, 1, bl);
+      ::encode(fh_hk.bucket, bl);
+      ::encode(fh_hk.object, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::iterator& bl) {
+      DECODE_START(1, bl);
+      ::decode(fh_hk.bucket, bl);
+      ::decode(fh_hk.object, bl);
+      DECODE_FINISH(bl);
+    }
   }; /* fh_key */
+
+  WRITE_CLASS_ENCODER(fh_key);
 
   inline bool operator<(const fh_key& lhs, const fh_key& rhs)
   {
@@ -153,7 +169,7 @@ namespace rgw {
     using marker_cache_t = flat_map<uint64_t, dirent_string>;
     using name_cache_t = flat_map<dirent_string, uint8_t>;
 
-    struct state {
+    struct State {
       uint64_t dev;
       size_t size;
       uint64_t nlink;
@@ -163,7 +179,7 @@ namespace rgw {
       struct timespec ctime;
       struct timespec mtime;
       struct timespec atime;
-      state() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0),
+      State() : dev(0), size(0), nlink(1), owner_uid(0), owner_gid(0),
 		ctime{0,0}, mtime{0,0}, atime{0,0} {}
     } state;
 
@@ -215,6 +231,9 @@ namespace rgw {
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
     static constexpr uint32_t FLAG_DELETED = 0x0080;
+
+#define CREATE_FLAGS(x) \
+    ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
 
     friend class RGWLibFS;
 
@@ -323,10 +342,10 @@ namespace rgw {
       if (mask & RGW_SETATTR_MODE)  {
 	switch (fh.fh_type) {
 	case RGW_FS_TYPE_DIRECTORY:
-	  st->st_mode = state.unix_mode|S_IFDIR;
+	  state.unix_mode = st->st_mode|S_IFDIR;
 	  break;
 	case RGW_FS_TYPE_FILE:
-	  st->st_mode = state.unix_mode|S_IFREG;
+	  state.unix_mode = st->st_mode|S_IFREG;
       default:
 	break;
 	}
@@ -350,11 +369,11 @@ namespace rgw {
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
-	st->st_mode = RGW_RWXMODE|S_IFDIR;
+	st->st_mode = RGW_RWXMODE|S_IFDIR /* state.unix_mode|S_IFDIR */;
 	st->st_nlink = 3;
 	break;
       case RGW_FS_TYPE_FILE:
-	st->st_mode = RGW_RWMODE|S_IFREG;
+	st->st_mode = RGW_RWMODE|S_IFREG /* state.unix_mode|S_IFREG */;
 	st->st_nlink = 1;
 	st->st_blksize = 4096;
 	st->st_size = state.size;
@@ -427,7 +446,7 @@ namespace rgw {
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
 	std::string key_name = make_key_name(name.c_str());
-	return fh_key(fhk.fh_hk.object, key_name.c_str());
+	return fh_key(fhk.fh_hk.bucket, key_name.c_str());
       }
     }
 
@@ -522,6 +541,46 @@ namespace rgw {
       state.atime = ts;
     }
 
+    void encode(buffer::list& bl) const {
+      ENCODE_START(1, 1, bl);
+      ::encode(uint32_t(fh.fh_type), bl);
+      ::encode(state.dev, bl);
+      ::encode(state.size, bl);
+      ::encode(state.nlink, bl);
+      ::encode(state.owner_uid, bl);
+      ::encode(state.owner_gid, bl);
+      ::encode(state.unix_mode, bl);
+      for (const auto& t : { state.ctime, state.mtime, state.atime }) {
+	::encode(real_clock::from_timespec(t), bl);
+      }
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::iterator& bl) {
+      DECODE_START(1, bl);
+      uint32_t fh_type;
+      ::decode(fh_type, bl);
+      assert(fh.fh_type == fh_type);
+      ::decode(state.dev, bl);
+      ::decode(state.size, bl);
+      ::decode(state.nlink, bl);
+      ::decode(state.owner_uid, bl);
+      ::decode(state.owner_gid, bl);
+      ::decode(state.unix_mode, bl);
+      ceph::real_time enc_time;
+      for (auto t : { &(state.ctime), &(state.mtime), &(state.atime) }) {
+	::decode(enc_time, bl);
+	*t = real_clock::to_timespec(enc_time);
+      }
+      DECODE_FINISH(bl);
+    }
+
+    void encode_attrs(ceph::buffer::list& ux_key1,
+		      ceph::buffer::list& ux_attrs1);
+
+    void decode_attrs(const ceph::buffer::list* ux_key1,
+		      const ceph::buffer::list* ux_attrs1);
+
     virtual bool reclaim();
 
     typedef cohort::lru::LRU<std::mutex> FhLRU;
@@ -604,6 +663,8 @@ namespace rgw {
     }; /* Factory */
 
   }; /* RGWFileHandle */
+
+  WRITE_CLASS_ENCODER(RGWFileHandle);
 
   static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
     return static_cast<RGWFileHandle*>(fh->fh_private);
@@ -738,7 +799,7 @@ namespace rgw {
 
     /* find or create an RGWFileHandle */
     LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name,
-			     const uint32_t cflags = RGWFileHandle::FLAG_NONE) {
+			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
@@ -748,10 +809,15 @@ namespace rgw {
 	return fhr;
 
       RGWFileHandle::FHCache::Latch lat;
-      memset(&lat, 0, sizeof(lat)); // XXXX testing
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
+
+      lsubdout(get_context(), rgw, 10)
+	<< __func__ << " lookup called on "
+	<< parent->object_name() << " for " << key_name
+	<< " (" << obj_name << ")"
+	<< dendl;
 
       fh_key fhk = parent->make_fhk(key_name);
 
@@ -777,21 +843,23 @@ namespace rgw {
 	  goto retry; /* !LATCHED */
 	}
 	/* LATCHED, LOCKED */
-	if (! (fh->flags & RGWFileHandle::FLAG_LOCK))
+	if (! (flags & RGWFileHandle::FLAG_LOCK))
 	  fh->mtx.unlock(); /* ! LOCKED */
       } else {
 	/* make or re-use handle */
 	RGWFileHandle::Factory prototype(this, get_inst(), parent, fhk,
-					 obj_name, cflags);
+					 obj_name, CREATE_FLAGS(flags));
 	fh = static_cast<RGWFileHandle*>(
 	  fh_lru.insert(&prototype,
 			cohort::lru::Edge::MRU,
 			cohort::lru::FLAG_INITIAL));
 	if (fh) {
+	  /* lock fh (LATCHED) */
+	  if (flags & RGWFileHandle::FLAG_LOCK)
+	    fh->mtx.lock();
+	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
-	  if (fh->flags & RGWFileHandle::FLAG_LOCK)
-	    fh->mtx.lock();
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
@@ -821,6 +889,9 @@ namespace rgw {
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
 			     uint32_t flags);
 
+    int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
+	     size_t* bytes_read, void* buffer, uint32_t flags);
+
     int rename(RGWFileHandle* old_fh, RGWFileHandle* new_fh,
 	       const char *old_name, const char *new_name);
 
@@ -828,6 +899,8 @@ namespace rgw {
 		      uint32_t mask, uint32_t flags);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
+		      uint32_t mask, uint32_t flags);
+    MkObjResult mkdir2(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
 
     int unlink(RGWFileHandle* parent, const char *name);
@@ -1561,7 +1634,12 @@ public:
   uint64_t get_size() { return _size; }
   real_time ctime() { return mod_time; } // XXX
   real_time mtime() { return mod_time; }
-  map<string, bufferlist>& get_attrs() { return attrs; }
+  std::map<string, bufferlist>& get_attrs() { return attrs; }
+
+  buffer::list* get_attr(const std::string& k) {
+    auto iter = attrs.find(k);
+    return (iter != attrs.end()) ? &(iter->second) : nullptr;
+  }
 
   virtual bool only_bucket() { return false; }
 
@@ -1602,6 +1680,7 @@ public:
   virtual int send_response_data(ceph::buffer::list& _bl, off_t s_off,
 				off_t e_off) {
     /* NOP */
+    /* XXX save attrs? */
     return 0;
   }
 
@@ -1622,12 +1701,18 @@ class RGWStatBucketRequest : public RGWLibRequest,
 {
 public:
   std::string uri;
+  std::map<std::string, buffer::list> attrs;
 
   RGWStatBucketRequest(CephContext* _cct, RGWUserInfo *_user,
 		       const std::string& _path)
     : RGWLibRequest(_cct, _user) {
     uri = "/" + _path;
     op = this;
+  }
+
+  buffer::list* get_attr(const std::string& k) {
+    auto iter = attrs.find(k);
+    return (iter != attrs.end()) ? &(iter->second) : nullptr;
   }
 
   virtual bool only_bucket() { return false; }
@@ -1672,6 +1757,7 @@ public:
 
   virtual void send_response() {
     bucket.creation_time = get_state()->bucket_info.creation_time;
+    std::swap(attrs, get_state()->bucket_attrs);
   }
 
   bool matched() {
@@ -1904,7 +1990,11 @@ public:
 		    const std::string& _src_name, const std::string& _dst_name)
     : RGWLibRequest(_cct, _user), src_parent(_src_parent),
       dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name) {
+    /* all requests have this */
     op = this;
+
+    /* allow this request to replace selected attrs */
+    attrs_mod = RGWRados::ATTRSMOD_MERGE;
   }
 
   virtual bool only_bucket() { return true; }
@@ -1939,6 +2029,14 @@ public:
 
     if (! valid_s3_object_name(dest_object))
       return -ERR_INVALID_OBJECT_NAME;
+
+    /* XXX and fixup key attr (could optimize w/string ref and
+     * dest_object) */
+    buffer::list ux_key;
+    std::string key_name{dst_parent->make_key_name(dst_name.c_str())};
+    fh_key fhk = dst_parent->make_fhk(key_name);
+    rgw::encode(fhk, ux_key);
+    emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
 
 #if 0 /* XXX needed? */
     s->relative_uri = uri;

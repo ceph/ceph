@@ -262,6 +262,9 @@ TEST(LibRGW, SETUP_DIRS1) {
 	rc = rgw_mkdir(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(), &st,
 		      create_mask, &dirs1_b.fh, RGW_MKDIR_FLAG_NONE);
 	ASSERT_EQ(rc, 0);
+      } else {
+	/* no top-level dir and can't create it--skip remaining tests */
+	return;
       }
     }
     dirs1_b.sync();
@@ -487,6 +490,12 @@ TEST(LibRGW, RGW_CROSSBUCKET_RENAME1) {
 TEST(LibRGW, BAD_DELETES_DIRS1) {
   if (do_dirs1) {
     int rc;
+
+    if (dirs_vec.size() == 0) {
+      /* skip */
+      return;
+    }
+
     if (do_delete) {
       /* try to unlink a non-empty directory (bucket) */
       rc = rgw_unlink(fs, dirs1_b.parent_fh, dirs1_b.name.c_str(),
@@ -494,7 +503,8 @@ TEST(LibRGW, BAD_DELETES_DIRS1) {
       ASSERT_NE(rc, 0);
     }
     /* try to unlink a non-empty directory (non-bucket) */
-    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];    ASSERT_EQ(sdir_0.name, "sdir_0");
+    obj_rec& sdir_0 = get<1>(dirs_vec[0])[0];
+    ASSERT_EQ(sdir_0.name, "sdir_0");
     ASSERT_TRUE(sdir_0.rgw_fh->is_dir());
     /* XXX we can't enforce this currently */
 #if 0
