@@ -123,11 +123,6 @@ public:
 };
 
 
-extern int rgw_swift_verify_signed_token(CephContext *cct,
-                                         RGWRados *store,
-                                         const char *token,
-                                         rgw_swift_auth_info& auth_info);
-
 class RGW_SWIFT_Auth_Get : public RGWOp {
 public:
   RGW_SWIFT_Auth_Get() {}
