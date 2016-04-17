@@ -94,6 +94,12 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
     goto done;
   }
 
+  /* FIXME: remove this after switching all handlers to the new authentication
+   * infrastructure. */
+  if (nullptr == s->auth_identity) {
+    s->auth_identity = rgw_auth_transform_old_authinfo(s);
+  }
+
   req->log(s, "normalizing buckets and tenants");
   ret = handler->postauth_init();
   if (ret < 0) {
