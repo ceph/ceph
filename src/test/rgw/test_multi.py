@@ -124,7 +124,7 @@ class RGWCluster:
         mstop(self.cluster_id, 'radosgw')
 
     def rgw_admin(self, cmd, check_retcode = True):
-        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd))
+        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd), check_retcode)
         return (s, retcode)
 
     def rgw_admin_ro(self, cmd, check_retcode = True):
