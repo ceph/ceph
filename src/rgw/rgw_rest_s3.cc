@@ -40,8 +40,7 @@ using std::get;
 
 void list_all_buckets_start(struct req_state *s)
 {
-  s->formatter->open_array_section_in_ns("ListAllMyBucketsResult",
-			      "http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_array_section_in_ns("ListAllMyBucketsResult", XMLNS_AWS_S3);
 }
 
 void list_all_buckets_end(struct req_state *s)
@@ -466,8 +465,7 @@ int RGWListBucket_ObjStore_S3::get_params()
 
 void RGWListBucket_ObjStore_S3::send_versioned_response()
 {
-  s->formatter->open_object_section_in_ns("ListVersionsResult",
-					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Name", s->bucket_name);
@@ -565,8 +563,7 @@ void RGWListBucket_ObjStore_S3::send_response()
     return;
   }
 
-  s->formatter->open_object_section_in_ns("ListBucketResult",
-					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("ListBucketResult", XMLNS_AWS_S3);
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Name", s->bucket_name);
@@ -628,8 +625,7 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   dump_start(s);
 
-  s->formatter->open_object_section_in_ns("BucketLoggingStatus",
-					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("BucketLoggingStatus", XMLNS_AWS_S3);
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -652,9 +648,8 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
     }
   }
 
-  s->formatter->dump_format_ns("LocationConstraint",
-			       "http://doc.s3.amazonaws.com/doc/2006-03-01/",
-			       "%s",api_name.c_str());
+  s->formatter->dump_format_ns("LocationConstraint", XMLNS_AWS_S3,
+			       "%s", api_name.c_str());
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -664,8 +659,7 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   dump_start(s);
 
-  s->formatter->open_object_section_in_ns("VersioningConfiguration",
-					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("VersioningConfiguration", XMLNS_AWS_S3);
   if (versioned) {
     const char *status = (versioning_enabled ? "Enabled" : "Suspended");
     s->formatter->dump_string("Status", status);
@@ -822,8 +816,7 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
 
   RGWBucketWebsiteConf& conf = s->bucket_info.website_conf;
 
-  s->formatter->open_object_section_in_ns("WebsiteConfiguration",
-					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("WebsiteConfiguration", XMLNS_AWS_S3);
   conf.dump_xml(s->formatter);
   s->formatter->close_section(); // WebsiteConfiguration
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1993,7 +1986,7 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
 
     end_header(s, this, "application/xml");
     if (op_ret == 0) {
-      s->formatter->open_object_section("CopyObjectResult");
+      s->formatter->open_object_section_in_ns("CopyObjectResult", XMLNS_AWS_S3);
     }
     sent_header = true;
   } else {
@@ -2213,8 +2206,7 @@ void RGWGetRequestPayment_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   dump_start(s);
 
-  s->formatter->open_object_section_in_ns("RequestPaymentConfiguration",
-					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("RequestPaymentConfiguration", XMLNS_AWS_S3);
   const char *payer = requester_pays ? "Requester" :  "BucketOwner";
   s->formatter->dump_string("Payer", payer);
   s->formatter->close_section();
@@ -2314,8 +2306,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   if (op_ret == 0) {
     dump_start(s);
-    s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
-		  "http://s3.amazonaws.com/doc/2006-03-01/");
+    s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult", XMLNS_AWS_S3);
     if (!s->bucket_tenant.empty())
       s->formatter->dump_string("Tenant", s->bucket_tenant);
     s->formatter->dump_string("Bucket", s->bucket_name);
@@ -2350,8 +2341,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   if (op_ret == 0) { 
     dump_start(s);
-    s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
-			  "http://s3.amazonaws.com/doc/2006-03-01/");
+    s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult", XMLNS_AWS_S3);
     if (!s->bucket_tenant.empty()) {
       if (s->info.domain.length()) {
         s->formatter->dump_format("Location", "%s.%s.%s",
@@ -2395,8 +2385,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_start(s);
-    s->formatter->open_object_section_in_ns("ListPartsResult",
-		    "http://s3.amazonaws.com/doc/2006-03-01/");
+    s->formatter->open_object_section_in_ns("ListPartsResult", XMLNS_AWS_S3);
     map<uint32_t, RGWUploadPartInfo>::iterator iter;
     map<uint32_t, RGWUploadPartInfo>::reverse_iterator test_iter;
     int cur_max = 0;
@@ -2448,7 +2437,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
   if (op_ret < 0)
     return;
 
-  s->formatter->open_object_section("ListMultipartUploadsResult");
+  s->formatter->open_object_section_in_ns("ListMultipartUploadsResult", XMLNS_AWS_S3);
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Bucket", s->bucket_name);
@@ -2533,8 +2522,7 @@ void RGWDeleteMultiObj_ObjStore_S3::begin_response()
 
   dump_start(s);
   end_header(s, this, "application/xml");
-  s->formatter->open_object_section_in_ns("DeleteResult",
-					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->open_object_section_in_ns("DeleteResult", XMLNS_AWS_S3);
 
   rgw_flush_formatter(s, s->formatter);
 }
