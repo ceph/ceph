@@ -2987,7 +2987,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   // read or error?
   if (ctx->op_t->empty() || result < 0) {
     // finish side-effects
-    if (result == 0)
+    if (result >= 0)
       do_osd_op_effects(ctx, m->get_connection());
 
     if (ctx->pending_async_reads.empty()) {
