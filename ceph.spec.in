@@ -793,7 +793,6 @@ install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildro
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT%{_udevrulesdir}/50-rbd.rules
-install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT%{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 
 %if (0%{?rhel} && 0%{?rhel} < 7)
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
@@ -1188,7 +1187,6 @@ fi
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-udev
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
-%{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-disk.8*
