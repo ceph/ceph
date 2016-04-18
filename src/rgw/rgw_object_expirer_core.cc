@@ -199,8 +199,6 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
 
 void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
 {
-  utime_t shard_marker;
-
   CephContext *cct = store->ctx();
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
 
@@ -245,8 +243,6 @@ void *RGWObjectExpirer::OEWorker::entry() {
     ldout(cct, 2) << "object expiration: start" << dendl;
     oe->inspect_all_shards(last_run, start);
     ldout(cct, 2) << "object expiration: stop" << dendl;
-
-    last_run = start;
 
     if (oe->going_down())
       break;
