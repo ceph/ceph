@@ -2525,7 +2525,7 @@ static const string metadata_name_from_key(const string &key)
  * Input:
  * @param start_after which name to begin listing after
  *        (use the empty string to start at the beginning)
- * @param max_return the maximum number of names to lis(if 0 means no limit)
+ * @param max_return the maximum number of names to list(if 0 means no limit)
 
  * Output:
  * @param value
@@ -2568,7 +2568,7 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
     last_read = raw_data.rbegin()->first;
     if (max_return)
-      max_read = MIN(RBD_MAX_KEYS_READ, max_return-data.size());
+      max_read = MIN(RBD_MAX_KEYS_READ, max_return - data.size());
   } while (max_read);
 
   ::encode(data, *out);
