@@ -1,6 +1,6 @@
 #!/bin/bash -x
 
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source $(dirname $0)/../ceph-helpers.sh
 
 set -e
 set -o functrace
