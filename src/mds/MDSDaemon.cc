@@ -469,12 +469,20 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   monc->set_messenger(messenger);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
-  monc->init();
+  int r = 0;
+  r = monc->init();
+  if (r < 0) {
+    derr << "ERROR: failed to get monmap: " << cpp_strerror(-r) << dendl;
+    mds_lock.Lock();
+    suicide();
+    mds_lock.Unlock();
+    return r;
+  }
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
 
-  int r = monc->authenticate();
+  r = monc->authenticate();
   if (r < 0) {
     derr << "ERROR: failed to authenticate: " << cpp_strerror(-r) << dendl;
     mds_lock.Lock();
