@@ -38,9 +38,17 @@ def get_version():
     try:
         for line in open(os.path.join(dir, "ceph_ver.h")):
             if "CEPH_GIT_NICE_VER" in line:
-                return line.split()[2].strip('"')
+                l=line.split()[2].strip('"')
+                if len(l) > 1 and l[0] == 'v': l = l[1:]
+                a=l.split("-",2)
+                if len(a) > 2:
+                    return "{}.post{}+{}".format( a[0], a[1], a[2] )
+                elif len(a) > 1:
+                    return "{}+{}".format( a[0], a[1] )
+                else:
+                    return l
     except IOError:
-	pass
+        pass
   return "0"
 
 
