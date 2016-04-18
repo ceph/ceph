@@ -1515,6 +1515,15 @@ extern "C" int ceph_ll_create(class ceph_mount_info *cmount,
 					   attr, out, fhp, uid, gid);
 }
 
+extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount,
+			     struct Inode *parent, const char *name,
+			     mode_t mode, dev_t rdev, struct stat *attr,
+			     struct Inode **out, int uid, int gid)
+{
+  return (cmount->get_client())->ll_mknod(parent, name, mode, rdev,
+					  attr, out, uid, gid);
+}
+
 extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount,
 			     Inode *parent, const char *name,
 			     mode_t mode, struct stat *attr, Inode **out,
