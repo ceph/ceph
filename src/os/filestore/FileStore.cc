@@ -2546,10 +2546,13 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_CLONE:
       {
-        coll_t cid = i.get_cid(op->cid);
+        coll_t cid, ncid;
+        cid = ncid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
+        _kludge_temp_object_collection(ncid, noid);
+        assert(cid == ncid);
         tracepoint(objectstore, clone_enter, osr_name);
         r = _clone(cid, oid, noid, spos);
         tracepoint(objectstore, clone_exit, r);
@@ -2558,11 +2561,13 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_CLONERANGE:
       {
-        coll_t cid = i.get_cid(op->cid);
+        coll_t cid, ncid;
+        cid = ncid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+	_kludge_temp_object_collection(ncid, noid);
+        assert(cid == ncid);
         uint64_t off = op->off;
         uint64_t len = op->len;
         tracepoint(objectstore, clone_range_enter, osr_name, len);
@@ -2573,11 +2578,13 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_CLONERANGE2:
       {
-        coll_t cid = i.get_cid(op->cid);
+        coll_t cid, ncid;
+        cid = ncid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
 	_kludge_temp_object_collection(cid, oid);
         ghobject_t noid = i.get_oid(op->dest_oid);
-	_kludge_temp_object_collection(cid, noid);
+	_kludge_temp_object_collection(ncid, noid);
+        assert (cid == ncid);
         uint64_t srcoff = op->off;
         uint64_t len = op->len;
         uint64_t dstoff = op->dest_off;
