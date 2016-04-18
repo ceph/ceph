@@ -51,6 +51,12 @@ public:
     }
     return 0;
   }
+
+  void request_cleanup() {
+    if (http_op) {
+      http_op->put();
+    }
+  }
 };
 
 template <class S, class T>
@@ -112,6 +118,12 @@ public:
       return ret;
     }
     return 0;
+  }
+
+  void request_cleanup() {
+    if (http_op) {
+      http_op->put();
+    }
   }
 };
 
