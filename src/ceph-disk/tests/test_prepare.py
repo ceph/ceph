@@ -395,3 +395,55 @@ class TestPrepareData(Base):
                                  set_type=set_type):
             data = main.PrepareData(args)
         assert data.args.cluster_uuid == cluster_uuid
+
+    @mock.patch('ceph_disk.main.is_partition')
+    def test_set_data_partition(self, m_is_partition):
+        parser = argparse.ArgumentParser('ceph-disk')
+        subparsers = parser.add_subparsers()
+        main.Prepare.set_subparser(subparsers)
+
+        cluster_uuid = '571bb920-6d85-44d7-9eca-1bc114d1cd75'
+        data = '/dev/spart1'
+        args = parser.parse_args([
+            'prepare',
+            '--cluster-uuid', cluster_uuid,
+            data,
+        ])
+
+        def set_type(self):
+            self.type = self.DEVICE
+        with mock.patch.multiple(main.PrepareData,
+                                 set_type=set_type):
+            data = main.PrepareData(args)
+        assert data.args.cluster_uuid == cluster_uuid
+
+        expect_uuid_list = [
+            '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d',
+            '4fbd7e29-9d25-41b8-afd0-062c0ceff05d',
+            '4fbd7e29-8ae0-4982-bf9d-5a8d867af560',
+            '4fbd7e29-9d25-41b8-afd0-35865ceff05d']
+
+        not_expect_uuid_list = [
+            'f1c33a3d-2327-46a1-93b3-ae48462520c9',
+            'a619f5a4-fabd-4ddd-8c98-30a08d99b6bf',
+            '0fc63daf-8483-4772-8e79-3d69d8477de4',
+            '8447639e-6e3b-4115-9573-972876210716']
+
+        def create_data_partition(self):
+            return True
+
+        with mock.patch.multiple(main.PrepareData,
+                                 create_data_partition=create_data_partition):
+
+            for uuid in expect_uuid_list + not_expect_uuid_list:
+
+                def get_dm_uuid(dev):
+                    return uuid
+
+                with mock.patch.multiple(main,
+                                         get_dm_uuid=get_dm_uuid):
+                    m_is_partition.return_value = True
+                    data.set_data_partition()
+
+                    m_is_partition.return_value = False
+                    data.set_data_partition()
