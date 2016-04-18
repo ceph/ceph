@@ -285,7 +285,7 @@ void ReplicatedBackend::objects_read_async(
   for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		 pair<bufferlist*, Context*> > >::const_iterator i =
 	   to_read.begin();
-       i != to_read.end() && r >= 0;
+       i != to_read.end();
        ++i) {
     int _r = store->read(ch, ghobject_t(hoid), i->first.get<0>(),
 			 i->first.get<1>(), *(i->second.first),
@@ -295,7 +295,7 @@ void ReplicatedBackend::objects_read_async(
 	get_parent()->bless_gencontext(
 	  new AsyncReadCallback(_r, i->second.second)));
     }
-    if (_r < 0)
+    if (_r < 0 && r == 0)
       r = _r;
   }
   get_parent()->schedule_recovery_work(
