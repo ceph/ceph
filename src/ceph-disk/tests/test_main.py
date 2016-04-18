@@ -114,7 +114,7 @@ class TestCephDisk(object):
         assert payload[0]['path'] in out
         assert payload[0]['partitions'][0]['path'] in out
 
-    def test_list_format_dev_plain(dev):
+    def test_list_format_dev_plain(self):
         #
         # data
         #
@@ -883,8 +883,10 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         osd_id = '5566'
 
         def stop_daemon_fail(cmd):
-            raise Exception('ceph osd stop failed')
-
+            if 'stop' in cmd:
+                raise Exception('ceph osd stop failed')
+            else:
+                return True
         #
         # fail on init type
         #
@@ -901,7 +903,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             if check_path == fake_path:
                 return True
             else:
-                False
+                return False
 
         patcher = patch('os.path.exists')
         check_path = patcher.start()
@@ -919,12 +921,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         fake_path = (STATEDIR + '/osd/{cluster}-{osd_id}/sysvinit').format(
             cluster=cluster, osd_id=osd_id)
 
-        def path_exist(check_path):
-            if check_path == fake_path:
-                return True
-            else:
-                return False
-
         patcher = patch('os.path.exists')
         check_path = patcher.start()
         check_path.side_effect = path_exist
@@ -941,18 +937,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         #
         fake_path = (STATEDIR + '/osd/{cluster}-{osd_id}/systemd').format(
             cluster=cluster, osd_id=osd_id)
-
-        def path_exist(check_path):
-            if check_path == fake_path:
-                return True
-            else:
-                False
-
-        def stop_daemon_fail(cmd):
-            if 'stop' in cmd:
-                raise Exception('ceph osd stop failed')
-            else:
-                return True
 
         patcher = patch('os.path.exists')
         check_path = patcher.start()
