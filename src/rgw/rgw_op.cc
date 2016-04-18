@@ -1363,8 +1363,6 @@ void RGWListBuckets::execute()
       buckets_size += bucket.size;
       buckets_size_rounded += bucket.size_rounded;
       buckets_objcount += bucket.count;
-
-      marker = iter->first;
     }
     buckets_count += m.size();
     total_count += m.size();
