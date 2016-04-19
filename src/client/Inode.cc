@@ -253,6 +253,14 @@ int Inode::caps_wanted()
   return want;
 }
 
+int Inode::caps_mds_wanted()
+{
+  int want = 0;
+  for (auto it = caps.begin(); it != caps.end(); ++it)
+    want |= it->second->wanted;
+  return want;
+}
+
 int Inode::caps_dirty()
 {
   return dirty_caps | flushing_caps;

@@ -748,6 +748,7 @@ private:
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _removexattr(InodeRef &in, const char *nm);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
+  int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
               int stripe_unit, int stripe_count, int object_size, const char *data_pool,
 	      bool *created, int uid, int gid);
