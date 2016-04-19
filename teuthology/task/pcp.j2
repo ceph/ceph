@@ -1,0 +1,15 @@
+<html>
+<head>
+<title>{% if job_id %}job {{ job_id }} {% endif %}performance data</title>
+</head>
+{% for metric in graphs.keys() %}
+{% if mode == 'static' %}
+{% set url = graphs[metric].file.split('/')[-1] %}
+{% else %}
+{% set url = graphs[metric].url %}
+{% endif %}
+<p>{{ metric }}
+<img src="{{ url }}"></img>
+</p>
+{% endfor %}
+</html>

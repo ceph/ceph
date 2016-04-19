@@ -213,3 +213,6 @@ Here is a sample configuration with many of the options set and documented::
         # The size of each volume, in GB
         #
         size: 10 # GB
+
+    # The host running a [PCP](http://pcp.io/) manager
+    pcp_host: http://pcp.front.sepia.ceph.com:44323/

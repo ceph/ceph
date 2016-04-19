@@ -84,6 +84,7 @@ setup(
                       'python-neutronclient',
                       'prettytable',
                       'libvirt-python',
+                      'python-dateutil',
                       ],
 
 
