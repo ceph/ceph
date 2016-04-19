@@ -37,9 +37,6 @@ non-master zones. Following are the basic terminologies that would be used:
   - Realm's current period is updated to point to the newly generated period id
   - Realm's epoch is incremented
 
-Pool Configuration
-==================
-
 About this guide
 ================
 
@@ -53,7 +50,7 @@ through the master zone, however data operations such as creation of buckets
 objects etc. can be handled by any of the zones.
 
 System Keys
-===========
+-----------
 
 While configuring zones, RadosGW, expects creation of zone a system user, with
 an S3-like access and secret keys. This allows another radosgw instance to pull
@@ -74,7 +71,7 @@ keys can be generated in shell for eg::
   $ SYSTEM_SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 40 | head -n 1)
 
 Naming conventions
-==================
+------------------
 
 This section describes the process of setting up a master zone. For the purpose
 of the guide, we'll assume a zonegroup called ``us`` spanning the United States,
@@ -90,6 +87,42 @@ to choose a format you prefer to set these names. So in summary:
 This will be a part of a larger realm, say ``gold``. The zones ``us-east-1`` and
 ``us-east-2`` are part of the same ceph cluster, of which we'll make
 ``us-east-1`` as the primary. ``us-west`` will be in a different ceph cluster.
+
+Create Pools
+------------
+
+Radosgw will create pools on its own, when it is configured with the appropriate
+permissions, this will be done with the value of ``pg_num`` and ``pgp_num`` from
+the ``ceph.conf``. See `Ceph Object Gateway - Create Pools`_ for more detailed
+explanation. Pools particular to a zone by default follows the convention of
+``{zone-name}.pool-name``. In the default configuration, for eg. in
+``us-east-1`` zone following will be the pools:
+
+- ``.rgw.root``
+- ``us-east-1.rgw.control``
+- ``us-east-1.rgw.data.root``
+- ``us-east-1.rgw.gc``
+- ``us-east-1.rgw.log``
+- ``us-east-1.rgw.intent-log``
+- ``us-east-1.rgw.usage``
+- ``us-east-1.rgw.users.keys``
+- ``us-east-1.rgw.users.email``
+- ``us-east-1.rgw.users.swift``
+- ``us-east-1.rgw.users.uid``
+- ``us-east-1.rgw.buckets.index``
+- ``us-east-1.rgw.buckets.data``
+- ``us-east-1.rgw.meta``
+
+These pools can be created in other zones as well replacing ``us-east-1`` with
+the appropriate zone name.
+
+Configuring the master zone in the primary cluster
+==================================================
+
+First, we'll be configuring the master zone ``us-east-1``, in the master
+zonegroup ``us``, this will serve as the master zone for all metadata
+operations, so all operations like creation of users need to be done on this
+zone.
 
 Creating a realm
 ----------------
@@ -713,3 +746,6 @@ difference being in the ``rgw zone`` configurable, which should reflect ``us-wes
 And start the radosgw depending on your Operating system's init system, for eg::
 
   $ sudo systemctl start ceph-radosgw.service
+
+
+.. _`Ceph Object Gateway - Create Pools`: ../config#create_pools
