@@ -735,6 +735,22 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWPutObj_Filter : public RGWPutObjDataProcessor
+{
+protected:
+  RGWPutObjDataProcessor& next;
+public:
+  RGWPutObj_Filter(RGWPutObjDataProcessor& next) :
+  next(next){}
+  virtual ~RGWPutObj_Filter(){}
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) {
+    return next.handle_data(bl, ofs, phandle, again);
+  }
+  virtual int throttle_data(void *handle, bool need_to_wait) {
+    return next.throttle_data(handle, need_to_wait);
+  }
+}; /* RGWPutObj_Filter */
+
 class RGWPostObj : public RGWOp {
 
   friend class RGWPutObjProcessor;
