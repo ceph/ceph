@@ -8847,8 +8847,8 @@ void OSD::process_peering_events(
        ++i) {
     set<boost::intrusive_ptr<PG> > split_pgs;
     PG *pg = *i;
-    pg->lock_suspend_timeout(handle);
     curmap = service.get_osdmap();
+    pg->lock_suspend_timeout(handle);
     if (pg->deleting) {
       pg->unlock();
       continue;
