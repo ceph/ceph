@@ -92,8 +92,8 @@ class RGWPutObj_BlockEncrypt : public RGWPutObj_Filter
 public:
   RGWPutObj_BlockEncrypt(CephContext* cct, RGWPutObjDataProcessor& next, BlockCrypt* crypt);
   virtual ~RGWPutObj_BlockEncrypt();
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) override;
-  virtual int throttle_data(void *handle, bool need_to_wait) override;
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override;
+  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 #endif

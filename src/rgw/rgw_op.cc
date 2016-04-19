@@ -2455,6 +2455,7 @@ void RGWPutObj::pre_exec()
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
+  RGWPutObjDataProcessor *encrypt = nullptr;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -2530,6 +2531,11 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  op_ret = get_encrypt_filter(&encrypt, processor);
+  if (op_ret < 0) {
+    goto done;
+  }
+
   do {
     bufferlist data;
     len = get_data(data);
@@ -2537,7 +2543,8 @@ void RGWPutObj::execute()
       op_ret = len;
       goto done;
     }
-
+    if (!len)
+      break;
     if (need_calc_md5) {
       hash.Update((const byte *)data.c_str(), data.length());
     }
@@ -2552,8 +2559,7 @@ void RGWPutObj::execute()
     if (need_to_wait) {
       orig_data = data;
     }
-
-    op_ret = put_data_and_throttle(processor, data, ofs, need_to_wait);
+    op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="
@@ -2569,6 +2575,13 @@ void RGWPutObj::execute()
       /* restart processing with different oid suffix */
 
       dispose_processor(processor);
+      if (encrypt) {
+        delete encrypt;
+      }
+      op_ret = get_encrypt_filter(&encrypt, processor);
+      if (op_ret < 0) {
+        goto done;
+      }
       processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
       string oid_rand;
@@ -2583,7 +2596,7 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, false);
+      op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, data, ofs, false);
       if (op_ret < 0) {
         goto done;
       }
@@ -2591,7 +2604,13 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
-
+  {
+    bufferlist flush;
+    op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, flush, ofs, false);
+    if (op_ret < 0) {
+      goto done;
+    }
+  }
   if (!chunked_upload && ofs != s->content_length) {
     op_ret = -ERR_REQUEST_TIMEOUT;
     goto done;
@@ -2690,6 +2709,9 @@ void RGWPutObj::execute()
 
 done:
   dispose_processor(processor);
+  if (encrypt) {
+    delete encrypt;
+  }
   perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
 }
@@ -2723,6 +2745,7 @@ void RGWPostObj::pre_exec()
 void RGWPostObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
+  RGWPutObjDataProcessor *encrypt = nullptr;
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
@@ -2755,6 +2778,11 @@ void RGWPostObj::execute()
   if (op_ret < 0)
     goto done;
 
+  op_ret = get_encrypt_filter(&encrypt, processor);
+  if (op_ret < 0) {
+    goto done;
+  }
+
   while (data_pending) {
      bufferlist data;
      len = get_data(data);
@@ -2767,7 +2795,7 @@ void RGWPostObj::execute()
      if (!len)
        break;
      hash.Update((const byte *)data.c_str(), data.length());
-     op_ret = put_data_and_throttle(processor, data, ofs, false);
+     op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, data, ofs, false);
 
      ofs += len;
 
@@ -2776,7 +2804,10 @@ void RGWPostObj::execute()
        goto done;
      }
    }
-
+  {
+    bufferlist flush;
+    op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, flush, ofs, false);
+  }
   if (len < min_len) {
     op_ret = -ERR_TOO_SMALL;
     goto done;
@@ -2809,6 +2840,9 @@ void RGWPostObj::execute()
   op_ret = processor->complete(etag, NULL, real_time(), attrs, delete_at);
 
 done:
+  if (encrypt) {
+    delete encrypt;
+  }
   dispose_processor(processor);
 }
 

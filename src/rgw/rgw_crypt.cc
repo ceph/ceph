@@ -148,7 +148,7 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct, RGWPutObjDataPr
   block_size = crypt->get_block_size();
 }
 RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {}
-int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **phandle, bool *again) {
+int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **phandle, rgw_obj *pobj, bool *again) {
   int res = 0;
   ldout(cct, 20)
     << "PUT HANDLE DATA " << bl.length()
@@ -156,7 +156,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
     << dendl;
   if (*again) {
     bufferlist lll;
-    res = next.handle_data(lll, in_ofs, phandle, again);
+    res = next.handle_data(lll, in_ofs, phandle, pobj, again);
     ldout(cct, 20)
         << "AGAIN =  " << *again
         << dendl;
@@ -177,7 +177,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
       if (cache.length() == block_size) {
         char* src = cache.get_contiguous(0, block_size);
         crypt->encrypt(src, block_size, src, ofs);
-        res = next.handle_data(cache, ofs, phandle, again);
+        res = next.handle_data(cache, ofs, phandle, pobj, again);
         ldout(cct, 20)
         << " cache.len=" << cache.length()
         << " pos=" << 0
@@ -206,7 +206,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
       toadd.append(src,aligned_size);
       crypt->encrypt(src, aligned_size, src, ofs);
       //res=next.handle_data(bl, ofs, phandle, again);
-      res=next.handle_data(toadd, ofs, phandle, again);
+      res=next.handle_data(toadd, ofs, phandle, pobj, again);
       ldout(cct, 20)
       << " toadd.len=" << toadd.length()
       << " pos=" << ofs
@@ -225,7 +225,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
       /*flush cached data*/
       char* src = cache.get_contiguous(0, cache.length());
       crypt->encrypt(src, cache.length(), src, ofs);
-      res=next.handle_data(cache, ofs, phandle, again);
+      res=next.handle_data(cache, ofs, phandle, pobj, again);
       ofs+=cache.length();
       ldout(cct, 20)
       << " cache.len=" << cache.length()
@@ -238,7 +238,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
         return res;
     }
     /*replicate 0-sized handle_data*/
-    res=next.handle_data(cache, ofs, phandle, again);
+    res=next.handle_data(cache, ofs, phandle, pobj, again);
     ldout(cct, 20)
     << " cache.len=" << cache.length()
     << " pos=" << 0
@@ -249,8 +249,8 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **pha
   return res;
 }
 
-int RGWPutObj_BlockEncrypt::throttle_data(void *handle, bool need_to_wait) {
-  return next.throttle_data(handle, need_to_wait);
+int RGWPutObj_BlockEncrypt::throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) {
+  return next.throttle_data(handle, obj, need_to_wait);
 }
 
 
