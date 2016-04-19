@@ -95,6 +95,7 @@ public:
     int ret = op->aio_send(bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send post request" << dendl;
+      op->put();
       return ret;
     }
     std::swap(http_op, op); // store reference in http_op on success
@@ -115,6 +116,7 @@ public:
           << " status=" << op->get_http_status() << std::endl;
       lsubdout(cct, rgw, 0) << "ERROR: failed to wait for op, ret=" << ret
           << ": " << op->to_str() << dendl;
+      op->put();
       return ret;
     }
     return 0;
