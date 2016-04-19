@@ -15,27 +15,28 @@ namespace mirror {
 
 std::string TestFixture::_local_pool_name;
 std::string TestFixture::_remote_pool_name;
-librados::Rados TestFixture::_rados;
+std::shared_ptr<librados::Rados> TestFixture::_rados;
 uint64_t TestFixture::_image_number = 0;
 
 TestFixture::TestFixture() {
 }
 
 void TestFixture::SetUpTestCase() {
-  ASSERT_EQ("", connect_cluster_pp(_rados));
-  ASSERT_EQ(0, _rados.conf_set("rbd_cache", "false"));
+  _rados = std::shared_ptr<librados::Rados>(new librados::Rados());
+  ASSERT_EQ("", connect_cluster_pp(*_rados.get()));
+  ASSERT_EQ(0, _rados->conf_set("rbd_cache", "false"));
 
   _local_pool_name = get_temp_pool_name("test-rbd-mirror-");
-  ASSERT_EQ(0, _rados.pool_create(_local_pool_name.c_str()));
+  ASSERT_EQ(0, _rados->pool_create(_local_pool_name.c_str()));
 
   _remote_pool_name = get_temp_pool_name("test-rbd-mirror-");
-  ASSERT_EQ(0, _rados.pool_create(_remote_pool_name.c_str()));
+  ASSERT_EQ(0, _rados->pool_create(_remote_pool_name.c_str()));
 }
 
 void TestFixture::TearDownTestCase() {
-  ASSERT_EQ(0, _rados.pool_delete(_remote_pool_name.c_str()));
-  ASSERT_EQ(0, _rados.pool_delete(_local_pool_name.c_str()));
-  _rados.shutdown();
+  ASSERT_EQ(0, _rados->pool_delete(_remote_pool_name.c_str()));
+  ASSERT_EQ(0, _rados->pool_delete(_local_pool_name.c_str()));
+  _rados->shutdown();
 }
 
 void TestFixture::SetUp() {
@@ -47,8 +48,8 @@ void TestFixture::SetUp() {
     srand(seed);
   }
 
-  ASSERT_EQ(0, _rados.ioctx_create(_local_pool_name.c_str(), m_local_io_ctx));
-  ASSERT_EQ(0, _rados.ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));
+  ASSERT_EQ(0, _rados->ioctx_create(_local_pool_name.c_str(), m_local_io_ctx));
+  ASSERT_EQ(0, _rados->ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));
   m_image_name = get_temp_image_name();
 
   m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(

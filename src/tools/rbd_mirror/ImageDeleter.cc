@@ -39,6 +39,9 @@
 using std::string;
 using std::map;
 using std::stringstream;
+using std::vector;
+using std::pair;
+using std::make_pair;
 
 using librados::IoCtx;
 using namespace librbd;
@@ -527,6 +530,33 @@ void ImageDeleter::DeleteInfo::print_status(Formatter *f, stringstream *ss,
   } else {
     this->to_string(*ss);
   }
+}
+
+vector<string> ImageDeleter::get_delete_queue_items() {
+  vector<string> items;
+
+  Mutex::Locker l(m_delete_lock);
+  for (const auto& del_info : m_delete_queue) {
+    items.push_back(del_info->local_image_name);
+  }
+
+  return items;
+}
+
+vector<pair<string, int> > ImageDeleter::get_failed_queue_items() {
+  vector<pair<string, int> > items;
+
+  Mutex::Locker l(m_delete_lock);
+  for (const auto& del_info : m_failed_queue) {
+    items.push_back(make_pair(del_info->local_image_name,
+                              del_info->error_code));
+  }
+
+  return items;
+}
+
+void ImageDeleter::set_failed_timer_interval(double interval) {
+  this->m_failed_interval = interval;
 }
 
 } // namespace mirror
