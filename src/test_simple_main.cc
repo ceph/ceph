@@ -101,18 +101,25 @@ int main(int argc, char* argv[]) {
     simulation->get_client(client_id).receive_response(resp, resp_params);
   };
 
+  test::CreateQueueF create_queue_f =
+      [&](test::SimpleQueue::CanHandleRequestFunc can_f,
+          test::SimpleQueue::HandleRequestFunc handle_f) -> test::SimpleQueue* {
+    return new test::SimpleQueue(can_f, handle_f);
+  };
+
   auto create_server_f = [&](ServerId id) -> test::SimpleServer* {
     return new test::SimpleServer(id,
 				  server_iops, server_threads,
 				  client_response_f,
-				  test::simple_server_accumulate_f);
+				  test::simple_server_accumulate_f,
+				  create_queue_f);
   };
 
   auto create_client_f = [&](ClientId id) -> test::SimpleClient* {
     return new test::SimpleClient(id,
 				  server_post_f,
 				  std::bind(server_select_f, _1, id),
-				  test::dmc_client_accumulate_f,
+				  test::simple_client_accumulate_f,
 				  id < (client_count - client_wait_count)
 				  ? no_wait : wait);
   };
@@ -131,6 +138,7 @@ void client_data(std::ostream& out,
 		 test::MySim* sim,
 		 test::MySim::ClientFilter client_disp_filter,
 		 int head_w, int data_w, int data_prec) {
+#if 0 // REMOVE
   // report how many ops were done by reservation and proportion for
   // each client
 
@@ -157,6 +165,7 @@ void client_data(std::ostream& out,
   }
   out << std::setw(data_w) << std::setprecision(data_prec) <<
     std::fixed << total_p << std::endl;
+#endif
 }
 
 
@@ -164,6 +173,7 @@ void server_data(std::ostream& out,
 		 test::MySim* sim,
 		 test::MySim::ServerFilter server_disp_filter,
 		 int head_w, int data_w, int data_prec) {
+#if 0 // REMOVE
   out << std::setw(head_w) << "res_ops:";
   int total_r = 0;
   for (uint i = 0; i < sim->get_server_count(); ++i) {
@@ -187,4 +197,5 @@ void server_data(std::ostream& out,
   }
   out << std::setw(data_w) << std::setprecision(data_prec) <<
     std::fixed << total_p << std::endl;
+#endif
 }

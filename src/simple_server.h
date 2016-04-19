@@ -35,7 +35,8 @@ namespace crimson {
 
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
-      using HandleRequestFunc = std::function<void(const C&,RequestRef)>;
+      using HandleRequestFunc =
+	std::function<void(const C&,RequestRef,NullData)>;
 
       struct PullReq {
 	enum class Type { returning, none };
@@ -98,7 +99,7 @@ namespace crimson {
 		       const ReqParams<C>& req_params) {
 	const C& client_id = req_params.client;
 	DataGuard g(queue_mtx);
-	queue.enqueue_back(QRequest{client_id, std::move(request)});
+	queue.emplace_back(QRequest{client_id, std::move(request)});
 
 	if (pq::Mechanism::push == mechanism) {
 	  schedule_request();
@@ -136,7 +137,7 @@ namespace crimson {
 	if (!queue.empty() && can_handle_f()) {
 	  auto front = queue.front();
 	  queue.pop_front();
-	  handle_f(front);
+	  handle_f(front.client, std::move(front.request), null_data);
 	}
       }
     };

@@ -25,29 +25,33 @@ namespace test_simple {
   struct ClientInfo {
   };
 
-  struct SimpleAddInfo {
-  };
-
   struct SimpleAccum {
   };
 
-  using SimpleServer = TestServer<simp::SimpleQueue<ClientId,TestRequest,Time>,
+  using SimpleQueue = simp::SimpleQueue<ClientId,TestRequest,Time>;
+
+  using SimpleServer = TestServer<SimpleQueue,
 				  ClientInfo,
 				  simp::ReqParams<ClientId>,
 				  simp::RespParams<ServerId>,
-				  SimpleAddInfo,
+				  simp::NullData,
 				  SimpleAccum>;
   using SimpleClient = TestClient<simp::ServiceTracker<ServerId>,
 				  simp::ReqParams<ClientId>,
 				  simp::RespParams<ServerId>,
 				  SimpleAccum>;
 
+  using CreateQueueF =
+    std::function<SimpleQueue*(SimpleQueue::CanHandleRequestFunc,
+			       SimpleQueue::HandleRequestFunc)>;
+
+
   using MySim = Simulation<ServerId,ClientId,SimpleServer,SimpleClient>;
   
   using SubmitFunc = SimpleClient::SubmitFunc;
 
   extern void simple_server_accumulate_f(SimpleAccum& a,
-					 const SimpleAddInfo& add_info);
+					 const simp::NullData& add_info);
 
   extern void simple_client_accumulate_f(SimpleAccum& a,
 					 const simp::RespParams<ServerId>& r);
