@@ -29,6 +29,8 @@
 
 #include "rgw_ldap.h"
 #include "rgw_token.h"
+#include "rgw_crypt.h"
+
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -279,6 +281,14 @@ send_data:
 
   return 0;
 }
+
+int RGWGetObj_ObjStore_S3::get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb)
+{
+  BlockCrypt* block_crypt=new AES_256_CTR();
+  *filter=new RGWGetObj_BlockDecrypt(s->cct, cb, block_crypt);
+  return 0;
+}
+
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
@@ -1077,6 +1087,11 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
+int RGWPutObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
+  BlockCrypt* block_crypt=new AES_256_CTR();
+  *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, block_crypt);
+  return 0;
+}
 /*
  * parses params in the format: 'first; param1=foo; param2=bar'
  */
@@ -1854,6 +1869,12 @@ done:
     return;
 
   rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+int RGWPostObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
+  BlockCrypt* block_crypt=new AES_256_CTR();
+  *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, block_crypt);
+  return 0;
 }
 
 int RGWDeleteObj_ObjStore_S3::get_params()
