@@ -468,10 +468,6 @@ public:
     return RGW_Auth_S3::authorize(store, s);
   }
   int postauth_init();
-  virtual int retarget(RGWOp *op, RGWOp **new_op) {
-    *new_op = op;
-    return 0;
-  }
 };
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {

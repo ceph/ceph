@@ -391,14 +391,6 @@ public:
 
   virtual RGWOp* get_op(RGWRados* store);
   virtual void put_op(RGWOp* op);
-
-  virtual int retarget(RGWOp* op, RGWOp** new_op) {
-    *new_op = op;
-    return 0;
-  }
-
-  virtual int authorize() = 0;
-  // virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
 class RGWHandler_REST_SWIFT;
