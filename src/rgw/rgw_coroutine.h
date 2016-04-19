@@ -536,6 +536,7 @@ public:
     }
   }
   virtual ~RGWCoroutinesManager() {
+    stop();
     completion_mgr->put();
     if (cr_registry) {
       cr_registry->remove(this);
@@ -545,8 +546,9 @@ public:
   int run(list<RGWCoroutinesStack *>& ops);
   int run(RGWCoroutine *op);
   void stop() {
-    going_down.set(1);
-    completion_mgr->go_down();
+    if (going_down.inc() == 1) {
+      completion_mgr->go_down();
+    }
   }
 
   virtual void report_error(RGWCoroutinesStack *op);
@@ -562,6 +564,8 @@ public:
 };
 
 class RGWSimpleCoroutine : public RGWCoroutine {
+  bool called_cleanup;
+
   int operate();
 
   int state_init();
@@ -569,14 +573,17 @@ class RGWSimpleCoroutine : public RGWCoroutine {
   int state_request_complete();
   int state_all_complete();
 
+  void call_cleanup();
+
 public:
-  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct) {}
+  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false) {}
+  ~RGWSimpleCoroutine();
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;
   virtual int request_complete() = 0;
   virtual int finish() { return 0; }
-
+  virtual void request_cleanup() {}
 };
 
 #endif
