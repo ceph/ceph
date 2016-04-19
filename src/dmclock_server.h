@@ -279,6 +279,9 @@ namespace crimson {
 
       using ClientRecRef = std::shared_ptr<ClientRec>;
 
+
+    public:
+
       // a function to see whether the server can handle another request
       using CanHandleRequestFunc = std::function<bool(void)>;
 
@@ -286,8 +289,6 @@ namespace crimson {
       // parameter is a callback when it's completed
       using HandleRequestFunc =
 	std::function<void(const C&,RequestRef,PhaseType)>;
-
-    public:
 
       enum class Mechanism { push, pull };
 

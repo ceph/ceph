@@ -41,9 +41,8 @@ namespace test_dmc {
                                  dmc::RespParams<ServerId>,
                                  DmcAccum>;
 
-    using foobar = std::function<int(double, char*)>;
-    using CreateQueueF = std::function<DmcQueue*(dmc::CanHandleRequestF,
-                                                 dmc::HandleRequestF)>;
+    using CreateQueueF = std::function<DmcQueue*(DmcQueue::CanHandleRequestFunc,
+                                                 DmcQueue::HandleRequestFunc)>;
 
     using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 

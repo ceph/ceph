@@ -9,6 +9,7 @@
 #include "test_dmclock.h"
 
 
+namespace dmc = crimson::dmclock;
 namespace test = test_dmc;
 using namespace std::placeholders;
 
@@ -95,20 +96,22 @@ int main(int argc, char* argv[]) {
   test::DmcServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
 		  const TestResponse& resp,
-		  const test::dmc::RespParams<ServerId>& resp_params) {
+		  const dmc::RespParams<ServerId>& resp_params) {
     simulation->get_client(client_id).receive_response(resp, resp_params);
   };
 
 
-  CreateQueueF create_queue_f = [&](CanHandleRequestF can_f,
-                                    HandleRequestF handle_f) -> DmcQueue* {
-      return new DmcQueue(client_info_f, can_f, handle_f, server_soft_limits);
-  }
+  test::CreateQueueF create_queue_f =
+      [&](test::DmcQueue::CanHandleRequestFunc can_f,
+          test::DmcQueue::HandleRequestFunc handle_f) -> test::DmcQueue* {
+      return new test::DmcQueue(client_info_f, can_f, handle_f, server_soft_limit);
+  };
 
   
   auto create_server_f = [&](ServerId id) -> test::DmcServer* {
     return new test::DmcServer(id,
 			       server_iops, server_threads,
+                               client_response_f,
 			       test::dmc_server_accumulate_f,
                                create_queue_f);
   };

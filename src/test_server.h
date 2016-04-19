@@ -53,7 +53,7 @@ public:
 protected:
 
   const ServerId                 id;
-  Q&                             priority_queue;
+  Q*                             priority_queue;
   ClientRespFunc                 client_resp_f;
   int                            iops;
   size_t                         thread_pool_size;
@@ -84,7 +84,7 @@ public:
 
   using CanHandleRequestFunc = std::function<bool(void)>;
   using HandleRequestFunc =
-    std::function<void(const ClientId&,std::unique_ptr<TestRequest>,RespPm)>;
+    std::function<void(const ClientId&,std::unique_ptr<TestRequest>,AddInfo)>;
   using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
 					
 
@@ -96,7 +96,8 @@ public:
 	     CreateQueueF _create_queue_f) :
     id(_id),
     priority_queue(_create_queue_f(std::bind(&TestServer::has_avail_thread, this),
-				   std::bind(&TestServer::inner_post, this,
+				   std::bind(&TestServer::inner_post,
+					     this,
 					     std::placeholders::_1,
 					     std::placeholders::_2,
 					     std::placeholders::_3))),
@@ -131,7 +132,7 @@ public:
 
   void post(const TestRequest& request,
 	    const ReqPm& req_params) {
-    priority_queue.add_request(request, req_params);
+    priority_queue->add_request(request, req_params);
   }
 
   bool has_avail_thread() {
@@ -141,7 +142,7 @@ public:
 
   const Accum& get_accumulator() const { return accumulator; }
 
-  const Q& get_priority_queue() const { return priority_queue; }
+  const Q& get_priority_queue() const { return *priority_queue; }
 
 protected:
 
@@ -166,7 +167,7 @@ protected:
 	auto& front = inner_queue.front();
 	auto client = front.client;
 	auto req = std::move(front.request);
-	auto phase = front.additional;
+	auto additional = front.additional;
 	inner_queue.pop_front();
 
 	l.unlock();
@@ -176,9 +177,11 @@ protected:
 	std::this_thread::sleep_for(op_time);
 
 	TestResponse resp(req->epoch);
-	sendResponse(client, resp, RespPm(id, phase));
+	// TODO: rather than assuming this constructor exists, perhaps
+	// pass in a function that does this mapping?
+	sendResponse(client, resp, RespPm(id, additional));
 
-	priority_queue.request_completed();
+	priority_queue->request_completed();
 
 	l.lock(); // in prep for next iteration of loop
       } else {
