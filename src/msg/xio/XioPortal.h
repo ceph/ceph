@@ -175,7 +175,7 @@ public:
     xrsp->finalize(); /* unconditional finalize */
   }
 
-  void enqueue_for_send(XioConnection *xcon, XioSubmit *xs)
+  void enqueue(XioConnection *xcon, XioSubmit *xs)
     {
       if (! _shutdown) {
 	submit_q.enq(xcon, xs);

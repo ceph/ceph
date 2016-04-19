@@ -932,7 +932,7 @@ assert(req->out.pdata_iov.nents || !nbuffers);
      }
     tail->next = NULL;
   }
-  xcon->portal->enqueue_for_send(xcon, xmsg);
+  xcon->portal->enqueue(xcon, xmsg);
 
   return code;
 } /* send_message(Message *, Connection *) */
