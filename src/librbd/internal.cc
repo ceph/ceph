@@ -997,7 +997,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     Rados rados(io_ctx);
     uint64_t bid = rados.get_instance_id();
 
-    int r = validate_pool(io_ctx, cct);
+    int r = validate_pool(io_ctx, cct); // TODO Not sure if it's necessary at all. Consider removing
     if (r < 0) {
       return r;
     }
@@ -1058,9 +1058,40 @@ err_remove_id:
     return r;
   }
 
-  int cg_add_image(librados::IoCtx& cg_io_ctx, const char *cg_name,
-                   librados::IoCtx& image_io_ctx, const char *image_name)
+  int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                   librados::IoCtx& image_ioctx, const char *image_name)
   {
+    CephContext *cct = (CephContext *)cg_ioctx.cct();
+    ldout(cct, 20) << "cg_add_image " << &cg_ioctx << " cg name " << cg_name << " image "
+		   << &image_ioctx << " name " << image_name << dendl;
+
+    string cg_id_obj = util::id_cg_name(cg_name);
+    string cg_id;
+
+    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
+    if (r < 0) {
+      lderr(cct) << "error reading consistency group id object: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    string cg_header_oid = util::cg_header_name(cg_id);
+
+    ldout(cct, 20) << "adding image to cg name " << cg_name << " cg id " << cg_header_oid << dendl;
+
+
+    ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
+    r = imctx->state->open();
+    if (r < 0) {
+      lderr(cct) << "error opening image: "
+		 << cpp_strerror(-r) << dendl;
+      delete imctx;
+      return r;
+    }
+
+    ldout(cct, 20) << "adding image " << image_name << " image id " << imctx->header_oid << dendl;
+
+    r = cls_client::cg_add_image(&cg_ioctx, cg_header_oid, imctx->id, image_ioctx.get_id());
+
     return 0;
   }
 

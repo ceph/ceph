@@ -90,8 +90,8 @@ namespace librbd {
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
-  int cg_add_image(librados::IoCtx& cg_io_ctx, const char *cg_name,
-                   librados::IoCtx& image_io_ctx, const char *image_name);
+  int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                   librados::IoCtx& image_ioctx, const char *image_name);
   int create_cg(librados::IoCtx& io_ctx, const char *imgname);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);

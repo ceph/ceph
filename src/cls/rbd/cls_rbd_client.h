@@ -48,6 +48,8 @@ namespace librbd {
 
     // low-level interface (mainly for testing)
     int create_cg(librados::IoCtx *ioctx, const std::string &oid);
+    int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
+		     std::string &image_id, int64_t pool_id);
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix);
