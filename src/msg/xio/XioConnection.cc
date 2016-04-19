@@ -540,7 +540,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
 	break;
       case XioSubmit::INCOMING_MSG_RELEASE:
 	deferred_q.erase(q_iter);
-	portal->release_xio_msg(static_cast<XioRsp*>(xs));
+	portal->release_xio_msg(static_cast<XioCompletion*>(xs));
 	break;
       default:
 	ldout(msgr->cct,0) << __func__ << ": Unknown Msg type " << xs->type << dendl;

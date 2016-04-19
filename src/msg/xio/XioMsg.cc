@@ -20,16 +20,16 @@
 
 int XioDispatchHook::release_msgs()
 {
-  XioRsp *xrsp;
+  XioCompletion *xcmp;
   int r = msg_seq.size();
   cl_flag = true;
 
   /* queue for release */
-  xrsp = static_cast<XioRsp *>(rsp_pool.alloc(sizeof(XioRsp)));
-  new (xrsp) XioRsp(xcon, this);
+  xcmp = static_cast<XioCompletion *>(rsp_pool.alloc(sizeof(XioCompletion)));
+  new (xcmp) XioCompletion(xcon, this);
 
   /* merge with portal traffic */
-  xcon->portal->enqueue_for_send(xcon, xrsp);
+  xcon->portal->enqueue_for_send(xcon, xcmp);
 
   assert(r);
   return r;
