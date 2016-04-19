@@ -773,6 +773,7 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillu
   install -m 0644 -D systemd/ceph-rbd-mirror.target $RPM_BUILD_ROOT%{_unitdir}/ceph-rbd-mirror.target
   install -m 0644 -D systemd/ceph-disk@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk@.service
   install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
+  install -m 0644 -D systemd/50-ceph.preset $RPM_BUILD_ROOT%{_libexecdir}/systemd/system-preset/50-ceph.preset
 %else
   install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
@@ -845,6 +846,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/cephfs
 %if 0%{?_with_systemd}
 %{_unitdir}/ceph-create-keys@.service
+%{_libexecdir}/systemd/system-preset/50-ceph.preset
 %else
 %{_initrddir}/ceph
 %endif
