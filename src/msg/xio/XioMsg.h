@@ -373,11 +373,11 @@ public:
   }
 };
 
-struct XioRsp : public XioSubmit
+struct XioCompletion : public XioSubmit
 {
   XioDispatchHook *xhook;
 public:
-  XioRsp(XioConnection *_xcon, XioDispatchHook *_xhook)
+  XioCompletion(XioConnection *_xcon, XioDispatchHook *_xhook)
     : XioSubmit(XioSubmit::INCOMING_MSG_RELEASE, _xcon /* not xcon! */),
       xhook(_xhook->get()) {
       // submit queue ref
