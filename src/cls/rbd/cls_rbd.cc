@@ -42,6 +42,7 @@
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
 #include "include/rbd/object_map_types.h"
+#include "include/rbd/cg_types.h"
 
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -248,7 +249,7 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist snap_seqbl;
   uint64_t snap_seq = 0;
   ::encode(snap_seq, snap_seqbl);
-  int r = cls_cxx_map_set_val(hctx, "snap_seq", &snap_seqbl);
+  int r = cls_cxx_map_set_val(hctx, SNAP_SEQ, &snap_seqbl);
   if (r < 0)
     return r;
 
