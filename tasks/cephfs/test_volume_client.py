@@ -11,8 +11,8 @@ log = logging.getLogger(__name__)
 
 class TestVolumeClient(CephFSTestCase):
     # One for looking at the global filesystem, one for being
-    # the VolumeClient, one for mounting the created shares
-    CLIENTS_REQUIRED = 3
+    # the VolumeClient, two for mounting the created shares
+    CLIENTS_REQUIRED = 4
 
     def _volume_client_python(self, client, script):
         # Can't dedent this *and* the script we pass in, because they might have different
@@ -309,3 +309,112 @@ vc.disconnect()
         # List the dir's contents on mount A
         self.assertListEqual(self.mount_a.ls("parent1/mydir"),
                              ["afile"])
+
+    def test_evict_client(self):
+        """
+        That a volume client can be evicted based on its auth ID and the volume
+        path it has mounted.
+        """
+
+        # mounts[1] would be used as handle for driving VolumeClient. mounts[2]
+        # and mounts[3] would be used as guests to mount the volumes/shares.
+
+        for i in range(1, 4):
+            self.mounts[i].umount_wait()
+
+        self._configure_vc_auth(self.mounts[1], "manila")
+
+        guest_entity = "guest"
+        group_id = "grpid"
+        mount_paths = []
+        volume_ids = []
+
+        # Create two volumes. Authorize 'guest' auth ID to mount the two
+        # volumes. Mount the two volumes. Write data to the volumes.
+        for i in range(2):
+            # Create volume.
+            volume_ids.append("volid_{0}".format(str(i)))
+            mount_paths.append(
+                self._volume_client_python(self.mounts[1], dedent("""
+                    vp = VolumePath("{group_id}", "{volume_id}")
+                    create_result = vc.create_volume(vp, 10)
+                    print create_result['mount_path']
+                """.format(
+                    group_id=group_id,
+                    volume_id=volume_ids[i]
+            ))))
+
+            # Authorize 'guest' auth ID to mount the volume.
+            key = self._volume_client_python(self.mounts[1], dedent("""
+                vp = VolumePath("{group_id}", "{volume_id}")
+                auth_result = vc.authorize(vp, "{guest_entity}")
+                print auth_result['auth_key']
+            """.format(
+                group_id=group_id,
+                volume_id=volume_ids[i],
+                guest_entity=guest_entity
+            )))
+
+            keyring_txt = dedent("""
+            [client.{guest_entity}]
+                key = {key}
+
+            """.format(
+                guest_entity=guest_entity,
+                key=key
+            ))
+
+            # Mount the volume.
+            self.mounts[i+2].client_id = guest_entity
+            self.mounts[i+2].mountpoint_dir_name = 'mnt.{id}.{suffix}'.format(
+                id=guest_entity, suffix=str(i))
+            self._sudo_write_file(
+                self.mounts[i+2].client_remote,
+                self.mounts[i+2].get_keyring_path(),
+                keyring_txt,
+            )
+            self.set_conf(
+                "client.{0}".format(guest_entity),
+                "keyring", self.mounts[i+2].get_keyring_path()
+            )
+            self.mounts[i+2].mount(mount_path=mount_paths[i])
+            self.mounts[i+2].write_n_mb("data.bin", 1)
+
+
+        # Evict client, mounts[2], using auth ID 'guest' and has mounted
+        # one volume.
+        self._volume_client_python(self.mount_b, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.evict("{guest_entity}", volume_path=vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_ids[0],
+            guest_entity=guest_entity
+        )))
+
+        # Evicted guest client, mounts[2], should not be able to do anymore metadata
+        # ops. It behaves as if it has lost network connection.
+        background = self.mounts[2].write_n_mb("rogue.bin", 1, wait=False)
+        # Approximate check for 'stuck' as 'still running after 10s'.
+        time.sleep(10)
+        self.assertFalse(background.finished)
+
+        # Guest client, mounts[3], using the same auth ID 'guest', but has mounted
+        # the other volume, should be able to use its volume unaffected.
+        self.mounts[3].write_n_mb("data.bin.1", 1)
+
+        # Cleanup.
+        for i in range(2):
+            self._volume_client_python(self.mounts[1], dedent("""
+                vp = VolumePath("{group_id}", "{volume_id}")
+                vc.deauthorize(vp, "{guest_entity}")
+                vc.delete_volume(vp)
+                vc.purge_volume(vp)
+            """.format(
+                group_id=group_id,
+                volume_id=volume_ids[i],
+                guest_entity=guest_entity
+            )))
+
+        # We must hard-umount the one that we evicted
+        self.mounts[2].umount_wait(force=True)
