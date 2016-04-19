@@ -608,7 +608,7 @@ public:
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
     int async_read_result;
-    unsigned inflightreads;
+    int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(ReplicatedPG *pg);
     void finish_read(ReplicatedPG *pg);
