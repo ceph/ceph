@@ -50,19 +50,6 @@ int main(int argc, char* argv[]) {
   const double client_limit = 60.0;
   const double client_weight = 1.0;
 
-#if 0 // REMOVE
-  test::dmc::ClientInfo client_info =
-      { client_weight, client_reservation, client_limit };
-
-  auto client_info_f = [=](const ClientId& c) -> test::dmc::ClientInfo {
-      return client_info;
-  };
-
-  test::dmc::ClientInfo test::client_info_f(const ClientId& c) {
-      return client_info;
-  }
-#endif
-
   auto client_disp_filter = [=] (const ClientId& i) -> bool {
     return i < 3 || i >= (client_count - 3);
   };
@@ -120,8 +107,7 @@ int main(int argc, char* argv[]) {
 				  server_post_f,
 				  std::bind(server_select_f, _1, id),
 				  test::simple_client_accumulate_f,
-				  id < (client_count - client_wait_count)
-				  ? no_wait : wait);
+				  id < (client_count - client_wait_count) ? no_wait : wait);
   };
 
   simulation->add_servers(server_count, create_server_f);
@@ -138,34 +124,7 @@ void client_data(std::ostream& out,
 		 test::MySim* sim,
 		 test::MySim::ClientFilter client_disp_filter,
 		 int head_w, int data_w, int data_prec) {
-#if 0 // REMOVE
-  // report how many ops were done by reservation and proportion for
-  // each client
-
-  int total_r = 0;
-  out << std::setw(head_w) << "res_ops:";
-  for (uint i = 0; i < sim->get_client_count(); ++i) {
-    const auto& client = sim->get_client(i);
-    auto r = client.get_accumulator().reservation_count;
-    total_r += r;
-    if (!client_disp_filter(i)) continue;
-    out << std::setw(data_w) << r;
-  }
-  out << std::setw(data_w) << std::setprecision(data_prec) <<
-    std::fixed << total_r << std::endl;
-
-  int total_p = 0;
-  out << std::setw(head_w) << "prop_ops:";
-  for (uint i = 0; i < sim->get_client_count(); ++i) {
-    const auto& client = sim->get_client(i);
-    auto p = client.get_accumulator().proportion_count;
-    total_p += p;
-    if (!client_disp_filter(i)) continue;
-    out << std::setw(data_w) << p;
-  }
-  out << std::setw(data_w) << std::setprecision(data_prec) <<
-    std::fixed << total_p << std::endl;
-#endif
+  // empty
 }
 
 
@@ -173,29 +132,5 @@ void server_data(std::ostream& out,
 		 test::MySim* sim,
 		 test::MySim::ServerFilter server_disp_filter,
 		 int head_w, int data_w, int data_prec) {
-#if 0 // REMOVE
-  out << std::setw(head_w) << "res_ops:";
-  int total_r = 0;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
-    const auto& server = sim->get_server(i);
-    auto rc = server.get_accumulator().reservation_count;
-    total_r += rc;
-    if (!server_disp_filter(i)) continue;
-    out << std::setw(data_w) << rc;
-  }
-  out << std::setw(data_w) << std::setprecision(data_prec) <<
-    std::fixed << total_r << std::endl;
-
-  out << std::setw(head_w) << "prop_ops:";
-  int total_p = 0;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
-    const auto& server = sim->get_server(i);
-    auto pc = server.get_accumulator().proportion_count;
-    total_p += pc;
-    if (!server_disp_filter(i)) continue;
-    out << std::setw(data_w) << pc;
-  }
-  out << std::setw(data_w) << std::setprecision(data_prec) <<
-    std::fixed << total_p << std::endl;
-#endif
+  // empty
 }

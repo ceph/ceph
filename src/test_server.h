@@ -75,11 +75,6 @@ protected:
   ServerAccumFunc accum_f;
   Accum accumulator;
 
-#if 0 // TODO remove
-  uint32_t reservation_counter = 0;
-  uint32_t proportion_counter = 0;
-#endif
-
 public:
 
   using CanHandleRequestFunc = std::function<bool(void)>;

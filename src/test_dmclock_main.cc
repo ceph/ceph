@@ -55,12 +55,6 @@ int main(int argc, char* argv[]) {
       return client_info;
   };
 
-#if 0 // REMOVE
-  test::dmc::ClientInfo test::client_info_f(const ClientId& c) {
-      return client_info;
-  }
-#endif
-
   auto client_disp_filter = [=] (const ClientId& i) -> bool {
     return i < 3 || i >= (client_count - 3);
   };

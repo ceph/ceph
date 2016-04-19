@@ -15,11 +15,11 @@
 
 namespace crimson {
   namespace simple_scheduler {
+
     // since we send no additional data out
     struct NullData {
       // intentionally empty
-    } null_data;
-
+    };
 
     template<typename C>
     struct ReqParams {
@@ -42,7 +42,6 @@ namespace crimson {
 	return out;
       }
     };
-
     
     // S is server id type
     template<typename S>

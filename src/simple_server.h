@@ -135,9 +135,10 @@ namespace crimson {
       void schedule_request() {
 	DataGuard g(queue_mtx);
 	if (!queue.empty() && can_handle_f()) {
-	  auto front = queue.front();
-	  queue.pop_front();
+	  auto& front = queue.front();
+	  static NullData null_data;
 	  handle_f(front.client, std::move(front.request), null_data);
+	  queue.pop_front();
 	}
       }
     };
