@@ -21,4 +21,5 @@ unit_DATA = $(unitfiles)
 EXTRA_DIST = \
 	$(unitfiles) \
 	ceph \
-	ceph.tmpfiles.d
+	ceph.tmpfiles.d \
+	50-ceph.preset

@@ -1,0 +1,5 @@
+enable ceph.target
+enable ceph-msd.target
+enable ceph-mon.target
+enable ceph-osd.target
+enable ceph-radosgw.target
