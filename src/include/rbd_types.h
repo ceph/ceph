@@ -29,8 +29,6 @@
 #define RBD_DATA_PREFIX        "rbd_data."
 #define RBD_ID_PREFIX          "rbd_id."
 
-#define CG_ID_PREFIX           "cg_id."
-#define CG_HEADER_PREFIX       "cg_header."
 /*
  * old-style rbd image 'foo' consists of objects
  *   foo.rbd      - image metadata
@@ -43,7 +41,6 @@
 #define RBD_DIRECTORY           "rbd_directory"
 #define RBD_INFO                "rbd_info"
 
-#define CG_DIRECTORY            "cg_directory"
 /*
  * rbd_children object in each pool contains omap entries
  * that map parent (poolid, imageid, snapid) to a list of children

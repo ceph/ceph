@@ -16,10 +16,18 @@
 #define CEPH_CG_TYPES_H
 
 enum cg_state {
-	DEFAULT,
-	ADDING_IMAGE
+	CG_DEFAULT,
+	CG_ADDING_IMAGE
+	CG_REMOVING_IMAGE
 };
 
-#define SNAP_SEQ "snap_seq"
+#define CG_SNAP_SEQ "snap_seq"
+#define CG_STATE "state"
+#define CG_IMAGE_TO_BE_ADDED "image_to_be_added"
+
+#define CG_ID_PREFIX           "cg_id."
+#define CG_HEADER_PREFIX       "cg_header."
+
+#define CG_DIRECTORY           "cg_directory"
 
 #endif

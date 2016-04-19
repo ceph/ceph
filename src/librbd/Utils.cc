@@ -3,6 +3,7 @@
 
 #include "librbd/Utils.h"
 #include "include/rbd_types.h"
+#include "include/rbd/cg_types.h"
 #include "include/stringify.h"
 
 namespace librbd {

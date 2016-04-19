@@ -249,7 +249,7 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist snap_seqbl;
   uint64_t snap_seq = 0;
   ::encode(snap_seq, snap_seqbl);
-  int r = cls_cxx_map_set_val(hctx, SNAP_SEQ, &snap_seqbl);
+  int r = cls_cxx_map_set_val(hctx, CG_SNAP_SEQ, &snap_seqbl);
   if (r < 0)
     return r;
 
@@ -286,7 +286,20 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  bufferlist statebl;
+  ::encode(CG_ADDING_IMAGE, statebl);
+  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  if (r < 0) {
+    goto delete_image_ref;
+  }
+
   return 0;
+
+delete_image_ref:
+
+  // TODO delete val image_key
+
+  return r;
 }
 
 /**

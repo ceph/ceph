@@ -41,6 +41,7 @@
 #include "librbd/Utils.h"
 #include "librbd/operation/TrimRequest.h"
 #include "include/util.h"
+#include "include/rbd/cg_types.h"
 
 #include "journal/Journaler.h"
 
