@@ -89,7 +89,8 @@ librgw_la_SOURCES = \
 	rgw/librgw.cc \
 	rgw/rgw_xml.cc \
 	rgw/rgw_xml_enc.cc \
-	rgw/rgw_website.cc
+	rgw/rgw_website.cc \
+	rgw/rgw_crypt.cc
 
 if WITH_OPENLDAP
 librgw_la_SOURCES += rgw/rgw_ldap.cc
