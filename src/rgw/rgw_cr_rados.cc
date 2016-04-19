@@ -305,7 +305,7 @@ RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados,
   s << "rados lock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
 }
 
-RGWSimpleRadosLockCR::~RGWSimpleRadosLockCR()
+void RGWSimpleRadosLockCR::request_cleanup()
 {
   if (req) {
     req->finish();
@@ -341,7 +341,7 @@ RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_ra
   set_description() << "rados unlock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie;
 }
 
-RGWSimpleRadosUnlockCR::~RGWSimpleRadosUnlockCR()
+void RGWSimpleRadosUnlockCR::request_cleanup()
 {
   if (req) {
     req->finish();
@@ -635,7 +635,7 @@ RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
 {
 }
 
-RGWStatObjCR::~RGWStatObjCR()
+void RGWStatObjCR::request_cleanup()
 {
   if (req) {
     req->finish();

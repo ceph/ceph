@@ -9,7 +9,6 @@ class RGWAsyncRadosRequest : public RefCountedObject {
   RGWCoroutine *caller;
   RGWAioCompletionNotifier *notifier;
 
-  void *user_info;
   int retcode;
 
   bool done;
@@ -19,15 +18,18 @@ class RGWAsyncRadosRequest : public RefCountedObject {
 protected:
   virtual int _send_request() = 0;
 public:
-  RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn),
+  RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn), retcode(0),
                                                                                done(false), lock("RGWAsyncRadosRequest::lock") {
+    notifier->get();
     caller->get();
   }
   virtual ~RGWAsyncRadosRequest() {
+    notifier->put();
     caller->put();
   }
 
   void send_request() {
+    get();
     retcode = _send_request();
     {
       Mutex::Locker l(lock);
@@ -35,6 +37,7 @@ public:
         notifier->cb();
       }
     }
+    put();
   }
 
   int get_ret_status() { return retcode; }
@@ -195,7 +198,7 @@ public:
 						result(_result),
                                                 req(NULL) { }
                                                          
-  ~RGWSimpleRadosReadCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -270,7 +273,7 @@ public:
                                                 pattrs(_pattrs),
                                                 req(NULL) { }
                                                          
-  ~RGWSimpleRadosReadAttrsCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -302,7 +305,7 @@ public:
     ::encode(_data, bl);
   }
 
-  ~RGWSimpleRadosWriteCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -342,7 +345,7 @@ public:
                                                 attrs(_attrs), req(NULL) {
   }
 
-  ~RGWSimpleRadosWriteAttrsCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -374,6 +377,7 @@ public:
   RGWRadosSetOmapKeysCR(RGWRados *_store,
 		      rgw_bucket& _pool, const string& _oid,
 		      map<string, bufferlist>& _entries);
+
   ~RGWRadosSetOmapKeysCR();
 
   int send_request();
@@ -400,6 +404,7 @@ public:
 		      const rgw_bucket& _pool, const string& _oid,
 		      const string& _marker,
 		      map<string, bufferlist> *_entries, int _max_entries);
+
   ~RGWRadosGetOmapKeysCR();
 
   int send_request();
@@ -426,7 +431,7 @@ public:
 		      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
 		      const string& _cookie,
 		      uint32_t _duration);
-  ~RGWSimpleRadosLockCR();
+  void request_cleanup();
 
   int send_request();
   int request_complete();
@@ -447,7 +452,7 @@ public:
   RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
 		      const string& _cookie);
-  ~RGWSimpleRadosUnlockCR();
+  void request_cleanup();
 
   int send_request();
   int request_complete();
@@ -518,7 +523,7 @@ public:
                          async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs), req(NULL) {
   }
 
-  ~RGWWaitCR() {
+  void request_cleanup() {
     wakeup();
     if (req) {
       req->finish();
@@ -616,7 +621,7 @@ public:
                         RGWBucketInfo *_bucket_info) : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                                        bucket_name(_bucket_name), bucket_id(_bucket_id),
                                                        bucket_info(_bucket_info), req(NULL) {}
-  ~RGWGetBucketInstanceInfoCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -693,7 +698,7 @@ public:
                                        copy_if_newer(_if_newer), req(NULL) {}
 
 
-  ~RGWFetchRemoteObjCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -808,7 +813,7 @@ public:
     }
   }
 
-  ~RGWRemoveObjCR() {
+  void request_cleanup() {
     if (req) {
       req->finish();
     }
@@ -931,7 +936,7 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
 	  const rgw_obj& obj, uint64_t *psize = nullptr,
 	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
 	  RGWObjVersionTracker *objv_tracker = nullptr);
-  ~RGWStatObjCR();
+  void request_cleanup();
 
   int send_request() override;
   int request_complete() override;
