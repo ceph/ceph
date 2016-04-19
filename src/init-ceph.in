@@ -39,10 +39,9 @@ else
 fi
 
 if [ -n $CEPH_BIN ] && [ -n $CEPH_ROOT ] && [ -n $CEPH_BUILD_DIR ]; then
-  #need second look at all variables, especially ETCDIR
   BINDIR=$CEPH_BIN
   SBINDIR=$CEPH_ROOT/src
-  ETCDIR=$CEPH_BUILD_DIR
+  ETCDIR=$CEPH_BIN
   LIBEXECDIR=$CEPH_ROOT/src
   SYSTEMD_RUN=""
   ASSUME_DEV=1
