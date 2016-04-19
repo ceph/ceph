@@ -51,7 +51,7 @@ public:
 
   static std::string _local_pool_name;
   static std::string _remote_pool_name;
-  static librados::Rados _rados;
+  static std::shared_ptr<librados::Rados> _rados;
   static uint64_t _image_number;
 };
 

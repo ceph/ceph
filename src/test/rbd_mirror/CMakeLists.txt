@@ -2,6 +2,7 @@ set(rbd_mirror_test_srcs
   test_ClusterWatcher.cc
   test_PoolWatcher.cc
   test_ImageReplayer.cc
+  test_ImageDeleter.cc
   test_ImageSync.cc
   test_fixture.cc
   )

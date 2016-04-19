@@ -16,6 +16,7 @@
 #define CEPH_RBD_MIRROR_IMAGEDELETER_H
 
 #include <deque>
+#include <vector>
 #include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -49,6 +50,11 @@ public:
                                    bool notify_on_failed_retry=true);
 
   void print_status(Formatter *f, std::stringstream *ss);
+
+  // for testing purposes
+  std::vector<std::string> get_delete_queue_items();
+  std::vector<std::pair<std::string, int> > get_failed_queue_items();
+  void set_failed_timer_interval(double interval);
 
 private:
 

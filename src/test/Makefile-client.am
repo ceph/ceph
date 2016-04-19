@@ -463,6 +463,7 @@ librbd_mirror_test_la_SOURCES = \
 	test/rbd_mirror/test_ClusterWatcher.cc \
 	test/rbd_mirror/test_PoolWatcher.cc \
 	test/rbd_mirror/test_ImageReplayer.cc \
+        test/rbd_mirror/test_ImageDeleter.cc \
 	test/rbd_mirror/test_ImageSync.cc \
 	test/rbd_mirror/test_fixture.cc
 
