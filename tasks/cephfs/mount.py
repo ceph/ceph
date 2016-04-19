@@ -23,6 +23,7 @@ class CephFSMount(object):
         self.test_dir = test_dir
         self.client_id = client_id
         self.client_remote = client_remote
+        self.mountpoint_dir_name = 'mnt.{id}'.format(id=self.client_id)
 
         self.test_files = ['a', 'b', 'c']
 
@@ -30,7 +31,8 @@ class CephFSMount(object):
 
     @property
     def mountpoint(self):
-        return os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
+        return os.path.join(
+            self.test_dir, '{dir_name}'.format(dir_name=self.mountpoint_dir_name))
 
     def is_mounted(self):
         raise NotImplementedError()
