@@ -151,8 +151,9 @@ public:
 };
 
 // inode flags
-#define I_COMPLETE 1
-#define I_DIR_ORDERED 2
+#define I_COMPLETE	1
+#define I_DIR_ORDERED	2
+#define I_CAP_DROPPED	4
 
 struct Inode {
   Client *client;
@@ -348,6 +349,7 @@ struct Inode {
   int caps_used();
   int caps_file_wanted();
   int caps_wanted();
+  int caps_mds_wanted();
   int caps_dirty();
 
   bool have_valid_size();

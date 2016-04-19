@@ -2998,8 +2998,13 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
     return r;
 
   while (1) {
-    if (!in->is_any_caps())
-      return -ESTALE;
+    int file_wanted = in->caps_file_wanted();
+    if ((file_wanted & need) != need) {
+      ldout(cct, 10) << "get_caps " << *in << " need " << ccap_string(need)
+		     << " file_wanted " << ccap_string(file_wanted) << ", EBADF "
+		     << dendl;
+      return -EBADF;
+    }
 
     int implemented;
     int have = in->caps_issued(&implemented);
@@ -3061,6 +3066,20 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
     if ((need & CEPH_CAP_FILE_WR) && in->auth_cap &&
 	in->auth_cap->session->readonly)
       return -EROFS;
+
+    if (in->flags & I_CAP_DROPPED) {
+      int mds_wanted = in->caps_mds_wanted();
+      if ((mds_wanted & need) != need) {
+	int ret = _renew_caps(in);
+	if (ret < 0)
+	  return ret;
+	continue;
+      }
+      if ((mds_wanted & file_wanted) ==
+	  (file_wanted & (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR))) {
+	in->flags &= ~I_CAP_DROPPED;
+      }
+    }
 
     if (waitfor_caps)
       wait_on_list(in->waitfor_caps);
@@ -3810,6 +3829,7 @@ void Client::remove_session_caps(MetaSession *s)
       dirty_caps = in->dirty_caps | in->flushing_caps;
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
+      in->flags |= I_CAP_DROPPED;
     }
     remove_cap(cap, false);
     signal_cond_list(in->waitfor_caps);
@@ -4565,6 +4585,9 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 		       m->peer.seq - 1, m->peer.mseq, (uint64_t)-1,
 		       cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0);
       }
+    } else {
+      if (cap == in->auth_cap)
+	in->flags |= I_CAP_DROPPED;
     }
 
     remove_cap(cap, false);
@@ -7741,6 +7764,39 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
   trim_cache();
 
   return result;
+}
+
+int Client::_renew_caps(Inode *in)
+{
+  int wanted = in->caps_file_wanted();
+  if (in->is_any_caps() &&
+      ((wanted & CEPH_CAP_ANY_WR) == 0 || in->auth_cap)) {
+    check_caps(in, true);
+    return 0;
+  }
+
+  int flags = 0;
+  if ((wanted & CEPH_CAP_FILE_RD) && (wanted & CEPH_CAP_FILE_WR))
+    flags = O_RDWR;
+  else if (wanted & CEPH_CAP_FILE_RD)
+    flags = O_RDONLY;
+  else if (wanted & CEPH_CAP_FILE_WR)
+    flags = O_WRONLY;
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
+  filepath path;
+  in->make_nosnap_relative_path(path);
+  req->set_filepath(path);
+  req->head.args.open.flags = flags;
+  req->head.args.open.pool = -1;
+  if (cct->_conf->client_debug_getattr_caps)
+    req->head.args.open.mask = DEBUG_GETATTR_CAPS;
+  else
+    req->head.args.open.mask = 0;
+  req->set_inode(in);
+
+  int ret = make_request(req, -1, -1);
+  return ret;
 }
 
 int Client::close(int fd)
