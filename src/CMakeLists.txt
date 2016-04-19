@@ -6,6 +6,7 @@ include_directories(crimson/src)
 include_directories(${BOOST_INCLUDE_DIR})
 
 set(local_flags "-std=gnu++11 -Wall -pthread")
+set(local_flags "${local_flags} -g -O0")
 
 set(simple_sim_srcs test_simple.cc test_simple_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
