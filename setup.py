@@ -72,6 +72,11 @@ setup(
                       'pyopenssl>=0.13',
                       'ndg-httpsclient',
                       'pyasn1',
+                      # python-novaclient is specified here, even though it is
+                      # redundant, because python-openstackclient requires
+                      # Babel, and installs 2.3.3, which is forbidden by
+                      # python-novaclient 4.0.0
+                      'python-novaclient',
                       'python-openstackclient',
                       # with openstacklient >= 2.1.0, neutronclient no longer is
                       # a dependency but we need it anyway.
