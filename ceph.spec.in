@@ -887,70 +887,34 @@ rm -rf $RPM_BUILD_ROOT
 %attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
 %endif
 
-%pre base
-%if 0%{?_with_systemd}
-  %if 0%{?suse_version}
-    # service_add_pre and friends don't work with parameterized systemd service
-    # instances, only with single services or targets, so we always pass
-    # ceph.target to these macros
-    %service_add_pre ceph.target
-  %endif
-%endif
-
 %post base
 /sbin/ldconfig
-%if 0%{?_with_systemd}
-  %if 0%{?suse_version}
-    %fillup_only
-    %service_add_post ceph.target
-  %endif
-%else
-  /sbin/chkconfig --add ceph
+%if 0%{?suse_version}
+%fillup_only
+if [ $1 -ge 1 ] ; then
+  /usr/bin/systemctl preset ceph.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph.target
 %endif
 
 %preun base
-%if 0%{?_with_systemd}
-  %if 0%{?suse_version}
-    %service_del_preun ceph.target
-  %endif
-  # Disable and stop on removal.
-  if [ $1 = 0 ] ; then
-    SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
-    if [ -n "$SERVICE_LIST" ]; then
-      for SERVICE in $SERVICE_LIST; do
-        /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
-        /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
-      done
-    fi
-  fi
-%else
-  %if 0%{?rhel} || 0%{?fedora}
-    if [ $1 = 0 ] ; then
-      /sbin/service ceph stop >/dev/null 2>&1
-      /sbin/chkconfig --del ceph
-    fi
-  %endif
+%if 0%{?suse_version}
+%service_del_preun ceph.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph.target
 %endif
 
 %postun base
 /sbin/ldconfig
-%if 0%{?_with_systemd}
-  if [ $1 = 1 ] ; then
-    # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
-    # "yes". In any case: if units are not running, do not touch them.
-    SYSCONF_CEPH=/etc/sysconfig/ceph
-    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
-      source $SYSCONF_CEPH
-    fi
-    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-      SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
-      if [ -n "$SERVICE_LIST" ]; then
-        for SERVICE in $SERVICE_LIST; do
-          /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
-        done
-      fi
-    fi
-  fi
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph.target
 %endif
 
 #################################################################################
@@ -1056,6 +1020,45 @@ fi
 %endif
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
 
+%post mds
+%if 0%{?suse_version}
+if [ $1 -ge 1 ] ; then
+  /usr/bin/systemctl preset ceph-mds@\*.service ceph-mds.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-mds@\*.service ceph-mds.target
+%endif
+
+%preun mds
+%if 0%{?suse_version}
+%service_del_preun ceph-mds@\*.service ceph-mds.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-mds@\*.service ceph-mds.target
+%endif
+
+%postun mds
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-mds@\*.service ceph-mds.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-mds@\*.service ceph-mds.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-mds@\*.service > /dev/null 2>&1 || :
+  fi
+fi
+
 #################################################################################
 %files mon
 %{_bindir}/ceph-mon
@@ -1070,6 +1073,45 @@ fi
 %{_initrddir}/ceph
 %endif
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
+
+%post mon
+%if 0%{?suse_version}
+if [ $1 -ge 1 ] ; then
+  /usr/bin/systemctl preset ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%endif
+
+%preun mon
+%if 0%{?suse_version}
+%service_del_preun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%endif
+
+%postun mon
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-create-keys@\*.service ceph-mon@\*.service > /dev/null 2>&1 || :
+  fi
+fi
 
 #################################################################################
 %files fuse
@@ -1124,48 +1166,43 @@ fi
 %endif
 
 %post radosgw
-/sbin/ldconfig
 %if 0%{?suse_version}
-  # explicit systemctl daemon-reload (that's the only relevant bit of
-  # service_add_post; the rest is all sysvinit --> systemd migration which
-  # isn't applicable in this context (see above comment).
-  /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+if [ $1 -ge 1 ] ; then
+  /usr/bin/systemctl preset ceph-radosgw@\*.service ceph-radosgw.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 
 %preun radosgw
-%if 0%{?_with_systemd}
-  # Disable and stop on removal.
-  if [ $1 = 0 ] ; then
-    SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
-    if [ -n "$SERVICE_LIST" ]; then
-      for SERVICE in $SERVICE_LIST; do
-        /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
-        /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
-      done
-    fi
-  fi
+%if 0%{?suse_version}
+%service_del_preun ceph-radosgw@\*.service ceph-radosgw.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 
 %postun radosgw
-/sbin/ldconfig
-%if 0%{?_with_systemd}
-  if [ $1 = 1 ] ; then
-    # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
-    # "yes". In any case: if units are not running, do not touch them.
-    SYSCONF_CEPH=/etc/sysconfig/ceph
-    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
-      source $SYSCONF_CEPH
-    fi
-    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-      SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
-      if [ -n "$SERVICE_LIST" ]; then
-        for SERVICE in $SERVICE_LIST; do
-          /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
-        done
-      fi
-    fi
-  fi
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-radosgw@\*.service ceph-radosgw.target
 %endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-radosgw@\*.service ceph-radosgw.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-radosgw@\*.service > /dev/null 2>&1 || :
+  fi
+fi
 
 #################################################################################
 %files osd
@@ -1191,6 +1228,45 @@ fi
 %{_initrddir}/ceph
 %endif
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
+
+%post osd
+%if 0%{?suse_version}
+if [ $1 -ge 1 ] ; then
+  /usr/bin/systemctl preset ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
+%endif
+
+%preun osd
+%if 0%{?suse_version}
+%service_del_preun ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
+%endif
+
+%postun osd
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-disk@\*.service ceph-osd@\*.service > /dev/null 2>&1 || :
+  fi
+fi
 
 #################################################################################
 %if %{with ocf}
@@ -1437,7 +1513,7 @@ else
     exit 0
 fi
 
-if test "$OLD_POLVER" == "$NEW_POLVER"; then
+if test "$OLD_POLVER" = "$NEW_POLVER"; then
    # Do not relabel if policy version did not change
    exit 0
 fi
