@@ -245,6 +245,12 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     return m_on_finish;
   }
 
+  if (!m_snapc.is_valid()) {
+    lderr(cct) << "image snap context is invalid!" << dendl;
+    *result = -EIO;
+    return m_on_finish;
+  }
+
   send_v2_get_flags();
   return nullptr;
 }
@@ -349,12 +355,6 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
   } else if (*result < 0) {
     lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
                << dendl;
-    return m_on_finish;
-  }
-
-  if (!m_snapc.is_valid()) {
-    lderr(cct) << "image snap context is invalid!" << dendl;
-    *result = -EIO;
     return m_on_finish;
   }
 
