@@ -132,8 +132,8 @@ namespace crimson {
 
     protected:
 
+      // queue_mtx should be held when called
       void schedule_request() {
-	DataGuard g(queue_mtx);
 	if (!queue.empty() && can_handle_f()) {
 	  auto& front = queue.front();
 	  static NullData null_data;
