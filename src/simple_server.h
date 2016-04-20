@@ -8,20 +8,18 @@
 #pragma once
 
 #include <memory>
-// #include <functional>
 #include <mutex>
 #include <deque>
 
-#include "queue_ifc.h"
+#include "boost/variant.hpp"
 
 #include "test_recs.h"
 #include "simple_recs.h"
 
 
 namespace crimson {
-  namespace simple_scheduler {
 
-    namespace pq = crimson::priority_queue;
+  namespace simple_scheduler {
 
     template<typename C, typename R, typename Time>
     class SimpleQueue {
@@ -52,13 +50,15 @@ namespace crimson {
 
     protected:
 
+      enum class Mechanism { push, pull };
+
       struct QRequest {
 	C          client;
 	RequestRef request;
       };
 
       bool finishing = false;
-      pq::Mechanism mechanism;
+      Mechanism mechanism;
 
       CanHandleRequestFunc can_handle_f;
       HandleRequestFunc handle_f;
@@ -73,7 +73,7 @@ namespace crimson {
       // push full constructor
       SimpleQueue(CanHandleRequestFunc _can_handle_f,
 		  HandleRequestFunc _handle_f) :
-	mechanism(pq::Mechanism::push),
+	mechanism(Mechanism::push),
 	can_handle_f(_can_handle_f),
 	handle_f(_handle_f)
       {
@@ -81,7 +81,7 @@ namespace crimson {
       }
 
       SimpleQueue() :
-	mechanism(pq::Mechanism::pull)
+	mechanism(Mechanism::pull)
       {
 	// empty
       }
@@ -101,20 +101,20 @@ namespace crimson {
 	DataGuard g(queue_mtx);
 	queue.emplace_back(QRequest{client_id, std::move(request)});
 
-	if (pq::Mechanism::push == mechanism) {
+	if (Mechanism::push == mechanism) {
 	  schedule_request();
 	}
       }
 
       void request_completed() {
-	if (pq::Mechanism::push == mechanism) {
+	if (Mechanism::push == mechanism) {
 	  DataGuard g(queue_mtx);
 	  schedule_request();
 	}
       }
 
       PullReq pull_request() {
-	assert(pq::Mechanism::pull == mechanism);
+	assert(Mechanism::pull == mechanism);
 	PullReq result;
 	DataGuard g(queue_mtx);
 	if (queue.empty()) {

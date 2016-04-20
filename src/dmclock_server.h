@@ -33,8 +33,6 @@
 
 #include "boost/variant.hpp"
 
-#include "queue_ifc.h"
-
 #include "indirect_intrusive_heap.h"
 #include "run_every.h"
 #include "dmclock_util.h"
@@ -48,7 +46,6 @@ namespace crimson {
   namespace dmclock {
 
     namespace c = crimson;
-    namespace pq = crimson::priority_queue;
 
     struct ClientInfo {
       const double reservation;  // minimum
