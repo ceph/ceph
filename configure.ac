@@ -758,6 +758,20 @@ if test "x$with_spdk" != x"no"; then
    AC_DEFINE([HAVE_SPDK], [1], [SPDK conditional compilation])
 fi
 
+#PMEM
+AC_ARG_WITH(pmem,
+    [AC_HELP_STRING([--with-pmem], [build Ceph PMEMDevice Support])], [], [with_pmem=no])
+AM_CONDITIONAL(WITH_PMEM, [test "x$with_pmem" != "xno"])
+if test "x$with_pmem" != x"no"; then
+   AC_CHECK_HEADER([libpmem.h], [],
+     AC_MSG_ERROR([libpmem.h not found (libpmem.so)]))
+   AC_CHECK_LIB([pmem], [pmem_is_pmem], [true],
+     AC_MSG_FAILURE([PMEM pmem_is_pmem not found]),
+                [-lpmem])
+   AC_SUBST([LIBPMEM_LIB], ['-lpmem'])
+   AC_DEFINE([HAVE_PMEM], [1], [PMEM conditional compilation])
+fi
+
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
             [AS_HELP_STRING([--without-libatomic-ops],

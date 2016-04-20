@@ -18,11 +18,18 @@
 #include <unistd.h>
 
 #include "KernelDevice.h"
+#include "PMEMDevice.h"
 #if defined(HAVE_SPDK)
 #include "NVMEDevice.h"
 #endif
 
+#if defined(HAVE_PMEM)
+#include <libpmem.h>
+#endif
+
 #include "common/debug.h"
+#include "common/errno.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -53,11 +60,42 @@ BlockDevice *BlockDevice::create(const string& path, aio_callback_t cb, void *cb
     if (strncmp(bname, SPDK_PREFIX, sizeof(SPDK_PREFIX)-1) == 0)
       type = "ust-nvme";
   }
+
+#if defined(HAVE_PMEM)
+  if (type == "kernel") {
+    int fd = ::open(path.c_str(), O_RDWR);
+    if (fd < 0) {
+      r = -errno;
+      derr << __func__ << " open " << path.c_str() << " error " << cpp_strerror(r) << dendl;
+    } else {
+      void *addr = ::mmap(0, 4096, PROT_WRITE, MAP_SHARED, fd, 0);
+      if (addr == MAP_FAILED) {
+	r = - errno;
+	derr << __func__ << " mmap " << path.c_str() << " error " << cpp_strerror(r) << dendl;
+      } else {
+	if (pmem_is_pmem(addr, 4096)) {
+	  type = "pmem";
+	}
+	::munmap(addr, 4096);
+      }
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
+    }
+  }
+#endif
+
   dout(1) << __func__ << " path " << path << " type " << type << dendl;
+
+#if defined(HAVE_PMEM)
+  if (type == "pmem") {
+    return new PMEMDevice(cb, cbpriv);
+  }
+#endif
 
   if (type == "kernel") {
     return new KernelDevice(cb, cbpriv);
   }
+
+
 #if defined(HAVE_SPDK)
   if (type == "ust-nvme") {
     return new NVMEDevice(cb, cbpriv);

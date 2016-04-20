@@ -147,7 +147,10 @@ libos_a_CXXFLAGS += \
 libos_a_SOURCES += os/bluestore/NVMEDevice.cc
 noinst_HEADERS += os/bluestore/NVMEDevice.h
 endif
-
+if WITH_PMEM
+libos_a_SOURCES += os/bluestore/PMEMDevice.cc
+noinst_HEADERS += os/bluestore/PMEMDevice.h
+endif
 if WITH_LIBAIO
 ceph_bluefs_tool_SOURCES = os/bluestore/bluefs_tool.cc
 ceph_bluefs_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
