@@ -790,6 +790,18 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
   return xmsg;
 }
 
+XioCommand* pool_alloc_xio_command(XioConnection *xcon)
+{
+  struct xio_reg_mem mp_mem;
+  int e = xpool_alloc(xio_msgr_noreg_mpool, sizeof(XioCommand), &mp_mem);
+  if (!!e)
+    return NULL;
+  XioCommand *xcmd = reinterpret_cast<XioCommand*>(mp_mem.addr);
+  assert(!!xcmd);
+  new (xcmd) XioCommand(xcon, mp_mem);
+  return xcmd;
+}
+
 int XioMessenger::_send_message(Message *m, Connection *con)
 {
   if (con == loop_con.get() /* intrusive_ptr get() */) {

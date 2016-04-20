@@ -28,8 +28,8 @@ extern "C" {
 #include "include/atomic.h"
 #include "auth/AuthSessionHandler.h"
 
-#define XIO_ALL_FEATURES (CEPH_FEATURES_ALL & \
-			  ~CEPH_FEATURE_MSGR_KEEPALIVE2)
+#define XIO_ALL_FEATURES (CEPH_FEATURES_ALL)
+
 
 #define XIO_NOP_TAG_MARKDOWN 0x0001
 
@@ -195,8 +195,13 @@ private:
 
   // message submission queue
   struct SendQ {
+    bool keepalive;
+    bool ack;
+    utime_t ack_time;
     Message::Queue mqueue; // deferred
     XioSubmit::Queue requeue;
+
+    SendQ():keepalive(false), ack(false){}
   } outgoing;
 
   // conns_entity_map comparison functor
@@ -271,7 +276,8 @@ public:
   bool is_connected() override { return connected.read(); }
 
   int send_message(Message *m) override;
-  void send_keepalive() override {}
+  void send_keepalive() override {send_keepalive_or_ack();}
+  void send_keepalive_or_ack(bool ack = false, const utime_t *tp = nullptr);
   void mark_down() override;
   int _mark_down(uint32_t flags);
   void mark_disposable() override;
@@ -324,6 +330,8 @@ public:
   int flush_out_queues(uint32_t flags);
   int discard_input_queue(uint32_t flags);
   int adjust_clru(uint32_t flags);
+private:
+  void send_keepalive_or_ack_internal(bool ack = false, const utime_t *tp = nullptr);
 };
 
 typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
@@ -348,7 +356,7 @@ public:
   bool is_connected() override { return true; }
 
   int send_message(Message *m) override;
-  void send_keepalive() override {}
+  void send_keepalive() override;
   void mark_down() override {}
   void mark_disposable() override {}
 
