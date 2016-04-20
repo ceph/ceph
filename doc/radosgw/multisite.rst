@@ -4,7 +4,7 @@ RGW Multisite
 
 .. versionadded:: Jewel
 
-From Ceph release Jewel and beyond, you may configure each :term`Ceph Object
+From Ceph release Jewel and beyond, you may configure each :term:`Ceph Object
 Gateway` to work in an active active zone configuration, allowing for writes to
 non-master zones. Following are the basic terminologies that would be used:
 
