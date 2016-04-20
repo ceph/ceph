@@ -279,7 +279,7 @@ int EventCenter::process_time_events()
   clock_type::time_point now = clock_type::now();
   ldout(cct, 10) << __func__ << " cur time is " << now << dendl;
 
-  time_lock.Lock();
+  Mutex::Locker l(time_lock);
   /* If the system clock is moved to the future, and then set back to the
    * right value, time events may be delayed in a random way. Often this
    * means that scheduled operations will not be performed soon enough.
@@ -291,25 +291,25 @@ int EventCenter::process_time_events()
   bool clock_skewed = now < last_time;
   last_time = now;
 
-  map<clock_type::time_point, list<TimeEvent> >::iterator prev;
-  list<TimeEvent> need_process;
-  for (auto it = time_events.begin(); it != time_events.end(); ) {
-    prev = it;
+  while (!time_events.empty()) {
+    auto it = time_events.begin();
     if (now >= it->first || clock_skewed) {
-      need_process.splice(need_process.end(), it->second);
-      ++it;
-      time_events.erase(prev);
+      if (it->second.empty()) {
+        time_events.erase(it);
+      } else {
+        TimeEvent &e = it->second.front();
+        EventCallbackRef cb = e.time_cb;
+        uint64_t id = e.id;
+        it->second.pop_front();
+        ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
+        processed++;
+        time_lock.Unlock();
+        cb->do_request(id);
+        time_lock.Lock();
+      }
     } else {
       break;
     }
-  }
-  time_lock.Unlock();
-
-  for (list<TimeEvent>::iterator it = need_process.begin();
-       it != need_process.end(); ++it) {
-    ldout(cct, 10) << __func__ << " process time event: id=" << it->id << dendl;
-    it->time_cb->do_request(it->id);
-    processed++;
   }
 
   return processed;
