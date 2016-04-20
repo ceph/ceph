@@ -327,11 +327,11 @@ public:
 		   struct xio_msg  *msg, void *conn_user_context);
   void msg_send_fail(XioSend *xsend, int code);
   void msg_release_fail(struct xio_msg *msg, int code);
+private:
+  void send_keepalive_or_ack_internal(bool ack = false, const utime_t *tp = nullptr);
   int flush_out_queues(uint32_t flags);
   int discard_out_queues(uint32_t flags);
   int adjust_clru(uint32_t flags);
-private:
-  void send_keepalive_or_ack_internal(bool ack = false, const utime_t *tp = nullptr);
 };
 
 typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
