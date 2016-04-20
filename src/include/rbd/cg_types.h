@@ -17,7 +17,7 @@
 
 enum cg_state {
 	CG_DEFAULT,
-	CG_ADDING_IMAGE
+	CG_ADDING_IMAGE,
 	CG_REMOVING_IMAGE
 };
 

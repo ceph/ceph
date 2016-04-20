@@ -290,16 +290,10 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode(CG_ADDING_IMAGE, statebl);
   r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
   if (r < 0) {
-    goto delete_image_ref;
+    return r;
   }
 
   return 0;
-
-delete_image_ref:
-
-  // TODO delete val image_key
-
-  return r;
 }
 
 /**
