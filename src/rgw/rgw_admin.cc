@@ -112,8 +112,8 @@ void _usage()
   cerr << "  replicalog get             get replica metadata log entry\n";
   cerr << "  replicalog update          update replica metadata log entry\n";
   cerr << "  replicalog delete          delete replica metadata log entry\n";
-  cout << "  orphans find               init and run search for leaked rados objects\n";
-  cout << "  orphans finish             clean up search for leaked rados objects\n";
+  cerr << "  orphans find               init and run search for leaked rados objects\n";
+  cerr << "  orphans finish             clean up search for leaked rados objects\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -168,7 +168,11 @@ void _usage()
   cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cerr << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
-  cerr << "   --reset-regions           reset regionmap when regionmap update";
+  cerr << "   --reset-regions           reset regionmap when regionmap update\n";
+  cerr << "   --bypass-gc               when specified with bucket deletion, triggers\n";
+  cerr << "                             object deletions by not involving GC\n";
+  cerr << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
+  cerr << "                             ignores bucket index consistency\n";
   cerr << "\n";
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cerr << "\nQuota options:\n";
@@ -176,9 +180,9 @@ void _usage()
   cerr << "   --max-objects             specify max objects (negative value to disable)\n";
   cerr << "   --max-size                specify max size (in bytes, negative value to disable)\n";
   cerr << "   --quota-scope             scope of quota (bucket, user)\n";
-  cout << "\nOrphans search options:\n";
-  cout << "   --pool                    data pool to scan for leaked rados objects in\n";
-  cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
+  cerr << "\nOrphans search options:\n";
+  cerr << "   --pool                    data pool to scan for leaked rados objects in\n";
+  cerr << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
   cerr << "\n";
   generic_client_usage();
 }
@@ -1163,6 +1167,9 @@ int main(int argc, char **argv)
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
 
+  int bypass_gc = false;
+  int inconsistent_index = false;
+
   std::string val;
   std::ostringstream errs;
   string err;
@@ -1324,6 +1331,10 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &reset_regions, NULL, "--reset-regions", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, NULL, "--bypass-gc", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -1727,6 +1738,7 @@ int main(int argc, char **argv)
   bucket_op.set_check_objects(check_objects);
   bucket_op.set_delete_children(delete_child_objects);
   bucket_op.set_fix_index(fix);
+  bucket_op.set_max_aio(max_concurrent_ios);
 
   // required to gather errors from operations
   std::string err_msg;
@@ -2548,7 +2560,11 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    RGWBucketAdminOp::remove_bucket(store, bucket_op);
+    if (inconsistent_index == false) {
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
+    } else {
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, false);
+    }
   }
 
   if (opt_cmd == OPT_GC_LIST) {
