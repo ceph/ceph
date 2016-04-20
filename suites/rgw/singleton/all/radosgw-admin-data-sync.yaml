@@ -51,7 +51,7 @@ tasks:
         access key: 1te6NH5mcdcq0Tc5i8i3
         secret key: Py4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXw
 - sleep:
-    duration: 5
+    duration: 15
 - radosgw-agent:
     client.0:
       max-entries: 10
