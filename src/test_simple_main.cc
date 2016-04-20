@@ -30,28 +30,18 @@ void client_data(std::ostream& out,
 int main(int argc, char* argv[]) {
   // server params
 
-#warning altered
-  const uint server_count = 1; //100;
+  const uint server_count = 100;
   const uint server_iops = 40;
   const uint server_threads = 1;
-  const bool server_soft_limit = false;
 
   // client params
 
   const uint client_total_ops = 1000;
-#warning altered
-  const uint client_count = 1; //100;
-#warning altered
-  const uint client_wait_count = 0; //1;
+  const uint client_count = 100;
+  const uint client_wait_count = 1;
   const uint client_iops_goal = 50;
   const uint client_outstanding_ops = 100;
   const std::chrono::seconds client_wait(10);
-
-  // client info
-  
-  const double client_reservation = 20.0;
-  const double client_limit = 60.0;
-  const double client_weight = 1.0;
 
   auto client_disp_filter = [=] (const ClientId& i) -> bool {
     return i < 3 || i >= (client_count - 3);
