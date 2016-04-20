@@ -241,7 +241,7 @@ private:
   int on_disconnect_event() {
     connected.set(false);
     pthread_spin_lock(&sp);
-    discard_input_queue(CState::OP_FLAG_LOCKED);
+    discard_out_queues(CState::OP_FLAG_LOCKED);
     pthread_spin_unlock(&sp);
     return 0;
   }
@@ -328,7 +328,7 @@ public:
   void msg_send_fail(XioSend *xsend, int code);
   void msg_release_fail(struct xio_msg *msg, int code);
   int flush_out_queues(uint32_t flags);
-  int discard_input_queue(uint32_t flags);
+  int discard_out_queues(uint32_t flags);
   int adjust_clru(uint32_t flags);
 private:
   void send_keepalive_or_ack_internal(bool ack = false, const utime_t *tp = nullptr);
