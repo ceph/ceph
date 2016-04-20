@@ -3,8 +3,8 @@
 Installation and setup
 ======================
 
-Ubuntu & Fedora
----------------
+Ubuntu, Fedora & SUSE/openSUSE
+------------------------------
 
 A bootstrap script is provided that will do everything for you assuming
 you have ``sudo``::
