@@ -26,6 +26,7 @@ namespace test_simple {
   };
 
   struct SimpleAccum {
+    uint32_t request_count = 0;
   };
 
   using SimpleQueue = simp::SimpleQueue<ClientId,TestRequest,Time>;

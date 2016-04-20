@@ -125,5 +125,15 @@ void server_data(std::ostream& out,
 		 test::MySim* sim,
 		 test::MySim::ServerFilter server_disp_filter,
 		 int head_w, int data_w, int data_prec) {
-  // empty
+  out << std::setw(head_w) << "requests:";
+  int total_req = 0;
+  for (uint i = 0; i < sim->get_server_count(); ++i) {
+    const auto& server = sim->get_server(i);
+    auto req_count = server.get_accumulator().request_count;
+    total_req += req_count;
+    if (!server_disp_filter(i)) continue;
+    out << std::setw(data_w) << req_count;
+  }
+  out << std::setw(data_w) << std::setprecision(data_prec) <<
+    std::fixed << total_req << std::endl;
 }
