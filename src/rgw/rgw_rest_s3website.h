@@ -32,7 +32,7 @@ protected:
   RGWOp *op_copy() { return NULL; }
   RGWOp *op_options() { return NULL; }
 
-  int get_errordoc(const string& errordoc_key, string *error_content);
+  int serve_errordoc(int http_ret, const string &errordoc_key);
 public:
   RGWHandler_REST_S3Website() : RGWHandler_REST_S3() {}
   virtual ~RGWHandler_REST_S3Website() {}
@@ -69,6 +69,7 @@ public:
 // TODO: do we actually need this?
 class  RGWGetObj_ObjStore_S3Website : public RGWGetObj_ObjStore_S3
 {
+  friend class RGWHandler_REST_S3Website;
 private:
    bool is_errordoc_request;
 public:
@@ -86,7 +87,7 @@ public:
         if_unmod = NULL;
         if_match = NULL;
         if_nomatch = NULL;
-               return 0;
+        return 0;
       } else {
         return RGWGetObj_ObjStore_S3::get_params();
       }
