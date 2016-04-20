@@ -1769,7 +1769,6 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
     }
   }
 
-  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 
   dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;

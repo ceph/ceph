@@ -172,7 +172,7 @@ void req_info::rebuild_from(req_info& src)
 
 req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
-    os_auth_token(NULL), info(_cct, e)
+    info(_cct, e)
 {
   enable_ops_log = e->conf->enable_ops_log;
   enable_usage_log = e->conf->enable_usage_log;
@@ -191,7 +191,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
 
   system_request = false;
 
-  os_auth_token = NULL;
   time = ceph_clock_now(cct);
   perm_mask = 0;
   bucket_instance_shard_id = -1;
