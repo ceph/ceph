@@ -560,18 +560,18 @@ We create the new zone, ``us-west``, with the same system keys::
   # radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-west
   --access-key=$SYSTEM_ACCESS_KEY --secret=$SYSTEM_SECRET_KEY --endpoints=http://rgw3:80 --default
   {
-    "id": "950c1a43-6836-41a2-a161-64777e07e8b8",
-    "name": "us-east-2",
-    "domain_root": "us-east-2.rgw.data.root",
-    "control_pool": "us-east-2.rgw.control",
-    "gc_pool": "us-east-2.rgw.gc",
-    "log_pool": "us-east-2.rgw.log",
-    "intent_log_pool": "us-east-2.rgw.intent-log",
-    "usage_log_pool": "us-east-2.rgw.usage",
-    "user_keys_pool": "us-east-2.rgw.users.keys",
-    "user_email_pool": "us-east-2.rgw.users.email",
-    "user_swift_pool": "us-east-2.rgw.users.swift",
-    "user_uid_pool": "us-east-2.rgw.users.uid",
+    "id": "d9522067-cb7b-4129-8751-591e45815b16",
+    "name": "us-west",
+    "domain_root": "us-west.rgw.data.root",
+    "control_pool": "us-west.rgw.control",
+    "gc_pool": "us-west.rgw.gc",
+    "log_pool": "us-west.rgw.log",
+    "intent_log_pool": "us-west.rgw.intent-log",
+    "usage_log_pool": "us-west.rgw.usage",
+    "user_keys_pool": "us-west.rgw.users.keys",
+    "user_email_pool": "us-west.rgw.users.email",
+    "user_swift_pool": "us-west.rgw.users.swift",
+    "user_uid_pool": "us-west.rgw.users.uid",
     "system_key": {
         "access_key": "1555b35654ad1656d804",
         "secret_key": "h7GhxuBLTrlhVUyxSPUKUV8r\/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=="
@@ -580,14 +580,14 @@ We create the new zone, ``us-west``, with the same system keys::
         {
             "key": "default-placement",
             "val": {
-                "index_pool": "us-east-2.rgw.buckets.index",
-                "data_pool": "us-east-2.rgw.buckets.data",
-                "data_extra_pool": "us-east-2.rgw.buckets.non-ec",
+                "index_pool": "us-west.rgw.buckets.index",
+                "data_pool": "us-west.rgw.buckets.data",
+                "data_extra_pool": "us-west.rgw.buckets.non-ec",
                 "index_type": 0
             }
         }
     ],
-    "metadata_heap": "us-east-2.rgw.meta",
+    "metadata_heap": "us-west.rgw.meta",
     "realm_id": "4a367026-bd8f-40ee-b486-8212482ddcd7"
     }
 
