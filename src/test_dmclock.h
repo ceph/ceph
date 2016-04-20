@@ -29,17 +29,17 @@ namespace test_dmc {
 
     using DmcQueue = dmc::PriorityQueue<ClientId,TestRequest>;
 
-    using DmcServer = TestServer<DmcQueue,
-                                 dmc::ClientInfo,
-                                 dmc::ReqParams<ClientId>,
-                                 dmc::RespParams<ServerId>,
-                                 DmcServerAddInfo,
-                                 DmcAccum>;
+    using DmcServer = SimulatedServer<DmcQueue,
+				      dmc::ClientInfo,
+				      dmc::ReqParams<ClientId>,
+				      dmc::RespParams<ServerId>,
+				      DmcServerAddInfo,
+				      DmcAccum>;
 
-    using DmcClient = TestClient<dmc::ServiceTracker<ServerId>,
-                                 dmc::ReqParams<ClientId>,
-                                 dmc::RespParams<ServerId>,
-                                 DmcAccum>;
+    using DmcClient = SimulatedClient<dmc::ServiceTracker<ServerId>,
+				      dmc::ReqParams<ClientId>,
+				      dmc::RespParams<ServerId>,
+				      DmcAccum>;
 
     using CreateQueueF = std::function<DmcQueue*(DmcQueue::CanHandleRequestFunc,
                                                  DmcQueue::HandleRequestFunc)>;

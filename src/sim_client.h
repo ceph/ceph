@@ -64,7 +64,7 @@ using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 
 
 template<typename SvcTrk, typename ReqPm, typename RespPm, typename Accum>
-class TestClient {
+class SimulatedClient {
 public:
 
   using SubmitFunc =
@@ -117,7 +117,7 @@ protected:
 
 public:
 
-  TestClient(ClientId _id,
+  SimulatedClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
 	     const ServerSelectFunc& _server_select_f,
 	     const ClientAccumFunc& _accum_f,
@@ -139,19 +139,19 @@ public:
     }
     op_times.reserve(op_count);
 
-    thd_resp = std::thread(&TestClient::run_resp, this);
-    thd_req = std::thread(&TestClient::run_req, this);
+    thd_resp = std::thread(&SimulatedClient::run_resp, this);
+    thd_req = std::thread(&SimulatedClient::run_req, this);
   }
 
 
-  TestClient(ClientId _id,
+  SimulatedClient(ClientId _id,
 	     const SubmitFunc& _submit_f,
 	     const ServerSelectFunc& _server_select_f,
 	     const ClientAccumFunc& _accum_f,
 	     uint16_t _ops_to_run,
 	     double _iops_goal,
 	     uint16_t _outstanding_ops_allowed) :
-    TestClient(_id,
+    SimulatedClient(_id,
 	       _submit_f, _server_select_f, _accum_f,
 	       {{req_op, _ops_to_run, _iops_goal, _outstanding_ops_allowed}})
   {
@@ -159,12 +159,12 @@ public:
   }
 
 
-  TestClient(const TestClient&) = delete;
-  TestClient(TestClient&&) = delete;
-  TestClient& operator=(const TestClient&) = delete;
-  TestClient& operator=(TestClient&&) = delete;
+  SimulatedClient(const SimulatedClient&) = delete;
+  SimulatedClient(SimulatedClient&&) = delete;
+  SimulatedClient& operator=(const SimulatedClient&) = delete;
+  SimulatedClient& operator=(SimulatedClient&&) = delete;
 
-  virtual ~TestClient() {
+  virtual ~SimulatedClient() {
     wait_until_done();
   }
 
@@ -278,4 +278,4 @@ protected:
 
     // all responses received, thread ends
   }
-}; // class TestClient
+}; // class SimulatedClient

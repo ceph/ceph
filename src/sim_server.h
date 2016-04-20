@@ -21,7 +21,7 @@
 template<typename Q, typename CInfo,
 	 typename ReqPm, typename RespPm,
 	 typename AddInfo, typename Accum>
-class TestServer {
+class SimulatedServer {
 
   struct QueueItem {
     ClientId client;
@@ -83,15 +83,16 @@ public:
   using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
 					
 
-  TestServer(ServerId _id,
-	     int _iops,
-	     size_t _thread_pool_size,
-	     const ClientRespFunc& _client_resp_f,
-	     const ServerAccumFunc& _accum_f,
-	     CreateQueueF _create_queue_f) :
+  SimulatedServer(ServerId _id,
+		  int _iops,
+		  size_t _thread_pool_size,
+		  const ClientRespFunc& _client_resp_f,
+		  const ServerAccumFunc& _accum_f,
+		  CreateQueueF _create_queue_f) :
     id(_id),
-    priority_queue(_create_queue_f(std::bind(&TestServer::has_avail_thread, this),
-				   std::bind(&TestServer::inner_post,
+    priority_queue(_create_queue_f(std::bind(&SimulatedServer::has_avail_thread,
+					     this),
+				   std::bind(&SimulatedServer::inner_post,
 					     this,
 					     std::placeholders::_1,
 					     std::placeholders::_2,
@@ -108,11 +109,11 @@ public:
     std::chrono::milliseconds delay(1000);
     threads = new std::thread[thread_pool_size];
     for (size_t i = 0; i < thread_pool_size; ++i) {
-      threads[i] = std::thread(&TestServer::run, this, delay);
+      threads[i] = std::thread(&SimulatedServer::run, this, delay);
     }
   }
 
-  virtual ~TestServer() {
+  virtual ~SimulatedServer() {
     Lock l(inner_queue_mtx);
     finishing = true;
     inner_queue_cv.notify_all();
@@ -190,4 +191,4 @@ protected:
 			   const RespPm& resp_params) {
     client_resp_f(client, resp, resp_params);
   }
-}; // class TestServer
+}; // class SimulatedServer
