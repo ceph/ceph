@@ -197,7 +197,6 @@ protected:
 	  while (outstanding_ops >= i.args.req_params.max_outstanding) {
 	    cv_req.wait(l);
 	  }
-std::cout << "client about to make request" << std::endl;
 
 	  l.unlock();
 	  auto now = std::chrono::steady_clock::now();
@@ -205,7 +204,6 @@ std::cout << "client about to make request" << std::endl;
 	  ReqPm rp = service_tracker.get_req_params(id, server);
 	  TestRequest req(server, o, 12);
 	  submit_f(server, req, rp);
-std::cout << "client made request" << std::endl;
 	  ++outstanding_ops;
 	  l.lock(); // lock for return to top of loop
 
@@ -237,8 +235,6 @@ std::cout << "client made request" << std::endl;
     // repetition and define it once.
     const auto proc_resp = [this, &op, &l](const bool notify_req_cv) {
       if (!resp_queue.empty()) {
-std::cout << "client received response" << std::endl;
-
 	RespQueueItem item = resp_queue.front();
 	resp_queue.pop_front();
 

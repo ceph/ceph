@@ -159,7 +159,6 @@ protected:
 	inner_queue_cv.wait_for(l, check_period);
       }
       if (!inner_queue.empty()) {
-std::cout << "server processing request" << std::endl;
 	auto& front = inner_queue.front();
 	auto client = front.client;
 	auto req = std::move(front.request);
