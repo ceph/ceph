@@ -189,7 +189,7 @@ public:
   struct xio_msg * get_xio_msg() {return &req_0.msg;}
   virtual size_t get_msg_count() const {return 1;}
 
-  XioSend(XioConnection *_xcon, struct xio_reg_mem& _mp, int _ex_cnt) :
+  XioSend(XioConnection *_xcon, struct xio_reg_mem& _mp, int _ex_cnt=0) :
     XioSubmit(XioSubmit::OUTGOING_MSG, _xcon),
     req_0(this), mp_this(_mp), nrefs(_ex_cnt+1)
   {
@@ -225,6 +225,18 @@ private:
   xio_msg_ex req_0;
   struct xio_reg_mem mp_this;
   atomic_t nrefs;
+};
+
+class XioCommand : public XioSend
+{
+public:
+  XioCommand(XioConnection *_xcon, struct xio_reg_mem& _mp):XioSend(_xcon, _mp) {
+  }
+
+  buffer::list& get_bl_ref() { return bl; };
+
+private:
+  buffer::list bl;
 };
 
 struct XioMsg : public XioSend
