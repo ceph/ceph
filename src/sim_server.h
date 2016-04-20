@@ -15,7 +15,7 @@
 #include <chrono>
 #include <deque>
 
-#include "test_recs.h"
+#include "sim_recs.h"
 
 
 template<typename Q, typename CInfo,

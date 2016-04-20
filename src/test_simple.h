@@ -9,9 +9,9 @@
 #include "simple_server.h"
 #include "simple_client.h"
 
-#include "test_recs.h"
-#include "test_server.h"
-#include "test_client.h"
+#include "sim_recs.h"
+#include "sim_server.h"
+#include "sim_client.h"
 
 #include "simulate.h"
 

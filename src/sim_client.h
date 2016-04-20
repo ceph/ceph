@@ -18,7 +18,7 @@
 #include <deque>
 #include <iostream>
 
-#include "test_recs.h"
+#include "sim_recs.h"
 
 
 struct req_op_t {};

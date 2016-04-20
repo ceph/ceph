@@ -13,9 +13,9 @@
 
 #include "boost/variant.hpp"
 
-#include "test_recs.h"
 #include "simple_recs.h"
 
+#include "sim_recs.h"
 
 namespace crimson {
 
