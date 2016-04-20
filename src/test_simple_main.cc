@@ -71,8 +71,16 @@ int main(int argc, char* argv[]) {
 
   simulation = new test::MySim();
 
+#if 1
   test::MySim::ClientBasedServerSelectFunc server_select_f =
     simulation->make_server_select_alt_range(8);
+#elif 0
+  test::MySim::ClientBasedServerSelectFunc server_select_f =
+    std::bind(&test::MySim::server_select_random, simulation, _1, _2);
+#else
+  test::MySim::ClientBasedServerSelectFunc server_select_f =
+    std::bind(&test::MySim::server_select_0, simulation, _1, _2);
+#endif
 
   test::SimpleServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
