@@ -636,7 +636,7 @@ int XioConnection::flush_out_queues(uint32_t flags) {
   return 0;
 }
 
-int XioConnection::discard_input_queue(uint32_t flags)
+int XioConnection::discard_out_queues(uint32_t flags)
 {
   Message::Queue disc_q;
   XioSubmit::Queue deferred_q;
@@ -748,7 +748,7 @@ int XioConnection::_mark_down(uint32_t flags)
 
   /* XXX this will almost certainly be called again from
    * on_disconnect_event() */
-  discard_input_queue(flags|CState::OP_FLAG_LOCKED);
+  discard_out_queues(flags|CState::OP_FLAG_LOCKED);
 
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_unlock(&sp);
@@ -820,7 +820,7 @@ int XioConnection::CState::state_fail(Message* m, uint32_t flags)
   session_state.set(DISCONNECTED);
   startup_state.set(FAIL);
 
-  xcon->discard_input_queue(flags|OP_FLAG_LOCKED);
+  xcon->discard_out_queues(flags|OP_FLAG_LOCKED);
   xcon->adjust_clru(flags|OP_FLAG_LOCKED|OP_FLAG_LRU);
 
   xcon->disconnect();
