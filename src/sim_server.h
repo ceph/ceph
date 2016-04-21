@@ -25,11 +25,11 @@ class SimulatedServer {
 
   struct QueueItem {
     ClientId client;
-    std::unique_ptr<TestRequest> request;
+    std::unique_ptr<crimson::qos_simulation::TestRequest> request;
     AddInfo additional;
 
     QueueItem(const ClientId& _client,
-	      std::unique_ptr<TestRequest>&& _request,
+	      std::unique_ptr<crimson::qos_simulation::TestRequest>&& _request,
 	      AddInfo _additional) :
       client(_client),
       request(std::move(_request)),
@@ -44,7 +44,7 @@ public:
   using ClientInfoFunc = std::function<CInfo(ClientId)>;
 
   using ClientRespFunc = std::function<void(ClientId,
-					    const TestResponse&,
+					    const crimson::qos_simulation::TestResponse&,
 					    const RespPm&)>;
 
   using ServerAccumFunc = std::function<void(Accum& accumulator,
@@ -79,7 +79,7 @@ public:
 
   using CanHandleRequestFunc = std::function<bool(void)>;
   using HandleRequestFunc =
-    std::function<void(const ClientId&,std::unique_ptr<TestRequest>,AddInfo)>;
+    std::function<void(const ClientId&,std::unique_ptr<crimson::qos_simulation::TestRequest>,AddInfo)>;
   using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
 					
 
@@ -126,7 +126,7 @@ public:
     delete[] threads;
   }
 
-  void post(const TestRequest& request,
+  void post(const crimson::qos_simulation::TestRequest& request,
 	    const ReqPm& req_params) {
     priority_queue->add_request(request, req_params);
   }
@@ -143,7 +143,7 @@ public:
 protected:
 
   void inner_post(const ClientId& client,
-		  std::unique_ptr<TestRequest> request,
+		  std::unique_ptr<crimson::qos_simulation::TestRequest> request,
 		  AddInfo additional) {
     Lock l(inner_queue_mtx);
     assert(!finishing);
@@ -172,7 +172,7 @@ protected:
 	// notify server of completion
 	std::this_thread::sleep_for(op_time);
 
-	TestResponse resp(req->epoch);
+	crimson::qos_simulation::TestResponse resp(req->epoch);
 	// TODO: rather than assuming this constructor exists, perhaps
 	// pass in a function that does this mapping?
 	sendResponse(client, resp, RespPm(id, additional));
@@ -187,7 +187,7 @@ protected:
   }
 
   inline void sendResponse(const ClientId& client,
-			   const TestResponse& resp,
+			   const crimson::qos_simulation::TestResponse& resp,
 			   const RespPm& resp_params) {
     client_resp_f(client, resp, resp_params);
   }

@@ -68,7 +68,7 @@ class SimulatedClient {
 public:
 
   using SubmitFunc =
-    std::function<void(const ServerId&, const TestRequest&, const ReqPm&)>;
+    std::function<void(const ServerId&, const crimson::qos_simulation::TestRequest&, const ReqPm&)>;
 
   using ClientAccumFunc = std::function<void(Accum&,const RespPm&)>;
 
@@ -79,7 +79,7 @@ public:
 protected:
 
   struct RespQueueItem {
-    TestResponse response;
+    crimson::qos_simulation::TestResponse response;
     RespPm resp_params;
   };
 
@@ -168,7 +168,7 @@ public:
     wait_until_done();
   }
 
-  void receive_response(const TestResponse& resp,
+  void receive_response(const crimson::qos_simulation::TestResponse& resp,
 			const RespPm& resp_params) {
     RespGuard g(mtx_resp);
     resp_queue.push_back(RespQueueItem{resp, resp_params});
@@ -202,7 +202,7 @@ protected:
 	  auto now = std::chrono::steady_clock::now();
 	  const ServerId& server = server_select_f(o);
 	  ReqPm rp = service_tracker.get_req_params(id, server);
-	  TestRequest req(server, o, 12);
+	  crimson::qos_simulation::TestRequest req(server, o, 12);
 	  submit_f(server, req, rp);
 	  ++outstanding_ops;
 	  l.lock(); // lock for return to top of loop
@@ -248,7 +248,7 @@ protected:
 	// processing
 
 #if 0 // not needed
-	TestResponse& resp = item.response;
+	crimson::qos_simulation::TestResponse& resp = item.response;
 #endif
 
 	service_tracker.track_resp(item.resp_params);

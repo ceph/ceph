@@ -26,7 +26,8 @@ using ServerId = uint;
 
 
 namespace crimson {
-  namespace queue_testing {
+  namespace qos_simulation {
+#if 0 // STILL NEEDED?
     using Time = double;
     static const Time TimeZero = 0.0;
     static const Time TimeMax = std::numeric_limits<Time>::max();
@@ -42,54 +43,54 @@ namespace crimson {
     std::string format_time(const Time& time, uint modulo = 1000);
 
     void debugger();
-  }; // namespace queue_testing
+#endif
+
+
+    struct TestRequest {
+      ServerId server; // allows debugging
+      uint32_t epoch;
+      uint32_t op;
+
+      TestRequest(ServerId _server,
+		  uint32_t _epoch,
+		  uint32_t _op) :
+	server(_server),
+	epoch(_epoch),
+	op(_op)
+      {
+	// empty
+      }
+
+      TestRequest(const TestRequest& r) :
+	TestRequest(r.server, r.epoch, r.op)
+      {
+	// empty
+      }
+    }; // struct TestRequest
+
+
+    struct TestResponse {
+      uint32_t epoch;
+
+      TestResponse(uint32_t _epoch) :
+	epoch(_epoch)
+      {
+	// empty
+      }
+
+      TestResponse(const TestResponse& r) :
+	epoch(r.epoch)
+      {
+	// empty
+      }
+
+      friend std::ostream& operator<<(std::ostream& out, const TestResponse& resp) {
+	out << "{ ";
+	out << "epoch:" << resp.epoch;
+	out << " }";
+	return out;
+      }
+    }; // class TestResponse
+
+  }; // namespace qos_simulation
 }; // namespace crimson
-
-
-// TODO : move into namespace above
-struct TestRequest {
-  ServerId server; // allows debugging
-  uint32_t epoch;
-  uint32_t op;
-
-  TestRequest(ServerId _server,
-	      uint32_t _epoch,
-	      uint32_t _op) :
-    server(_server),
-    epoch(_epoch),
-    op(_op)
-  {
-    // empty
-  }
-
-  TestRequest(const TestRequest& r) :
-    TestRequest(r.server, r.epoch, r.op)
-  {
-    // empty
-  }
-}; // struct TestRequest
-
-
-// TODO : move into namespace above
-struct TestResponse {
-  uint32_t epoch;
-
-  TestResponse(uint32_t _epoch) :
-    epoch(_epoch)
-  {
-    // empty
-  }
-
-  TestResponse(const TestResponse& r) :
-    epoch(r.epoch)
-  {
-    // empty
-  }
-
-  friend std::ostream& operator<<(std::ostream& out, const TestResponse& resp) {
-    out << "{ ";
-    out << "epoch:" << resp.epoch;
-    out << " }";
-    return out;
-  }
-}; // class TestResponse

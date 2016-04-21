@@ -19,6 +19,7 @@
 namespace test_simple {
 
   namespace simp = crimson::simple_scheduler;
+  namespace sim = crimson::qos_simulation;
 
   using Time = double;
 
@@ -29,7 +30,7 @@ namespace test_simple {
     uint32_t request_count = 0;
   };
 
-  using SimpleQueue = simp::SimpleQueue<ClientId,TestRequest,Time>;
+  using SimpleQueue = simp::SimpleQueue<ClientId,sim::TestRequest,Time>;
 
   using SimpleServer = SimulatedServer<SimpleQueue,
 				       ClientInfo,

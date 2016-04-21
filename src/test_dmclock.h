@@ -19,7 +19,9 @@
 
 namespace test_dmc {
     namespace dmc = crimson::dmclock;
+    namespace sim = crimson::qos_simulation;
 
+  
     using DmcServerAddInfo = crimson::dmclock::PhaseType;
 
     struct DmcAccum {
@@ -27,7 +29,7 @@ namespace test_dmc {
         uint64_t proportion_count = 0;
     };
 
-    using DmcQueue = dmc::PriorityQueue<ClientId,TestRequest>;
+    using DmcQueue = dmc::PriorityQueue<ClientId,sim::TestRequest>;
 
     using DmcServer = SimulatedServer<DmcQueue,
 				      dmc::ClientInfo,

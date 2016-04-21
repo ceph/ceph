@@ -11,6 +11,8 @@
 
 namespace dmc = crimson::dmclock;
 namespace test = test_dmc;
+namespace sim = crimson::qos_simulation;
+
 using namespace std::placeholders;
 
 
@@ -70,7 +72,7 @@ int main(int argc, char* argv[]) {
   // lambda to post a request to the identified server; called by client
   test::SubmitFunc server_post_f =
     [&simulation](const ServerId& server,
-		  const TestRequest& request,
+		  const sim::TestRequest& request,
 		  const test::dmc::ReqParams<ClientId>& req_params) {
     test::DmcServer& s = simulation->get_server(server);
     s.post(request, req_params);
@@ -89,7 +91,7 @@ int main(int argc, char* argv[]) {
 
   test::DmcServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
-		  const TestResponse& resp,
+		  const sim::TestResponse& resp,
 		  const dmc::RespParams<ServerId>& resp_params) {
     simulation->get_client(client_id).receive_response(resp, resp_params);
   };
