@@ -188,8 +188,6 @@ int PMEMDevice::aio_write(
   dout(20) << __func__ << " " << off << "~" << len
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
   assert(len > 0);
   assert(off < size);
   assert(off + len <= size);
@@ -227,8 +225,6 @@ int PMEMDevice::aio_zero(
   IOContext *ioc)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
   assert(len > 0);
   assert(off < size);
   assert(off + len <= size);
@@ -244,8 +240,6 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   dout(5) << __func__ << " " << off << "~" << len
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
   assert(len > 0);
   assert(off < size);
   assert(off + len <= size);
