@@ -202,7 +202,7 @@ bool CrushWrapper::subtree_contains(int root, int item) const
     return false;  // root is a leaf
 
   const crush_bucket *b = get_bucket(root);
-  if (!b)
+  if (IS_ERR(b))
     return false;
 
   for (unsigned j=0; j<b->size; j++) {
@@ -243,7 +243,12 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
-    if (t && t->size) {
+    if (IS_ERR(t)) {
+      ldout(cct, 1) << "remove_item bucket " << item << " does not exist" << dendl;
+      return -ENOENT;
+    }
+
+    if (t->size) {
       ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
@@ -352,7 +357,13 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
-    if (t && t->size) {
+    if (IS_ERR(t)) {
+      ldout(cct, 1) << "remove_item_under bucket " << item
+                    << " does not exist" << dendl;
+      return -ENOENT;
+    }
+
+    if (t->size) {
       ldout(cct, 1) << "remove_item_under bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
@@ -555,7 +566,7 @@ int CrushWrapper::get_children(int id, list<int> *children)
   }
 
   crush_bucket *b = get_bucket(id);
-  if (!b) {
+  if (IS_ERR(b)) {
     return -ENOENT;
   }
 
