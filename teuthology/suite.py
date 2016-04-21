@@ -594,6 +594,16 @@ def get_branch_info(project, branch, project_owner='ceph'):
     if resp.ok:
         return resp.json()
 
+def strip_fragment_path(original_path):
+    """
+    Given a path, remove the text before '/suites/'.  Part of the fix for
+    http://tracker.ceph.com/issues/15470
+    """
+    scan_after = '/suites/'
+    scan_start = original_path.find(scan_after) 
+    if scan_start > 0:
+        return original_path[scan_start + len(scan_after):]
+    return original_path
 
 def schedule_suite(job_config,
                    path,
@@ -624,6 +634,7 @@ def schedule_suite(job_config,
     jobs_to_schedule = []
     jobs_missing_packages = []
     for description, fragment_paths in configs:
+        base_frag_paths = [strip_fragment_path(x) for x in fragment_paths]
         if limit > 0 and len(jobs_to_schedule) >= limit:
             log.info(
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
@@ -636,7 +647,7 @@ def schedule_suite(job_config,
             if not any([x in description for x in filter_list]):
                 all_filt = []
                 for filt_samp in filter_list:
-                    all_filt.extend([x.find(filt_samp) < 0 for x in fragment_paths])
+                    all_filt.extend([x.find(filt_samp) < 0 for x in base_frag_paths])
                 if all(all_filt):
                     continue
         if filter_out:
@@ -645,7 +656,7 @@ def schedule_suite(job_config,
                 continue
             all_filt_val = False
             for filt_samp in filter_list:
-                flist = [filt_samp in x for x in fragment_paths]
+                flist = [filt_samp in x for x in base_frag_paths]
                 if any(flist):
                     all_filt_val = True
                     continue
