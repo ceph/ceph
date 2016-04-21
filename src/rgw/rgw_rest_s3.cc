@@ -930,6 +930,8 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   op_ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
+  
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   if (s->aws4_auth_needs_complete) {
     int ret_auth = do_aws4_auth_completion();
@@ -954,10 +956,8 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
     if (!success) {
       ldout(s->cct, 0) << "failed to parse input: " << data << dendl;
-      free(data);
       return -EINVAL;
     }
-    free(data);
 
     if (!parser.get_location_constraint(location_constraint)) {
       ldout(s->cct, 0) << "provided input did not specify location constraint correctly" << dendl;
