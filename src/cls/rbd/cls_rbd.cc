@@ -295,6 +295,16 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_add_image");
+
+  int cur_state = CG_DEFAULT;
+  int r = read_key(hctx, CG_STATE, &cur_state);
+  if (r < 0) {
+    return r;
+  }
+  if (cur_state != CG_DEFAULT) {
+    return -EALREADY;
+  }
+
   std::string image_id;
   int64_t pool_id;
   try {
@@ -309,9 +319,8 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
 
-  int r = cls_cxx_map_get_vals(hctx, image_key, image_key, RBD_MAX_KEYS_READ, &existing_refs);
+  r = cls_cxx_map_get_vals(hctx, image_key, image_key, RBD_MAX_KEYS_READ, &existing_refs);
   if (r > 0) {
-    CLS_ERR("We already have %d images", r);
     return -EEXIST;
   }
 
@@ -324,7 +333,8 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   bufferlist statebl;
-  ::encode(CG_ADDING_IMAGE, statebl);
+  int next_state = CG_ADDING_IMAGE; // in order to be sure what type is serialized.
+  ::encode(next_state, statebl);
   r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
   if (r < 0) {
     return r;
@@ -351,7 +361,6 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_add_image");
   std::string image_id;
-  int64_t pool_id;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(image_id, iter);
