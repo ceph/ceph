@@ -2758,6 +2758,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (!object_size)
       object_size = op_size;
+    else if (object_size < op_size)
+      op_size = object_size;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
 			    max_objects, cleanup, run_name, no_verify);
