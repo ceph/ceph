@@ -645,8 +645,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       return -EINVAL;
     }
 
+    // we have done sanity check above
     crush_bucket *b = get_bucket(id);
-    assert(b);
 
     if (p->first != b->type) {
       ldout(cct, 1) << "insert_item existing bucket has type "
@@ -808,8 +808,6 @@ int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
     if (!bucket_exists(bid))
       continue;
     crush_bucket *b = get_bucket(bid);
-    if ( b == NULL)
-      continue;
     for (unsigned int i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	return crush_get_bucket_item_weight(b, i);
@@ -851,8 +849,6 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
     if (!bucket_exists(bid))
       continue;
     crush_bucket *b = get_bucket(bid);
-    if ( b == NULL)
-      continue;
     for (unsigned int i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	int diff = crush_bucket_adjust_item_weight(crush, b, id, weight);
