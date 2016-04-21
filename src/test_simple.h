@@ -32,16 +32,16 @@ namespace test_simple {
 
   using SimpleQueue = simp::SimpleQueue<ClientId,sim::TestRequest,Time>;
 
-  using SimpleServer = SimulatedServer<SimpleQueue,
-				       ClientInfo,
-				       simp::ReqParams<ClientId>,
-				       simp::RespParams<ServerId>,
-				       simp::NullData,
-				       SimpleAccum>;
-  using SimpleClient = SimulatedClient<simp::ServiceTracker<ServerId>,
-				       simp::ReqParams<ClientId>,
-				       simp::RespParams<ServerId>,
-				       SimpleAccum>;
+  using SimpleServer = sim::SimulatedServer<SimpleQueue,
+					    ClientInfo,
+					    simp::ReqParams<ClientId>,
+					    simp::RespParams<ServerId>,
+					    simp::NullData,
+					    SimpleAccum>;
+  using SimpleClient = sim::SimulatedClient<simp::ServiceTracker<ServerId>,
+					    simp::ReqParams<ClientId>,
+					    simp::RespParams<ServerId>,
+					    SimpleAccum>;
 
   using CreateQueueF =
     std::function<SimpleQueue*(SimpleQueue::CanHandleRequestFunc,

@@ -18,41 +18,40 @@
 
 
 namespace test_dmc {
-    namespace dmc = crimson::dmclock;
-    namespace sim = crimson::qos_simulation;
+  namespace dmc = crimson::dmclock;
+  namespace sim = crimson::qos_simulation;
 
-  
-    using DmcServerAddInfo = crimson::dmclock::PhaseType;
+  using DmcServerAddInfo = crimson::dmclock::PhaseType;
 
-    struct DmcAccum {
-        uint64_t reservation_count = 0;
-        uint64_t proportion_count = 0;
-    };
+  struct DmcAccum {
+    uint64_t reservation_count = 0;
+    uint64_t proportion_count = 0;
+  };
 
-    using DmcQueue = dmc::PriorityQueue<ClientId,sim::TestRequest>;
+  using DmcQueue = dmc::PriorityQueue<ClientId,sim::TestRequest>;
 
-    using DmcServer = SimulatedServer<DmcQueue,
-				      dmc::ClientInfo,
-				      dmc::ReqParams<ClientId>,
-				      dmc::RespParams<ServerId>,
-				      DmcServerAddInfo,
-				      DmcAccum>;
+  using DmcServer = sim::SimulatedServer<DmcQueue,
+					 dmc::ClientInfo,
+					 dmc::ReqParams<ClientId>,
+					 dmc::RespParams<ServerId>,
+					 DmcServerAddInfo,
+					 DmcAccum>;
 
-    using DmcClient = SimulatedClient<dmc::ServiceTracker<ServerId>,
-				      dmc::ReqParams<ClientId>,
-				      dmc::RespParams<ServerId>,
-				      DmcAccum>;
+  using DmcClient = sim::SimulatedClient<dmc::ServiceTracker<ServerId>,
+					 dmc::ReqParams<ClientId>,
+					 dmc::RespParams<ServerId>,
+					 DmcAccum>;
 
-    using CreateQueueF = std::function<DmcQueue*(DmcQueue::CanHandleRequestFunc,
-                                                 DmcQueue::HandleRequestFunc)>;
+  using CreateQueueF = std::function<DmcQueue*(DmcQueue::CanHandleRequestFunc,
+					       DmcQueue::HandleRequestFunc)>;
 
-    using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
+  using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 
-    using SubmitFunc = DmcClient::SubmitFunc;
+  using SubmitFunc = DmcClient::SubmitFunc;
 
-    extern void dmc_server_accumulate_f(DmcAccum& a,
-                                        const DmcServerAddInfo& add_info);
+  extern void dmc_server_accumulate_f(DmcAccum& a,
+				      const DmcServerAddInfo& add_info);
 
-    extern void dmc_client_accumulate_f(DmcAccum& a,
-                                        const dmc::RespParams<ServerId>& r);
+  extern void dmc_client_accumulate_f(DmcAccum& a,
+				      const dmc::RespParams<ServerId>& r);
 }; // namespace test_dmc

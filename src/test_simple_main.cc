@@ -64,11 +64,11 @@ int main(int argc, char* argv[]) {
     server.post(request, req_params);
   };
 
-  static std::vector<CliInst> no_wait =
-    { { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
-  static std::vector<CliInst> wait =
-    { { wait_op, client_wait },
-      { req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+  static std::vector<sim::CliInst> no_wait =
+    { { sim::req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+  static std::vector<sim::CliInst> wait =
+    { { sim::wait_op, client_wait },
+      { sim::req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
 
   simulation = new test::MySim();
 
