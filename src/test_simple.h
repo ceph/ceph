@@ -24,9 +24,6 @@ namespace crimson {
 
     using Time = double;
 
-    struct ClientInfo {
-    };
-
     struct SimpleAccum {
       uint32_t request_count = 0;
     };
@@ -34,7 +31,6 @@ namespace crimson {
     using SimpleQueue = ssched::SimpleQueue<ClientId,sim::TestRequest,Time>;
 
     using SimpleServer = sim::SimulatedServer<SimpleQueue,
-					      ClientInfo,
 					      ssched::ReqParams<ClientId>,
 					      ssched::RespParams<ServerId>,
 					      ssched::NullData,

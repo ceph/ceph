@@ -21,15 +21,15 @@
 namespace crimson {
   namespace qos_simulation {
 
-    template<typename Q, typename CInfo,
+    template<typename Q,
 	     typename ReqPm, typename RespPm,
 	     typename AddInfo, typename Accum>
     class SimulatedServer {
 
       struct QueueItem {
-	ClientId client;
+	ClientId                     client;
 	std::unique_ptr<TestRequest> request;
-	AddInfo additional;
+	AddInfo                      additional;
 
 	QueueItem(const ClientId& _client,
 		  std::unique_ptr<TestRequest>&& _request,
@@ -43,8 +43,6 @@ namespace crimson {
       }; // QueueItem
 
     public:
-
-      using ClientInfoFunc = std::function<CInfo(ClientId)>;
 
       using ClientRespFunc = std::function<void(ClientId,
 						const TestResponse&,

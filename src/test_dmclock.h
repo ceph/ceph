@@ -33,7 +33,6 @@ namespace crimson {
     using DmcQueue = dmc::PriorityQueue<ClientId,sim::TestRequest>;
 
     using DmcServer = sim::SimulatedServer<DmcQueue,
-					   dmc::ClientInfo,
 					   dmc::ReqParams<ClientId>,
 					   dmc::RespParams<ServerId>,
 					   DmcServerAddInfo,
