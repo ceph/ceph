@@ -45,7 +45,7 @@ namespace test_dmc {
   using CreateQueueF = std::function<DmcQueue*(DmcQueue::CanHandleRequestFunc,
 					       DmcQueue::HandleRequestFunc)>;
 
-  using MySim = Simulation<ServerId,ClientId,DmcServer,DmcClient>;
+  using MySim = sim::Simulation<ServerId,ClientId,DmcServer,DmcClient>;
 
   using SubmitFunc = DmcClient::SubmitFunc;
 

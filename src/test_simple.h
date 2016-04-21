@@ -48,7 +48,7 @@ namespace test_simple {
 			       SimpleQueue::HandleRequestFunc)>;
 
 
-  using MySim = Simulation<ServerId,ClientId,SimpleServer,SimpleClient>;
+  using MySim = sim::Simulation<ServerId,ClientId,SimpleServer,SimpleClient>;
   
   using SubmitFunc = SimpleClient::SubmitFunc;
 

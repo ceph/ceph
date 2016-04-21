@@ -28,11 +28,11 @@ namespace crimson {
 
       struct QueueItem {
 	ClientId client;
-	std::unique_ptr<crimson::qos_simulation::TestRequest> request;
+	std::unique_ptr<TestRequest> request;
 	AddInfo additional;
 
 	QueueItem(const ClientId& _client,
-		  std::unique_ptr<crimson::qos_simulation::TestRequest>&& _request,
+		  std::unique_ptr<TestRequest>&& _request,
 		  AddInfo _additional) :
 	  client(_client),
 	  request(std::move(_request)),
@@ -47,7 +47,7 @@ namespace crimson {
       using ClientInfoFunc = std::function<CInfo(ClientId)>;
 
       using ClientRespFunc = std::function<void(ClientId,
-						const crimson::qos_simulation::TestResponse&,
+						const TestResponse&,
 						const RespPm&)>;
 
       using ServerAccumFunc = std::function<void(Accum& accumulator,
@@ -82,7 +82,7 @@ namespace crimson {
 
       using CanHandleRequestFunc = std::function<bool(void)>;
       using HandleRequestFunc =
-	std::function<void(const ClientId&,std::unique_ptr<crimson::qos_simulation::TestRequest>,AddInfo)>;
+	std::function<void(const ClientId&,std::unique_ptr<TestRequest>,AddInfo)>;
       using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
 					
 
@@ -129,7 +129,7 @@ namespace crimson {
 	delete[] threads;
       }
 
-      void post(const crimson::qos_simulation::TestRequest& request,
+      void post(const TestRequest& request,
 		const ReqPm& req_params) {
 	priority_queue->add_request(request, req_params);
       }
@@ -146,7 +146,7 @@ namespace crimson {
     protected:
 
       void inner_post(const ClientId& client,
-		      std::unique_ptr<crimson::qos_simulation::TestRequest> request,
+		      std::unique_ptr<TestRequest> request,
 		      AddInfo additional) {
 	Lock l(inner_queue_mtx);
 	assert(!finishing);
@@ -175,7 +175,7 @@ namespace crimson {
 	    // notify server of completion
 	    std::this_thread::sleep_for(op_time);
 
-	    crimson::qos_simulation::TestResponse resp(req->epoch);
+	    TestResponse resp(req->epoch);
 	    // TODO: rather than assuming this constructor exists, perhaps
 	    // pass in a function that does this mapping?
 	    sendResponse(client, resp, RespPm(id, additional));
@@ -190,7 +190,7 @@ namespace crimson {
       }
 
       inline void sendResponse(const ClientId& client,
-			       const crimson::qos_simulation::TestResponse& resp,
+			       const TestResponse& resp,
 			       const RespPm& resp_params) {
 	client_resp_f(client, resp, resp_params);
       }
