@@ -1107,10 +1107,11 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     // dirstat
     DirStat dst(p);
     __u32 numdn;
-    __u8 complete, end;
+    __u16 flags;
     ::decode(numdn, p);
-    ::decode(end, p);
-    ::decode(complete, p);
+    ::decode(flags, p);
+
+    bool end = ((unsigned)flags & CEPH_READDIR_FRAG_END);
 
     frag_t fg = (unsigned)request->head.args.readdir.frag;
     uint64_t readdir_offset = dirp->next_offset;
@@ -1124,7 +1125,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       dirp->offset = dir_result_t::make_fpos(fg, readdir_offset);
     }
 
-    ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << (int)end
+    ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << end
 		   << ", offset " << readdir_offset
 		   << ", readdir_start " << readdir_start << dendl;
 
@@ -6943,6 +6944,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->set_filepath(path); 
   req->set_inode(diri.get());
   req->head.args.readdir.frag = fg;
+  req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
   if (dirp->last_name.length()) {
     req->path2.set_path(dirp->last_name.c_str());
   }
