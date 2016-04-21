@@ -93,6 +93,7 @@ OPTION(xio_mp_max_1k, OPT_INT, 8192) // max 1K chunks
 OPTION(xio_mp_max_page, OPT_INT, 4096) // max 1K chunks
 OPTION(xio_mp_max_hint, OPT_INT, 4096) // max size-hint chunks
 OPTION(xio_portal_threads, OPT_INT, 2) // xio portal threads per messenger
+OPTION(xio_max_conns_per_portal, OPT_INT, 32) // max xio_connections per portal/ctx
 OPTION(xio_transport_type, OPT_STR, "rdma") // xio transport type: {rdma or tcp}
 OPTION(xio_max_send_inline, OPT_INT, 512) // xio maximum threshold to send inline
 

@@ -131,28 +131,28 @@ private:
   friend class XioMessenger;
 
 public:
-  explicit XioPortal(Messenger *_msgr) :
-  msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
-  portal_id(NULL), _shutdown(false), drained(false),
-  magic(0),
-  special_handling(0)
-    {
-      pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
-      pthread_mutex_init(&mtx, NULL);
+  explicit XioPortal(Messenger *_msgr, int max_conns) :
+    msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
+    portal_id(NULL), _shutdown(false), drained(false),
+    magic(0),
+    special_handling(0)
+  {
+    pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
+    pthread_mutex_init(&mtx, NULL);
 
-      /* a portal is an xio_context and event loop */
-      ctx = xio_context_create(NULL, 0 /* poll timeout */, -1 /* cpu hint */);
+    struct xio_context_params ctx_params;
+    memset(&ctx_params, 0, sizeof(ctx_params));
+    ctx_params.user_context = this;
+    /*
+     * hint to Accelio the total number of connections that will share
+     * this context's resources: internal primary task pool...
+     */
+    ctx_params.max_conns_per_ctx = max_conns;
 
-      /* associate this XioPortal object with the xio_context handle */
-      struct xio_context_attr xca;
-      xca.user_context = this;
-      xio_modify_context(ctx, &xca, XIO_CONTEXT_ATTR_USER_CTX);
-
-      if (magic & (MSG_MAGIC_XIO)) {
-	printf("XioPortal %p created ev_loop %p ctx %p\n",
-	       this, ev_loop, ctx);
-      }
-    }
+    /* a portal is an xio_context and event loop */
+    ctx = xio_context_create(&ctx_params, 0 /* poll timeout */, -1 /* cpu hint */);
+    assert(ctx && "Whoops, failed to create portal/ctx");
+  }
 
   int bind(struct xio_session_ops *ops, const string &base_uri,
 	   uint16_t port, uint16_t *assigned_port);
@@ -355,21 +355,20 @@ private:
   vector<XioPortal*> portals;
   char **p_vec;
   int n;
-  int last_use;
+  int last_unused;
 
 public:
-  XioPortals(Messenger *msgr, int _n) : p_vec(NULL)
+  XioPortals(Messenger *msgr, int _n, int nconns) : p_vec(NULL), last_unused(0)
   {
-    /* portal0 */
-    portals.push_back(new XioPortal(msgr));
-    last_use = 0;
+    n = max(_n, 1);
 
-    /* enforce at least two portals if bind */
-    if (_n < 2)
-      _n = 2;
-    n = _n;
-
-    /* additional portals allocated on bind() */
+    portals.resize(n);
+    for (int i = 0; i < n; i++) {
+      if (!portals[i]) {
+        portals[i] = new XioPortal(msgr, nconns);
+        assert(portals[i] != nullptr);
+      }
+    }
   }
 
   vector<XioPortal*>& get() { return portals; }
@@ -384,17 +383,18 @@ public:
     return n;
   }
 
-  int get_last_use()
+  int get_last_unused()
   {
-    int pix = last_use;
-    if (++last_use >= get_portals_len() - 1)
-      last_use = 0;
+    int pix = last_unused;
+    if (++last_unused >= get_portals_len())
+      last_unused = 0;
     return pix;
   }
 
-  XioPortal* get_portal0()
+  XioPortal* get_next_portal()
   {
-    return portals[0];
+    int pix = get_last_unused();
+    return portals[pix];
   }
 
   int bind(struct xio_session_ops *ops, const string& base_uri,
@@ -405,11 +405,15 @@ public:
 	     void *cb_user_context)
   {
     const char **portals_vec = get_vec();
-    int pix = get_last_use();
+    int pix = get_last_unused();
 
-    return xio_accept(session,
-		      (const char **)&(portals_vec[pix]),
-		      1, NULL, 0);
+    if (pix == 0) {
+      return xio_accept(session, NULL, 0, NULL, 0);
+    } else {
+      return xio_accept(session,
+			(const char **)&(portals_vec[pix]),
+			1, NULL, 0);
+    }
   }
 
   void start()
@@ -417,14 +421,10 @@ public:
     XioPortal *portal;
     int p_ix, nportals = portals.size();
 
-    /* portal_0 is the new-session handler, portal_1+ terminate
-     * active sessions */
-
-    p_vec = new char*[(nportals-1)];
-    for (p_ix = 1; p_ix < nportals; ++p_ix) {
+    p_vec = new char*[nportals];
+    for (p_ix = 0; p_ix < nportals; ++p_ix) {
       portal = portals[p_ix];
-      /* shift left */
-      p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
+      p_vec[p_ix] = (char*) /* portal->xio_uri.c_str() */
 			portal->portal_id;
     }
 

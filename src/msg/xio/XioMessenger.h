@@ -68,7 +68,7 @@ public:
 
   virtual ~XioMessenger();
 
-  XioPortal* default_portal() { return portals.get_portal0(); }
+  XioPortal* get_portal() { return portals.get_next_portal(); }
 
   virtual void set_myaddr(const entity_addr_t& a) {
     Messenger::set_myaddr(a);
@@ -153,6 +153,9 @@ public:
    */
   void learned_addr(const entity_addr_t& peer_addr_for_me);
 
+private:
+  int get_nconns_per_portal();
+  int get_nportals();
 
 protected:
   virtual void ready()
