@@ -8677,7 +8677,7 @@ int Client::fstat(int fd, struct stat *stbuf)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  int r = _getattr(f->inode, -1);
+  int r = _getattr(f->inode, CEPH_STAT_CAP_INODE_ALL);
   if (r < 0)
     return r;
   fill_stat(f->inode, stbuf, NULL);
