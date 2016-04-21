@@ -726,7 +726,7 @@ private:
   }
   crush_rule_step *get_rule_step(unsigned ruleno, unsigned step) const {
     crush_rule *n = get_rule(ruleno);
-    if (!n) return (crush_rule_step *)(-EINVAL);
+    if (IS_ERR(n)) return (crush_rule_step *)(-EINVAL);
     if (step >= n->len) return (crush_rule_step *)(-EINVAL);
     return &n->steps[step];
   }
