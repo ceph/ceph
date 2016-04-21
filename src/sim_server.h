@@ -46,6 +46,7 @@ namespace crimson {
 
       using ClientRespFunc = std::function<void(ClientId,
 						const TestResponse&,
+						const ServerId&,
 						const RespPm&)>;
 
       using ServerAccumFunc = std::function<void(Accum& accumulator,
@@ -176,7 +177,7 @@ namespace crimson {
 	    TestResponse resp(req->epoch);
 	    // TODO: rather than assuming this constructor exists, perhaps
 	    // pass in a function that does this mapping?
-	    sendResponse(client, resp, RespPm(id, additional));
+	    client_resp_f(client, resp, id, additional);
 
 	    priority_queue->request_completed();
 
@@ -185,12 +186,6 @@ namespace crimson {
 	    break;
 	  }
 	}
-      }
-
-      inline void sendResponse(const ClientId& client,
-			       const TestResponse& resp,
-			       const RespPm& resp_params) {
-	client_resp_f(client, resp, resp_params);
       }
     }; // class SimulatedServer
 

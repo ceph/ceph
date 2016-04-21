@@ -84,7 +84,8 @@ namespace crimson {
 
       struct RespQueueItem {
 	TestResponse response;
-	RespPm resp_params;
+	ServerId     server_id;
+	RespPm       resp_params;
       };
 
       const ClientId id;
@@ -173,9 +174,10 @@ namespace crimson {
       }
 
       void receive_response(const TestResponse& resp,
+			    const ServerId& server_id,
 			    const RespPm& resp_params) {
 	RespGuard g(mtx_resp);
-	resp_queue.push_back(RespQueueItem{resp, resp_params});
+	resp_queue.push_back(RespQueueItem{resp, server_id, resp_params});
 	cv_resp.notify_one();
       }
 
@@ -255,7 +257,7 @@ namespace crimson {
 	    TestResponse& resp = item.response;
 #endif
 
-	    service_tracker.track_resp(item.resp_params);
+	    service_tracker.track_resp(item.server_id, item.resp_params);
 
 	    --outstanding_ops;
 	    if (notify_req_cv) {

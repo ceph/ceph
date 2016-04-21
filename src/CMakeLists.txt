@@ -12,7 +12,7 @@ set(simple_sim_srcs test_simple.cc test_simple_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
 
 set(dmc_srcs
-  dmclock_server.cc dmclock_util.cc dmclock_recs.cc crimson/src/run_every.cc)
+  dmclock_server.cc dmclock_util.cc crimson/src/run_every.cc)
 
 set_source_files_properties(${simple_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}
   PROPERTIES

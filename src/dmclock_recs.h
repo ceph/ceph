@@ -19,7 +19,10 @@ namespace crimson {
 
     enum class PhaseType { reservation, priority };
 
-    std::ostream& operator<<(std::ostream& out, PhaseType phase);
+    inline std::ostream& operator<<(std::ostream& out, const PhaseType& phase) {
+      out << (PhaseType::reservation == phase ? "reservation" : "priority");
+      return out;
+    }
 
     template<typename C>
     struct ReqParams {
@@ -52,33 +55,6 @@ namespace crimson {
 	  ", rho:" << rp.rho << " }";
 	return out;
       }
-    };
-
-    // S is server id type
-    template<typename S>
-    struct RespParams {
-      S         server;
-      PhaseType phase;
-
-      RespParams(const S& _server, const PhaseType& _phase) :
-	server(_server),
-	phase(_phase)
-      {
-	// empty
-      }
-
-      RespParams(const RespParams& other) :
-	server(other.server),
-	phase(other.phase)
-      {
-	// empty
-      }
-
-      friend std::ostream& operator<<(std::ostream& out, const RespParams& rp) {
-	out << "RespParams{ server:" << rp.server <<
-	  ", phase:" << rp.phase << " }";
-	return out;
-      }
-    };
+    }; // class ReqParams
   }
 }

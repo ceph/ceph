@@ -31,8 +31,8 @@ void test::dmc_server_accumulate_f(test::DmcAccum& a,
 
 
 void test::dmc_client_accumulate_f(test::DmcAccum& a,
-				   const test::dmc::RespParams<ServerId>& r) {
-  if (test::dmc::PhaseType::reservation == r.phase) {
+				   const test::dmc::PhaseType& phase) {
+  if (test::dmc::PhaseType::reservation == phase) {
     ++a.reservation_count;
   } else {
     ++a.proportion_count;

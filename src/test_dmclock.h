@@ -34,13 +34,13 @@ namespace crimson {
 
     using DmcServer = sim::SimulatedServer<DmcQueue,
 					   dmc::ReqParams<ClientId>,
-					   dmc::RespParams<ServerId>,
+					   dmc::PhaseType,
 					   DmcServerAddInfo,
 					   DmcAccum>;
 
     using DmcClient = sim::SimulatedClient<dmc::ServiceTracker<ServerId>,
 					   dmc::ReqParams<ClientId>,
-					   dmc::RespParams<ServerId>,
+					   dmc::PhaseType,
 					   DmcAccum>;
 
     using CreateQueueF = std::function<DmcQueue*(DmcQueue::CanHandleRequestFunc,
@@ -54,6 +54,6 @@ namespace crimson {
 					const DmcServerAddInfo& add_info);
 
     extern void dmc_client_accumulate_f(DmcAccum& a,
-					const dmc::RespParams<ServerId>& r);
+					const dmc::PhaseType& phase);
   } // namespace test_dmc
 } // namespace crimson

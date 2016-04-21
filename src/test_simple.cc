@@ -28,6 +28,6 @@ void test::simple_server_accumulate_f(test::SimpleAccum& a,
 
 
 void test::simple_client_accumulate_f(test::SimpleAccum& a,
-				      const ssched::RespParams<ServerId>& r) {
+				      const ssched::NullData& ignore) {
   // empty
 }

@@ -28,7 +28,7 @@ namespace crimson {
       }
 
 
-      void track_resp(const RespParams<S>& resp_params) {
+      void track_resp(const S& server_id, const NullData& ignore) {
 	// empty
       }
 

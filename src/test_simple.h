@@ -32,12 +32,12 @@ namespace crimson {
 
     using SimpleServer = sim::SimulatedServer<SimpleQueue,
 					      ssched::ReqParams<ClientId>,
-					      ssched::RespParams<ServerId>,
+					      ssched::NullData,
 					      ssched::NullData,
 					      SimpleAccum>;
     using SimpleClient = sim::SimulatedClient<ssched::ServiceTracker<ServerId>,
 					      ssched::ReqParams<ClientId>,
-					      ssched::RespParams<ServerId>,
+					      ssched::NullData,
 					      SimpleAccum>;
 
     using CreateQueueF =
@@ -53,6 +53,6 @@ namespace crimson {
 					   const ssched::NullData& add_info);
 
     extern void simple_client_accumulate_f(SimpleAccum& a,
-					   const ssched::RespParams<ServerId>& r);
+					   const ssched::NullData& ignore);
   } // namespace test_simple
 } // namespace crimson

@@ -96,8 +96,11 @@ int main(int argc, char* argv[]) {
     test::DmcServer::ClientRespFunc client_response_f =
         [&simulation](ClientId client_id,
                       const sim::TestResponse& resp,
-                      const dmc::RespParams<ServerId>& resp_params) {
-        simulation->get_client(client_id).receive_response(resp, resp_params);
+                      const ServerId& server_id,
+                      const dmc::PhaseType& phase) {
+        simulation->get_client(client_id).receive_response(resp,
+                                                           server_id,
+                                                           phase);
     };
 
 

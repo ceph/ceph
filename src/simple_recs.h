@@ -21,6 +21,11 @@ namespace crimson {
       // intentionally empty
     };
 
+    inline std::ostream& operator<<(std::ostream& out, const NullData& n) {
+      out << "NullData{intentionally empty}";
+      return out;
+    }
+
     template<typename C>
     struct ReqParams {
       C        client;
@@ -41,36 +46,6 @@ namespace crimson {
 	out << "ReqParams{ client:" << rp.client << "}";
 	return out;
       }
-    };
-    
-    // S is server id type
-    template<typename S>
-    struct RespParams {
-      S         server;
-
-      RespParams(const S& _server) :
-	server(_server)
-      {
-	// empty
-      }
-
-      RespParams(const S& _server, NullData ignore) :
-	server(_server)
-      {
-	// empty
-      }
-
-
-      RespParams(const RespParams& other) :
-	server(other.server)
-      {
-	// empty
-      }
-
-      friend std::ostream& operator<<(std::ostream& out, const RespParams& rp) {
-	out << "RespParams{ server:" << rp.server << "}";
-	return out;
-      }
-    };
+    }; // struct ReqParams
   }
 }

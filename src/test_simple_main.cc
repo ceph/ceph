@@ -89,8 +89,11 @@ int main(int argc, char* argv[]) {
   test::SimpleServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
 		  const sim::TestResponse& resp,
-		  const ssched::RespParams<ServerId>& resp_params) {
-    simulation->get_client(client_id).receive_response(resp, resp_params);
+		  const ServerId& server_id,
+		  const ssched::NullData& resp_params) {
+    simulation->get_client(client_id).receive_response(resp,
+						       server_id,
+						       resp_params);
   };
 
   test::CreateQueueF create_queue_f =

@@ -112,23 +112,23 @@ namespace crimson {
       /*
        * Incorporates the RespParams received into the various counter.
        */
-      void track_resp(const RespParams<S>& resp_params) {
+      void track_resp(const S& server_id, const PhaseType& phase) {
 	DataGuard g(data_mtx);
 
-	auto it = server_map.find(resp_params.server);
+	auto it = server_map.find(server_id);
 	if (server_map.end() == it) {
 	  // this code can only run if a request did not precede the
 	  // response or if the record was cleaned up b/w when
 	  // the request was made and now
 	  ServerInfo si(delta_counter, rho_counter);
-	  si.resp_update(resp_params.phase);
-	  server_map.emplace(resp_params.server, si);
+	  si.resp_update(phase);
+	  server_map.emplace(server_id, si);
 	} else {
-	  it->second.resp_update(resp_params.phase);
+	  it->second.resp_update(phase);
 	}
 
 	++delta_counter;
-	if (PhaseType::reservation == resp_params.phase) {
+	if (PhaseType::reservation == phase) {
 	  ++rho_counter;
 	}
       }
