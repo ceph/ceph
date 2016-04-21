@@ -156,6 +156,16 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "create_cg", bl, bl2);
     }
 
+    int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+	                 std::string &cg_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(cg_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "image_add_cg_ref", bl, bl2);
+    }
+
     int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
 	             std::string &image_id, int64_t pool_id)
     {
@@ -166,6 +176,14 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "cg_add_image", bl, bl2);
     }
 
+    int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
+		        std::string &image_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(image_id, bl);
+
+      return ioctx->exec(oid, "rbd", "cg_remove_image", bl, bl2);
+    }
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix)

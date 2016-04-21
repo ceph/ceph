@@ -1093,6 +1093,18 @@ err_remove_id:
 
     r = cls_client::cg_add_image(&cg_ioctx, cg_header_oid, imctx->id, image_ioctx.get_id());
 
+    if (r < 0) {
+      lderr(cct) << "error adding image reference to consistency group: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = cls_client::image_add_cg_ref(&image_ioctx, imctx->header_oid, cg_id, cg_ioctx.get_id());
+    if (r < 0) {
+      lderr(cct) << "error adding cg reference to image: "
+		 << cpp_strerror(-r) << dendl;
+      cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id);
+    }
     return 0;
   }
 

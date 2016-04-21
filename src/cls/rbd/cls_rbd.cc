@@ -68,6 +68,8 @@ cls_handle_t h_class;
 cls_method_handle_t h_create;
 cls_method_handle_t h_create_cg;
 cls_method_handle_t h_cg_add_image;
+cls_method_handle_t h_cg_remove_image;
+cls_method_handle_t h_image_add_cg_ref;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_set_features;
 cls_method_handle_t h_get_size;
@@ -138,6 +140,7 @@ cls_method_handle_t h_mirror_image_remove;
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 #define RBD_METADATA_KEY_PREFIX "metadata_"
 #define RBD_MAX_OBJECT_MAP_OBJECT_COUNT 256000000
+#define RBD_CG_REF_KEY "cg_ref"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -256,6 +259,38 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "image_add_cg_ref");
+  std::string cg_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(cg_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  map<string, bufferlist> existing_refs;
+
+  int r = cls_cxx_map_get_vals(hctx, RBD_CG_REF_KEY, RBD_CG_REF_KEY, RBD_MAX_KEYS_READ, &existing_refs);
+  if (r > 0) {
+    return -ETOOMANYREFS;
+  }
+
+  bufferlist refbl;
+  ::encode(pool_id, refbl);
+  ::encode(cg_id, refbl);
+  r = cls_cxx_map_set_val(hctx, RBD_CG_REF_KEY, &refbl);
+
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_add_image");
@@ -269,12 +304,13 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  set<string> existing_refs;
+  map<string, bufferlist> existing_refs;
 
   string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
 
-  int r = cls_cxx_map_get_keys(hctx, image_key, RBD_MAX_KEYS_READ, &existing_refs);
-  if (r > 1) {
+  int r = cls_cxx_map_get_vals(hctx, image_key, image_key, RBD_MAX_KEYS_READ, &existing_refs);
+  if (r > 0) {
+    CLS_ERR("We already have %d images", r);
     return -EEXIST;
   }
 
@@ -294,6 +330,39 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   return 0;
+}
+
+int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_add_image");
+  std::string image_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  set<string> existing_refs;
+
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
+
+  int r = cls_cxx_map_remove_key(hctx, image_key);
+  if (r < 0) {
+    CLS_ERR("error removing image from cg: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  bufferlist statebl;
+  ::encode(CG_DEFAULT, statebl);
+  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+
 }
 
 /**
@@ -3818,6 +3887,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "cg_add_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_add_image, &h_cg_add_image);
+  cls_register_cxx_method(h_class, "cg_remove_image",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_remove_image, &h_cg_remove_image);
+  cls_register_cxx_method(h_class, "image_add_cg_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  image_add_cg_ref, &h_image_add_cg_ref);
   cls_register_cxx_method(h_class, "get_features",
 			  CLS_METHOD_RD,
 			  get_features, &h_get_features);
