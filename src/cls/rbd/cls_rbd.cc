@@ -69,6 +69,7 @@ cls_method_handle_t h_create;
 cls_method_handle_t h_create_cg;
 cls_method_handle_t h_cg_add_image;
 cls_method_handle_t h_cg_remove_image;
+cls_method_handle_t h_cg_to_removing;
 cls_method_handle_t h_image_add_cg_ref;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_set_features;
@@ -325,6 +326,20 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist statebl;
   ::encode(CG_ADDING_IMAGE, statebl);
   r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int cg_to_removing(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_to_removing");
+
+  bufferlist statebl;
+  ::encode(CG_REMOVING_IMAGE, statebl);
+  int r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
   if (r < 0) {
     return r;
   }
@@ -3890,6 +3905,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "cg_remove_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_remove_image, &h_cg_remove_image);
+  cls_register_cxx_method(h_class, "cg_to_removing",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_to_removing, &h_cg_to_removing);
   cls_register_cxx_method(h_class, "image_add_cg_ref",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  image_add_cg_ref, &h_image_add_cg_ref);

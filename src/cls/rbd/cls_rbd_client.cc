@@ -184,6 +184,14 @@ namespace librbd {
 
       return ioctx->exec(oid, "rbd", "cg_remove_image", bl, bl2);
     }
+
+    int cg_to_removing(librados::IoCtx *ioctx, const std::string &oid)
+    {
+      bufferlist bl, bl2;
+
+      return ioctx->exec(oid, "rbd", "cg_to_removing", bl, bl2);
+    }
+
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix)
