@@ -491,17 +491,17 @@ int ExtentManager::write_uncompressed(uint64_t offset, const bufferlist& bl, voi
   while (l > 0 && r >= 0) {
     BlobRef blob_ref = UNDEF_BLOB_REF;
     bluestore_blob_map_t::iterator blob_it;
-    int processed = allocate_raw_blob(l, opaque, check_info, &blob_ref, &blob_it);
-    if (processed < 0) {
+    uint32_t to_allocate = MIN(l, get_max_blob_size());
+    r = allocate_raw_blob(to_allocate, opaque, check_info, &blob_ref, &blob_it);
+    if (r < 0) {
       release_lextents(res_lextents->begin(), res_lextents->end(), false, false, opaque);
       res_lextents->clear();
-      r = processed;
       //dout(0)<<" write failed, can't allocate"<< dendl;
     }
     else {
-      res_lextents->emplace(o, live_lextent_t(blob_it, blob_ref, 0, processed, 0));
-      o += processed;
-      l -= processed;
+      res_lextents->emplace(o, live_lextent_t(blob_it, blob_ref, 0, to_allocate, 0));
+      o += to_allocate;
+      l -= to_allocate;
     }
   }
 
@@ -526,7 +526,7 @@ int ExtentManager::write_compressed(uint64_t offset, const bufferlist& bl, void*
     compressed_buffers.resize(sz + 1);
     int processed = l > get_min_alloc_size() ?
       compress_and_allocate_blob(input_offs, bl, opaque, check_info, compress_info, &blob_ref, &blob_it, &compressed_buffers[sz]) :
-      allocate_raw_blob(l, opaque, check_info, &blob_ref, &blob_it);
+      allocate_raw_blob(MIN(l, get_max_blob_size()), opaque, check_info, &blob_ref, &blob_it);
     if (processed < 0) {
       release_lextents(res_lextents->begin(), res_lextents->end(), false, false, opaque);
       res_lextents->clear();
@@ -549,8 +549,7 @@ int ExtentManager::write_compressed(uint64_t offset, const bufferlist& bl, void*
 
 int ExtentManager::allocate_raw_blob(uint32_t length, void* opaque, const ExtentManager::CheckSumInfo& check_info, BlobRef* blob_ref, bluestore_blob_map_t::iterator* res_blob_it)
 {
-  uint32_t processed = MIN(length, get_max_blob_size());
-
+  assert(length <= get_max_blob_size());
   //allocate a new blob
   auto blob_it = m_blobs.end();
   if (blob_it != m_blobs.begin()) {
@@ -560,14 +559,14 @@ int ExtentManager::allocate_raw_blob(uint32_t length, void* opaque, const Extent
   else
     *blob_ref = FIRST_BLOB_REF;
 
-  blob_it = m_blobs.emplace(*blob_ref, bluestore_blob_t(processed, 0, check_info.csum_type, check_info.csum_block_order)).first;
+  blob_it = m_blobs.emplace(*blob_ref, bluestore_blob_t(length, 0, check_info.csum_type, check_info.csum_block_order)).first;
   bluestore_blob_t& blob = blob_it->second;
 
   //allocate space for the new blob
-  uint32_t to_allocate = ROUND_UP_TO(processed, get_min_alloc_size());
+  uint32_t to_allocate = ROUND_UP_TO(length, get_min_alloc_size());
   int r = m_blockop_inf.allocate_blocks(to_allocate, opaque, &blob.extents);
   if (r >= 0) {
-    r = processed;
+    r = length;
     *res_blob_it = blob_it;
   } else {
     m_blobs.erase(blob_it);
@@ -594,7 +593,14 @@ int ExtentManager::compress_and_allocate_blob(
 
   compressed_buffer->clear();
   r = m_compressor.compress(compress_info, input_offs, len, bl, opaque, compressed_buffer);
-  if (r >= 0) {
+  bool bypass = false;
+  if(r >= 0) {
+    uint32_t aligned_len1 = ROUND_UP_TO(len, get_min_alloc_size());
+    uint32_t aligned_len2 = ROUND_UP_TO(compressed_buffer->length(), get_min_alloc_size());
+    bypass = aligned_len2 > get_max_blob_size() || aligned_len2 >= aligned_len1; //no saving
+  }
+
+  if (r >= 0 && !bypass) {
     r = allocate_raw_blob(compressed_buffer->length(), opaque, check_info, blob_ref, res_blob_it);
     if (r >= 0) {
       (*res_blob_it)->second.set_flag(bluestore_blob_t::BLOB_COMPRESSED);
@@ -602,6 +608,7 @@ int ExtentManager::compress_and_allocate_blob(
     }
   } else {
     dout(20) << __func__ << " compression bypassed, status:" << r << dendl;
+    compressed_buffer->clear();
     r = allocate_raw_blob(len, opaque, check_info, blob_ref, res_blob_it);
     if (r >= 0) {
       r = len;
