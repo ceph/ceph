@@ -22,18 +22,77 @@
 #define dout_prefix *_dout << "ext_mgr:"
 
 
-bluestore_blob_t* ExtentManager::get_blob(BlobRef blob)
+bluestore_blob_map_t::iterator ExtentManager::get_blob_iterator(BlobRef blob_ref)
 {
-  bluestore_blob_t* res = nullptr;
-  bluestore_blob_map_t::iterator it = m_blobs.find(blob);
-  if (it != m_blobs.end())
-    res = &it->second;
+  bluestore_blob_map_t::iterator res = m_blobs.end();
+  if (blob_ref == UNDEF_BLOB_REF)
+    return res;
+  res = m_blobs.find(blob_ref);
   return res;
+}
+
+bluestore_blob_t* ExtentManager::get_blob(BlobRef blob_ref)
+{
+  bluestore_blob_t* res = NULL;
+  auto it = get_blob_iterator(blob_ref);
+  if (it != m_blobs.end())
+    res = &(it->second);
+  return res;
+}
+
+void ExtentManager::ref_blob(BlobRef blob_ref)
+{
+  auto it = m_blobs.find(blob_ref);
+  if (it != m_blobs.end())
+    it->second.num_refs++;
+}
+
+void ExtentManager::ref_blob(bluestore_blob_map_t::iterator blob_it)
+{
+  if (blob_it != m_blobs.end()) {
+    blob_it->second.num_refs++;
+  }
+}
+
+void ExtentManager::deref_blob(bluestore_blob_map_t::iterator blob_it, bool zero, void* opaque)
+{
+  if (blob_it != m_blobs.end()) {
+    blob_it->second.num_refs--;
+    if (blob_it->second.num_refs == 0) {
+
+      bluestore_blob_t* blob = &(blob_it->second);
+      auto end_ext = blob->extents.end();
+      auto ext = blob->extents.begin();
+      auto l = blob->length;
+      uint64_t x_offs = 0;
+      while (ext != end_ext) {
+        if (zero && x_offs < l) {
+          uint32_t x_len = ROUND_UP_TO(MIN(ext->length, l - x_offs), m_blockop_inf.get_block_size());
+          m_blockop_inf.zero_block(ext->offset, x_len, opaque);
+        }
+        m_blockop_inf.release_block(ext->offset, ext->length, opaque);
+        x_offs += ext->length;
+        ++ext;
+      }
+      m_blobs.erase(blob_it);
+    }
+  }
+}
+
+uint64_t ExtentManager::get_max_blob_size() const
+{
+  //FIXME: temporary implementation
+  return 4 * get_min_alloc_size();
+}
+uint64_t ExtentManager::get_min_alloc_size() const
+{
+  //FIXME: temporary implementation
+  return 0x10000;
 }
 
 uint64_t ExtentManager::get_read_block_size(const bluestore_blob_t* blob) const
 {
-  uint64_t block_size = m_device.get_block_size();
+  uint64_t block_size = m_blockop_inf.get_block_size();
   if(blob->csum_type != bluestore_blob_t::CSUM_NONE)
     block_size = MAX(blob->get_csum_block_size(), block_size);
   return block_size;
@@ -46,7 +105,7 @@ int ExtentManager::read(uint64_t offset, uint32_t length, void* opaque, bufferli
   bluestore_lextent_map_t::iterator lext = m_lextents.upper_bound(offset);
   uint32_t l = length;
   uint64_t o = offset;
-  if (lext == m_lextents.begin() && offset+length <= lext->first){
+  if (lext == m_lextents.begin() && offset + length <= lext->first){
     result->append_zero(length);
     return 0;
   } else if(lext == m_lextents.begin()) {
@@ -60,9 +119,9 @@ int ExtentManager::read(uint64_t offset, uint32_t length, void* opaque, bufferli
   while (l > 0 && lext != m_lextents.end()) {
     bluestore_blob_t* bptr = get_blob(lext->second.blob);
     assert(bptr != nullptr);
-    unsigned l2read;
+    uint32_t l2read;
     if(o >= lext->first && o < lext->first + lext->second.length) {
-      unsigned r_off = o - lext->first;
+      uint32_t r_off = o - lext->first;
       l2read = MIN(l, lext->second.length - r_off);
       regions2read_t& regions = blobs2read[bptr];
       regions.push_back(region_t(o, r_off + lext->second.x_offset, 0, l2read));
@@ -149,7 +208,7 @@ int ExtentManager::read_whole_blob(const bluestore_blob_t* blob, void* opaque, b
 {
   result->clear();
 
-  uint64_t block_size = m_device.get_block_size();
+  uint64_t block_size = m_blockop_inf.get_block_size();
 
   uint32_t l = blob->length;
   uint64_t ext_pos = 0;
@@ -161,7 +220,7 @@ int ExtentManager::read_whole_blob(const bluestore_blob_t* blob, void* opaque, b
 
     bufferlist bl;
     //  dout(30) << __func__ << "  reading " << it->offset << "~" << x_len << dendl;
-    int r = m_device.read_block(it->offset, x_len, opaque, &bl);
+    int r = m_blockop_inf.read_block(it->offset, x_len, opaque, &bl);
     if (r < 0) {
       return r;
     }
@@ -203,7 +262,7 @@ int ExtentManager::read_extent_sparse(const bluestore_blob_t* blob, const bluest
 
 //    dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
     bufferlist bl;
-    int r = m_device.read_block(r_off + extent->offset, r_len, opaque, &bl);
+    int r = m_blockop_inf.read_block(r_off + extent->offset, r_len, opaque, &bl);
     if (r < 0) {
       return r;
     }
@@ -225,8 +284,8 @@ int ExtentManager::blob2read_to_extents2read(const bluestore_blob_t* blob, Exten
 {
   result->clear();
 
-  vector<bluestore_extent_t>::const_iterator ext_it = blob->extents.cbegin();
-  vector<bluestore_extent_t>::const_iterator ext_end = blob->extents.cend();
+  bluestore_extent_vector_t::const_iterator ext_it = blob->extents.cbegin();
+  bluestore_extent_vector_t::const_iterator ext_end = blob->extents.cend();
 
   uint64_t ext_pos = 0;
   uint64_t l = 0;
@@ -300,6 +359,363 @@ int ExtentManager::verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffs
 
   std::copy(start, end, csum_data.begin());
 
-  int r = m_csum_verifier.verify((bluestore_blob_t::CSumType)blob->csum_type, blob->get_csum_block_size(), csum_data, bl, opaque);
+  int r = m_csum_verifier.verify((bluestore_blob_t::CSumType)blob->csum_type, blob->get_csum_value_size(), blob->get_csum_block_size(), bl, opaque, csum_data);
   return r;
+}
+
+void ExtentManager::preprocess_changes(uint64_t offset, uint64_t length, bluestore_lextent_map_t* updated_lextents, ExtentManager::live_lextent_map_t* removed_lextents, list<BlobRef>* blobs2ref)
+{
+  auto lext_begin = m_lextents.begin();
+  auto lext_end = m_lextents.end();
+
+  //Check for append and position the iterator to the lextent prior to the specified offset
+  bool append = false;
+  auto lext_it = m_lextents.upper_bound(offset);
+  if (lext_it == lext_end) {
+    if (lext_it != lext_begin) {
+      --lext_it;
+      append = lext_it->first + lext_it->second.length <= offset;
+    }
+    else
+      append = true;
+  }
+  else if (lext_it != lext_begin)
+    --lext_it;
+
+  if (!append) {
+    uint64_t write_end_offset = offset + length;
+    while (lext_it != lext_end && lext_it->first < write_end_offset) {
+
+      uint64_t lext_end_offset = lext_it->first + lext_it->second.length;
+      if (lext_it->first >= offset &&  lext_end_offset <= write_end_offset) { //totally overlapped lextent
+	bluestore_lextent_t& lext = lext_it->second;
+	auto blob_it = get_blob_iterator(lext.blob);
+	removed_lextents->emplace(lext_it->first, live_lextent_t(blob_it, lext.blob, lext.x_offset, lext.length, lext.flags));
+	ref_blob(blob_it);
+      }
+      else if (lext_it->first < offset
+	&& lext_end_offset > offset
+	&& lext_end_offset <= write_end_offset) { //partially overlapped at the end
+	bluestore_lextent_t& upd_lext = (*updated_lextents)[lext_it->first];
+	upd_lext = lext_it->second;
+	upd_lext.length = offset - lext_it->first;
+      }
+      else if (lext_it->first >= offset && lext_end_offset > write_end_offset) { //partially overlapped at the start
+	bluestore_lextent_t& upd_lext = (*updated_lextents)[write_end_offset];
+	upd_lext = lext_it->second;
+	upd_lext.x_offset += write_end_offset - lext_it->first;
+	upd_lext.length = lext_end_offset - write_end_offset;
+	removed_lextents->emplace(lext_it->first, live_lextent_t(m_blobs.end())); //the content of the live lextent has to be empty - we need to remove entry from the lextent map only, blob map to be unaffected
+      }
+      else if (lext_it->first < offset && lext_end_offset > write_end_offset) { //overlapped at the center
+	bluestore_lextent_t& upd_lext1 = (*updated_lextents)[lext_it->first];
+	upd_lext1 = lext_it->second;
+	upd_lext1.length = offset - lext_it->first;
+	bluestore_lextent_t& upd_lext2 = (*updated_lextents)[write_end_offset];
+	upd_lext2 = lext_it->second;
+	upd_lext2.x_offset += write_end_offset - lext_it->first;
+	upd_lext2.length = lext_end_offset - write_end_offset;
+
+	blobs2ref->push_back(lext_it->second.blob);
+      }
+      ++lext_it;
+    }
+  }
+}
+
+int ExtentManager::write(uint64_t offset, const bufferlist& bl, void* opaque, const ExtentManager::CheckSumInfo& check_info, const ExtentManager::CompressInfo* compress_info)
+{
+  int r;
+  bluestore_lextent_map_t updated_lextents;
+  live_lextent_map_t  new_lextents, removed_lextents;
+  list<BlobRef> blobs2ref;
+
+  preprocess_changes(offset, bl.length(), &updated_lextents, &removed_lextents, &blobs2ref);
+
+  r = compress_info && bl.length() > get_min_alloc_size() ?
+    write_compressed(offset, bl, opaque, check_info, *compress_info, &new_lextents) :
+    write_uncompressed(offset, bl, opaque, check_info, &new_lextents);
+
+  if (r > 0) {
+    update_lextents(updated_lextents.begin(), updated_lextents.end());
+    auto it = blobs2ref.begin();
+    while (it != blobs2ref.end()) {
+      ref_blob(*it);
+      ++it;
+    }
+    release_lextents(removed_lextents.begin(), removed_lextents.end(), true, true, opaque);
+    add_lextents(new_lextents.begin(), new_lextents.end());
+  }
+  return r >= 0 ? bl.length() : r;
+}
+
+int ExtentManager::zero(uint64_t offset, uint64_t len, void* opaque)
+{
+  bluestore_lextent_map_t updated_lextents;
+  live_lextent_map_t  new_lextents, removed_lextents;
+  list<BlobRef> blobs2ref;
+
+  preprocess_changes(offset, len, &updated_lextents, &removed_lextents, &blobs2ref);
+
+  update_lextents(updated_lextents.begin(), updated_lextents.end());
+  auto it = blobs2ref.begin();
+  while (it != blobs2ref.end()) {
+    ref_blob(*it);
+    ++it;
+  }
+  release_lextents(removed_lextents.begin(), removed_lextents.end(), true, true, opaque);
+  return 0;
+}
+
+int ExtentManager::truncate(uint64_t offset, void* opaque)
+{
+  auto lext_begin = m_lextents.begin();
+  auto lext_it = m_lextents.end();
+  uint64_t len = 0;
+  if (lext_it != lext_begin) {
+    --lext_it;
+    len = lext_it->first + lext_it->second.length;
+    if (offset <= len)
+      len -= offset;
+  }
+  int r = len ? zero(offset, len, opaque) : 0;
+  return r;
+}
+
+int ExtentManager::write_uncompressed(uint64_t offset, const bufferlist& bl, void* opaque, const ExtentManager::CheckSumInfo& check_info, live_lextent_map_t* res_lextents)
+{
+  int r = 0;
+  uint64_t o = offset;
+  uint32_t l = bl.length();
+  //create new lextents & blobs
+  while (l > 0 && r >= 0) {
+    BlobRef blob_ref = UNDEF_BLOB_REF;
+    bluestore_blob_map_t::iterator blob_it;
+    int processed = allocate_raw_blob(l, opaque, check_info, &blob_ref, &blob_it);
+    if (processed < 0) {
+      release_lextents(res_lextents->begin(), res_lextents->end(), false, false, opaque);
+      res_lextents->clear();
+      r = processed;
+      //dout(0)<<" write failed, can't allocate"<< dendl;
+    }
+    else {
+      res_lextents->emplace(o, live_lextent_t(blob_it, blob_ref, 0, processed, 0));
+      o += processed;
+      l -= processed;
+    }
+  }
+
+  if (r >= 0) {
+    r = apply_lextents(*res_lextents, bl, NULL, opaque);
+  }
+  return r;
+}
+
+int ExtentManager::write_compressed(uint64_t offset, const bufferlist& bl, void* opaque, const ExtentManager::CheckSumInfo& check_info, const ExtentManager::CompressInfo& compress_info, live_lextent_map_t* res_lextents)
+{
+  int r = 0;
+  std::vector<bufferlist> compressed_buffers;
+  uint64_t o = offset;
+  uint32_t l = bl.length();
+  uint64_t input_offs = 0;
+  //create new lextents & blobs
+  while (l > 0 && r >= 0) {
+    BlobRef blob_ref;
+    bluestore_blob_map_t::iterator blob_it;
+    size_t sz = compressed_buffers.size();
+    compressed_buffers.resize(sz + 1);
+    int processed = l > get_min_alloc_size() ?
+      compress_and_allocate_blob(input_offs, bl, opaque, check_info, compress_info, &blob_ref, &blob_it, &compressed_buffers[sz]) :
+      allocate_raw_blob(l, opaque, check_info, &blob_ref, &blob_it);
+    if (processed < 0) {
+      release_lextents(res_lextents->begin(), res_lextents->end(), false, false, opaque);
+      res_lextents->clear();
+      r = processed;
+      //dout(0)<<" write failed, can't allocate"<< dendl;
+    }
+    else {
+      res_lextents->emplace(o, live_lextent_t(blob_it, blob_ref, 0, processed, 0));
+      o += processed;
+      input_offs += processed;
+      l -= processed;
+    }
+  }
+
+  if (r >= 0) {
+    r = apply_lextents(*res_lextents, bl, &compressed_buffers, opaque);
+  }
+  return r;
+}
+
+int ExtentManager::allocate_raw_blob(uint32_t length, void* opaque, const ExtentManager::CheckSumInfo& check_info, BlobRef* blob_ref, bluestore_blob_map_t::iterator* res_blob_it)
+{
+  uint32_t processed = MIN(length, get_max_blob_size());
+
+  //allocate a new blob
+  auto blob_it = m_blobs.end();
+  if (blob_it != m_blobs.begin()) {
+    --blob_it;
+    *blob_ref = blob_it->first + 1;
+  }
+  else
+    *blob_ref = FIRST_BLOB_REF;
+
+  blob_it = m_blobs.emplace(*blob_ref, bluestore_blob_t(processed, 0, check_info.csum_type, check_info.csum_block_order)).first;
+  bluestore_blob_t& blob = blob_it->second;
+
+  //allocate space for the new blob
+  uint32_t to_allocate = ROUND_UP_TO(processed, get_min_alloc_size());
+  int r = m_blockop_inf.allocate_blocks(to_allocate, opaque, &blob.extents);
+  if (r >= 0) {
+    r = processed;
+    *res_blob_it = blob_it;
+  } else {
+    m_blobs.erase(blob_it);
+    *blob_ref = UNDEF_BLOB_REF;
+    *res_blob_it = m_blobs.end();
+  }
+  return r;
+}
+
+int ExtentManager::compress_and_allocate_blob(
+    uint64_t input_offs,
+    const bufferlist& bl,
+    void* opaque,
+    const ExtentManager::CheckSumInfo& check_info,
+    const ExtentManager::CompressInfo& compress_info,
+    BlobRef* blob_ref,
+    bluestore_blob_map_t::iterator* res_blob_it,
+    bufferlist* compressed_buffer)
+{
+  int r = 0;
+  assert(input_offs <= bl.length());
+  uint32_t len = bl.length() - input_offs;
+  len = MIN(len, get_max_blob_size());
+
+  compressed_buffer->clear();
+  r = m_compressor.compress(compress_info, input_offs, len, bl, opaque, compressed_buffer);
+  if (r >= 0) {
+    r = allocate_raw_blob(compressed_buffer->length(), opaque, check_info, blob_ref, res_blob_it);
+    if (r >= 0) {
+      (*res_blob_it)->second.set_flag(bluestore_blob_t::BLOB_COMPRESSED);
+      r = len;
+    }
+  } else {
+    dout(20) << __func__ << " compression bypassed, status:" << r << dendl;
+    r = allocate_raw_blob(len, opaque, check_info, blob_ref, res_blob_it);
+    if (r >= 0) {
+      r = len;
+    }
+  }
+  return r;
+}
+
+int ExtentManager::write_blob(bluestore_blob_t& blob, uint64_t input_offs, const bufferlist& bl, void* opaque)
+{
+  int r = 0;
+  uint64_t input_offs0 = input_offs;
+  uint32_t ext_pos = 0;
+  assert(input_offs <= bl.length());
+  uint64_t len = MIN( blob.get_ondisk_length(), bl.length() - input_offs );
+//  assert(blob.get_ondisk_length() >= len);
+
+  if (blob.csum_type != bluestore_blob_t::CSUM_NONE) {
+    blob.csum_data.clear();
+    r = m_csum_verifier.calculate((bluestore_blob_t::CSumType)blob.csum_type, blob.get_csum_value_size(), blob.get_csum_block_size(), input_offs, len, bl, opaque, &(blob.csum_data));
+    if (r < 0)
+      derr << __func__ << " checksum("<< blob.csum_type<< ") calculation failure:" << r << dendl;
+  }
+
+  while (len > 0 && r >= 0) {
+    assert(ext_pos < blob.extents.size());
+    bluestore_extent_t& ext = blob.extents[ext_pos];
+    uint64_t l = MIN(len, ext.length);
+
+    uint64_t aligned_len = ROUND_UP_TO(l, m_blockop_inf.get_block_size());
+    if (input_offs == 0 && aligned_len == bl.length()) //fast track, no need for input data slicing
+      r = m_blockop_inf.write_block(ext.offset, bl, opaque);
+    else {
+      bufferlist tmp_bl;
+      tmp_bl.substr_of(bl, input_offs, l);
+      tmp_bl.append_zero(aligned_len - l);
+      r = m_blockop_inf.write_block(ext.offset, tmp_bl, opaque);
+    }
+    ++ext_pos;
+    input_offs += l;
+    len -= l;
+  }
+  return r < 0 ? r : input_offs - input_offs0;
+}
+
+int ExtentManager::apply_lextents(
+  live_lextent_map_t& new_lextents,
+  const bufferlist& raw_buffer,
+  std::vector<bufferlist>* compressed_buffers,
+  void* opaque)
+{
+  int r = 0;
+  uint64_t x_offs = 0;
+  size_t lext_pos = 0;
+  //write data to new lextents
+  auto newext_it = new_lextents.begin();
+  while (newext_it != new_lextents.end() && r >= 0) {
+    bluestore_blob_t& blob = newext_it->second.blob_iterator->second;
+    if (compressed_buffers && compressed_buffers->at(lext_pos).length() > 0 && blob.has_flag(bluestore_blob_t::BLOB_COMPRESSED) ) {
+      r = write_blob(blob, 0, compressed_buffers->at(lext_pos), opaque);
+      assert( r < 0 || r == (int)compressed_buffers->at(lext_pos).length());
+    }
+    else {
+      r = write_blob(blob, x_offs, raw_buffer, opaque);
+      assert( r < 0 || r == (int)newext_it->second.length);
+    }
+    x_offs += newext_it->second.length;
+    ++lext_pos;
+    ++newext_it;
+  }
+  assert(x_offs == raw_buffer.length());
+  if (r < 0) {
+    release_lextents(new_lextents.begin(), new_lextents.end(), false, false, opaque); //FIXME: we may need to zero some of already written blobs, mark lextent somehow?
+    new_lextents.clear();
+  }
+
+  return r;
+}
+
+void ExtentManager::add_lextents(live_lextent_map_t::iterator cur, live_lextent_map_t::iterator end)
+{
+  //update specified lextents in the primary map
+  while (cur != end) {
+    m_lextents[cur->first] = cur->second;
+    ++cur;
+  }
+}
+
+void ExtentManager::update_lextents(bluestore_lextent_map_t::iterator cur, bluestore_lextent_map_t::iterator end)
+{
+  //update specified lextents in the primary map
+  while (cur != end) {
+    m_lextents[cur->first] = cur->second;
+    ++cur;
+  }
+}
+
+void ExtentManager::release_lextents(live_lextent_map_t::iterator cur, live_lextent_map_t::iterator end, bool zero, bool remove_from_primary_map, void* opaque)
+{
+  while (cur != end){
+
+    auto blob_it = cur->second.blob_iterator;
+    if (blob_it != m_blobs.end()) {
+      deref_blob(blob_it, zero, opaque);
+    }
+    if (remove_from_primary_map) {
+      auto ext_it = m_lextents.find(cur->first);
+      if (ext_it != m_lextents.end()) {
+	if (blob_it == m_blobs.end())
+	  blob_it = get_blob_iterator(cur->second.blob); //please note - we use blob ref from the live lextent instead of the one from the lextent map to be able to bypass blob lookup if needed.
+	deref_blob(blob_it, zero, opaque);
+	m_lextents.erase(ext_it);
+      }
+    }
+    ++cur;
+  }
 }
