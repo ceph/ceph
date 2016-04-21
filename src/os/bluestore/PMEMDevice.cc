@@ -192,11 +192,6 @@ int PMEMDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!bl.is_n_align_sized(block_size) || !bl.is_aligned(block_size)) {
-    dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
-    bl.rebuild_aligned(block_size);
-  }
-
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
@@ -212,7 +207,8 @@ int PMEMDevice::aio_write(
       ++injecting_crash;
       return 0;
     }
-    pmem_memcpy_persist(addr + off, bl.c_str(), bl.length());
+    bl.copy(0, bl.length(), addr + off);
+    pmem_persist(addr + off, bl.length());
   }
 
   _aio_log_finish(ioc, off, bl.length());
