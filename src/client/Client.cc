@@ -1118,10 +1118,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     if (fg != dst.frag) {
       ldout(cct, 10) << "insert_trace got new frag " << fg << " -> " << dst.frag << dendl;
       fg = dst.frag;
-      if (fg.is_leftmost())
-	readdir_offset = 2;
-      else
-	readdir_offset = 0;
+      readdir_offset = 2;
       readdir_start.clear();
     }
 
@@ -6851,8 +6848,6 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
     d->release_count--;   // bump if we do a forward seek
 
   d->offset = offset;
-  if (!d->frag().is_leftmost() && d->next_offset == 2)
-    d->next_offset = 0;  // not 2 on non-leftmost frags!
 }
 
 
@@ -6968,10 +6963,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
     if (fg != req->readdir_reply_frag) {
       fg = req->readdir_reply_frag;
-      if (fg.is_leftmost())
-	dirp->next_offset = 2;
-      else
-	dirp->next_offset = 0;
+      dirp->next_offset = 2;
       dirp->offset = dir_result_t::make_fpos(fg, dirp->next_offset);
     }
     dirp->buffer_frag = fg;
@@ -6982,10 +6974,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
     if (req->readdir_end) {
       dirp->last_name.clear();
-      if (fg.is_rightmost())
-	dirp->next_offset = 2;
-      else
-	dirp->next_offset = 0;
+      dirp->next_offset = 2;
     } else {
       dirp->last_name = req->readdir_last_name;
       dirp->next_offset += req->readdir_num;
