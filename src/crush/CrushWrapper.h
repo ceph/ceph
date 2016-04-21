@@ -1095,21 +1095,6 @@ public:
       out[i] = rawout[i];
   }
 
-  int read_from_file(const char *fn) {
-    bufferlist bl;
-    std::string error;
-    int r = bl.read_file(fn, &error);
-    if (r < 0) return r;
-    bufferlist::iterator blp = bl.begin();
-    decode(blp);
-    return 0;
-  }
-  int write_to_file(const char *fn) {
-    bufferlist bl;
-    encode(bl);
-    return bl.write_file(fn);
-  }
-
   void encode(bufferlist &bl, bool lean=false) const;
   void decode(bufferlist::iterator &blp);
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
