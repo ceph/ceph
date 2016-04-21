@@ -1426,7 +1426,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
   /* Check whether we have enough acting shards to later perform recovery */
   boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
     get_pgbackend()->get_is_recoverable_predicate());
-  set<pg_shard_t> have;
   for (int i = 0; i < (int)want.size(); ++i) {
     if (want[i] != CRUSH_ITEM_NONE)
       have.insert(
