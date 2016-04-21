@@ -11811,7 +11811,8 @@ void ReplicatedPG::agent_setup()
 void ReplicatedPG::agent_clear()
 {
   agent_stop();
-  agent_state.reset(NULL);
+  if (agent_state)
+    agent_state.reset(NULL);
 }
 
 // Return false if no objects operated on since start of object hash space
