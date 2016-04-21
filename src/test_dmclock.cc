@@ -21,8 +21,8 @@ namespace test = crimson::test_dmc;
 
 
 void test::dmc_server_accumulate_f(test::DmcAccum& a,
-				   const test::DmcServerAddInfo& add_info) {
-  if (test::dmc::PhaseType::reservation == add_info) {
+				   const test::dmc::PhaseType& phase) {
+  if (test::dmc::PhaseType::reservation == phase) {
     ++a.reservation_count;
   } else {
     ++a.proportion_count;

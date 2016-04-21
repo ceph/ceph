@@ -33,7 +33,6 @@ namespace crimson {
     using SimpleServer = sim::SimulatedServer<SimpleQueue,
 					      ssched::ReqParams<ClientId>,
 					      ssched::NullData,
-					      ssched::NullData,
 					      SimpleAccum>;
     using SimpleClient = sim::SimulatedClient<ssched::ServiceTracker<ServerId>,
 					      ssched::ReqParams<ClientId>,

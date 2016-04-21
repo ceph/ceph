@@ -23,8 +23,6 @@ namespace crimson {
     namespace dmc = crimson::dmclock;
     namespace sim = crimson::qos_simulation;
 
-    using DmcServerAddInfo = crimson::dmclock::PhaseType;
-
     struct DmcAccum {
       uint64_t reservation_count = 0;
       uint64_t proportion_count = 0;
@@ -35,7 +33,6 @@ namespace crimson {
     using DmcServer = sim::SimulatedServer<DmcQueue,
 					   dmc::ReqParams<ClientId>,
 					   dmc::PhaseType,
-					   DmcServerAddInfo,
 					   DmcAccum>;
 
     using DmcClient = sim::SimulatedClient<dmc::ServiceTracker<ServerId>,
@@ -51,7 +48,7 @@ namespace crimson {
     using SubmitFunc = DmcClient::SubmitFunc;
 
     extern void dmc_server_accumulate_f(DmcAccum& a,
-					const DmcServerAddInfo& add_info);
+					const dmc::PhaseType& phase);
 
     extern void dmc_client_accumulate_f(DmcAccum& a,
 					const dmc::PhaseType& phase);

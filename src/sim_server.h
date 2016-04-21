@@ -21,19 +21,17 @@
 namespace crimson {
   namespace qos_simulation {
 
-    template<typename Q,
-	     typename ReqPm, typename RespPm,
-	     typename AddInfo, typename Accum>
+    template<typename Q, typename ReqPm, typename RespPm, typename Accum>
     class SimulatedServer {
 
       struct QueueItem {
 	ClientId                     client;
 	std::unique_ptr<TestRequest> request;
-	AddInfo                      additional;
+	RespPm                       additional;
 
-	QueueItem(const ClientId& _client,
+	QueueItem(const ClientId&                _client,
 		  std::unique_ptr<TestRequest>&& _request,
-		  AddInfo _additional) :
+		  const RespPm&                  _additional) :
 	  client(_client),
 	  request(std::move(_request)),
 	  additional(_additional)
@@ -50,7 +48,7 @@ namespace crimson {
 						const RespPm&)>;
 
       using ServerAccumFunc = std::function<void(Accum& accumulator,
-						 const AddInfo& additional_info)>;
+						 const RespPm& additional)>;
 
     protected:
 
@@ -81,7 +79,7 @@ namespace crimson {
 
       using CanHandleRequestFunc = std::function<bool(void)>;
       using HandleRequestFunc =
-	std::function<void(const ClientId&,std::unique_ptr<TestRequest>,AddInfo)>;
+	std::function<void(const ClientId&,std::unique_ptr<TestRequest>,const RespPm&)>;
       using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
 					
 
@@ -146,11 +144,13 @@ namespace crimson {
 
       void inner_post(const ClientId& client,
 		      std::unique_ptr<TestRequest> request,
-		      AddInfo additional) {
+		      const RespPm& additional) {
 	Lock l(inner_queue_mtx);
 	assert(!finishing);
 	accum_f(accumulator, additional);
-	inner_queue.emplace_back(QueueItem(client, std::move(request), additional));
+	inner_queue.emplace_back(QueueItem(client,
+					   std::move(request),
+					   additional));
 	inner_queue_cv.notify_one();
       }
 
