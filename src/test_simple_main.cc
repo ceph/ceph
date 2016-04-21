@@ -10,7 +10,7 @@
 
 
 namespace test = test_simple;
-namespace simp = crimson::simple_scheduler;
+namespace ssched = crimson::simple_scheduler;
 namespace sim = crimson::qos_simulation;
 
 using namespace std::placeholders;
@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
   test::SubmitFunc server_post_f =
     [&simulation](const ServerId& server_id,
 		  const sim::TestRequest& request,
-		  const simp::ReqParams<ClientId>& req_params) {
+		  const ssched::ReqParams<ClientId>& req_params) {
     auto& server = simulation->get_server(server_id);
     server.post(request, req_params);
   };
@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
   test::SimpleServer::ClientRespFunc client_response_f =
     [&simulation](ClientId client_id,
 		  const sim::TestResponse& resp,
-		  const simp::RespParams<ServerId>& resp_params) {
+		  const ssched::RespParams<ServerId>& resp_params) {
     simulation->get_client(client_id).receive_response(resp, resp_params);
   };
 

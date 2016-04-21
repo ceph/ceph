@@ -18,7 +18,7 @@
 
 namespace test_simple {
 
-  namespace simp = crimson::simple_scheduler;
+  namespace ssched = crimson::simple_scheduler;
   namespace sim = crimson::qos_simulation;
 
   using Time = double;
@@ -30,17 +30,17 @@ namespace test_simple {
     uint32_t request_count = 0;
   };
 
-  using SimpleQueue = simp::SimpleQueue<ClientId,sim::TestRequest,Time>;
+  using SimpleQueue = ssched::SimpleQueue<ClientId,sim::TestRequest,Time>;
 
   using SimpleServer = sim::SimulatedServer<SimpleQueue,
 					    ClientInfo,
-					    simp::ReqParams<ClientId>,
-					    simp::RespParams<ServerId>,
-					    simp::NullData,
+					    ssched::ReqParams<ClientId>,
+					    ssched::RespParams<ServerId>,
+					    ssched::NullData,
 					    SimpleAccum>;
-  using SimpleClient = sim::SimulatedClient<simp::ServiceTracker<ServerId>,
-					    simp::ReqParams<ClientId>,
-					    simp::RespParams<ServerId>,
+  using SimpleClient = sim::SimulatedClient<ssched::ServiceTracker<ServerId>,
+					    ssched::ReqParams<ClientId>,
+					    ssched::RespParams<ServerId>,
 					    SimpleAccum>;
 
   using CreateQueueF =
@@ -53,8 +53,8 @@ namespace test_simple {
   using SubmitFunc = SimpleClient::SubmitFunc;
 
   extern void simple_server_accumulate_f(SimpleAccum& a,
-					 const simp::NullData& add_info);
+					 const ssched::NullData& add_info);
 
   extern void simple_client_accumulate_f(SimpleAccum& a,
-					 const simp::RespParams<ServerId>& r);
+					 const ssched::RespParams<ServerId>& r);
 }; // namespace test_simple

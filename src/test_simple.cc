@@ -18,16 +18,16 @@
 
 
 namespace test = test_simple;
-namespace simp = crimson::simple_scheduler;
+namespace ssched = crimson::simple_scheduler;
 
 
 void test::simple_server_accumulate_f(test::SimpleAccum& a,
-				      const simp::NullData& add_info) {
+				      const ssched::NullData& add_info) {
   ++a.request_count;
 }
 
 
 void test::simple_client_accumulate_f(test::SimpleAccum& a,
-				      const simp::RespParams<ServerId>& r) {
+				      const ssched::RespParams<ServerId>& r) {
   // empty
 }

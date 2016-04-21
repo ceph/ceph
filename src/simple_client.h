@@ -8,22 +8,11 @@
 
 #pragma once
 
-// #include <map>
-// #include <deque>
-// #include <chrono>
-// #include <thread>
-// #include <mutex>
-// #include <condition_variable>
-
-// #include "run_every.h"
 #include "simple_recs.h"
-
-// #include "gtest/gtest_prod.h"
 
 
 namespace crimson {
   namespace simple_scheduler {
-
 
     // S is server identifier type
     template<typename S>
