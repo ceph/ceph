@@ -471,8 +471,8 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
       return false;
     }
 
+    assert(bucket_exists(id));
     crush_bucket *b = get_bucket(id);
-    assert(b);
 
     // see if item exists in this bucket
     for (unsigned j=0; j<b->size; j++) {

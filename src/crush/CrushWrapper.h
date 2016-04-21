@@ -905,7 +905,7 @@ private:
       return (-EINVAL);
 
     // check that the bucket that we want to detach exists
-    assert( get_bucket(item) );
+    assert(bucket_exists(item));
 
     // get the bucket's weight
     crush_bucket *b = get_bucket(item);
