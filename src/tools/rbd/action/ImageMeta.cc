@@ -233,6 +233,13 @@ int execute_set(const po::variables_map &vm) {
     return -EINVAL;
   }
 
+  if ((key.compare("rbd_cache") == 0) || (key.compare("rbd_cache_writethrough_until_flush") == 0)) {
+    if ((value.compare("true") != 0) && (key.compare("false") != 0)) {
+      std::cerr << "rbd: rbd_cache or rbd_cache_writethrough_until_flush must be true or false" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
