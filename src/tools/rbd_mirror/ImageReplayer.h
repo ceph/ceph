@@ -40,6 +40,8 @@ namespace mirror {
 
 struct Threads;
 
+namespace image_replayer { template <typename> class ReplayStatusFormatter; }
+
 /**
  * Replays changes from a remote cluster for a single image.
  */
@@ -49,6 +51,7 @@ public:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::ReplayEntry ReplayEntry;
 
   enum State {
+    STATE_UNKNOWN,
     STATE_UNINITIALIZED,
     STATE_STARTING,
     STATE_REPLAYING,
@@ -208,6 +211,8 @@ private:
   int m_last_r = 0;
   std::string m_state_desc;
   BootstrapProgressContext m_progress_cxt;
+  image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
+    nullptr;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
@@ -254,11 +259,10 @@ private:
 
   void shut_down_journal_replay(bool cancel_ops);
 
-  void update_mirror_image_status(bool final = false);
+  void update_mirror_image_status(bool final = false,
+				  State expected_state = STATE_UNKNOWN);
   void reschedule_update_status_task(int new_interval = 0);
   void start_update_status_task();
-
-  std::string get_replay_status_description();
 
   void bootstrap();
   void handle_bootstrap(int r);

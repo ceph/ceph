@@ -23,6 +23,7 @@
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -50,8 +51,7 @@ template <typename I>
 struct ReplayHandler : public ::journal::ReplayHandler {
   ImageReplayer<I> *replayer;
   ReplayHandler(ImageReplayer<I> *replayer) : replayer(replayer) {}
-
-  virtual void get() {}
+virtual void get() {}
   virtual void put() {}
 
   virtual void handle_entries_available() {
@@ -202,6 +202,7 @@ ImageReplayer<I>::ImageReplayer(Threads *threads, RadosRef local, RadosRef remot
 template <typename I>
 ImageReplayer<I>::~ImageReplayer()
 {
+  assert(m_replay_status_formatter == nullptr);
   assert(m_local_image_ctx == nullptr);
   assert(m_local_replay == nullptr);
   assert(m_remote_journaler == nullptr);
@@ -268,7 +269,6 @@ void ImageReplayer<I>::start(Context *on_finish,
 				     &m_threads->timer_lock, m_remote_ioctx,
 				     m_remote_image_id, m_local_mirror_uuid,
                                      commit_interval);
-
   bootstrap();
 }
 
@@ -379,6 +379,8 @@ void ImageReplayer<I>::start_replay() {
     std::swap(m_on_start_finish, on_finish);
   }
 
+  m_replay_status_formatter =
+    ReplayStatusFormatter<I>::create(m_remote_journaler, m_local_mirror_uuid);
   update_mirror_image_status();
   reschedule_update_status_task(30);
 
@@ -583,6 +585,9 @@ void ImageReplayer<I>::on_stop_local_image_close_finish(int r)
   update_mirror_image_status(true);
 
   m_local_ioctx.close();
+
+  delete m_replay_status_formatter;
+  m_replay_status_formatter = nullptr;
 
   m_remote_journaler->stop_replay();
   m_remote_journaler->shut_down();
@@ -924,16 +929,24 @@ void ImageReplayer<I>::shut_down_journal_replay(bool cancel_ops)
 }
 
 template <typename I>
-void ImageReplayer<I>::update_mirror_image_status(bool final)
+void ImageReplayer<I>::update_mirror_image_status(bool final,
+						  State expected_state)
 {
-  dout(20) << dendl;
+  dout(20) << "final=" << final << ", expected_state=" << expected_state
+	   << dendl;
 
   cls::rbd::MirrorImageStatus status;
 
   {
     Mutex::Locker locker(m_lock);
 
+    assert(!final || !is_running_());
+
     if (!final) {
+      if (expected_state != STATE_UNKNOWN && expected_state != m_state) {
+	dout(20) << "state changed" << dendl;
+	return;
+      }
       if (m_update_status_comp) {
 	dout(20) << "already sending update" << dendl;
 	m_update_status_pending = true;
@@ -956,7 +969,7 @@ void ImageReplayer<I>::update_mirror_image_status(bool final)
 	  if (comp) {
 	    comp->release();
 	  }
-	  if (pending && r == 0) {
+	  if (pending && r == 0 && is_running_()) {
 	    update_mirror_image_status();
 	  }
 	});
@@ -987,7 +1000,6 @@ void ImageReplayer<I>::update_mirror_image_status(bool final)
       break;
     case STATE_REPLAYING:
       status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING;
-      status.description = get_replay_status_description();
       break;
     case STATE_STOPPING:
       if (m_local_image_ctx) {
@@ -1008,6 +1020,28 @@ void ImageReplayer<I>::update_mirror_image_status(bool final)
     default:
       assert(!"invalid state");
     }
+  }
+
+  if (status.state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING) {
+    Context *on_req_finish = new FunctionContext(
+      [this](int r) {
+	if (r == 0) {
+	  librados::AioCompletion *comp = nullptr;
+	  {
+	    Mutex::Locker locker(m_lock);
+	    std::swap(m_update_status_comp, comp);
+	  }
+	  if (comp) {
+	    comp->release();
+	  }
+	  update_mirror_image_status(false, STATE_REPLAYING);
+	}
+      });
+    std::string desc;
+    if (!m_replay_status_formatter->get_or_send_update(&desc, on_req_finish)) {
+      return;
+    }
+    status.description = "replaying, " + desc;
   }
 
   dout(20) << "status=" << status << dendl;
@@ -1079,46 +1113,6 @@ void ImageReplayer<I>::start_update_status_task()
       update_mirror_image_status();
     });
   m_threads->work_queue->queue(ctx, 0);
-}
-
-template <typename I>
-std::string ImageReplayer<I>::get_replay_status_description() {
-  assert(m_lock.is_locked());
-  assert(m_state == STATE_REPLAYING);
-
-  std::stringstream ss;
-  ss << "replaying";
-
-  cls::journal::Client master;
-  int r = m_remote_journaler->get_cached_client(
-    librbd::Journal<>::IMAGE_CLIENT_ID, &master);
-  if (r == 0) {
-    ss << ", master_position=";
-    cls::journal::ObjectPositions &object_positions =
-      master.commit_position.object_positions;
-
-    if (object_positions.begin() != object_positions.end()) {
-      ss << *(object_positions.begin());
-    } else {
-      ss << "[]";
-    }
-  }
-
-  cls::journal::Client mirror;
-  r = m_remote_journaler->get_cached_client(m_local_mirror_uuid, &mirror);
-  if (r == 0) {
-    ss << ", mirror_position=";
-    cls::journal::ObjectPositions &object_positions =
-      mirror.commit_position.object_positions;
-
-    if (object_positions.begin() != object_positions.end()) {
-      ss << *(object_positions.begin());
-    } else {
-      ss << "[]";
-    }
-  }
-
-  return ss.str();
 }
 
 template <typename I>
