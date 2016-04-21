@@ -134,7 +134,7 @@ int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
       strm.avail_out = max_len;
       strm.next_out = c_out;
       ret = inflate(&strm, Z_NO_FLUSH);
-      if (ret != Z_OK && ret != Z_STREAM_END) {
+      if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {
        dout(1) << "Decompression error: decompress return "
             << ret << dendl;
        inflateEnd(&strm);
