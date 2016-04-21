@@ -17,7 +17,7 @@
 #include "test_simple.h"
 
 
-namespace test = test_simple;
+namespace test = crimson::test_simple_scheduler;
 namespace ssched = crimson::simple_scheduler;
 
 

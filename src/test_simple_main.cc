@@ -9,24 +9,27 @@
 #include "test_simple.h"
 
 
-namespace test = test_simple;
+namespace test = crimson::test_simple_scheduler;
 namespace ssched = crimson::simple_scheduler;
 namespace sim = crimson::qos_simulation;
 
 using namespace std::placeholders;
 
 
-void server_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ServerFilter server_disp_filter,
-		 int head_w, int data_w, int data_prec);
+namespace crimson {
+  namespace test_simple_scheduler {
+    void client_data(std::ostream& out,
+		     test::MySim* sim,
+		     test::MySim::ClientFilter client_disp_filter,
+		     int head_w, int data_w, int data_prec);
 
-
-void client_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ClientFilter client_disp_filter,
-		 int head_w, int data_w, int data_prec);
-
+    void server_data(std::ostream& out,
+		     test::MySim* sim,
+		     test::MySim::ServerFilter server_disp_filter,
+		     int head_w, int data_w, int data_prec);
+  } // namespace test_simple
+} // namespace crimson
+    
 
 int main(int argc, char* argv[]) {
   // server params
@@ -91,8 +94,8 @@ int main(int argc, char* argv[]) {
   };
 
   test::CreateQueueF create_queue_f =
-      [&](test::SimpleQueue::CanHandleRequestFunc can_f,
-          test::SimpleQueue::HandleRequestFunc handle_f) -> test::SimpleQueue* {
+    [&](test::SimpleQueue::CanHandleRequestFunc can_f,
+	test::SimpleQueue::HandleRequestFunc handle_f) -> test::SimpleQueue* {
     return new test::SimpleQueue(can_f, handle_f);
   };
 
@@ -117,23 +120,23 @@ int main(int argc, char* argv[]) {
 
   simulation->run();
   simulation->display_stats(std::cout,
-			    &server_data, &client_data,
+			    &test::server_data, &test::client_data,
 			    server_disp_filter, client_disp_filter);
 } // main
 
 
-void client_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ClientFilter client_disp_filter,
-		 int head_w, int data_w, int data_prec) {
+void test::client_data(std::ostream& out,
+		       test::MySim* sim,
+		       test::MySim::ClientFilter client_disp_filter,
+		       int head_w, int data_w, int data_prec) {
   // empty
 }
 
 
-void server_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ServerFilter server_disp_filter,
-		 int head_w, int data_w, int data_prec) {
+void test::server_data(std::ostream& out,
+		       test::MySim* sim,
+		       test::MySim::ServerFilter server_disp_filter,
+		       int head_w, int data_w, int data_prec) {
   out << std::setw(head_w) << "requests:";
   int total_req = 0;
   for (uint i = 0; i < sim->get_server_count(); ++i) {

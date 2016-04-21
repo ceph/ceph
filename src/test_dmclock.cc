@@ -17,7 +17,7 @@
 #include "test_dmclock.h"
 
 
-namespace test = test_dmc;
+namespace test = crimson::test_dmc;
 
 
 void test::dmc_server_accumulate_f(test::DmcAccum& a,
