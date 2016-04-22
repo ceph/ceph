@@ -2655,7 +2655,7 @@ int BlueStore::_do_read(
       ++op;
       continue;
     }
-    if (bp != bend && bp->first + bp->second.length <= offset) {
+    if (bp != bend && bp->first + bp->second.length < offset) {
       dout(30) << __func__ << " skip frag " << bp->first << " " << bp->second
 	       << dendl;
       ++bp;
@@ -2808,7 +2808,7 @@ int BlueStore::fiemap(
       ++op;
       continue;
     }
-    if (bp != bend && bp->first + bp->second.length <= offset) {
+    if (bp != bend && bp->first + bp->second.length < offset) {
       ++bp;
       continue;
     }
