@@ -20,32 +20,6 @@ fi
 data="/var/lib/ceph/osd/${cluster:-ceph}-$id"
 journal="$data/journal"
 
-update="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_update_on_start || :)"
-
-if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
-    # update location in crush
-    hook="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_location_hook || :)"
-    if [ -z "$hook" ]; then
-        hook="/usr/bin/ceph-crush-location"
-    fi
-    location="$($hook --cluster ${cluster:-ceph} --id $id --type osd)"
-    weight="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_initial_weight || :)"
-    if [ -e $data/block ]; then
-        defaultweight=`blockdev --getsize64 $data/block | awk '{ d= $1/1099511627776 ; r = sprintf("%.4f", d); print r }'`
-    else
-        defaultweight=`df -P -k $data/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.4f", d); print r }'`
-    fi
-    ceph \
-        --cluster="${cluster:-ceph}" \
-        --name="osd.$id" \
-        --keyring="$data/keyring" \
-        osd crush create-or-move \
-        -- \
-        "$id" \
-        "${weight:-${defaultweight:-1}}" \
-        $location
-fi
-
 if [ -L "$journal" -a ! -e "$journal" ]; then
     udevadm settle --timeout=5 || :
     if [ -L "$journal" -a ! -e "$journal" ]; then
