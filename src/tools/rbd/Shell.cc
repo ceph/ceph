@@ -84,6 +84,7 @@ int Shell::execute(const Arguments& cmdline_arguments) {
                                      cmdline_arguments.end());
   std::vector<std::string> command_spec;
   get_command_spec(arguments, &command_spec);
+  bool is_alias = true;
 
   if (command_spec.empty() || command_spec == CommandSpec({"help"})) {
     // list all available actions
@@ -92,12 +93,12 @@ int Shell::execute(const Arguments& cmdline_arguments) {
   } else if (command_spec[0] == HELP_SPEC) {
     // list help for specific action
     command_spec.erase(command_spec.begin());
-    Action *action = find_action(command_spec, NULL);
+    Action *action = find_action(command_spec, NULL, &is_alias);
     if (action == NULL) {
       print_unknown_action(command_spec);
       return EXIT_FAILURE;
     } else {
-      print_action_help(action);
+      print_action_help(action, is_alias);
       return 0;
     }
   } else if (command_spec[0] == BASH_COMPLETION_SPEC) {
@@ -107,7 +108,7 @@ int Shell::execute(const Arguments& cmdline_arguments) {
   }
 
   CommandSpec *matching_spec;
-  Action *action = find_action(command_spec, &matching_spec);
+  Action *action = find_action(command_spec, &matching_spec, &is_alias);
   if (action == NULL) {
     print_unknown_action(command_spec);
     return EXIT_FAILURE;
@@ -210,7 +211,7 @@ void Shell::get_command_spec(const std::vector<std::string> &arguments,
 }
 
 Shell::Action *Shell::find_action(const CommandSpec &command_spec,
-                                  CommandSpec **matching_spec) {
+                                  CommandSpec **matching_spec, bool *is_alias) {
   for (size_t i = 0; i < get_actions().size(); ++i) {
     Action *action = get_actions()[i];
     if (action->command_spec.size() <= command_spec.size()) {
@@ -221,6 +222,7 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
         if (matching_spec != NULL) {
           *matching_spec = &action->command_spec;
         }
+        *is_alias = false;
         return action;
       }
     }
@@ -234,6 +236,7 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
         if (matching_spec != NULL) {
           *matching_spec = &action->alias_command_spec;
         }
+        *is_alias = true;
         return action;
       }
     }
@@ -302,14 +305,13 @@ void Shell::print_help() {
   std::cout << std::endl << global_opts << std::endl
             << "See '" << APP_NAME << " help <command>' for help on a specific "
             << "command." << std::endl;
-}
+ }
 
-void Shell::print_action_help(Action *action) {
-
+void Shell::print_action_help(Action *action, bool is_alias) {
   std::stringstream ss;
-  ss << "usage: " << APP_NAME << " "
-     << format_command_spec(action->command_spec);
-  std::cout << ss.str();
+    ss << "usage: " << APP_NAME << " "
+       << format_command_spec(is_alias ? action->alias_command_spec : action->command_spec);
+    std::cout << ss.str();
 
   po::options_description positional;
   po::options_description options;
@@ -339,7 +341,10 @@ void Shell::print_unknown_action(const std::vector<std::string> &command_spec) {
 }
 
 void Shell::print_bash_completion(const CommandSpec &command_spec) {
-  Action *action = find_action(command_spec, NULL);
+  
+  bool is_alias = true;
+
+  Action *action = find_action(command_spec, NULL, &is_alias);
   po::options_description global_opts;
   get_global_options(&global_opts);
   print_bash_completion_options(global_opts);
