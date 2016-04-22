@@ -26,16 +26,8 @@
 #include <xmmintrin.h>
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <spdk/pci.h>
 #include <spdk/nvme.h>
-
-#ifdef __cplusplus
-}
-#endif
 
 #include <rte_config.h>
 #include <rte_cycles.h>
