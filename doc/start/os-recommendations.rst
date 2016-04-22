@@ -40,8 +40,8 @@ platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
-Infernalis (9.1.0)
-------------------
+Infernalis (9.2.z) and Jewel (10.2.z)
+-------------------------------------
 
 +----------+----------+--------------------+--------------+---------+------------+
 | Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
