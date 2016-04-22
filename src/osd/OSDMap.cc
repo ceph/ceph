@@ -2953,12 +2953,12 @@ int OSDMap::summarize_mapping_stats(
       base_stddev += base_diff * base_diff;
       float new_diff = (float)new_by_osd[osd] - avg_pg;
       new_stddev += new_diff * new_diff;
-      if (min < 0 || min_base_pg < base_by_osd[osd]) {
+      if (min < 0 || base_by_osd[osd] < min_base_pg) {
 	min = osd;
 	min_base_pg = base_by_osd[osd];
 	min_new_pg = new_by_osd[osd];
       }
-      if (max < 0 || max_base_pg > base_by_osd[osd]) {
+      if (max < 0 || base_by_osd[osd] > max_base_pg) {
 	max = osd;
 	max_base_pg = base_by_osd[osd];
 	max_new_pg = new_by_osd[osd];
