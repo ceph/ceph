@@ -109,10 +109,14 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 The major releases of Ceph include:
 
-- **Hammer:** Hammer is the most recent, and is also the eighth major release
-  of Ceph.  These packages are recommended for anyone deploying Ceph in a
-  production environment. Critical bug fixes are backported and point releases
-  are made as necessary.
+- **Jewel:** Jewel includes CephFS for production environments and bug
+  fixing for prior versions.
+
+- **Infernalis:** Changes the version number from 0.x to 9.x
+
+- **Hammer:** Hammer is the eighth major release of Ceph. These packages
+  are recommended for anyone deploying Ceph in a production environment.
+  Critical bug fixes are backported and point releases are made as necessary.
 
 - **Giant:** Giant is the seventh major release of Ceph. These packages are
   recommended for anyone deploying Ceph in a production environment.  Critical
@@ -180,8 +184,8 @@ RPM Packages
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
 ``{ceph-release}`` with  a major release of Ceph (e.g., ``dumpling``,
-``emperor``, etc.) and ``{distro}`` with your Linux distribution (e.g., ``el6``,
-``rhel6``, etc.).  You may view http://download.ceph.com/rpm-{ceph-release}/ directory to
+``emperor``, etc.) and ``{distro}`` with your Linux distribution (e.g., ``el7``,
+``rhel7``, etc.).  You may view http://download.ceph.com/rpm-{ceph-release}/ directory to
 see which  distributions Ceph supports. Some Ceph packages (e.g., EPEL) must
 take priority over standard packages, so you must ensure that you set
 ``priority=2``. ::
@@ -424,7 +428,7 @@ RPM Packages
 Ceph requires additional additional third party libraries.
 To add the EPEL repository, execute the following::
 
-   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
+   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-6.noarch.rpm'
 
 Ceph requires the following packages:
 
@@ -435,7 +439,7 @@ Ceph requires the following packages:
 - gperftools-libs
 
 
-Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 18 and 19
+Packages are currently built for the RHEL/CentOS7 (``el7``), Fedora 18 and 19
 (``f18`` and ``f19``), OpenSUSE 12.2 (``opensuse12.2``), and SLES (``sles11``)
 platforms. The repository package installs the repository details on your local
 system for use with ``yum`` or ``up2date``. Replace ``{distro}`` with your
@@ -443,13 +447,13 @@ distribution. ::
 
     su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
-For example, for CentOS 6  (``el6``)::
+For example, for CentOS 7  (``el7``)::
 
-    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-jewel/el7/noarch/ceph-release-1-1.el7.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	http://download.ceph.com/rpm-firefly
+	http://download.ceph.com/rpm-jewel
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name
