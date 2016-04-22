@@ -35,29 +35,38 @@ public:
 
   KVTest() : db(0) {}
 
-  string mydirname() { return "kv_test_temp_dir_" + string(GetParam()); }
+  void rm_r(string path) {
+    string cmd = string("rm -r ") + path;
+    cout << "==> " << cmd << std::endl;
+    int r = ::system(cmd.c_str());
+    if (r) {
+      cerr << "failed with exit code " << r
+	   << ", continuing anyway" << std::endl;
+    }
+  }
 
   void init() {
     cout << "Creating " << string(GetParam()) << "\n";
     db.reset(KeyValueDB::create(g_ceph_context, string(GetParam()),
-				mydirname()));
+				"kv_test_temp_dir"));
   }
   void fini() {
     db.reset(NULL);
   }
 
   virtual void SetUp() {
-    int r = ::mkdir(mydirname().c_str(), 0777);
+    int r = ::mkdir("kv_test_temp_dir", 0777);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
-      cerr << __func__ << ": unable to create " << mydirname()
-	   << ": " << cpp_strerror(r) << std::endl;
+      cerr << __func__ << ": unable to create kv_test_temp_dir: "
+	   << cpp_strerror(r) << std::endl;
       return;
     }
     init();
   }
   virtual void TearDown() {
     fini();
+    rm_r("kv_test_temp_dir");
   }
 };
 
