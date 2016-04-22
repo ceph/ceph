@@ -276,7 +276,7 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   map<string, bufferlist> existing_refs;
 
-  int r = cls_cxx_map_get_vals(hctx, RBD_CG_REF_KEY, RBD_CG_REF_KEY, RBD_MAX_KEYS_READ, &existing_refs);
+  int r = cls_cxx_map_get_vals(hctx, "", RBD_CG_REF_KEY, RBD_MAX_KEYS_READ, &existing_refs);
   if (r > 0) {
     return -ETOOMANYREFS;
   }
