@@ -15,15 +15,15 @@
 
 [mon.alpha]
   host = peon5752
-  mon addr = [2607:f298:4:2243::5752]:6789
+  mon addr = [2607:f298:4:2243::5752]:3300
 
 [mon.beta]
   host = peon5753
-  mon addr = [2607:f298:4:2243::5753]:6789
+  mon addr = [2607:f298:4:2243::5753]:3300
 
 [mon.charlie]
   host = peon5754
-  mon addr = [2607:f298:4:2243::5754]:6789
+  mon addr = [2607:f298:4:2243::5754]:3300
 
 [client]
   rgw socket path = /var/run/ceph/radosgw.$name

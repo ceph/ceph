@@ -27,17 +27,17 @@
 
 [mon0]
 	host = cosd0
-	mon addr = 10.3.14.95:6789
+	mon addr = 10.3.14.95:3300
 	log dir = /data/cosd0
 
 [mon1]
 	host = cosd1
-	mon addr = 10.3.14.96:6789
+	mon addr = 10.3.14.96:3300
 	log dir = /data/cosd1
 
 [mon2]
 	host = cosd2
-	mon addr = 10.3.14.97:6789
+	mon addr = 10.3.14.97:3300
 	log dir = /data/cosd2
 
 
