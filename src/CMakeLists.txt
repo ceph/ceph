@@ -20,7 +20,7 @@ set_source_files_properties(${simple_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}
   )
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-   set(warnings_off "-Wno-unused-variable -Wno-unused-function")
+   set(warnings_off " -Wno-unused-variable -Wno-unused-function")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
    set(warnings_off " -Wno-unused-but-set-variable -Wno-unused-function")
  endif()
