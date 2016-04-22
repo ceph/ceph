@@ -1035,3 +1035,8 @@ int NVMEDevice::invalidate_cache(uint64_t off, uint64_t len)
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   return 0;
 }
+
+string NVMEDevice::get_type()
+{
+  return "ust-nvme";
+}

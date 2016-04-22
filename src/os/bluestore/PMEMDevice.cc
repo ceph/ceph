@@ -283,3 +283,7 @@ int PMEMDevice::invalidate_cache(uint64_t off, uint64_t len)
   return 0;
 }
 
+string PMEMDevice::get_type()
+{
+  return "pmem";
+}

@@ -552,3 +552,7 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
+string KernelDevice::get_type()
+{
+  return "kernel";
+}
