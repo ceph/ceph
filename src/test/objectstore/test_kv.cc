@@ -159,6 +159,70 @@ TEST_P(KVTest, BenchCommit) {
   fini();
 }
 
+struct AppendMOP : public KeyValueDB::MergeOperator {
+  virtual void merge_nonexistant(
+    const char *rdata, size_t rlen, std::string *new_value) override {
+    *new_value = "?" + std::string(rdata, rlen);
+  }
+  virtual void merge(
+    const char *ldata, size_t llen,
+    const char *rdata, size_t rlen,
+    std::string *new_value) {
+    *new_value = std::string(ldata, llen) + std::string(rdata, rlen);
+  }
+  // We use each operator name and each prefix to construct the
+  // overall RocksDB operator name for consistency check at open time.
+  virtual string name() const {
+    return "Append";
+  }
+};
+
+string tostr(bufferlist& b) {
+  return string(b.c_str(),b.length());
+}
+
+TEST_P(KVTest, Merge) {
+  shared_ptr<KeyValueDB::MergeOperator> p(new AppendMOP);
+  int r = db->set_merge_operator("A",p);
+  if (r < 0)
+    return; // No merge operators for this database type
+  ASSERT_EQ(0, db->create_and_open(cout));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist v1, v2, v3;
+    v1.append(string("1"));
+    v2.append(string("2"));
+    v3.append(string("3"));
+    t->set("P", "K1", v1);
+    t->set("A", "A1", v2);
+    t->rmkey("A", "A2");
+    t->merge("A", "A2", v3);
+    db->submit_transaction_sync(t);
+  }
+  {
+    bufferlist v1, v2, v3;
+    ASSERT_EQ(0, db->get("P", "K1", &v1));
+    ASSERT_EQ(tostr(v1), "1");
+    ASSERT_EQ(0, db->get("A", "A1", &v2));
+    ASSERT_EQ(tostr(v2), "2");
+    ASSERT_EQ(0, db->get("A", "A2", &v3));
+    ASSERT_EQ(tostr(v3), "?3");
+  }
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist v1;
+    v1.append(string("1"));
+    t->merge("A", "A2", v1);
+    db->submit_transaction_sync(t);
+  }
+  {
+    bufferlist v;
+    ASSERT_EQ(0, db->get("A", "A2", &v));
+    ASSERT_EQ(tostr(v), "?31");
+  }
+  fini();
+}
+
 
 INSTANTIATE_TEST_CASE_P(
   KeyValueDB,
