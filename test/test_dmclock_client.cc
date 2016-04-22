@@ -38,7 +38,7 @@ namespace crimson {
       ServerId server = 101;
       ClientId client = 3;
 
-      RespParams<ServerId> resp_params(server, dmc::PhaseType::reservation);
+      dmc::PhaseType resp_params = dmc::PhaseType::reservation;
 
       dmc::ServiceTracker<ServerId> st(std::chrono::seconds(2),
                                        std::chrono::seconds(3));
@@ -72,7 +72,7 @@ namespace crimson {
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
-      auto req_params = st.get_req_params(client, server);
+      auto req_params = st.get_req_params(server);
 
       lock_st([&] () {
 	  EXPECT_EQ(1, st.server_map.size()) <<
@@ -108,7 +108,7 @@ namespace crimson {
       dmc::ServiceTracker<ServerId> st(std::chrono::seconds(2),
                                        std::chrono::seconds(3));
 
-      auto rp1 = st.get_req_params(client, server1);
+      auto rp1 = st.get_req_params(server1);
 
       EXPECT_EQ(1, rp1.delta) <<
 	"delta should be 1 with no intervening responses by" <<
@@ -117,7 +117,7 @@ namespace crimson {
 	"rho should be 1 with no intervening reservation responses by" <<
 	"other servers";
 
-      auto rp2 = st.get_req_params(client, server1);
+      auto rp2 = st.get_req_params(server1);
 
       EXPECT_EQ(1, rp2.delta) <<
 	"delta should be 1 with no intervening responses by" <<
@@ -126,10 +126,9 @@ namespace crimson {
 	"rho should be 1 with no intervening reservation responses by" <<
 	"other servers";
 
-      st.track_resp(dmc::RespParams<ServerId>(server1,
-					      dmc::PhaseType::priority));
+      st.track_resp(server1, dmc::PhaseType::priority);
 
-      auto rp3 = st.get_req_params(client, server1);
+      auto rp3 = st.get_req_params(server1);
 
       EXPECT_EQ(1, rp3.delta) <<
 	"delta should be 1 with no intervening responses by" <<
@@ -139,10 +138,9 @@ namespace crimson {
 	"other servers";
 
 
-      st.track_resp(dmc::RespParams<ServerId>(server2,
-					      dmc::PhaseType::priority));
+      st.track_resp(server1, dmc::PhaseType::priority);
 
-      auto rp4 = st.get_req_params(client, server1);
+      auto rp4 = st.get_req_params(server1);
 
       EXPECT_EQ(2, rp4.delta) <<
 	"delta should be 2 with one intervening priority response by " <<
@@ -151,7 +149,7 @@ namespace crimson {
 	"rho should be 1 with one intervening priority responses by " <<
 	"another server";
 
-      auto rp5 = st.get_req_params(client, server1);
+      auto rp5 = st.get_req_params(server1);
 
       EXPECT_EQ(1, rp5.delta) <<
 	"delta should be 1 with no intervening responses by" <<
@@ -160,10 +158,9 @@ namespace crimson {
 	"rho should be 1 with no intervening reservation responses by" <<
 	"other servers";
 
-      st.track_resp(dmc::RespParams<ServerId>(server2,
-					      dmc::PhaseType::reservation));
+      st.track_resp(server1, dmc::PhaseType::reservation);
 
-      auto rp6 = st.get_req_params(client, server1);
+      auto rp6 = st.get_req_params(server1);
 
       EXPECT_EQ(2, rp6.delta) <<
 	"delta should be 2 with one intervening reservation response by " <<
@@ -172,24 +169,17 @@ namespace crimson {
 	"rho should be 2 with one intervening reservation responses by " <<
 	"another server";
 
-      auto rp6_b = st.get_req_params(client, server2);
+      auto rp6_b = st.get_req_params(server2);
 
-      st.track_resp(dmc::RespParams<ServerId>(server2,
-					      dmc::PhaseType::reservation));
-      st.track_resp(dmc::RespParams<ServerId>(server1,
-					      dmc::PhaseType::priority));
-      st.track_resp(dmc::RespParams<ServerId>(server2,
-					      dmc::PhaseType::priority));
-      st.track_resp(dmc::RespParams<ServerId>(server2,
-					      dmc::PhaseType::reservation));
-      st.track_resp(dmc::RespParams<ServerId>(server1,
-					      dmc::PhaseType::reservation));
-      st.track_resp(dmc::RespParams<ServerId>(server1,
-					      dmc::PhaseType::priority));
-      st.track_resp(dmc::RespParams<ServerId>(server2,
-					      dmc::PhaseType::priority));
+      st.track_resp(server2, dmc::PhaseType::reservation);
+      st.track_resp(server1, dmc::PhaseType::priority);
+      st.track_resp(server2, dmc::PhaseType::priority);
+      st.track_resp(server2, dmc::PhaseType::reservation);
+      st.track_resp(server1, dmc::PhaseType::reservation);
+      st.track_resp(server1, dmc::PhaseType::priority);
+      st.track_resp(server2, dmc::PhaseType::priority);
 
-      auto rp7 = st.get_req_params(client, server1);
+      auto rp7 = st.get_req_params(server1);
 
       EXPECT_EQ(5, rp7.delta) <<
 	"delta should be 5 with fourintervening responses by " <<
@@ -198,7 +188,7 @@ namespace crimson {
 	"rho should be 3 with two intervening reservation responses by " <<
 	"another server";
 
-      auto rp7b = st.get_req_params(client, server2);
+      auto rp7b = st.get_req_params(server2);
 
       EXPECT_EQ(4, rp7b.delta) <<
 	"delta should be 4 with three intervening responses by " <<
@@ -207,7 +197,7 @@ namespace crimson {
 	"rho should be 2 with one intervening reservation responses by " <<
 	"another server";
 
-      auto rp8 = st.get_req_params(client, server1);
+      auto rp8 = st.get_req_params(server1);
 
       EXPECT_EQ(1, rp8.delta) <<
 	"delta should be 1 with no intervening responses by " <<
@@ -216,7 +206,7 @@ namespace crimson {
 	"rho should be 1 with no intervening reservation responses by " <<
 	"another server";
 
-      auto rp8b = st.get_req_params(client, server2);
+      auto rp8b = st.get_req_params(server2);
       EXPECT_EQ(1, rp8b.delta) <<
 	"delta should be 1 with no intervening responses by " <<
 	"another server";
