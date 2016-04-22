@@ -30,7 +30,11 @@ if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
     fi
     location="$($hook --cluster ${cluster:-ceph} --id $id --type osd)"
     weight="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_initial_weight || :)"
-    defaultweight=`df -P -k $data/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.4f", d); print r }'`
+    if [ -e $data/block ]; then
+        defaultweight=`blockdev --getsize64 $data/block | awk '{ d= $1/1099511627776 ; r = sprintf("%.4f", d); print r }'`
+    else
+        defaultweight=`df -P -k $data/ | tail -1 | awk '{ d= $2/1073741824 ; r = sprintf("%.4f", d); print r }'`
+    fi
     ceph \
         --cluster="${cluster:-ceph}" \
         --name="osd.$id" \
