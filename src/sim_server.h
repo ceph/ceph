@@ -127,8 +127,9 @@ namespace crimson {
       }
 
       void post(const TestRequest& request,
+		const ClientId& client_id,
 		const ReqPm& req_params) {
-	priority_queue->add_request(request, req_params);
+	priority_queue->add_request(request, client_id, req_params);
       }
 
       bool has_avail_thread() {

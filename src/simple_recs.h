@@ -26,6 +26,14 @@ namespace crimson {
       return out;
     }
 
+    struct ReqParams {
+      friend std::ostream& operator<<(std::ostream& out, const ReqParams& rp) {
+	out << "ReqParams{ EMPTY }";
+	return out;
+      }
+    };
+
+#if 0
     template<typename C>
     struct ReqParams {
       C        client;
@@ -47,5 +55,6 @@ namespace crimson {
 	return out;
       }
     }; // struct ReqParams
+#endif
   }
 }

@@ -62,9 +62,10 @@ int main(int argc, char* argv[]) {
   test::SubmitFunc server_post_f =
     [&simulation](const ServerId& server_id,
 		  const sim::TestRequest& request,
-		  const ssched::ReqParams<ClientId>& req_params) {
+		  const ClientId& client_id,
+		  const ssched::ReqParams& req_params) {
     auto& server = simulation->get_server(server_id);
-    server.post(request, req_params);
+    server.post(request, client_id, req_params);
   };
 
   static std::vector<sim::CliInst> no_wait =

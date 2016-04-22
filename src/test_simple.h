@@ -31,11 +31,11 @@ namespace crimson {
     using SimpleQueue = ssched::SimpleQueue<ClientId,sim::TestRequest,Time>;
 
     using SimpleServer = sim::SimulatedServer<SimpleQueue,
-					      ssched::ReqParams<ClientId>,
+					      ssched::ReqParams,
 					      ssched::NullData,
 					      SimpleAccum>;
     using SimpleClient = sim::SimulatedClient<ssched::ServiceTracker<ServerId>,
-					      ssched::ReqParams<ClientId>,
+					      ssched::ReqParams,
 					      ssched::NullData,
 					      SimpleAccum>;
 

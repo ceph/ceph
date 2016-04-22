@@ -137,23 +137,21 @@ namespace crimson {
       /*
        * Returns the ReqParams for the given server.
        */
-      template<typename C>
-      ReqParams<C> get_req_params(const C& client, const S& server) {
+      ReqParams get_req_params(const S& server) {
 	DataGuard g(data_mtx);
 	auto it = server_map.find(server);
 	if (server_map.end() == it) {
 	  server_map.emplace(server, ServerInfo(delta_counter, rho_counter));
-	  return ReqParams<C>(client, 1, 1);
+	  return ReqParams(1, 1);
 	} else {
 	  Counter delta =
 	    1 + delta_counter - it->second.delta_prev_req - it->second.my_delta;
 	  Counter rho =
 	    1 + rho_counter - it->second.rho_prev_req - it->second.my_rho;
-	  ReqParams<C> result(client, uint32_t(delta), uint32_t(rho));
-
+	  
 	  it->second.req_update(delta_counter, rho_counter);
 
-	  return result;
+	  return ReqParams(uint32_t(delta), uint32_t(rho));
 	}
       }
 

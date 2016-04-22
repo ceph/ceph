@@ -82,10 +82,9 @@ namespace crimson {
       double limit;
       bool   ready; // true when within limit
 
-      template<typename I>
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
-		 const ReqParams<I>& req_params,
+		 const ReqParams& req_params,
 		 const Time& time) :
 	reservation(tag_calc(time,
 			     prev_tag.reservation,
@@ -171,14 +170,17 @@ namespace crimson {
       class ClientReq {
 	friend PriorityQueue;
 
-	RequestTag          tag;
-	RequestRef          request;
+	RequestTag tag;
+	C          client_id;
+	RequestRef request;
 
       public:
 
 	ClientReq(const RequestTag& _tag,
+		  const C&          _client_id,
 		  RequestRef&&      _request) :
 	  tag(_tag),
+	  client_id(_client_id),
 	  request(std::move(_request))
 	{
 	  // empty
@@ -244,8 +246,10 @@ namespace crimson {
 	  prev_tag.proportion = value - (adjust_by_inc ? info.weight_inv : 0.0);
 	}
 
-	inline void add_request(const RequestTag& tag, RequestRef&& request) {
-	  requests.emplace_back(ClientReq(tag, std::move(request)));
+	inline void add_request(const RequestTag& tag,
+				const C&          client_id,
+				RequestRef&&      request) {
+	  requests.emplace_back(ClientReq(tag, client_id, std::move(request)));
 	}
 
 	inline const ClientReq& next_request() const {
@@ -553,28 +557,34 @@ namespace crimson {
 
 
       void add_request(const R& request,
-		       const ReqParams<C>& req_params) {
-	add_request(RequestRef(new R(request)), req_params, get_time());
+		       const C& client_id,
+		       const ReqParams& req_params) {
+	add_request(RequestRef(new R(request)),
+		    client_id,
+		    req_params,
+		    get_time());
       }
 
       
       void add_request(RequestRef&& request,
-		       const ReqParams<C>& req_params) {
-	add_request(request, req_params, get_time());
+		       const C& client_id,
+		       const ReqParams& req_params) {
+	add_request(request, req_params, client_id, get_time());
       }
 
       
       void add_request(const R& request,
-		       const ReqParams<C>& req_params,
+		       const C& client_id,
+		       const ReqParams& req_params,
 		       const Time time) {
-	add_request(RequestRef(new R(request)), req_params, time);
+	add_request(RequestRef(new R(request)), client_id, req_params, time);
       }
 
 
-      void add_request(RequestRef&& request,
-		       const ReqParams<C>& req_params,
-		       const Time time) {
-	const C& client_id = req_params.client;
+      void add_request(RequestRef&&     request,
+		       const C&         client_id,
+		       const ReqParams& req_params,
+		       const Time       time) {
 	DataGuard g(data_mtx);
 	++tick;
 
@@ -635,7 +645,7 @@ namespace crimson {
 	} // if this client was idle
 
 	RequestTag tag(client.get_req_tag(), client.info, req_params, time);
-	client.add_request(tag, std::move(request));
+	client.add_request(tag, client.client, std::move(request));
 
 	// copy tag to previous tag for client
 	client.update_req_tag(tag, tick);

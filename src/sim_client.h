@@ -72,7 +72,10 @@ namespace crimson {
     public:
 
       using SubmitFunc =
-	std::function<void(const ServerId&, const TestRequest&, const ReqPm&)>;
+	std::function<void(const ServerId&,
+			   const TestRequest&,
+			   const ClientId&,
+			   const ReqPm&)>;
 
       using ClientAccumFunc = std::function<void(Accum&,const RespPm&)>;
 
@@ -207,9 +210,9 @@ namespace crimson {
 	      l.unlock();
 	      auto now = std::chrono::steady_clock::now();
 	      const ServerId& server = server_select_f(o);
-	      ReqPm rp = service_tracker.get_req_params(id, server);
+	      ReqPm rp = service_tracker.get_req_params(server);
 	      TestRequest req(server, o, 12);
-	      submit_f(server, req, rp);
+	      submit_f(server, req, id, rp);
 	      ++outstanding_ops;
 	      l.lock(); // lock for return to top of loop
 

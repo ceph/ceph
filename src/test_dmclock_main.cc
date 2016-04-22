@@ -77,9 +77,10 @@ int main(int argc, char* argv[]) {
     test::SubmitFunc server_post_f =
         [&simulation](const ServerId& server,
                       const sim::TestRequest& request,
-                      const test::dmc::ReqParams<ClientId>& req_params) {
+                      const ClientId& client_id,
+                      const test::dmc::ReqParams& req_params) {
         test::DmcServer& s = simulation->get_server(server);
-        s.post(request, req_params);
+        s.post(request, client_id, req_params);
     };
 
     static std::vector<sim::CliInst> no_wait =

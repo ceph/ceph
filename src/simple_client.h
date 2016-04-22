@@ -36,9 +36,8 @@ namespace crimson {
       /*
        * Returns the ReqParams for the given server.
        */
-      template<typename C>
-      ReqParams<C> get_req_params(const C& client, const S& server) {
-	return ReqParams<C>(client);
+      ReqParams get_req_params(const S& server) {
+	return ReqParams();
       } // get_req_params
     }; // class ServiceTracker
   } // namespace simple_scheduler

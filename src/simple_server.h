@@ -91,13 +91,14 @@ namespace crimson {
       }
 
       void add_request(const R& request,
-		       const ReqParams<C>& req_params) {
-	add_request(RequestRef(new R(request)), req_params);
+		       const C& client_id,
+		       const ReqParams& req_params) {
+	add_request(RequestRef(new R(request)), client_id, req_params);
       }
 
       void add_request(RequestRef&& request,
-		       const ReqParams<C>& req_params) {
-	const C& client_id = req_params.client;
+		       const C& client_id,
+		       const ReqParams& req_params) {
 	DataGuard g(queue_mtx);
 	queue.emplace_back(QRequest{client_id, std::move(request)});
 

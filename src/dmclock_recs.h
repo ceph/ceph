@@ -24,18 +24,14 @@ namespace crimson {
       return out;
     }
 
-    template<typename C>
     struct ReqParams {
-      C        client;
-
       // count of all replies since last request; MUSTN'T BE 0
       uint32_t delta;
 
       // count of reservation replies since last request; MUSTN'T BE 0
       uint32_t rho;
 
-      ReqParams(const C& _client, uint32_t _delta, uint32_t _rho) :
-	client(_client),
+      ReqParams(uint32_t _delta, uint32_t _rho) :
 	delta(_delta),
 	rho(_rho)
       {
@@ -43,7 +39,6 @@ namespace crimson {
       }
 
       ReqParams(const ReqParams& other) :
-	client(other.client),
 	delta(other.delta),
 	rho(other.rho)
       {
@@ -51,7 +46,7 @@ namespace crimson {
       }
 
       friend std::ostream& operator<<(std::ostream& out, const ReqParams& rp) {
-	out << "ReqParams{ client:" << rp.client << ", delta:" << rp.delta <<
+	out << "ReqParams{ delta:" << rp.delta <<
 	  ", rho:" << rp.rho << " }";
 	return out;
       }
