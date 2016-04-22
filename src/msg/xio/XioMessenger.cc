@@ -26,6 +26,8 @@
 #include "messages/MNop.h"
 
 #define dout_subsys ceph_subsys_xio
+#undef dout_prefix
+#define dout_prefix *_dout << "xio."
 
 Mutex mtx("XioMessenger Package Lock");
 atomic_t initialized;
