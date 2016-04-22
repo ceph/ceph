@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_IMAGE_WATCHER_NOTIFIER_H
 
 #include "include/int_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include <list>
