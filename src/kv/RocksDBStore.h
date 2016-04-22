@@ -154,6 +154,10 @@ public:
     void rmkeys_by_prefix(
       const string &prefix
       );
+    void merge(
+      const string& prefix,
+      const string& k,
+      const bufferlist &bl);
   };
 
   KeyValueDB::Transaction get_transaction() {
@@ -217,6 +221,11 @@ public:
   static bufferlist to_bufferlist(rocksdb::Slice in);
   static string past_prefix(const string &prefix);
 
+  class MergeOperatorRouter;
+  friend class MergeOperatorRouter;
+  virtual int set_merge_operator(const std::string& prefix, std::shared_ptr<KeyValueDB::MergeOperator> mop);
+  string assoc_name; // Name of associative operator
+ 
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {
     DIR *store_dir = opendir(path.c_str());
     if (!store_dir) {
@@ -290,5 +299,7 @@ protected:
   WholeSpaceIterator _get_snapshot_iterator();
 
 };
+
+
 
 #endif
