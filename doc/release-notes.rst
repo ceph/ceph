@@ -5306,7 +5306,7 @@ v0.94.5 Hammer
 ==============
 
 This Hammer point release fixes a critical regression in librbd that can cause
-Qemu/KVM to crash when caching is enabled on images that have been cloned.
+QEMU/KVM to crash when caching is enabled on images that have been cloned.
 
 All v0.94.4 Hammer users are strongly encouraged to upgrade.
 
@@ -12690,7 +12690,7 @@ Notable changes
 * rbd: avoid FIEMAP ioctl on import (it is broken on some kernels)
 * librbd: fixes for several request/reply ordering bugs
 * librbd: only set STRIPINGV2 feature on new images when needed
-* librbd: new async flush method to resolve qemu hangs (requires Qemu update as well)
+* librbd: new async flush method to resolve qemu hangs (requires QEMU update as well)
 * librbd: a few fixes to flatten
 * ceph-disk: support for dm-crypt
 * ceph-disk: many backports to allow bobtail deployments with ceph-deploy, chef

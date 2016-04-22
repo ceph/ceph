@@ -479,7 +479,7 @@ Next, create a branch for the bugfix:
 .. code::
 
     $ git checkout master
-    $ git branch -b fix_1
+    $ git checkout -b fix_1
     $ git push -u origin fix_1
 
 This creates a ``fix_1`` branch locally and in our GitHub fork. At this
