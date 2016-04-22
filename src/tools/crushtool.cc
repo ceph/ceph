@@ -132,7 +132,7 @@ void usage()
   cout << "                         compile with unsafe tunables\n";
   cout << "   --build --num_osds N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
-  cout << "                         'name (uniform|straw|list|tree) size'\n";
+  cout << "                         'name (uniform|straw2|straw|list|tree) size'\n";
   cout << "\n";
   cout << "Options for the tunables adjustments stage\n";
   cout << "\n";

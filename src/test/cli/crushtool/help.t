@@ -26,7 +26,7 @@
                            compile with unsafe tunables
      --build --num_osds N layer1 ...
                            build a new map, where each 'layer' is
-                           'name (uniform|straw|list|tree) size'
+                           'name (uniform|straw2|straw|list|tree) size'
   
   Options for the tunables adjustments stage
   
