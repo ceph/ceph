@@ -391,10 +391,9 @@ else
     IP="$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
     # if nothing left, try using localhost address, it might work
     if [ -z "$IP" ]; then IP="127.0.0.1"; fi
-    echo ip $IP
 fi
 echo "ip $IP"
-echo "port $PORT"
+echo "port $CEPH_PORT"
 
 
 [ -z $CEPH_ADM ] && CEPH_ADM=$CEPH_BIN/ceph
