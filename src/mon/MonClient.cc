@@ -89,7 +89,7 @@ MonClient::~MonClient()
 int MonClient::build_initial_monmap()
 {
   ldout(cct, 10) << "build_initial_monmap" << dendl;
-  return monmap.build_initial(cct, cerr);
+  return monmap.build_initial(cct, cerr, true);
 }
 
 int MonClient::get_monmap()
