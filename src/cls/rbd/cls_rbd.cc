@@ -298,7 +298,7 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   int cur_state = CG_DEFAULT;
   int r = read_key(hctx, CG_STATE, &cur_state);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) { // missing state key is default state
     return r;
   }
   if (cur_state != CG_DEFAULT) {
