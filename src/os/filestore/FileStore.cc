@@ -152,7 +152,6 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s)
 {
-  assert(&out);
   return out << *s.parent;
 }
 
