@@ -19,6 +19,7 @@
 
 class MClientReply;
 class Dentry;
+class dir_result_t;
 
 struct MetaRequest {
 private:
@@ -56,15 +57,7 @@ public:
   bool success;
   
   // readdir result
-  frag_t readdir_frag;
-  string readdir_start;  // starting _after_ this name
-  uint64_t readdir_offset;
-
-  frag_t readdir_reply_frag;
-  vector<pair<string,InodeRef> > readdir_result;
-  bool readdir_end;
-  int readdir_num;
-  string readdir_last_name;
+  dir_result_t *dirp;
 
   //possible responses
   bool got_unsafe;
@@ -93,7 +86,6 @@ public:
     num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), success(false),
-    readdir_offset(0), readdir_end(false), readdir_num(0),
     got_unsafe(false), item(this), unsafe_item(this),
     unsafe_dir_item(this), unsafe_target_item(this),
     caller_cond(0), dispatch_cond(0) {
