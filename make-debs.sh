@@ -84,7 +84,12 @@ fi
 if test $NPROC -gt 1 ; then
     j=-j${NPROC}
 fi
-PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
+CCACHE_PATH=$PATH
+for d in /usr/{lib64,lib,lib32,libexec}/ccache{,/bin} ; do
+    test -d $d && test -x $d/g++ && CCACHE_PATH=$d:$PATH && break
+done
+
+PATH=${CCACHE_PATH} dpkg-buildpackage $j -uc -us
 cd ../..
 mkdir -p $codename/conf
 cat > $codename/conf/distributions <<EOF
