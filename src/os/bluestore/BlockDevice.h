@@ -105,6 +105,7 @@ public:
   virtual void close() = 0;
 
   virtual string get_type() = 0;
+  virtual int copy(uint64_t dest, uint64_t src, uint64_t len) = 0;
 };
 
 #endif //CEPH_OS_BLUESTORE_BLOCKDEVICE_H

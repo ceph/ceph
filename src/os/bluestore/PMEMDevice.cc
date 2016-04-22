@@ -287,3 +287,14 @@ string PMEMDevice::get_type()
 {
   return "pmem";
 }
+
+int PMEMDevice::copy(uint64_t dest, uint64_t src, uint64_t len)
+{
+  dout(5) << __func__ << " from " << src  << " --> " << dest << " len=" << len << dendl;
+  assert(len > 0 );
+  assert(dest < size && src < size);
+  assert((src + len <= size) && (dest + len <= size));
+  pmem_memcpy_persist(addr + dest, addr + src, len);
+
+  return 0;
+}

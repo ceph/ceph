@@ -556,3 +556,8 @@ string KernelDevice::get_type()
 {
   return "kernel";
 }
+
+int KernelDevice::copy(uint64_t dest, uint64_t src, uint64_t len)
+{
+  return -EOPNOTSUPP;
+}

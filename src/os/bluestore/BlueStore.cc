@@ -4156,12 +4156,19 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     assert((wo.extent.length & ~block_mask) == 0);
     assert(wo.extent.length == wo.src_extent.length);
     assert((wo.src_extent.offset & ~block_mask) == 0);
-    bufferlist bl;
-    r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
-		       true);
-    assert(r == 0);
-    assert(bl.length() == wo.extent.length);
-    r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
+#if defined(HAVE_PMEM)
+    if (bdev->get_type() == "pmem") {
+      r = bdev->copy(wo.src_extent.offset, wo.extent.offset, wo.src_extent.length);
+    } else
+#endif
+    {
+      bufferlist bl;
+      r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
+	  true);
+      assert(r == 0);
+      assert(bl.length() == wo.extent.length);
+      r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
+    }
     assert(r == 0);
   }
   break;

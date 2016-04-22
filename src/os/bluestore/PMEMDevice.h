@@ -68,6 +68,7 @@ public:
   void close() override;
 
   string get_type() override;
+  int copy(uint64_t dest, uint64_t src, uint64_t len) override;
 };
 
 #endif
