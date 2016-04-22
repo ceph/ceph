@@ -319,7 +319,7 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
 
-  r = cls_cxx_map_get_vals(hctx, image_key, image_key, RBD_MAX_KEYS_READ, &existing_refs);
+  r = cls_cxx_map_get_vals(hctx, "", image_key, RBD_MAX_KEYS_READ, &existing_refs);
   if (r > 0) {
     return -EEXIST;
   }
