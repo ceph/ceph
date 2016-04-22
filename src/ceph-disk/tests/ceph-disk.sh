@@ -35,7 +35,7 @@ function teardown_btrfs() {
 
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-export PATH=..:.:$PATH # make sure program from sources are prefered
+export PATH=..:.:$PATH # make sure program from sources are preferred
 export PATH=../ceph-detect-init/virtualenv/bin:$PATH
 export PATH=virtualenv/bin:$PATH
 DIR=test-ceph-disk
