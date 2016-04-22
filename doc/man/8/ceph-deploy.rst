@@ -367,9 +367,9 @@ the configuration file under ``/etc/ceph`` directory of remote host to admin nod
 
 Usage::
 
-	ceph-deploy push [HOST] [HOST...]
+	ceph-deploy config push [HOST] [HOST...]
 
-	ceph-deploy pull [HOST] [HOST...]
+	ceph-deploy config pull [HOST] [HOST...]
 
 Here, [HOST] is the hostname of the node where config file will be pushed to or
 pulled from.
