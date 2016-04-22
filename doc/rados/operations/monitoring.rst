@@ -50,7 +50,7 @@ one monitor, and two OSDs may print the following::
 
     cluster b370a29d-9287-4ca3-ab57-3d824f65e339
      health HEALTH_OK
-     monmap e1: 1 mons at {ceph1=10.0.0.8:6789/0}, election epoch 2, quorum 0 ceph1
+     monmap e1: 1 mons at {ceph1=10.0.0.8:3300/0}, election epoch 2, quorum 0 ceph1
      osdmap e63: 2 osds: 2 up, 2 in
       pgmap v41338: 952 pgs, 20 pools, 17130 MB data, 2199 objects
             115 GB used, 167 GB / 297 GB avail
@@ -151,7 +151,7 @@ of one monitor, and two OSDs may print the following::
 
     cluster b370a29d-9287-4ca3-ab57-3d824f65e339
      health HEALTH_OK
-     monmap e1: 1 mons at {ceph1=10.0.0.8:6789/0}, election epoch 2, quorum 0 ceph1
+     monmap e1: 1 mons at {ceph1=10.0.0.8:3300/0}, election epoch 2, quorum 0 ceph1
      osdmap e63: 2 osds: 2 up, 2 in
       pgmap v41332: 952 pgs, 20 pools, 17130 MB data, 2199 objects
             115 GB used, 167 GB / 297 GB avail
@@ -224,7 +224,7 @@ three monitors may return the following:
 	      "mons": [
 	            { "rank": 0,
 	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
+	              "addr": "127.0.0.1:3300\/0"},
 	            { "rank": 1,
 	              "name": "b",
 	              "addr": "127.0.0.1:6790\/0"},

@@ -90,13 +90,13 @@ harden the ports on your Ceph Nodes.
 Monitor IP Tables
 -----------------
 
-Ceph Monitors listen on port ``6789`` by default. Additionally, Ceph Monitors
+Ceph Monitors listen on port ``3300`` by default. Additionally, Ceph Monitors
 always operate on the public network. When you add the rule using the example
 below, make sure you replace ``{iface}`` with the public network interface
 (e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with  the IP address of the
 public network and ``{netmask}`` with the netmask for the public network. ::
 
-   sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
+   sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 3300 -j ACCEPT
 
 
 MDS IP Tables
@@ -242,7 +242,7 @@ port.
 	[mon.a]
 	
 		host = {hostname}
-		mon addr = {ip-address}:6789
+		mon addr = {ip-address}:3300
 
 	[osd.0]
 		host = {hostname}

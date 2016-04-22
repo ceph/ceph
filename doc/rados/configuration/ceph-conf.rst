@@ -92,7 +92,7 @@ configuration as follows:
               the Ceph Storage Cluster, and override the same setting in 
               ``[global]``.
 
-:Example: ``mon addr = 10.0.0.101:6789``
+:Example: ``mon addr = 10.0.0.101:3300``
 
 
 ``[mds]``
@@ -283,13 +283,13 @@ Monitors in the quorum.
 .. note:: You may deploy Ceph with a single monitor, but if the instance fails,
 	       the lack of other monitors may interrupt data service availability.
 
-Ceph Monitors typically listen on port ``6789``. For example:
+Ceph Monitors typically listen on port ``3300``. For example:
 
 .. code-block:: ini 
 
 	[mon.a]
 	host = hostName
-	mon addr = 150.140.130.120:6789
+	mon addr = 150.140.130.120:3300
 
 By default, Ceph expects that you will store a monitor's data under the
 following path::
@@ -510,8 +510,8 @@ name at the appropriate places in the path. For example::
 	sudo mkdir /var/lib/ceph/mon/openstack-a
 	
 .. important:: When running monitors on the same host, you should use 
-   different ports. By default, monitors use port 6789. If you already 
-   have monitors using port 6789, use a different port for your other cluster(s). 
+   different ports. By default, monitors use port 3300. If you already 
+   have monitors using port 3300, use a different port for your other cluster(s). 
 
 To invoke a cluster other than the default ``ceph`` cluster, use the 
 ``-c {filename}.conf`` option with the ``ceph`` command. For example:: 

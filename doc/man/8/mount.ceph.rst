@@ -26,7 +26,7 @@ specifying monitor address(es) by IP::
         mount -t ceph 1.2.3.4:/ mountpoint
 
 Each monitor address monaddr takes the form host[:port]. If the port
-is not specified, the Ceph default of 6789 is assumed.
+is not specified, the Ceph default of 3300 is assumed.
 
 Multiple monitor addresses can be separated by commas. Only one
 responsible monitor is needed to successfully mount; the client will
