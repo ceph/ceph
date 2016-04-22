@@ -994,9 +994,9 @@ int BlueFS::_flush_log()
 
   // pad to block boundary
   _pad_bl(bl);
-  log_writer->append(bl);
-
   logger->inc(l_bluefs_logged_bytes, bl.length());
+
+  log_writer->append(bl);
 
   log_t.clear();
   log_t.seq = 0;  // just so debug output is less confusing
