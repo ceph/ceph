@@ -60,8 +60,8 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
     int r = 0;
     if (send_refresh_parent(&r) != nullptr) {
       send_complete();
-      return;
     }
+    return;
   }
 
   CephContext *cct = m_image_ctx.cct;
