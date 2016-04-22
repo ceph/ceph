@@ -35,19 +35,22 @@ public:
 
   KVTest() : db(0) {}
 
+  string mydirname() { return "kv_test_temp_dir_" + string(GetParam()); }
+
   void init() {
+    cout << "Creating " << string(GetParam()) << "\n";
     db.reset(KeyValueDB::create(g_ceph_context, string(GetParam()),
-				string("kv_test_temp_dir")));
+				mydirname()));
   }
   void fini() {
     db.reset(NULL);
   }
 
   virtual void SetUp() {
-    int r = ::mkdir("kv_test_temp_dir", 0777);
+    int r = ::mkdir(mydirname().c_str(), 0777);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
-      cerr << __func__ << ": unable to create kv_test_temp_dir"
+      cerr << __func__ << ": unable to create " << mydirname()
 	   << ": " << cpp_strerror(r) << std::endl;
       return;
     }
@@ -87,11 +90,11 @@ TEST_P(KVTest, PutReopen) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    bufferlist v;
-    ASSERT_EQ(0, db->get("prefix", "key", &v));
-    ASSERT_EQ(v.length(), 5u);
-    ASSERT_EQ(0, db->get("prefix", "key2", &v));
-    ASSERT_EQ(v.length(), 5u);
+    bufferlist v1, v2;
+    ASSERT_EQ(0, db->get("prefix", "key", &v1));
+    ASSERT_EQ(v1.length(), 5u);
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 5u);
   }
   {
     KeyValueDB::Transaction t = db->get_transaction();
@@ -104,11 +107,11 @@ TEST_P(KVTest, PutReopen) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    bufferlist v;
-    ASSERT_EQ(-ENOENT, db->get("prefix", "key", &v));
-    ASSERT_EQ(0, db->get("prefix", "key2", &v));
-    ASSERT_EQ(v.length(), 5u);
-    ASSERT_EQ(-ENOENT, db->get("prefix", "key3", &v));
+    bufferlist v1, v2, v3;
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key", &v1));
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 5u);
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key3", &v3));
   }
   fini();
 }
@@ -144,6 +147,7 @@ TEST_P(KVTest, BenchCommit) {
   utime_t dur = end - start;
   cout << n << " commits in " << dur << ", avg latency " << (dur / (double)n)
        << std::endl;
+  fini();
 }
 
 
