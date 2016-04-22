@@ -2207,6 +2207,12 @@ int OSD::init()
     }
   }
 
+  r = update_crush_location();
+  if (r < 0) {
+    osd_lock.Lock();
+    goto monout;
+  }
+
   osd_lock.Lock();
   if (is_stopping())
     return 0;
@@ -2750,6 +2756,61 @@ int OSD::shutdown()
   peering_wq.clear();
 
   return r;
+}
+
+int OSD::update_crush_location()
+{
+  if (!g_conf->osd_crush_update_on_start) {
+    dout(10) << __func__ << " osd_crush_update_on_start = false" << dendl;
+    return 0;
+  }
+
+  char weight[32];
+  if (g_conf->osd_crush_initial_weight) {
+    snprintf(weight, sizeof(weight), "%.4lf", g_conf->osd_crush_initial_weight);
+  } else {
+    struct statfs st;
+    int r = store->statfs(&st);
+    if (r < 0) {
+      derr << "statfs: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    snprintf(weight, sizeof(weight), "%.4lf",
+	     MAX((double).00001,
+		 (double)(st.f_blocks * st.f_bsize) /
+		 (double)(1ull << 40 /* TB */)));
+  }
+
+  std::multimap<string,string> loc = cct->crush_location.get_location();
+  dout(10) << __func__ << " crush location is " << loc << dendl;
+
+  string cmd =
+    string("{\"prefix\": \"osd crush create-or-move\", ") +
+    string("\"id\": ") + stringify(whoami) + string(", ") +
+    string("\"weight\":") + weight + string(", ") +
+    string("\"args\": [");
+  for (multimap<string,string>::iterator p = loc.begin(); p != loc.end(); ++p) {
+    if (p != loc.begin())
+      cmd += ", ";
+    cmd += "\"" + p->first + "=" + p->second + "\"";
+  }
+  cmd += "]}";
+
+  dout(10) << __func__ << " cmd: " << cmd << dendl;
+  vector<string> vcmd{cmd};
+  bufferlist inbl;
+
+  C_SaferCond w;
+  string outs;
+  int r = monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
+  if (r == 0)
+    r = w.wait();
+  if (r < 0) {
+    derr << __func__ << " fail: '" << outs << "': " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  return 0;
 }
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
