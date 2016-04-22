@@ -56,6 +56,7 @@ static list<int> free_ids;
 static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
 static bool follows[MAX_LOCKS][MAX_LOCKS]; // follows[a][b] means b taken after a
 static BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
+unsigned current_maxid;
 
 static bool lockdep_force_backtrace()
 {
@@ -75,6 +76,7 @@ void lockdep_register_ceph_context(CephContext *cct)
     g_lockdep = true;
     g_lockdep_ceph_ctx = cct;
     lockdep_dout(0) << "lockdep start" << dendl;
+    current_maxid = 0;
 
     for (int i=0; i<MAX_LOCKS; ++i) {
       free_ids.push_back(i);
@@ -93,17 +95,20 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     g_lockdep_ceph_ctx = NULL;
 
     // blow away all of our state, too, in case it starts up again.
-    held.clear();
-    for (unsigned i = 0; i < MAX_LOCKS; ++i) {
-      for (unsigned j = 0; j < MAX_LOCKS; ++j) {
-        follows[i][j] = false;
-        follows_bt[i][j] = NULL;
+    for (unsigned i = 0; i < current_maxid; ++i) {
+      for (unsigned j = 0; j < current_maxid; ++j) {
+        delete follows_bt[i][j];
       }
     }
+
+    held.clear();
     lock_names.clear();
     lock_ids.clear();
     lock_refs.clear();
     free_ids.clear();
+    memset((void*)&follows[0][0], 0, sizeof(bool) * current_maxid * MAX_LOCKS);
+    memset((void*)&follows_bt[0][0], 0, sizeof(BackTrace*) * current_maxid * MAX_LOCKS);
+    current_maxid = 0;
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -148,7 +153,9 @@ int lockdep_register(const char *name)
     }
     id = free_ids.front();
     free_ids.pop_front();
-
+    if (current_maxid <= (unsigned)id) {
+        current_maxid = (unsigned)id + 1;
+    }
     lock_ids[name] = id;
     lock_names[id] = name;
     lockdep_dout(10) << "registered '" << name << "' as " << id << dendl;
@@ -177,10 +184,10 @@ void lockdep_unregister(int id)
   int &refs = lock_refs[id];
   if (--refs == 0) {
     // reset dependency ordering
-    for (int i=0; i<MAX_LOCKS; ++i) {
+    memset((void*)&follows[id][0], 0, current_maxid);
+    for (unsigned i=0; i<current_maxid; ++i) {
       delete follows_bt[id][i];
       follows_bt[id][i] = NULL;
-      follows[id][i] = false;
 
       delete follows_bt[i][id];
       follows_bt[i][id] = NULL;
@@ -192,7 +199,7 @@ void lockdep_unregister(int id)
     lock_ids.erase(p->second);
     lock_names.erase(id);
     lock_refs.erase(id);
-    free_ids.push_back(id);
+    free_ids.push_front(id);
   } else {
     lockdep_dout(20) << "have " << refs << " of '" << p->second << "' "
                      << "from " << id << dendl;
@@ -216,7 +223,7 @@ static bool does_follow(int a, int b)
     return true;
   }
 
-  for (int i=0; i<MAX_LOCKS; i++) {
+  for (unsigned i=0; i<current_maxid; i++) {
     if (follows[a][i] &&
 	does_follow(i, b)) {
       lockdep_dout(0) << "existing intermediate dependency " << lock_names[a]
