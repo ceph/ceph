@@ -15,9 +15,9 @@ Major Changes from Infernalis
 
 - *CephFS*:
 
-  * This is the first release in which CephFS is declared stable and
-    production ready!  Several features are disabled by default, including
-    snapshots and multiple active MDS servers.
+  * This is the first release in which CephFS is declared stable!
+    Several features are disabled by default, including snapshots and
+    multiple active MDS servers.
   * The repair and disaster recovery tools are now feature-complete.
   * A new cephfs-volume-manager module is included that provides a
     high-level interface for creating "shares" for OpenStack Manila
