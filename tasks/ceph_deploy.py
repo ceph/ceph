@@ -239,14 +239,19 @@ def build_ceph_cluster(ctx, config):
                         ceph_admin, conf_path, lines, sudo=True)
 
         # install ceph
-        install_nodes = './ceph-deploy install ' + \
-            (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        ceph_sha = ctx.config['sha1']
+        devcommit = '--dev-commit={sha}'.format(sha=ceph_sha)
+        if ceph_branch:
+            option = ceph_branch
+        else:
+            option = devcommit
+        install_nodes = './ceph-deploy install ' + option + " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes)
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph")
         # install ceph-test package too
-        install_nodes2 = './ceph-deploy install --tests ' + \
-            (ceph_branch if ceph_branch else "--dev=master") + " " + all_nodes
+        install_nodes2 = './ceph-deploy install --tests ' + option + \
+                         " " + all_nodes
         estatus_install = execute_ceph_deploy(install_nodes2)
         if estatus_install != 0:
             raise RuntimeError("ceph-deploy: Failed to install ceph-test")
