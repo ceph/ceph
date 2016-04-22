@@ -4,6 +4,7 @@ add_custom_target(cython_rados
   CC=${PY_CC}
   CXX=${PY_CXX}
   LDSHARED=${PY_LDSHARED}
+  OPT=\"-DNDEBUG -g -fwrapv -O2 -Wall\"
   LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
   CYTHON_BUILD_DIR=${CMAKE_BINARY_DIR}/src/pybind/rados
   CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"

@@ -1013,7 +1013,7 @@ Rados object in state %s." % self.state)
                 with nogil:
                     ret = rados_inconsistent_pg_list(self.cluster, pool,
                                                      pgs, size)
-                if ret > size:
+                if ret > <int>size:
                     size *= 2
                 elif ret >= 0:
                     break
@@ -1039,7 +1039,7 @@ Rados object in state %s." % self.state)
                 c_names = <char *>realloc_chk(c_names, size)
                 with nogil:
                     ret = rados_pool_list(self.cluster, c_names, size)
-                if ret > size:
+                if ret > <int>size:
                     size *= 2
                 elif ret >= 0:
                     break
@@ -1068,7 +1068,7 @@ Rados object in state %s." % self.state)
                 ret = rados_cluster_fsid(self.cluster, ret_buf, buf_len)
             if ret < 0:
                 raise make_ex(ret, "error getting cluster fsid")
-            if ret != buf_len:
+            if ret != <int>buf_len:
                 _PyBytes_Resize(&ret_s, ret)
             return <object>ret_s
         finally:
