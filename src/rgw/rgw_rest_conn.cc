@@ -118,7 +118,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
-                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req, RGWHTTPManager *mgr)
 {
   string url;
   int ret = get_url(url);
@@ -163,7 +163,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
   }
 
-  return (*req)->get_obj(key, extra_headers, obj);
+  return (*req)->get_obj(key, extra_headers, obj, mgr);
 }
 
 int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, real_time *mtime, map<string, string>& attrs)

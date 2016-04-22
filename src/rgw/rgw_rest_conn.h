@@ -93,7 +93,7 @@ public:
   int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
-              bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
+              bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req, RGWHTTPManager *mgr = NULL);
   int complete_request(RGWRESTStreamReadRequest *req, string& etag, ceph::real_time *mtime, map<string, string>& attrs);
 
   int get_resource(const string& resource,

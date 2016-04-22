@@ -604,14 +604,14 @@ int RGWRESTStreamWriteRequest::complete(string& etag, real_time *mtime)
   return status;
 }
 
-int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
+int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj, RGWHTTPManager *mgr)
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.name, urlsafe_bucket);
   url_encode(obj.get_orig_obj(), urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
-  return get_resource(key, extra_headers, resource);
+  return get_resource(key, extra_headers, resource, mgr);
 }
 
 int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)

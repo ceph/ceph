@@ -3044,6 +3044,9 @@ int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
 
 void RGWRados::finalize()
 {
+  if (http_manager) {
+    http_manager->stop();
+  }
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
@@ -3119,6 +3122,8 @@ void RGWRados::finalize()
   if (cr_registry) {
     cr_registry->put();
   }
+
+  delete http_manager;
   delete binfo_cache;
 }
 
@@ -3662,6 +3667,8 @@ int RGWRados::init_complete()
   if (get_zonegroup().zones.size() < 2 || get_zonegroup().master_zone.empty() || !rest_master_conn) {
     run_sync_thread = false;
   }
+
+  http_manager = new RGWHTTPManager(cct, nullptr);
 
   async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
   async_rados->start();
@@ -6445,7 +6452,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
  
   ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                      true, &cb, &in_stream_req);
+                      true, &cb, &in_stream_req, http_manager);
   if (ret < 0) {
     goto set_err_state;
   }

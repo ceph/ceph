@@ -1689,6 +1689,7 @@ struct RGWObjectCtx {
 
 class Finisher;
 class RGWAsyncRadosProcessor;
+class RGWHTTPManager;
 
 template <class T>
 class RGWChainedCacheImpl;
@@ -1756,6 +1757,7 @@ class RGWRados
   bool run_sync_thread;
 
   RGWAsyncRadosProcessor* async_rados;
+  RGWHTTPManager *http_manager;
 
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
@@ -1833,7 +1835,7 @@ protected:
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
-               run_sync_thread(false), async_rados(nullptr), meta_notifier(NULL),
+               run_sync_thread(false), async_rados(nullptr), http_manager(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
                meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
                num_watchers(0), watchers(NULL),
