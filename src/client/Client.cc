@@ -1088,7 +1088,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
   ConnectionRef con = request->reply->get_connection();
   uint64_t features = con->get_features();
 
-  assert(request->readdir_result.empty());
+  dir_result_t *dirp = request->dirp;
+  assert(dirp);
 
   // the extra buffer list is only set for readdir and lssnap replies
   bufferlist::iterator p = reply->get_extra_bl().begin();
@@ -1111,23 +1112,27 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     ::decode(end, p);
     ::decode(complete, p);
 
-    frag_t fg = request->readdir_frag;
-    uint64_t readdir_offset = request->readdir_offset;
-    string readdir_start = request->readdir_start;
+    frag_t fg = (unsigned)request->head.args.readdir.frag;
+    uint64_t readdir_offset = dirp->next_offset;
+    string readdir_start = dirp->last_name;
+
     if (fg != dst.frag) {
       ldout(cct, 10) << "insert_trace got new frag " << fg << " -> " << dst.frag << dendl;
       fg = dst.frag;
       readdir_offset = 2;
       readdir_start.clear();
+      dirp->offset = dir_result_t::make_fpos(fg, readdir_offset);
     }
 
     ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << (int)end
 		   << ", offset " << readdir_offset
 		   << ", readdir_start " << readdir_start << dendl;
 
-    request->readdir_reply_frag = fg;
-    request->readdir_end = end;
-    request->readdir_num = numdn;
+    dirp->buffer_frag = fg;
+    dirp->this_offset = readdir_offset;
+
+    _readdir_drop_dirp_buffer(dirp);
+    dirp->buffer.reserve(numdn);
 
     string dname;
     LeaseStat dlease;
@@ -1158,14 +1163,21 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	dn = link(dir, dname, in, NULL);
       }
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
-      dn->offset = dir_result_t::make_fpos(fg, i + readdir_offset);
+      dn->offset = dir_result_t::make_fpos(fg, readdir_offset++);
 
       // add to cached result list
-      request->readdir_result.push_back(pair<string,InodeRef>(dname, in));
+      dirp->buffer.push_back(pair<string,InodeRef>(dname, in));
 
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
-    request->readdir_last_name = dname;
+
+    if (end) {
+      dirp->last_name.clear();
+      dirp->next_offset = 2;
+    } else {
+      dirp->last_name = dname;
+      dirp->next_offset = readdir_offset;
+    }
 
     if (dir->is_empty())
       close_dir(dir);
@@ -6933,11 +6945,8 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->head.args.readdir.frag = fg;
   if (dirp->last_name.length()) {
     req->path2.set_path(dirp->last_name.c_str());
-    req->readdir_start = dirp->last_name;
   }
-  req->readdir_offset = dirp->next_offset;
-  req->readdir_frag = fg;
-  
+  req->dirp = dirp;
   
   bufferlist dirbl;
   int res = make_request(req, dirp->owner_uid, dirp->owner_gid, NULL, NULL, -1, &dirbl);
@@ -6949,31 +6958,9 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   }
 
   if (res == 0) {
-    // stuff dir contents to cache, dir_result_t
-    assert(diri);
-
-    _readdir_drop_dirp_buffer(dirp);
-
-    dirp->buffer.swap(req->readdir_result);
-
-    if (fg != req->readdir_reply_frag) {
-      fg = req->readdir_reply_frag;
-      dirp->next_offset = 2;
-      dirp->offset = dir_result_t::make_fpos(fg, dirp->next_offset);
-    }
-    dirp->buffer_frag = fg;
-    dirp->this_offset = dirp->next_offset;
     ldout(cct, 10) << "_readdir_get_frag " << dirp << " got frag " << dirp->buffer_frag
 	     << " this_offset " << dirp->this_offset
 	     << " size " << dirp->buffer.size() << dendl;
-
-    if (req->readdir_end) {
-      dirp->last_name.clear();
-      dirp->next_offset = 2;
-    } else {
-      dirp->last_name = req->readdir_last_name;
-      dirp->next_offset += req->readdir_num;
-    }
   } else {
     ldout(cct, 10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
     dirp->set_end();
@@ -7162,7 +7149,6 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     ldout(cct, 10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer.size()
 	     << " frag " << fg << dendl;
 
-    dirp->offset = dir_result_t::make_fpos(fg, off);
     while (off >= dirp->this_offset &&
 	   off - dirp->this_offset < dirp->buffer.size()) {
       pair<string,InodeRef>& ent = dirp->buffer[off - dirp->this_offset];
@@ -7185,7 +7171,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 	return r;
     }
 
-    if (dirp->last_name.length()) {
+    if (!dirp->last_name.empty()) {
       ldout(cct, 10) << " fetching next chunk of this frag" << dendl;
       _readdir_drop_dirp_buffer(dirp);
       continue;  // more!
