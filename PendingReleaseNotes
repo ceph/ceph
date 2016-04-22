@@ -10,3 +10,14 @@
   New monitors will now use rocksdb by default, but if that file is
   not present, existing monitors will use leveldb.  The ``mon keyvaluedb`` option
   now only affects the backend chosen when a monitor is created.
+
+* The 'osd crush initial weight' option allows you to specify a CRUSH
+  weight for a newly added OSD.  Previously a value of 0 (the default)
+  meant that we should use the size of the OSD's store to weight the
+  new OSD.  Now, a value of 0 means it should have a weight of 0, and
+  a negative value (the new default) means we should automatically
+  weight the OSD based on its size.  If your configuration file
+  explicitly specifies a value of 0 for this option you will need to
+  change it to a negative value (e.g., -1) to preserve the current
+  behavior.
+

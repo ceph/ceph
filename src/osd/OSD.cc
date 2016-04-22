@@ -2766,7 +2766,7 @@ int OSD::update_crush_location()
   }
 
   char weight[32];
-  if (g_conf->osd_crush_initial_weight) {
+  if (g_conf->osd_crush_initial_weight >= 0) {
     snprintf(weight, sizeof(weight), "%.4lf", g_conf->osd_crush_initial_weight);
   } else {
     struct statfs st;
