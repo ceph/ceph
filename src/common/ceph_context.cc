@@ -332,12 +332,17 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
   }
   else if (command == "perf reset") {
     std::string var;
+    string section = command;
+    f->open_object_section(section.c_str());
     if (!cmd_getval(this, cmdmap, "var", var)) {
       f->dump_string("error", "syntax error: 'perf reset <var>'");
     } else {
      if(!_perf_counters_collection->reset(var))
         f->dump_stream("error") << "Not find: " << var;
+     else
+       f->dump_string("success", command + ' ' + var);
     }
+    f->close_section();
   }
   else {
     string section = command;
