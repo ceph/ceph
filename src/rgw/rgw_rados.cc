@@ -7491,11 +7491,14 @@ int RGWRados::Object::Delete::delete_obj()
     }
   }
 
+  if (!state->exists) {
+    target->invalidate_state();
+    return -ENOENT;
+  }
+
   r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true);
   if (r < 0)
     return r;
-
-  bool ret_not_existed = (!state->exists);
 
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -7546,9 +7549,6 @@ int RGWRados::Object::Delete::delete_obj()
 
   if (r < 0)
     return r;
-
-  if (ret_not_existed)
-    return -ENOENT;
 
   /* update quota cache */
   store->quota_handler->update_stats(params.bucket_owner, bucket, -1, 0, obj_size);
