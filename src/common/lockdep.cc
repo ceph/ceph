@@ -54,7 +54,7 @@ static map<int, std::string> lock_names;
 static map<int, int> lock_refs;
 static list<int> free_ids;
 static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
-static bool follows[MAX_LOCKS][MAX_LOCKS]; // follows[a][b] means b taken after a
+static char follows[MAX_LOCKS][MAX_LOCKS/8]; // follows[a][b] means b taken after a
 static BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
 unsigned current_maxid;
 
@@ -106,7 +106,7 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     lock_ids.clear();
     lock_refs.clear();
     free_ids.clear();
-    memset((void*)&follows[0][0], 0, sizeof(bool) * current_maxid * MAX_LOCKS);
+    memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
     memset((void*)&follows_bt[0][0], 0, sizeof(BackTrace*) * current_maxid * MAX_LOCKS);
     current_maxid = 0;
   }
@@ -134,7 +134,6 @@ int lockdep_dump_locks()
   pthread_mutex_unlock(&lockdep_mutex);
   return 0;
 }
-
 
 int lockdep_register(const char *name)
 {
@@ -184,14 +183,14 @@ void lockdep_unregister(int id)
   int &refs = lock_refs[id];
   if (--refs == 0) {
     // reset dependency ordering
-    memset((void*)&follows[id][0], 0, current_maxid);
+    memset((void*)&follows[id][0], 0, MAX_LOCKS/8);
     for (unsigned i=0; i<current_maxid; ++i) {
       delete follows_bt[id][i];
       follows_bt[id][i] = NULL;
 
       delete follows_bt[i][id];
       follows_bt[i][id] = NULL;
-      follows[i][id] = false;
+      follows[i][id / 8] &= 255 - (1 << (id % 8));
     }
 
     lockdep_dout(10) << "unregistered '" << p->second << "' from " << id
@@ -211,7 +210,7 @@ void lockdep_unregister(int id)
 // does b follow a?
 static bool does_follow(int a, int b)
 {
-  if (follows[a][b]) {
+  if (follows[a][b/8] & (1 << (b % 8))) {
     lockdep_dout(0) << "\n";
     *_dout << "------------------------------------" << "\n";
     *_dout << "existing dependency " << lock_names[a] << " (" << a << ") -> "
@@ -224,7 +223,7 @@ static bool does_follow(int a, int b)
   }
 
   for (unsigned i=0; i<current_maxid; i++) {
-    if (follows[a][i] &&
+    if ((follows[a][i/8] & (1 << (i % 8))) &&
 	does_follow(i, b)) {
       lockdep_dout(0) << "existing intermediate dependency " << lock_names[a]
           << " (" << a << ") -> " << lock_names[i] << " (" << i << ") at:\n";
@@ -265,7 +264,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
       *_dout << dendl;
       assert(0);
     }
-    else if (!follows[p->first][id]) {
+    else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
       // new dependency
 
       // did we just create a cycle?
@@ -300,7 +299,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
         if (force_backtrace || lockdep_force_backtrace()) {
           bt = new BackTrace(BACKTRACE_SKIP);
         }
-        follows[p->first][id] = true;
+        follows[p->first][id/8] |= 1 << (id % 8);
         follows_bt[p->first][id] = bt;
 	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
 	//bt->print(*_dout);
