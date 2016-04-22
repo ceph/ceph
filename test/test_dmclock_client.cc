@@ -137,8 +137,7 @@ namespace crimson {
 	"rho should be 1 with no intervening reservation responses by" <<
 	"other servers";
 
-
-      st.track_resp(server1, dmc::PhaseType::priority);
+      st.track_resp(server2, dmc::PhaseType::priority);
 
       auto rp4 = st.get_req_params(server1);
 
@@ -158,7 +157,7 @@ namespace crimson {
 	"rho should be 1 with no intervening reservation responses by" <<
 	"other servers";
 
-      st.track_resp(server1, dmc::PhaseType::reservation);
+      st.track_resp(server2, dmc::PhaseType::reservation);
 
       auto rp6 = st.get_req_params(server1);
 
