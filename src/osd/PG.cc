@@ -2756,7 +2756,6 @@ void PG::upgrade(ObjectStore *store)
   ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
   t.remove(coll_t::meta(), log_oid);
   t.remove(coll_t::meta(), biginfo_oid);
-  t.collection_rmattr(coll, "info");
 
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> v;

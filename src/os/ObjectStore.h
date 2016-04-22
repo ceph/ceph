@@ -1473,73 +1473,6 @@ public:
       data.ops++;
     }
 
-    // NOTE: Collection attr operations are all DEPRECATED.  new
-    // backends need not implement these at all.
-
-    /// Set an xattr on a collection
-    void collection_setattr(const coll_t& cid, const string& name,
-			    bufferlist& val) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTR;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(name, tbl);
-        ::encode(val, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTR;
-        _op->cid = _get_coll_id(cid);
-        ::encode(name, data_bl);
-        ::encode(val, data_bl);
-      }
-      data.ops++;
-    }
-
-    /// Remove an xattr from a collection
-    void collection_rmattr(const coll_t& cid, const string& name) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_RMATTR;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(name, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_RMATTR;
-        _op->cid = _get_coll_id(cid);
-        ::encode(name, data_bl);
-      }
-      data.ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(const coll_t& cid, map<string,bufferptr>& aset) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTRS;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(aset, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTRS;
-        _op->cid = _get_coll_id(cid);
-        ::encode(aset, data_bl);
-      }
-      data.ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(const coll_t& cid, map<string,bufferlist>& aset) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTRS;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(aset, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTRS;
-        _op->cid = _get_coll_id(cid);
-        ::encode(aset, data_bl);
-      }
-      data.ops++;
-    }
     /// Remove omap from oid
     void omap_clear(
       coll_t cid,           ///< [in] Collection containing oid
@@ -2213,44 +2146,6 @@ public:
    * @returns true if it exists, false otherwise
    */
   virtual bool collection_exists(const coll_t& c) = 0;
-  /**
-   * collection_getattr - get an xattr of a collection
-   *
-   * @param cid collection name
-   * @param name xattr name
-   * @param value pointer of buffer to receive value
-   * @param size size of buffer to receive value
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattr(const coll_t& cid, const char *name,
-	                         void *value, size_t size) {
-    return -EOPNOTSUPP;
-  }
-
-  /**
-   * collection_getattr - get an xattr of a collection
-   *
-   * @param cid collection name
-   * @param name xattr name
-   * @param bl buffer to receive value
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattr(const coll_t& cid, const char *name,
-				 bufferlist& bl) {
-    return -EOPNOTSUPP;
-  }
-
-  /**
-   * collection_getattrs - get all xattrs of a collection
-   *
-   * @param cid collection name
-   * @param aset map of keys and buffers that contain the values
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattrs(const coll_t& cid,
-				  map<string,bufferptr> &aset) {
-    return -EOPNOTSUPP;
-  }
 
   /**
    * is a collection empty?
