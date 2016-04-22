@@ -189,7 +189,7 @@ struct dir_result_t {
   int start_shared_gen;  // dir shared_gen at start of readdir
 
   frag_t buffer_frag;
-  vector<pair<string,InodeRef> > *buffer;
+  vector<pair<string,InodeRef> > buffer;
 
   string at_cache_name;  // last entry we successfully returned
 
@@ -218,8 +218,7 @@ struct dir_result_t {
     next_offset = 2;
     this_offset = 0;
     offset = 0;
-    delete buffer;
-    buffer = 0;
+    buffer.clear();
   }
 };
 

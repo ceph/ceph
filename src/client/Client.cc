@@ -175,9 +175,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 
 dir_result_t::dir_result_t(Inode *in)
   : inode(in), owner_uid(-1), owner_gid(-1), offset(0), this_offset(2),
-    next_offset(2), release_count(0), ordered_count(0), start_shared_gen(0),
-    buffer(0) {
-}
+    next_offset(2), release_count(0), ordered_count(0), start_shared_gen(0)
+  { }
 
 void Client::_reset_faked_inos()
 {
@@ -6905,10 +6904,7 @@ void Client::_readdir_rechoose_frag(dir_result_t *dirp)
 void Client::_readdir_drop_dirp_buffer(dir_result_t *dirp)
 {
   ldout(cct, 10) << "_readdir_drop_dirp_buffer " << dirp << dendl;
-  if (dirp->buffer) {
-    delete dirp->buffer;
-    dirp->buffer = NULL;
-  }
+  dirp->buffer.clear();
 }
 
 int Client::_readdir_get_frag(dir_result_t *dirp)
@@ -6958,8 +6954,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
     _readdir_drop_dirp_buffer(dirp);
 
-    dirp->buffer = new vector<pair<string,InodeRef> >;
-    dirp->buffer->swap(req->readdir_result);
+    dirp->buffer.swap(req->readdir_result);
 
     if (fg != req->readdir_reply_frag) {
       fg = req->readdir_reply_frag;
@@ -6970,7 +6965,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
     dirp->this_offset = dirp->next_offset;
     ldout(cct, 10) << "_readdir_get_frag " << dirp << " got frag " << dirp->buffer_frag
 	     << " this_offset " << dirp->this_offset
-	     << " size " << dirp->buffer->size() << dendl;
+	     << " size " << dirp->buffer.size() << dendl;
 
     if (req->readdir_end) {
       dirp->last_name.clear();
@@ -7154,7 +7149,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     if (dirp->at_end())
       return 0;
 
-    if (dirp->buffer_frag != dirp->frag() || dirp->buffer == NULL) {
+    if (dirp->buffer_frag != dirp->frag() || dirp->buffer.empty()) {
       int r = _readdir_get_frag(dirp);
       if (r)
 	return r;
@@ -7164,13 +7159,13 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       off = dirp->fragpos();
     }
 
-    ldout(cct, 10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer->size()
+    ldout(cct, 10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer.size()
 	     << " frag " << fg << dendl;
 
     dirp->offset = dir_result_t::make_fpos(fg, off);
     while (off >= dirp->this_offset &&
-	   off - dirp->this_offset < dirp->buffer->size()) {
-      pair<string,InodeRef>& ent = (*dirp->buffer)[off - dirp->this_offset];
+	   off - dirp->this_offset < dirp->buffer.size()) {
+      pair<string,InodeRef>& ent = dirp->buffer[off - dirp->this_offset];
 
       int stmask = fill_stat(ent.second, &st);
       fill_dirent(&de, ent.first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
