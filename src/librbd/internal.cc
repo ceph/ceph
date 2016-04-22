@@ -1105,8 +1105,11 @@ err_remove_id:
 		 << cpp_strerror(-r) << dendl;
       cls_client::cg_to_removing(&cg_ioctx, cg_header_oid);
       cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id);
+      // Ignore errors in the clean up procedure.
+      return r;
     }
-    return 0;
+    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid);
+    return r;
   }
 
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
