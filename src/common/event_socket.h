@@ -52,6 +52,7 @@ class EventSocket {
           ret = -errno;
         else
           ret = 0;
+        break;
       }
       case EVENT_SOCKET_TYPE_EVENTFD:
       {
@@ -61,10 +62,12 @@ class EventSocket {
           ret = -errno;
         else
           ret = 0;
+        break;
       }
       default:
       {
         ret = -1;
+        break;
       }
     }
     return ret;
