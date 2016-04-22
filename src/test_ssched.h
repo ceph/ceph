@@ -6,8 +6,8 @@
  */
 
 
-#include "simple_server.h"
-#include "simple_client.h"
+#include "ssched_server.h"
+#include "ssched_client.h"
 
 #include "sim_recs.h"
 #include "sim_server.h"

@@ -8,13 +8,13 @@ include_directories(${BOOST_INCLUDE_DIR})
 set(local_flags "-std=gnu++11 -Wall -pthread")
 # set(local_flags "${local_flags} -g -O0")
 
-set(simple_sim_srcs test_simple.cc test_simple_main.cc)
+set(ssched_sim_srcs test_ssched.cc test_ssched_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
 
 set(dmc_srcs
   dmclock_server.cc dmclock_util.cc crimson/src/run_every.cc)
 
-set_source_files_properties(${simple_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}
+set_source_files_properties(${ssched_sim_srcs} ${dmc_sim_srcs} ${dmc_srcs}
   PROPERTIES
   COMPILE_FLAGS "${my_compile_flags} ${local_flags}"
   )
@@ -27,16 +27,16 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 
 # append warning flags to certain source files
 set_property(
-  SOURCE ${simple_sim_srcs} ${dmc_sim_src}
+  SOURCE ${ssched_sim_srcs} ${dmc_sim_src}
   APPEND_STRING
   PROPERTY COMPILE_FLAGS "${warnings_off}"
   )
 
-add_executable(simple_sim ${simple_sim_srcs})
+add_executable(ssched_sim ${ssched_sim_srcs})
 add_executable(dmc_sim ${dmc_sim_srcs} ${dmc_srcs})
 
 # target_link_libraries(sim PUBLIC pthread)
-target_link_libraries(simple_sim PUBLIC pthread)
+target_link_libraries(ssched_sim PUBLIC pthread)
 target_link_libraries(dmc_sim PUBLIC pthread)
 
 # file(COPY sim DESTINATION .)

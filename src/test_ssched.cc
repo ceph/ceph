@@ -6,15 +6,15 @@
  */
 
 
-#include "simple_recs.h"
-#include "simple_server.h"
-#include "simple_client.h"
+#include "ssched_recs.h"
+#include "ssched_server.h"
+#include "ssched_client.h"
 
 #include "sim_recs.h"
 #include "sim_server.h"
 #include "sim_client.h"
 
-#include "test_simple.h"
+#include "test_ssched.h"
 
 
 namespace test = crimson::test_simple_scheduler;

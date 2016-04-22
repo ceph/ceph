@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "simple_recs.h"
+#include "ssched_recs.h"
 
 
 namespace crimson {

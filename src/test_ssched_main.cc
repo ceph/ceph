@@ -6,7 +6,7 @@
  */
 
 
-#include "test_simple.h"
+#include "test_ssched.h"
 
 
 namespace test = crimson::test_simple_scheduler;

@@ -13,7 +13,7 @@
 
 #include "boost/variant.hpp"
 
-#include "simple_recs.h"
+#include "ssched_recs.h"
 
 #include "sim_recs.h"
 
