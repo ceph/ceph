@@ -231,6 +231,10 @@ case $1 in
 	    cephx=0
 	    ;;
     -k )
+	    if [ ! -r $conf_fn ]; then
+	        echo "cannot use old configuration: $conf_fn not readable." >&2
+	        exit
+	    fi
 	    overwrite_conf=0
 	    ;;
     --memstore )
