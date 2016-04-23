@@ -1043,6 +1043,9 @@ function test_mon_osd()
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
+  # test with wrong address
+  expect_false "ceph osd blacklist 1234.56.78.90/100"
+
   # Test `clear`
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
@@ -1234,6 +1237,7 @@ function test_mon_osd_pool()
   ceph osd pool mksnap data datasnap
   rados -p data lssnap | grep datasnap
   ceph osd pool rmsnap data datasnap
+  expect_false ceph osd pool rmsnap pool_fake snapshot
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pool create data2 10
@@ -1376,6 +1380,7 @@ function test_mon_pg()
 
   ceph osd primary-affinity osd.0 .9
   expect_false ceph osd primary-affinity osd.0 -2
+  expect_false ceph osd primary-affinity osd.9999 .5
   ceph osd primary-affinity osd.0 1
 
   ceph osd pg-temp 0.0 0 1 2
