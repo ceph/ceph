@@ -23,12 +23,12 @@ using namespace librados;
 std::string get_temp_pool_name(const std::string &prefix)
 {
   char hostname[80];
-  char out[80];
+  char out[160];
   memset(hostname, 0, sizeof(hostname));
   memset(out, 0, sizeof(out));
   gethostname(hostname, sizeof(hostname)-1);
   static int num = 1;
-  sprintf(out, "%s-%d-%d", hostname, getpid(), num);
+  snprintf(out, sizeof(out), "%s-%d-%d", hostname, getpid(), num);
   num++;
   return prefix + out;
 }
