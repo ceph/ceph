@@ -8,6 +8,7 @@
 #include "common/Cond.h"
 #include "include/atomic.h"
 #include "rgw_common.h"
+#include "rgw_string.h"
 
 using param_pair_t = pair<string, string>;
 using param_vec_t = vector<param_pair_t>;
@@ -134,17 +135,9 @@ public:
 
 class RGWHTTPHeadersCollector : public RGWHTTPClient {
 public:
-  /* Case insensitive comparator for containers carrying HTTP headers. */
-  struct CILess : public std::binary_function<std::string, std::string, bool> {
-    bool operator()(const std::string& lhs,
-                    const std::string& rhs) const {
-      return ::strcasecmp(lhs.c_str(), rhs.c_str()) < 0 ;
-    }
-  };
-
   typedef std::string header_name_t;
   typedef std::string header_value_t;
-  typedef std::set<header_name_t, CILess> header_spec_t;
+  typedef std::set<header_name_t, ltstr_nocase> header_spec_t;
 
   RGWHTTPHeadersCollector(CephContext * const cct,
                           const header_spec_t relevant_headers)
@@ -152,7 +145,7 @@ public:
       relevant_headers(relevant_headers) {
   }
 
-  std::map<header_name_t, header_value_t, CILess> get_headers() const {
+  std::map<header_name_t, header_value_t, ltstr_nocase> get_headers() const {
     return found_headers;
   }
 
@@ -173,8 +166,8 @@ protected:
   }
 
 private:
-  const std::set<header_name_t, CILess> relevant_headers;
-  std::map<header_name_t, header_value_t, CILess> found_headers;
+  const std::set<header_name_t, ltstr_nocase> relevant_headers;
+  std::map<header_name_t, header_value_t, ltstr_nocase> found_headers;
 };
 
 
