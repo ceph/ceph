@@ -5,6 +5,7 @@
 #ifndef CEPH_RGW_AUTH_H
 #define CEPH_RGW_AUTH_H
 
+#include <functional>
 #include <type_traits>
 
 #include "rgw_common.h"
@@ -124,11 +125,19 @@ public:
     }
   };
 
+  using aclspec_t = RGWIdentityApplier::aclspec_t;
+  typedef std::function<int(const aclspec_t&)> acl_strategy_t;
+
 protected:
   /* Read-write is intensional here due to RGWUserInfo creation process. */
   RGWRados * const store;
-  const AuthInfo info;
 
+  /* Supplemental strategy for extracting permissions from ACLs. Its results
+   * will be combined (ORed) with a default strategy that is responsible for
+   * handling backward compatibility. */
+  const acl_strategy_t extra_acl_strategy;
+
+  const AuthInfo info;
 
   virtual void create_account(const rgw_user acct_user,
                               RGWUserInfo& user_info) const;          /* out */
@@ -136,9 +145,11 @@ protected:
 public:
   RGWRemoteAuthApplier(CephContext * const cct,
                        RGWRados * const store,
+                       acl_strategy_t&& extra_acl_strategy,
                        const AuthInfo info)
     : RGWAuthApplier(cct),
       store(store),
+      extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info) {
   }
 
@@ -150,7 +161,11 @@ public:
 
   struct Factory {
     virtual ~Factory() {}
+    /* Providing r-value reference here is required intensionally. Callee is
+     * thus disallowed to handle std::function in a way that could inhibit
+     * the move behaviour (like forgetting about std::moving a l-value). */
     virtual aplptr_t create_apl_remote(CephContext * const cct,
+                                       acl_strategy_t&& extra_acl_strategy,
                                        const AuthInfo info) const = 0;
   };
 };

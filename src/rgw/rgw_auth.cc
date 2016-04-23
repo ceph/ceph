@@ -98,6 +98,12 @@ int RGWRemoteAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
                                                     aclspec);
   }
 
+  /* Now it's a time for invoking additional strategy that was supplied by
+   * a specific auth engine. */
+  if (extra_acl_strategy) {
+    perm |= extra_acl_strategy(aclspec);
+  }
+
   ldout(cct, 20) << "from ACL got perm=" << perm << dendl;
   return perm;
 }
