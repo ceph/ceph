@@ -291,13 +291,21 @@ void global_init(std::vector < const char * > *alt_def_args,
 
   if (priv_ss.str().length()) {
     dout(0) << priv_ss.str() << dendl;
+  }
 
-    if (g_ceph_context->get_set_uid() || g_ceph_context->get_set_gid()) {
-      // fix ownership on log, asok files.  this is sadly a bit of a hack :(
-      g_ceph_context->_log->chown_log_file(
-	g_ceph_context->get_set_uid(),
-	g_ceph_context->get_set_gid());
-    }
+  if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+      (g_ceph_context->get_set_uid() || g_ceph_context->get_set_gid())) {
+    // Fix ownership on log files and run directories if needed.
+    // Admin socket files are chown()'d during the common init path _after_
+    // the service thread has been started. This is sadly a bit of a hack :(
+    chown_path(g_conf->run_dir,
+	       g_ceph_context->get_set_uid(),
+	       g_ceph_context->get_set_gid(),
+	       g_ceph_context->get_set_uid_string(),
+	       g_ceph_context->get_set_gid_string());
+    g_ceph_context->_log->chown_log_file(
+      g_ceph_context->get_set_uid(),
+      g_ceph_context->get_set_gid());
   }
 
   // Now we're ready to complain about config file parse errors
