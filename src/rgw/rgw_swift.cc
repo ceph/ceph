@@ -104,88 +104,37 @@ int RGWSwift::validate_token(const char *token, struct rgw_swift_auth_info *info
   return 0;
 }
 
-class RGWPostHTTPData : public RGWHTTPClient {
-  bufferlist *bl;
-  std::string post_data;
-  size_t post_data_index;
-  std::string subject_token;
+
+class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
 public:
-  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
-  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl, bool verify_ssl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0){
-    set_verify_ssl(verify_ssl);
+  RGWKeystoneHTTPTransceiver(CephContext * const cct,
+                             bufferlist * const token_body_bl)
+    : RGWHTTPTransceiver(cct, token_body_bl,
+                         cct->_conf->rgw_keystone_verify_ssl,
+                         { "X-Subject-Token" }) {
   }
 
-  void set_post_data(const std::string& _post_data) {
-    this->post_data = _post_data;
-  }
-
-  int send_data(void* ptr, size_t len) {
-    int length_to_copy = 0;
-    if (post_data_index < post_data.length()) {
-      length_to_copy = min(post_data.length() - post_data_index, len);
-      memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
-      post_data_index += length_to_copy;
+  std::string get_subject_token() const {
+    try {
+      return get_header_value("X-Subject-Token");
+    } catch (std::out_of_range&) {
+      return header_value_t();
     }
-    return length_to_copy;
-  }
-
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-
-  int receive_header(void *ptr, size_t len) {
-    char line[len + 1];
-
-    char *s = (char *)ptr, *end = (char *)ptr + len;
-    char *p = line;
-    ldout(cct, 20) << "RGWPostHTTPData::receive_header parsing HTTP headers" << dendl;
-
-    while (s != end) {
-      if (*s == '\r') {
-        s++;
-        continue;
-      }
-      if (*s == '\n') {
-        *p = '\0';
-        ldout(cct, 20) << "RGWPostHTTPData::receive_header: line="
-                       << line << dendl;
-        // TODO: fill whatever data required here
-        char *l = line;
-        char *tok = strsep(&l, " \t:");
-        if (tok) {
-          while (l && *l == ' ') {
-            l++;
-          }
-
-          if (strcasecmp(tok, "X-Subject-Token") == 0) {
-            subject_token = l;
-          }
-        }
-      }
-      if (s != end) {
-        *p++ = *s++;
-      }
-    }
-    return 0;
-  }
-
-  std::string get_subject_token() {
-    return subject_token;
   }
 };
 
-typedef RGWPostHTTPData RGWValidateKeystoneToken;
-typedef RGWPostHTTPData RGWGetKeystoneAdminToken;
-typedef RGWPostHTTPData RGWGetRevokedTokens;
+typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
+typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
+typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 
 int RGWSwift::get_keystone_url(CephContext * const cct,
                                std::string& url)
 {
+  // FIXME: it seems we don't need RGWGetRevokedToken here
   bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl, cct->_conf->rgw_keystone_verify_ssl);
+  RGWGetRevokedTokens req(cct, &bl);
 
   url = cct->_conf->rgw_keystone_url;
   if (url.empty()) {
@@ -231,7 +180,7 @@ int RGWSwift::get_keystone_admin_token(CephContext * const cct,
   }
 
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(cct, &token_bl, cct->_conf->rgw_keystone_verify_ssl);
+  RGWGetKeystoneAdminToken token_req(cct, &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -491,7 +440,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token,
 
     /* can't decode, just go to the keystone server for validation */
 
-    RGWValidateKeystoneToken validate(cct, &bl, cct->_conf->rgw_keystone_verify_ssl);
+    RGWValidateKeystoneToken validate(cct, &bl);
 
     string url = g_conf->rgw_keystone_url;
     if (url.empty()) {

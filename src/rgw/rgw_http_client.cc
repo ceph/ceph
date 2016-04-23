@@ -14,36 +14,49 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+/* Static methods - callbacks for libcurl. */
+size_t RGWHTTPClient::receive_http_header(void * const ptr,
+                                          const size_t size,
+                                          const size_t nmemb,
+                                          void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_header(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_header() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::receive_http_data(void * const ptr,
+                                        const size_t size,
+                                        const size_t nmemb,
+                                        void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::send_http_data(void * const ptr,
+                                     const size_t size,
+                                     const size_t nmemb,
+                                     void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return ret;
@@ -254,6 +267,51 @@ RGWHTTPClient::~RGWHTTPClient()
   if (req_data) {
     req_data->put();
   }
+}
+
+
+int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
+{
+  const std::string header_line(static_cast<const char * const>(ptr), len);
+
+  /* We're tokening the line that way due to backward compatibility. */
+  const size_t sep_loc = header_line.find_first_of(" \t:");
+
+  if (std::string::npos == sep_loc) {
+    /* Wrongly formatted header? Just skip it. */
+    return 0;
+  }
+
+  header_name_t name(header_line.substr(0, sep_loc));
+  if (0 == relevant_headers.count(name)) {
+    /* Not interested in this particular header. */
+    return 0;
+  }
+
+  /* Skip spaces and tabs after the separator. */
+  const size_t val_loc_s = header_line.find_first_not_of(' ', sep_loc + 1);
+  const size_t val_loc_e = header_line.find_first_of("\r\n", sep_loc + 1);
+
+  if (std::string::npos == val_loc_s || std::string::npos == val_loc_e) {
+    /* Empty value case. */
+    found_headers.emplace(name, header_value_t());
+  } else {
+    found_headers.emplace(name, header_value_t(
+        header_line.substr(val_loc_s, val_loc_e - val_loc_s)));
+  }
+
+  return 0;
+}
+
+int RGWHTTPTransceiver::send_data(void* ptr, size_t len)
+{
+  int length_to_copy = 0;
+  if (post_data_index < post_data.length()) {
+    length_to_copy = min(post_data.length() - post_data_index, len);
+    memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
+    post_data_index += length_to_copy;
+  }
+  return length_to_copy;
 }
 
 
