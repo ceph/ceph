@@ -328,7 +328,13 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist pool_id_bl;
   ::encode(pool_id, pool_id_bl);
   r = cls_cxx_map_set_val(hctx, image_key, &pool_id_bl);
+  if (r < 0) {
+    return r;
+  }
 
+  bufferlist image_to_be_addedbl;
+  ::encode(image_key, image_to_be_addedbl);
+  r = cls_cxx_map_set_val(hctx, CG_IMAGE_TO_BE_ADDED, &image_to_be_addedbl);
   if (r < 0) {
     return r;
   }
@@ -362,9 +368,14 @@ int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_to_default");
 
+  int r = cls_cxx_map_remove_key(hctx, CG_IMAGE_TO_BE_ADDED);
+  if (r < 0) {
+    return r;
+  }
+
   bufferlist statebl;
   ::encode(CG_DEFAULT, statebl);
-  int r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
   if (r < 0) {
     return r;
   }
