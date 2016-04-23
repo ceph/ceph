@@ -1204,10 +1204,6 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/ceph
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/mds
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/mon
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/osd
 %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
