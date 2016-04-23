@@ -336,7 +336,7 @@ int global_init_prefork(CephContext *cct)
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize) {
 
-    if (pidfile_write(g_conf) < 0)
+    if (pidfile_write(conf) < 0)
       exit(1);
 
     if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
@@ -349,8 +349,8 @@ int global_init_prefork(CephContext *cct)
   }
 
   // stop log thread
-  g_ceph_context->_log->flush();
-  g_ceph_context->_log->stop();
+  cct->_log->flush();
+  cct->_log->stop();
   return 0;
 }
 
@@ -378,7 +378,7 @@ void global_init_daemonize(CephContext *cct)
 void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
-  g_ceph_context->_log->start();
+  cct->_log->start();
 
   /* This is the old trick where we make file descriptors 0, 1, and possibly 2
    * point to /dev/null.
@@ -403,7 +403,8 @@ void global_init_postfork_start(CephContext *cct)
     exit(1);
   }
 
-  if (pidfile_write(g_conf) < 0)
+  const md_config_t *conf = cct->_conf;
+  if (pidfile_write(conf) < 0)
     exit(1);
 
   if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
