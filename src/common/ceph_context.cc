@@ -641,6 +641,11 @@ uint32_t CephContext::get_module_type() const
   return _module_type;
 }
 
+void CephContext::set_init_flags(int flags)
+{
+  _init_flags = flags;
+}
+
 int CephContext::get_init_flags() const
 {
   return _init_flags;
