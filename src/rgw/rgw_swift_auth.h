@@ -37,10 +37,7 @@ protected:
   /* Helper methods. */
   void get_owner_info(RGWUserInfo& owner_info) const;
   bool is_expired(const std::string& expires) const;
-  std::string generate_signature(const string& key,
-                                 const string& method,
-                                 const string& path,
-                                 const string& expires) const;
+
 public:
   RGWTempURLAuthEngine(const req_state * const s,
                        /*const*/ RGWRados * const store,
