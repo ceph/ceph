@@ -7,12 +7,15 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 
-#include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"
 #include "rgw_cors_swift.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
+
+#include "rgw_auth.h"
+#include "rgw_auth_decoimpl.h"
+#include "rgw_swift_auth.h"
 
 #include <sstream>
 
@@ -55,11 +58,12 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-				  const uint32_t buckets_count,
-				  const uint64_t buckets_object_count,
-				  const uint64_t buckets_size,
-				  const uint64_t buckets_size_rounded,
-				  map<string, bufferlist>& attrs)
+                                  const uint32_t buckets_count,
+                                  const uint64_t buckets_object_count,
+                                  const uint64_t buckets_size,
+                                  const uint64_t buckets_size_rounded,
+                                  map<string, bufferlist>& attrs,
+                                  const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -106,6 +110,13 @@ static void dump_account_metadata(struct req_state * const s,
 			  iter->second.c_str());
     }
   }
+
+  /* Dump account ACLs */
+  string acct_acl;
+  policy.to_str(acct_acl);
+  if (acct_acl.size()) {
+    STREAM_IO(s)->print("X-Account-Access-Control: %s\r\n", acct_acl.c_str());
+  }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
@@ -124,7 +135,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
   }
@@ -174,7 +186,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, NULL, NULL, s->formatter->get_len(), true);
   }
@@ -391,8 +404,13 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size,
-			  buckets_size_rounded, attrs);
+    dump_account_metadata(s,
+            buckets_count,
+            buckets_objcount,
+            buckets_size,
+            buckets_size_rounded,
+            attrs,
+            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
   set_req_state_err(s, op_ret);
@@ -417,16 +435,20 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   dump_start(s);
 }
 
-static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccessControlPolicy *policy, bool *has_policy,
-                                        RGWCORSConfiguration *cors_config, bool *has_cors)
+static int get_swift_container_settings(req_state * const s,
+                                        RGWRados * const store,
+                                        RGWAccessControlPolicy * const policy,
+                                        bool * const has_policy,
+                                        RGWCORSConfiguration * const cors_config,
+                                        bool * const has_cors)
 {
   string read_list, write_list;
 
-  const char *read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
+  const char * const read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
   if (read_attr) {
     read_list = read_attr;
   }
-  const char *write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
+  const char * const write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
   if (write_attr) {
     write_list = write_attr;
   }
@@ -435,9 +457,14 @@ static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccess
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    int r = swift_policy.create(store, s->user->user_id, s->user->display_name, read_list, write_list);
-    if (r < 0)
+    int r = swift_policy.create(store,
+                                s->user->user_id,
+                                s->user->display_name,
+                                read_list,
+                                write_list);
+    if (r < 0) {
       return r;
+    }
 
     *policy = swift_policy;
     *has_policy = true;
@@ -701,10 +728,45 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int get_swift_account_settings(req_state * const s,
+                                      RGWRados * const store,
+                                      RGWAccessControlPolicy_SWIFTAcct * const policy,
+                                      bool * const has_policy)
+{
+  *has_policy = false;
+
+  const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
+  if (acl_attr) {
+    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
+    int r = swift_acct_policy.create(store,
+                                     s->user->user_id,
+                                     s->user->display_name,
+                                     string(acl_attr));
+    if (r < 0) {
+      return r;
+    }
+
+    *policy = swift_acct_policy;
+    *has_policy = true;
+  }
+
+  return 0;
+}
+
 int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta) {
     return -EINVAL;
+  }
+
+  int ret = get_swift_account_settings(s,
+                                       store,
+                                       // FIXME: we need to carry unique_ptr in generic class
+                                       // and allocate appropriate ACL class in the ctor
+                                       static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
+                                       &has_policy);
+  if (ret < 0) {
+    return ret;
   }
 
   get_rmattrs_from_headers(s, ACCT_PUT_ATTR_PREFIX, ACCT_REMOVE_ATTR_PREFIX,
@@ -1350,38 +1412,98 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 
 int RGWHandler_REST_SWIFT::authorize()
 {
-  if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
-      (s->op == OP_OPTIONS)) {
-    /* anonymous access */
-    rgw_get_anon_user(*(s->user));
-    s->perm_mask = RGW_PERM_FULL_CONTROL;
+  /* Factories. */
+  RGWTempURLAuthApplier::Factory tempurl_fact;
+  RGWLocalAuthApplier::Factory local_fact;
+  RGWRemoteAuthApplier::Factory creating_fact(store);
+
+  /* Extractors. */
+  RGWReqStateTokenExtractor token_extr(s);
+
+  /* Auth engines. */
+  RGWTempURLAuthEngine tempurl(s, store, &tempurl_fact);
+  RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &local_fact);
+  RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &creating_fact);
+  RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &local_fact);
+  RGWAnonymousAuthEngine anoneng(s->cct, &local_fact);
+
+  /* Pipeline. */
+  const std::vector<const RGWAuthEngine *> engines = {
+    &tempurl, &rgwtk, &keystone, &ext, &anoneng
+  };
+
+  for (const auto engine : engines) {
+    if (!engine->is_applicable()) {
+      /* Engine said it isn't suitable for handling this particular
+       * request. Let's try a next one. */
+      continue;
+    }
+
+    try {
+      ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
+
+      auto final_applier = engine->authenticate();
+      if (!final_applier) {
+        /* Access denied is acknowledged by returning a std::unique_ptr with
+         * nullptr inside. */
+        ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
+        return false;
+      }
+
+      /* Construct a pipeline over the final_applier. */
+      RGWThirdPartyAccountAuthApplier<RGWAuthApplier::aplptr_t> applier(
+        std::move(final_applier), store, s->account_name);
+
+      try {
+        /* Account used by a given RGWOp is decoupled from identity employed
+         * in the authorization phase (RGWOp::verify_permissions). */
+        applier.load_acct_info(*s->user);
+        applier.load_user_info(s->auth_user, s->perm_mask, s->admin_request);
+
+        /* This is the signle place where we pass req_state as a pointer
+         * to non-const and thus its modification is allowed. In the time
+         * of writing only RGWTempURLEngine needed that feature. */
+        applier.modify_request_state(s);
+      } catch (int err) {
+        ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
+        return err;
+      }
+    } catch (int err) {
+      ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+      return err;
+    }
+
+    /* Paranoia mode on. */
+    if (s->auth_user.empty()) {
+      s->auth_user = s->user->user_id;
+    }
+
+    /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
+    if (s->user->system) {
+      s->system_request = true;
+      ldout(s->cct, 20) << "system request over Swift API" << dendl;
+
+      rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
+      if (!euid.empty()) {
+        RGWUserInfo einfo;
+
+        const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
+        if (ret < 0) {
+          ldout(s->cct, 0) << "User lookup failed, euid=" << euid
+                           << " ret=" << ret << dendl;
+          return ret;
+        }
+
+        *(s->user) = einfo;
+      }
+    }
+
     return 0;
   }
 
-  bool authorized = rgw_swift->verify_swift_token(store, s);
-  if (!authorized)
-    return -EPERM;
-
-  if (s->user->system) {
-    s->system_request = true;
-    ldout(s->cct, 20) << "system request over Swift API" << dendl;
-
-    rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-    if (!euid.empty()) {
-      RGWUserInfo einfo;
-
-      const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "User lookup failed, euid=" << euid
-                         << " ret=" << ret << dendl;
-        return -ENOENT;
-      }
-
-      *(s->user) = einfo;
-    }
-  }
-
-  return 0;
+  /* All engines refused to handle this authentication request by
+   * returning RGWAuthEngine::Status::UNKKOWN. Rather rare case. */
+  return -EPERM;
 }
 
 int RGWHandler_REST_SWIFT::postauth_init()

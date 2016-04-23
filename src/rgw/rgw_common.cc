@@ -200,6 +200,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   obj_size = 0;
   prot_flags = 0;
 
+  admin_request = false;
   system_request = false;
 
   os_auth_token = NULL;
@@ -797,11 +798,10 @@ void RGWHTTPArgs::append(const string& name, const string& val)
   }
 }
 
-string& RGWHTTPArgs::get(const string& name, bool *exists)
+const string& RGWHTTPArgs::get(const string& name, bool *exists) const
 {
-  map<string, string>::iterator iter;
-  iter = val_map.find(name);
-  bool e = (iter != val_map.end());
+  auto iter = val_map.find(name);
+  bool e = (iter != std::end(val_map));
   if (exists)
     *exists = e;
   if (e)
@@ -859,12 +859,32 @@ string RGWHTTPArgs::sys_get(const string& name, bool * const exists)
   return e ? iter->second : string();
 }
 
+bool verify_user_permission(struct req_state * const s,
+                            RGWAccessControlPolicy * const user_acl,
+                            const int perm)
+{
+  /* S3 doesn't support account ACLs. */
+  if (!user_acl)
+    return true;
+
+  if ((perm & (int)s->perm_mask) != perm)
+    return false;
+
+  return user_acl->verify_permission(s->auth_user, perm, perm);
+}
+
+bool verify_user_permission(struct req_state * const s,
+                            const int perm)
+{
+  return verify_user_permission(s, s->user_acl.get(), perm);
+}
+
 bool verify_requester_payer_permission(struct req_state *s)
 {
   if (!s->bucket_info.requester_pays)
     return true;
 
-  if (s->bucket_info.owner == s->user->user_id)
+  if (s->bucket_info.owner == s->auth_user)
     return true;
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
@@ -884,6 +904,7 @@ bool verify_requester_payer_permission(struct req_state *s)
 }
 
 bool verify_bucket_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
                               const int perm)
 {
@@ -896,24 +917,36 @@ bool verify_bucket_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  return bucket_acl->verify_permission(s->user->user_id, perm, perm);
+  if (bucket_acl->verify_permission(s->auth_user, perm, perm,
+                                    s->info.env->get("HTTP_REFERER")))
+    return true;
+
+  if (!user_acl)
+    return false;
+
+  return user_acl->verify_permission(s->auth_user, perm, perm);
 }
 
 bool verify_bucket_permission(struct req_state * const s, const int perm)
 {
-  return verify_bucket_permission(s, s->bucket_acl, perm);
+  return verify_bucket_permission(s,
+                                  s->user_acl.get(),
+                                  s->bucket_acl,
+                                  perm);
 }
 
 static inline bool check_deferred_bucket_acl(struct req_state * const s,
+                                             RGWAccessControlPolicy * const user_acl,
                                              RGWAccessControlPolicy * const bucket_acl,
                                              const uint8_t deferred_check,
                                              const int perm)
 {
   return (s->defer_to_bucket_acls == deferred_check \
-              && verify_bucket_permission(s, bucket_acl, perm));
+              && verify_bucket_permission(s, user_acl, bucket_acl, perm));
 }
 
 bool verify_object_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
                               RGWAccessControlPolicy * const object_acl,
                               const int perm)
@@ -921,18 +954,19 @@ bool verify_object_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  if (check_deferred_bucket_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
   }
 
-  if (!object_acl)
+  if (!object_acl) {
     return false;
+  }
 
-  bool ret = object_acl->verify_permission(s->user->user_id, s->perm_mask,
-					  perm);
-  if (ret)
+  bool ret = object_acl->verify_permission(s->auth_user, s->perm_mask, perm);
+  if (ret) {
     return true;
+  }
 
   if (!s->cct->_conf->rgw_enforce_swift_acls)
     return ret;
@@ -948,15 +982,26 @@ bool verify_object_permission(struct req_state * const s,
 
   if (!swift_perm)
     return false;
+
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  return bucket_acl->verify_permission(s->user->user_id, swift_perm,
-				      swift_perm);
+  if (bucket_acl->verify_permission(s->auth_user, swift_perm, swift_perm,
+                                    s->info.env->get("HTTP_REFERER")))
+    return true;
+
+  if (!user_acl)
+    return false;
+
+  return user_acl->verify_permission(s->auth_user, swift_perm, swift_perm);
 }
 
 bool verify_object_permission(struct req_state *s, int perm)
 {
-  return verify_object_permission(s, s->bucket_acl, s->object_acl, perm);
+  return verify_object_permission(s,
+                                  s->user_acl.get(),
+                                  s->bucket_acl,
+                                  s->object_acl,
+                                  perm);
 }
 
 class HexTable

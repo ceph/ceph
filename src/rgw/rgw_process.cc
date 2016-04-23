@@ -153,6 +153,8 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
+    } else if (s->admin_request) {
+      dout(2) << "overriding permissions due to admin operation" << dendl;
     } else {
       abort_early(s, op, ret, handler);
       goto done;

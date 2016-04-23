@@ -32,6 +32,7 @@ enum ACLGranteeTypeEnum {
   ACL_TYPE_EMAIL_USER = 1,
   ACL_TYPE_GROUP      = 2,
   ACL_TYPE_UNKNOWN    = 3,
+  ACL_TYPE_REFERER    = 4,
 };
 
 enum ACLGroupTypeEnum {
@@ -48,7 +49,7 @@ protected:
 public:
   ACLPermission() : flags(0) {}
   ~ACLPermission() {}
-  int get_permissions() { return flags; }
+  int get_permissions() const { return flags; }
   void set_permissions(int perm) { flags = perm; }
 
   void encode(bufferlist& bl) const {
@@ -74,7 +75,7 @@ public:
   ACLGranteeType() : type(ACL_TYPE_UNKNOWN) {}
   virtual ~ACLGranteeType() {}
 //  virtual const char *to_string() = 0;
-  ACLGranteeTypeEnum get_type() { return (ACLGranteeTypeEnum)type; }
+  ACLGranteeTypeEnum get_type() const { return (ACLGranteeTypeEnum)type; }
   void set(ACLGranteeTypeEnum t) { type = t; }
 //  virtual void set(const char *s) = 0;
   void encode(bufferlist& bl) const {
@@ -109,6 +110,7 @@ protected:
   ACLPermission permission;
   string name;
   ACLGroupTypeEnum group;
+  string url_spec;
 
 public:
   ACLGrant() : group(ACL_GROUP_NONE) {}
@@ -116,12 +118,13 @@ public:
 
   /* there's an assumption here that email/uri/id encodings are
      different and there can't be any overlap */
-  bool get_id(rgw_user& _id) {
+  bool get_id(rgw_user& _id) const {
     switch(type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
       _id = email; // implies from_str() that parses the 't:u' syntax
       return true;
     case ACL_TYPE_GROUP:
+    case ACL_TYPE_REFERER:
       return false;
     default:
       _id = id;
@@ -129,11 +132,14 @@ public:
     }
   }
   ACLGranteeType& get_type() { return type; }
+  const ACLGranteeType& get_type() const { return type; }
   ACLPermission& get_permission() { return permission; }
-  ACLGroupTypeEnum get_group() { return group; }
+  const ACLPermission& get_permission() const { return permission; }
+  ACLGroupTypeEnum get_group() const { return group; }
+  const string& get_referer() const { return url_spec; }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(5, 3, bl);
     ::encode(type, bl);
     string s;
     id.to_str(s);
@@ -145,10 +151,11 @@ public:
     ::encode(name, bl);
     __u32 g = (__u32)group;
     ::encode(g, bl);
+    ::encode(url_spec, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     ::decode(type, bl);
     string s;
     ::decode(s, bl);
@@ -164,6 +171,11 @@ public:
       group = (ACLGroupTypeEnum)g;
     } else {
       group = uri_to_group(uri);
+    }
+    if (struct_v >= 5) {
+      ::decode(url_spec, bl);
+    } else {
+      url_spec.clear();
     }
     DECODE_FINISH(bl);
   }
@@ -183,8 +195,59 @@ public:
     group = _group;
     permission.set_permissions(perm);
   }
+  void set_referer(const std::string& _url_spec, int perm) {
+    type.set(ACL_TYPE_REFERER);
+    url_spec = _url_spec;
+    permission.set_permissions(perm);
+  }
 };
 WRITE_CLASS_ENCODER(ACLGrant)
+
+struct ACLReferer {
+  std::string url_spec;
+  int perm;
+
+  ACLReferer() : perm(0) {}
+  ACLReferer(const std::string& url_spec,
+             const int perm)
+    : url_spec(url_spec),
+      perm(perm) {
+  }
+
+  bool is_match(std::string http_referer) const {
+    if (http_referer == url_spec) {
+      return true;
+    }
+
+    if (http_referer.length() < url_spec.length()) {
+      return false;
+    }
+
+    if ('.' == url_spec[0]) {
+      /* Wildcard support: a referer matches the spec when its last char are
+       * perfectly equal to spec. */
+      return !http_referer.compare(http_referer.length() - url_spec.length(),
+                                   url_spec.length(), url_spec);
+    }
+
+    return false;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(url_spec, bl);
+    ::encode(perm, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+    ::decode(url_spec, bl);
+    ::decode(perm, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(ACLReferer)
 
 class RGWAccessControlList
 {
@@ -192,6 +255,7 @@ protected:
   CephContext *cct;
   map<string, int> acl_user_map;
   map<uint32_t, int> acl_group_map;
+  list<ACLReferer> referer_list;
   multimap<string, ACLGrant> grant_map;
   void _add_grant(ACLGrant *grant);
 public:
@@ -204,19 +268,21 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  int get_perm(rgw_user& id, int perm_mask);
+  int get_perm(const rgw_user& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
+  int get_referer_perm(const std::string http_referer, int perm_mask);
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     bool maps_initialized = true;
     ::encode(maps_initialized, bl);
     ::encode(acl_user_map, bl);
     ::encode(grant_map, bl);
     ::encode(acl_group_map, bl);
+    ::encode(referer_list, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     bool maps_initialized;
     ::decode(maps_initialized, bl);
     ::decode(acl_user_map, bl);
@@ -230,6 +296,9 @@ public:
         _add_grant(&grant);
       }
     }
+    if (struct_v >= 4) {
+      ::decode(referer_list, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -238,10 +307,12 @@ public:
   void add_grant(ACLGrant *grant);
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
+  const multimap<string, ACLGrant>& get_grant_map() const { return grant_map; }
 
   void create_default(const rgw_user& id, string name) {
     acl_user_map.clear();
     acl_group_map.clear();
+    referer_list.clear();
 
     ACLGrant grant;
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
@@ -278,7 +349,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ACLOwner*>& o);
   void set_id(const rgw_user& _id) { id = _id; }
-  void set_name(string& name) { display_name = name; }
+  void set_name(const string& name) { display_name = name; }
 
   rgw_user& get_id() { return id; }
   string& get_display_name() { return display_name; }
@@ -302,9 +373,12 @@ public:
     acl.set_ctx(ctx);
   }
 
-  int get_perm(rgw_user& id, int perm_mask);
+  int get_perm(const rgw_user& id, int perm_mask, const char * http_referer);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
-  bool verify_permission(rgw_user& uid, int user_perm_mask, int perm);
+  bool verify_permission(const rgw_user& uid,
+                         int user_perm_mask,
+                         int perm,
+                         const char * http_referer = nullptr);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
@@ -337,6 +411,9 @@ public:
     owner.set_name(name);
   }
   RGWAccessControlList& get_acl() {
+    return acl;
+  }
+  const RGWAccessControlList& get_acl() const {
     return acl;
   }
 

@@ -1260,6 +1260,7 @@ OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project 
 OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
 OPTION(rgw_keystone_api_version, OPT_INT, 2) // Version of Keystone API to use (2 or 3)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
+OPTION(rgw_keystone_accepted_admin_roles, OPT_STR, "") // list of roles allowing an user to gain admin privileges
 OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL, true) // should we try to verify keystone's ssl

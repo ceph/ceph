@@ -137,6 +137,7 @@ void ACLGrant::dump(Formatter *f) const
 
   f->dump_string("name", name);
   f->dump_int("group", (int)group);
+  f->dump_string("url_spec", url_spec);
 }
 
 void RGWAccessControlList::dump(Formatter *f) const

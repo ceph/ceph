@@ -169,6 +169,7 @@ void _usage()
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>\n";
   cout << "   --max_buckets             max number of buckets for a user\n";
+  cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>\n";
   cout << "   --pool=<pool>\n";
@@ -1995,6 +1996,8 @@ int main(int argc, char **argv)
   string start_marker;
   string end_marker;
   int max_entries = -1;
+  int admin = false;
+  bool admin_specified = false;
   int system = false;
   bool system_specified = false;
   int shard_id = -1;
@@ -2098,6 +2101,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip_zero_entries", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &admin, NULL, "--admin", (char*)NULL)) {
+      admin_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
@@ -3570,6 +3575,9 @@ int main(int argc, char **argv)
 
   if (max_buckets >= 0)
     user_op.set_max_buckets(max_buckets);
+
+  if (admin_specified)
+     user_op.set_admin(admin);
 
   if (system_specified)
     user_op.set_system(system);

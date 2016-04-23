@@ -357,7 +357,7 @@ private:
   bufferlist rx_buffer;
   bufferlist tx_buffer;
   bufferlist::iterator tx_buffer_it;
-  list<string> roles_list;
+  vector<string> accepted_roles;
 
 public:
   KeystoneToken response;
@@ -373,7 +373,7 @@ private:
 public:
   explicit RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
       : RGWHTTPClient(_cct) {
-    get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
+    get_str_vec(cct->_conf->rgw_keystone_accepted_roles, accepted_roles);
   }
 
   int receive_header(void *ptr, size_t len) {

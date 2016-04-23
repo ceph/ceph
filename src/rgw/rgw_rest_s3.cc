@@ -21,9 +21,7 @@
 
 #include "rgw_client_io.h"
 
-/* This header consists several Keystone-related primitives
- * we want to reuse here. */
-#include "rgw_swift.h"
+#include "rgw_keystone.h"
 
 #include <typeinfo> // for 'typeid'
 
@@ -1686,6 +1684,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     // deep copy
     *(s->user) = user_info;
+    s->auth_user = s->user->user_id;
     s->owner.set_id(user_info.user_id);
     s->owner.set_name(user_info.display_name);
   } else {
@@ -2931,7 +2930,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* get authentication token for Keystone. */
   string admin_token_id;
-  int r = RGWSwift::get_keystone_admin_token(cct, admin_token_id);
+  int r = KeystoneService::get_keystone_admin_token(cct, admin_token_id);
   if (r < 0) {
     ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
     return r;
@@ -2986,10 +2985,11 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* check if we have a valid role */
   bool found = false;
-  list<string>::iterator iter;
-  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    if ((found=response.has_role(*iter))==true)
+  for (const auto role : accepted_roles) {
+    if (response.has_role(role) == true) {
+      found = true;
       break;
+    }
   }
 
   if (!found) {
@@ -3008,7 +3008,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
 static void init_anon_user(struct req_state *s)
 {
-  rgw_get_anon_user(*(s->user));
+  rgw_get_anon_user(*(s->user), s->auth_user);
   s->perm_mask = RGW_PERM_FULL_CONTROL;
 }
 
@@ -3695,7 +3695,8 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 	  return -ERR_REQUEST_TIME_SKEWED;
 	}
 
-        string project_id = keystone_validator.response.get_project_id();
+        const string project_id = keystone_validator.response.get_project_id();
+        s->auth_user = project_id;
         s->user->user_id = project_id;
         s->user->display_name = keystone_validator.response.get_project_name(); // wow.
 
@@ -3816,6 +3817,9 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
     if (s->user->system) {
       s->system_request = true;
+      /* System user has admin permissions by default - it's supposed
+       * to go through any security check. */
+      s->admin_request = true;
       dout(20) << "system request" << dendl;
       s->info.args.set_system();
       string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
@@ -3833,7 +3837,10 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
   } /* if external_auth_result < 0 */
 
-  // populate the owner info
+  /* populate the owner info */
+  if (s->auth_user.empty()) {
+    s->auth_user = s->user->user_id;
+  }
   s->owner.set_id(s->user->user_id);
   s->owner.set_name(s->user->display_name);
 
