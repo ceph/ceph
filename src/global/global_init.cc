@@ -148,6 +148,12 @@ void global_init(std::vector < const char * > *alt_def_args,
   }
   first_run = false;
 
+  // Verify flags have not changed if global_pre_init() has been called
+  // manually. If they have, update them.
+  if (g_ceph_context->get_init_flags() != flags) {
+    g_ceph_context->set_init_flags(flags);
+  }
+
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
