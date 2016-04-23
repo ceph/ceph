@@ -3277,6 +3277,10 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   string offset_str = req->get_path2();
   dout(10) << " frag " << fg << " offset '" << offset_str << "'" << dendl;
 
+  __u32 offset_hash = 0;
+  if (!offset_str.empty())
+    offset_hash = ceph_frag_value(diri->hash_dentry_name(offset_str));
+
   // does the frag exist?
   if (diri->dirfragtree[fg.value()] != fg) {
     frag_t newfg = diri->dirfragtree[fg.value()];
@@ -3359,8 +3363,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
       continue;
     }
 
-    if (!offset_str.empty() && dn->get_name().compare(offset_str) <= 0)
-      continue;
+    if (!offset_str.empty()) {
+      dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
+      if (!(offset_key < dn->key()))
+	continue;
+    }
 
     CInode *in = dnl->get_inode();
 

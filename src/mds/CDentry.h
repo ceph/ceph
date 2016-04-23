@@ -110,7 +110,7 @@ public:
   snapid_t first, last;
 
   dentry_key_t key() { 
-    return dentry_key_t(last, name.c_str()); 
+    return dentry_key_t(last, name.c_str(), hash);
   }
 
 public:

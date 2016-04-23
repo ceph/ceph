@@ -4558,6 +4558,7 @@ CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
   if (!in->is_dir()) {
     assert(in->state_test(CInode::STATE_REJOINUNDEF));
     in->inode.mode = S_IFDIR;
+    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
   }
   CDir *dir = in->get_or_open_dirfrag(this, df.frag);
   dir->state_set(CDir::STATE_REJOINUNDEF);
@@ -5753,6 +5754,8 @@ void MDCache::opened_undef_inode(CInode *in) {
   dout(10) << "opened_undef_inode " << *in << dendl;
   rejoin_undef_inodes.erase(in);
   if (in->is_dir()) {
+    // FIXME: re-hash dentries if necessary
+    assert(in->inode.dir_layout.dl_dir_hash == g_conf->mds_default_dir_hash);
     if (in->has_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
       CDir *dir = in->get_dirfrag(frag_t());
       assert(dir);
