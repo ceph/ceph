@@ -5407,8 +5407,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   // This should be used as a general guideline for most commands handled
   // in this function.  Adapt as you see fit, but please bear in mind that
   // this is the expected behavior.
-
-
+   
+ 
   if (prefix == "osd setcrushmap" ||
       (prefix == "osd crush set" && !osdid_present)) {
     dout(10) << "prepare_command setting new crush map" << dendl;
@@ -5427,6 +5427,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!validate_crush_against_features(&crush, ss)) {
       err = -EINVAL;
       goto reply;
+    }
+    
+    if (prefix == "osd setcrushmap") {
+      const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
+      map<int64_t,pg_pool_t>::const_iterator pit;
+      for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+        const int64_t pool_id = pit->first;
+        const pg_pool_t &pool = pit->second;
+        int ruleno = pool.get_crush_ruleset();
+        if (!crush.rule_exists(ruleno)) {
+          ss << " the crush rule no "<< ruleno << " for pool id " << pool_id << " is in use";
+          err = -EINVAL;
+          goto reply;
+        }
+      }
     }
 
     // sanity check: test some inputs to make sure this map isn't totally broken
