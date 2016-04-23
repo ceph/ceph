@@ -147,13 +147,16 @@ public:
     void set(
       const string &prefix,
       const string &k,
-      const bufferlist &bl);
+      const bufferlist &bl) override;
     void rmkey(
       const string &prefix,
-      const string &k);
+      const string &k) override;
+    void rm_single(
+      const string &prefix,
+      const string &k) override;
     void rmkeys_by_prefix(
       const string &prefix
-      );
+      ) override;
   };
 
   KeyValueDB::Transaction get_transaction() {
