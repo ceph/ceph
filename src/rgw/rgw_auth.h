@@ -58,6 +58,9 @@ inline ostream& operator<<(ostream& out, const RGWIdentityApplier &id) {
 std::unique_ptr<RGWIdentityApplier>
 rgw_auth_transform_old_authinfo(req_state * const s);
 
+int rgw_perms_from_aclspec_default_strategy(const rgw_user& uid,
+                                            const RGWIdentityApplier::aclspec_t& aclspec);
+
 
 /* Interface for classes applying changes to request state/RADOS store imposed
  * by a particular RGWAuthEngine.

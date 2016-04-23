@@ -38,17 +38,7 @@ rgw_auth_transform_old_authinfo(req_state * const s)
     }
 
     int get_perms_from_aclspec(const aclspec_t& aclspec) const {
-      ldout(cct, 5) << "Searching permissions for uid=" << id
-                    << " mask=" << perm_mask << dendl;
-
-      const auto iter = aclspec.find(id.to_str());
-      if (std::end(aclspec) != iter) {
-        ldout(cct, 5) << "Found permission: " << iter->second << dendl;
-        return iter->second & perm_mask;
-      }
-
-      ldout(cct, 5) << "Permissions for user not found" << dendl;
-      return 0;
+      return rgw_perms_from_aclspec_default_strategy(id, aclspec);
     }
 
     bool is_admin_of(const rgw_user& acct_id) const {
@@ -74,15 +64,42 @@ rgw_auth_transform_old_authinfo(req_state * const s)
 }
 
 
-/* RGWRemoteAuthApplier */
-int RGWRemoteAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+int rgw_perms_from_aclspec_default_strategy(const rgw_user& uid,
+                                            const RGWIdentityApplier::aclspec_t& aclspec)
 {
-  const auto iter = aclspec.find(info.auth_user.to_str());
-  if (std::end(aclspec) == iter) {
+  dout(5) << "Searching permissions for uid=" << uid <<  dendl;
+
+  const auto iter = aclspec.find(uid.to_str());
+  if (std::end(aclspec) != iter) {
+    dout(5) << "Found permission: " << iter->second << dendl;
     return iter->second;
   }
 
+  dout(5) << "Permissions for user not found" << dendl;
   return 0;
+}
+
+
+/* RGWRemoteAuthApplier */
+int RGWRemoteAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+{
+  int perm = 0;
+
+  /* For backward compatibility with ACLOwner. */
+  perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user,
+                                                  aclspec);
+
+  /* We also need to cover cases where rgw_keystone_implicit_tenants
+   * was enabled. */
+  if (info.acct_user.tenant.empty()) {
+    const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
+
+    perm |= rgw_perms_from_aclspec_default_strategy(tenanted_acct_user,
+                                                    aclspec);
+  }
+
+  ldout(cct, 20) << "from ACL got perm=" << perm << dendl;
+  return perm;
 }
 
 bool RGWRemoteAuthApplier::is_admin_of(const rgw_user& uid) const
@@ -169,13 +186,7 @@ const std::string RGWLocalAuthApplier::NO_SUBUSER;
 
 int RGWLocalAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
 {
-  const auto iter = aclspec.find(user_info.user_id.to_str());
-  if (std::end(aclspec) != iter) {
-    ldout(cct, 20) << "from user ACL got perm=" << iter->second << dendl;
-    return iter->second;
-  }
-
-  return 0;
+  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
 }
 
 bool RGWLocalAuthApplier::is_admin_of(const rgw_user& uid) const
