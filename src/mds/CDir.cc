@@ -295,10 +295,11 @@ bool CDir::check_rstats(bool scrub)
   return good;
 }
 
-CDentry *CDir::lookup(const char *name, snapid_t snap)
+CDentry *CDir::lookup(const string& name, snapid_t snap)
 { 
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
-  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name));
+  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name.c_str(),
+							inode->hash_dentry_name(name)));
   if (iter == items.end())
     return 0;
   if (iter->second->name == name &&
@@ -310,9 +311,13 @@ CDentry *CDir::lookup(const char *name, snapid_t snap)
   return 0;
 }
 
-
-
-
+CDentry *CDir::lookup_exact_snap(const string& name, snapid_t last) {
+  map_t::iterator p = items.find(dentry_key_t(last, name.c_str(),
+					      inode->hash_dentry_name(name)));
+  if (p == items.end())
+    return NULL;
+  return p->second;
+}
 
 /***
  * linking fun
