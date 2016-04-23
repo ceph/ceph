@@ -84,6 +84,7 @@ public:
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
 
+  void set_init_flags(int flags);
   int get_init_flags() const;
 
   /* Get the PerfCountersCollection of this CephContext */
