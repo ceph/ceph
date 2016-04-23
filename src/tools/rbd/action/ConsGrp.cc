@@ -156,10 +156,66 @@ int execute_add(const po::variables_map &vm) {
   return 0;
 }
 
+int execute_list_images(const po::variables_map &vm) {
+  std::string cg_name = utils::get_positional_argument(vm, 0);
+  size_t arg_index = 1;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+
+  at::Format::Formatter formatter;
+  int r = utils::get_formatter(vm, &formatter);
+  if (r < 0) {
+    return r;
+  }
+  Formatter *f = formatter.get();
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  std::cerr << "Received pool name: " << pool_name << std::endl;
+  std::cerr << "Received cg name: " << cg_name << std::endl;
+
+  librbd::RBD rbd;
+  std::vector<std::string> names;
+  /*
+  r = rbd.list_cgs(io_ctx, names);
+
+  if (r == -ENOENT)
+    r = 0;
+  if (r < 0)
+    return r;
+  */
+
+  if (f)
+    f->open_array_section("consistency_groups");
+  for (auto i : names) {
+     if (f)
+       f->dump_string("name", i);
+     else
+       std::cout << i << std::endl;
+  }
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  }
+
+  return 0;
+}
+
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
+}
+
+void get_list_images_arguments(po::options_description *positional,
+                               po::options_description *options) {
+  add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_format_options(options);
+  positional->add_options()(at::CG_NAME.c_str(), "Name of consistency group");
 }
 
 void get_create_arguments(po::options_description *positional,
@@ -187,6 +243,9 @@ void get_add_arguments(po::options_description *positional,
 Shell::Action action_add(
   {"cg", "add"}, {}, "Add an image to the consistency group.", "",
   &get_add_arguments, &execute_add);
+Shell::Action action_list_images(
+  {"cg", "list", "images"}, {}, "Dump list of images in consistency group.", "",
+  &get_list_images_arguments, &execute_list_images);
 Shell::Action action_list(
   {"cg", "list"}, {"cg", "ls"}, "Dump list of consistency groups.", "",
   &get_list_arguments, &execute_list);
