@@ -373,8 +373,8 @@ void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
   bat->Delete(combine_strings(prefix, k));
 }
 
-void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
-					                 const string &k)
+void RocksDBStore::RocksDBTransactionImpl::rm_single(const string &prefix,
+						     const string &k)
 {
   bat->SingleDelete(combine_strings(prefix, k));
 }

@@ -151,7 +151,7 @@ public:
     void rmkey(
       const string &prefix,
       const string &k) override;
-    void rm_single_key(
+    void rm_single(
       const string &prefix,
       const string &k) override;
     void rmkeys_by_prefix(

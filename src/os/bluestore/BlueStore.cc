@@ -3987,13 +3987,13 @@ void BlueStore::_kv_sync_thread()
 	       ++q) {
             string key;
             get_overlay_key(p->nid, *q, &key);
-	    t->rm_single_key(PREFIX_OVERLAY, key);
+	    t->rm_single(PREFIX_OVERLAY, key);
 	  }
 	}
 	// cleanup the wal
 	string key;
 	get_wal_key(wt.seq, &key);
-	t->rm_single_key(PREFIX_WAL, key);
+	t->rm_single(PREFIX_WAL, key);
       }
       db->submit_transaction_sync(t);
 
@@ -4726,7 +4726,7 @@ int BlueStore::_do_overlay_trim(TransContext *txc,
       if (o->onode.put_overlay_ref(p->second.key)) {
 	string key;
 	get_overlay_key(o->onode.nid, p->second.key, &key);
-	txc->t->rm_single_key(PREFIX_OVERLAY, key);
+	txc->t->rm_single(PREFIX_OVERLAY, key);
       }
       o->onode.overlay_map.erase(p++);
       ++changed;
@@ -4826,7 +4826,7 @@ int BlueStore::_do_write_overlays(TransContext *txc,
 	if (o->onode.put_overlay_ref(p->second.key)) {
 	  string key;
 	  get_overlay_key(o->onode.nid, p->second.key, &key);
-	  txc->t->rm_single_key(PREFIX_OVERLAY, key);
+	  txc->t->rm_single(PREFIX_OVERLAY, key);
 	}
 	o->onode.overlay_map.erase(p++);
 	continue;
@@ -4844,7 +4844,7 @@ int BlueStore::_do_write_overlays(TransContext *txc,
 	if (o->onode.put_overlay_ref(p->second.key)) {
 	  string key;
 	  get_overlay_key(o->onode.nid, p->second.key, &key);
-	  txc->t->rm_single_key(PREFIX_OVERLAY, key);
+	  txc->t->rm_single(PREFIX_OVERLAY, key);
 	}
 	o->onode.overlay_map.erase(p++);
 	continue;
@@ -6013,7 +6013,7 @@ int BlueStore::_do_truncate(
 		 << op->second << dendl;
 	string key;
 	get_overlay_key(o->onode.nid, op->second.key, &key);
-	txc->t->rm_single_key(PREFIX_OVERLAY, key);
+	txc->t->rm_single(PREFIX_OVERLAY, key);
       } else {
 	dout(20) << __func__ << " rm overlay " << op->first << " "
 		 << op->second << " (put ref)" << dendl;
