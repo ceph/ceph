@@ -399,6 +399,51 @@ RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
   };
 }
 
+static inline const std::string make_spec_item(const std::string tenant,
+                                               const std::string id)
+{
+  return tenant + ":" + id;
+}
+
+RGWKeystoneAuthEngine::acl_strategy_t
+RGWKeystoneAuthEngine::get_acl_strategy(const KeystoneToken& token) const
+{
+  /* The primary identity is constructed upon UUIDs. */
+  const auto tenant_uuid = token.get_project_id();
+  const auto user_uuid = token.get_user_id();
+
+  /* For Keystone v2 an alias may be also used. */
+  const auto tenant_name = token.get_project_name();
+  const auto user_name = token.get_user_name();
+
+  /* Construct all possible combinations including Swift's wildcards. */
+  const std::vector<std::string> allowed_items = {
+    make_spec_item(tenant_uuid, user_uuid),
+    make_spec_item(tenant_name, user_name),
+
+    /* Wildcards. */
+    make_spec_item(tenant_uuid, "*"),
+    make_spec_item(tenant_name, "*"),
+    make_spec_item("*", user_uuid),
+    make_spec_item("*", user_name),
+  };
+
+  /* Lambda will obtain a copy of (not a reference to!) allowed_items. */
+  return [allowed_items](const RGWIdentityApplier::aclspec_t& aclspec) {
+    int perm = 0;
+
+    for (const auto& allowed_item : allowed_items) {
+      const auto iter = aclspec.find(allowed_item);
+
+      if (std::end(aclspec) != iter) {
+        perm |= iter->second;
+      }
+    }
+
+    return perm;
+  };
+}
+
 RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
 {
   KeystoneToken t;
@@ -428,6 +473,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
                    << dendl;
       return apl_factory->create_apl_remote(cct,
+                                            get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));
   }
 
@@ -460,6 +506,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
                     << " expires: " << t.get_expires() << dendl;
       RGWKeystoneTokenCache::get_instance().add(token_id, t);
       return apl_factory->create_apl_remote(cct,
+                                            get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));
     }
   }
