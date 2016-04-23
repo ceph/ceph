@@ -105,6 +105,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
 .. note:: The bootstrap-rgw keyring is only created during installation of clusters
    running Hammer or newer
 
+.. note:: If this process fails with a message similar to
+   "Unable to find /etc/ceph/ceph.client.admin.keyring", please ensure that the IP
+   listed for the monitor node in ceph.conf is the Public IP, not the Private IP.
 
 #. Add two OSDs. For fast setup, this quick start uses a directory rather
    than an entire disk per Ceph OSD Daemon. See `ceph-deploy osd`_ for
