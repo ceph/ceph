@@ -339,6 +339,12 @@ int global_init_prefork(CephContext *cct)
     if (pidfile_write(g_conf) < 0)
       exit(1);
 
+    if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+	(cct->get_set_uid() || cct->get_set_gid())) {
+      chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
+		 cct->get_set_uid_string(), cct->get_set_gid_string());
+    }
+
     return -1;
   }
 
@@ -399,6 +405,12 @@ void global_init_postfork_start(CephContext *cct)
 
   if (pidfile_write(g_conf) < 0)
     exit(1);
+
+  if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+      (cct->get_set_uid() || cct->get_set_gid())) {
+    chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
+	       cct->get_set_uid_string(), cct->get_set_gid_string());
+  }
 }
 
 void global_init_postfork_finish(CephContext *cct)
