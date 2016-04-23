@@ -297,9 +297,6 @@ void global_init(std::vector < const char * > *alt_def_args,
       g_ceph_context->_log->chown_log_file(
 	g_ceph_context->get_set_uid(),
 	g_ceph_context->get_set_gid());
-      g_ceph_context->get_admin_socket()->chown(
-	g_ceph_context->get_set_uid(),
-	g_ceph_context->get_set_gid());
     }
   }
 
