@@ -109,6 +109,7 @@ BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
 BuildRequires:	python-requests
+BuildRequires:	python-sphinx
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	util-linux
@@ -180,8 +181,6 @@ BuildRequires:	FastCGI-devel
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
 %endif
-# python-sphinx
-BuildRequires:	python-sphinx
 #hardened-cc1
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
