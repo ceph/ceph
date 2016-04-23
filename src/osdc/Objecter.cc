@@ -3319,9 +3319,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   /* get it before we call _finish_op() */
-  auto completion_lock =
-    (op->target.base_oid.name.size() ? s->get_lock(op->target.base_oid) :
-     OSDSession::unique_completion_lock());
+  auto completion_lock = s->get_lock(op->target.base_oid);
 
   // done with this tid?
   if (!op->onack && !op->oncommit && !op->oncommit_sync) {
