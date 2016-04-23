@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <boost/utility/string_ref.hpp>
+#include "common/ceph_crypto.h"
 #include "common/ceph_json.h"
 #include "rgw_common.h"
 #include "rgw_swift.h"
@@ -568,24 +570,47 @@ static void temp_url_make_content_disp(req_state * const s)
   }
 }
 
-static string temp_url_gen_sig(const string& key,
-                               const string& method,
-                               const string& path,
-                               const string& expires)
+class TempURLSig
 {
-  const string str = method + "\n" + expires + "\n" + path;
-  //dout(20) << "temp url signature (plain text): " << str << dendl;
+private:
+  static constexpr uint32_t output_size =
+    CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1;
 
-  /* unsigned */ char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  calc_hmac_sha1(key.c_str(), key.size(),
-                 str.c_str(), str.size(),
-                 dest);
+  unsigned char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE]; // 20
+  char dest_str[output_size];
 
-  char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
-  buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
+public:
+  TempURLSig() {}
 
-  return dest_str;
-}
+  const char* calc(const string& key,
+		  const string& method,
+		  const boost::string_ref& path,
+		  const string& expires) {
+
+    using ceph::crypto::HMACSHA1;
+    using UCHARPTR = const unsigned char*;
+
+    HMACSHA1 hmac((UCHARPTR) key.c_str(), key.size());
+    hmac.Update((UCHARPTR) method.c_str(), method.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+    hmac.Update((UCHARPTR) expires.c_str(), expires.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+    hmac.Update((UCHARPTR) path.data(), path.size());
+    hmac.Final(dest);
+
+    buf_to_hex((UCHARPTR) dest, sizeof(dest), dest_str);
+
+    return dest_str;
+  }
+
+  int comp(const std::string& rhs) {
+    /* never allow out-of-range exception */
+    if (rhs.size() < output_size)
+      return -1;
+    return rhs.compare(0 /* pos */,  output_size, dest_str);
+  }
+
+}; /* TempURLSig */
 
 int authenticate_temp_url(RGWRados * const store, req_state * const s)
 {
@@ -602,12 +627,12 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
     return -EPERM;
   }
 
-  const string temp_url_sig = s->info.args.get("temp_url_sig");
+  const string& temp_url_sig = s->info.args.get("temp_url_sig");
   if (temp_url_sig.empty()) {
     return -EPERM;
   }
 
-  const string temp_url_expires = s->info.args.get("temp_url_expires");
+  const string& temp_url_expires = s->info.args.get("temp_url_expires");
   if (temp_url_expires.empty()) {
     return -EPERM;
   }
@@ -668,12 +693,17 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
   /* We need to verify two paths because of compliance with Swift, Tempest
    * and old versions of RadosGW. The second item will have the prefix
    * of Swift API entry point removed. */
+
+  /* XXX can we search this ONCE? */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  const vector<string> allowed_paths = {
-    s->info.request_uri,
-    s->info.request_uri.substr(pos + 1)
+  boost::string_ref ref_uri = s->info.request_uri;
+  const vector<boost::string_ref> allowed_paths = {
+    ref_uri,
+    ref_uri.substr(pos + 1)
   };
 
+  /* XXX Boost 1.6 small_vector--or maybe, could we select from a few static
+   * vectors? */
   vector<string> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
@@ -683,7 +713,8 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
   }
 
   /* Need to try each combination of keys, allowed path and methods. */
-  for (const auto kv : s->user->temp_url_keys) {
+  TempURLSig sig_helper;
+  for (const auto& kv : s->user->temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;
 
@@ -691,17 +722,16 @@ int authenticate_temp_url(RGWRados * const store, req_state * const s)
       continue;
     }
 
-    for (const auto path : allowed_paths) {
-      for (const auto method : allowed_methods) {
-        const string local_sig = temp_url_gen_sig(temp_url_key,
-                                                  method, path,
-                                                  temp_url_expires);
+    for (const auto& path : allowed_paths) {
+      for (const auto& method : allowed_methods) {
+        const char* local_sig = sig_helper.calc(temp_url_key, method, path,
+						temp_url_expires);
 
         ldout(s->cct, 20) << "temp url signature [" << temp_url_key_num
                           << "] (calculated): " << local_sig
                           << dendl;
 
-        if (local_sig != temp_url_sig) {
+        if (!!sig_helper.comp(temp_url_sig)) {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
                             << " != "
                             << temp_url_sig
