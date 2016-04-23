@@ -52,11 +52,12 @@ static lockdep_stopper_t lockdep_stopper;
 static ceph::unordered_map<std::string, int> lock_ids;
 static map<int, std::string> lock_names;
 static map<int, int> lock_refs;
-static list<int> free_ids;
+static char free_ids[MAX_LOCKS/8]; // bit set = free
 static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
 static char follows[MAX_LOCKS][MAX_LOCKS/8]; // follows[a][b] means b taken after a
 static BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
 unsigned current_maxid;
+int last_freed_id;
 
 static bool lockdep_force_backtrace()
 {
@@ -67,6 +68,8 @@ static bool lockdep_force_backtrace()
 /******* Functions **********/
 void lockdep_register_ceph_context(CephContext *cct)
 {
+  static_assert((MAX_LOCKS > 0) && (MAX_LOCKS % 8 == 0),                   
+    "lockdep's MAX_LOCKS needs to be divisible by 8 to operate correctly.");
   pthread_mutex_lock(&lockdep_mutex);
   if (g_lockdep_ceph_ctx == NULL) {
     ANNOTATE_BENIGN_RACE_SIZED(&g_lockdep_ceph_ctx, sizeof(g_lockdep_ceph_ctx),
@@ -77,10 +80,9 @@ void lockdep_register_ceph_context(CephContext *cct)
     g_lockdep_ceph_ctx = cct;
     lockdep_dout(0) << "lockdep start" << dendl;
     current_maxid = 0;
+	last_freed_id = -1;
 
-    for (int i=0; i<MAX_LOCKS; ++i) {
-      free_ids.push_back(i);
-    }
+    memset((void*) &free_ids[0], 255, sizeof(free_ids));
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -105,10 +107,11 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     lock_names.clear();
     lock_ids.clear();
     lock_refs.clear();
-    free_ids.clear();
+    memset((void*)&free_ids[0], 0, sizeof(free_ids));
     memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
     memset((void*)&follows_bt[0][0], 0, sizeof(BackTrace*) * current_maxid * MAX_LOCKS);
     current_maxid = 0;
+    last_freed_id = -1;
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -135,6 +138,37 @@ int lockdep_dump_locks()
   return 0;
 }
 
+int lockdep_get_free_id(void)
+{
+  // if there's id known to be freed lately, reuse it
+  if ((last_freed_id >= 0) && 
+     (free_ids[last_freed_id/8] & (1 << (last_freed_id % 8)))) {
+    int tmp = last_freed_id;
+    last_freed_id = -1;
+    free_ids[tmp/8] &= 255 - (1 << (tmp % 8));
+    lockdep_dout(1) << "reusing last freed id " << tmp << dendl;
+    return tmp;
+  }
+  
+  // walk through entire array and locate nonzero char, then find
+  // actual bit.
+  for (int i = 0; i < MAX_LOCKS / 8; ++i) {
+    if (free_ids[i] != 0) {
+      for (int j = 0; j < 8; ++j) {
+        if (free_ids[i] & (1 << j)) {
+          free_ids[i] &= 255 - (1 << j);
+          lockdep_dout(1) << "using id " << i * 8 + j << dendl;
+          return i * 8 + j;
+        }
+      }
+    }
+  }
+  
+  // not found
+  lockdep_dout(0) << "failing miserably..." << dendl;
+  return -1;
+}
+
 int lockdep_register(const char *name)
 {
   int id;
@@ -142,16 +176,15 @@ int lockdep_register(const char *name)
   pthread_mutex_lock(&lockdep_mutex);
   ceph::unordered_map<std::string, int>::iterator p = lock_ids.find(name);
   if (p == lock_ids.end()) {
-    if (free_ids.empty()) {
-      lockdep_dout(0) << "ERROR OUT OF IDS .. have " << free_ids.size()
+    id = lockdep_get_free_id();
+    if (id < 0) {
+      lockdep_dout(0) << "ERROR OUT OF IDS .. have 0"
 		      << " max " << MAX_LOCKS << dendl;
       for (auto& p : lock_names) {
 	lockdep_dout(0) << "  lock " << p.first << " " << p.second << dendl;
       }
-      assert(!free_ids.empty());
+      assert(false);
     }
-    id = free_ids.front();
-    free_ids.pop_front();
     if (current_maxid <= (unsigned)id) {
         current_maxid = (unsigned)id + 1;
     }
@@ -198,7 +231,8 @@ void lockdep_unregister(int id)
     lock_ids.erase(p->second);
     lock_names.erase(id);
     lock_refs.erase(id);
-    free_ids.push_front(id);
+    free_ids[id/8] |= (1 << (id % 8));
+	last_freed_id = id;
   } else {
     lockdep_dout(20) << "have " << refs << " of '" << p->second << "' "
                      << "from " << id << dendl;
