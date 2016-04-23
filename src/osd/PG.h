@@ -434,7 +434,6 @@ public:
       const map<pg_shard_t, pg_info_t> &pinfo) {
       recovered(hoid);
       boost::optional<pg_missing_t::item> item;
-      set<pg_shard_t> have;
       auto miter = missing.missing.find(hoid);
       if (miter != missing.missing.end()) {
 	item = miter->second;
