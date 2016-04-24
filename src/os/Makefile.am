@@ -42,6 +42,7 @@ libos_a_SOURCES += \
 	os/bluestore/BlueFS.cc \
 	os/bluestore/BlueRocksEnv.cc \
 	os/bluestore/BlueStore.cc \
+	os/bluestore/ExtentFreelistManager.cc \
 	os/bluestore/FreelistManager.cc \
 	os/bluestore/KernelDevice.cc \
 	os/bluestore/StupidAllocator.cc
@@ -111,6 +112,7 @@ noinst_HEADERS += \
 	os/bluestore/BlueRocksEnv.h \
 	os/bluestore/BlueStore.h \
 	os/bluestore/KernelDevice.h \
+	os/bluestore/ExtentFreelistManager.h \
 	os/bluestore/FreelistManager.h \
 	os/bluestore/StupidAllocator.h
 endif

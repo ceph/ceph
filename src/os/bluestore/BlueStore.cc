@@ -971,7 +971,7 @@ int BlueStore::_open_alloc()
 {
   assert(fm == NULL);
   assert(alloc == NULL);
-  fm = new FreelistManager();
+  fm = FreelistManager::create(freelist_type);
   int r = fm->init(db, PREFIX_ALLOC);
   if (r < 0) {
     delete fm;
@@ -1685,6 +1685,8 @@ int BlueStore::mkfs()
       return r;
   }
 
+  freelist_type = g_conf->bluestore_freelist_type;
+
   r = _open_path();
   if (r < 0)
     return r;
@@ -1750,6 +1752,12 @@ int BlueStore::mkfs()
   {
     dout(20) << __func__ << " initializing freespace" << dendl;
     KeyValueDB::Transaction t = db->get_transaction();
+    {
+      bufferlist bl;
+      bl.append(freelist_type);
+      t->set(PREFIX_SUPER, "freelist_type", bl);
+    }
+    fm->create(t);
     uint64_t reserved = 0;
     if (g_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
@@ -1874,13 +1882,13 @@ int BlueStore::mount()
   if (r < 0)
     goto out_bdev;
 
-  r = _open_alloc();
+  r = _open_super_meta();
   if (r < 0)
     goto out_db;
 
-  r = _open_super_meta();
+  r = _open_alloc();
   if (r < 0)
-    goto out_alloc;
+    goto out_db;
 
   r = _open_collections();
   if (r < 0)
@@ -2423,7 +2431,7 @@ int BlueStore::statfs(struct statfs *buf)
   memset(buf, 0, sizeof(*buf));
   buf->f_blocks = bdev->get_size() / bdev->get_block_size();
   buf->f_bsize = bdev->get_block_size();
-  buf->f_bfree = fm->get_total_free() / bdev->get_block_size();
+  buf->f_bfree = alloc->get_free() / bdev->get_block_size();
   buf->f_bavail = buf->f_bfree;
   dout(20) << __func__ << " free " << pretty_si_t(buf->f_bfree * buf->f_bsize)
 	   << " / " << pretty_si_t(buf->f_blocks * buf->f_bsize) << dendl;
@@ -3531,6 +3539,14 @@ int BlueStore::_open_super_meta()
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
     nid_last = nid_max;
+  }
+
+  // freelist
+  {
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "freelist_type", &bl);
+    freelist_type = std::string(bl.c_str(), bl.length());
+    dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
   }
 
   // bluefs alloc
