@@ -532,13 +532,6 @@ public:
     return osd_xinfo[osd];
   }
   
-  int get_any_up_osd() const {
-    for (int i=0; i<max_osd; i++)
-      if (is_up(i))
-	return i;
-    return -1;
-  }
-
   int get_next_up_osd_after(int n) const {
     for (int i = n + 1; i != n; ++i) {
       if (i >= get_max_osd())

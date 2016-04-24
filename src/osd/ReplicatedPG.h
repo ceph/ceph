@@ -608,7 +608,7 @@ public:
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
     int async_read_result;
-    unsigned inflightreads;
+    int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(ReplicatedPG *pg);
     void finish_read(ReplicatedPG *pg);
@@ -923,10 +923,6 @@ protected:
 
   // agent
   boost::scoped_ptr<TierAgentState> agent_state;
-
-  friend struct C_AgentFlushStartStop;
-  friend struct C_AgentEvictStartStop;
-  friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
   bool agent_work(int max) ///< entry point to do some agent work
@@ -1297,14 +1293,6 @@ protected:
 	obc3->ondisk_write_unlock();
     }
   };
-  struct C_OSD_OndiskWriteUnlockList : public Context {
-    list<ObjectContextRef> *pls;
-    explicit C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
-    void finish(int r) {
-      for (list<ObjectContextRef>::iterator p = pls->begin(); p != pls->end(); ++p)
-	(*p)->ondisk_write_unlock();
-    }
-  };
   struct C_OSD_AppliedRecoveredObject : public Context {
     ReplicatedPGRef pg;
     ObjectContextRef obc;
@@ -1416,7 +1404,6 @@ protected:
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();
   object_stat_collection_t scrub_cstat;
-  friend class C_ScrubDigestUpdated;
 
   virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void apply_and_flush_repops(bool requeue);
@@ -1448,7 +1435,6 @@ protected:
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
   void cancel_proxy_write(ProxyWriteOpRef pwop);
 
-  friend struct C_ProxyWrite_Apply;
   friend struct C_ProxyWrite_Commit;
 
 public:
