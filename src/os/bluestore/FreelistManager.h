@@ -10,47 +10,31 @@
 #include <ostream>
 #include "kv/KeyValueDB.h"
 
-#include "include/cpp-btree/btree_map.h"
-
 class FreelistManager {
-  std::string prefix;
-  std::mutex lock;
-  uint64_t total_free;
-
-  typedef btree::btree_map<uint64_t,uint64_t> map_t;
-  static const bool map_t_has_stable_iterators = false;
-
-  map_t kv_free;    ///< mirrors our kv values in the db
-
-  map_t::const_iterator enumerate_p;
-
-  void _audit();
-  void _dump();
-
 public:
-  FreelistManager() :
-    total_free(0) {
+  FreelistManager() {}
+  virtual ~FreelistManager() {}
+
+  static FreelistManager *create(string type);
+
+  virtual int create(KeyValueDB::Transaction txn) {
+    return 0;
   }
 
-  int init(KeyValueDB *kvdb, std::string prefix);
-  void shutdown();
+  virtual int init(KeyValueDB *kvdb, std::string prefix) = 0;
+  virtual void shutdown() = 0;
 
-  void dump();
+  virtual void dump() = 0;
 
-  uint64_t get_total_free() {
-    std::lock_guard<std::mutex> l(lock);
-    return total_free;
-  }
+  virtual void enumerate_reset() = 0;
+  virtual bool enumerate_next(uint64_t *offset, uint64_t *length) = 0;
 
-  void enumerate_reset();
-  bool enumerate_next(uint64_t *offset, uint64_t *length);
-
-  void allocate(
+  virtual void allocate(
     uint64_t offset, uint64_t length,
-    KeyValueDB::Transaction txn);
-  void release(
+    KeyValueDB::Transaction txn) = 0;
+  virtual void release(
     uint64_t offset, uint64_t length,
-    KeyValueDB::Transaction txn);
+    KeyValueDB::Transaction txn) = 0;
 };
 
 

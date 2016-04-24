@@ -520,6 +520,7 @@ private:
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
   BlockDevice *bdev;
+  std::string freelist_type;
   FreelistManager *fm;
   Allocator *alloc;
   uuid_d fsid;
