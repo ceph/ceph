@@ -123,5 +123,6 @@ noinst_HEADERS += \
 	messages/MStatfsReply.h \
 	messages/MTimeCheck.h \
 	messages/MWatchNotify.h \
-	messages/PaxosServiceMessage.h
+	messages/PaxosServiceMessage.h \
+	messages/MNop.h
 
