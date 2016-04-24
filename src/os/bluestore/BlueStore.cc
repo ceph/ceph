@@ -981,11 +981,12 @@ int BlueStore::_open_alloc()
 
   alloc = Allocator::create("stupid");
   uint64_t num = 0, bytes = 0;
-  const auto& fl = fm->get_freelist();
-  for (auto& p : fl) {
-    alloc->init_add_free(p.first, p.second);
+  fm->enumerate_reset();
+  uint64_t offset, length;
+  while (fm->enumerate_next(&offset, &length)) {
+    alloc->init_add_free(offset, length);
     ++num;
-    bytes += p.second;
+    bytes += length;
   }
   dout(10) << __func__ << " loaded " << pretty_si_t(bytes)
 	   << " in " << num << " extents"
@@ -2354,20 +2355,20 @@ int BlueStore::fsck()
 
   dout(1) << __func__ << " checking freelist vs allocated" << dendl;
   {
-    const auto& free = fm->get_freelist();
-    for (auto p = free.begin();
-	 p != free.end(); ++p) {
-      if (used_blocks.intersects(p->first, p->second)) {
-	derr << __func__ << " free extent " << p->first << "~" << p->second
+    fm->enumerate_reset();
+    uint64_t offset, length;
+    while (fm->enumerate_next(&offset, &length)) {
+      if (used_blocks.intersects(offset, length)) {
+	derr << __func__ << " free extent " << offset << "~" << length
 	     << " intersects allocated blocks" << dendl;
 	interval_set<uint64_t> free, overlap;
-	free.insert(p->first, p->second);
+	free.insert(offset, length);
 	overlap.intersection_of(free, used_blocks);
 	derr << __func__ << " overlap: " << overlap << dendl;
 	++errors;
 	continue;
       }
-      used_blocks.insert(p->first, p->second);
+      used_blocks.insert(offset, length);
     }
     if (!used_blocks.contains(0, bdev->get_size())) {
       derr << __func__ << " leaked some space; free+used = "

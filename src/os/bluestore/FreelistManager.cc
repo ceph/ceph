@@ -89,6 +89,23 @@ void FreelistManager::dump()
   _dump();
 }
 
+void FreelistManager::enumerate_reset()
+{
+  std::lock_guard<std::mutex> l(lock);
+  enumerate_p = kv_free.begin();
+}
+
+bool FreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
+{
+  std::lock_guard<std::mutex> l(lock);
+  if (enumerate_p == kv_free.end())
+    return false;
+  *offset = enumerate_p->first;
+  *length = enumerate_p->second;
+  ++enumerate_p;
+  return true;
+}
+
 void FreelistManager::_dump()
 {
   dout(30) << __func__ << " " << total_free
