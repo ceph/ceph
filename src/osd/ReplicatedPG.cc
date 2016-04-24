@@ -6844,7 +6844,8 @@ void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
   MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
   assert(ctx->async_reads_complete());
 
-  for (vector<OSDOp>::iterator p = ctx->ops.begin(); p != ctx->ops.end(); ++p) {
+  for (vector<OSDOp>::iterator p = ctx->ops.begin();
+    p != ctx->ops.end() && result >= 0; ++p) {
     if (p->rval < 0 && !(p->op.flags & CEPH_OSD_OP_FLAG_FAILOK)) {
       result = p->rval;
       break;
