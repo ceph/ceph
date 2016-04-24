@@ -726,7 +726,7 @@ private:
   }
   crush_rule_step *get_rule_step(unsigned ruleno, unsigned step) const {
     crush_rule *n = get_rule(ruleno);
-    if (!n) return (crush_rule_step *)(-EINVAL);
+    if (IS_ERR(n)) return (crush_rule_step *)(-EINVAL);
     if (step >= n->len) return (crush_rule_step *)(-EINVAL);
     return &n->steps[step];
   }
@@ -905,7 +905,7 @@ private:
       return (-EINVAL);
 
     // check that the bucket that we want to detach exists
-    assert( get_bucket(item) );
+    assert(bucket_exists(item));
 
     // get the bucket's weight
     crush_bucket *b = get_bucket(item);
@@ -1093,21 +1093,6 @@ public:
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
-  }
-
-  int read_from_file(const char *fn) {
-    bufferlist bl;
-    std::string error;
-    int r = bl.read_file(fn, &error);
-    if (r < 0) return r;
-    bufferlist::iterator blp = bl.begin();
-    decode(blp);
-    return 0;
-  }
-  int write_to_file(const char *fn) {
-    bufferlist bl;
-    encode(bl);
-    return bl.write_file(fn);
   }
 
   void encode(bufferlist &bl, bool lean=false) const;

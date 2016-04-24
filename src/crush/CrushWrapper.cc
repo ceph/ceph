@@ -202,7 +202,7 @@ bool CrushWrapper::subtree_contains(int root, int item) const
     return false;  // root is a leaf
 
   const crush_bucket *b = get_bucket(root);
-  if (!b)
+  if (IS_ERR(b))
     return false;
 
   for (unsigned j=0; j<b->size; j++) {
@@ -243,7 +243,12 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
-    if (t && t->size) {
+    if (IS_ERR(t)) {
+      ldout(cct, 1) << "remove_item bucket " << item << " does not exist" << dendl;
+      return -ENOENT;
+    }
+
+    if (t->size) {
       ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
@@ -352,7 +357,13 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
-    if (t && t->size) {
+    if (IS_ERR(t)) {
+      ldout(cct, 1) << "remove_item_under bucket " << item
+                    << " does not exist" << dendl;
+      return -ENOENT;
+    }
+
+    if (t->size) {
       ldout(cct, 1) << "remove_item_under bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
@@ -460,8 +471,8 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
       return false;
     }
 
+    assert(bucket_exists(id));
     crush_bucket *b = get_bucket(id);
-    assert(b);
 
     // see if item exists in this bucket
     for (unsigned j=0; j<b->size; j++) {
@@ -555,7 +566,7 @@ int CrushWrapper::get_children(int id, list<int> *children)
   }
 
   crush_bucket *b = get_bucket(id);
-  if (!b) {
+  if (IS_ERR(b)) {
     return -ENOENT;
   }
 
@@ -634,8 +645,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       return -EINVAL;
     }
 
+    // we have done sanity check above
     crush_bucket *b = get_bucket(id);
-    assert(b);
 
     if (p->first != b->type) {
       ldout(cct, 1) << "insert_item existing bucket has type "
@@ -797,8 +808,6 @@ int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
     if (!bucket_exists(bid))
       continue;
     crush_bucket *b = get_bucket(bid);
-    if ( b == NULL)
-      continue;
     for (unsigned int i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	return crush_get_bucket_item_weight(b, i);
@@ -840,8 +849,6 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
     if (!bucket_exists(bid))
       continue;
     crush_bucket *b = get_bucket(bid);
-    if ( b == NULL)
-      continue;
     for (unsigned int i = 0; i < b->size; i++) {
       if (b->items[i] == id) {
 	int diff = crush_bucket_adjust_item_weight(crush, b, id, weight);
