@@ -5,6 +5,9 @@ overrides:
     conf:
       global:
         osd_max_object_name_len: 800
+        debug objecter: 20
+        debug rados: 20
+        debug ms: 1
 tasks:
 - workunit:
     clients:
