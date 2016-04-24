@@ -26,7 +26,7 @@ pip --log $DIR/log.txt install --upgrade 'pip >= 6.1'
 if test -d wheelhouse ; then
     export NO_INDEX=--no-index
 fi
-pip --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse --upgrade distribute
+
 pip --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9'
 if test -f requirements.txt ; then
     pip --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse -r requirements.txt

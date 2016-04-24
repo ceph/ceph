@@ -66,7 +66,7 @@ CentOS|Fedora|RedHatEnterpriseServer)
                     $SUDO yum install subscription-manager
                     $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/ 
+                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
@@ -92,8 +92,6 @@ function populate_wheelhouse() {
     local install=$1
     shift
 
-    # Ubuntu-12.04 and Python 2.7.3 require this line
-    pip --timeout 300 $install 'distribute >= 0.7.3' || return 1
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
     pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
