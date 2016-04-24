@@ -93,6 +93,13 @@ public:
       const std::string &prefix ///< [in] Prefix by which to remove keys
       ) = 0;
 
+    /// Merge value into key
+    virtual void merge(
+      const std::string &prefix,   ///< [in] Prefix ==> MUST match some established merge operator
+      const std::string &key,      ///< [in] Key to be merged
+      const bufferlist  &value     ///< [in] value to be merged into key
+    ) { assert(0 == "Not implemented"); }
+
     virtual ~TransactionImpl() {}
   };
   typedef ceph::shared_ptr< TransactionImpl > Transaction;
@@ -277,7 +284,36 @@ public:
   virtual void compact_range_async(const std::string& prefix,
 				   const std::string& start, const std::string& end) {}
 
+  // See RocksDB merge operator definition, we support the basic
+  // associative merge only right now.
+  class MergeOperator {
+    public:
+    /// Merge into a key that doesn't exist
+    virtual void merge_nonexistant(
+      const char *rdata, size_t rlen,
+      std::string *new_value) = 0;
+    /// Merge into a key that does exist
+    virtual void merge(
+      const char *ldata, size_t llen,
+      const char *rdata, size_t rlen,
+      std::string *new_value) = 0;
+    /// We use each operator name and each prefix to construct the overall RocksDB operator name for consistency check at open time.
+    virtual string name() const = 0;
+
+    virtual ~MergeOperator() {}
+  };
+
+  /// Setup one or more operators, this needs to be done BEFORE the DB is opened.
+  virtual int set_merge_operator(const std::string& prefix,
+				 std::shared_ptr<MergeOperator> mop) {
+    return -EOPNOTSUPP;
+  }
+
 protected:
+  /// List of matching prefixes and merge operators
+  std::vector<std::pair<std::string,
+			std::shared_ptr<MergeOperator> > > merge_ops;
+
   virtual WholeSpaceIterator _get_iterator() = 0;
   virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
 };
