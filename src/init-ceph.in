@@ -38,7 +38,7 @@ else
     ASSUME_DEV=0
 fi
 
-if [ -n $CEPH_BIN ] && [ -n $CEPH_ROOT ] && [ -n $CEPH_BUILD_DIR ]; then
+if [ -n "$CEPH_BIN" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BUILD_DIR" ]; then
   BINDIR=$CEPH_BIN
   SBINDIR=$CEPH_ROOT/src
   ETCDIR=$CEPH_BIN
