@@ -39,7 +39,7 @@ class CrushCompiler {
   map<int, unsigned> item_weight;
   map<string, int> type_id;
   map<string, int> rule_id;
-
+  map<int, string> ruleset_name;
   string string_node(node_t &node);
   int int_node(node_t &node); 
   float float_node(node_t &node);
