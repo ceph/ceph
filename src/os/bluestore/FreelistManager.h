@@ -22,6 +22,8 @@ class FreelistManager {
 
   map_t kv_free;    ///< mirrors our kv values in the db
 
+  map_t::const_iterator enumerate_p;
+
   void _audit();
   void _dump();
 
@@ -40,9 +42,8 @@ public:
     return total_free;
   }
 
-  const map_t& get_freelist() {
-    return kv_free;
-  }
+  void enumerate_reset();
+  bool enumerate_next(uint64_t *offset, uint64_t *length);
 
   void allocate(
     uint64_t offset, uint64_t length,
