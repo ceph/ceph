@@ -131,6 +131,10 @@ int PGBackend::objects_list_partial(
     _next = ghobject_t(begin, 0, get_parent()->whoami_shard().shard);
   ls->reserve(max);
   int r = 0;
+
+  if (min > max)
+    min = max;
+
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
     int r = store->collection_list(
