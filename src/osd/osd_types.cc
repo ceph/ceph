@@ -5455,6 +5455,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       if (op.op.watch.gen)
 	out << " gen " << op.op.watch.gen;
       break;
+    case CEPH_OSD_OP_NOTIFY:
+      out << " cookie " << op.op.notify.cookie;
+      break;
     case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
