@@ -30,6 +30,7 @@
 #include <condition_variable>
 #include <thread>
 #include <iostream>
+#include <limits>
 
 #include "boost/variant.hpp"
 
@@ -89,15 +90,18 @@ namespace crimson {
 	reservation(tag_calc(time,
 			     prev_tag.reservation,
 			     client.reservation_inv,
-			     req_params.rho)),
+			     req_params.rho,
+			     true)),
 	proportion(tag_calc(time,
 			    prev_tag.proportion,
 			    client.weight_inv,
-			    req_params.delta)),
+			    req_params.delta,
+			    true)),
 	limit(tag_calc(time,
 		       prev_tag.limit,
 		       client.limit_inv,
-		       req_params.delta)),
+		       req_params.delta,
+		       false)),
 	ready(false)
       {
 	// empty
@@ -126,12 +130,15 @@ namespace crimson {
       static double tag_calc(const Time& time,
 			     double prev,
 			     double increment,
-			     uint32_t dist_req_val) {
+			     uint32_t dist_req_val,
+			     bool extreme_is_high) {
 	if (0 != dist_req_val) {
 	  increment *= dist_req_val;
 	}
 	if (0.0 == increment) {
-	  return 0.0;
+	  return extreme_is_high ?
+	    std::numeric_limits<double>::max() :
+	    std::numeric_limits<double>::lowest();
 	} else {
 	  return std::max(time, prev + increment);
 	}
@@ -679,7 +686,7 @@ namespace crimson {
 
 	NextReq next = next_request();
 	result.type = next.type;
-	switch(next.status) {
+	switch(next.type) {
 	case NextReqType::none:
 	  return result;
 	  break;
@@ -713,16 +720,23 @@ namespace crimson {
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pop_process_request(ready_heap, process_f(result, PhaseType::priority));
-	  reduce_reservation_tags(result.client);
+	{
+	  pop_process_request(ready_heap,
+			      process_f(result, PhaseType::priority));
+	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	  reduce_reservation_tags(retn.client);
 	  ++prop_sched_count;
-	  break;
+	}
+	break;
 #if USE_PROP_HEAP
 	case HeapId::proportional:
+	{
 	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
-	  reduce_reservation_tags(result.client);
+	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	  reduce_reservation_tags(retn.client);
 	  ++limit_break_sched_count;
-	  break;
+	}
+	break;
 #endif
 	default:
 	  assert(false);

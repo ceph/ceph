@@ -164,5 +164,63 @@ namespace crimson {
       }
     } // TEST
 #endif
+
+
+    TEST(dmclock_server_pull, basic_pull) {
+      using ClientId = int;
+      using Queue = dmc::PriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+      using std::chrono::steady_clock;
+
+      std::vector<dmc::Time> times;
+      std::mutex times_mtx;
+      using Guard = std::lock_guard<decltype(times_mtx)>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      // reservation every second
+      dmc::ClientInfo info1(1.0, 0.0, 0.0);
+      dmc::ClientInfo info2(2.0, 0.0, 0.0);
+
+      QueueRef pq;
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	if (client1 == c) return info1;
+	else return info2;
+      };
+
+      pq = QueueRef(new Queue(client_info_f, false));
+
+      Request req;
+      ReqParams req_params(1,1);
+
+      auto now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	pq->add_request(req, client1, req_params);
+	pq->add_request(req, client2, req_params);
+	now += 0.0001;
+      }
+
+      int c1_count = 0;
+      int c2_count = 0;
+      for (int i = 0; i < 6; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(2, c1_count) <<
+	"one-third of request should have come from first client";
+      EXPECT_EQ(4, c2_count) <<
+	"two-thirds of request should have come from second client";
+    }
   } // namespace dmclock
 } // namespace crimson

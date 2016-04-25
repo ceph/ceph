@@ -27,6 +27,6 @@ function(make_tests)
   endforeach()
 endfunction()
 
-make_tests(dmclock_server dmclock_client test_client)
+make_tests(dmclock_server dmclock_server_pull dmclock_client test_client)
 
 add_dependencies(check tests)
