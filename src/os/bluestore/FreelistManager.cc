@@ -3,6 +3,7 @@
 
 #include "FreelistManager.h"
 #include "ExtentFreelistManager.h"
+#include "BitmapFreelistManager.h"
 
 FreelistManager *FreelistManager::create(
   string type,
@@ -11,5 +12,7 @@ FreelistManager *FreelistManager::create(
 {
   if (type == "extent")
     return new ExtentFreelistManager(kvdb, prefix);
+  if (type == "bitmap")
+    return new BitmapFreelistManager(kvdb, prefix);
   return NULL;
 }
