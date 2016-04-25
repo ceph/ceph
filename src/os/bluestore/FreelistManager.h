@@ -44,10 +44,10 @@ public:
     return kv_free;
   }
 
-  int allocate(
+  void allocate(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn);
-  int release(
+  void release(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn);
 };
