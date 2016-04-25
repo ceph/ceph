@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "SnapshotCopyRequest.h"
+#include "SnapshotCreateRequest.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/Operations.h"
@@ -34,8 +35,6 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
 } // anonymous namespace
 
 using librbd::util::create_context_callback;
-
-
 
 template <typename I>
 SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
@@ -237,6 +236,8 @@ void SnapshotCopyRequest<I>::handle_snap_remove(int r) {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_snap_create() {
+  CephContext *cct = m_local_image_ctx->cct;
+
   SnapIdSet::iterator snap_id_it = m_remote_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_remote_snap_ids.upper_bound(m_prev_snap_id);
@@ -261,7 +262,18 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   m_prev_snap_id = *snap_id_it;
   m_snap_name = get_snapshot_name(m_remote_image_ctx, m_prev_snap_id);
 
-  CephContext *cct = m_local_image_ctx->cct;
+  m_remote_image_ctx->snap_lock.get_read();
+  auto snap_info_it = m_remote_image_ctx->snap_info.find(m_prev_snap_id);
+  if (snap_info_it == m_remote_image_ctx->snap_info.end()) {
+    m_remote_image_ctx->snap_lock.put_read();
+    lderr(cct) << "failed to retrieve remote snap info: " << m_snap_name
+               << dendl;
+    finish(-ENOENT);
+    return;
+  }
+  uint64_t size = snap_info_it->second.size;
+  m_remote_image_ctx->snap_lock.put_read();
+
   ldout(cct, 20) << ": "
                  << "snap_name=" << m_snap_name << ", "
                  << "snap_id=" << m_prev_snap_id << dendl;
@@ -269,9 +281,9 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
       this);
-  RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_create(m_snap_name.c_str(), ctx,
-                                                     0U);
+  SnapshotCreateRequest<I> *req = SnapshotCreateRequest<I>::create(
+    m_local_image_ctx, m_snap_name, size, ctx);
+  req->send();
 }
 
 template <typename I>
