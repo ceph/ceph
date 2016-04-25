@@ -662,7 +662,10 @@ void MDSRank::_advance_queues()
       old->put();
     } else {
       dout(7) << " processing laggy deferred " << *old << dendl;
-      handle_deferrable_message(old);
+      if(!handle_deferrable_message(old)) {
+        dout(0) << "unrecognized message " << *old << dendl;
+        old->put();
+      }
     }
 
     heartbeat_reset();
