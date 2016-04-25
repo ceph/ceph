@@ -2473,7 +2473,7 @@ bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
   } else if (args[0] == "fragment_dir") {
-    if (!mdsmap->allows_dirfrags()) {
+    if (mdsmap->allows_dirfrags()) {
       if (args.size() == 4) {
 	filepath fp(args[1].c_str());
 	CInode *in = mdcache->cache_traverse(fp);
