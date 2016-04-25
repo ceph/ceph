@@ -584,6 +584,15 @@ void bluestore_wal_transaction_t::dump(Formatter *f) const
     f->dump_object("op", *p);
   }
   f->close_section();
+
+  f->open_array_section("released extents");
+  for (interval_set<uint64_t>::const_iterator p = released.begin(); p != released.end(); ++p) {
+    f->open_object_section("extent");
+    f->dump_unsigned("offset", p.get_start());
+    f->dump_unsigned("length", p.get_len());
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_transaction_t*>& o)
