@@ -174,8 +174,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 // -------------
 
 dir_result_t::dir_result_t(Inode *in)
-  : inode(in), owner_uid(-1), owner_gid(-1), offset(0), this_offset(2),
-    next_offset(2), release_count(0), ordered_count(0), start_shared_gen(0)
+  : inode(in), owner_uid(-1), owner_gid(-1), offset(0), next_offset(2),
+    release_count(0), ordered_count(0), start_shared_gen(0)
   { }
 
 void Client::_reset_faked_inos()
@@ -1130,7 +1130,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 		   << ", readdir_start " << readdir_start << dendl;
 
     dirp->buffer_frag = fg;
-    dirp->this_offset = readdir_offset;
 
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
@@ -1167,7 +1166,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       dn->offset = dir_result_t::make_fpos(fg, readdir_offset++);
 
       // add to cached result list
-      dirp->buffer.push_back(pair<string,InodeRef>(dname, in));
+      dirp->buffer.push_back(dir_result_t::dentry(dn->offset, dname, in));
 
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
@@ -6961,8 +6960,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
   if (res == 0) {
     ldout(cct, 10) << "_readdir_get_frag " << dirp << " got frag " << dirp->buffer_frag
-	     << " this_offset " << dirp->this_offset
-	     << " size " << dirp->buffer.size() << dendl;
+		   << " size " << dirp->buffer.size() << dendl;
   } else {
     ldout(cct, 10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
     dirp->set_end();
@@ -7020,12 +7018,13 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     struct stat st;
     struct dirent de;
     int stmask = fill_stat(dn->inode, &st);
-    fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
-      
+
     uint64_t next_off = dn->offset + 1;
     ++pd;
     if (pd.end())
       next_off = dir_result_t::END;
+
+    fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, next_off);
 
     dn_name = dn->name; // fill in name while we have lock
 
@@ -7036,11 +7035,14 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 	     << " = " << r
 	     << dendl;
     if (r < 0) {
-      dirp->next_offset = next_off - 1;
       return r;
     }
 
-    dirp->next_offset = dirp->offset = next_off;
+    dirp->offset = next_off;
+    if (dirp->at_end())
+      dirp->next_offset = 2;
+    else
+      dirp->next_offset = dirp->fragpos();
     dirp->at_cache_name = dn_name; // we successfully returned this one; update!
     if (r > 0)
       return r;
@@ -7068,7 +7070,6 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   memset(&st, 0, sizeof(st));
 
   frag_t fg = dirp->frag();
-  uint32_t off = dirp->fragpos();
 
   InodeRef& diri = dirp->inode;
 
@@ -7090,31 +7091,30 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       return r;
 
     dirp->offset = next_off;
-    off = next_off;
     if (r > 0)
       return r;
   }
   if (dirp->offset == 1) {
     ldout(cct, 15) << " including .." << dendl;
+    uint64_t next_off = 2;
     if (!diri->dn_set.empty()) {
       InodeRef& in = diri->get_first_parent()->inode;
       fill_stat(in, &st);
-      fill_dirent(&de, "..", S_IFDIR, st.st_ino, 2);
+      fill_dirent(&de, "..", S_IFDIR, st.st_ino, next_off);
     } else {
       /* must be at the root (no parent),
        * so we add the dotdot with a special inode (3) */
-      fill_dirent(&de, "..", S_IFDIR, CEPH_INO_DOTDOT, 2);
+      fill_dirent(&de, "..", S_IFDIR, CEPH_INO_DOTDOT, next_off);
     }
 
 
     client_lock.Unlock();
-    int r = cb(p, &de, &st, -1, 2);
+    int r = cb(p, &de, &st, -1, next_off);
     client_lock.Lock();
     if (r < 0)
       return r;
 
-    dirp->offset = 2;
-    off = 2;
+    dirp->offset = next_off;
     if (r > 0)
       return r;
   }
@@ -7149,30 +7149,31 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       // _readdir_get_frag () may updates dirp->offset if the replied dirfrag is
       // different than the requested one. (our dirfragtree was outdated)
       fg = dirp->buffer_frag;
-      off = dirp->fragpos();
     }
 
-    ldout(cct, 10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer.size()
-	     << " frag " << fg << dendl;
+    ldout(cct, 10) << "frag " << fg << " buffer size " << dirp->buffer.size()
+		   << " offset " << hex << dirp->offset << dendl;
 
-    while (off >= dirp->this_offset &&
-	   off - dirp->this_offset < dirp->buffer.size()) {
-      pair<string,InodeRef>& ent = dirp->buffer[off - dirp->this_offset];
+    for (auto it = std::lower_bound(dirp->buffer.begin(), dirp->buffer.end(),
+				    dirp->offset, dir_result_t::dentry_off_lt());
+	 it != dirp->buffer.end();
+	 ++it) {
+      dir_result_t::dentry &entry = *it;
 
-      int stmask = fill_stat(ent.second, &st);
-      fill_dirent(&de, ent.first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
-      
+      uint64_t next_off = entry.offset + 1;
+      int stmask = fill_stat(entry.inode, &st);
+      fill_dirent(&de, entry.name.c_str(), st.st_mode, st.st_ino, next_off);
+
       client_lock.Unlock();
-      int r = cb(p, &de, &st, stmask, dirp->offset + 1);  // _next_ offset
+      int r = cb(p, &de, &st, stmask, next_off);  // _next_ offset
       client_lock.Lock();
-      ldout(cct, 15) << " de " << de.d_name << " off " << hex << dirp->offset << dec
-	       << " = " << r
-	       << dendl;
+
+      ldout(cct, 15) << " de " << de.d_name << " off " << hex << next_off - 1 << dec
+		     << " = " << r << dendl;
       if (r < 0)
 	return r;
-      
-      off++;
-      dirp->offset++;
+
+      dirp->offset = next_off;
       if (r > 0)
 	return r;
     }
@@ -7188,7 +7189,6 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       _readdir_next_frag(dirp);
       ldout(cct, 10) << " advancing to next frag: " << fg << " -> " << dirp->frag() << dendl;
       fg = dirp->frag();
-      off = 0;
       continue;
     }
 
