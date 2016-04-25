@@ -33,7 +33,7 @@ fi
 
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
-        $SUDO apt-get install -y dpkg-dev
+        $SUDO apt-get install -y dpkg-dev gcc
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
