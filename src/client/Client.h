@@ -188,8 +188,7 @@ struct dir_result_t {
 
   int64_t offset;        // high bits: frag_t, low bits: an offset
 
-  uint64_t this_offset;  // offset of last chunk, adjusted for . and ..
-  uint64_t next_offset;  // offset of next chunk (last_name's + 1)
+  unsigned next_offset;  // offset of next chunk (last_name's + 1)
   string last_name;      // last entry in previous chunk
 
   uint64_t release_count;
@@ -197,7 +196,21 @@ struct dir_result_t {
   int start_shared_gen;  // dir shared_gen at start of readdir
 
   frag_t buffer_frag;
-  vector<pair<string,InodeRef> > buffer;
+
+  struct dentry {
+    int64_t offset;
+    string name;
+    InodeRef inode;
+    dentry(int64_t o) : offset(o) {}
+    dentry(int64_t o, const string& n, const InodeRef& in) :
+      offset(o), name(n), inode(in) {}
+  };
+  struct dentry_off_lt {
+    bool operator()(const dentry& d, int64_t off) const {
+      return dir_result_t::fpos_cmp(d.offset, off) < 0;
+    }
+  };
+  vector<dentry> buffer;
 
   string at_cache_name;  // last entry we successfully returned
 
@@ -224,7 +237,6 @@ struct dir_result_t {
     last_name.clear();
     at_cache_name.clear();
     next_offset = 2;
-    this_offset = 0;
     offset = 0;
     buffer.clear();
   }

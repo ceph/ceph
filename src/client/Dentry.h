@@ -17,7 +17,7 @@ class Dentry : public LRUObject {
   Dir	   *dir;
   InodeRef inode;
   int	   ref;                       // 1 if there's a dir beneath me.
-  uint64_t offset;
+  int64_t offset;
   mds_rank_t lease_mds;
   utime_t lease_ttl;
   uint64_t lease_gen;
