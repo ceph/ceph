@@ -37,7 +37,7 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 
       if (!parse_network(s->c_str(), &net, &prefix_len)) {
 	lderr(cct) << "unable to parse network: " << *s << dendl;
-	exit(1);
+	return NULL;
       }
 
       const struct sockaddr *found = find_ip_in_subnet(ifa, &net, prefix_len);
@@ -65,7 +65,7 @@ struct Observer : public md_config_obs_t {
   }
 };
 
-static void fill_in_one_address(CephContext *cct,
+static int fill_in_one_address(CephContext *cct,
 				const struct ifaddrs *ifa,
 				const string networks,
 				const char *conf_var)
@@ -73,7 +73,7 @@ static void fill_in_one_address(CephContext *cct,
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks);
   if (!found) {
     lderr(cct) << "unable to find any IP address in networks: " << networks << dendl;
-    exit(1);
+    return -1;
   }
 
   char buf[INET6_ADDRSTRLEN];
@@ -89,7 +89,7 @@ static void fill_in_one_address(CephContext *cct,
 		    NI_NUMERICHOST);
   if (err != 0) {
     lderr(cct) << "unable to convert chosen address to string: " << gai_strerror(err) << dendl;
-    exit(1);
+    return -1;
   }
 
   Observer obs(conf_var);
@@ -100,6 +100,7 @@ static void fill_in_one_address(CephContext *cct,
   cct->_conf->apply_changes(NULL);
 
   cct->_conf->remove_observer(&obs);
+  return 0;
 }
 
 void pick_addresses(CephContext *cct, int needs)
@@ -115,13 +116,21 @@ void pick_addresses(CephContext *cct, int needs)
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC)
       && cct->_conf->public_addr.is_blank_ip()
       && !cct->_conf->public_network.empty()) {
-    fill_in_one_address(cct, ifa, cct->_conf->public_network, "public_addr");
+    r = fill_in_one_address(cct, ifa, cct->_conf->public_network, "public_addr");
+    if (r < 0) {
+      freeifaddrs(ifa);
+      exit(1);
+    }
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER)
       && cct->_conf->cluster_addr.is_blank_ip()
       && !cct->_conf->cluster_network.empty()) {
-    fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
+    r = fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
+    if (r < 0) {
+      freeifaddrs(ifa);
+      exit(1);
+    }
   }
 
   freeifaddrs(ifa);
