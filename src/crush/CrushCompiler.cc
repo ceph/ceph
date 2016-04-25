@@ -608,10 +608,6 @@ int CrushCompiler::parse_rule(iter_t const& i)
   }
 
   int ruleset = int_node(i->children[start]);
-  if (ruleset_name.count(ruleset)) {
-    err << "ruleset '" << ruleset << "' already defined in rule '" << ruleset_name[ruleset] <<"'\n"<< std::endl;
-    return -1;
-  }
 
   string tname = string_node(i->children[start+2]);
   int type;
@@ -728,7 +724,6 @@ int CrushCompiler::parse_rule(iter_t const& i)
     }
   }
   assert(step == steps);
-  ruleset_name[ruleset] = rname;
   return 0;
 }
 
