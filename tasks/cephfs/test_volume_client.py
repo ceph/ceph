@@ -122,7 +122,7 @@ vc.disconnect()
         # Create
         mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
-            create_result = vc.create_volume(vp, 10)
+            create_result = vc.create_volume(vp, 1024*1024*100)
             print create_result['mount_path']
         """.format(
             group_id=group_id,
@@ -160,13 +160,41 @@ vc.disconnect()
         # We should be able to mount the volume
         self.mounts[2].client_id = guest_entity
         self._sudo_write_file(self.mounts[2].client_remote, self.mounts[2].get_keyring_path(), keyring_txt)
+        self.set_conf("client.{0}".format(guest_entity), "client quota", "true")
         self.set_conf("client.{0}".format(guest_entity), "debug client", "20")
         self.set_conf("client.{0}".format(guest_entity), "debug objecter", "20")
         self.set_conf("client.{0}".format(guest_entity), "keyring", self.mounts[2].get_keyring_path())
         self.mounts[2].mount(mount_path=mount_path)
-        self.mounts[2].write_n_mb("data.bin", 1)
 
-        #sync so that file data are persist to rados
+        # df granularity is 4MB block so have to write at least that much
+        data_bin_mb = 4
+        self.mounts[2].write_n_mb("data.bin", data_bin_mb)
+
+        # Write something outside volume to check this space usage is
+        # not reported in the volume's DF.
+        other_bin_mb = 6
+        self.mount_a.write_n_mb("other.bin", other_bin_mb)
+
+        # global: df should see all the writes (data + other).  This is a >
+        # rather than a == because the global spaced used includes all pools
+        self.assertGreater(self.mount_a.df()['used'],
+                           (data_bin_mb + other_bin_mb) * 1024 * 1024)
+
+        # Hack: do a metadata IO to kick rstats
+        self.mounts[2].run_shell(["touch", "foo"])
+
+        # volume: df should see the data_bin_mb consumed from quota, same
+        # as the rbytes for the volume's dir
+        self.wait_until_equal(
+                lambda: self.mounts[2].df()['used'],
+                data_bin_mb * 1024 * 1024, timeout=60)
+        self.wait_until_equal(
+                lambda: self.mount_a.getfattr(
+                    os.path.join(volume_prefix.strip("/"), group_id, volume_id),
+                    "ceph.dir.rbytes"),
+                "%s" % (data_bin_mb * 1024 * 1024), timeout=60)
+
+        # sync so that file data are persist to rados
         self.mounts[2].run_shell(["sync"])
 
         # Our data should stay in particular rados namespace
