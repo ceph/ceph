@@ -70,7 +70,7 @@ add_library(librbd ${CEPH_SHARED}
   $<TARGET_OBJECTS:krbd_objs>
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
-target_link_libraries(librbd PRIVATE 
+target_link_libraries(librbd LINK_PRIVATE 
   rbd_internal
   rbd_types
   journal
