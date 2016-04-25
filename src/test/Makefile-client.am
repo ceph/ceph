@@ -477,6 +477,7 @@ unittest_rbd_mirror_SOURCES = \
 	test/rbd_mirror/image_sync/test_mock_ImageCopyRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_ObjectCopyRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_SnapshotCopyRequest.cc \
+	test/rbd_mirror/image_sync/test_mock_SnapshotCreateRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_SyncPointCreateRequest.cc \
 	test/rbd_mirror/image_sync/test_mock_SyncPointPruneRequest.cc
 unittest_rbd_mirror_CXXFLAGS = $(UNITTEST_CXXFLAGS)
