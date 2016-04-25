@@ -1709,6 +1709,13 @@ bool OSDMonitor::check_failures(utime_t now)
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
+  // already pending failure?
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return true;
+  }
+
   set<string> reporters_by_subtree;
   string reporter_subtree_level = g_conf->mon_osd_reporter_subtree_level;
   utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
@@ -1763,14 +1770,6 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << grace << " grace (" << orig_grace << " + " << my_grace
 	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
-
-  // already pending failure?
-  if (pending_inc.new_state.count(target_osd) &&
-      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
-    dout(10) << " already pending failure" << dendl;
-    return true;
-  }
-
 
   if (failed_for >= grace &&
       (int)reporters_by_subtree.size() >= g_conf->mon_osd_min_down_reporters) {
