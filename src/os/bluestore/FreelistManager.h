@@ -17,7 +17,8 @@ public:
 
   static FreelistManager *create(string type);
 
-  virtual int create(KeyValueDB::Transaction txn) {
+  virtual int create(uint64_t size, KeyValueDB::Transaction txn) {
+    release(0, size, txn);
     return 0;
   }
 
