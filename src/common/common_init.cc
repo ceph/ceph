@@ -130,10 +130,6 @@ void common_init_finish(CephContext *cct)
 
   if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
       (cct->get_set_uid() || cct->get_set_gid())) {
-    // FIXME: Changing ownership of a socket file via the fd does not work as
-    //        expected. The socket file is listed as owned by the same
-    //        'user:group' which the daemon that created the socket had during
-    //        open().
     cct->get_admin_socket()->chown(cct->get_set_uid(), cct->get_set_gid());
   }
 }
