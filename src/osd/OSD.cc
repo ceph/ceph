@@ -255,7 +255,7 @@ OSDService::OSDService(OSD *osd) :
 		  cct->_conf->osd_min_recovery_priority),
   pg_temp_lock("OSDService::pg_temp_lock"),
   map_cache_lock("OSDService::map_lock"),
-  map_cache(cct, cct->_conf->osd_map_cache_size),
+  map_cache(cct, cct->_conf->osd_map_cache_size, true),
   map_bl_cache(cct->_conf->osd_map_cache_size),
   map_bl_inc_cache(cct->_conf->osd_map_cache_size),
   in_progress_split_lock("OSDService::in_progress_split_lock"),

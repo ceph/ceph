@@ -32,8 +32,15 @@ class SharedLRU {
   size_t max_size;
   Cond cond;
   unsigned size;
+  bool init_last_item;
+  K last_key;
+  // If last_val is null, the treate the last_val as dirty,
+  // so we should not use the last_val when lookup in next round
+  VPtr last_val;
+
 public:
   int waiting;
+  bool tuning_get_item;
 private:
   ceph::unordered_map<K, typename list<pair<K, VPtr> >::iterator, H> contents;
   list<pair<K, VPtr> > lru;
@@ -76,6 +83,9 @@ private:
     if (i != weak_refs.end() && i->second.second == valptr) {
       weak_refs.erase(i);
     }
+    if (tuning_get_item && key == last_key) {
+      last_val = VPtr();
+    }
     cond.Signal();
   }
 
@@ -91,21 +101,29 @@ private:
   };
 
 public:
-  SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
+  SharedLRU(CephContext *cct = NULL, size_t max_size = 20, bool tuning = false)
     : cct(cct), lock("SharedLRU::lock"), max_size(max_size), 
-      size(0), waiting(0) {
+      size(0), init_last_item(false), last_val(VPtr()),
+      waiting(0), tuning_get_item(tuning) {
     contents.rehash(max_size); 
   }
   
   ~SharedLRU() {
     contents.clear();
     lru.clear();
+    last_val = VPtr();
     if (!weak_refs.empty()) {
-      lderr(cct) << "leaked refs:\n";
-      dump_weak_refs(*_dout);
-      *_dout << dendl;
+      if (cct) {
+        lderr(cct) << "leaked refs:\n";
+        dump_weak_refs(*_dout);
+        *_dout << dendl;
+      }
       assert(weak_refs.empty());
     }
+  }
+
+  void optimized_get_last_item() {
+    tuning_get_item = true;
   }
 
   /// adjust container comparator (for purposes of get_next sort order)
@@ -158,6 +176,7 @@ public:
       val = lru.back().second;
       lru_remove(lru.back().first);
     }
+    last_val = VPtr();
   }
 
   void clear(const K& key) {
@@ -169,6 +188,9 @@ public:
 	val = i->second.first.lock();
       }
       lru_remove(key);
+    }
+    if (tuning_get_item && key == last_key) {
+      last_val = VPtr();
     }
   }
 
@@ -182,6 +204,10 @@ public:
         weak_refs.erase(i);
       }
       lru_remove(key);
+      weak_refs.erase(key);
+      if (tuning_get_item && key == last_key) {
+        last_val = VPtr();
+      }
     }
   }
 
@@ -260,11 +286,31 @@ public:
     return found;
   }
 
+  bool get_last_item(const K &key)
+  {
+    if (tuning_get_item && last_val && last_key == key) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  void set_last_item(VPtr &val, const K &key)
+  {
+    if (tuning_get_item && (key != last_key || !last_val)) {
+      last_key = key;
+      last_val = val;
+    }
+  }
+
   VPtr lookup(const K& key) {
     VPtr val;
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      if (get_last_item(key)) {
+        return last_val;
+      }
       ++waiting;
       bool retry = false;
       do {
@@ -283,6 +329,7 @@ public:
       } while (retry);
       --waiting;
     }
+    set_last_item(val, key);
     return val;
   }
   VPtr lookup_or_create(const K &key) {
@@ -290,6 +337,9 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      if (get_last_item(key)) {
+        return last_val;
+      }
       bool retry = false;
       do {
 	retry = false;
@@ -311,6 +361,7 @@ public:
       VPtr new_val(new_value, Cleanup(this, key));
       weak_refs.insert(make_pair(key, make_pair(new_val, new_value)));
       lru_add(key, new_val, &to_release);
+      set_last_item(new_val, key);
       return new_val;
     }
   }
@@ -343,6 +394,11 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      if (get_last_item(key)) {
+        if (existed)
+          *existed = true;
+        return last_val;
+      }
       typename map<K, pair<WeakVPtr, V*>, C>::iterator actual =
 	weak_refs.lower_bound(key);
       if (actual != weak_refs.end() && actual->first == key) {
@@ -358,6 +414,7 @@ public:
       val = VPtr(value, Cleanup(this, key));
       weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       lru_add(key, val, &to_release);
+      set_last_item(val, key);
     }
     return val;
   }
