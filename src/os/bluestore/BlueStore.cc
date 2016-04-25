@@ -1757,7 +1757,8 @@ int BlueStore::mkfs()
       bl.append(freelist_type);
       t->set(PREFIX_SUPER, "freelist_type", bl);
     }
-    fm->create(t);
+    fm->create(bdev->get_size(), t);
+
     uint64_t reserved = 0;
     if (g_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
@@ -1771,8 +1772,10 @@ int BlueStore::mkfs()
     } else {
       reserved = BLUEFS_START;
     }
-    uint64_t end = bdev->get_size() - reserved;
+    fm->allocate(0, reserved, t);
+
     if (g_conf->bluestore_debug_prefill > 0) {
+      uint64_t end = bdev->get_size() - reserved;
       dout(1) << __func__ << " pre-fragmenting freespace, using "
 	      << g_conf->bluestore_debug_prefill << " with max free extent "
 	      << g_conf->bluestore_debug_prefragment_max << dendl;
@@ -1785,14 +1788,12 @@ int BlueStore::mkfs()
 	if (start + l > end)
 	  l = end - start;
 	l = ROUND_UP_TO(l, min_alloc_size);
-	fm->release(start, l, t);
 	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
 	u = ROUND_UP_TO(u, min_alloc_size);
 	dout(20) << "  free " << start << "~" << l << " use " << u << dendl;
+	fm->allocate(start + l, u, t);
 	start += l + u;
       }
-    } else {
-      fm->release(reserved, end, t);
     }
     assert(0 == db->submit_transaction_sync(t));
   }
