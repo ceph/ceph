@@ -955,6 +955,31 @@ Keystone Settings
 :Default: None
 
 
+``rgw keystone api version``
+
+:Description: The version (2 or 3) of OpenStack Identity API that should be
+              used for communication with the Keystone server.
+:Type: Integer
+:Default: ``2``
+
+
+``rgw keystone admin domain``
+
+:Description: The name of OpenStack domain with admin privilege when using
+              OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+
+``rgw keystone admin project``
+
+:Description: The name of OpenStack project with admin privilege when using
+              OpenStack Identity API v3. If left unspecified, value of
+              ``rgw keystone admin tenant`` will be used instead.
+:Type: String
+:Default: None
+
+
 ``rgw keystone admin token``
 
 :Description: The Keystone admin token (shared secret).
