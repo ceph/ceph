@@ -713,11 +713,11 @@ void Client::trim_dentry(Dentry *dn)
 		 << " in dir " << hex << dn->dir->parent_inode->ino 
 		 << dendl;
   if (dn->inode) {
-    dn->dir->release_count++;
-    if (dn->dir->parent_inode->flags & I_COMPLETE) {
-      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on "
-		     << *dn->dir->parent_inode << dendl;
-      dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+    Inode *diri = dn->dir->parent_inode;
+    diri->dir_release_count++;
+    if (diri->flags & I_COMPLETE) {
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
+      diri->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
     }
   }
   unlink(dn, false, false);  // drop dir, drop dentry
@@ -1002,19 +1002,20 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     InodeRef tmp_ref(in);
     if (old_dentry) {
       if (old_dentry->dir != dir) {
-	old_dentry->dir->ordered_count++;
-	if (old_dentry->dir->parent_inode->flags & I_DIR_ORDERED) {
-	  ldout(cct, 10) << " clearing I_DIR_ORDERED on "
-			 << *old_dentry->dir->parent_inode << dendl;
-	  old_dentry->dir->parent_inode->flags &= ~I_DIR_ORDERED;
+	Inode *old_diri = old_dentry->dir->parent_inode;
+	old_diri->dir_ordered_count++;
+	if (old_diri->flags & I_DIR_ORDERED) {
+	  ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *old_diri << dendl;
+	  old_diri->flags &= ~I_DIR_ORDERED;
 	}
       }
       unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
     }
-    dir->ordered_count++;
-    if (dir->parent_inode->flags & I_DIR_ORDERED) {
-	ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *dir->parent_inode << dendl;
-	dir->parent_inode->flags &= ~I_DIR_ORDERED;
+    Inode *diri = dir->parent_inode;
+    diri->dir_ordered_count++;
+    if (diri->flags & I_DIR_ORDERED) {
+	ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *diri << dendl;
+	diri->flags &= ~I_DIR_ORDERED;
     }
     dn = link(dir, dname, in, dn);
   }
@@ -1136,6 +1137,12 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 		   << ", hash_order=" << hash_order << ", offset " << readdir_offset
 		   << ", readdir_start " << readdir_start << dendl;
 
+    if (fg.is_leftmost() && readdir_offset == 2) {
+      dirp->release_count = diri->dir_release_count;
+      dirp->ordered_count = diri->dir_ordered_count;
+      dirp->start_shared_gen = diri->shared_gen;
+    }
+
     dirp->buffer_frag = fg;
 
     _readdir_drop_dirp_buffer(dirp);
@@ -1222,10 +1229,11 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     Dentry *d = request->dentry();
     if (d && d->dir) {
-      d->dir->release_count++;
-      if (d->dir->parent_inode->flags & I_COMPLETE) {
-	ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *d->dir->parent_inode << dendl;
-	d->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+      Inode *diri = d->dir->parent_inode;
+      diri->dir_release_count++;
+      if (diri->flags & I_COMPLETE) {
+	ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
+	diri->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
       }
     }
 
@@ -1304,7 +1312,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode) {
-	  diri->dir->ordered_count++;
+	  diri->dir_ordered_count++;
 	  if (diri->flags & I_DIR_ORDERED) {
 	    ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *diri << dendl;
 	    diri->flags &= ~I_DIR_ORDERED;
@@ -6801,11 +6809,6 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid)
     return -ENOTDIR;
   *dirpp = new dir_result_t(in);
   opened_dirs.insert(*dirpp);
-  if (in->dir) {
-    (*dirpp)->release_count = in->dir->release_count;
-    (*dirpp)->ordered_count = in->dir->ordered_count;
-  }
-  (*dirpp)->start_shared_gen = in->shared_gen;
   (*dirpp)->owner_uid = uid;
   (*dirpp)->owner_gid = gid;
   ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
@@ -7222,10 +7225,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       continue;
     }
 
-    if (diri->dir &&
-	diri->shared_gen == dirp->start_shared_gen &&
-	diri->dir->release_count == dirp->release_count) {
-      if (diri->dir->ordered_count == dirp->ordered_count) {
+    if (diri->shared_gen == dirp->start_shared_gen &&
+	diri->dir_release_count == dirp->release_count) {
+      if (diri->dir_ordered_count == dirp->ordered_count) {
 	ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
 	diri->flags |= I_COMPLETE | I_DIR_ORDERED;
       } else {
