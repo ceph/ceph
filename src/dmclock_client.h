@@ -112,23 +112,23 @@ namespace crimson {
       /*
        * Incorporates the RespParams received into the various counter.
        */
-      void track_resp(const RespParams<S>& resp_params) {
+      void track_resp(const S& server_id, const PhaseType& phase) {
 	DataGuard g(data_mtx);
 
-	auto it = server_map.find(resp_params.server);
+	auto it = server_map.find(server_id);
 	if (server_map.end() == it) {
 	  // this code can only run if a request did not precede the
 	  // response or if the record was cleaned up b/w when
 	  // the request was made and now
 	  ServerInfo si(delta_counter, rho_counter);
-	  si.resp_update(resp_params.phase);
-	  server_map.emplace(resp_params.server, si);
+	  si.resp_update(phase);
+	  server_map.emplace(server_id, si);
 	} else {
-	  it->second.resp_update(resp_params.phase);
+	  it->second.resp_update(phase);
 	}
 
 	++delta_counter;
-	if (PhaseType::reservation == resp_params.phase) {
+	if (PhaseType::reservation == phase) {
 	  ++rho_counter;
 	}
       }
@@ -137,23 +137,21 @@ namespace crimson {
       /*
        * Returns the ReqParams for the given server.
        */
-      template<typename C>
-      ReqParams<C> get_req_params(const C& client, const S& server) {
+      ReqParams get_req_params(const S& server) {
 	DataGuard g(data_mtx);
 	auto it = server_map.find(server);
 	if (server_map.end() == it) {
 	  server_map.emplace(server, ServerInfo(delta_counter, rho_counter));
-	  return ReqParams<C>(client, 1, 1);
+	  return ReqParams(1, 1);
 	} else {
 	  Counter delta =
 	    1 + delta_counter - it->second.delta_prev_req - it->second.my_delta;
 	  Counter rho =
 	    1 + rho_counter - it->second.rho_prev_req - it->second.my_rho;
-	  ReqParams<C> result(client, uint32_t(delta), uint32_t(rho));
-
+	  
 	  it->second.req_update(delta_counter, rho_counter);
 
-	  return result;
+	  return ReqParams(uint32_t(delta), uint32_t(rho));
 	}
       }
 

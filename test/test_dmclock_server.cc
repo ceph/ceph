@@ -88,8 +88,8 @@ namespace crimson {
 	});
 
       Request req;
-      dmc::ReqParams<ClientId> req_params(client, 1, 1);
-      pq.add_request(req, req_params, dmc::get_time());
+      dmc::ReqParams req_params(1, 1);
+      pq.add_request(req, client, req_params, dmc::get_time());
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 

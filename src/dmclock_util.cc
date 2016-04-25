@@ -23,5 +23,5 @@ std::string crimson::dmclock::format_time(const Time& time, uint modulo) {
 
 
 void crimson::dmclock::debugger() {
-    raise(SIGCONT);
+  raise(SIGCONT);
 }
