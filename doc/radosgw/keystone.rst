@@ -20,6 +20,20 @@ The following configuration options are available for Keystone integration::
 	rgw s3 auth use keystone = true
 	nss db path = {path to nss db}
 
+It is also possible to configure a Keystone service tenant, user & password for
+keystone (for v2.0 version of the OpenStack Identity API), similar to the way
+OpenStack services tend to be configured, this avoids the need for setting the
+shared secret ``rgw keystone admin token`` in the configuration file, which is
+recommended to be disabled in production environments. The service tenant
+credentials should have admin privileges, for more details refer the `Openstack
+keystone documentation`_, which explains the process in detail. The requisite
+configuration options for are::
+
+   rgw keystone admin user = {keystone service tenant user name}
+   rgw keystone admin password = {keystone service tenant user password}
+   rgw keystone admin tenant = {keystone service tenant name}
+
+
 A Ceph Object Gateway user is mapped into a Keystone ``tenant``. A Keystone user
 has different roles assigned to it on possibly more than a single tenant. When
 the Ceph Object Gateway gets the ticket, it looks at the tenant, and the user
@@ -112,9 +126,13 @@ requests to the nss db format, for example::
 		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
 
 
+
 Openstack keystone may also be terminated with a self signed ssl certificate, in
 order for radosgw to interact with keystone in such a case, you could either
 install keystone's ssl certificate in the node running radosgw. Alternatively
 radosgw could be made to not verify the ssl certificate at all (similar to
 openstack clients with a ``--insecure`` switch) by setting the value of the
 configurable ``rgw keystone verify ssl`` to false.
+
+
+.. _Openstack keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
