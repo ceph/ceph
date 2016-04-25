@@ -3578,8 +3578,14 @@ int BlueStore::_open_super_meta()
   {
     bufferlist bl;
     db->get(PREFIX_SUPER, "freelist_type", &bl);
-    freelist_type = std::string(bl.c_str(), bl.length());
-    dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
+    if (bl.length()) {
+      freelist_type = std::string(bl.c_str(), bl.length());
+      dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
+    } else {
+      freelist_type = "extent";
+      dout(10) << __func__ << " freelist_type " << freelist_type
+	       << " (legacy bluestore instance)" << dendl;
+    }
   }
 
   // bluefs alloc
