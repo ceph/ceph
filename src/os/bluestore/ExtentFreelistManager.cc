@@ -11,17 +11,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
 
-int ExtentFreelistManager::init(KeyValueDB *db, string p)
+int ExtentFreelistManager::init()
 {
-  dout(1) << __func__ << " prefix " << p << dendl;
+  dout(1) << __func__ << dendl;
 
   // load state from kvstore
-  prefix = p;
-
-  KeyValueDB::Transaction txn = db->get_transaction();
+  KeyValueDB::Transaction txn = kvdb->get_transaction();
   int fixed = 0;
 
-  KeyValueDB::Iterator it = db->get_iterator(prefix);
+  KeyValueDB::Iterator it = kvdb->get_iterator(prefix);
   it->lower_bound(string());
   uint64_t last_offset = 0;
   uint64_t last_length = 0;
@@ -70,7 +68,7 @@ int ExtentFreelistManager::init(KeyValueDB *db, string p)
   }
 
   if (fixed) {
-    db->submit_transaction_sync(txn);
+    kvdb->submit_transaction_sync(txn);
     derr << " fixed " << fixed << " extents" << dendl;
   }
 

@@ -967,18 +967,83 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_alloc()
+int BlueStore::_open_fm(bool create)
 {
   assert(fm == NULL);
-  assert(alloc == NULL);
-  fm = FreelistManager::create(freelist_type);
-  int r = fm->init(db, PREFIX_ALLOC);
+  fm = FreelistManager::create(freelist_type, db, PREFIX_ALLOC);
+
+  if (create) {
+    // initialize freespace
+    dout(20) << __func__ << " initializing freespace" << dendl;
+    KeyValueDB::Transaction t = db->get_transaction();
+    {
+      bufferlist bl;
+      bl.append(freelist_type);
+      t->set(PREFIX_SUPER, "freelist_type", bl);
+    }
+    fm->create(bdev->get_size(), t);
+
+    uint64_t reserved = 0;
+    if (g_conf->bluestore_bluefs) {
+      assert(bluefs_extents.num_intervals() == 1);
+      interval_set<uint64_t>::iterator p = bluefs_extents.begin();
+      reserved = p.get_start() + p.get_len();
+      dout(20) << __func__ << " reserved " << reserved << " for bluefs" << dendl;
+      bufferlist bl;
+      ::encode(bluefs_extents, bl);
+      t->set(PREFIX_SUPER, "bluefs_extents", bl);
+      dout(20) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
+    } else {
+      reserved = BLUEFS_START;
+    }
+    fm->allocate(0, reserved, t);
+
+    if (g_conf->bluestore_debug_prefill > 0) {
+      uint64_t end = bdev->get_size() - reserved;
+      dout(1) << __func__ << " pre-fragmenting freespace, using "
+	      << g_conf->bluestore_debug_prefill << " with max free extent "
+	      << g_conf->bluestore_debug_prefragment_max << dendl;
+      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
+      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
+      uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
+      float r = g_conf->bluestore_debug_prefill;
+      while (start < end) {
+	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
+	if (start + l > end)
+	  l = end - start;
+	l = ROUND_UP_TO(l, min_alloc_size);
+	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
+	u = ROUND_UP_TO(u, min_alloc_size);
+	dout(20) << "  free " << start << "~" << l << " use " << u << dendl;
+	fm->allocate(start + l, u, t);
+	start += l + u;
+      }
+    }
+    db->submit_transaction_sync(t);
+  }
+
+  int r = fm->init();
   if (r < 0) {
+    derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
     delete fm;
     fm = NULL;
     return r;
   }
+  return 0;
+}
 
+void BlueStore::_close_fm()
+{
+  dout(10) << __func__ << dendl;
+  assert(fm);
+  fm->shutdown();
+  delete fm;
+  fm = NULL;
+}
+
+int BlueStore::_open_alloc()
+{
+  assert(alloc == NULL);
   alloc = Allocator::create("stupid");
   uint64_t num = 0, bytes = 0;
   fm->enumerate_reset();
@@ -991,19 +1056,15 @@ int BlueStore::_open_alloc()
   dout(10) << __func__ << " loaded " << pretty_si_t(bytes)
 	   << " in " << num << " extents"
 	   << dendl;
-  return r;
+  return 0;
 }
 
 void BlueStore::_close_alloc()
 {
-  assert(fm);
   assert(alloc);
   alloc->shutdown();
   delete alloc;
   alloc = NULL;
-  fm->shutdown();
-  delete fm;
-  fm = NULL;
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -1744,59 +1805,13 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_bdev;
 
-  r = _open_alloc();
+  r = _open_fm(true);
   if (r < 0)
     goto out_close_db;
 
-  // initialize freespace
-  {
-    dout(20) << __func__ << " initializing freespace" << dendl;
-    KeyValueDB::Transaction t = db->get_transaction();
-    {
-      bufferlist bl;
-      bl.append(freelist_type);
-      t->set(PREFIX_SUPER, "freelist_type", bl);
-    }
-    fm->create(bdev->get_size(), t);
-
-    uint64_t reserved = 0;
-    if (g_conf->bluestore_bluefs) {
-      assert(bluefs_extents.num_intervals() == 1);
-      interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      reserved = p.get_start() + p.get_len();
-      dout(20) << __func__ << " reserved " << reserved << " for bluefs" << dendl;
-      bufferlist bl;
-      ::encode(bluefs_extents, bl);
-      t->set(PREFIX_SUPER, "bluefs_extents", bl);
-      dout(20) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
-    } else {
-      reserved = BLUEFS_START;
-    }
-    fm->allocate(0, reserved, t);
-
-    if (g_conf->bluestore_debug_prefill > 0) {
-      uint64_t end = bdev->get_size() - reserved;
-      dout(1) << __func__ << " pre-fragmenting freespace, using "
-	      << g_conf->bluestore_debug_prefill << " with max free extent "
-	      << g_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
-      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
-      uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
-      float r = g_conf->bluestore_debug_prefill;
-      while (start < end) {
-	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
-	if (start + l > end)
-	  l = end - start;
-	l = ROUND_UP_TO(l, min_alloc_size);
-	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
-	u = ROUND_UP_TO(u, min_alloc_size);
-	dout(20) << "  free " << start << "~" << l << " use " << u << dendl;
-	fm->allocate(start + l, u, t);
-	start += l + u;
-      }
-    }
-    assert(0 == db->submit_transaction_sync(t));
-  }
+  r = _open_alloc();
+  if (r < 0)
+    goto out_close_fm;
 
   r = write_meta("kv_backend", g_conf->bluestore_kvbackend);
   if (r < 0)
@@ -1821,6 +1836,8 @@ int BlueStore::mkfs()
 
  out_close_alloc:
   _close_alloc();
+ out_close_fm:
+  _close_fm();
  out_close_db:
   _close_db();
  out_close_bdev:
@@ -1887,9 +1904,13 @@ int BlueStore::mount()
   if (r < 0)
     goto out_db;
 
-  r = _open_alloc();
+  r = _open_fm(false);
   if (r < 0)
     goto out_db;
+
+  r = _open_alloc();
+  if (r < 0)
+    goto out_fm;
 
   r = _open_collections();
   if (r < 0)
@@ -1922,6 +1943,8 @@ int BlueStore::mount()
   coll_map.clear();
  out_alloc:
   _close_alloc();
+ out_fm:
+  _close_fm();
  out_db:
   _close_db();
  out_bdev:
@@ -1956,6 +1979,7 @@ int BlueStore::umount()
 
   mounted = false;
   _close_alloc();
+  _close_fm();
   _close_db();
   _close_bdev();
   _close_fsid();
@@ -2047,13 +2071,17 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_bdev;
 
-  r = _open_alloc();
+  r = _open_super_meta();
   if (r < 0)
     goto out_db;
 
-  r = _open_super_meta();
+  r = _open_fm(false);
   if (r < 0)
-    goto out_alloc;
+    goto out_db;
+
+  r = _open_alloc();
+  if (r < 0)
+    goto out_fm;
 
   r = _open_collections(&errors);
   if (r < 0)
@@ -2392,6 +2420,8 @@ int BlueStore::fsck()
   coll_map.clear();
  out_alloc:
   _close_alloc();
+ out_fm:
+  _close_fm();
  out_db:
   it.reset();  // before db is closed
   _close_db();

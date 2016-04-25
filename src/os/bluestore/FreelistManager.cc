@@ -4,9 +4,12 @@
 #include "FreelistManager.h"
 #include "ExtentFreelistManager.h"
 
-FreelistManager *FreelistManager::create(string type)
+FreelistManager *FreelistManager::create(
+  string type,
+  KeyValueDB *kvdb,
+  string prefix)
 {
   if (type == "extent")
-    return new ExtentFreelistManager;
+    return new ExtentFreelistManager(kvdb, prefix);
   return NULL;
 }
