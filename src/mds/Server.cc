@@ -3276,7 +3276,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   frag_t fg = (__u32)req->head.args.readdir.frag;
   unsigned req_flags = (__u32)req->head.args.readdir.flags;
   string offset_str = req->get_path2();
-  dout(10) << " frag " << fg << " offset '" << offset_str << "'" << dendl;
+  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
+	   << " flags " << req_flags << dendl;
 
   __u32 offset_hash = 0;
   if (!offset_str.empty())
@@ -3284,10 +3285,20 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   // does the frag exist?
   if (diri->dirfragtree[fg.value()] != fg) {
-    frag_t newfg = diri->dirfragtree[fg.value()];
+    frag_t newfg;
+    if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+      if (fg.contains((unsigned)offset_hash)) {
+	newfg = diri->dirfragtree[offset_hash];
+      } else {
+	// client actually wants next frag
+	newfg = diri->dirfragtree[fg.value()];
+      }
+    } else {
+      offset_str.clear();
+      newfg = diri->dirfragtree[fg.value()];
+    }
     dout(10) << " adjust frag " << fg << " -> " << newfg << " " << diri->dirfragtree << dendl;
     fg = newfg;
-    offset_str.clear();
   }
   
   CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);

@@ -1125,10 +1125,11 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     if (fg != dst.frag) {
       ldout(cct, 10) << "insert_trace got new frag " << fg << " -> " << dst.frag << dendl;
       fg = dst.frag;
-      readdir_offset = 2;
-      readdir_start.clear();
-      if (!hash_order)
+      if (!hash_order) {
+	readdir_offset = 2;
+	readdir_start.clear();
 	dirp->offset = dir_result_t::make_fpos(fg, readdir_offset, false);
+      }
     }
 
     ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << end
@@ -1184,13 +1185,12 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
 
-    if (end) {
-      dirp->last_name.clear();
-      dirp->next_offset = 2;
-    } else {
+    if (numdn > 0)
       dirp->last_name = dname;
+    if (end)
+      dirp->next_offset = 2;
+    else
       dirp->next_offset = readdir_offset;
-    }
 
     if (dir->is_empty())
       close_dir(dir);
@@ -6918,10 +6918,12 @@ void Client::_readdir_next_frag(dir_result_t *dirp)
   ldout(cct, 10) << "_readdir_next_frag advance from " << dirp->buffer_frag << " to " << fg << dendl;
 
   if (dirp->hash_order()) {
+    // keep last_name
     int64_t new_offset = dir_result_t::make_fpos(fg.value(), 2, true);
     if (dirp->offset < new_offset) // don't decrease offset
       dirp->offset = new_offset;
   } else {
+    dirp->last_name.clear();
     dirp->offset = dir_result_t::make_fpos(fg, 2, false);
     _readdir_rechoose_frag(dirp);
   }
@@ -7208,7 +7210,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 	return r;
     }
 
-    if (!dirp->last_name.empty()) {
+    if (dirp->next_offset > 2) {
       ldout(cct, 10) << " fetching next chunk of this frag" << dendl;
       _readdir_drop_dirp_buffer(dirp);
       continue;  // more!
