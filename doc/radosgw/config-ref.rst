@@ -982,7 +982,13 @@ Keystone Settings
 
 ``rgw keystone admin token``
 
-:Description: The Keystone admin token (shared secret).
+:Description: The Keystone admin token (shared secret). In Ceph RadosGW
+              authentication with the admin token has priority over
+              authentication with the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``). Admin token feature is considered
+              as deprecated.
 :Type: String
 :Default: None
 
