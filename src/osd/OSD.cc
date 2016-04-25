@@ -6954,6 +6954,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
 	hbclient_messenger->mark_down_all();
 
+	heartbeat_set_peers_need_update();
+	last_heartbeat_resample = ceph_clock_now(cct);
 	reset_heartbeat_peers();
       }
     }
