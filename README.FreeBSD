@@ -57,3 +57,17 @@ Things to investigate:
 
  - ceph-{osd,mon} need 2 signals before they actually terminate.
 
+Tests that fail at the moment:
+==============================
+ - test/cephtool-test-mon.sh
+	The test builds a cluster runs some tests on it, that works.
+	Then osd.0 is set down, and then up, but it actually does not come back up
+	at all.
+	Test terminates because of timeout waiting for osd.0 up
+ -  test/cephtool-test-rados.sh
+     0> 2016-03-16 00:04:01.041452 8056a0d00 -1 common/HeartbeatMap.cc: 
+	In function 'bool ceph::HeartbeatMap::_check(const ceph::heartbeat_handle_d *, const char *, time_t)' 
+	thread 8056a0d00 time 2016-03-16 00:04:00.999146 
+     common/HeartbeatMap.cc: 86: FAILED assert(0 == "hit suicide timeout")
+
+ 
