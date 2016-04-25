@@ -3446,6 +3446,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   }
   // client only understand END and COMPLETE flags ?
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+    flags |= CEPH_READDIR_HASH_ORDER;
   }
   
   // finish final blob
