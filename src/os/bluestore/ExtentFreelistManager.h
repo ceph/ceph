@@ -13,6 +13,7 @@
 #include "include/cpp-btree/btree_map.h"
 
 class ExtentFreelistManager : public FreelistManager {
+  KeyValueDB *kvdb;
   std::string prefix;
   std::mutex lock;
   uint64_t total_free;
@@ -28,11 +29,13 @@ class ExtentFreelistManager : public FreelistManager {
   void _dump();
 
 public:
-  ExtentFreelistManager() :
+  ExtentFreelistManager(KeyValueDB *kvdb, std::string prefix) :
+    kvdb(kvdb),
+    prefix(prefix),
     total_free(0) {
   }
 
-  int init(KeyValueDB *kvdb, std::string prefix) override;
+  int init() override;
   void shutdown() override;
 
   void dump() override;

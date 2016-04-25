@@ -577,6 +577,8 @@ private:
   void _close_bdev();
   int _open_db(bool create);
   void _close_db();
+  int _open_fm(bool create);
+  void _close_fm();
   int _open_alloc();
   void _close_alloc();
   int _open_collections(int *errors=0);

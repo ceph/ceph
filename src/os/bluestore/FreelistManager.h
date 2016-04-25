@@ -15,14 +15,17 @@ public:
   FreelistManager() {}
   virtual ~FreelistManager() {}
 
-  static FreelistManager *create(string type);
+  static FreelistManager *create(
+    string type,
+    KeyValueDB *db,
+    string prefix);
 
   virtual int create(uint64_t size, KeyValueDB::Transaction txn) {
     release(0, size, txn);
     return 0;
   }
 
-  virtual int init(KeyValueDB *kvdb, std::string prefix) = 0;
+  virtual int init() = 0;
   virtual void shutdown() = 0;
 
   virtual void dump() = 0;
