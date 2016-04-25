@@ -104,6 +104,8 @@ public:
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int cg_add_image(IoCtx& cg_io_ctx, const char *cg_name,
                    IoCtx& image_io_ctx, const char *image_name);
+  int cg_remove_image(IoCtx& cg_io_ctx, const char *cg_name,
+                      IoCtx& image_io_ctx, const char *image_name);
   int create_cg(IoCtx& io_ctx, const char *cg_name);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);

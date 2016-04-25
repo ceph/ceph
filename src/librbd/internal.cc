@@ -1112,6 +1112,16 @@ err_remove_id:
     return r;
   }
 
+  int cg_remove_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                      librados::IoCtx& image_ioctx, const char *image_name)
+  {
+    CephContext *cct = (CephContext *)cg_ioctx.cct();
+    ldout(cct, 20) << "cg_remove_image " << &cg_ioctx << " cg name " << cg_name << " image "
+		   << &image_ioctx << " name " << image_name << dendl;
+
+    return 0;
+  }
+
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {

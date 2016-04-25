@@ -278,6 +278,15 @@ namespace librbd {
     return r;
   }
 
+  int RBD::cg_remove_image(IoCtx& cg_ioctx, const char *cg_name, IoCtx& image_ioctx, const char *image_name)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
+    tracepoint(librbd, cg_remove_image_enter, cg_ioctx.get_pool_name().c_str(), cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(), image_ioctx.get_id(), image_name);
+    int r = librbd::cg_remove_image(cg_ioctx, cg_name, image_ioctx, image_name);
+    tracepoint(librbd, cg_remove_image_exit, r);
+    return r;
+  }
+
   int RBD::create_cg(IoCtx& io_ctx, const char *cg_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
