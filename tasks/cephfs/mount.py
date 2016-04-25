@@ -566,3 +566,19 @@ class CephFSMount(object):
         """
         p = self.run_shell(["getfattr", "--only-values", "-n", attr, path])
         return p.stdout.getvalue()
+
+    def df(self):
+        """
+        Wrap df: return a dict of usage fields in bytes
+        """
+
+        p = self.run_shell(["df", "-B1", "."])
+        lines = p.stdout.getvalue().strip().split("\n")
+        fs, total, used, avail = lines[1].split()[:4]
+        log.warn(lines)
+
+        return {
+            "total": int(total),
+            "used": int(used),
+            "available": int(avail)
+        }
