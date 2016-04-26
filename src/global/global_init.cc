@@ -60,6 +60,26 @@ static const char* c_str_or_null(const std::string &str)
   return str.c_str();
 }
 
+static int chown_path(const std::string &pathname, const uid_t owner, const gid_t group,
+		      const std::string &uid_str, const std::string &gid_str)
+{
+  const char *pathname_cstr = c_str_or_null(pathname);
+
+  if (!pathname_cstr) {
+    return 0;
+  }
+
+  int r = ::chown(pathname_cstr, owner, group);
+
+  if (r < 0) {
+    r = -errno;
+    cerr << "warning: unable to chown() " << pathname << " as "
+	 << uid_str << ":" << gid_str << ": " << cpp_strerror(r) << std::endl;
+  }
+
+  return r;
+}
+
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
@@ -127,6 +147,12 @@ void global_init(std::vector < const char * > *alt_def_args,
     assert(g_ceph_context && first_run);
   }
   first_run = false;
+
+  // Verify flags have not changed if global_pre_init() has been called
+  // manually. If they have, update them.
+  if (g_ceph_context->get_init_flags() != flags) {
+    g_ceph_context->set_init_flags(flags);
+  }
 
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
@@ -265,16 +291,21 @@ void global_init(std::vector < const char * > *alt_def_args,
 
   if (priv_ss.str().length()) {
     dout(0) << priv_ss.str() << dendl;
+  }
 
-    if (g_ceph_context->get_set_uid() || g_ceph_context->get_set_gid()) {
-      // fix ownership on log, asok files.  this is sadly a bit of a hack :(
-      g_ceph_context->_log->chown_log_file(
-	g_ceph_context->get_set_uid(),
-	g_ceph_context->get_set_gid());
-      g_ceph_context->get_admin_socket()->chown(
-	g_ceph_context->get_set_uid(),
-	g_ceph_context->get_set_gid());
-    }
+  if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+      (g_ceph_context->get_set_uid() || g_ceph_context->get_set_gid())) {
+    // Fix ownership on log files and run directories if needed.
+    // Admin socket files are chown()'d during the common init path _after_
+    // the service thread has been started. This is sadly a bit of a hack :(
+    chown_path(g_conf->run_dir,
+	       g_ceph_context->get_set_uid(),
+	       g_ceph_context->get_set_gid(),
+	       g_ceph_context->get_set_uid_string(),
+	       g_ceph_context->get_set_gid_string());
+    g_ceph_context->_log->chown_log_file(
+      g_ceph_context->get_set_uid(),
+      g_ceph_context->get_set_gid());
   }
 
   // Now we're ready to complain about config file parse errors
@@ -305,15 +336,21 @@ int global_init_prefork(CephContext *cct)
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize) {
 
-    if (pidfile_write(g_conf) < 0)
+    if (pidfile_write(conf) < 0)
       exit(1);
+
+    if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+	(cct->get_set_uid() || cct->get_set_gid())) {
+      chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
+		 cct->get_set_uid_string(), cct->get_set_gid_string());
+    }
 
     return -1;
   }
 
   // stop log thread
-  g_ceph_context->_log->flush();
-  g_ceph_context->_log->stop();
+  cct->_log->flush();
+  cct->_log->stop();
   return 0;
 }
 
@@ -341,7 +378,7 @@ void global_init_daemonize(CephContext *cct)
 void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
-  g_ceph_context->_log->start();
+  cct->_log->start();
 
   /* This is the old trick where we make file descriptors 0, 1, and possibly 2
    * point to /dev/null.
@@ -366,8 +403,15 @@ void global_init_postfork_start(CephContext *cct)
     exit(1);
   }
 
-  if (pidfile_write(g_conf) < 0)
+  const md_config_t *conf = cct->_conf;
+  if (pidfile_write(conf) < 0)
     exit(1);
+
+  if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
+      (cct->get_set_uid() || cct->get_set_gid())) {
+    chown_path(conf->pid_file, cct->get_set_uid(), cct->get_set_gid(),
+	       cct->get_set_uid_string(), cct->get_set_gid_string());
+  }
 }
 
 void global_init_postfork_finish(CephContext *cct)
