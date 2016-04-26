@@ -46,18 +46,15 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
 class RGWReadDataSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_data_sync_info> {
   RGWDataSyncEnv *sync_env;
 
-  RGWObjectCtx& obj_ctx;
-
   rgw_data_sync_status *sync_status;
 
 public:
-  RGWReadDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env, RGWObjectCtx& _obj_ctx,
-		      rgw_data_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store, _obj_ctx,
+  RGWReadDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
+		      rgw_data_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store,
 									    _sync_env->store->get_zone_params().log_pool,
 									    RGWDataSyncStatusManager::sync_status_oid(_sync_env->source_zone),
 									    &_status->sync_info),
                                                                             sync_env(_sync_env),
-                                                                            obj_ctx(_obj_ctx),
 									    sync_status(_status) {}
 
   int handle_data(rgw_data_sync_info& data);
@@ -72,7 +69,7 @@ int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
   map<uint32_t, rgw_data_sync_marker>& markers = sync_status->sync_markers;
   RGWRados *store = sync_env->store;
   for (int i = 0; i < (int)data.num_shards; i++) {
-    spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+    spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
                                                     RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, i), &markers[i]), true);
   }
   return 0;
@@ -344,7 +341,6 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
 
   RGWRados *store;
-  RGWObjectCtx& obj_ctx;
 
   string sync_status_oid;
 
@@ -354,9 +350,8 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   map<int, RGWDataChangesLogInfo> shards_info;
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
-		      RGWObjectCtx& _obj_ctx, uint32_t _num_shards) : RGWCoroutine(_sync_env->cct),
-                                                sync_env(_sync_env), store(sync_env->store),
-                                                obj_ctx(_obj_ctx) {
+		      uint32_t _num_shards) : RGWCoroutine(_sync_env->cct),
+                                                sync_env(_sync_env), store(sync_env->store) {
     lock_name = "sync_lock";
     status.num_shards = _num_shards;
 
@@ -527,8 +522,7 @@ int RGWRemoteDataLog::get_shard_info(int shard_id)
 
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
-  RGWObjectCtx obj_ctx(store, NULL);
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, obj_ctx, sync_status));
+  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
   if (r == -ENOENT) {
     r = 0;
   }
@@ -537,8 +531,7 @@ int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 
 int RGWRemoteDataLog::init_sync_status(int num_shards)
 {
-  RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitDataSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
+  return run(new RGWInitDataSyncStatusCoroutine(&sync_env, num_shards));
 }
 
 static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
@@ -1139,8 +1132,7 @@ public:
 
   RGWCoroutine *alloc_finisher_cr() {
     RGWRados *store = sync_env->store;
-    RGWObjectCtx obj_ctx(store, NULL);
-    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+    return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
                                                     RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id), &sync_marker);
   }
 
@@ -1160,8 +1152,6 @@ class RGWDataSyncCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   uint32_t num_shards;
 
-  RGWObjectCtx obj_ctx;
-
   rgw_data_sync_status sync_status;
 
   RGWDataSyncShardMarkerTrack *marker_tracker;
@@ -1175,7 +1165,6 @@ public:
   RGWDataSyncCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards, bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
                                                       num_shards(_num_shards),
-                                                      obj_ctx(sync_env->store),
                                                       marker_tracker(NULL),
                                                       shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
                                                       reset_backoff(_reset_backoff) {
@@ -1191,7 +1180,7 @@ public:
     reenter(this) {
 
       /* read sync status */
-      yield call(new RGWReadDataSyncStatusCoroutine(sync_env, obj_ctx, &sync_status));
+      yield call(new RGWReadDataSyncStatusCoroutine(sync_env, &sync_status));
 
       if (retcode == -ENOENT) {
         sync_status.sync_info.num_shards = num_shards;
@@ -1203,7 +1192,7 @@ public:
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
-        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, obj_ctx, sync_status.sync_info.num_shards));
+        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, sync_status.sync_info.num_shards));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to init sync, retcode=" << retcode << dendl;
           return set_cr_error(retcode);
@@ -1320,9 +1309,7 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
 
 int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status)
 {
-  RGWObjectCtx obj_ctx(store, NULL);
-
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
+  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, &sync_status));
   if (r < 0 && r != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: failed to read sync status from source_zone=" << sync_env.source_zone << " r=" << r << dendl;
     return r;
@@ -1604,7 +1591,6 @@ void rgw_bucket_shard_inc_sync_marker::encode_attr(map<string, bufferlist>& attr
 
 class RGWReadBucketSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
-  RGWObjectCtx obj_ctx;
   string oid;
   rgw_bucket_shard_sync_info *status;
 
@@ -1614,7 +1600,6 @@ public:
                       const string& _bucket_name, const string _bucket_id, int _shard_id,
 		      rgw_bucket_shard_sync_info *_status) : RGWCoroutine(_sync_env->cct),
                                                             sync_env(_sync_env),
-                                                            obj_ctx(sync_env->store),
                                                             oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, _bucket_name, _bucket_id, _shard_id)),
                                                             status(_status) {}
   int operate();
@@ -1623,7 +1608,7 @@ public:
 int RGWReadBucketSyncStatusCoroutine::operate()
 {
   reenter(this) {
-    yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->store, obj_ctx,
+    yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->store,
                                                    sync_env->store->get_zone_params().log_pool,
                                                    oid,
                                                    &attrs));
