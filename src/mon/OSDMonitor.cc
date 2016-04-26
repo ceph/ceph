@@ -8025,6 +8025,16 @@ bool OSDMonitor::_check_become_tier(
     return false;
   }
 
+  if (tier_pool->has_tiers()) {
+    *ss << "pool '" << tier_pool_name << "' has following tier(s) already:";
+    for (set<uint64_t>::iterator it = tier_pool->tiers.begin();
+         it != tier_pool->tiers.end(); it++)
+      *ss << "'" << osdmap.get_pool_name(*it) << "',";
+    *ss << " multiple tiers are not yet supported.";
+    *err = -EINVAL;
+    return false;
+  }
+
   if (tier_pool->is_tier()) {
     *ss << "tier pool '" << tier_pool_name << "' is already a tier of '"
        << osdmap.get_pool_name(tier_pool->tier_of) << "'";
