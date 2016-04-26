@@ -290,7 +290,7 @@ void* AdminSocket::entry()
 void AdminSocket::chown(uid_t uid, gid_t gid)
 {
   if (m_sock_fd >= 0) {
-    int r = ::fchown(m_sock_fd, uid, gid);
+    int r = ::chown(m_path.c_str(), uid, gid);
     if (r < 0) {
       r = -errno;
       lderr(m_cct) << "AdminSocket: failed to chown socket: "
