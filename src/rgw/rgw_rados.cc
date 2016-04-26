@@ -3361,9 +3361,9 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    /* read region info default has no data */
-    if (*iter != default_zonegroup_name){
+    if (1 /* || *iter != default_zonegroup_name */) {
       RGWZoneGroup zonegroup(*iter);
+      zonegroup.set_id(*iter);
       int ret = zonegroup.init(cct, this, true, true);
       if (ret < 0) {
 	ldout(cct, 0) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
@@ -3393,6 +3393,7 @@ int RGWRados::replace_region_with_zonegroup()
       for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
 	   iter ++) {
 	RGWZoneParams zoneparams(iter->first, iter->first);
+        zoneparams.set_id(iter->first);
 	ret = zoneparams.init(cct, this);
 	if (ret < 0) {
 	  ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
