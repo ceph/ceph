@@ -288,47 +288,38 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 	 << ret << std::endl;
     return -ENOENT;
   }
-  std::vector <std::string> mon_names;
+  
+  std::vector <std::string> mon_section = {"","mon","global"};
   for (std::vector <std::string>::const_iterator s = sections.begin();
        s != sections.end(); ++s) {
     if ((s->substr(0, 4) == "mon.") && (s->size() > 4)) {
-      mon_names.push_back(s->substr(4));
-    }
-  }
+       mon_section[0] = *s;
+       const string &m_name = s->substr(4);
+       std::string val;
+       int res = conf->get_val_from_conf_file(mon_section, "mon addr", val, true);
+       if (res) {
+         errout << "failed to get an address for mon." << m_name << ": error "
+          << res << std::endl;
+         continue;
+       }
+       entity_addr_t addr;
+       if (!addr.parse(val.c_str())) {
+         errout << "unable to parse address for mon." << m_name
+           << ": addr='" << val << "'" << std::endl;
+         continue;
+       }
 
-  // Find an address for each monitor in the config file.
-  for (std::vector <std::string>::const_iterator m = mon_names.begin();
-       m != mon_names.end(); ++m) {
-    std::vector <std::string> sections;
-    std::string m_name("mon");
-    m_name += ".";
-    m_name += *m;
-    sections.push_back(m_name);
-    sections.push_back("mon");
-    sections.push_back("global");
-    std::string val;
-    int res = conf->get_val_from_conf_file(sections, "mon addr", val, true);
-    if (res) {
-      errout << "failed to get an address for mon." << *m << ": error "
-	   << res << std::endl;
-      continue;
-    }
-    entity_addr_t addr;
-    if (!addr.parse(val.c_str())) {
-      errout << "unable to parse address for mon." << *m
-	   << ": addr='" << val << "'" << std::endl;
-      continue;
-    }
-    if (addr.get_port() == 0)
-      addr.set_port(CEPH_MON_PORT);
+       if (addr.get_port() == 0)
+         addr.set_port(CEPH_MON_PORT);
 
-    // the make sure this mon isn't already in the map
-    if (contains(addr))
-      remove(get_name(addr));
-    if (contains(*m))
-      remove(*m);
+       // the make sure this mon isn't already in the map
+       if (contains(addr))
+         remove(get_name(addr));
+       if (contains(m_name))
+         remove(m_name);
 
-    add(m->c_str(), addr);
+       add(m_name.c_str(), addr);
+    }
   }
 
   if (size() == 0) {
