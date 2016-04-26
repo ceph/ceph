@@ -2461,11 +2461,11 @@ void RGWPutObj::execute()
       if (encrypt) {
         delete encrypt;
       }
+      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
       op_ret = get_encrypt_filter(&encrypt, processor);
       if (op_ret < 0) {
         goto done;
       }
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
       string oid_rand;
       char buf[33];
