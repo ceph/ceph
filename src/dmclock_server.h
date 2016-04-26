@@ -700,7 +700,7 @@ namespace crimson {
 	  [&] (PullReq& pull_result, PhaseType phase) ->
 	  std::function<void(const C&,
 			     RequestRef&)> {
-	  return [&](const C& client, RequestRef& request) {
+	  return [&pull_result, phase](const C& client, RequestRef& request) {
 	    pull_result.data =
 	    typename PullReq::Retn{client, std::move(request), phase};
 	  };
@@ -765,7 +765,8 @@ namespace crimson {
 			   PhaseType phase) {
 	C client_result;
 	pop_process_request(heap,
-			    [&] (const C& client, RequestRef& request) {
+			    [this, phase, &client_result]
+			    (const C& client, RequestRef& request) {
 			      client_result = client;
 			      handle_f(client, std::move(request), phase);
 			    });
