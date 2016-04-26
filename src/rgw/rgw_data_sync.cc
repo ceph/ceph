@@ -2305,7 +2305,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
           }
           ldout(sync_env->cct, 5) << *this << ": [inc sync] can't do op on key=" << key << " need to wait for conflicting operation to complete" << dendl;
           yield wait_for_child();
-          
+          while (collect(&ret)) {
+            if (ret < 0) {
+              ldout(sync_env->cct, 0) << "ERROR: a child operation returned error (ret=" << ret << ")" << dendl;
+              /* we have reported this error */
+            }
+          }
         }
         if (!marker_tracker->index_key_to_marker(key, entry->op, cur_id)) {
           set_status() << "can't do op, sync already in progress for object";
