@@ -297,7 +297,7 @@ void get_remove_image_arguments(po::options_description *positional,
 }
 
 Shell::Action action_add(
-  {"cg", "add"}, {}, "Add an image to the consistency group.", "",
+  {"cg", "add", "image"}, {}, "Add an image to the consistency group.", "",
   &get_add_arguments, &execute_add);
 Shell::Action action_remove_image(
   {"cg", "remove", "image"}, {}, "Remove an image from the consistency group.", "",
