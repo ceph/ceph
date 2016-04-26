@@ -918,12 +918,12 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   policy = s3policy;
 
   int len = 0;
-  char *data;
+  char *data = nullptr;
 #define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
   op_ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
     return op_ret;
-  
+
   auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   if (s->aws4_auth_needs_complete) {
