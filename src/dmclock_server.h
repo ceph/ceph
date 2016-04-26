@@ -48,6 +48,9 @@ namespace crimson {
 
     namespace c = crimson;
 
+    constexpr double max_tag = std::numeric_limits<double>::max();
+    constexpr double min_tag = std::numeric_limits<double>::lowest();
+
     struct ClientInfo {
       const double reservation;  // minimum
       const double weight;       // proportional
@@ -116,7 +119,7 @@ namespace crimson {
 		       false)),
 	ready(false)
       {
-	// empty
+	assert(reservation < max_tag || proportion < max_tag);
       }
 
       RequestTag(double _res, double _prop, double _lim) :
@@ -125,7 +128,7 @@ namespace crimson {
 	limit(_lim),
 	ready(false)
       {
-	// empty
+	assert(reservation < max_tag || proportion < max_tag);
       }
 
       RequestTag(const RequestTag& other) :
@@ -148,9 +151,7 @@ namespace crimson {
 	  increment *= dist_req_val;
 	}
 	if (0.0 == increment) {
-	  return extreme_is_high ?
-	    std::numeric_limits<double>::max() :
-	    std::numeric_limits<double>::lowest();
+	  return extreme_is_high ? max_tag : min_tag;
 	} else {
 	  return std::max(time, prev + increment);
 	}
@@ -968,12 +969,31 @@ namespace crimson {
 	  limits = &limit_heap.top();
 	}
 
-	auto readys = &ready_heap.top();
-	if (readys->has_request() &&
-	    (readys->next_request().tag.ready || allow_limit_break)) {
+	auto& readys = ready_heap.top();
+	if (readys.has_request() &&
+	    readys.next_request().tag.ready &&
+	    readys.next_request().tag.proportion < max_tag) {
 	  result.type = NextReqType::returning;
 	  result.heap_id = HeapId::ready;
 	  return result;
+	}
+
+	// if nothing is schedulable by reservation or
+	// proportion/weight, and if we allow limit break, try to
+	// schedule something with the lowest proportion tag or
+	// alternatively lowest reservation tag.
+	if (allow_limit_break) {
+	  if (readys.has_request() &&
+	      readys.next_request().tag.proportion < max_tag) {
+	    result.type = NextReqType::returning;
+	    result.heap_id = HeapId::ready;
+	    return result;
+	  } else if (reserv.has_request() &&
+		     reserv.next_request().tag.reservation < max_tag) {
+	    result.type = NextReqType::returning;
+	    result.heap_id = HeapId::reservation;
+	    return result;
+	  }
 	}
 
 	// nothing scheduled; make sure we re-run when next

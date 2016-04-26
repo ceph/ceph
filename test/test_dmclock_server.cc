@@ -34,6 +34,42 @@ namespace crimson {
       code();
     }
 
+
+    TEST(dmclock_server, bad_tag) {
+      using ClientId = int;
+      using Queue = dmc::PriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 18;
+
+      dmc::ClientInfo ci1(0.0, 0.0, 0.0);
+      dmc::ClientInfo ci2(0.0, 0.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	if (client1 == c) return ci1;
+	else if (client2 == c) return ci2;
+	else ADD_FAILURE() << "got request from neither of two clients";
+      };
+
+      QueueRef pq(new Queue(client_info_f, false));
+      Request req;
+      ReqParams req_params(1,1);
+
+      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client1, req_params),
+				"Assertion.*reservation.*max_tag.*"
+				"proportion.*max_tag.*failed") <<
+	"we should fail if a client tries to generate a reservation tag "
+	"where reservation and proportion are both 0";
+
+
+      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client2, req_params),
+				"Assertion.*reservation.*max_tag.*"
+				"proportion.*max_tag.*failed") <<
+	"we should fail if a client tries to generate a reservation tag "
+	"where reservation and proportion are both 0";
+    }
+
     
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
@@ -232,15 +268,13 @@ namespace crimson {
       dmc::ClientInfo info1(0.0, 2.0, 0.0);
       dmc::ClientInfo info2(0.0, 1.0, 0.0);
 
-      QueueRef pq;
-
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
 	if (client1 == c) return info1;
 	else if (client2 == c) return info2;
 	else ADD_FAILURE() << "client info looked up for non-existant client";
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, false));
 
       Request req;
       ReqParams req_params(1,1);
