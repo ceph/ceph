@@ -203,17 +203,19 @@ class CephFSVolumeClient(object):
     """
 
     # Where shall we create our volumes?
-    VOLUME_PREFIX = "/volumes"
     POOL_PREFIX = "fsvolume_"
-    POOL_NS_PREFIX = "fsvolumens_"
+    DEFAULT_VOL_PREFIX = "/volumes"
+    DEFAULT_NS_PREFIX = "fsvolumens_"
 
-    def __init__(self, auth_id, conf_path, cluster_name):
+    def __init__(self, auth_id, conf_path, cluster_name, volume_prefix=None, pool_ns_prefix=None):
         self.fs = None
         self.rados = None
         self.connected = False
         self.conf_path = conf_path
         self.cluster_name = cluster_name
         self.auth_id = auth_id
+        self.volume_prefix = volume_prefix if volume_prefix else self.DEFAULT_VOL_PREFIX
+        self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else self.DEFAULT_NS_PREFIX
 
     def evict(self, auth_id, timeout=30):
         """
@@ -262,7 +264,7 @@ class CephFSVolumeClient(object):
         :return: absolute path (string)
         """
         return os.path.join(
-            self.VOLUME_PREFIX,
+            self.volume_prefix,
             volume_path.group_id if volume_path.group_id is not None else NO_GROUP_NAME,
             volume_path.volume_id)
 
@@ -271,7 +273,7 @@ class CephFSVolumeClient(object):
             raise ValueError("group_id may not be None")
 
         return os.path.join(
-            self.VOLUME_PREFIX,
+            self.volume_prefix,
             group_id
         )
 
@@ -402,7 +404,7 @@ class CephFSVolumeClient(object):
     def destroy_group(self, group_id):
         path = self._get_group_path(group_id)
         try:
-            self.fs.stat(self.VOLUME_PREFIX)
+            self.fs.stat(self.volume_prefix)
         except cephfs.ObjectNotFound:
             pass
         else:
@@ -458,7 +460,7 @@ class CephFSVolumeClient(object):
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
 
         # enforce security isolation, use seperate namespace for this volume
-        namespace = "{0}{1}".format(self.POOL_NS_PREFIX, volume_path.volume_id)
+        namespace = "{0}{1}".format(self.pool_ns_prefix, volume_path.volume_id)
         log.info("create_volume: {0}, using rados namespace {1} to isolate data.".format(volume_path, namespace))
         self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace', namespace, 0)
 
@@ -479,7 +481,7 @@ class CephFSVolumeClient(object):
         log.info("delete_volume: {0}".format(volume_path))
 
         # Create the trash folder if it doesn't already exist
-        trash = os.path.join(self.VOLUME_PREFIX, "_deleting")
+        trash = os.path.join(self.volume_prefix, "_deleting")
         self._mkdir_p(trash)
 
         # We'll move it to here
@@ -501,7 +503,7 @@ class CephFSVolumeClient(object):
         function is idempotent.
         """
 
-        trash = os.path.join(self.VOLUME_PREFIX, "_deleting")
+        trash = os.path.join(self.volume_prefix, "_deleting")
         trashed_volume = os.path.join(trash, volume_path.volume_id)
 
         try:
