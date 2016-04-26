@@ -54,7 +54,7 @@ namespace crimson {
       const double limit;        // maximum
 
       // multiplicative inverses of above, which we use in calculations
-      // and don't want to recalculate repeatedlu
+      // and don't want to recalculate repeatedly
       const double reservation_inv;
       const double weight_inv;
       const double limit_inv;
@@ -70,7 +70,19 @@ namespace crimson {
 	// empty
       }
 
-      friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
+
+      friend std::ostream& operator<<(std::ostream& out,
+				      const ClientInfo& client) {
+	out <<
+	  "{ r:" << client.reservation <<
+	  " w:" << client.weight <<
+	  " l:" << client.limit <<
+	  " 1/r:" << client.reservation_inv <<
+	  " 1/w:" << client.weight_inv <<
+	  " 1/l:" << client.limit_inv <<
+	  " }";
+	return out;
+      }
     }; // class ClientInfo
 
 
@@ -144,7 +156,14 @@ namespace crimson {
 	}
       }
 
-      friend std::ostream& operator<<(std::ostream&, const RequestTag&);
+      friend std::ostream& operator<<(std::ostream& out,
+				      const RequestTag& tag) {
+	out <<
+	  "{ r:" << format_time(tag.reservation) <<
+	  " p:" << format_time(tag.proportion) <<
+	  " l:" << format_time(tag.limit) << " }";
+	return out;
+      }
     }; // class RequestTag
 
 
