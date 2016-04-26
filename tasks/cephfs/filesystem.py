@@ -723,7 +723,7 @@ class Filesystem(MDSCluster):
             log.info("All objects for ino {0} size {1} are absent".format(ino, size))
             return True
 
-    def rados(self, args, pool=None, stdin_data=None):
+    def rados(self, args, pool=None, namespace=None, stdin_data=None):
         """
         Call into the `rados` CLI from an MDS
         """
@@ -738,7 +738,9 @@ class Filesystem(MDSCluster):
 
         # NB we could alternatively use librados pybindings for this, but it's a one-liner
         # using the `rados` CLI
-        args = [os.path.join(self._prefix, "rados"), "-p", pool] + args
+        args = ([os.path.join(self._prefix, "rados"), "-p", pool] +
+                (["--namespace", namespace] if namespace else []) +
+                args)
         p = remote.run(
             args=args,
             stdin=stdin_data,
