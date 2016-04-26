@@ -3154,6 +3154,52 @@ def find_cluster_by_uuid(_uuid):
     return None
 
 
+def get_journal_uuid_maps():
+    partmap = list_all_partitions()
+    journal_map = {}
+    for base, parts in sorted(partmap.iteritems()):
+        for p in parts:
+            dev = get_dev_path(p)
+            out, _, _ = command(
+                [
+                    'blkid',
+                    '-o',
+                    'udev',
+                    '-p',
+                    dev,
+                ]
+            )
+
+            p = {}
+            for line in out.splitlines():
+                (key, value) = line.split('=')
+                p[key] = value
+
+            ptype = p.get('ID_PART_ENTRY_TYPE')
+            part_uuid = p.get('ID_PART_ENTRY_UUID')
+            if ptype in (PTYPE['regular']['journal']['ready'],PTYPE['luks']['journal']['ready'],PTYPE['plain']['journal']['ready'],PTYPE['mpath']['journal']['ready']):
+                journal_map[part_uuid.lower()] = dev
+    return journal_map
+
+
+def check_journal_available(journal_uuid):
+    journal_map = get_journal_uuid_maps()
+    journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+        journal_uuid=journal_uuid,
+        )
+    if journal_uuid in journal_map:
+        journal_part = journal_map.get(journal_uuid)
+        if not os.path.exists(journal_symlink):
+            adjust_symlink(os.path.relpath(journal_part, os.path.dirname(journal_symlink)), journal_symlink)
+        journal_type = get_partition_type(journal_part)
+        journal_type_symlink = '/dev/disk/by-parttypeuuid/{journal_type}.{journal_uuid}'.format(
+            journal_type=journal_type,
+            journal_uuid=journal_uuid,
+            )
+        if not os.path.exists(journal_type_symlink):
+            adjust_symlink(os.path.relpath(journal_part, os.path.dirname(journal_type_symlink)), journal_type_symlink)
+
+
 def activate(
     path,
     activate_key_template,
@@ -3177,6 +3223,12 @@ def activate(
     if fsid is None:
         raise Error('No OSD uuid assigned.')
     LOG.debug('OSD uuid is %s', fsid)
+
+    juuid = read_one_line(path, 'journal_uuid')
+    if juuid is None:
+        raise Error('No Journal uuid assigned')
+    LOG.debug('Journal uuid is %s', juuid)
+    check_journal_available(juuid)
 
     keyring = activate_key_template.format(cluster=cluster,
                                            statedir=STATEDIR)
