@@ -360,6 +360,26 @@ namespace crimson {
 
     protected:
 
+      // The ClientCompare functor is essentially doing a precedes?
+      // operator, returning true if and only if the first parameter
+      // must precede the second parameter. If the second must precede
+      // the first, or if they are equivalent, false should be
+      // returned. The reason for this behavior is that it will be
+      // called to test if two items are out of order and if true is
+      // returned it will reverse the items. Therefore false is the
+      // default return when it doesn't matter to prevent unnecessary
+      // re-ordering.
+      //
+      // The template is supporting variations in sorting based on the
+      // heap in question and allowing these variations to be handled
+      // at compile-time.
+      //
+      // tag_field determines which tag is being used for comparison
+      //
+      // ready_opt determines how the ready flag influences the sort
+      //
+      // use_prop_delta determines whether the proportial delta is
+      // added in for comparison
       template<double RequestTag::*tag_field,
 	       ReadyOption ready_opt,
 	       bool use_prop_delta>
