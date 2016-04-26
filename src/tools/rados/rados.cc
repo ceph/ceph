@@ -1334,6 +1334,7 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
   f.dump_bool("head_mismatch", inc.head_mismatch());
   f.dump_bool("headless", inc.headless());
+  f.dump_bool("snapset_missing", inc.snapset_missing());
   f.dump_bool("size_mismatch", inc.size_mismatch());
 
   if (inc.clone_missing()) {

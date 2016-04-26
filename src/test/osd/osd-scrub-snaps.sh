@@ -14,6 +14,18 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+if test -z $CEPH_BUILD_DIR
+then
+    CEPH_BUILD_DIR=$(pwd)
+    export $CEPH_BUILD_DIR
+    CEPH_BIN=$CEPH_BUILD_DIR
+    export $CEPH_BIN
+    CEPH_ROOT=$(dirname $CEPH_BUILD_DIR)
+    export $CEPH_ROOT
+    CEPH_LIB="$CEPH_BIN/.libs"
+    export $CEPH_LIB
+fi
+
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
@@ -156,6 +168,17 @@ function TEST_scrub_snaps() {
     fi
     grep 'log_channel' $dir/osd.0.log
 
+    PGJSON=$(rados list-inconsistent-pg $poolname)
+    CHECKPGJSON="[\"$pgid\"]"
+    if [ "$PGJSON" != "$CHECKPGJSON" ]
+    then
+       echo $PGJSON not equal to $CHECKPGJSON
+       ERRORS=$(expr $ERRORS + 1)
+    fi
+    rados --pretty-format list-inconsistent-obj $pgid
+    echo
+    rados --pretty-format list-inconsistent-snapset $pgid | tee dz.lis.log
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
@@ -207,6 +230,8 @@ function TEST_scrub_snaps() {
             ERRORS=$(expr $ERRORS + 1)
         fi
     done
+
+    cp $dir/osd.0.log dz.osd.0.log
 
     teardown $dir || return 1
 

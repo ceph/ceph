@@ -96,6 +96,7 @@ struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   // soid claims that it is a head or a snapdir, but its SS_ATTR
   // is missing.
   void set_ss_attr_missing();
+  void set_snapset_missing();
   void set_ss_attr_corrupted();
   // snapset with missing clone
   void set_clone_missing(snapid_t);

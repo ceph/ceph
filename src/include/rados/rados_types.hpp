@@ -59,7 +59,7 @@ struct err_t {
     OMAP_DIGEST_MISMATCH = 1 << 5,
     SIZE_MISMATCH        = 1 << 6,
     ATTR_MISMATCH        = 1 << 7,
-    SNAPSET_MISSING      = 1 << 8,
+    NOTUSED_AVAILABLE      = 1 << 8,
     DATA_DIGEST_MISMATCH_OI = 1 << 9,
     OMAP_DIGEST_MISMATCH_OI = 1 << 10,
     SIZE_MISMATCH_OI        = 1 << 11,
@@ -131,6 +131,7 @@ struct inconsistent_snapset_t {
     HEAD_MISMATCH  = 1 << 4,
     HEADLESS_CLONE = 1 << 5,
     SIZE_MISMATCH  = 1 << 6,
+    SNAPSET_MISSING   = 1 << 7,
   };
   uint64_t errors = 0;
   object_id_t object;
@@ -157,6 +158,9 @@ struct inconsistent_snapset_t {
   }
   bool size_mismatch() const {
     return errors & SIZE_MISMATCH;
+  }
+  bool snapset_missing() const {
+    return errors & SNAPSET_MISSING;
   }
 };
 

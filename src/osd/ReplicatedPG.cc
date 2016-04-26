@@ -12715,6 +12715,7 @@ void ReplicatedPG::_scrub(
       if (head && !snapset) {
 	osd->clog->info() << mode << " " << info.pgid << " " << soid
 			  << " clone ignored due to missing snapset";
+	snap_error.set_snapset_missing();
 	scrubber.store->add_snap_error(pool.id, snap_error);
 	continue;
       }

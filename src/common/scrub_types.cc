@@ -161,6 +161,11 @@ void inconsistent_snapset_wrapper::set_ss_attr_missing()
   errors |= inc_snapset_t::ATTR_MISSING;
 }
 
+void inconsistent_snapset_wrapper::set_snapset_missing()
+{
+  errors |= inc_snapset_t::SNAPSET_MISSING;
+}
+
 void inconsistent_snapset_wrapper::set_ss_attr_corrupted()
 {
   errors |= inc_snapset_t::ATTR_CORRUPTED;
