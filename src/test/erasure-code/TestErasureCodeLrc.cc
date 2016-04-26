@@ -403,7 +403,7 @@ TEST(ErasureCodeLrc, layers_init)
     ErasureCodeProfile profile;
 
     const char* env = getenv("CEPH_LIB");
-    string directory(env ? env : "lib");
+    string directory(env ? env : ".libs");
     string description_string = 
       "[ " 
       "  [ \"_cDDD_cDD_\", \"directory=" + directory + "\" ]," 
@@ -917,7 +917,7 @@ int main(int argc, char **argv)
   common_init_finish(g_ceph_context);
 
   const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : "lib");
+  string directory(env ? env : ".libs");
   g_conf->set_val("erasure_code_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
