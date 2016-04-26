@@ -131,6 +131,19 @@ vc.disconnect()
         self.mounts[2].mount(mount_path=mount_path)
         self.mounts[2].write_n_mb("data.bin", 1)
 
+        #sync so that file data are persist to rados
+        self.mounts[2].run_shell(["sync"])
+
+        # Our data should stay in particular rados namespace
+        pool_name = self.mount_a.getfattr(os.path.join("volumes", group_id, volume_id), "ceph.dir.layout.pool")
+        NS_PREFIX = "fsvolumens_"
+        namespace = "{0}{1}".format(NS_PREFIX, volume_id)
+        ns_in_attr = self.mount_a.getfattr(os.path.join("volumes", group_id, volume_id), "ceph.dir.layout.pool_namespace")
+        self.assertEqual(namespace, ns_in_attr)
+
+        objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace).split("\n"))
+        self.assertNotEqual(objects_in_ns, set())
+
         # De-authorize the guest
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
