@@ -147,7 +147,8 @@
      --realm-id=<realm id>     realm id
      --realm-new-name=<realm new name> realm new name
      --rgw-zonegroup=<zonegroup>   zonegroup name
-     --rgw-zone=<zone>         zone in which radosgw is running
+     --zonegroup-id=<zonegroup id> zonegroup id
+     --rgw-zone=<zone>         name of zone in which radosgw is running
      --zone-id=<zone id>       zone id
      --zone-new-name=<zone>    zone new name
      --source-zone             specify the source zone (for data sync)
