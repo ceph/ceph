@@ -1158,6 +1158,10 @@ int RGWPeriod::update()
     return ret;
   }
 
+  // clear short_zone_ids in case we removed zones; period_map.update() will add
+  // them back for each zonegroup
+  period_map.short_zone_ids.clear();
+
   for (auto& iter : zonegroups) {
     RGWZoneGroup zg(string(), iter);
     ret = zg.init(cct, store);
