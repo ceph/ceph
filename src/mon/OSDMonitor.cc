@@ -463,10 +463,16 @@ void OSDMonitor::update_logger()
 }
 
 struct Sorter {
-  bool operator()(std::pair<int,float> l,
-		  std::pair<int,float> r) {
-    return l.second > r.second;
-  }
+
+    double average_util; 
+
+    Sorter(const average_util_)
+     : average_util(average_util_)
+    {}
+
+    bool operator()(std::pair<int,float> l, std::pair<int,float> r) {
+        return abs(l.second - average_util) > abs(r.second - average_util);
+    }
 };
 
 /* Assign a lower weight to overloaded OSDs.
@@ -595,8 +601,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
     util_by_osd.push_back(osd_util);
   }
 
-  // sort and iterate from most to least utilized
-  std::sort(util_by_osd.begin(), util_by_osd.end(), Sorter());
+  // sort by absolute deviation from the mean utilization,
+  // in descending order.
+  std::sort(util_by_osd.begin(), util_by_osd.end(), Sorter(average_util));
 
   OSDMap::Incremental newinc;
 
