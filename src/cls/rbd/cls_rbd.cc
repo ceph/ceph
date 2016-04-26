@@ -72,6 +72,7 @@ cls_method_handle_t h_cg_remove_image;
 cls_method_handle_t h_cg_to_removing;
 cls_method_handle_t h_cg_to_default;
 cls_method_handle_t h_image_add_cg_ref;
+cls_method_handle_t h_image_remove_cg_ref;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_set_features;
 cls_method_handle_t h_get_size;
@@ -293,6 +294,50 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int image_remove_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "image_remove_cg_ref");
+  std::string cg_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(cg_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  map<string, bufferlist> existing_refs;
+
+  int r = cls_cxx_map_get_vals(hctx, "", RBD_CG_REF_KEY, RBD_MAX_KEYS_READ, &existing_refs);
+  if (r < 1) {
+    return -ENOENT;
+  }
+
+  bufferlist refbl;
+  r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string ref_cg_id;
+  int64_t ref_pool_id;
+  bufferlist::iterator iter = refbl.begin();
+  ::decode(ref_pool_id, iter);
+  ::decode(ref_cg_id, iter);
+
+  if (ref_pool_id != pool_id || ref_cg_id != cg_id) {
+    return -EBADF;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, RBD_CG_REF_KEY);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_add_image");
@@ -385,7 +430,7 @@ int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(20, "cg_add_image");
+  CLS_LOG(20, "cg_remove_image");
   std::string image_id;
   try {
     bufferlist::iterator iter = in->begin();
@@ -3948,6 +3993,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "image_add_cg_ref",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  image_add_cg_ref, &h_image_add_cg_ref);
+  cls_register_cxx_method(h_class, "image_remove_cg_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  image_remove_cg_ref, &h_image_remove_cg_ref);
   cls_register_cxx_method(h_class, "get_features",
 			  CLS_METHOD_RD,
 			  get_features, &h_get_features);

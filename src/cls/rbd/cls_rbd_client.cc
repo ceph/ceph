@@ -166,6 +166,16 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "image_add_cg_ref", bl, bl2);
     }
 
+    int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+	                    std::string &cg_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(cg_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "image_remove_cg_ref", bl, bl2);
+    }
+
     int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
 	             std::string &image_id, int64_t pool_id)
     {

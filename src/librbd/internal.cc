@@ -1119,6 +1119,53 @@ err_remove_id:
     ldout(cct, 20) << "cg_remove_image " << &cg_ioctx << " cg name " << cg_name << " image "
 		   << &image_ioctx << " name " << image_name << dendl;
 
+    string cg_id_obj = util::id_cg_name(cg_name);
+    string cg_id;
+
+    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
+    if (r < 0) {
+      lderr(cct) << "error reading consistency group id object: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    string cg_header_oid = util::cg_header_name(cg_id);
+
+    ldout(cct, 20) << "adding image to cg name " << cg_name << " cg id " << cg_header_oid << dendl;
+
+
+    ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
+    r = imctx->state->open();
+    if (r < 0) {
+      lderr(cct) << "error opening image: "
+		 << cpp_strerror(-r) << dendl;
+      delete imctx;
+      return r;
+    }
+
+    ldout(cct, 20) << "removing image " << image_name << " image id " << imctx->header_oid << dendl;
+
+    r = cls_client::cg_to_removing(&cg_ioctx, cg_header_oid);
+
+    if (r < 0) {
+      lderr(cct) << "couldn't put image into removing state: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = cls_client::image_remove_cg_ref(&image_ioctx, imctx->header_oid, cg_id, cg_ioctx.get_id());
+    if ((r < 0) && (r != -ENOENT)) {
+      lderr(cct) << "couldn't remove cg ref from image"
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id);
+    if (r < 0) {
+      lderr(cct) << "couldn't remove image from cg"
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
     return 0;
   }
 
