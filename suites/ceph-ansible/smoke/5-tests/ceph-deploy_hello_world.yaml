@@ -1,7 +1,0 @@
-meta:
-- desc: "Run ceph-deploy_hello_world.sh"
-tasks:
-- workunit:
-    clients:
-      client.0:
-        - ceph-deploy/ceph-deploy_hello_world.sh
