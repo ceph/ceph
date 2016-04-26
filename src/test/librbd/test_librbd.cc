@@ -40,6 +40,7 @@
 #include "test/librados/test.h"
 #include "test/librbd/test_support.h"
 #include "common/errno.h"
+#include "common/event_socket.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
 
@@ -4045,6 +4046,72 @@ TEST_F(TestLibRBD, TestImageOptionsPP)
   ASSERT_EQ(0, parent.copy_with_progress3(ioctx, copy2_name.c_str(), opts, pp));
 
   ASSERT_EQ(0, parent.close());
+}
+
+TEST_F(TestLibRBD, EventSocketPipe)
+{
+  EventSocket event_sock;
+  int pipe_fd[2]; // read and write fd
+  char buf[32];
+
+  ASSERT_EQ(0, pipe(pipe_fd));
+
+  ASSERT_FALSE(event_sock.is_valid());
+
+  ASSERT_EQ(-EINVAL, event_sock.init(pipe_fd[1], EVENT_SOCKET_TYPE_NONE));
+  ASSERT_FALSE(event_sock.is_valid());
+
+  ASSERT_EQ(-EINVAL, event_sock.init(pipe_fd[1], 44));
+  ASSERT_FALSE(event_sock.is_valid());
+
+#ifndef HAVE_EVENTFD
+  ASSERT_EQ(-EINVAL, event_sock.init(pipe_fd[1], EVENT_SOCKET_TYPE_EVENTFD));
+  ASSERT_FALSE(event_sock.is_valid());
+#endif
+
+  ASSERT_EQ(0, event_sock.init(pipe_fd[1], EVENT_SOCKET_TYPE_PIPE));
+  ASSERT_TRUE(event_sock.is_valid());
+  ASSERT_EQ(0, event_sock.notify());
+  ASSERT_EQ(1, read(pipe_fd[0], buf, 32));
+  ASSERT_EQ('i', buf[0]);
+
+  close(pipe_fd[0]);
+  close(pipe_fd[1]);
+}
+
+TEST_F(TestLibRBD, EventSocketEventfd)
+{
+#ifdef HAVE_EVENTFD
+  EventSocket event_sock;
+  int event_fd;
+  struct pollfd poll_fd;
+  char buf[32];
+
+  event_fd = eventfd(0, EFD_NONBLOCK);
+  ASSERT_NE(-1, event_fd);
+
+  ASSERT_FALSE(event_sock.is_valid());
+
+  ASSERT_EQ(-EINVAL, event_sock.init(event_fd, EVENT_SOCKET_TYPE_NONE));
+  ASSERT_FALSE(event_sock.is_valid());
+
+  ASSERT_EQ(-EINVAL, event_sock.init(event_fd, 44));
+  ASSERT_FALSE(event_sock.is_valid());
+
+  ASSERT_EQ(0, event_sock.init(event_fd, EVENT_SOCKET_TYPE_EVENTFD));
+  ASSERT_TRUE(event_sock.is_valid());
+  ASSERT_EQ(0, event_sock.notify());
+
+  poll_fd.fd = event_fd;
+  poll_fd.events = POLLIN;
+  ASSERT_EQ(1, poll(&poll_fd, 1, -1));
+  ASSERT_TRUE(poll_fd.revents & POLLIN);
+
+  ASSERT_EQ(static_cast<ssize_t>(sizeof(uint64_t)), read(event_fd, buf, 32));
+  ASSERT_EQ(1, *reinterpret_cast<uint64_t *>(buf));
+
+  close(event_fd);
+#endif
 }
 
 TEST_F(TestLibRBD, ImagePollIO)
