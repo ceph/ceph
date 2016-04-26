@@ -437,6 +437,12 @@ void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
   bat->Delete(combine_strings(prefix, k));
 }
 
+void RocksDBStore::RocksDBTransactionImpl::rm_single_key(const string &prefix,
+					                 const string &k)
+{
+  bat->SingleDelete(combine_strings(prefix, k));
+}
+
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
 {
   KeyValueDB::Iterator it = db->get_iterator(prefix);
