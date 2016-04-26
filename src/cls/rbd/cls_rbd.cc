@@ -70,6 +70,7 @@ cls_method_handle_t h_create_cg;
 cls_method_handle_t h_cg_add_image;
 cls_method_handle_t h_cg_remove_image;
 cls_method_handle_t h_cg_to_removing;
+cls_method_handle_t h_cg_to_reverting_addition;
 cls_method_handle_t h_cg_to_default;
 cls_method_handle_t h_image_add_cg_ref;
 cls_method_handle_t h_image_remove_cg_ref;
@@ -399,8 +400,31 @@ int cg_to_removing(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_to_removing");
 
+  int cur_state = CG_DEFAULT;
+  int r = read_key(hctx, CG_STATE, &cur_state);
+  if (r < 0 && r != -ENOENT) { // missing state key is default state
+    return r;
+  }
+  if (cur_state != CG_DEFAULT) {
+    return -EALREADY;
+  }
+
   bufferlist statebl;
   ::encode(CG_REMOVING_IMAGE, statebl);
+  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int cg_to_reverting_addition(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_to_reverting_addition");
+
+  bufferlist statebl;
+  ::encode(CG_REVERTING_ADDITION, statebl);
   int r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
   if (r < 0) {
     return r;
@@ -3987,6 +4011,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "cg_to_removing",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_to_removing, &h_cg_to_removing);
+  cls_register_cxx_method(h_class, "cg_to_reverting_addition",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_to_reverting_addition, &h_cg_to_reverting_addition);
   cls_register_cxx_method(h_class, "cg_to_default",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_to_default, &h_cg_to_default);
