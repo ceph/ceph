@@ -42,8 +42,6 @@ restorecon -R %{_bindir}/ceph-mon > /dev/null 2>&1; \
 restorecon -R %{_bindir}/ceph-osd > /dev/null 2>&1; \
 restorecon -R %{_bindir}/ceph-mds > /dev/null 2>&1; \
 restorecon -R %{_bindir}/radosgw > /dev/null 2>&1; \
-restorecon -R /etc/rc\.d/init\.d/ceph > /dev/null 2>&1; \
-restorecon -R /etc/rc\.d/init\.d/radosgw > /dev/null 2>&1; \
 restorecon -R %{_localstatedir}/run/ceph > /dev/null 2>&1; \
 restorecon -R %{_localstatedir}/lib/ceph > /dev/null 2>&1; \
 restorecon -R %{_localstatedir}/log/ceph > /dev/null 2>&1; \
