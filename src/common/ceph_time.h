@@ -150,7 +150,7 @@ namespace ceph {
       typedef duration::period period;
       // The second template parameter defaults to the clock's duration
       // type.
-      typedef std::chrono::time_point<real_clock> time_point;
+      typedef std::chrono::time_point<coarse_real_clock> time_point;
       static constexpr const bool is_steady = false;
 
       static time_point now() noexcept {
@@ -243,7 +243,7 @@ namespace ceph {
       typedef timespan duration;
       typedef duration::rep rep;
       typedef duration::period period;
-      typedef std::chrono::time_point<mono_clock> time_point;
+      typedef std::chrono::time_point<coarse_mono_clock> time_point;
       static constexpr const bool is_steady = true;
 
       static time_point now() noexcept {
@@ -263,6 +263,44 @@ namespace ceph {
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
       }
     };
+
+    // So that our subtractions produce negative spans rather than
+    // arithmetic underflow.
+    namespace {
+      template<typename Rep1, typename Period1, typename Rep2,
+	       typename Period2>
+      inline auto difference(std::chrono::duration<Rep1, Period1> minuend,
+			     std::chrono::duration<Rep2, Period2> subtrahend)
+	-> typename std::common_type<
+	  std::chrono::duration<typename std::make_signed<Rep1>::type,
+				Period1>,
+	  std::chrono::duration<typename std::make_signed<Rep2>::type,
+				Period2> >::type {
+	// Foo.
+	using srep =
+	  typename std::common_type<
+	    std::chrono::duration<typename std::make_signed<Rep1>::type,
+				  Period1>,
+	    std::chrono::duration<typename std::make_signed<Rep2>::type,
+				  Period2> >::type;
+	return srep(srep(minuend).count() - srep(subtrahend).count());
+      }
+
+      template<typename Clock, typename Duration1, typename Duration2>
+      inline auto difference(
+	typename std::chrono::time_point<Clock, Duration1> minuend,
+	typename std::chrono::time_point<Clock, Duration2> subtrahend)
+	-> typename std::common_type<
+	  std::chrono::duration<typename std::make_signed<
+				  typename Duration1::rep>::type,
+				typename Duration1::period>,
+	  std::chrono::duration<typename std::make_signed<
+				  typename Duration2::rep>::type,
+				typename Duration2::period> >::type {
+	return difference(minuend.time_since_epoch(),
+			  subtrahend.time_since_epoch());
+      }
+    }
   } // namespace time_detail
 
   // duration is the concrete time representation for our code in the
@@ -306,12 +344,14 @@ namespace ceph {
 
   // Actual wall-clock times
   typedef real_clock::time_point real_time;
+  typedef coarse_real_clock::time_point coarse_real_time;
 
   // Monotonic times should never be serialized or communicated
   // between machines, since they are incomparable. Thus we also don't
   // make any provision for converting between
   // std::chrono::steady_clock time and ceph::mono_clock time.
   typedef mono_clock::time_point mono_time;
+  typedef coarse_mono_clock::time_point coarse_mono_time;
 
   template<typename Rep1, typename Ratio1, typename Rep2, typename Ratio2>
   auto floor(const std::chrono::duration<Rep1, Ratio1>& duration,
@@ -355,14 +395,46 @@ namespace ceph {
 	  ceil(timepoint.time_since_epoch(), precision));
   }
 
-  static inline timespan make_timespan(const double d) {
-    return std::chrono::duration_cast<timespan>(
-      std::chrono::duration<double>(d));
+  namespace {
+    inline timespan make_timespan(const double d) {
+      return std::chrono::duration_cast<timespan>(
+	std::chrono::duration<double>(d));
+    }
   }
 
   std::ostream& operator<<(std::ostream& m, const timespan& t);
   std::ostream& operator<<(std::ostream& m, const real_time& t);
   std::ostream& operator<<(std::ostream& m, const mono_time& t);
+
+  // The way std::chrono handles the return type of subtraction is not
+  // wonderful. The difference of two unsigned types SHOULD be signed.
+
+  namespace {
+    inline signedspan operator -(real_time minuend,
+				 real_time subtrahend) {
+      return time_detail::difference(minuend, subtrahend);
+    }
+
+    inline signedspan operator -(coarse_real_time minuend,
+				 coarse_real_time subtrahend) {
+      return time_detail::difference(minuend, subtrahend);
+    }
+
+    inline signedspan operator -(mono_time minuend,
+				 mono_time subtrahend) {
+      return time_detail::difference(minuend, subtrahend);
+    }
+
+    inline signedspan operator -(coarse_mono_time minuend,
+				 coarse_mono_time subtrahend) {
+      return time_detail::difference(minuend, subtrahend);
+    }
+  }
+
+  // We could add specializations of time_point - duration and
+  // time_point + duration to assert on overflow, but I don't think we
+  // should.
+
 } // namespace ceph
 
 // We need these definitions to be able to hande ::encode/::decode on
@@ -410,6 +482,15 @@ namespace std {
       ::decode(t, p);
     }
   } // namespace chrono
+
+  // An overload of our own
+  namespace {
+    inline timespan abs(signedspan z) {
+      return z > signedspan::zero() ?
+	std::chrono::duration_cast<timespan>(z) :
+	timespan(-z.count());
+    }
+  }
 } // namespace std
 
 #endif // COMMON_CEPH_TIME_H
