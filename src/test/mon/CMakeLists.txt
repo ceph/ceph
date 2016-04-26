@@ -28,6 +28,7 @@ add_ceph_test(mon-scrub.sh ${CMAKE_CURRENT_SOURCE_DIR}/mon-scrub.sh)
 add_ceph_test(osd-crush.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-crush.sh)
 add_ceph_test(osd-erasure-code-profile.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-erasure-code-profile.sh)
 add_ceph_test(osd-pool-create.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-pool-create.sh)
+add_ceph_test(test_pool_quota.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pool_quota.sh)
 
 # unittest_mon_moncap
 add_executable(unittest_mon_moncap EXCLUDE_FROM_ALL
