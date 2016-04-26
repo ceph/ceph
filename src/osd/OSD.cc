@@ -8392,11 +8392,13 @@ void OSD::do_recovery(
   uint64_t started = 0;
   if (g_conf->osd_recovery_sleep > 0) {
     handle.suspend_tp_timeout();
+    pg->unlock();
     utime_t t;
     t.set_from_double(g_conf->osd_recovery_sleep);
     t.sleep();
-    handle.reset_tp_timeout();
     dout(20) << __func__ << " slept for " << t << dendl;
+    pg->lock();
+    handle.reset_tp_timeout();
   }
 
   {
