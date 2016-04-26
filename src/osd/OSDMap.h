@@ -455,7 +455,7 @@ public:
   }
 
   /**
-   * check if an entire crush subtre is down
+   * check if an entire crush subtree is down
    */
   bool subtree_is_down(int id, set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, set<int> *down_cache) const;
@@ -764,13 +764,7 @@ public:
       return group[0];
     return -1;  // we fail!
   }
-  int get_pg_acting_tail(pg_t pg) const {
-    vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    if (nrep > 0)
-      return group[group.size()-1];
-    return -1;  // we fail!
-  }
+
   bool is_acting_osd_shard(pg_t pg, int osd, shard_id_t shard) const {
     vector<int> acting;
     int nrep = pg_to_acting_osds(pg, acting);
