@@ -1416,7 +1416,7 @@ string fix_zone_pool_name(set<string> pool_names,
 
   if (!suggested_name.empty()) {
     prefix = suggested_name.substr(0,suggested_name.find("."));
-    suffix = suggested_name.substr(prefix.length(), suggested_name.length() - 1);
+    suffix = suggested_name.substr(prefix.length());
   }
 
   string name = prefix + suffix;
