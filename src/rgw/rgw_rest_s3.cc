@@ -294,8 +294,9 @@ send_data:
 
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb)
 {
-  BlockCrypt* block_crypt=new AES_256_CTR();
-  *filter=new RGWGetObj_BlockDecrypt(s->cct, cb, block_crypt);
+  RGWObjState* none;
+  BlockCrypt* block_crypt=new AES_256_CTR(s->cct);
+  *filter=new RGWGetObj_BlockDecrypt(none, s, cb, block_crypt);
   return 0;
 }
 
@@ -1106,7 +1107,7 @@ void RGWPutObj_ObjStore_S3::send_response()
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
-  BlockCrypt* block_crypt=new AES_256_CTR();
+  BlockCrypt* block_crypt=new AES_256_CTR(s->cct);
   *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, block_crypt);
   return 0;
 }
@@ -1890,7 +1891,7 @@ done:
 }
 
 int RGWPostObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
-  BlockCrypt* block_crypt=new AES_256_CTR();
+  BlockCrypt* block_crypt=new AES_256_CTR(s->cct);
   *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, block_crypt);
   return 0;
 }

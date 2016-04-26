@@ -31,7 +31,7 @@ public:
    * dst - destination to encrypt to
    * offset - location of <src,src+size) chunk in data stream
    */
-  virtual bool encrypt(const void *src, size_t size, void *dst, off_t offset) = 0;
+  virtual bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) = 0;
   /**
    * Decrypts packet of data.
    * This is basic decryption of wider stream of data.
@@ -45,42 +45,47 @@ public:
    * dst - destination to decrypt to
    * offset - location of <src,src+size) chunk in data stream
    */
-  virtual bool decrypt(const void *src, size_t size, void *dst, off_t offset) = 0;
+  virtual bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) = 0;
 };
 
 /**
  * Encryption works in CTR mode. nonce + offset/block_size is used as IV for block starting at offset.
  */
 class AES_256_CTR : public BlockCrypt {
+  CephContext* cct;
 public:
+  AES_256_CTR(CephContext* cct);
+  virtual ~AES_256_CTR();
   /**
    * Sets key and nonce.
    */
-  AES_256_CTR();
-  virtual ~AES_256_CTR();
   bool set_key(uint8_t* key, uint8_t* nonce, size_t key_len);
   virtual size_t get_block_size() override;
-  virtual bool encrypt(const void *src, size_t size, void *dst, off_t offset) override;
-  virtual bool decrypt(const void *src, size_t size, void *dst, off_t offset) override;
+  virtual bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) override;
+  virtual bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) override;
 };
 
 
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
-  CephContext* cct;
+  RGWObjState* s;
+  req_state* req;
   BlockCrypt* crypt;
   off_t enc_begin_skip;
   off_t ofs;
   off_t end;
   bufferlist cache;
   size_t block_size;
+  std::vector<size_t> parts_len;
 public:
-  RGWGetObj_BlockDecrypt(CephContext* cct, RGWGetDataCB& next, BlockCrypt* crypt);
+  RGWGetObj_BlockDecrypt(RGWObjState* s, req_state* req, RGWGetDataCB& next, BlockCrypt* crypt);
   virtual ~RGWGetObj_BlockDecrypt();
 
-  virtual void fixup_range(off_t& bl_ofs, off_t& bl_end) override;
+  virtual int fixup_range(off_t& bl_ofs, off_t& bl_end) override;
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
   virtual int flush() override;
-};
+private:
+  int read_manifest();
+}; /* RGWGetObj_BlockDecrypt */
 
 class RGWPutObj_BlockEncrypt : public RGWPutObj_Filter
 {

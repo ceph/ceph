@@ -222,8 +222,8 @@ public:
   /**
    * Allows filter to extend range required for successful filtering
    */
-  virtual void fixup_range(off_t& bl_ofs, off_t& bl_len) {
-    next.fixup_range(bl_ofs, bl_len);
+  virtual int fixup_range(off_t& bl_ofs, off_t& bl_len) {
+    return next.fixup_range(bl_ofs, bl_len);
   }
 };
 
