@@ -112,7 +112,7 @@ Gateway::
 
 Finally, check to ensure that the port you selected is open on the node's
 firewall (e.g., port ``80``). If it is not open, add the port and reload the
-firewall configuration. If you use the ``firewald``, daemon execute::
+firewall configuration. If you use the ``firewalld`` daemon, execute::
 
   sudo firewall-cmd --list-all
   sudo firewall-cmd --zone=public --add-port 80/tcp --permanent
