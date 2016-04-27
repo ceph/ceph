@@ -28,7 +28,7 @@ if type apt-get > /dev/null 2>&1 ; then
 fi
 
 if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release
+    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
 fi
 
 case $(lsb_release -si) in
