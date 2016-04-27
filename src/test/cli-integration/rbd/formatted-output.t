@@ -854,11 +854,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </snapshots>
   $ rbd disk-usage --pool rbd_other
   NAME                    PROVISIONED  USED 
-  child@snap                     512M  512M 
-  child                          512M  512M 
-  deep-flatten-child@snap        512M  512M 
-  deep-flatten-child             512M  512M 
-  <TOTAL>                       1024M 2048M 
+  child@snap                     512M     0 
+  child                          512M 4096k 
+  deep-flatten-child@snap        512M     0 
+  deep-flatten-child             512M     0 
+  <TOTAL>                       1024M 4096k 
   $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "images": [
@@ -866,27 +866,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
               "name": "child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
-              "used_size": 536870912
+              "used_size": 0
           }, 
           {
               "name": "child", 
               "provisioned_size": 536870912, 
-              "used_size": 536870912
+              "used_size": 4194304
           }, 
           {
               "name": "deep-flatten-child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
-              "used_size": 536870912
+              "used_size": 0
           }, 
           {
               "name": "deep-flatten-child", 
               "provisioned_size": 536870912, 
-              "used_size": 536870912
+              "used_size": 0
           }
       ], 
       "total_provisioned_size": 1073741824, 
-      "total_used_size": 2147483648
+      "total_used_size": 4194304
   }
   $ rbd disk-usage --pool rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <stats>
@@ -895,27 +895,27 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
         <name>child</name>
         <snapshot>snap</snapshot>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>0</used_size>
       </image>
       <image>
         <name>child</name>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>4194304</used_size>
       </image>
       <image>
         <name>deep-flatten-child</name>
         <snapshot>snap</snapshot>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>0</used_size>
       </image>
       <image>
         <name>deep-flatten-child</name>
         <provisioned_size>536870912</provisioned_size>
-        <used_size>536870912</used_size>
+        <used_size>0</used_size>
       </image>
     </images>
     <total_provisioned_size>1073741824</total_provisioned_size>
-    <total_used_size>2147483648</total_used_size>
+    <total_used_size>4194304</total_used_size>
   </stats>
 
 # cleanup

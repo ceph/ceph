@@ -180,6 +180,26 @@ private:
     return false;
   }
 
+  bool CopyupRequest::is_nop()
+  {
+    if (!m_copyup_data.is_zero()) {
+      return false;
+    }
+
+    for (const AioObjectRequest *req : m_pending_requests) {
+      const AioObjectWrite *wreq = dynamic_cast<const AioObjectWrite *>(req);
+      if (!wreq) {
+	return false;
+      }
+
+      if (!wreq->all_zero()) {
+	return false;
+      }
+    }
+
+    return true;
+  }
+
   void CopyupRequest::send()
   {
     m_state = STATE_READ_FROM_PARENT;
@@ -217,11 +237,20 @@ private:
       ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
       remove_from_list();
       if (r >= 0 || r == -ENOENT) {
-        return send_object_map();
+	if (is_nop()) {
+	  ldout(cct, 20) << "nop, skipping" << dendl;
+	  return true;
+	}
+        return send_object_map_head();
       }
       break;
 
-    case STATE_OBJECT_MAP:
+    case STATE_OBJECT_MAP_HEAD:
+      ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
+      assert(r == 0);
+      return send_object_map_snap();
+
+    case STATE_OBJECT_MAP_SNAP:
       ldout(cct, 20) << "OBJECT_MAP" << dendl;
       assert(r == 0);
       return send_copyup();
@@ -259,27 +288,81 @@ private:
     m_ictx->copyup_list.erase(it);
   }
 
-  bool CopyupRequest::send_object_map() {
+  bool CopyupRequest::send_object_map_head() {
+    CephContext *cct = m_ictx->cct;
+    ldout(cct, 20) << __func__ << " " << this << dendl;
+
+    m_state = STATE_OBJECT_MAP_HEAD;
+
     {
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
-      if (m_ictx->object_map != nullptr) {
-        bool copy_on_read = m_pending_requests.empty();
-        assert(m_ictx->exclusive_lock->is_lock_owner());
 
-        RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (copy_on_read &&
-            (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
-          // CoW already updates the HEAD object map
-          m_snap_ids.push_back(CEPH_NOSNAP);
-        }
-        if (!m_ictx->snaps.empty()) {
-          m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
-                            m_ictx->snaps.end());
-        }
+      if (m_ictx->object_map != nullptr) {
+
+	bool copy_on_read = m_pending_requests.empty();
+	assert(m_ictx->exclusive_lock->is_lock_owner());
+
+	RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+
+	if (!m_ictx->snaps.empty()) {
+	  m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
+			    m_ictx->snaps.end());
+	}
+
+	if (copy_on_read &&
+	    (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
+	  m_snap_ids.push_back(CEPH_NOSNAP);
+	  object_map_locker.unlock();
+	  snap_locker.unlock();
+	  owner_locker.unlock();
+	  return send_object_map_snap();
+	}
+
+	uint8_t current_state;
+	uint8_t new_state = OBJECT_NONEXISTENT;
+	bool may_update = false;
+
+	for (AioObjectRequest *req : m_pending_requests) {
+	  uint8_t tmp_state;
+
+	  if (!req->pre_object_map_update(&tmp_state)) {
+	    continue;
+	  }
+
+	  ldout(cct, 20) << __func__ << " " << req->get_op_type()
+			 << " state " << (int)tmp_state << dendl;
+
+	  assert(tmp_state != OBJECT_NONEXISTENT);
+
+	  may_update = true;
+	  new_state = tmp_state;
+
+	  if (tmp_state == OBJECT_EXISTS) {
+	    break;
+	  }
+	}
+
+	current_state = (*m_ictx->object_map)[m_object_no];
+	ldout(cct, 20) << __func__ << " object_no " << m_object_no
+		       << " current_state " << (int)current_state
+		       << " new_state " << (int)new_state << dendl;
+
+	if (may_update && current_state != new_state) {
+	  Context *ctx = util::create_context_callback(this);
+	  bool updated = m_ictx->object_map->aio_update(m_object_no, new_state,
+							current_state, ctx);
+	  assert(updated);
+	  return false;
+	}
       }
     }
 
+    bool r = send_object_map_snap();
+    return r;
+  }
+
+  bool CopyupRequest::send_object_map_snap() {
     // avoid possible recursive lock attempts
     if (m_snap_ids.empty()) {
       // no object map update required
@@ -289,7 +372,7 @@ private:
       ldout(m_ictx->cct, 20) << __func__ << " " << this
       	                     << ": oid " << m_oid
                              << dendl;
-      m_state = STATE_OBJECT_MAP;
+      m_state = STATE_OBJECT_MAP_SNAP;
 
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
       AsyncObjectThrottle<>::ContextFactory context_factory(

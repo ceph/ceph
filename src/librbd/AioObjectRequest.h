@@ -45,6 +45,10 @@ namespace librbd {
       return !m_parent_extents.empty();
     }
 
+    virtual const char *get_op_type() const = 0;
+
+    virtual bool pre_object_map_update(uint8_t *new_state) = 0;
+
   protected:
     bool compute_parent_extents();
 
@@ -71,6 +75,14 @@ namespace librbd {
 
     ceph::bufferlist &data() {
       return m_read_data;
+    }
+
+    const char *get_op_type() const {
+      return "read";
+    }
+
+    bool pre_object_map_update(uint8_t *new_state) {
+      return false;
     }
 
     std::map<uint64_t, uint64_t> m_ext_map;
@@ -167,6 +179,7 @@ namespace librbd {
     enum write_state_d {
       LIBRBD_AIO_WRITE_GUARD,
       LIBRBD_AIO_WRITE_COPYUP,
+      LIBRBD_AIO_WRITE_OBJECT_MAP,
       LIBRBD_AIO_WRITE_FLAT,
       LIBRBD_AIO_WRITE_PRE,
       LIBRBD_AIO_WRITE_POST,
@@ -178,17 +191,17 @@ namespace librbd {
     uint64_t m_snap_seq;
     std::vector<librados::snap_t> m_snaps;
     bool m_object_exist;
+    bool m_guard;
 
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
-    virtual const char* get_write_type() const = 0;
     virtual void guard_write();
-    virtual void pre_object_map_update(uint8_t *new_state) = 0;
     virtual bool post_object_map_update() {
       return false;
     }
     virtual void send_write();
-    virtual void send_write_op(bool write_guard);
+    virtual void send_write_op();
     virtual void handle_write_guard();
+    void send_object_map_update();
 
   private:
     void send_pre();
@@ -209,16 +222,23 @@ namespace librbd {
     void set_op_flags(int op_flags) {
       m_op_flags = op_flags;
     }
-  protected:
-    virtual void add_write_ops(librados::ObjectWriteOperation *wr);
 
-    virtual const char* get_write_type() const {
+    bool all_zero() const {
+      return m_write_data.is_zero();
+    }
+
+    virtual const char* get_op_type() const {
       return "write";
     }
 
-    virtual void pre_object_map_update(uint8_t *new_state) {
+    virtual bool pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_EXISTS;
+      return true;
     }
+
+  protected:
+    virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+
     virtual void send_write();
 
   private:
@@ -235,6 +255,23 @@ namespace librbd {
         m_object_state(OBJECT_NONEXISTENT) {
     }
 
+    virtual const char* get_op_type() const {
+      if (has_parent()) {
+        return "remove (trunc)";
+      }
+      return "remove";
+    }
+
+    virtual bool pre_object_map_update(uint8_t *new_state) {
+      if (has_parent()) {
+	m_object_state = OBJECT_EXISTS;
+      } else {
+	m_object_state = OBJECT_PENDING;
+      }
+      *new_state = m_object_state;
+      return true;
+    }
+
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
       if (has_parent()) {
@@ -242,21 +279,6 @@ namespace librbd {
       } else {
 	wr->remove();
       }
-    }
-
-    virtual const char* get_write_type() const {
-      if (has_parent()) {
-        return "remove (trunc)";
-      }
-      return "remove";
-    }
-    virtual void pre_object_map_update(uint8_t *new_state) {
-      if (has_parent()) {
-	m_object_state = OBJECT_EXISTS;
-      } else {
-	m_object_state = OBJECT_PENDING;
-      }
-      *new_state = m_object_state;
     }
 
     virtual bool post_object_map_update() {
@@ -281,17 +303,18 @@ namespace librbd {
                                true) {
     }
 
-  protected:
-    virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-      wr->remove();
-    }
-
-    virtual const char* get_write_type() const {
+    virtual const char* get_op_type() const {
       return "remove (trim)";
     }
 
-    virtual void pre_object_map_update(uint8_t *new_state) {
+    virtual bool pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_PENDING;
+      return true;
+    }
+
+  protected:
+    virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+      wr->remove();
     }
 
     virtual bool post_object_map_update() {
@@ -308,21 +331,24 @@ namespace librbd {
                                completion, true) {
     }
 
+    virtual const char* get_op_type() const {
+      return "truncate";
+    }
+
+    virtual bool pre_object_map_update(uint8_t *new_state) {
+      if (!m_object_exist && !has_parent())
+        *new_state = OBJECT_NONEXISTENT;
+      else
+	*new_state = OBJECT_EXISTS;
+
+      return true;
+    }
+
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
       wr->truncate(m_object_off);
     }
 
-    virtual const char* get_write_type() const {
-      return "truncate";
-    }
-
-    virtual void pre_object_map_update(uint8_t *new_state) {
-      if (!m_object_exist && !has_parent())
-        *new_state = OBJECT_NONEXISTENT;
-      else
-	*new_state = OBJECT_EXISTS;
-    }
     virtual void send_write();
   };
 
@@ -335,17 +361,18 @@ namespace librbd {
                                snapc, completion, true) {
     }
 
-  protected:
-    virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-      wr->zero(m_object_off, m_object_len);
-    }
-
-    virtual const char* get_write_type() const {
+    virtual const char* get_op_type() const {
       return "zero";
     }
 
-    virtual void pre_object_map_update(uint8_t *new_state) {
+    virtual bool pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_EXISTS;
+      return true;
+    }
+
+  protected:
+    virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+      wr->zero(m_object_off, m_object_len);
     }
   };
 
