@@ -2639,28 +2639,18 @@ int BlueStore::_do_read(
 
   // loop over overlays and data fragments.  overlays take precedence.
   bend = o->onode.block_map.end();
-  bp = o->onode.block_map.lower_bound(offset);
+  bp = o->onode.block_map.upper_bound(offset);
   if (bp != o->onode.block_map.begin()) {
     --bp;
   }
   oend = o->onode.overlay_map.end();
-  op = o->onode.overlay_map.lower_bound(offset);
+  op = o->onode.overlay_map.upper_bound(offset);
   if (op != o->onode.overlay_map.begin()) {
     --op;
   }
   while (length > 0) {
-    if (op != oend && op->first + op->second.length < offset) {
-      dout(20) << __func__ << " skip overlay " << op->first << " " << op->second
-	       << dendl;
-      ++op;
-      continue;
-    }
-    if (bp != bend && bp->first + bp->second.length <= offset) {
-      dout(30) << __func__ << " skip frag " << bp->first << " " << bp->second
-	       << dendl;
-      ++bp;
-      continue;
-    }
+    assert(op == oend || (op->first + op->second.length > offset));
+    assert(bp == bend || (bp->first + bp->second.length > offset));
 
     // overlay?
     if (op != oend && op->first <= offset) {
