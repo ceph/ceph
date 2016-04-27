@@ -2119,10 +2119,12 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     if (do_parent_mtime || linkunlink) {
       assert(mut->wrlocks.count(&pin->filelock));
+      assert(mut->wrlocks.count(&pin->nestlock));
       assert(cfollows == CEPH_NOSNAP);
       
-      // update stale fragstat?
+      // update stale fragstat/rstat?
       parent->resync_accounted_fragstat();
+      parent->resync_accounted_rstat();
 
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
@@ -2145,35 +2147,34 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       }
     }
 
-    
     // rstat
     if (!primary_dn) {
       // don't update parent this pass
-    } else if (!linkunlink && !(parent->inode->nestlock.can_wrlock(-1) &&
-			        parent->inode->versionlock.can_wrlock())) {
-      dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
-	       << ", marking dirty rstat on " << *cur << dendl;
+    } else if (!linkunlink && !(pin->nestlock.can_wrlock(-1) &&
+				pin->versionlock.can_wrlock())) {
+      dout(20) << " unwritable parent nestlock " << pin->nestlock
+	<< ", marking dirty rstat on " << *cur << dendl;
       cur->mark_dirty_rstat();
-   } else {
+    } else {
       // if we don't hold a wrlock reference on this nestlock, take one,
       // because we are about to write into the dirfrag fnode and that needs
       // to commit before the lock can cycle.
-     if (linkunlink) {
-       assert(parent->inode->nestlock.get_num_wrlocks() || mut->is_slave());
-     }
+      if (linkunlink) {
+	assert(pin->nestlock.get_num_wrlocks() || mut->is_slave());
+      }
 
-      if (mut->wrlocks.count(&parent->inode->nestlock) == 0) {
-	dout(10) << " taking wrlock on " << parent->inode->nestlock << " on " << *parent->inode << dendl;
-	mds->locker->wrlock_force(&parent->inode->nestlock, mut);
+      if (mut->wrlocks.count(&pin->nestlock) == 0) {
+	dout(10) << " taking wrlock on " << pin->nestlock << " on " << *pin << dendl;
+	mds->locker->wrlock_force(&pin->nestlock, mut);
       }
 
       // now we can project the inode rstat diff the dirfrag
-      SnapRealm *prealm = parent->inode->find_snaprealm();
-      
+      SnapRealm *prealm = pin->find_snaprealm();
+
       snapid_t follows = cfollows;
       if (follows == CEPH_NOSNAP)
 	follows = prealm->get_newest_seq();
-      
+
       snapid_t first = follows+1;
 
       // first, if the frag is stale, bring it back in sync.
@@ -2291,36 +2292,33 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     assert(parentdn);
 
     // rstat
-    if (primary_dn) {
+    dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
 
-      dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
+    // first, if the frag is stale, bring it back in sync.
+    parent->resync_accounted_rstat();
 
-      // first, if the frag is stale, bring it back in sync.
-      parent->resync_accounted_rstat();
+    if (g_conf->mds_snap_rstat) {
+      for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
+	   p != parent->dirty_old_rstat.end();
+	   ++p)
+	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first,
+				    p->first, pin, true);//false);
+    }
+    parent->dirty_old_rstat.clear();
+    project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
 
-      if (g_conf->mds_snap_rstat) {
-	for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
-	     p != parent->dirty_old_rstat.end();
-	     ++p)
-	  project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first,
-				      p->first, pin, true);//false);
-      }
-      parent->dirty_old_rstat.clear();
-      project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+    pf->accounted_rstat = pf->rstat;
 
-      pf->accounted_rstat = pf->rstat;
+    if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+      if (pi->rstat.rbytes != pf->rstat.rbytes) {
+	mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
+	  << parent->dirfrag() << ", inode has " << pi->rstat
+	  << ", dirfrag has " << pf->rstat << "\n";
 
-      if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
-	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	  mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
-	      << parent->dirfrag() << ", inode has " << pi->rstat
-	      << ", dirfrag has " << pf->rstat << "\n";
-	  
-	  // trust the dirfrag for now
-	  pi->rstat = pf->rstat;
+	// trust the dirfrag for now
+	pi->rstat = pf->rstat;
 
-	  assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
-	}
+	assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
       }
     }
 
