@@ -50,7 +50,8 @@ namespace librbd {
     int create_cg(librados::IoCtx *ioctx, const std::string &oid);
     int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
 		     std::string &image_id, int64_t pool_id);
-    int cg_to_removing(librados::IoCtx *ioctx, const std::string &oid);
+    int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid,
+	              std::string &image_id, int64_t pool_id);
     int cg_to_reverting_addition(librados::IoCtx *ioctx, const std::string &oid);
     int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
 	              std::string &image_id, int64_t pool_id);

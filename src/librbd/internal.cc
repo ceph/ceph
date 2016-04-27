@@ -1143,8 +1143,7 @@ err_remove_id:
 
     ldout(cct, 20) << "removing image " << image_name << " image id " << imctx->header_oid << dendl;
 
-    /*
-    r = cls_client::cg_to_removing(&cg_ioctx, cg_header_oid);
+    r = cls_client::cg_dirty_link(&cg_ioctx, cg_header_oid, imctx->id, image_ioctx.get_id());
 
     if (r < 0) {
       lderr(cct) << "couldn't put image into removing state: "
@@ -1159,13 +1158,12 @@ err_remove_id:
       return r;
     }
 
-    r = cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id);
+    r = cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id, image_ioctx.get_id());
     if (r < 0) {
       lderr(cct) << "couldn't remove image from cg"
 		 << cpp_strerror(-r) << dendl;
       return r;
     }
-    */
 
     return 0;
   }

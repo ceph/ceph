@@ -388,36 +388,21 @@ int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "cg_dirty_link");
 
   std::string image_id;
+  int64_t pool_id;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(image_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
-
-  bufferlist image_val_bl;
-  int r = read_key(hctx, image_key, &image_val_bl);
-  if ((r != -ENOENT) && (r < 0)) {
-    return r;
-  }
-
-  int64_t link_state;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = image_val_bl.begin();
-    ::decode(link_state, iter);
     ::decode(pool_id, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
+
   bufferlist statebl;
   int64_t new_state = LINK_DIRTY;
   ::encode(new_state, statebl);
-  ::encode(pool_id, statebl);
-  r = cls_cxx_map_set_val(hctx, image_key, &statebl);
+  int r = cls_cxx_map_set_val(hctx, image_key, &statebl);
   if (r < 0) {
     return r;
   }
@@ -476,13 +461,6 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   int r = cls_cxx_map_remove_key(hctx, image_key);
   if (r < 0) {
     CLS_ERR("error removing image from cg: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  bufferlist statebl;
-  ::encode(LINK_NORMAL, statebl);
-  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
-  if (r < 0) {
     return r;
   }
 
