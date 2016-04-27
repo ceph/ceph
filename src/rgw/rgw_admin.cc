@@ -101,7 +101,7 @@ void _usage()
   cout << "  zonegroup default          set default zone group\n";
   cout << "  zonegroup delete           delete a zone group info\n";
   cout << "  zonegroup get              show zone group info\n";
-  cout << "  zonegroup modify           set/clear zonegroup master status\n";
+  cout << "  zonegroup modify           modify an existing zonegroup\n";
   cout << "  zonegroup set              set zone group info (requires infile)\n";
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
@@ -110,7 +110,7 @@ void _usage()
   cout << "  zone create                create a new zone\n";
   cout << "  zone delete                delete a zone\n";
   cout << "  zone get                   show zone cluster params\n";
-  cout << "  zone modify                set/clear zone master status\n";
+  cout << "  zone modify                modify an existing zone\n";
   cout << "  zone set                   set zone cluster params (requires infile)\n";
   cout << "  zone list                  list all zones set on this cluster\n";
   cout << "  pool add                   add an existing pool for data placement\n";
