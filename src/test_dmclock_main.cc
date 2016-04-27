@@ -54,8 +54,9 @@ int main(int argc, char* argv[]) {
     const double client_limit = 60.0;
     const double client_weight = 1.0;
 
-    test::dmc::ClientInfo client_info =
-        { client_weight, client_reservation, client_limit };
+    test::dmc::ClientInfo client_info(client_reservation,
+                                      client_weight,
+                                      client_limit);
 
     auto client_info_f = [=](const ClientId& c) -> test::dmc::ClientInfo {
         return client_info;

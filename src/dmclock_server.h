@@ -62,7 +62,8 @@ namespace crimson {
       const double weight_inv;
       const double limit_inv;
 
-      ClientInfo(double _weight, double _reservation, double _limit) :
+      // order parameters -- min, "normal", max
+      ClientInfo(double _reservation, double _weight, double _limit) :
 	reservation(_reservation),
 	weight(_weight),
 	limit(_limit),

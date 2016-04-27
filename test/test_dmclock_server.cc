@@ -43,8 +43,11 @@ namespace crimson {
       ClientId client1 = 17;
       ClientId client2 = 18;
 
-      dmc::ClientInfo ci1(0.0, 0.0, 0.0);
-      dmc::ClientInfo ci2(0.0, 0.0, 1.0);
+      double reservation = 0.0;
+      double weight = 0.0;
+
+      dmc::ClientInfo ci1(reservation, weight, 0.0);
+      dmc::ClientInfo ci2(reservation, weight, 1.0);
 
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
 	if (client1 == c) return ci1;
@@ -74,8 +77,9 @@ namespace crimson {
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
       int client = 17;
+      double reservation = 100.0;
 
-      dmc::ClientInfo ci(1.0, 100.0, 0.0);
+      dmc::ClientInfo ci(reservation, 1.0, 0.0);
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
       auto server_ready_f = [] () -> bool { return true; };
       auto submit_req_f = [] (const ClientId& c,
@@ -164,7 +168,7 @@ namespace crimson {
       using Guard = std::lock_guard<decltype(times_mtx)>;
 
       // reservation every second
-      dmc::ClientInfo ci(0.0, 1.0, 0.0);
+      dmc::ClientInfo ci(1.0, 0.0, 0.0);
       Queue pq;
 
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
@@ -210,9 +214,8 @@ namespace crimson {
       ClientId client1 = 17;
       ClientId client2 = 98;
 
-      // reservation every second
-      dmc::ClientInfo info1(1.0, 0.0, 0.0);
-      dmc::ClientInfo info2(2.0, 0.0, 0.0);
+      dmc::ClientInfo info1(0.0, 1.0, 0.0);
+      dmc::ClientInfo info2(0.0, 2.0, 0.0);
 
       QueueRef pq;
 
@@ -264,9 +267,8 @@ namespace crimson {
       ClientId client1 = 52;
       ClientId client2 = 8;
 
-      // reservation every second
-      dmc::ClientInfo info1(0.0, 2.0, 0.0);
-      dmc::ClientInfo info2(0.0, 1.0, 0.0);
+      dmc::ClientInfo info1(2.0, 0.0, 0.0);
+      dmc::ClientInfo info2(1.0, 0.0, 0.0);
 
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
 	if (client1 == c) return info1;
