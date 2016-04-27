@@ -761,6 +761,13 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
     return r;
   }
 
+  if (s->aws4_auth_needs_complete) {
+      int ret_auth = do_aws4_auth_completion();
+      if (ret_auth < 0) {
+        return ret_auth;
+      }
+  }
+
   bufferlist bl;
   bl.append(data, len);
 
@@ -3576,6 +3583,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       case RGW_OP_SET_BUCKET_VERSIONING:
       case RGW_OP_DELETE_MULTI_OBJ:
       case RGW_OP_ADMIN_SET_METADATA:
+      case RGW_OP_SET_BUCKET_WEBSITE:
         break;
       default:
         dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
