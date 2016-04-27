@@ -1848,7 +1848,7 @@ class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, 
   string marker_oid;
   rgw_bucket_shard_inc_sync_marker sync_marker;
 
-  map<rgw_obj_key, pair<RGWModifyOp, string> > key_to_marker;
+  map<rgw_obj_key, string> key_to_marker;
   map<string, rgw_obj_key> marker_to_key;
 
   void handle_finish(const string& marker) {
@@ -1891,23 +1891,18 @@ public:
    * Also, we should make sure that we don't run concurrent operations on the same key with
    * different ops.
    */
-  bool index_key_to_marker(const rgw_obj_key& key, RGWModifyOp op, const string& marker) {
+  bool index_key_to_marker(const rgw_obj_key& key, const string& marker) {
     if (key_to_marker.find(key) != key_to_marker.end()) {
       set_need_retry(key);
       return false;
     }
-    key_to_marker[key] = make_pair<>(op, marker);
+    key_to_marker[key] = marker;
     marker_to_key[marker] = key;
     return true;
   }
 
-  bool can_do_op(const rgw_obj_key& key, RGWModifyOp op) {
-    auto i = key_to_marker.find(key);
-    if (i == key_to_marker.end()) {
-      return true;
-    }
-
-    return (i->second.first == op);
+  bool can_do_op(const rgw_obj_key& key) {
+    return (key_to_marker.find(key) == key_to_marker.end());
   }
 };
 
@@ -2298,7 +2293,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         }
         ldout(sync_env->cct, 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
         updated_status = false;
-        while (!marker_tracker->can_do_op(key, entry->op)) {
+        while (!marker_tracker->can_do_op(key)) {
           if (!updated_status) {
             set_status() << "can't do op, conflicting inflight operation";
             updated_status = true;
@@ -2312,7 +2307,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             }
           }
         }
-        if (!marker_tracker->index_key_to_marker(key, entry->op, cur_id)) {
+        if (!marker_tracker->index_key_to_marker(key, cur_id)) {
           set_status() << "can't do op, sync already in progress for object";
           ldout(sync_env->cct, 20) << __func__ << ": skipping sync of entry: " << cur_id << ":" << key << " sync already in progress for object" << dendl;
           marker_tracker->try_update_high_marker(cur_id, 0, entry->timestamp);
