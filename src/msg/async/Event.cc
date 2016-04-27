@@ -149,9 +149,9 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
   int r = 0;
   Mutex::Locker l(file_lock);
   if (fd >= nevent) {
-    int new_size = nevent << 2;
+    int new_size = nevent << 1;
     while (fd > new_size)
-      new_size <<= 2;
+      new_size <<= 1;
     ldout(cct, 10) << __func__ << " event count exceed " << nevent << ", expand to " << new_size << dendl;
     r = driver->resize_events(new_size);
     if (r < 0) {
