@@ -1103,11 +1103,11 @@ err_remove_id:
     if (r < 0) {
       lderr(cct) << "error adding cg reference to image: "
 		 << cpp_strerror(-r) << dendl;
-      cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id);
+      cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id, image_ioctx.get_id());
       // Ignore errors in the clean up procedure.
       return r;
     }
-    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid, imctx->id);
+    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid, imctx->id, image_ioctx.get_id());
     return r;
   }
 

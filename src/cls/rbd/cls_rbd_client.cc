@@ -187,10 +187,11 @@ namespace librbd {
     }
 
     int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
-		        std::string &image_id)
+		        std::string &image_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(image_id, bl);
+      ::encode(pool_id, bl);
 
       return ioctx->exec(oid, "rbd", "cg_remove_image", bl, bl2);
     }
@@ -203,10 +204,11 @@ namespace librbd {
     }
 
     int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
-		      std::string &image_id)
+		      std::string &image_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(image_id, bl);
+      ::encode(pool_id, bl);
 
       return ioctx->exec(oid, "rbd", "cg_to_default", bl, bl2);
     }

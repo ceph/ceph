@@ -36,6 +36,7 @@
 #include <map>
 #include <sstream>
 #include <vector>
+#include <boost/lexical_cast.hpp>
 
 #include "common/bit_vector.hpp"
 #include "common/errno.h"
@@ -46,7 +47,6 @@
 
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_types.h"
-
 
 /*
  * Object keys:
@@ -370,12 +370,11 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   map<string, bufferlist> existing_refs;
 
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
 
   bufferlist image_val_bl;
   int64_t link_state = LINK_DIRTY;
   ::encode(link_state, image_val_bl);
-  ::encode(pool_id, image_val_bl);
   int r = cls_cxx_map_set_val(hctx, image_key, &image_val_bl);
   if (r < 0) {
     return r;
@@ -431,43 +430,26 @@ int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "cg_to_default");
 
   std::string image_id;
+  int64_t pool_id;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(image_id, iter);
+    ::decode(pool_id, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
-  CLS_LOG(20, "parsed image id %s", image_id.c_str());
-
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
-
-  bufferlist image_val_bl;
-  int r = cls_cxx_map_get_val(hctx, image_key, &image_val_bl);
-  if (r < 0) {
-    if (r != -ENOENT) {
-      CLS_ERR("error reading omap key %s: %s", image_key.c_str(), cpp_strerror(r).c_str());
-    }
-    return r;
-  }
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
 
   int64_t link_state;
-  int64_t pool_id;
 
-  try {
-    bufferlist::iterator iter = image_val_bl.begin();
-    ::decode(link_state, iter);
-    CLS_LOG(20, "parsed link_state %d", (int)link_state);
-    ::decode(pool_id, iter);
-    CLS_LOG(20, "parsed pool id %d", (int)pool_id);
-  } catch (const buffer::error &err) {
-    CLS_LOG(20, "Failed to parse link state");
-    return -EINVAL;
+  int r = read_key(hctx, image_key, &link_state);
+  if (r < 0) {
+    return r;
   }
 
   bufferlist statebl;
   int64_t new_state = LINK_NORMAL;
   ::encode(new_state, statebl);
-  ::encode(pool_id, statebl);
   r = cls_cxx_map_set_val(hctx, image_key, &statebl);
   if (r < 0) {
     return r;
@@ -480,14 +462,16 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_remove_image");
   std::string image_id;
+  int64_t pool_id;
   try {
     bufferlist::iterator iter = in->begin();
     ::decode(image_id, iter);
+    ::decode(pool_id, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
 
   int r = cls_cxx_map_remove_key(hctx, image_key);
   if (r < 0) {
