@@ -35,7 +35,7 @@ namespace crimson {
     }
 
 
-    TEST(dmclock_server, bad_tag) {
+    TEST(dmclock_server, bad_tag_deathtest) {
       using ClientId = int;
       using Queue = dmc::PriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
@@ -311,5 +311,123 @@ namespace crimson {
 	"one-third of request should have come from second client";
     }
 
+
+    TEST(dmclock_server_pull, pull_none) {
+      using ClientId = int;
+      using Queue = dmc::PriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      dmc::ClientInfo info(1.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info;
+      };
+
+      QueueRef pq(new Queue(client_info_f, false));
+
+      Request req;
+      ReqParams req_params(1,1);
+
+      auto now = dmc::get_time();
+
+      Queue::PullReq pr = pq->pull_request(now + 100);
+
+      EXPECT_EQ(Queue::NextReqType::none, pr.type);
+    }
+
+
+    TEST(dmclock_server_pull, pull_future) {
+      using ClientId = int;
+      using Queue = dmc::PriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 52;
+      ClientId client2 = 8;
+
+      dmc::ClientInfo info(1.0, 0.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info;
+      };
+
+      QueueRef pq(new Queue(client_info_f, false));
+
+      Request req;
+      ReqParams req_params(1,1);
+
+      // make sure all times are well before now
+      auto now = dmc::get_time();
+
+      pq->add_request(req, client1, req_params, now + 100);
+      Queue::PullReq pr = pq->pull_request(now);
+
+      EXPECT_EQ(Queue::NextReqType::future, pr.type);
+
+      Time when = boost::get<Time>(pr.data);
+      EXPECT_EQ(now + 100, when);
+    }
+
+
+    TEST(dmclock_server_pull, pull_future_limit_break_weight) {
+      using ClientId = int;
+      using Queue = dmc::PriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 52;
+      ClientId client2 = 8;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info;
+      };
+
+      QueueRef pq(new Queue(client_info_f, true));
+
+      Request req;
+      ReqParams req_params(1,1);
+
+      // make sure all times are well before now
+      auto now = dmc::get_time();
+
+      pq->add_request(req, client1, req_params, now + 100);
+      Queue::PullReq pr = pq->pull_request(now);
+
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+      EXPECT_EQ(client1, retn.client);
+    }
+
+    TEST(dmclock_server_pull, pull_future_limit_break_reservation) {
+      using ClientId = int;
+      using Queue = dmc::PriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 52;
+      ClientId client2 = 8;
+
+      dmc::ClientInfo info(1.0, 0.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info;
+      };
+
+      QueueRef pq(new Queue(client_info_f, true));
+
+      Request req;
+      ReqParams req_params(1,1);
+
+      // make sure all times are well before now
+      auto now = dmc::get_time();
+
+      pq->add_request(req, client1, req_params, now + 100);
+      Queue::PullReq pr = pq->pull_request(now);
+
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+      EXPECT_EQ(client1, retn.client);
+    }
   } // namespace dmclock
 } // namespace crimson
