@@ -5853,7 +5853,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     err = newcrush.adjust_subtree_weightf(g_ceph_context, id, w);
-    if (err < 0)
+    if (err <= 0)
       goto reply;
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
