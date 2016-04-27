@@ -1157,6 +1157,46 @@ fi
 %{_unitdir}/ceph-rbd-mirror.target
 %endif
 
+%post -n rbd-mirror
+%if 0%{?suse_version}
+if [ $1 -ge 1 ] ; then
+  /usr/bin/systemctl preset ceph-rbd-mirror@\*.service ceph-rbd-mirror.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
+%endif
+/usr/bin/systemctl start ceph-rbd-mirror.target >/dev/null 2>&1 || :
+
+%preun -n rbd-mirror
+%if 0%{?suse_version}
+%service_del_preun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
+%endif
+
+%postun -n rbd-mirror
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-rbd-mirror@\*.service > /dev/null 2>&1 || :
+  fi
+fi
+
 #################################################################################
 %files -n rbd-nbd
 %defattr(-,root,root,-)
