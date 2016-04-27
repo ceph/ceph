@@ -898,6 +898,7 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph.target
 %endif
+/usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
 
 %preun base
 %if 0%{?suse_version}
@@ -1029,6 +1030,7 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-mds@\*.service ceph-mds.target
 %endif
+/usr/bin/systemctl start ceph-mds.target >/dev/null 2>&1 || :
 
 %preun mds
 %if 0%{?suse_version}
@@ -1083,6 +1085,7 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
 %endif
+/usr/bin/systemctl start ceph-mon.target >/dev/null 2>&1 || :
 
 %preun mon
 %if 0%{?suse_version}
@@ -1174,6 +1177,7 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-radosgw@\*.service ceph-radosgw.target
 %endif
+/usr/bin/systemctl start ceph-radosgw.target >/dev/null 2>&1 || :
 
 %preun radosgw
 %if 0%{?suse_version}
@@ -1238,6 +1242,7 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
 %endif
+/usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
 
 %preun osd
 %if 0%{?suse_version}
