@@ -736,7 +736,14 @@ Context *RefreshRequest<I>::send_flush_aio() {
       klass, &klass::handle_flush_aio>(this);
     m_image_ctx.flush(ctx);
     return nullptr;
+  } else if (m_error_result < 0) {
+    // propagate saved error back to caller
+    Context *ctx = create_context_callback<
+      RefreshRequest<I>, &RefreshRequest<I>::handle_error>(this);
+    m_image_ctx.op_work_queue->queue(ctx, 0);
+    return nullptr;
   }
+
   return m_on_finish;
 }
 
@@ -750,8 +757,16 @@ Context *RefreshRequest<I>::handle_flush_aio(int *result) {
                << dendl;
   }
 
+  return handle_error(result);
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_error(int *result) {
   if (m_error_result < 0) {
     *result = m_error_result;
+
+    CephContext *cct = m_image_ctx.cct;
+    ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
   }
   return m_on_finish;
 }
