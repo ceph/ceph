@@ -13,7 +13,7 @@
  * would help with is quickly finding the mininum proportion/prioity
  * when an idle client became active
  */
-// #define USE_PROP_HEAP 
+// #define USE_PROP_HEAP
 
 #pragma once
 
@@ -345,7 +345,7 @@ namespace crimson {
 	boost::variant<Retn,Time> data;
       };
 
-      
+
       // this is returned from next_req to tell the caller the situation
       struct NextReq {
 	NextReqType type;
@@ -612,14 +612,14 @@ namespace crimson {
 		    get_time());
       }
 
-      
+
       void add_request(RequestRef&& request,
 		       const C& client_id,
 		       const ReqParams& req_params) {
 	add_request(request, req_params, client_id, get_time());
       }
 
-      
+
       void add_request(const R& request,
 		       const C& client_id,
 		       const ReqParams& req_params,
@@ -719,12 +719,17 @@ namespace crimson {
 
 
       PullReq pull_request() {
+	return pull_request(get_time());
+      }
+
+
+      PullReq pull_request(Time now) {
 	assert(Mechanism::pull == mechanism);
 
 	PullReq result;
 	DataGuard g(data_mtx);
 
-	NextReq next = next_request();
+	NextReq next = next_request(now);
 	result.type = next.type;
 	switch(next.type) {
 	case NextReqType::none:
@@ -927,7 +932,7 @@ namespace crimson {
 	return next_request(get_time());
       }
 
-      
+
       // data_mtx should be held when called
       NextReq next_request(Time now) {
 	NextReq result;
