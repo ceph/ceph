@@ -436,6 +436,8 @@ namespace buffer CEPH_BUFFER_API {
     bool is_page_aligned() const;
     bool is_n_align_sized(unsigned align) const;
     bool is_n_page_sized() const;
+    bool is_aligned_size_and_memory(unsigned align_size,
+				    unsigned align_memory) const;
 
     bool is_zero() const;
 
