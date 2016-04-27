@@ -180,6 +180,26 @@ private:
     return false;
   }
 
+  bool CopyupRequest::is_nop()
+  {
+    if (!m_copyup_data.is_zero()) {
+      return false;
+    }
+
+    for (const AioObjectRequest *req : m_pending_requests) {
+      const AioObjectWrite *wreq = dynamic_cast<const AioObjectWrite *>(req);
+      if (!wreq) {
+	return false;
+      }
+
+      if (!wreq->all_zero()) {
+	return false;
+      }
+    }
+
+    return true;
+  }
+
   void CopyupRequest::send()
   {
     m_state = STATE_READ_FROM_PARENT;
@@ -217,6 +237,10 @@ private:
       ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
       remove_from_list();
       if (r >= 0 || r == -ENOENT) {
+	if (is_nop()) {
+	  ldout(cct, 20) << "nop, skipping" << dendl;
+	  return true;
+	}
         return send_object_map();
       }
       break;
@@ -264,13 +288,10 @@ private:
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map != nullptr) {
-        bool copy_on_read = m_pending_requests.empty();
         assert(m_ictx->exclusive_lock->is_lock_owner());
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (copy_on_read &&
-            (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
-          // CoW already updates the HEAD object map
+        if ((*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
           m_snap_ids.push_back(CEPH_NOSNAP);
         }
         if (!m_ictx->snaps.empty()) {
