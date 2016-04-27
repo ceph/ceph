@@ -1422,6 +1422,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return true;
   }
 
+  bool buffer::list::is_aligned_size_and_memory(unsigned align_size,
+						  unsigned align_memory) const
+  {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 ++it) {
+      if (!it->is_aligned(align_memory) || !it->is_n_align_sized(align_size))
+	return false;
+    }
+    return true;
+  }
+
   bool buffer::list::is_zero() const {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
