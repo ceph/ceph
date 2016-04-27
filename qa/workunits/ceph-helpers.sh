@@ -125,15 +125,10 @@ function teardown() {
 
 function __teardown_btrfs() {
     local btrfs_base_dir=$1
-
-    btrfs_dirs=`ls -l $btrfs_base_dir | egrep '^d' | awk '{print $9}'`
-    current_path=`pwd`
-    # extracting the current existing subvolumes
-    for subvolume in $(cd $btrfs_base_dir; btrfs subvolume list . -t |egrep '^[0-9]' | awk '{print $4}' |grep "$btrfs_base_dir/$btrfs_dir"); do
-       # Compute the relative path by removing the local path
-       # Like "erwan/chroot/ceph/src/testdir/test-7202/dev/osd1/snap_439" while we want "testdir/test-7202/dev/osd1/snap_439"
-       local_subvolume=$(echo $subvolume | sed -e "s|.*$current_path/||"g)
-       btrfs subvolume delete $local_subvolume
+    local btrfs_root=$(df -P . | tail -1 | awk '{print $NF}')
+    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list . -t | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
+    for subvolume in $btrfs_dirs; do
+       sudo btrfs subvolume delete $btrfs_root/$subvolume
     done
 }
 
