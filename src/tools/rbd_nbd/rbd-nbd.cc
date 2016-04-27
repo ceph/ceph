@@ -186,10 +186,9 @@ private:
 
     if (ret < 0) {
       ctx->reply.error = htonl(-ret);
-    } else if ((ctx->command == NBD_CMD_WRITE || ctx->command == NBD_CMD_READ)
-	       && ret != static_cast<int>(ctx->request.len)) {
+    } else if ((ctx->command == NBD_CMD_WRITE) && ret != 0) {
       derr << __func__ << ": " << *ctx << ": unexpected return value: " << ret
-	   << " (" << ctx->request.len << " expected)" << dendl;
+	   << dendl;
       ctx->reply.error = htonl(EIO);
     } else {
       ctx->reply.error = htonl(0);
