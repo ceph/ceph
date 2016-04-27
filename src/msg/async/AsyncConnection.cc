@@ -646,7 +646,7 @@ void AsyncConnection::process()
 
           // verify header crc
           if (msgr->crcflags & MSG_CRC_HEADER && header_crc != header.crc) {
-            ldout(async_msgr->cct,0) << __func__ << " reader got bad header crc "
+            ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
                                      << header_crc << " != " << header.crc << dendl;
             goto fail;
           }
