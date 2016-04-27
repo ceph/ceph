@@ -69,8 +69,7 @@ cls_method_handle_t h_create;
 cls_method_handle_t h_create_cg;
 cls_method_handle_t h_cg_add_image;
 cls_method_handle_t h_cg_remove_image;
-cls_method_handle_t h_cg_to_removing;
-cls_method_handle_t h_cg_to_reverting_addition;
+cls_method_handle_t h_cg_dirty_link;
 cls_method_handle_t h_cg_to_default;
 cls_method_handle_t h_image_add_cg_ref;
 cls_method_handle_t h_image_remove_cg_ref;
@@ -276,11 +275,27 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  map<string, bufferlist> existing_refs;
+  bufferlist existing_refbl;
 
-  int r = cls_cxx_map_get_vals(hctx, "", RBD_CG_REF_KEY, RBD_MAX_KEYS_READ, &existing_refs);
-  if (r > 0) {
-    return -ETOOMANYREFS;
+  int r = read_key(hctx, RBD_CG_REF_KEY, &existing_refbl);
+  if (r != -ENOENT) { // No entry means this image is not a member of any cg. So, we can use it.
+    if (r < 0) {
+      return r;
+    }
+
+    std::string old_cg_id;
+    int64_t old_pool_id;
+    try {
+      bufferlist::iterator iter = in->begin();
+      ::decode(old_cg_id, iter);
+      ::decode(old_pool_id, iter);
+    } catch (const buffer::error &err) {
+      return -EINVAL;
+    }
+
+    if ((old_cg_id != cg_id) || (old_pool_id != pool_id)) {
+      return -EEXIST;
+    }
   }
 
   bufferlist refbl;
@@ -343,15 +358,6 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_add_image");
 
-  int cur_state = CG_DEFAULT;
-  int r = read_key(hctx, CG_STATE, &cur_state);
-  if (r < 0 && r != -ENOENT) { // missing state key is default state
-    return r;
-  }
-  if (cur_state != CG_DEFAULT) {
-    return -EALREADY;
-  }
-
   std::string image_id;
   int64_t pool_id;
   try {
@@ -366,29 +372,11 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
 
-  r = cls_cxx_map_get_vals(hctx, "", image_key, RBD_MAX_KEYS_READ, &existing_refs);
-  if (r > 0) {
-    return -EEXIST;
-  }
-
-  bufferlist pool_id_bl;
-  ::encode(pool_id, pool_id_bl);
-  r = cls_cxx_map_set_val(hctx, image_key, &pool_id_bl);
-  if (r < 0) {
-    return r;
-  }
-
-  bufferlist image_to_be_addedbl;
-  ::encode(image_key, image_to_be_addedbl);
-  r = cls_cxx_map_set_val(hctx, CG_IMAGE_TO_BE_ADDED, &image_to_be_addedbl);
-  if (r < 0) {
-    return r;
-  }
-
-  bufferlist statebl;
-  int next_state = CG_ADDING_IMAGE; // in order to be sure what type is serialized.
-  ::encode(next_state, statebl);
-  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  bufferlist image_val_bl;
+  int64_t link_state = LINK_DIRTY;
+  ::encode(link_state, image_val_bl);
+  ::encode(pool_id, image_val_bl);
+  int r = cls_cxx_map_set_val(hctx, image_key, &image_val_bl);
   if (r < 0) {
     return r;
   }
@@ -396,36 +384,41 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-int cg_to_removing(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(20, "cg_to_removing");
+  CLS_LOG(20, "cg_dirty_link");
 
-  int cur_state = CG_DEFAULT;
-  int r = read_key(hctx, CG_STATE, &cur_state);
-  if (r < 0 && r != -ENOENT) { // missing state key is default state
+  std::string image_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
+
+  bufferlist image_val_bl;
+  int r = read_key(hctx, image_key, &image_val_bl);
+  if ((r != -ENOENT) && (r < 0)) {
     return r;
   }
-  if (cur_state != CG_DEFAULT) {
-    return -EALREADY;
+
+  int64_t link_state;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = image_val_bl.begin();
+    ::decode(link_state, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
   }
 
   bufferlist statebl;
-  ::encode(CG_REMOVING_IMAGE, statebl);
-  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int cg_to_reverting_addition(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "cg_to_reverting_addition");
-
-  bufferlist statebl;
-  ::encode(CG_REVERTING_ADDITION, statebl);
-  int r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  int64_t new_state = LINK_DIRTY;
+  ::encode(new_state, statebl);
+  ::encode(pool_id, statebl);
+  r = cls_cxx_map_set_val(hctx, image_key, &statebl);
   if (r < 0) {
     return r;
   }
@@ -437,14 +430,45 @@ int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_to_default");
 
-  int r = cls_cxx_map_remove_key(hctx, CG_IMAGE_TO_BE_ADDED);
+  std::string image_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+  CLS_LOG(20, "parsed image id %s", image_id.c_str());
+
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
+
+  bufferlist image_val_bl;
+  int r = cls_cxx_map_get_val(hctx, image_key, &image_val_bl);
   if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading omap key %s: %s", image_key.c_str(), cpp_strerror(r).c_str());
+    }
     return r;
   }
 
+  int64_t link_state;
+  int64_t pool_id;
+
+  try {
+    bufferlist::iterator iter = image_val_bl.begin();
+    ::decode(link_state, iter);
+    CLS_LOG(20, "parsed link_state %d", (int)link_state);
+    ::decode(pool_id, iter);
+    CLS_LOG(20, "parsed pool id %d", (int)pool_id);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "Failed to parse link state");
+    return -EINVAL;
+  }
+
   bufferlist statebl;
-  ::encode(CG_DEFAULT, statebl);
-  r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
+  int64_t new_state = LINK_NORMAL;
+  ::encode(new_state, statebl);
+  ::encode(pool_id, statebl);
+  r = cls_cxx_map_set_val(hctx, image_key, &statebl);
   if (r < 0) {
     return r;
   }
@@ -463,8 +487,6 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  set<string> existing_refs;
-
   string image_key = RBD_IMAGE_KEY_PREFIX + image_id;
 
   int r = cls_cxx_map_remove_key(hctx, image_key);
@@ -474,7 +496,7 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   bufferlist statebl;
-  ::encode(CG_DEFAULT, statebl);
+  ::encode(LINK_NORMAL, statebl);
   r = cls_cxx_map_set_val(hctx, CG_STATE, &statebl);
   if (r < 0) {
     return r;
@@ -4008,12 +4030,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "cg_remove_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_remove_image, &h_cg_remove_image);
-  cls_register_cxx_method(h_class, "cg_to_removing",
+  cls_register_cxx_method(h_class, "cg_dirty_link",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_to_removing, &h_cg_to_removing);
-  cls_register_cxx_method(h_class, "cg_to_reverting_addition",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_to_reverting_addition, &h_cg_to_reverting_addition);
+			  cg_dirty_link, &h_cg_dirty_link);
   cls_register_cxx_method(h_class, "cg_to_default",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_to_default, &h_cg_to_default);

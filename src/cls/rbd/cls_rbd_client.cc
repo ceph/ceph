@@ -195,25 +195,20 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "cg_remove_image", bl, bl2);
     }
 
-    int cg_to_removing(librados::IoCtx *ioctx, const std::string &oid)
+    int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid)
     {
       bufferlist bl, bl2;
 
-      return ioctx->exec(oid, "rbd", "cg_to_removing", bl, bl2);
+      return ioctx->exec(oid, "rbd", "cg_dirty_link", bl, bl2);
     }
 
-    int cg_to_default(librados::IoCtx *ioctx, const std::string &oid)
+    int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
+		      std::string &image_id)
     {
       bufferlist bl, bl2;
+      ::encode(image_id, bl);
 
       return ioctx->exec(oid, "rbd", "cg_to_default", bl, bl2);
-    }
-
-    int cg_to_reverting_addition(librados::IoCtx *ioctx, const std::string &oid)
-    {
-      bufferlist bl, bl2;
-
-      return ioctx->exec(oid, "rbd", "cg_to_reverting_addition", bl, bl2);
     }
 
     int create_image(librados::IoCtx *ioctx, const std::string &oid,

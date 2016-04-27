@@ -127,11 +127,6 @@ int execute_add(const po::variables_map &vm) {
     return r;
   }
 
-  std::cerr << "Received pool name: " << pool_name << std::endl;
-  std::cerr << "Received cg name: " << cg_name << std::endl;
-  std::cerr << "Received image pool name: " << image_pool_name << std::endl;
-  std::cerr << "Received image name: " << image_name << std::endl;
-
   librados::Rados rados;
 
   librados::IoCtx cg_io_ctx;

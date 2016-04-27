@@ -1103,12 +1103,11 @@ err_remove_id:
     if (r < 0) {
       lderr(cct) << "error adding cg reference to image: "
 		 << cpp_strerror(-r) << dendl;
-      cls_client::cg_to_reverting_addition(&cg_ioctx, cg_header_oid);
       cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id);
       // Ignore errors in the clean up procedure.
       return r;
     }
-    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid);
+    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid, imctx->id);
     return r;
   }
 
@@ -1144,6 +1143,7 @@ err_remove_id:
 
     ldout(cct, 20) << "removing image " << image_name << " image id " << imctx->header_oid << dendl;
 
+    /*
     r = cls_client::cg_to_removing(&cg_ioctx, cg_header_oid);
 
     if (r < 0) {
@@ -1165,6 +1165,7 @@ err_remove_id:
 		 << cpp_strerror(-r) << dendl;
       return r;
     }
+    */
 
     return 0;
   }

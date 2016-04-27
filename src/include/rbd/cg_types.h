@@ -15,11 +15,9 @@
 #ifndef CEPH_CG_TYPES_H
 #define CEPH_CG_TYPES_H
 
-enum cg_state {
-	CG_DEFAULT,
-	CG_ADDING_IMAGE,
-	CG_REMOVING_IMAGE,
-	CG_REVERTING_ADDITION
+enum image_link_state {
+	LINK_NORMAL,
+	LINK_DIRTY
 };
 
 #define CG_SNAP_SEQ "snap_seq"
