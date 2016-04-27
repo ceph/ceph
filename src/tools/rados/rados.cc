@@ -1321,7 +1321,6 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
     f.close_section();
   }
   f.close_section();
-  f.close_section();
 }
 
 static void dump_inconsistent(const inconsistent_snapset_t& inc,
@@ -1349,7 +1348,6 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
     }
     f.close_section();
   }
-  f.close_section();
 }
 
 // dispatch the call by type
@@ -1425,6 +1423,7 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     for (auto& inc : items) {
       formatter.open_object_section("inconsistent");
       dump_inconsistent(inc, formatter);
+      formatter.close_section();
     }
     if (items.size() < max_item_num) {
       formatter.close_section();
