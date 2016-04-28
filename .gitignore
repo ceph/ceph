@@ -2,3 +2,5 @@
 *.dSYM
 *.o
 build
+build-debug
+build-release
