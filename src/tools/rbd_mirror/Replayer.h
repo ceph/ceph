@@ -42,6 +42,9 @@ public:
   void run();
 
   void print_status(Formatter *f, stringstream *ss);
+  void start();
+  void stop();
+  void restart();
   void flush();
 
 private:
@@ -60,6 +63,7 @@ private:
   Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;
+  bool m_manual_stop = false;
 
   peer_t m_peer;
   std::vector<const char*> m_args;
