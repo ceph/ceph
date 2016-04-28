@@ -231,10 +231,10 @@ bool AioImageRequestWQ::is_lock_request_needed() const {
           (m_require_lock_on_read && m_queued_reads.read() > 0));
 }
 
-void AioImageRequestWQ::block_writes() {
+int AioImageRequestWQ::block_writes() {
   C_SaferCond cond_ctx;
   block_writes(&cond_ctx);
-  cond_ctx.wait();
+  return cond_ctx.wait();
 }
 
 void AioImageRequestWQ::block_writes(Context *on_blocked) {
