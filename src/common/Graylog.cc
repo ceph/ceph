@@ -24,7 +24,7 @@ Graylog::Graylog(const SubsystemMap * const s, std::string logger)
       m_log_dst_valid(false),
       m_hostname(""),
       m_fsid(""),
-      m_logger(logger),
+      m_logger(std::move(logger)),
       m_ostream_compressed(std::stringstream::in |
                            std::stringstream::out |
                            std::stringstream::binary)
@@ -38,7 +38,7 @@ Graylog::Graylog(std::string logger)
       m_log_dst_valid(false),
       m_hostname(""),
       m_fsid(""),
-      m_logger(logger),
+      m_logger(std::move(logger)),
       m_ostream_compressed(std::stringstream::in |
                            std::stringstream::out |
                            std::stringstream::binary)
