@@ -394,6 +394,10 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
   {
     Mutex::Locker locker(m_lock);
     m_bootstrap_request = nullptr;
+    if (m_local_image_ctx) {
+      m_local_image_id = m_local_image_ctx->id;
+      m_local_image_name = m_local_image_ctx->name;
+    }
   }
 
   if (r == -EREMOTEIO) {
