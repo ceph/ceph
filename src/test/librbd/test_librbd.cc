@@ -1266,7 +1266,7 @@ void aio_write_test_data(librbd::Image& image, const char *test_data,
   comp->wait_for_complete();
   int r = comp->get_return_value();
   printf("return value is: %d\n", r);
-  ASSERT_TRUE(r >= 0);
+  ASSERT_EQ(0, r);
   printf("finished write\n");
   comp->release();
   *passed = true;
@@ -1278,7 +1278,7 @@ void aio_discard_test_data(librbd::Image& image, off_t off, size_t len, bool *pa
   image.aio_discard(off, len, comp);
   comp->wait_for_complete();
   int r = comp->get_return_value();
-  ASSERT_TRUE(r >= 0);
+  ASSERT_EQ(0, r);
   comp->release();
   *passed = true;
 }
