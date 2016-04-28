@@ -678,26 +678,30 @@ struct RGWUploadPartInfo {
   string etag;
   ceph::real_time modified;
   RGWObjManifest manifest;
+  RGWCompressionInfo cs_info;
 
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     ::encode(num, bl);
     ::encode(size, bl);
     ::encode(etag, bl);
     ::encode(modified, bl);
     ::encode(manifest, bl);
+    ::encode(cs_info, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     ::decode(num, bl);
     ::decode(size, bl);
     ::decode(etag, bl);
     ::decode(modified, bl);
     if (struct_v >= 3)
       ::decode(manifest, bl);
+    if (struct_v >= 4)
+      ::decode(cs_info, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -3300,7 +3304,13 @@ protected:
                           const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
 
 public:
-  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), compressed(false), bucket_info(_bi), canceled(false) {}
+  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
+                                                                   obj_ctx(_obj_ctx), 
+                                                                   is_complete(false), 
+                                                                   compressed(false), 
+                                                                   bucket_info(_bi), 
+                                                                   canceled(false),
+                                                                   compression_enabled(false) {}
   virtual ~RGWPutObjProcessor() {}
   virtual int prepare(RGWRados *_store, string *oid_rand) {
     store = _store;
@@ -3315,6 +3325,7 @@ public:
                        map<string, bufferlist>& attrs, ceph::real_time delete_at,
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
+  bool compression_enabled;
   CephContext *ctx();
 
   bool is_canceled() { return canceled; }

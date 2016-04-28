@@ -1240,7 +1240,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
                                                  const off_t bl_ofs,
                                                  const off_t bl_len)
 {
-  string content_type;
+  string content_type; int rr;
 
   if (sent_header) {
     goto send_data;
@@ -1272,7 +1272,6 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
   dump_header(s, "X-Timestamp", utime_t(lastmod));
-
   if (is_slo) {
     dump_header(s, "X-Static-Large-Object", "True");
   }

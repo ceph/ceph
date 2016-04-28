@@ -2370,7 +2370,6 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   bufferlist in_bl;
 
   // compression stuff
-  bool compression_enabled = store->ctx()->_conf->rgw_compression_type != "none";
   if ((ofs > 0 && compressed) ||                                // if previous part was compressed
       (ofs == 0 && compression_enabled)) {   // or it's the first part and flag is set
     ldout(store->ctx(), 10) << "Compression for rgw is enabled, compress part " << bl.length() << dendl;
@@ -2413,7 +2412,6 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
     in_bl.claim(bl);
   }
   // end of compression stuff
-
 
   if (extra_data_len) {
     size_t extra_len = in_bl.length();
@@ -7393,6 +7391,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
   attrs.erase(RGW_ATTR_SOURCE_ZONE);
+  if (src_attrs.find(RGW_ATTR_COMPRESSION) != src_attrs.end())
+    attrs[RGW_ATTR_COMPRESSION] = src_attrs[RGW_ATTR_COMPRESSION];
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -9140,9 +9140,11 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     end = astate->size - 1;
   }
 
+  int ret = 0;
+
   if (astate->size > 0) {
     if (ofs >= (off_t)astate->size) {
-      return -ERANGE;
+      ret = -ERANGE;
     }
     if (end >= (off_t)astate->size) {
       end = astate->size - 1;
@@ -9160,7 +9162,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   if (params.lastmod)
     *params.lastmod = astate->mtime;
 
-  return 0;
+  return ret;
 }
 
 int RGWRados::SystemObject::get_state(RGWObjState **pstate, RGWObjVersionTracker *objv_tracker)
