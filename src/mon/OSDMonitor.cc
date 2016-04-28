@@ -599,9 +599,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
     util_by_osd.push_back(osd_util);
   }
 
-  // sort and iterate from most to least utilized
-  std::sort(util_by_osd.begin(), util_by_osd.end(), [](std::pair<int, float> l, std::pair<int, float> r) {
-    return l.second > r.second;
+  // sort and iterate from most to least absolute difference to the mean utilization
+  std::sort(util_by_osd.begin(), util_by_osd.end(), [&](std::pair<int, float> l, std::pair<int, float> r) {
+    return std::abs(l.second - average_util) > std::abs(r.second - average_util);
   });
 
   OSDMap::Incremental newinc;
