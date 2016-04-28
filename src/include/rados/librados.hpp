@@ -369,6 +369,8 @@ namespace librados
 
     void write(uint64_t off, const bufferlist& bl);
     void write_full(const bufferlist& bl);
+    void writesame(uint64_t off, uint64_t write_len,
+		   const bufferlist& bl);
     void append(const bufferlist& bl);
     void remove();
     void truncate(uint64_t off);
@@ -683,6 +685,8 @@ namespace librados
      * NOTE: this call steals the contents of @param bl.
      */
     int write_full(const std::string& oid, bufferlist& bl);
+    int writesame(const std::string& oid, bufferlist& bl,
+		  size_t write_len, uint64_t off);
     int clone_range(const std::string& dst_oid, uint64_t dst_off,
                    const std::string& src_oid, uint64_t src_off,
                    size_t len);
@@ -908,6 +912,8 @@ namespace librados
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len);
     int aio_write_full(const std::string& oid, AioCompletion *c, const bufferlist& bl);
+    int aio_writesame(const std::string& oid, AioCompletion *c, const bufferlist& bl,
+		      size_t write_len, uint64_t off);
 
     /**
      * Asychronously remove an object

@@ -142,6 +142,14 @@ struct ObjectOperation {
     osd_op.op.extent.length = len;
     osd_op.indata.claim_append(bl);
   }
+  void add_writesame(int op, uint64_t off, uint64_t write_len,
+		     bufferlist& bl) {
+    OSDOp& osd_op = add_op(op);
+    osd_op.op.writesame.offset = off;
+    osd_op.op.writesame.length = write_len;
+    osd_op.op.writesame.data_length = bl.length();
+    osd_op.indata.claim_append(bl);
+  }
   void add_clone_range(int op, uint64_t off, uint64_t len,
 		       const object_t& srcoid, uint64_t srcoff,
 		       snapid_t srcsnapid) {
@@ -369,6 +377,9 @@ struct ObjectOperation {
   }
   void write_full(bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
+  }
+  void writesame(uint64_t off, uint64_t write_len, bufferlist& bl) {
+    add_writesame(CEPH_OSD_OP_WRITESAME, off, write_len, bl);
   }
   void append(bufferlist& bl) {
     add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
@@ -2594,6 +2605,44 @@ public:
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_write_full_op(oid, oloc, snapc, bl, mtime, flags,
 				  onack, oncommit, objver, extra_ops, op_flags);
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
+  }
+  Op *prepare_writesame_op(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t write_len, uint64_t off,
+    const SnapContext& snapc, const bufferlist &bl,
+    ceph::real_time mtime, int flags, Context *onack,
+    Context *oncommit, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+
+    vector<OSDOp> ops;
+    int i = init_ops(ops, 1, extra_ops);
+    ops[i].op.op = CEPH_OSD_OP_WRITESAME;
+    ops[i].op.writesame.offset = off;
+    ops[i].op.writesame.length = write_len;
+    ops[i].op.writesame.data_length = bl.length();
+    ops[i].indata = bl;
+    ops[i].op.flags = op_flags;
+    Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return o;
+  }
+  ceph_tid_t writesame(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t write_len, uint64_t off,
+    const SnapContext& snapc, const bufferlist &bl,
+    ceph::real_time mtime, int flags, Context *onack,
+    Context *oncommit, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+
+    Op *o = prepare_writesame_op(oid, oloc, write_len, off, snapc, bl,
+				 mtime, flags, onack, oncommit, objver,
+				 extra_ops, op_flags);
+
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
