@@ -524,6 +524,12 @@ install(TARGETS rados librados-config DESTINATION bin)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
   DESTINATION ${PYTHON_INSTDIR})
 
+# virtualenv base directory for ceph-disk and ceph-detect-init
+set(CEPH_BUILD_VIRTUALENV $ENV{TMPDIR})
+if(NOT CEPH_BUILD_VIRTUALENV)
+  set(CEPH_BUILD_VIRTUALENV /tmp)
+endif()
+
 add_subdirectory(pybind)
 add_subdirectory(ceph-disk)
 add_subdirectory(ceph-detect-init)
