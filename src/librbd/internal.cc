@@ -2877,6 +2877,43 @@ remove_mirroring_image:
     return 0;
   }
 
+  int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
+			      size_t status_size) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
+    if (status_size < sizeof(mirror_image_status_t)) {
+      return -ERANGE;
+    }
+
+    cls::rbd::MirrorImageStatus
+      s(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
+
+    cls::rbd::MirrorImage image;
+    int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &image);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+
+    if (r == 0) {
+      r = cls_client::mirror_image_status_get(&ictx->md_ctx,
+					      image.global_image_id, &s);
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "failed to retrieve image mirror status: "
+		   << cpp_strerror(r) << dendl;
+	return r;
+      }
+    }
+
+    *status = mirror_image_status_t{
+      static_cast<mirror_image_status_state_t>(s.state),
+      s.description,
+      s.last_update.sec(),
+      s.up};
+    return 0;
+  }
+
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
     ldout(cct, 20) << __func__ << dendl;
@@ -3238,6 +3275,80 @@ remove_mirroring_image:
       lderr(cct) << "Failed to update cluster '" << uuid << "': "
                  << cpp_strerror(r) << dendl;
       return r;
+    }
+    return 0;
+  }
+
+  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start,
+      size_t max, std::map<std::string, mirror_image_info_t> *images,
+      std::map<std::string, mirror_image_status_t> *statuses) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    int r;
+
+    map<string, string> id_to_name;
+    {
+      map<string, string> name_to_id;
+      r = list_images_v2(io_ctx, name_to_id);
+      if (r < 0) {
+	return r;
+      }
+      for (auto it : name_to_id) {
+	id_to_name[it.second] = it.first;
+      }
+    }
+
+    map<std::string, cls::rbd::MirrorImage> images_;
+    map<std::string, cls::rbd::MirrorImageStatus> statuses_;
+
+    r = librbd::cls_client::mirror_image_status_list(&io_ctx, start, max,
+						     &images_, &statuses_);
+    if (r < 0) {
+      lderr(cct) << "Failed to list mirror image statuses: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    cls::rbd::MirrorImageStatus
+      unknown_status(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
+
+    for (auto it = images_.begin(); it != images_.end(); ++it) {
+      auto &image_id = it->first;
+      auto &info = it->second;
+      auto &image_name = id_to_name[image_id];
+      if (image_name.empty()) {
+	lderr(cct) << "Failed to find image name for image " << image_id
+		   << ", using image id as name" << dendl;
+	image_name = image_id;
+      }
+      (*images)[image_name] = mirror_image_info_t{
+	info.global_image_id,
+	static_cast<mirror_image_state_t>(info.state),
+	false}; // XXX: To set "primary" properly would require additional call.
+      auto s_it = statuses_.find(image_id);
+      auto &s = s_it != statuses_.end() ? s_it->second : unknown_status;
+      (*statuses)[image_name] = mirror_image_status_t{
+	static_cast<mirror_image_status_state_t>(s.state),
+	s.description,
+	s.last_update.sec(),
+	s.up};
+    }
+
+    return 0;
+  }
+
+  int mirror_image_status_summary(IoCtx& io_ctx,
+    std::map<mirror_image_status_state_t, int> *states) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+
+    std::map<cls::rbd::MirrorImageStatusState, int> states_;
+    int r = cls_client::mirror_image_status_get_summary(&io_ctx, &states_);
+    if (r < 0) {
+      lderr(cct) << "Failed to get mirror status summary: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    for (auto &s : states_) {
+      (*states)[static_cast<mirror_image_status_state_t>(s.first)] = s.second;
     }
     return 0;
   }

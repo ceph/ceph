@@ -6,6 +6,7 @@
 
 #include "objclass/objclass.h"
 #include "osd/ReplicatedPG.h"
+#include "osd/osd_types.h"
 
 #include "osd/ClassHandler.h"
 
@@ -604,6 +605,28 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
   op.op.op = CEPH_OSD_OP_OMAPRMKEYS;
 
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
+int cls_cxx_list_watchers(cls_method_context_t hctx,
+			  obj_list_watch_response_t *watchers)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> nops(1);
+  OSDOp& op = nops[0];
+  int r;
+
+  op.op.op = CEPH_OSD_OP_LIST_WATCHERS;
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops);
+  if (r < 0)
+    return r;
+
+  bufferlist::iterator iter = op.outdata.begin();
+  try {
+    ::decode(*watchers, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
 }
 
 int cls_gen_random_bytes(char *buf, int size)
