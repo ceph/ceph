@@ -615,7 +615,8 @@ int OSDMonitor::reweight_by_utilization(int oload,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
-      new_weight = MAX(new_weight, weight - max_change);
+      if (weight > max_change)
+	new_weight = MAX(new_weight, weight - max_change);
       newinc.new_weight[p->first] = new_weight;
       if (!dry_run) {
 	pending_inc.new_weight[p->first] = new_weight;
