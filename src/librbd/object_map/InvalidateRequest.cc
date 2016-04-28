@@ -47,6 +47,7 @@ void InvalidateRequest<I>::send() {
   r = image_ctx.update_flags(m_snap_id, flags, true);
   if (r < 0) {
     this->async_complete(r);
+    return;
   }
 
   // do not update on-disk flags if not image owner
