@@ -412,6 +412,9 @@ namespace ceph {
   std::ostream& operator<<(std::ostream& m,
 			   const std::chrono::time_point<Clock>& t);
 
+  int snprintf_time(char *out, size_t outlen, const real_time& t);
+  int snprintf_time(char *out, size_t outlen, const coarse_real_time& t);
+
   // The way std::chrono handles the return type of subtraction is not
   // wonderful. The difference of two unsigned types SHOULD be signed.
 
