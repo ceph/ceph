@@ -1143,6 +1143,156 @@ TEST(LibRadosAio, RoundTripWriteFullPP2)
   destroy_one_pool_pp(pool_name, cluster);
 }
 
+TEST(LibRadosAio, RoundTripWriteSame) {
+  AioTestData test_data;
+  rados_completion_t my_completion, my_completion2, my_completion3;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char full[128];
+  memset(full, 0xcc, sizeof(full));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, full, sizeof(full), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  /* write the same buf four times */
+  char buf[32];
+  size_t ws_write_len = sizeof(full);
+  memset(buf, 0xdd, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+  ASSERT_EQ(0, rados_aio_writesame(test_data.m_ioctx, "foo",
+				   my_completion2, buf, sizeof(buf),
+				   ws_write_len, 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion3));
+  ASSERT_EQ(0, rados_aio_read(test_data.m_ioctx, "foo",
+			      my_completion3, full, sizeof(full), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
+  }
+  ASSERT_EQ((int)sizeof(full), rados_aio_get_return_value(my_completion3));
+  for (char *cmp = full; cmp < full + sizeof(full); cmp += sizeof(buf)) {
+    ASSERT_EQ(0, memcmp(cmp, buf, sizeof(buf)));
+  }
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
+  rados_aio_release(my_completion3);
+}
+
+TEST(LibRadosAio, RoundTripWriteSamePP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char full[128];
+  memset(full, 0xcc, sizeof(full));
+  bufferlist bl1;
+  bl1.append(full, sizeof(full));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(full), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  /* write the same buf four times */
+  char buf[32];
+  size_t ws_write_len = sizeof(full);
+  memset(buf, 0xdd, sizeof(buf));
+  bufferlist bl2;
+  bl2.append(buf, sizeof(buf));
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_writesame("foo", my_completion2, bl2,
+					       ws_write_len, 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  bufferlist bl3;
+  AioCompletion *my_completion3 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion3, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_read("foo", my_completion3,
+					  &bl3, sizeof(full), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion3->wait_for_complete());
+  }
+  ASSERT_EQ((int)sizeof(full), my_completion3->get_return_value());
+  ASSERT_EQ(sizeof(full), bl3.length());
+  for (char *cmp = bl3.c_str(); cmp < bl3.c_str() + bl3.length();
+							cmp += sizeof(buf)) {
+    ASSERT_EQ(0, memcmp(cmp, buf, sizeof(buf)));
+  }
+  delete my_completion;
+  delete my_completion2;
+  delete my_completion3;
+}
+
+TEST(LibRadosAio, RoundTripWriteSamePP2)
+{
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  boost::scoped_ptr<AioCompletion>
+			wr_cmpl(cluster.aio_create_completion(0, 0, 0));
+  ObjectWriteOperation op;
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  op.writesame(0, sizeof(buf) * 4, bl);
+  op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", wr_cmpl.get(), &op);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, wr_cmpl->wait_for_complete());
+  }
+  EXPECT_EQ(0, wr_cmpl->get_return_value());
+
+  boost::scoped_ptr<AioCompletion>
+			rd_cmpl(cluster.aio_create_completion(0, 0, 0));
+  char *cmp;
+  char full[sizeof(buf) * 4];
+  memset(full, 0, sizeof(full));
+  bufferlist fl;
+  fl.append(full, sizeof(full));
+  ObjectReadOperation op1;
+  op1.read(0, sizeof(full), &fl, NULL);
+  op1.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", rd_cmpl.get(), &op1, 0);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rd_cmpl->wait_for_complete());
+  }
+  EXPECT_EQ(0, rd_cmpl->get_return_value());
+  for (cmp = fl.c_str(); cmp < fl.c_str() + fl.length(); cmp += sizeof(buf)) {
+    ASSERT_EQ(0, memcmp(cmp, buf, sizeof(buf)));
+  }
+
+  ioctx.remove("test_obj");
+  destroy_one_pool_pp(pool_name, cluster);
+}
+
 TEST(LibRadosAio, SimpleStat) {
   AioTestData test_data;
   rados_completion_t my_completion;
