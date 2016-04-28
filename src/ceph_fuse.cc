@@ -264,11 +264,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     
   out_client_unmount:
     client->unmount();
-    //cout << "unmounted" << std::endl;
-    
     cfuse->finalize();
-    delete cfuse;
-    
   out_shutdown:
     client->shutdown();
   out_init_failed:
@@ -279,7 +275,9 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->shutdown();
     messenger->wait();
   out_messenger_start_failed:
+    delete cfuse;
     delete client;
+    delete messenger;
   out_mc_start_failed:
     
     if (g_conf->daemonize) {
@@ -288,7 +286,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       foo += ::write(fd[1], &r, sizeof(r));
     }
     
-    delete messenger;
     g_ceph_context->put();
     free(newargv);
     
