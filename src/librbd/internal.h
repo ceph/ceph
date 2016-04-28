@@ -90,6 +90,8 @@ namespace librbd {
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
 
+  int list_images_v2(librados::IoCtx& io_ctx,
+      std::map<std::string, std::string>& images);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);

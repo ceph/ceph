@@ -103,6 +103,18 @@ void PoolWatcher::refresh_images(bool reschedule)
       continue;
     }
 
+    std::map<std::string, std::string> images_map;
+    r = librbd::list_images_v2(ioctx, images_map);
+    if (r < 0) {
+      derr << "error retrieving image names from pool " << pool_name << ": "
+           << cpp_strerror(r) << dendl;
+    }
+
+    std::map<std::string, std::string> image_id_to_name;
+    for (const auto& img_pair : images_map) {
+      image_id_to_name.insert(std::make_pair(img_pair.second, img_pair.first));
+    }
+
     std::set<ImageIds> image_ids;
     std::string last_read = "";
     int max_read = 1024;
@@ -115,7 +127,12 @@ void PoolWatcher::refresh_images(bool reschedule)
         continue;
       }
       for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
-        image_ids.insert(ImageIds(it->first, it->second));
+        boost::optional<std::string> image_name(boost::none);
+        auto it2 = image_id_to_name.find(it->first);
+        if (it2 != image_id_to_name.end()) {
+          image_name = it2->second;
+        }
+        image_ids.insert(ImageIds(it->first, image_name, it->second));
       }
       if (!mirror_images.empty()) {
         last_read = mirror_images.rbegin()->first;
