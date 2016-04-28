@@ -117,8 +117,9 @@ void RefreshParentRequest<I>::send_open_parent() {
   }
 
   using klass = RefreshParentRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_open_parent, false>(this);
+  Context *ctx = create_async_context_callback(
+    m_child_image_ctx, create_context_callback<
+      klass, &klass::handle_open_parent, false>(this));
   OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, ctx);
   req->send();
 }
@@ -132,8 +133,12 @@ Context *RefreshParentRequest<I>::handle_open_parent(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to open parent image: " << cpp_strerror(*result)
                << dendl;
-    send_close_parent();
-    return nullptr;
+
+    // image already closed by open state machine
+    delete m_parent_image_ctx;
+    m_parent_image_ctx = nullptr;
+
+    return m_on_finish;
   }
 
   send_set_parent_snap();
