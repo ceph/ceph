@@ -87,6 +87,48 @@ private:
 };
 
 template <typename I>
+class StartCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit StartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->start(nullptr, nullptr, true);
+    return true;
+  }
+
+private:
+  ImageReplayer<I> *replayer;
+};
+
+template <typename I>
+class StopCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit StopCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->stop(nullptr, true);
+    return true;
+  }
+
+private:
+  ImageReplayer<I> *replayer;
+};
+
+template <typename I>
+class RestartCommand : public ImageReplayerAdminSocketCommand {
+public:
+  explicit RestartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->restart();
+    return true;
+  }
+
+private:
+  ImageReplayer<I> *replayer;
+};
+
+template <typename I>
 class FlushCommand : public ImageReplayerAdminSocketCommand {
 public:
   explicit FlushCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
@@ -120,6 +162,27 @@ public:
 				       "get status for rbd mirror " + name);
     if (r == 0) {
       commands[command] = new StatusCommand<I>(replayer);
+    }
+
+    command = "rbd mirror start " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "start rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new StartCommand<I>(replayer);
+    }
+
+    command = "rbd mirror stop " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "stop rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new StopCommand<I>(replayer);
+    }
+
+    command = "rbd mirror restart " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "restart rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new RestartCommand<I>(replayer);
     }
 
     command = "rbd mirror flush " + name;
@@ -239,23 +302,41 @@ void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
 
 template <typename I>
 void ImageReplayer<I>::start(Context *on_finish,
-			     const BootstrapParams *bootstrap_params)
+			     const BootstrapParams *bootstrap_params,
+			     bool manual)
 {
   assert(m_on_start_finish == nullptr);
   assert(m_on_stop_finish == nullptr);
   dout(20) << "on_finish=" << on_finish << dendl;
 
+  int r = 0;
   {
     Mutex::Locker locker(m_lock);
-    assert(is_stopped_());
 
-    m_state = STATE_STARTING;
-    m_last_r = 0;
-    m_state_desc.clear();
-    m_on_start_finish = on_finish;
+    if (!is_stopped_()) {
+      derr << "already running" << dendl;
+      r = -EINVAL;
+    } else if (m_manual_stop && !manual) {
+      dout(5) << "stopped manually, ignoring start without manual flag"
+	      << dendl;
+      r = -EPERM;
+    } else {
+      m_state = STATE_STARTING;
+      m_last_r = 0;
+      m_state_desc.clear();
+      m_on_start_finish = on_finish;
+      m_manual_stop = false;
+    }
   }
 
-  int r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
+  if (r < 0) {
+    if (on_finish) {
+      on_finish->complete(r);
+    }
+    return;
+  }
+
+  r = m_remote->ioctx_create2(m_remote_pool_id, m_remote_ioctx);
   if (r < 0) {
     derr << "error opening ioctx for remote pool " << m_remote_pool_id
 	 << ": " << cpp_strerror(r) << dendl;
@@ -508,27 +589,39 @@ bool ImageReplayer<I>::on_start_interrupted()
 }
 
 template <typename I>
-void ImageReplayer<I>::stop(Context *on_finish)
+void ImageReplayer<I>::stop(Context *on_finish, bool manual)
 {
   dout(20) << "on_finish=" << on_finish << dendl;
 
   bool shut_down_replay = false;
+  bool running = true;
   {
     Mutex::Locker locker(m_lock);
-    assert(is_running_());
+    if (!is_running_()) {
+      running = false;
+    } else {
+      if (!is_stopped_()) {
+	if (m_state == STATE_STARTING) {
+	  dout(20) << "interrupting start" << dendl;
+	} else {
+	  dout(20) << "interrupting replay" << dendl;
+	  shut_down_replay = true;
+	}
 
-    if (!is_stopped_()) {
-      if (m_state == STATE_STARTING) {
-        dout(20) << "interrupting start" << dendl;
-      } else {
-        dout(20) << "interrupting replay" << dendl;
-        shut_down_replay = true;
+	assert(m_on_stop_finish == nullptr);
+	std::swap(m_on_stop_finish, on_finish);
+	m_stop_requested = true;
+	m_manual_stop = manual;
       }
-
-      assert(m_on_stop_finish == nullptr);
-      std::swap(m_on_stop_finish, on_finish);
-      m_stop_requested = true;
     }
+  }
+
+  if (!running) {
+    derr << "not running" << dendl;
+    if (on_finish) {
+      on_finish->complete(-EINVAL);
+    }
+    return;
   }
 
   if (shut_down_replay) {
@@ -665,6 +758,19 @@ void ImageReplayer<I>::handle_replay_ready()
   }
 
   replay_flush();
+}
+
+template <typename I>
+void ImageReplayer<I>::restart(Context *on_finish)
+{
+  FunctionContext *ctx = new FunctionContext(
+    [this, on_finish](int r) {
+      if (r < 0) {
+	// Try start anyway.
+      }
+      start(on_finish, nullptr, true);
+    });
+  stop(ctx);
 }
 
 template <typename I>
