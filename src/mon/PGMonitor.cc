@@ -1804,7 +1804,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
       ss << "failed";  
     else 
       ss << "ok";
-    r = 0;
   } else if (prefix == "pg map") {
     pg_t pgid;
     string pgidstr;
