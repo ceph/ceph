@@ -1590,8 +1590,10 @@ remove_mirroring_image:
     }
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker md_locker(ictx->md_lock);
-    r = ictx->flush();
+    r = ictx->aio_work_queue->block_writes();
+    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
+      ictx->aio_work_queue->unblock_writes();
+    };
     if (r < 0) {
       return r;
     }
@@ -1606,6 +1608,17 @@ remove_mirroring_image:
       lderr(cct) << "update requires at least one feature" << dendl;
       return -EINVAL;
     }
+
+    // avoid accepting new requests from peers while we manipulate
+    // the image features
+    if (ictx->exclusive_lock != nullptr) {
+      ictx->exclusive_lock->block_requests();
+    }
+    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
+      if (ictx->exclusive_lock != nullptr) {
+        ictx->exclusive_lock->unblock_requests();
+      }
+    };
 
     // if disabling features w/ exclusive lock supported, we need to
     // acquire the lock to temporarily block IO against the image
