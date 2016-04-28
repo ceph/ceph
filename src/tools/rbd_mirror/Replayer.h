@@ -18,6 +18,7 @@
 #include "ClusterWatcher.h"
 #include "ImageReplayer.h"
 #include "PoolWatcher.h"
+#include "ImageDeleter.h"
 #include "types.h"
 
 namespace rbd {
@@ -53,7 +54,8 @@ private:
 
   void set_sources(const PoolImageIds &pool_image_ids);
 
-  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
+  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                            const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
   int mirror_image_status_init(int64_t pool_id, librados::IoCtx& ioctx);
@@ -75,6 +77,7 @@ private:
 			     std::unique_ptr<ImageReplayer<> > > > m_images;
   std::map<int64_t, std::unique_ptr<MirrorStatusWatchCtx> > m_status_watchers;
   ReplayerAdminSocketHook *m_asok_hook;
+  std::unique_ptr<ImageDeleter> m_image_deleter;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;

@@ -257,6 +257,8 @@ int Replayer::init()
 {
   dout(20) << "replaying for " << m_peer << dendl;
 
+  m_image_deleter.reset(new ImageDeleter(m_peer.cluster_name, m_local));
+
   // NOTE: manually bootstrap a CephContext here instead of via
   // the librados API to avoid mixing global singletons between
   // the librados shared library and the daemon
@@ -344,6 +346,8 @@ void Replayer::run()
   }
 
   // Stopping
+  m_image_deleter.reset();
+
   PoolImageIds empty_sources;
   while (true) {
     Mutex::Locker l(m_lock);
@@ -374,6 +378,13 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
       image_replayer->print_status(f, ss);
     }
   }
+
+  if (f) {
+    f->close_section();
+    f->open_object_section("image_deleter");
+  }
+
+  m_image_deleter->print_status(f, ss);
 
   if (f) {
     f->close_section();
@@ -578,7 +589,7 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
         dout(20) << "starting image replayer for "
                  << it->second->get_global_image_id() << dendl;
       }
-      start_image_replayer(it->second);
+      start_image_replayer(it->second, image_id.name);
     }
   }
 }
@@ -628,13 +639,25 @@ void Replayer::mirror_image_status_shut_down(int64_t pool_id) {
   m_status_watchers.erase(watcher_it);
 }
 
-void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
+void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                                    const boost::optional<std::string>& image_name)
 {
   if (!image_replayer->is_stopped()) {
     return;
   }
 
-  image_replayer->start();
+  if (image_name) {
+    FunctionContext *ctx = new FunctionContext(
+        [&] (int r) {
+          if (r >= 0) {
+            image_replayer->start();
+          } else {
+            start_image_replayer(image_replayer, image_name);
+          }
+       }
+    );
+    m_image_deleter->wait_for_scheduled_deletion(image_name.get(), ctx, false);
+  }
 }
 
 bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
@@ -644,7 +667,18 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
   }
 
   if (image_replayer->is_running()) {
-    image_replayer->stop();
+    FunctionContext *ctx = new FunctionContext(
+        [&image_replayer, this] (int r) {
+          if (m_image_deleter) {
+            m_image_deleter->schedule_image_delete(
+                          image_replayer->get_local_pool_id(),
+                          image_replayer->get_local_image_id(),
+                          image_replayer->get_local_image_name(),
+                          image_replayer->get_global_image_id());
+          }
+        }
+    );
+    image_replayer->stop(ctx);
   } else {
     // TODO: check how long it is stopping and alert if it is too long.
   }
