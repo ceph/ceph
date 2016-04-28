@@ -302,7 +302,11 @@ test_image_replay_state()
     test -S "${asok_file}"
 
     ceph --admin-daemon ${asok_file} help |
-	fgrep "\"rbd mirror status ${POOL}/${image}\"" && current_state=started
+	fgrep "\"rbd mirror status ${POOL}/${image}\"" &&
+    ceph --admin-daemon ${asok_file} rbd mirror status ${POOL}/${image} |
+	grep -i 'state.*Replaying' &&
+    current_state=started
+
     test "${test_state}" = "${current_state}"
 }
 
