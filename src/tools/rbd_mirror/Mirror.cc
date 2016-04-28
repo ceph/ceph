@@ -216,6 +216,9 @@ int Mirror::init()
   // TODO: make interval configurable
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
+  m_image_deleter.reset(new ImageDeleter(m_local, m_threads->timer,
+                                         &m_threads->timer_lock));
+
   return r;
 }
 
@@ -253,6 +256,13 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
     auto &replayer = it->second;
     replayer->print_status(f, ss);
   }
+
+  if (f) {
+    f->close_section();
+    f->open_object_section("image_deleter");
+  }
+
+  m_image_deleter->print_status(f, ss);
 
   if (f) {
     f->close_section();
