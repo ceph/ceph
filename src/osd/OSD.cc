@@ -8714,11 +8714,13 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 #endif
 
     if (dequeue)
+		//这个是伪的dequeue，实际处理的时候已经dequeue了，这里修改了pg自身的计数信息
         recovery_wq._dequeue(pg);
     else
     {
         //好吧 只要没恢复完，这里又丢到队列里面了
         //这样通过出队入队的方式最终完成pg的恢复
+        //注意由于reserve的存在，pg无法进行交替式的恢复，是恢复完成一个，再恢复下一个
         recovery_wq._queue_front(pg);
     }
 

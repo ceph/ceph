@@ -428,6 +428,7 @@ public:
                 }
                 else
                 {
+                    //这断言意思是如果一个对象还没恢复，就不应该有新的写操作
                     assert(i->second.need == j->second.need);
                 }
             }
@@ -508,6 +509,8 @@ protected:
 
 public:
     eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
+    //这个last_complete_ondisk是acting节点的，并不是所有副本(不活跃的副本是不管的，因而trim log会触发backfill
+    //)
     eversion_t  last_complete_ondisk;  // last_complete that has committed.
     eversion_t  last_update_applied;
 
@@ -1793,6 +1796,7 @@ public:
             boost::statechart::result react(const IntervalFlush&);
             boost::statechart::result react(const boost::statechart::event_base&)
             {
+                //这个实际上就是处理NullEvt，其他无法处理的事件会导致crashed
                 return discard_event();
             }
         };

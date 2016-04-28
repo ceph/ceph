@@ -480,6 +480,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 					itemtype = 0;
 				dprintk("  item %d type %d\n", item, itemtype);
 
+                //尝试在里面增加过滤，如果权重不够就不能分给该osd
 				/* keep going? */
 				if (itemtype != type) {
 					if (item >= 0 ||

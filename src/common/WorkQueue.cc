@@ -116,7 +116,7 @@ void ThreadPool::worker(WorkThread *wt)
 	last_work_queue++;
 	last_work_queue %= work_queues.size();
 	wq = work_queues[last_work_queue];
-	
+	//先从队列拿出来
 	void *item = wq->_void_dequeue();
 	if (item) {
 	  processing++;

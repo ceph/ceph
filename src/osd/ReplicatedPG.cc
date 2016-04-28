@@ -429,6 +429,7 @@ void ReplicatedPG::maybe_kick_recovery(
         {
             prep_object_replica_pushes(soid, v, h);
         }
+		//相当于走了快速通道，立即触发恢复
         pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
     }
 }
@@ -1472,6 +1473,7 @@ void ReplicatedPG::calc_trim_to()
         pg_trim_to = new_trim_to;
         assert(pg_trim_to <= pg_log.get_head());
         assert(pg_trim_to <= min_last_complete_ondisk);
+		//按这样算，怎么会出现需要backfill的情况，多余的pglog也无法清除
     }
 }
 
@@ -11051,6 +11053,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
     int skipped = 0;
 
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
+	//如果有些已经恢复，那么就可以跳过
     map<version_t, hobject_t>::const_iterator p =
         missing.rmissing.lower_bound(pg_log.get_log().last_requested);
     while (p != missing.rmissing.end())

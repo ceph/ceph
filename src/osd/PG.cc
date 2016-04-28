@@ -1549,6 +1549,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
             // want is the same as crush map up OSDs.
             assert(compat_mode || want_backfill.empty());
             vector<int> empty;
+			//这里就清除了pg temp
             osd->queue_want_pg_temp(info.pgid.pgid, empty);
         }
         else
@@ -5884,6 +5885,7 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
                 advmap.lastmap,
                 advmap.osdmap))
     {
+        //这个事件非常关键
         dout(10) << "should_restart_peering, transitioning to Reset" << dendl;
         post_event(advmap);
         return transit< Reset >();
@@ -5966,6 +5968,8 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
     return discard_event();
 }
 
+//这个事件和上面是相辅的。
+//如果PG没有进入Reset状态，那么这里也就收不到ActMap事件
 boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
 {
     PG *pg = context< RecoveryMachine >().pg;
@@ -6926,7 +6930,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
         dout(10) << "Active: queuing snap trim" << dendl;
         pg->queue_snap_trim();
     }
-
+    //这段非常重要，有些情况，osd状态的变化不会引起acting和up的变化。
+    //但是这些osd上却有该pg需要的missing object，这时必须启动恢复。
     if (!pg->is_clean() &&
             !pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) &&
             (!pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) || pg->is_degraded()))
