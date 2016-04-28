@@ -358,6 +358,8 @@ struct bluestore_lextent_t {
 };
 WRITE_CLASS_ENCODER(bluestore_lextent_t)
 
+ostream& operator<<(ostream& out, const bluestore_lextent_t& lb);
+
 typedef map<uint64_t, bluestore_lextent_t> bluestore_lextent_map_t;
 typedef map<bluestore_blob_id_t, bluestore_blob_t> bluestore_blob_map_t;
 
@@ -366,10 +368,6 @@ struct bluestore_onode_t {
   uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  map<uint64_t, bluestore_extent_t> block_map;   ///< block data
-  map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
-  map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
-  uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
   map<uint64_t, bluestore_lextent_t> lextents;   ///< logical extents
@@ -380,52 +378,9 @@ struct bluestore_onode_t {
   bluestore_onode_t()
     : nid(0),
       size(0),
-      last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
       expected_write_size(0) {}
-
-  map<uint64_t,bluestore_extent_t>::iterator find_extent(uint64_t offset) {
-    map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
-    if (fp != block_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    if (fp != block_map.end() && fp->first > offset)
-      return block_map.end();  // extent is past offset
-    return fp;
-  }
-
-  map<uint64_t,bluestore_extent_t>::iterator seek_extent(uint64_t offset) {
-    map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
-    if (fp != block_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    return fp;
-  }
-
-  bool put_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      return true;
-    assert(q->second >= 2);
-    if (--q->second == 1) {
-      overlay_refs.erase(q);
-    }
-    return false;
-  }
-  void get_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      overlay_refs[key] = 2;
-    else
-      ++q->second;
-  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

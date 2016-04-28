@@ -148,7 +148,7 @@ ostream& operator<<(ostream& out, const bluestore_extent_t& e)
 }
 
 // bluestore_extent_ref_map_t
-
+/*
 void bluestore_extent_ref_map_t::add(uint64_t offset, uint32_t len, unsigned ref)
 {
   map<uint64_t,record_t>::iterator p = ref_map.insert(
@@ -353,7 +353,7 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
   out << ")";
   return out;
 }
-
+*/
 // bluestore_overlay_t
 
 void bluestore_overlay_t::encode(bufferlist& bl) const
@@ -402,14 +402,9 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(nid, bl);
   ::encode(size, bl);
   ::encode(attrs, bl);
-  ::encode(block_map, bl);
-  ::encode(overlay_map, bl);
-  ::encode(overlay_refs, bl);
-  ::encode(last_overlay_key, bl);
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
-  //FIXME: raise ver
   ::encode(lextents, bl);
   ENCODE_FINISH(bl);
 }
@@ -420,14 +415,9 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(nid, p);
   ::decode(size, p);
   ::decode(attrs, p);
-  ::decode(block_map, p);
-  ::decode(overlay_map, p);
-  ::decode(overlay_refs, p);
-  ::decode(last_overlay_key, p);
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
-  //FIXME: raise ver
   ::decode(lextents, p);
   DECODE_FINISH(p);
 }
@@ -445,37 +435,18 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_object_section("block_map");
-  for (map<uint64_t, bluestore_extent_t>::const_iterator p = block_map.begin();
-       p != block_map.end(); ++p) {
-    f->open_object_section("extent");
-    f->dump_unsigned("extent_offset", p->first);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-  f->open_object_section("overlays");
-  for (map<uint64_t, bluestore_overlay_t>::const_iterator p = overlay_map.begin();
-       p != overlay_map.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-  f->open_array_section("overlay_refs");
-  for (map<uint64_t,uint16_t>::const_iterator p = overlay_refs.begin();
-       p != overlay_refs.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    f->dump_unsigned("refs", p->second);
-    f->close_section();
-  }
-  f->close_section();
-  f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
+  f->open_array_section("lextents");
+  for (auto p = lextents.cbegin();
+       p != lextents.cend(); ++p) {
+    f->open_object_section("lextent");
+    f->dump_unsigned("offset", p->first);
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
