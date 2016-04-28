@@ -74,7 +74,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
     usage();
-    return 0;
   }
   env_to_vec(args);
 
