@@ -5380,15 +5380,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "expecting value 'true' or '1'";
       return -EINVAL;
     }
-  } else if (var == "debug_fake_ec_pool") {
-    if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
-    } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags &= ~pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
-    } else {
-      ss << "expecting value 'true', 'false', '0', or '1'";
-      return -EINVAL;
-    }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
       ss << "error parsing int '" << val << "': " << interr;

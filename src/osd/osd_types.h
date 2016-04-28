@@ -1075,7 +1075,7 @@ struct pg_pool_t {
   enum {
     FLAG_HASHPSPOOL = 1<<0, // hash pg seed and pool together (instead of adding)
     FLAG_FULL       = 1<<1, // pool is full
-    FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
+    //UNUSED = 1<<2,
     FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
     FLAG_NODELETE = 1<<4, // pool can't be deleted
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
@@ -1089,7 +1089,6 @@ struct pg_pool_t {
     switch (f) {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
-    case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
     case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
     case FLAG_NODELETE: return "nodelete";
     case FLAG_NOPGCHANGE: return "nopgchange";
@@ -1119,8 +1118,6 @@ struct pg_pool_t {
       return FLAG_HASHPSPOOL;
     if (name == "full")
       return FLAG_FULL;
-    if (name == "require_local_rollback")
-      return FLAG_DEBUG_FAKE_EC_POOL;
     if (name == "incomplete_clones")
       return FLAG_INCOMPLETE_CLONES;
     if (name == "nodelete")
@@ -1364,7 +1361,7 @@ public:
     return type == TYPE_ERASURE;
   }
   bool require_rollback() const {
-    return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
+    return ec_pool();
   }
 
   /// true if incomplete clones may be present
@@ -1397,7 +1394,7 @@ public:
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool supports_omap() const {
-    return !(get_type() == TYPE_ERASURE || has_flag(FLAG_DEBUG_FAKE_EC_POOL));
+    return !(get_type() == TYPE_ERASURE);
   }
 
   bool requires_aligned_append() const { return is_erasure(); }
