@@ -197,6 +197,21 @@ ImageReplayer<I>::ImageReplayer(Threads *threads, RadosRef local, RadosRef remot
 	 remote_image_id),
   m_progress_cxt(this)
 {
+  // Register asok commands using a temporary "remote_pool_name/global_image_id"
+  // name.  When the image name becomes known on start the asok commands will be
+  // re-registered using "remote_pool_name/remote_image_name" name.
+
+  std::string pool_name;
+  int r = m_remote->pool_reverse_lookup(m_remote_pool_id, &pool_name);
+  if (r < 0) {
+    derr << "error resolving remote pool " << m_remote_pool_id
+	 << ": " << cpp_strerror(r) << dendl;
+    pool_name = stringify(m_remote_pool_id);
+  }
+  m_name = pool_name + "/" + m_global_image_id;
+
+  CephContext *cct = static_cast<CephContext *>(m_local->cct());
+  m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
 }
 
 template <typename I>
@@ -309,11 +324,21 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-    m_name = m_local_ioctx.get_pool_name() + "/" + m_local_image_ctx->name;
 
-    CephContext *cct = static_cast<CephContext *>(m_local->cct());
-    delete m_asok_hook;
-    m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+    std::string name = m_local_ioctx.get_pool_name() + "/" +
+      m_local_image_ctx->name;
+    if (m_name != name) {
+      m_name = name;
+      if (m_asok_hook) {
+	// Re-register asok commands using the new name.
+	delete m_asok_hook;
+	m_asok_hook = nullptr;
+      }
+    }
+    if (!m_asok_hook) {
+      CephContext *cct = static_cast<CephContext *>(m_local->cct());
+      m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+    }
   }
 
   update_mirror_image_status();
@@ -595,9 +620,6 @@ void ImageReplayer<I>::on_stop_local_image_close_finish(int r)
   m_replay_handler = nullptr;
 
   m_remote_ioctx.close();
-
-  delete m_asok_hook;
-  m_asok_hook = nullptr;
 
   Context *on_finish(nullptr);
 
