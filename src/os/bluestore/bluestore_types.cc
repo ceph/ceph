@@ -409,6 +409,8 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
+  //FIXME: raise ver
+  ::encode(lextents, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -425,6 +427,8 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
+  //FIXME: raise ver
+  ::decode(lextents, p);
   DECODE_FINISH(p);
 }
 
@@ -601,11 +605,53 @@ void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_tra
 }
 
 // bluestore_blob_t
+void bluestore_blob_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(extents, bl);
+  ::encode(length, bl);
+  ::encode(flags, bl);
+  ::encode(csum_type, bl);
+  ::encode(csum_block_order, bl);
+  ::encode(num_refs, bl);
+  ::encode(csum_data, bl);
+  ENCODE_FINISH(bl);
+}
+void bluestore_blob_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(extents, p);
+  ::decode(length, p);
+  ::decode(flags, p);
+  ::decode(csum_type, p);
+  ::decode(csum_block_order, p);
+  ::decode(num_refs, p);
+  ::decode(csum_data, p);
+  DECODE_FINISH(p);
+}
+
 void bluestore_blob_t::dump(Formatter *f) const
 {
   f->dump_unsigned("length", length);
   f->dump_unsigned("flags", flags);
-  //FIXME: more fields to dump
+  f->dump_unsigned("csum_type", csum_type);
+  f->dump_unsigned("csum_block_order", csum_block_order);
+  f->dump_unsigned("num_refs", num_refs);
+  f->dump_unsigned("flags", flags);
+  f->open_array_section("extents");
+  for (auto i = extents.begin();
+    i != extents.end();
+    ++i) {
+    f->open_object_section("extent");
+    i->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  //FIXME: dump csum_data
+}
+
+void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& o)
+{
 }
 
 // bluestore_lextent_t

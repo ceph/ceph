@@ -45,7 +45,7 @@ public:
 
     virtual int read_block(uint64_t offset, uint32_t length, void* opaque, bufferlist* result) = 0;
     virtual int write_block(uint64_t offset, const bufferlist& data, void* opaque) = 0;
-    virtual int zero_block(uint64_t offset, uint32_t length, void* opaque) = 0;
+    virtual int zero_block(uint64_t offset, uint64_t length, void* opaque) = 0;
 
     //method to allocate pextents, depending on the store state can return single or multiple pextents if there is no contiguous extent available
     virtual int allocate_blocks(uint32_t length, void* opaque, bluestore_extent_vector_t* result) = 0;
@@ -69,25 +69,44 @@ public:
   };
 
 
-  ExtentManager(BlockOpInterface& blockop_inf, CompressorInterface& compressor, CheckSumVerifyInterface& csum_verifier)
-    : m_blockop_inf(blockop_inf), m_compressor(compressor), m_csum_verifier(csum_verifier) {
+  ExtentManager(
+    BlockOpInterface& blockop_inf,
+    CompressorInterface& compressor,
+    CheckSumVerifyInterface& csum_verifier,
+    bluestore_lextent_map_t& lextents,
+    bluestore_blob_map_t& blobs,
+    uint64_t max_blob_size,
+    uint64_t min_alloc_size)
+    : m_blockop_inf(blockop_inf),
+      m_compressor(compressor),
+      m_csum_verifier(csum_verifier),
+      m_lextents(lextents),
+      m_blobs(blobs),
+      m_max_blob_size(max_blob_size),
+      m_min_alloc_size(min_alloc_size) {
   }
 
-  int write(uint64_t offset, const bufferlist& bl, void* opaque, const CheckSumInfo& check_info, const CompressInfo* compress_info);
+  int write(uint64_t offset, uint64_t length, const bufferlist& bl, void* opaque, const CheckSumInfo& check_info, const CompressInfo* compress_info);
   int zero(uint64_t offset, uint64_t length, void* opaque);
   int truncate(uint64_t offset, void* opaque);
   int read(uint64_t offset, uint32_t length, void* opaque, bufferlist* result);
+  int fiemap(uint64_t offset, uint32_t len, interval_set<uint64_t>* m);
+  int clone_to(bluestore_lextent_map_t* new_lextents);
+
 
   uint64_t get_max_blob_size() const;
   uint64_t get_min_alloc_size() const;
 
 protected:
 
-  bluestore_blob_map_t m_blobs;
-  bluestore_lextent_map_t m_lextents;
   BlockOpInterface& m_blockop_inf;
   CompressorInterface& m_compressor;
   CheckSumVerifyInterface& m_csum_verifier;
+  bluestore_lextent_map_t& m_lextents;
+  bluestore_blob_map_t& m_blobs;
+  uint64_t m_max_blob_size;
+  uint64_t m_min_alloc_size;
+
 
   //intermediate data structures used while reading
   struct region_t {
@@ -123,23 +142,23 @@ protected:
       : bluestore_lextent_t(),
       blob_iterator(blob_it)
     {}
-    live_lextent_t(bluestore_blob_map_t::iterator blob_it, BlobRef blob_ref, uint32_t o, uint32_t l, uint32_t f)
+    live_lextent_t(bluestore_blob_map_t::iterator blob_it, bluestore_blob_id_t blob_ref, uint32_t o, uint32_t l, uint32_t f)
       : bluestore_lextent_t(blob_ref, o, l, f),
       blob_iterator(blob_it)
     {}
   };
   typedef map<uint64_t, live_lextent_t> live_lextent_map_t;
 
-  bluestore_blob_t* get_blob(BlobRef blob_ref);
-  bluestore_blob_map_t::iterator get_blob_iterator(BlobRef blob_ref);
+  bluestore_blob_t* get_blob(bluestore_blob_id_t blob_ref);
+  bluestore_blob_map_t::iterator get_blob_iterator(bluestore_blob_id_t blob_ref);
 
-  void ref_blob(BlobRef blob_ref);
+  void ref_blob(bluestore_blob_id_t blob_ref);
   void ref_blob(bluestore_blob_map_t::iterator blob_it);
   void deref_blob(bluestore_blob_map_t::iterator blob_it, bool zero, void* opaque);
 
   uint64_t get_read_block_size(const bluestore_blob_t*) const;
 
-  void preprocess_changes(uint64_t offset, uint64_t length, bluestore_lextent_map_t* updated_lextents, live_lextent_map_t* removed_lextents, list<BlobRef>* blob2ref);
+  void preprocess_changes(uint64_t offset, uint64_t length, bluestore_lextent_map_t* updated_lextents, live_lextent_map_t* removed_lextents, list<bluestore_blob_id_t>* blob2ref);
 
   int read_whole_blob(const bluestore_blob_t*, void* opaque, bufferlist* result);
   int read_extent_sparse(const bluestore_blob_t*, const bluestore_extent_t* extent, regions2read_t::const_iterator begin, regions2read_t::const_iterator end, void* opaque, ready_regions_t* result);
@@ -147,25 +166,28 @@ protected:
 
   int verify_csum(const bluestore_blob_t* blob, uint64_t x_offset, const bufferlist& bl, void* opaque) const;
 
-  int allocate_raw_blob(uint32_t length, void* opaque, const CheckSumInfo& check_info, BlobRef* blob, bluestore_blob_map_t::iterator* res_blob_it);
+  int allocate_raw_blob(uint32_t length, void* opaque, const CheckSumInfo& check_info, bluestore_blob_id_t* blob, bluestore_blob_map_t::iterator* res_blob_it);
   int compress_and_allocate_blob(
-    uint64_t input_offs,
+    uint64_t input_offset,
+    uint64_t input_length,
     const bufferlist& raw_buffer,
     void* opaque,
     const CheckSumInfo& check_info,
     const CompressInfo& compress_info,
-    BlobRef* blob,
+    bluestore_blob_id_t* blob,
     bluestore_blob_map_t::iterator* res_blob_it,
     bufferlist* compressed_buffer);
 
-  int write_blob(bluestore_blob_t& blob, uint64_t input_offs, const bufferlist& bl, void* opaque);
+  int write_blob(bluestore_blob_t& blob, uint64_t input_offs, uint64_t input_len, const bufferlist& bl, void* opaque);
 
-  int write_uncompressed(uint64_t offset,
+  int write_uncompressed(uint64_t input_offset,
+    uint64_t input_length,
     const bufferlist& bl,
     void* opaque,
     const CheckSumInfo& check_info,
     live_lextent_map_t* new_lextents);
-  int write_compressed(uint64_t offset,
+  int write_compressed(uint64_t input_offset,
+    uint64_t input_length,
     const bufferlist& bl,
     void* opaque,
     const CheckSumInfo& check_info,
@@ -173,6 +195,7 @@ protected:
     live_lextent_map_t* new_lextents);
   int apply_lextents(
     live_lextent_map_t& new_lextents,
+    uint64_t input_length,
     const bufferlist& raw_buffer,
     std::vector<bufferlist>* compressed_buffers,
     void* opaque);
