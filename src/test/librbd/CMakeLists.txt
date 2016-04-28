@@ -55,6 +55,7 @@ target_link_libraries(unittest_librbd
   cls_lock
   cls_lock_client
   journal
+  cls_journal
   cls_journal_client
   rados_test_stub
   librados
