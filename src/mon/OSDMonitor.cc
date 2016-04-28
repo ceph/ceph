@@ -77,6 +77,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap)
 
 OSDMonitor::OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name)
  : PaxosService(mn, p, service_name),
+   cct(cct),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    thrash_map(0), thrash_last_up_osd(-1),
@@ -5378,6 +5379,25 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.use_gmt_hitset = true;
     } else {
       ss << "expecting value 'true' or '1'";
+      return -EINVAL;
+    }
+  } else if (var == "debug_white_box_testing_ec_overwrites") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      if (cct->check_experimental_feature_enabled(
+	    "debug_white_box_testing_ec_overwrites")) {
+	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
+      } else {
+	ss << "debug_white_box_testing_ec_overwrites is an experimental feature "
+	   << "and must be enabled.  Note, this feature does not yet actually "
+	   << "work.  This flag merely enables some of the preliminary support "
+	   << "for testing purposes.";
+	return -ENOTSUP;
+      }
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      ss << "ec overwrites cannot be disabled once enabled";
+      return -EINVAL;
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
   } else if (var == "target_max_objects") {
