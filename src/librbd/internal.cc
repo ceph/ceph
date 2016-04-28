@@ -1589,40 +1589,40 @@ remove_mirroring_image:
       return -EINVAL;
     }
 
-    {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      RWLock::WLocker md_locker(ictx->md_lock);
-      r = ictx->flush();
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::WLocker md_locker(ictx->md_lock);
+    r = ictx->flush();
+    if (r < 0) {
+      return r;
+    }
+
+    uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
+                             RBD_FEATURES_DISABLE_ONLY);
+    if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
+        (!enabled && (features & disable_mask) != features)) {
+      lderr(cct) << "cannot update immutable features" << dendl;
+      return -EINVAL;
+    } else if (features == 0) {
+      lderr(cct) << "update requires at least one feature" << dendl;
+      return -EINVAL;
+    }
+
+    // if disabling features w/ exclusive lock supported, we need to
+    // acquire the lock to temporarily block IO against the image
+    if (ictx->exclusive_lock != nullptr && !enabled) {
+      C_SaferCond lock_ctx;
+      ictx->exclusive_lock->request_lock(&lock_ctx);
+      r = lock_ctx.wait();
       if (r < 0) {
+        lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
         return r;
+      } else if (!ictx->exclusive_lock->is_lock_owner()) {
+        lderr(cct) << "failed to acquire exclusive lock" << dendl;
+        return -EROFS;
       }
+    }
 
-      uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
-                               RBD_FEATURES_DISABLE_ONLY);
-      if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
-          (!enabled && (features & disable_mask) != features)) {
-        lderr(cct) << "cannot update immutable features" << dendl;
-        return -EINVAL;
-      } else if (features == 0) {
-        lderr(cct) << "update requires at least one feature" << dendl;
-        return -EINVAL;
-      }
-
-      // if disabling features w/ exclusive lock supported, we need to
-      // acquire the lock to temporarily block IO against the image
-      if (ictx->exclusive_lock != nullptr && !enabled) {
-        C_SaferCond lock_ctx;
-        ictx->exclusive_lock->request_lock(&lock_ctx);
-        r = lock_ctx.wait();
-        if (r < 0) {
-          lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
-          return r;
-        } else if (!ictx->exclusive_lock->is_lock_owner()) {
-          lderr(cct) << "failed to acquire exclusive lock" << dendl;
-          return -EROFS;
-        }
-      }
-
+    {
       RWLock::WLocker snap_locker(ictx->snap_lock);
       uint64_t new_features;
       if (enabled) {
@@ -1799,7 +1799,7 @@ remove_mirroring_image:
           img_ctx->state->close();
         }
       }
-   }
+    }
 
     ictx->notify_update();
     return 0;
