@@ -140,8 +140,8 @@ binary-arch: build install
 	# install the systemd stuff manually since we have funny service names
 	install -d -m0755 debian/ceph-common/lib/systemd/system
 	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
-	install -d -m0755 debian/ceph-common/etc/default/ceph
-	install -m0644 etc/default/ceph debian/ceph-common/etc/default/ceph
+	install -d -m0755 debian/ceph-common/etc/default
+	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
 	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
 	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
 
