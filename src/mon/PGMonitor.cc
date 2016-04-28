@@ -2124,7 +2124,7 @@ namespace {
 	cct->_conf->mon_warn_not_scrubbed + cct->_conf->mon_scrub_interval;
 
       const int mon_warn_not_deep_scrubbed =
-	cct->_conf->mon_warn_not_deep_scrubbed + cct->_conf->mon_scrub_interval;
+	cct->_conf->mon_warn_not_deep_scrubbed + cct->_conf->osd_deep_scrub_interval;
 
       bool not_scrubbed = (time_since_ls >= mon_warn_not_scrubbed &&
 			   cct->_conf->mon_warn_not_scrubbed != 0);
@@ -2137,7 +2137,8 @@ namespace {
 	  print_unscrubbed_detailed(pg_entry,
 				    detail,
 				    scrubbed_or_deepscrubbed_t::SCRUBBED);
-	} else if (not_deep_scrubbed) {
+	}
+        if (not_deep_scrubbed) {
 	  print_unscrubbed_detailed(pg_entry,
 				    detail,
 				    scrubbed_or_deepscrubbed_t::DEEPSCRUBBED);
