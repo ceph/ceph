@@ -46,7 +46,7 @@ public:
     return (m_write_blockers > 0);
   }
 
-  void block_writes();
+  int block_writes();
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
