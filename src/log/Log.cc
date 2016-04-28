@@ -24,6 +24,8 @@
 #include "include/compat.h"
 #include "include/on_exit.h"
 #include "include/uuid.h"
+#include "Entry.h"
+#include "SubsystemMap.h"
 
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
