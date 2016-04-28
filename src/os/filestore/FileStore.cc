@@ -4947,6 +4947,7 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
   r = object_map->get_values(hoid, keys, out);
   if (r < 0 && r != -ENOENT) {
     assert(!m_filestore_fail_eio || r != -EIO);
+    where = " (get_values)";
     goto out;
   }
   r = 0;
