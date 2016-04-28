@@ -558,9 +558,6 @@ int OSDMonitor::reweight_by_utilization(int oload,
   // adjust down only if we are above the threshold
   double overload_util = average_util * (double)oload / 100.0;
 
-  // but aggressively adjust weights up whenever possible.
-  double underload_util = average_util;
-
   unsigned max_change = (unsigned)(max_changef * (double)0x10000);
 
   ostringstream oss;
@@ -620,7 +617,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
       unsigned weight = osdmap.get_weight(p->first);
-      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      unsigned new_weight = (unsigned)((overload_util / util) * (float)weight);
       new_weight = MAX(new_weight, weight - max_change);
       newinc.new_weight[p->first] = new_weight;
       if (!dry_run) {
@@ -643,10 +640,10 @@ int OSDMonitor::reweight_by_utilization(int oload,
       if (++num_changed >= max_osds)
 	break;
     }
-    if (!no_increasing && util <= underload_util) {
+    if (!no_increasing) {
       // assign a higher weight.. if we can.
       unsigned weight = osdmap.get_weight(p->first);
-      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      unsigned new_weight = (unsigned)((overload_util / util) * (float)weight);
       new_weight = MIN(new_weight, weight + max_change);
       if (new_weight > 0x10000)
 	new_weight = 0x10000;
