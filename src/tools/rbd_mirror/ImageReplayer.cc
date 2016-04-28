@@ -322,22 +322,9 @@ void ImageReplayer<I>::start_replay() {
     return;
   }
 
-  m_replay_handler = new ReplayHandler<I>(this);
-  m_remote_journaler->start_live_replay(m_replay_handler,
-					1 /* TODO: configurable */);
-
-  dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
-
-  assert(r == 0);
-
   Context *on_finish(nullptr);
   {
     Mutex::Locker locker(m_lock);
-    if (m_stop_requested) {
-      on_start_fail_start(-EINTR);
-      return;
-    }
-
     assert(m_state == STATE_STARTING);
     m_state = STATE_REPLAYING;
     std::swap(m_on_start_finish, on_finish);
@@ -348,6 +335,17 @@ void ImageReplayer<I>::start_replay() {
     dout(20) << "on finish complete, r=" << r << dendl;
     on_finish->complete(r);
   }
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_replay_handler = new ReplayHandler<I>(this);
+    m_remote_journaler->start_live_replay(m_replay_handler,
+                                          1 /* TODO: configurable */);
+
+    dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
+  }
+
+  on_replay_interrupted();
 }
 
 template <typename I>
