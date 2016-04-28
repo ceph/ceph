@@ -671,7 +671,7 @@ make %{?_smp_mflags}
 %if 0%{with tests}
 %check
 # run in-tree unittests
-make %{?_smp_mflags} check-local
+make %{?_smp_mflags} check
 
 %endif
 
