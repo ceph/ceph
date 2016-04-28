@@ -494,11 +494,13 @@ def extract_zone_info(ctx, client, client_config):
     index_pool = '.' + region + '.' + zone + '.' + 'index_pool'
     data_pool = '.' + region + '.' + zone + '.' + 'data_pool'
     data_extra_pool = '.' + region + '.' + zone + '.' + 'data_extra_pool'
+    compression_type = ceph_config.get('rgw compression type', '')
 
     zone_info['placement_pools'] = [{'key': 'default_placement',
                                      'val': {'index_pool': index_pool,
                                              'data_pool': data_pool,
-                                             'data_extra_pool': data_extra_pool}
+                                             'data_extra_pool': data_extra_pool,
+                                             'compression': compression_type}
                                      }]
 
     # these keys are meant for the zones argument in the region info.  We
