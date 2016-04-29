@@ -3444,7 +3444,6 @@ void OSD::handle_pg_peering_evt(
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(
       pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
     pg_history_t history = orig_history;
     bool valid_history = project_pg_history(
@@ -3476,6 +3475,10 @@ void OSD::handle_pg_peering_evt(
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
       PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
       PG::_init(*rctx.transaction, pgid, pp);
+
+      int role = osdmap->calc_pg_role(whoami, acting, acting.size());
+      if (!pp->is_replicated() && role != pgid.shard)
+	role = -1;
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
