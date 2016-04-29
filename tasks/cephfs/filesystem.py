@@ -419,7 +419,7 @@ class Filesystem(MDSCluster):
         else:
             return False
 
-    def get_daemon_names(self, state):
+    def get_daemon_names(self, state=None):
         """
         Return MDS daemon names of those daemons in the given state
         :param state:
@@ -428,7 +428,7 @@ class Filesystem(MDSCluster):
         status = self.get_mds_map()
         result = []
         for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
-            if mds_status['state'] == state:
+            if mds_status['state'] == state or state is None:
                 result.append(mds_status['name'])
 
         return result
