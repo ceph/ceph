@@ -1279,6 +1279,8 @@ static void dump_shard(const shard_info_t& shard,
     }
     f.close_section();
   }
+  f.dump_bool("attr_missing", shard.has_attr_missing());
+  f.dump_bool("attr_unexpected", shard.has_attr_unexpected());
 }
 
 static void dump_object_id(const object_id_t& object,
