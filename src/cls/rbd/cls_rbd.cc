@@ -369,8 +369,6 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  map<string, bufferlist> existing_refs;
-
   string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
 
   bufferlist image_val_bl;
