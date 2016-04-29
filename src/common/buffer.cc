@@ -1519,14 +1519,15 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     last_p = begin();
   }
 
-  void buffer::list::rebuild_aligned(unsigned align)
+  bool buffer::list::rebuild_aligned(unsigned align)
   {
-    rebuild_aligned_size_and_memory(align, align);
+    return rebuild_aligned_size_and_memory(align, align);
   }
   
-  void buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
+  bool buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
   						   unsigned align_memory)
   {
+    unsigned old_memcopy_count = _memcopy_count;
     std::list<ptr>::iterator p = _buffers.begin();
     while (p != _buffers.end()) {
       // keep anything that's already align and sized aligned
@@ -1565,11 +1566,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       _buffers.insert(p, unaligned._buffers.front());
     }
     last_p = begin();
+
+    return  (old_memcopy_count != _memcopy_count);
   }
   
-  void buffer::list::rebuild_page_aligned()
+  bool buffer::list::rebuild_page_aligned()
   {
-    rebuild_aligned(CEPH_PAGE_SIZE);
+   return  rebuild_aligned(CEPH_PAGE_SIZE);
   }
 
   // sort-of-like-assignment-op

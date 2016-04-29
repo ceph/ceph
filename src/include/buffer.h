@@ -483,10 +483,10 @@ namespace buffer CEPH_BUFFER_API {
     bool is_contiguous() const;
     void rebuild();
     void rebuild(ptr& nb);
-    void rebuild_aligned(unsigned align);
-    void rebuild_aligned_size_and_memory(unsigned align_size,
+    bool rebuild_aligned(unsigned align);
+    bool rebuild_aligned_size_and_memory(unsigned align_size,
 					 unsigned align_memory);
-    void rebuild_page_aligned();
+    bool rebuild_page_aligned();
 
     // assignment-op with move semantics
     const static unsigned int CLAIM_DEFAULT = 0;
