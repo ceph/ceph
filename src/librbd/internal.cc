@@ -586,19 +586,9 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "list_cgs " << &io_ctx << dendl;
 
-    bufferlist bl;
-    int r = io_ctx.read(RBD_DIRECTORY, bl, 0, 0);
-    if (r < 0)
-      return r;
-
-    /*
-    names.push_back("name1");
-    names.push_back("name2");
-    names.push_back("name3");
-    */
-
     int max_read = 1024;
     string last_read = "";
+    int r;
     do {
       map<string, string> cgs;
       r = cls_client::dir_list_cgs(&io_ctx, CG_DIRECTORY,
