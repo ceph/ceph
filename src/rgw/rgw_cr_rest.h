@@ -25,6 +25,10 @@ public:
       path(_path), params(make_param_list(params)), result(_result)
   {}
 
+  ~RGWReadRESTResourceCR() {
+    request_cleanup();
+  }
+
   int send_request() {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
         new RGWRESTReadResource(conn, path, params, NULL, http_manager));
@@ -55,6 +59,7 @@ public:
   void request_cleanup() {
     if (http_op) {
       http_op->put();
+      http_op = NULL;
     }
   }
 };
@@ -78,6 +83,10 @@ public:
       path(_path), params(make_param_list(_params)), result(_result),
       input(_input)
   {}
+
+  ~RGWPostRESTResourceCR() {
+    request_cleanup();
+  }
 
   int send_request() {
     auto op = boost::intrusive_ptr<RGWRESTPostResource>(
@@ -126,6 +135,7 @@ public:
   void request_cleanup() {
     if (http_op) {
       http_op->put();
+      http_op = NULL;
     }
   }
 };
