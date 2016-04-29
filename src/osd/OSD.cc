@@ -5329,6 +5329,7 @@ COMMAND("list_missing " \
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
+COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
