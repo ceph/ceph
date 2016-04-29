@@ -130,7 +130,7 @@ void SnapshotCreateRequest<I>::send_snap_create() {
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
   m_local_image_ctx->operations->execute_snap_create(m_snap_name.c_str(), ctx,
-                                                     0U);
+                                                     0U, true);
 }
 
 template <typename I>
