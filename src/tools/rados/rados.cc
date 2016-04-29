@@ -1246,6 +1246,7 @@ static void dump_shard(const shard_info_t& shard,
 		       const inconsistent_obj_t& inc,
 		       Formatter &f)
 {
+  f.dump_bool("missing", shard.has_shard_missing());
   if (shard.has_shard_missing()) {
     f.dump_bool("missing", shard.has_shard_missing());
     return;
@@ -1318,20 +1319,13 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
   f.open_object_section("object");
   dump_object_id(inc.object, f);
   f.close_section();
-  if (inc.has_shard_missing())
-    f.dump_bool("missing", inc.has_shard_missing());
-  if (inc.has_stat_error())
-    f.dump_bool("stat_err", inc.has_stat_error());
-  if (inc.has_read_error())
-    f.dump_bool("read_err", inc.has_read_error());
-  if (inc.has_data_digest_mismatch())
-    f.dump_bool("data_digest_mismatch", inc.has_data_digest_mismatch());
-  if (inc.has_omap_digest_mismatch())
-    f.dump_bool("omap_digest_mismatch", inc.has_omap_digest_mismatch());
-  if (inc.has_size_mismatch())
-    f.dump_bool("size_mismatch", inc.has_size_mismatch());
-  if (inc.has_attr_mismatch())
-    f.dump_bool("attr_mismatch", inc.has_attr_mismatch());
+  f.dump_bool("missing", inc.has_shard_missing());
+  f.dump_bool("stat_err", inc.has_stat_error());
+  f.dump_bool("read_err", inc.has_read_error());
+  f.dump_bool("data_digest_mismatch", inc.has_data_digest_mismatch());
+  f.dump_bool("omap_digest_mismatch", inc.has_omap_digest_mismatch());
+  f.dump_bool("size_mismatch", inc.has_size_mismatch());
+  f.dump_bool("attr_mismatch", inc.has_attr_mismatch());
   f.open_array_section("shards");
   for (auto osd_shard : inc.shards) {
     f.open_object_section("shard");
@@ -1346,7 +1340,6 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
 			      Formatter &f)
 {
   dump_object_id(inc.object, f);
-<<<<<<< HEAD
   f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
   f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
   f.dump_bool("clone_missing", inc.clone_missing());
@@ -1357,7 +1350,7 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
 
   if (inc.clone_missing()) {
     f.open_array_section("clones");
-=======
+
   if (inc.ss_attr_missing())
     f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
   if (inc.ss_attr_corrupted())
@@ -2815,6 +2808,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (!object_size)
       object_size = op_size;
+    else if (object_size < op_size)
+      op_size = object_size;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
 			    max_objects, cleanup, run_name, no_verify);
