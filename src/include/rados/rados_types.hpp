@@ -52,6 +52,7 @@ struct object_id_t {
 
 struct err_t {
   enum {
+    ATTR_UNEXPECTED      = 1 << 0,
     SHARD_MISSING        = 1 << 1,
     SHARD_STAT_ERR       = 1 << 2,
     SHARD_READ_ERR       = 1 << 3,
@@ -59,12 +60,15 @@ struct err_t {
     OMAP_DIGEST_MISMATCH = 1 << 5,
     SIZE_MISMATCH        = 1 << 6,
     ATTR_MISMATCH        = 1 << 7,
-    SNAPSET_MISSING      = 1 << 8,
+    ATTR_MISSING         = 1 << 8,
     DATA_DIGEST_MISMATCH_OI = 1 << 9,
     OMAP_DIGEST_MISMATCH_OI = 1 << 10,
     SIZE_MISMATCH_OI        = 1 << 11,
   };
   uint64_t errors = 0;
+  bool has_attr_unexpected() const {
+    return errors & ATTR_UNEXPECTED;
+  }
   bool has_shard_missing() const {
     return errors & SHARD_MISSING;
   }
@@ -96,6 +100,9 @@ struct err_t {
   }
   bool has_attr_mismatch() const {
     return errors & ATTR_MISMATCH;
+  }
+  bool has_attr_missing() const {
+    return errors & ATTR_MISSING;
   }
 };
 

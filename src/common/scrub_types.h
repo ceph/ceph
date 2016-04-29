@@ -51,13 +51,13 @@ public:
     errors |= err_t::SIZE_MISMATCH;
   }
   void set_attr_missing() {
-    errors |= err_t::ATTR_MISMATCH;
+    errors |= err_t::ATTR_MISSING;
   }
   void set_attr_mismatch() {
     errors |= err_t::ATTR_MISMATCH;
   }
   void set_attr_unexpected() {
-    errors |= err_t::ATTR_MISMATCH;
+    errors |= err_t::ATTR_UNEXPECTED;
   }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
