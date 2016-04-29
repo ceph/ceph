@@ -158,8 +158,6 @@ struct rgw_http_req_data : public RefCountedObject {
   void finish(int r) {
     Mutex::Locker l(lock);
     ret = r;
-    cond.Signal();
-    done.set(1);
     if (easy_handle)
       curl_easy_cleanup(easy_handle);
 
@@ -168,6 +166,8 @@ struct rgw_http_req_data : public RefCountedObject {
 
     easy_handle = NULL;
     h = NULL;
+    done.set(1);
+    cond.Signal();
   }
 
   bool is_done() {
@@ -252,6 +252,7 @@ int RGWHTTPClient::wait()
 RGWHTTPClient::~RGWHTTPClient()
 {
   if (req_data) {
+    wait();
     req_data->put();
   }
 }
@@ -454,6 +455,7 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
   int ret = client->init_request(method, url, req_data);
   if (ret < 0) {
     req_data->put();
+    req_data = NULL;
     return ret;
   }
 
@@ -464,6 +466,10 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
 
   if (!is_threaded) {
     ret = link_request(req_data);
+    if (ret < 0) {
+      req_data->put();
+      req_data = NULL;
+    }
     return ret;
   }
   ret = signal_thread();
