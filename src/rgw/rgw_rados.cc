@@ -1653,13 +1653,11 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
     master_zonegroup = "";
   }
 
-  for (auto iter : zonegroups) {
-    for (auto i : iter.second.zones) {
-      string& zone_id = i.second.id;
-      if (short_zone_ids.find(zone_id) == short_zone_ids.end()) {
-        uint32_t short_id = gen_short_zone_id(zone_id);
-        short_zone_ids[i.second.id] = short_id;
-      }
+  for (auto& i : zonegroup.zones) {
+    string& zone_id = i.second.id;
+    if (short_zone_ids.find(zone_id) == short_zone_ids.end()) {
+      uint32_t short_id = gen_short_zone_id(zone_id);
+      short_zone_ids[i.second.id] = short_id;
     }
   }
 
