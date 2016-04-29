@@ -32,7 +32,7 @@
 #include <iostream>
 #include <limits>
 
-#include "boost/variant.hpp"
+#include <boost/variant.hpp>
 
 #include "indirect_intrusive_heap.h"
 #include "run_every.h"

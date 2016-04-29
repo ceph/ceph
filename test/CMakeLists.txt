@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src/crimson/src)
+include_directories(${BOOST_INCLUDE_DIR})
 
 # set(local_flags "-g -O0")
 
