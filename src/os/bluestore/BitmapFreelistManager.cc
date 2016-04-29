@@ -314,11 +314,130 @@ void BitmapFreelistManager::dump()
   }
 }
 
+void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
+					  int val)
+{
+  unsigned errors = 0;
+  uint64_t first_key = offset & key_mask;
+  uint64_t last_key = (offset + length - 1) & key_mask;
+  if (first_key == last_key) {
+    string k;
+    make_offset_key(first_key, &k);
+    bufferlist bl;
+    kvdb->get(bitmap_prefix, k, &bl);
+    if (bl.length() > 0) {
+      const char *p = bl.c_str();
+      unsigned s = (offset & ~key_mask) / bytes_per_block;
+      unsigned e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
+      for (unsigned i = s; i <= e; ++i) {
+	int has = !!(p[i >> 3] & (1ull << (i & 7)));
+	if (has != val) {
+	  derr << __func__ << " key " << first_key << " bit " << i
+	       << " has " << has << " expected " << val << dendl;
+	  ++errors;
+	}
+      }
+    } else {
+      if (val) {
+	derr << __func__ << " key " << first_key << " not present, expected "
+	     << val << dendl;
+	++errors;
+      }
+    }
+  } else {
+    // first key
+    {
+      string k;
+      make_offset_key(first_key, &k);
+      bufferlist bl;
+      kvdb->get(bitmap_prefix, k, &bl);
+      if (bl.length()) {
+	const char *p = bl.c_str();
+	unsigned s = (offset & ~key_mask) / bytes_per_block;
+	unsigned e = blocks_per_key;
+	for (unsigned i = s; i < e; ++i) {
+	  int has = !!(p[i >> 3] & (1ull << (i & 7)));
+	  if (has != val) {
+	    derr << __func__ << " key " << first_key << " bit " << i
+		 << " has " << has << " expected " << val << dendl;
+	    ++errors;
+	  }
+	}
+      } else {
+	if (val) {
+	  derr << __func__ << " key " << first_key << " not present, expected "
+	       << val << dendl;
+	  ++errors;
+	}
+      }
+      first_key += bytes_per_block * blocks_per_key;
+    }
+    // middle keys
+    if (first_key < last_key) {
+      while (first_key < last_key) {
+	string k;
+	make_offset_key(first_key, &k);
+	bufferlist bl;
+	kvdb->get(bitmap_prefix, k, &bl);
+	if (bl.length() > 0) {
+	  const char *p = bl.c_str();
+	  for (unsigned i = 0; i < blocks_per_key; ++i) {
+	    int has = !!(p[i >> 3] & (1ull << (i & 7)));
+	    if (has != val) {
+	      derr << __func__ << " key " << first_key << " bit " << i
+		   << " has " << has << " expected " << val << dendl;
+	      ++errors;
+	    }
+	  }
+	} else {
+	  if (val) {
+	    derr << __func__ << " key " << first_key << " not present, expected "
+		 << val << dendl;
+	    ++errors;
+	  }
+	}
+	first_key += bytes_per_block * blocks_per_key;
+      }
+    }
+    assert(first_key == last_key);
+    {
+      string k;
+      make_offset_key(first_key, &k);
+      bufferlist bl;
+      kvdb->get(bitmap_prefix, k, &bl);
+      if (bl.length() > 0) {
+	const char *p = bl.c_str();
+	unsigned e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
+	for (unsigned i = 0; i < e; ++i) {
+	  int has = !!(p[i >> 3] & (1ull << (i & 7)));
+	  if (has != val) {
+	    derr << __func__ << " key " << first_key << " bit " << i
+		 << " has " << has << " expected " << val << dendl;
+	    ++errors;
+	  }
+	}
+      } else {
+	if (val) {
+	  derr << __func__ << " key " << first_key << " not present, expected "
+	       << val << dendl;
+	  ++errors;
+	}
+      }
+    }
+  }
+  if (errors) {
+    derr << __func__ << " saw " << errors << " errors" << dendl;
+    assert(0 == "bitmap freelist errors");
+  }
+}
+
 void BitmapFreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
+  if (g_conf->bluestore_debug_freelist)
+    _verify_range(offset, length, 0);
   _xor(offset, length, txn);
 }
 
@@ -327,6 +446,8 @@ void BitmapFreelistManager::release(
   KeyValueDB::Transaction txn)
 {
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
+  if (g_conf->bluestore_debug_freelist)
+    _verify_range(offset, length, 1);
   _xor(offset, length, txn);
 }
 

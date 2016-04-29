@@ -39,6 +39,7 @@ class BitmapFreelistManager : public FreelistManager {
 
   void _init_misc();
 
+  void _verify_range(uint64_t offset, uint64_t length, int val);
   void _xor(
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn);
