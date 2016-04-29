@@ -70,7 +70,7 @@ vc.disconnect()
 
     def _configure_guest_auth(self, volumeclient_mount, guest_mount,
                               guest_entity, mount_path,
-                              namespace_prefix=None):
+                              namespace_prefix=None, readonly=False):
         """
         Set up auth credentials for the guest client to mount a volume.
 
@@ -81,8 +81,10 @@ vc.disconnect()
         :param mount_path: path of the volume.
         :param namespace_prefix: name prefix of the RADOS namespace, which
                                  is used for the volume's layout.
-
+        :param readonly: defaults to False. If set to 'True' only read-only
+                         mount access is granted to the guest.
         """
+
         head, volume_id = os.path.split(mount_path)
         head, group_id = os.path.split(head)
         head, volume_prefix = os.path.split(head)
@@ -91,12 +93,13 @@ vc.disconnect()
         # Authorize the guest client's auth ID to mount the volume.
         key = self._volume_client_python(volumeclient_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
-            auth_result = vc.authorize(vp, "{guest_entity}")
+            auth_result = vc.authorize(vp, "{guest_entity}", readonly={readonly})
             print auth_result['auth_key']
         """.format(
             group_id=group_id,
             volume_id=volume_id,
-            guest_entity=guest_entity)), volume_prefix, namespace_prefix
+            guest_entity=guest_entity,
+            readonly=readonly)), volume_prefix, namespace_prefix
         )
 
         # The guest auth ID should exist.
@@ -539,3 +542,64 @@ vc.disconnect()
         # Check it's really gone
         self.assertEqual(self.mount_a.ls("volumes/_deleting"), [])
         self.assertEqual(self.mount_a.ls("volumes/"), ["_deleting", group_id])
+
+    def test_readonly_authorization(self):
+        """
+        That guest clients can be restricted to read-only mounts of volumes.
+        """
+
+        volumeclient_mount = self.mounts[1]
+        guest_mount = self.mounts[2]
+        volumeclient_mount.umount_wait()
+        guest_mount.umount_wait()
+
+        # Configure volumeclient_mount as the handle for driving volumeclient.
+        self._configure_vc_auth(volumeclient_mount, "manila")
+
+        guest_entity = "guest"
+        group_id = "grpid"
+        volume_id = "volid"
+
+        # Create a volume.
+        mount_path = self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            create_result = vc.create_volume(vp, 1024*1024*10)
+            print create_result['mount_path']
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            guest_entity=guest_entity
+        )))
+
+        # Authorize and configure credentials for the guest to mount the
+        # the volume with read-write access.
+        self._configure_guest_auth(volumeclient_mount, guest_mount, guest_entity,
+                                   mount_path, readonly=False)
+
+        # Mount the volume, and write to it.
+        guest_mount.mount(mount_path=mount_path)
+        guest_mount.write_n_mb("data.bin", 1)
+
+        # Change the guest auth ID's authorization to read-only mount access.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.deauthorize(vp, "{guest_entity}")
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            guest_entity=guest_entity
+        )))
+        self._configure_guest_auth(volumeclient_mount, guest_mount, guest_entity,
+                                   mount_path, readonly=True)
+
+        # The effect of the change in access level to read-only is not
+        # immediate. The guest sees the change only after a remount of
+        # the volume.
+        guest_mount.umount_wait()
+        guest_mount.mount(mount_path=mount_path)
+
+        # Read existing content of the volume.
+        self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
+        # Cannot write into read-only volume.
+        with self.assertRaises(CommandFailedError):
+            guest_mount.write_n_mb("rogue.bin", 1)
