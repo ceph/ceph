@@ -90,7 +90,9 @@ namespace crimson {
       uint get_server_count() const { return server_count; }
       TC& get_client(ClientId id) { return *clients[id]; }
       TS& get_server(ServerId id) { return *servers[id]; }
-      const ServerId& get_server_id(uint index) const { return server_ids[index]; }
+      const ServerId& get_server_id(uint index) const {
+	return server_ids[index];
+      }
 
 
       void add_servers(uint count,
@@ -136,14 +138,19 @@ namespace crimson {
 
       void display_stats(std::ostream& out,
 			 ServerDataOutF server_out_f, ClientDataOutF client_out_f,
-			 ServerFilter server_filter = [](const ServerId&) { return true; },
-			 ClientFilter client_filter = [](const ClientId&) { return true; },
+			 ServerFilter server_filter =
+			 [] (const ServerId&) { return true; },
+			 ClientFilter client_filter =
+			 [] (const ClientId&) { return true; },
 			 int head_w = 12, int data_w = 8, int data_prec = 2) {
 	assert(has_run);
-    
-	const std::chrono::seconds skip_amount(0); // skip first 2 secondsd of data
-	const std::chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
-	const std::chrono::seconds report_unit(1); // unit to output reports in
+
+	// skip first 2 secondsd of data
+	const std::chrono::seconds skip_amount(0);
+	// calculate in groups of 5 seconds
+	const std::chrono::seconds measure_unit(2);
+	// unit to output reports in
+	const std::chrono::seconds report_unit(1);
 
 	// compute and display stats
 
@@ -251,14 +258,16 @@ namespace crimson {
       // **** server selection functions ****
 
 
-      const ServerId& server_select_alternate(uint64_t seed, uint16_t client_idx) {
+      const ServerId& server_select_alternate(uint64_t seed,
+					      uint16_t client_idx) {
 	uint index = (client_idx + seed) % server_count;
 	return server_ids[index];
       }
 
 
       // returns a lambda using the range specified as servers_per (client)
-      ClientBasedServerSelectFunc make_server_select_alt_range(uint16_t servers_per) {
+      ClientBasedServerSelectFunc
+      make_server_select_alt_range(uint16_t servers_per) {
 	return [servers_per,this](uint64_t seed, uint16_t client_idx)
 	  -> const ServerId& {
 	  double factor = double(server_count) / client_count;
@@ -277,7 +286,8 @@ namespace crimson {
 
   
       // function to choose a server randomly
-      ClientBasedServerSelectFunc make_server_select_ran_range(uint16_t servers_per) {
+      ClientBasedServerSelectFunc
+      make_server_select_ran_range(uint16_t servers_per) {
 	return [servers_per,this](uint64_t seed, uint16_t client_idx)
 	  -> const ServerId& {
 	  double factor = double(server_count) / client_count;
