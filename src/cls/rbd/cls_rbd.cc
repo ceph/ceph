@@ -301,6 +301,8 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
     if ((old_cg_id != cg_id) || (old_pool_id != pool_id)) {
       return -EEXIST;
+    } else {
+      return 0; // In this case the values are already correct
     }
   }
 
