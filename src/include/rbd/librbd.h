@@ -113,6 +113,23 @@ typedef struct {
   bool primary;
 } rbd_mirror_image_info_t;
 
+typedef enum {
+  MIRROR_IMAGE_STATUS_STATE_UNKNOWN         = 0,
+  MIRROR_IMAGE_STATUS_STATE_ERROR           = 1,
+  MIRROR_IMAGE_STATUS_STATE_SYNCING         = 2,
+  MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY = 3,
+  MIRROR_IMAGE_STATUS_STATE_REPLAYING       = 4,
+  MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY = 5,
+  MIRROR_IMAGE_STATUS_STATE_STOPPED         = 6,
+} rbd_mirror_image_status_state_t;
+
+typedef struct {
+  rbd_mirror_image_status_state_t state;
+  char *description;
+  time_t last_update;
+  bool up;
+} rbd_mirror_image_status_t;
+
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
 
 /* image options */
@@ -208,6 +225,12 @@ CEPH_RBD_API int rbd_mirror_peer_set_client(rados_ioctx_t io_ctx,
 CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
                                              const char *uuid,
                                              const char *cluster_name);
+CEPH_RBD_API int rbd_mirror_image_status_list(rados_ioctx_t io_ctx,
+    const char *start, size_t max, char **image_names,
+    rbd_mirror_image_info_t *images, rbd_mirror_image_status_t *image_statuses,
+    size_t *len);
+CEPH_RBD_API int rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
+    rbd_mirror_image_status_state_t *states, int *counts, size_t *maxlen);
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
@@ -607,6 +630,8 @@ CEPH_RBD_API int rbd_mirror_image_resync(rbd_image_t image);
 CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
                                            rbd_mirror_image_info_t *mirror_image_info,
                                            size_t info_size);
+CEPH_RBD_API int rbd_mirror_image_get_status(rbd_image_t image,
+    rbd_mirror_image_status_t *mirror_image_status, size_t info_size);
 
 #ifdef __cplusplus
 }

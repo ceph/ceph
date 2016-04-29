@@ -40,6 +40,7 @@
 #include "common/bit_vector.hpp"
 #include "common/errno.h"
 #include "objclass/objclass.h"
+#include "osd/osd_types.h"
 #include "include/rbd_types.h"
 #include "include/rbd/object_map_types.h"
 
@@ -125,6 +126,12 @@ cls_method_handle_t h_mirror_image_get_image_id;
 cls_method_handle_t h_mirror_image_get;
 cls_method_handle_t h_mirror_image_set;
 cls_method_handle_t h_mirror_image_remove;
+cls_method_handle_t h_mirror_image_status_set;
+cls_method_handle_t h_mirror_image_status_remove;
+cls_method_handle_t h_mirror_image_status_get;
+cls_method_handle_t h_mirror_image_status_list;
+cls_method_handle_t h_mirror_image_status_get_summary;
+cls_method_handle_t h_mirror_image_status_remove_down;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -2968,6 +2975,7 @@ static const std::string MODE("mirror_mode");
 static const std::string PEER_KEY_PREFIX("mirror_peer_");
 static const std::string IMAGE_KEY_PREFIX("image_");
 static const std::string GLOBAL_KEY_PREFIX("global_");
+static const std::string STATUS_GLOBAL_KEY_PREFIX("status_global_");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
@@ -2979,6 +2987,10 @@ std::string image_key(const string &image_id) {
 
 std::string global_key(const string &global_id) {
   return GLOBAL_KEY_PREFIX + global_id;
+}
+
+std::string status_global_key(const string &global_id) {
+  return STATUS_GLOBAL_KEY_PREFIX + global_id;
 }
 
 int uuid_get(cls_method_context_t hctx, std::string *mirror_uuid) {
@@ -3162,6 +3174,296 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
            cpp_strerror(r).c_str());
     return r;
   }
+  return 0;
+}
+
+struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
+  entity_inst_t origin;
+
+  MirrorImageStatusOnDisk() {
+  }
+  MirrorImageStatusOnDisk(const cls::rbd::MirrorImageStatus &status) :
+    cls::rbd::MirrorImageStatus(status) {
+  }
+
+  void encode_meta(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(origin, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void encode(bufferlist &bl) const {
+    encode_meta(bl);
+    cls::rbd::MirrorImageStatus::encode(bl);
+  }
+
+  void decode_meta(bufferlist::iterator &it) {
+    DECODE_START(1, it);
+    ::decode(origin, it);
+    DECODE_FINISH(it);
+  }
+
+  void decode(bufferlist::iterator &it) {
+    decode_meta(it);
+    cls::rbd::MirrorImageStatus::decode(it);
+  }
+};
+WRITE_CLASS_ENCODER(MirrorImageStatusOnDisk)
+
+int image_status_set(cls_method_context_t hctx, const string &global_image_id,
+		     const cls::rbd::MirrorImageStatus &status) {
+  MirrorImageStatusOnDisk ondisk_status(status);
+  ondisk_status.up = false;
+  ondisk_status.last_update = ceph_clock_now(g_ceph_context);
+
+  int r = cls_get_request_origin(hctx, &ondisk_status.origin);
+  assert(r == 0);
+
+  bufferlist bl;
+  encode(ondisk_status, bl);
+
+  r = cls_cxx_map_set_val(hctx, status_global_key(global_image_id), &bl);
+  if (r < 0) {
+    CLS_ERR("error setting status for mirrored image, global id '%s': %s",
+	    global_image_id.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int image_status_remove(cls_method_context_t hctx,
+			const string &global_image_id) {
+
+  int r = cls_cxx_map_remove_key(hctx, status_global_key(global_image_id));
+  if (r < 0) {
+    CLS_ERR("error removing status for mirrored image, global id '%s': %s",
+	    global_image_id.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int image_status_get(cls_method_context_t hctx, const string &global_image_id,
+		     cls::rbd::MirrorImageStatus *status) {
+
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, status_global_key(global_image_id), &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading status for mirrored image, global id '%s': '%s'",
+	      global_image_id.c_str(), cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  MirrorImageStatusOnDisk ondisk_status;
+  try {
+    bufferlist::iterator it = bl.begin();
+    decode(ondisk_status, it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("could not decode status for mirrored image, global id '%s'",
+	    global_image_id.c_str());
+    return -EIO;
+  }
+
+  obj_list_watch_response_t watchers;
+  r = cls_cxx_list_watchers(hctx, &watchers);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error listing watchers: '%s'", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  *status = static_cast<cls::rbd::MirrorImageStatus>(ondisk_status);
+  status->up = false;
+  for (auto &w : watchers.entries) {
+    if (w.name == ondisk_status.origin.name &&
+	w.addr == ondisk_status.origin.addr) {
+      status->up = true;
+      break;
+    }
+  }
+
+  return 0;
+}
+
+int image_status_list(cls_method_context_t hctx,
+	const std::string &start_after, uint64_t max_return,
+	map<std::string, cls::rbd::MirrorImage> *mirror_images,
+        map<std::string, cls::rbd::MirrorImageStatus> *mirror_statuses) {
+  std::string last_read = image_key(start_after);
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+
+  while (r == max_read && mirror_images->size() < max_return) {
+    std::map<std::string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, IMAGE_KEY_PREFIX, max_read,
+			     &vals);
+    if (r < 0) {
+      CLS_ERR("error reading mirror image directory by name: %s",
+              cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto it = vals.begin(); it != vals.end() &&
+	   mirror_images->size() < max_return; ++it) {
+      const std::string &image_id = it->first.substr(IMAGE_KEY_PREFIX.size());
+      cls::rbd::MirrorImage mirror_image;
+      bufferlist::iterator iter = it->second.begin();
+      try {
+	::decode(mirror_image, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode mirror image payload of image '%s'",
+                image_id.c_str());
+	return -EIO;
+      }
+
+      (*mirror_images)[image_id] = mirror_image;
+
+      cls::rbd::MirrorImageStatus status;
+      r = image_status_get(hctx, mirror_image.global_image_id, &status);
+      if (r < 0) {
+	continue;
+      }
+
+      (*mirror_statuses)[image_id] = status;
+    }
+    if (!vals.empty()) {
+      last_read = image_key(mirror_images->rbegin()->first);
+    }
+  }
+
+  return 0;
+}
+
+int image_status_get_summary(cls_method_context_t hctx,
+	std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+  obj_list_watch_response_t watchers_;
+  int r = cls_cxx_list_watchers(hctx, &watchers_);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error listing watchers: '%s'", cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  set<entity_inst_t> watchers;
+  for (auto &w : watchers_.entries) {
+    watchers.insert(entity_inst_t(w.name, w.addr));
+  }
+
+  states->clear();
+
+  string last_read = IMAGE_KEY_PREFIX;
+  int max_read = RBD_MAX_KEYS_READ;
+  r = max_read;
+  while (r == max_read) {
+    map<string, bufferlist> vals;
+    r = cls_cxx_map_get_vals(hctx, last_read, IMAGE_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto &list_it : vals) {
+      const string &key = list_it.first;
+
+      if (0 != key.compare(0, IMAGE_KEY_PREFIX.size(), IMAGE_KEY_PREFIX)) {
+	break;
+      }
+
+      cls::rbd::MirrorImage mirror_image;
+      bufferlist::iterator iter = list_it.second.begin();
+      try {
+	::decode(mirror_image, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode mirror image payload for key '%s'",
+                key.c_str());
+	return -EIO;
+      }
+
+      cls::rbd::MirrorImageStatus status;
+      r = image_status_get(hctx, mirror_image.global_image_id, &status);
+      if (r < 0) {
+	// Ignore.
+      }
+
+      cls::rbd::MirrorImageStatusState state = status.up ? status.state :
+	cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
+      (*states)[state]++;
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  }
+
+  return 0;
+}
+
+int image_status_remove_down(cls_method_context_t hctx) {
+  obj_list_watch_response_t watchers_;
+  int r = cls_cxx_list_watchers(hctx, &watchers_);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error listing watchers: '%s'", cpp_strerror(r).c_str());
+    }
+    return r;
+  }
+
+  set<entity_inst_t> watchers;
+  for (auto &w : watchers_.entries) {
+    watchers.insert(entity_inst_t(w.name, w.addr));
+  }
+
+  string last_read = STATUS_GLOBAL_KEY_PREFIX;
+  int max_read = RBD_MAX_KEYS_READ;
+  r = max_read;
+  while (r == max_read) {
+    map<string, bufferlist> vals;
+    r = cls_cxx_map_get_vals(hctx, last_read, STATUS_GLOBAL_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto &list_it : vals) {
+      const string &key = list_it.first;
+
+      if (0 != key.compare(0, STATUS_GLOBAL_KEY_PREFIX.size(),
+			   STATUS_GLOBAL_KEY_PREFIX)) {
+	break;
+      }
+
+      MirrorImageStatusOnDisk status;
+      try {
+	bufferlist::iterator it = list_it.second.begin();
+	status.decode_meta(it);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode status metadata for mirrored image '%s'",
+		key.c_str());
+	return -EIO;
+      }
+
+      if (watchers.find(status.origin) == watchers.end()) {
+	CLS_LOG(20, "removing stale status object for key %s",
+		key.c_str());
+	int r1 = cls_cxx_map_remove_key(hctx, key);
+	if (r1 < 0) {
+	  CLS_ERR("error removing stale status for key '%s': %s",
+		  key.c_str(), cpp_strerror(r1).c_str());
+	  return r1;
+	}
+      }
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  }
+
   return 0;
 }
 
@@ -3679,6 +3981,158 @@ int mirror_image_remove(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+/**
+ * Input:
+ * @param global_image_id (std::string)
+ * @param status (cls::rbd::MirrorImageStatus)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_status_set(cls_method_context_t hctx, bufferlist *in,
+			    bufferlist *out) {
+  string global_image_id;
+  cls::rbd::MirrorImageStatus status;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(global_image_id, it);
+    ::decode(status, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::image_status_set(hctx, global_image_id, status);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_image_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_status_remove(cls_method_context_t hctx, bufferlist *in,
+			       bufferlist *out) {
+  string global_image_id;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(global_image_id, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::image_status_remove(hctx, global_image_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_image_id (std::string)
+ *
+ * Output:
+ * @param cls::rbd::MirrorImageStatus - metadata associated with the global_image_id
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_status_get(cls_method_context_t hctx, bufferlist *in,
+			    bufferlist *out) {
+  string global_image_id;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(global_image_id, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::MirrorImageStatus status;
+  int r = mirror::image_status_get(hctx, global_image_id, &status);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(status, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param std::map<std::string, cls::rbd::MirrorImage>: image id to image map
+ * @param std::map<std::string, cls::rbd::MirrorImageStatus>: image it to status map
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_status_list(cls_method_context_t hctx, bufferlist *in,
+			     bufferlist *out) {
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  map<std::string, cls::rbd::MirrorImage> images;
+  map<std::string, cls::rbd::MirrorImageStatus> statuses;
+  int r = mirror::image_status_list(hctx, start_after, max_return, &images,
+				    &statuses);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(images, *out);
+  ::encode(statuses, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param std::map<cls::rbd::MirrorImageStatusState, int>: states counts
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_status_get_summary(cls_method_context_t hctx, bufferlist *in,
+				    bufferlist *out) {
+  std::map<cls::rbd::MirrorImageStatusState, int> states;
+
+  int r = mirror::image_status_get_summary(hctx, &states);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(states, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_image_status_remove_down(cls_method_context_t hctx, bufferlist *in,
+				    bufferlist *out) {
+  int r = mirror::image_status_remove_down(hctx);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -3874,5 +4328,24 @@ void __cls_init()
   cls_register_cxx_method(h_class, "mirror_image_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_image_remove, &h_mirror_image_remove);
+  cls_register_cxx_method(h_class, "mirror_image_status_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
+                          mirror_image_status_set, &h_mirror_image_status_set);
+  cls_register_cxx_method(h_class, "mirror_image_status_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_image_status_remove,
+			  &h_mirror_image_status_remove);
+  cls_register_cxx_method(h_class, "mirror_image_status_get", CLS_METHOD_RD,
+                          mirror_image_status_get, &h_mirror_image_status_get);
+  cls_register_cxx_method(h_class, "mirror_image_status_list", CLS_METHOD_RD,
+                          mirror_image_status_list,
+			  &h_mirror_image_status_list);
+  cls_register_cxx_method(h_class, "mirror_image_status_get_summary",
+			  CLS_METHOD_RD, mirror_image_status_get_summary,
+			  &h_mirror_image_status_get_summary);
+  cls_register_cxx_method(h_class, "mirror_image_status_remove_down",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_image_status_remove_down,
+			  &h_mirror_image_status_remove_down);
   return;
 }

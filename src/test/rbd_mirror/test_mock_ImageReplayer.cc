@@ -65,7 +65,8 @@ struct BootstrapRequest<librbd::MockImageReplayerImageCtx> {
                                   const std::string &remote_mirror_uuid,
                                   ::journal::MockJournalerProxy *journaler,
                                   librbd::journal::MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish) {
+                                  Context *on_finish,
+                                  rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -124,9 +125,28 @@ struct OpenLocalImageRequest<librbd::MockImageReplayerImageCtx> {
   MOCK_METHOD0(send, void());
 };
 
+template<>
+struct ReplayStatusFormatter<librbd::MockImageReplayerImageCtx> {
+  static ReplayStatusFormatter* s_instance;
+
+  static ReplayStatusFormatter* create(::journal::MockJournalerProxy *journaler,
+				       const std::string &mirror_uuid) {
+    assert(s_instance != nullptr);
+    return s_instance;
+  }
+
+  ReplayStatusFormatter() {
+    assert(s_instance == nullptr);
+    s_instance = this;
+  }
+
+  MOCK_METHOD2(get_or_send_update, bool(std::string *description, Context *on_finish));
+};
+
 BootstrapRequest<librbd::MockImageReplayerImageCtx>* BootstrapRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
 CloseImageRequest<librbd::MockImageReplayerImageCtx>* CloseImageRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
 OpenLocalImageRequest<librbd::MockImageReplayerImageCtx>* OpenLocalImageRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
+ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>* ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
 
 } // namespace image_replayer
 } // namespace mirror

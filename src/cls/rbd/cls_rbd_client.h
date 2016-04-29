@@ -243,6 +243,40 @@ namespace librbd {
 			 const cls::rbd::MirrorImage &mirror_image);
     int mirror_image_remove(librados::IoCtx *ioctx,
 			    const std::string &image_id);
+    int mirror_image_status_set(librados::IoCtx *ioctx,
+				const std::string &global_image_id,
+				const cls::rbd::MirrorImageStatus &status);
+    void mirror_image_status_set(librados::ObjectWriteOperation *op,
+				 const std::string &global_image_id,
+				 const cls::rbd::MirrorImageStatus &status);
+    int mirror_image_status_remove(librados::IoCtx *ioctx,
+				   const std::string &global_image_id);
+    void mirror_image_status_remove(librados::ObjectWriteOperation *op,
+				    const std::string &global_image_id);
+    int mirror_image_status_get(librados::IoCtx *ioctx,
+				const std::string &global_image_id,
+				cls::rbd::MirrorImageStatus *status);
+    void mirror_image_status_get_start(librados::ObjectReadOperation *op,
+				       const std::string &global_image_id);
+    int mirror_image_status_get_finish(bufferlist::iterator *iter,
+				       cls::rbd::MirrorImageStatus *status);
+    int mirror_image_status_list(librados::IoCtx *ioctx,
+	const std::string &start, uint64_t max_return,
+	std::map<std::string, cls::rbd::MirrorImage> *images,
+	std::map<std::string, cls::rbd::MirrorImageStatus> *statuses);
+    void mirror_image_status_list_start(librados::ObjectReadOperation *op,
+					const std::string &start,
+					uint64_t max_return);
+    int mirror_image_status_list_finish(bufferlist::iterator *iter,
+	std::map<std::string, cls::rbd::MirrorImage> *images,
+	std::map<std::string, cls::rbd::MirrorImageStatus> *statuses);
+    int mirror_image_status_get_summary(librados::IoCtx *ioctx,
+	std::map<cls::rbd::MirrorImageStatusState, int> *states);
+    void mirror_image_status_get_summary_start(librados::ObjectReadOperation *op);
+    int mirror_image_status_get_summary_finish(bufferlist::iterator *iter,
+	std::map<cls::rbd::MirrorImageStatusState, int> *states);
+    int mirror_image_status_remove_down(librados::IoCtx *ioctx);
+    void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 
   } // namespace cls_client
 } // namespace librbd

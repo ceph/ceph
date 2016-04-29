@@ -199,8 +199,15 @@ status()
 	rbd --cluster ${cluster} -p ${POOL} ls
 	echo
 
+	echo "${cluster} ${POOL} mirror pool status"
+	rbd --cluster ${cluster} -p ${POOL} mirror pool status --verbose
+	echo
+
 	for image in `rbd --cluster ${cluster} -p ${POOL} ls 2>/dev/null`
 	do
+	    echo "image ${image} info"
+	    rbd --cluster ${cluster} -p ${POOL} info ${image}
+	    echo
 	    echo "image ${image} journal status"
 	    rbd --cluster ${cluster} -p ${POOL} journal status --image ${image}
 	    echo
@@ -373,6 +380,20 @@ wait_for_replay_complete()
     return 1
 }
 
+test_status_in_pool_dir()
+{
+    local cluster=$1
+    local image=$2
+    local state_pattern=$3
+    local description_pattern=$4
+
+    local status_log=${TEMPDIR}/${cluster}-${image}.mirror_status
+    rbd --cluster ${cluster} -p ${POOL} mirror image status ${image} |
+	tee ${status_log}
+    grep "state: .*${state_pattern}" ${status_log}
+    grep "description: .*${description_pattern}" ${status_log}
+}
+
 create_image()
 {
     local cluster=$1
@@ -451,6 +472,8 @@ create_image ${CLUSTER2} ${image}
 wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image}
 write_image ${CLUSTER2} ${image} 100
 wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
+test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
 compare_images ${image}
 
 echo "TEST: stop mirror, add image, start mirror and test replay"
@@ -461,11 +484,14 @@ write_image ${CLUSTER2} ${image1} 100
 start_mirror ${CLUSTER1_DAEMON} ${CLUSTER1}
 wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image1}
 wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image1}
+test_status_in_pool_dir ${CLUSTER1} ${image1} 'up+replaying' 'master_position'
+test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
 compare_images ${image1}
 
 echo "TEST: test the first image is replaying after restart"
 write_image ${CLUSTER2} ${image} 100
 wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 compare_images ${image}
 
 echo "TEST: failover and failback"
@@ -474,19 +500,26 @@ start_mirror ${CLUSTER2_DAEMON} ${CLUSTER2}
 # failover
 demote_image ${CLUSTER2} ${image}
 wait_for_image_replay_stopped ${CLUSTER1_DAEMON} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${image} 'up+stopped'
+test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 promote_image ${CLUSTER1} ${image}
 wait_for_image_replay_started ${CLUSTER2_DAEMON} ${image}
 write_image ${CLUSTER1} ${image} 100
 wait_for_replay_complete ${CLUSTER2_DAEMON} ${CLUSTER1} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${image} 'up+stopped'
+test_status_in_pool_dir ${CLUSTER2} ${image} 'up+replaying' 'master_position'
 compare_images ${image}
 
 # failback
 demote_image ${CLUSTER1} ${image}
 wait_for_image_replay_stopped ${CLUSTER2_DAEMON} ${image}
+test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 promote_image ${CLUSTER2} ${image}
 wait_for_image_replay_started ${CLUSTER1_DAEMON} ${image}
 write_image ${CLUSTER2} ${image} 100
 wait_for_replay_complete ${CLUSTER1_DAEMON} ${CLUSTER2} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
+test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 compare_images ${image}
 
 echo OK

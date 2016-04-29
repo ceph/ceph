@@ -17,6 +17,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
+#include "tools/rbd_mirror/ProgressContext.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -95,14 +96,16 @@ BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
                                       const std::string &remote_mirror_uuid,
                                       Journaler *journaler,
                                       MirrorPeerClientMeta *client_meta,
-                                      Context *on_finish)
+                                      Context *on_finish,
+				      rbd::mirror::ProgressContext *progress_ctx)
   : m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
     m_local_image_ctx(local_image_ctx), m_local_image_name(local_image_name),
     m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
     m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
-    m_client_meta(client_meta), m_on_finish(on_finish) {
+    m_client_meta(client_meta), m_on_finish(on_finish),
+    m_progress_ctx(progress_ctx) {
 }
 
 template <typename I>
@@ -118,6 +121,8 @@ void BootstrapRequest<I>::send() {
 template <typename I>
 void BootstrapRequest<I>::get_local_image_id() {
   dout(20) << dendl;
+
+  update_progress("GET_LOCAL_IMAGE_ID");
 
   // attempt to cross-reference a local image by the global image id
   librados::ObjectReadOperation op;
@@ -155,6 +160,8 @@ void BootstrapRequest<I>::handle_get_local_image_id(int r) {
 template <typename I>
 void BootstrapRequest<I>::get_remote_tag_class() {
   dout(20) << dendl;
+
+  update_progress("GET_REMOTE_TAG_CLASS");
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_tag_class>(
@@ -201,6 +208,8 @@ template <typename I>
 void BootstrapRequest<I>::get_client() {
   dout(20) << dendl;
 
+  update_progress("GET_CLIENT");
+
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_client>(
       this);
@@ -229,6 +238,8 @@ void BootstrapRequest<I>::handle_get_client(int r) {
 template <typename I>
 void BootstrapRequest<I>::register_client() {
   dout(20) << dendl;
+
+  update_progress("REGISTER_CLIENT");
 
   // record an place-holder record
   librbd::journal::ClientData client_data{
@@ -260,6 +271,8 @@ void BootstrapRequest<I>::handle_register_client(int r) {
 template <typename I>
 void BootstrapRequest<I>::open_remote_image() {
   dout(20) << dendl;
+
+  update_progress("OPEN_REMOTE_IMAGE");
 
   m_remote_image_ctx = I::create("", m_remote_image_id, nullptr,
                                  m_remote_io_ctx, false);
@@ -319,6 +332,8 @@ template <typename I>
 void BootstrapRequest<I>::open_local_image() {
   dout(20) << dendl;
 
+  update_progress("OPEN_LOCAL_IMAGE");
+
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_local_image>(
       this);
@@ -359,6 +374,8 @@ template <typename I>
 void BootstrapRequest<I>::remove_local_image() {
   dout(20) << dendl;
 
+  update_progress("REMOVE_LOCAL_IMAGE");
+
   // TODO
 }
 
@@ -372,6 +389,8 @@ void BootstrapRequest<I>::handle_remove_local_image(int r) {
 template <typename I>
 void BootstrapRequest<I>::create_local_image() {
   dout(20) << dendl;
+
+  update_progress("CREATE_LOCAL_IMAGE");
 
   // TODO: librbd should provide an AIO image creation method -- this is
   //       blocking so we execute in our worker thread
@@ -401,6 +420,10 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::update_client() {
+  dout(20) << dendl;
+
+  update_progress("UPDATE_CLIENT");
+
   if (m_client_meta->image_id == (*m_local_image_ctx)->id) {
     // already registered local image with remote journal
     get_remote_tags();
@@ -440,6 +463,10 @@ void BootstrapRequest<I>::handle_update_client(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::get_remote_tags() {
+  dout(20) << dendl;
+
+  update_progress("GET_REMOTE_TAGS");
+
   if (m_created_local_image) {
     // optimization -- no need to compare remote tags if we just created
     // the image locally
@@ -520,6 +547,10 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::image_sync() {
+  dout(20) << dendl;
+
+  update_progress("IMAGE_SYNC");
+
   if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING) {
     // clean replay state -- no image sync required
     close_remote_image();
@@ -535,7 +566,8 @@ void BootstrapRequest<I>::image_sync() {
                                                m_remote_image_ctx, m_timer,
                                                m_timer_lock,
                                                m_local_mirror_uuid, m_journaler,
-                                               m_client_meta, ctx);
+                                               m_client_meta, ctx,
+					       m_progress_ctx);
   request->start();
 }
 
@@ -554,6 +586,8 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
 template <typename I>
 void BootstrapRequest<I>::close_local_image() {
   dout(20) << dendl;
+
+  update_progress("CLOSE_LOCAL_IMAGE");
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_local_image>(
@@ -578,6 +612,8 @@ void BootstrapRequest<I>::handle_close_local_image(int r) {
 template <typename I>
 void BootstrapRequest<I>::close_remote_image() {
   dout(20) << dendl;
+
+  update_progress("CLOSE_REMOTE_IMAGE");
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_remote_image>(
@@ -634,6 +670,15 @@ bool BootstrapRequest<I>::decode_client_meta() {
 
   dout(20) << ": client found: image_id=" << m_local_image_id << dendl;
   return true;
+}
+
+template <typename I>
+void BootstrapRequest<I>::update_progress(const std::string &description) {
+  dout(20) << ": " << description << dendl;
+
+  if (m_progress_ctx) {
+    m_progress_ctx->update_progress(description);
+  }
 }
 
 } // namespace image_replayer
