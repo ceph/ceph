@@ -76,6 +76,15 @@ namespace crimson {
 	std::chrono::microseconds get_req_params_time;
 	uint32_t track_resp_count;
 	uint32_t get_req_params_count;
+
+	InternalStats() :
+	  track_resp_time(0),
+	  get_req_params_time(0),
+	  track_resp_count(0),
+	  get_req_params_count(0)
+	{
+	  // empty
+	}
       };
 
       using SubmitFunc =
@@ -220,11 +229,12 @@ namespace crimson {
 	      const ServerId& server = server_select_f(o);
 
 	      ReqPm rp =
-	      time_stats_type(internal_stats.mtx,
-			 internal_stats.get_req_params_time,
-			 [&]() -> ReqPm {
-			   return service_tracker.get_req_params(server);
-			 });
+		time_stats_type<decltype(internal_stats.get_req_params_time),
+		ReqPm>(internal_stats.mtx,
+		       internal_stats.get_req_params_time,
+		       [&]() -> ReqPm {
+			 return service_tracker.get_req_params(server);
+		       });
 	      count_stats(internal_stats.mtx,
 			  internal_stats.get_req_params_count);
 

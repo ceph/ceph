@@ -46,7 +46,6 @@ namespace crimson {
     void debugger();
 #endif
 
-#if 1
     template<typename T>
     void time_stats(std::mutex& mtx,
 		    T& time_accumulate,
@@ -59,9 +58,10 @@ namespace crimson {
       std::lock_guard<std::mutex> lock(mtx);
       time_accumulate += cast_duration;
     }
-#endif
 
-#if 1
+    // unfortunately it's hard for the compiler to infer the types,
+    // and therefore when called the template params might have to be
+    // explicit
     template<typename T, typename R>
     R time_stats_type(std::mutex& mtx,
 		      T& time_accumulate,
@@ -75,7 +75,6 @@ namespace crimson {
       time_accumulate += cast_duration;
       return result;
     }
-#endif
 
     template<typename T>
     void count_stats(std::mutex& mtx,
