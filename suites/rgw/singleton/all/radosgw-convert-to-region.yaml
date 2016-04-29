@@ -32,6 +32,8 @@ tasks:
           rgw user uid pool: .users.uid
           rgw user keys pool: .users
 - rgw:
+    realm:
+      realm0
     regions:
       default:
         api name: api1
@@ -52,6 +54,8 @@ tasks:
         writers: 1
         readers: 0
 - rgw:
+    realm:
+      realm0
     regions:
       default:
         api name: api1
