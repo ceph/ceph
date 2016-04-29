@@ -1,4 +1,4 @@
-set(CEPH_DETECT_INIT_VIRTUALENV ${CMAKE_BINARY_DIR}/ceph-detect-init-virtualenv)
+set(CEPH_DETECT_INIT_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv)
 
 add_custom_target(ceph-detect-init
   COMMAND
