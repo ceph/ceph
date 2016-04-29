@@ -1434,6 +1434,10 @@ int ceph_ll_create(struct ceph_mount_info *cmount, struct Inode *parent,
 		   const char *name, mode_t mode, int flags,
 		   struct stat *attr, struct Inode **out, Fh **fhp,
 		   int uid, int gid);
+int ceph_ll_mknod(struct ceph_mount_info *cmount, struct Inode *parent,
+		  const char *name, mode_t mode, dev_t rdev,
+		  struct stat *attr, struct Inode **out,
+		  int uid, int gid);
 int ceph_ll_mkdir(struct ceph_mount_info *cmount, struct Inode *parent,
 		  const char *name, mode_t mode, struct stat *attr,
 		  Inode **out, int uid, int gid);
