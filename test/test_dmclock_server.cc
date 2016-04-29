@@ -64,14 +64,14 @@ namespace crimson {
 
       EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client1, req_params),
 				"Assertion.*reservation.*max_tag.*"
-				"proportion.*max_tag.*failed") <<
+				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
 
 
       EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client2, req_params),
 				"Assertion.*reservation.*max_tag.*"
-				"proportion.*max_tag.*failed") <<
+				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
     }
