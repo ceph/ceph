@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
     const uint server_count = 100;
     const uint server_iops = 40;
     const uint server_threads = 1;
-    const bool server_soft_limit = false;
+    const bool server_soft_limit = true;
 
     // client params
 
