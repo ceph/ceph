@@ -714,7 +714,7 @@ bool ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 
     m_image_ctx.operations->execute_snap_create(payload.snap_name.c_str(),
                                                 new C_ResponseMessage(ack_ctx),
-                                                0);
+                                                0, false);
     return false;
   }
   return true;

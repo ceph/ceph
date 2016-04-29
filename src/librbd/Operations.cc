@@ -585,7 +585,8 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
 
   C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
     m_image_ctx, "snap_create", true,
-    boost::bind(&Operations<I>::execute_snap_create, this, snap_name, _1, 0),
+    boost::bind(&Operations<I>::execute_snap_create, this, snap_name, _1, 0,
+                false),
     boost::bind(&ImageWatcher::notify_snap_create, m_image_ctx.image_watcher,
                 snap_name, _1),
     {-EEXIST}, on_finish);
@@ -595,7 +596,8 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
 template <typename I>
 void Operations<I>::execute_snap_create(const char *snap_name,
                                         Context *on_finish,
-                                        uint64_t journal_op_tid) {
+                                        uint64_t journal_op_tid,
+                                        bool skip_object_map) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
@@ -607,7 +609,7 @@ void Operations<I>::execute_snap_create(const char *snap_name,
   operation::SnapshotCreateRequest<I> *req =
     new operation::SnapshotCreateRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name,
-      journal_op_tid);
+      journal_op_tid, skip_object_map);
   req->send();
 }
 
