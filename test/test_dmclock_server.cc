@@ -52,7 +52,10 @@ namespace crimson {
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
 	if (client1 == c) return ci1;
 	else if (client2 == c) return ci2;
-	else ADD_FAILURE() << "got request from neither of two clients";
+	else {
+	  ADD_FAILURE() << "got request from neither of two clients";
+	  return ci1; // must return
+	}
       };
 
       QueueRef pq(new Queue(client_info_f, false));
@@ -222,7 +225,10 @@ namespace crimson {
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
 	if (client1 == c) return info1;
 	else if (client2 == c) return info2;
-	else ADD_FAILURE() << "client info looked up for non-existant client";
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return info1;
+	}
       };
 
       pq = QueueRef(new Queue(client_info_f, false));
@@ -273,7 +279,10 @@ namespace crimson {
       auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
 	if (client1 == c) return info1;
 	else if (client2 == c) return info2;
-	else ADD_FAILURE() << "client info looked up for non-existant client";
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return info1;
+	}
       };
 
       QueueRef pq(new Queue(client_info_f, false));
