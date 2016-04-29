@@ -276,6 +276,15 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
       for (const auto p : standby_daemons) {
         full_mdsmap.mds_info[p.first] = p.second;
       }
+
+      // Old MDSMaps don't set rank on standby replay daemons
+      for (auto &i : full_mdsmap.mds_info) {
+        auto &info = i.second;
+        if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
+          info.rank = MDS_RANK_NONE;
+        }
+      }
+
       full_mdsmap.encode(bl, features);
     }
   }
@@ -412,7 +421,12 @@ void FSMap::decode(bufferlist::iterator& p)
 
       // Construct mds_roles, standby_daemons, and remove
       // standbys from the MDSMap in the Filesystem.
-      for (const auto &p : migrate_fs->mds_map.mds_info) {
+      for (auto &p : migrate_fs->mds_map.mds_info) {
+        if (p.second.state == MDSMap::STATE_STANDBY_REPLAY) {
+          // In legacy MDSMap, standby replay daemons don't have
+          // rank set, but since FSMap they do.
+          p.second.rank = p.second.standby_for_rank;
+        }
         if (p.second.rank == MDS_RANK_NONE) {
           standby_daemons[p.first] = p.second;
           standby_epochs[p.first] = epoch;
