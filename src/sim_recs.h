@@ -18,6 +18,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <mutex>
 #include <iostream>
 
 
@@ -45,6 +46,26 @@ namespace crimson {
     void debugger();
 #endif
 
+
+    template<typename T>
+    void time_stats(std::mutex& mtx,
+		    T& time_accumulate,
+		    std::function<void()> code) {
+      auto t1 = std::chrono::steady_clock::now();
+      code();
+      auto t2 = std::chrono::steady_clock::now();
+      auto duration = t2 - t1;
+      auto cast_duration = std::chrono::duration_cast<T>(duration);
+      std::lock_guard<std::mutex> lock(mtx);
+      time_accumulate += cast_duration;
+    }
+
+    template<typename T>
+    void count_stats(std::mutex& mtx,
+		     T& counter) {
+      std::lock_guard<std::mutex> lock(mtx);
+      ++counter;
+    }
 
     struct TestRequest {
       ServerId server; // allows debugging

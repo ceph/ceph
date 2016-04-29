@@ -43,7 +43,9 @@ namespace crimson {
       std::vector<ServerId> server_ids;
 
       TimePoint early_time;
+      TimePoint servers_created_time;
       TimePoint clients_created_time;
+      TimePoint clients_finished_time;
       TimePoint late_time;
 
       std::default_random_engine prng;
@@ -102,6 +104,8 @@ namespace crimson {
 	  servers[i] = create_server_f(server_count + i);
 	}
 	server_count += count;
+
+	servers_created_time = now();
       }
 
 
@@ -128,9 +132,11 @@ namespace crimson {
 	  i.second->wait_until_done();
 	}
 
-	late_time = now();
+	late_time = clients_finished_time = now();
 
-	std::cout << "simulation complete" << std::endl;
+	std::cout << "simulation completed in " <<
+	  std::chrono::duration_cast<std::chrono::milliseconds>(clients_finished_time - servers_created_time).count() <<
+	  " millisecs" << std::endl;
 
 	has_run = true;
       } // run
@@ -230,6 +236,8 @@ namespace crimson {
 
 	client_out_f(out, this, client_filter, head_w, data_w, data_prec);
 
+	display_client_internal_stats(out);
+
 	out << std::endl << "==== Server Data ====" << std::endl;
 
 	out << std::setw(head_w) << "server:";
@@ -240,6 +248,8 @@ namespace crimson {
 	out << std::setw(data_w) << "total" << std::endl;
 
 	server_out_f(out, this, server_filter, head_w, data_w, data_prec);
+
+	display_server_internal_stats(out);
 
 	// clean up clients then servers
 
@@ -253,6 +263,35 @@ namespace crimson {
 	  i->second = nullptr;
 	}
       } // display_stats
+
+
+      void display_server_internal_stats(std::ostream& out) {
+	std::chrono::microseconds add_request_time(0);
+	std::chrono::microseconds request_complete_time(0);
+	uint32_t add_request_count = 0;
+	uint32_t request_complete_count = 0;
+	for (uint i = 0; i < get_server_count(); ++i) {
+	  const auto& server = get_server(i);
+	  const auto& is = server.get_internal_stats();
+	  add_request_time += is.add_request_time;
+	  request_complete_time += is.request_complete_time;
+	  add_request_count += is.add_request_count;
+	  request_complete_count += is.request_complete_count;
+	}
+	out << "total time to add requests: " <<
+	  std::fixed << add_request_time.count() << " microsecs" <<
+	  "; count: " << add_request_count <<
+	  std::endl;
+	out << "total time to note requests complete: " <<
+	  std::fixed << request_complete_time.count() << " microsecs" <<
+	  "; count: " << request_complete_count <<
+	  std::endl;
+      }
+
+
+      void display_client_internal_stats(std::ostream& out) {
+	out << "no client internal stats to display" << std::endl;
+      }
 
 
       // **** server selection functions ****
