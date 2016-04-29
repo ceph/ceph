@@ -108,7 +108,11 @@ int snap_set(librbd::Image &image, const std::string &snap_name);
 
 std::string image_id(librbd::Image& image);
 
-std::string mirror_image_state(rbd_mirror_image_state_t mirror_image_state);
+std::string mirror_image_state(librbd::mirror_image_state_t mirror_image_state);
+std::string mirror_image_status_state(librbd::mirror_image_status_state_t state);
+std::string mirror_image_status_state(librbd::mirror_image_status_t status);
+
+std::string timestr(time_t t);
 
 } // namespace utils
 } // namespace rbd
