@@ -33,10 +33,6 @@ endfunction()
 
 make_tests(ind_intru_heap)
 
-add_dependencies(check crim_tests)
-
-
-
 
 # target_link_libraries(sim PUBLIC pthread)
 
