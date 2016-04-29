@@ -286,7 +286,7 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     std::string old_cg_id;
     int64_t old_pool_id;
     try {
-      bufferlist::iterator iter = in->begin();
+      bufferlist::iterator iter = existing_refbl.begin();
       ::decode(old_cg_id, iter);
       ::decode(old_pool_id, iter);
     } catch (const buffer::error &err) {
