@@ -35,6 +35,38 @@ Linux)
             fi
         fi
         ;;
+    RedHatEnterpriseWorkstation|RedHatEnterpriseServer)
+        if ! rpm -q mysql-community-devel ; then
+             cat << EOM
+             Please install mysql-community devel package before running bootstrap
+             Reference document: http://dev.mysql.com/doc/refman/5.7/en/linux-installation-yum-repo.html
+             mysql Yum repo's exist in following location
+             http://dev.mysql.com/downloads/repo/yum/
+             and the Repo can be installed using (note below example is for v5.7)
+             yum localinstall http://dev.mysql.com/get/mysql57-community-release-el7-8.noarch.rpm
+             yum update metadata
+             yum install mysql-community-devel"
+EOM
+	    exit 1
+        fi
+        for package in python-pip python-virtualenv libev-devel libvirt-devel libffi-devel; do
+	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
+		missing="${missing:+$missing }$package"
+	    fi
+        done
+	if [ -n "$missing" ]; then
+            echo "$0: missing required packages:" 1>&2
+            echo "$missing"
+            if [ "$install" = true ]; then
+                echo "Installing missing packages..."
+                sudo yum -y install $missing
+            else
+                echo "Please install missing packages or run './bootstrap install' if you have sudo"
+                echo "sudo yum -y install $missing"
+                exit 1
+            fi
+	fi
+	;;
     Fedora)
         for package in python-pip python-virtualenv libev-devel libvirt-devel community-mysql-devel libffi-devel; do
 	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
