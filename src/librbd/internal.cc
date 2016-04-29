@@ -1074,7 +1074,6 @@ err_remove_id:
       return r;
     }
 
-
     return 0;
   }
   int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
@@ -1096,7 +1095,6 @@ err_remove_id:
     string cg_header_oid = util::cg_header_name(cg_id);
 
     ldout(cct, 20) << "adding image to cg name " << cg_name << " cg id " << cg_header_oid << dendl;
-
 
     ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
     r = imctx->state->open();
@@ -1148,7 +1146,6 @@ err_remove_id:
     string cg_header_oid = util::cg_header_name(cg_id);
 
     ldout(cct, 20) << "adding image to cg name " << cg_name << " cg id " << cg_header_oid << dendl;
-
 
     ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
     r = imctx->state->open();
