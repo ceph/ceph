@@ -10,9 +10,14 @@ FreelistManager *FreelistManager::create(
   KeyValueDB *kvdb,
   string prefix)
 {
+  // a bit of a hack... we hard-code the prefixes here.  we need to
+  // put the freelistmanagers in different prefixes because the merge
+  // op is per prefix, has to done pre-db-open, and we don't know the
+  // freelist type until after we open the db.
+  assert(prefix == "B");
   if (type == "extent")
-    return new ExtentFreelistManager(kvdb, prefix);
+    return new ExtentFreelistManager(kvdb, "B");
   if (type == "bitmap")
-    return new BitmapFreelistManager(kvdb, prefix);
+    return new BitmapFreelistManager(kvdb, "B", "b");
   return NULL;
 }
