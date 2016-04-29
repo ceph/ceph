@@ -63,13 +63,20 @@ namespace crimson {
     };
 
 
-
     using ServerSelectFunc = std::function<const ServerId&(uint64_t seed)>;
 
 
     template<typename SvcTrk, typename ReqPm, typename RespPm, typename Accum>
     class SimulatedClient {
     public:
+
+      struct InternalStats {
+	std::mutex mtx;
+	std::chrono::microseconds track_resp_time;
+	std::chrono::microseconds get_req_params_time;
+	uint32_t track_resp_count;
+	uint32_t get_req_params_count;
+      };
 
       using SubmitFunc =
 	std::function<void(const ServerId&,
@@ -119,6 +126,7 @@ namespace crimson {
 
       std::vector<TimePoint>   op_times;
       Accum                    accumulator;
+      InternalStats            internal_stats;
 
       std::thread              thd_req;
       std::thread              thd_resp;
@@ -210,7 +218,16 @@ namespace crimson {
 	      l.unlock();
 	      auto now = std::chrono::steady_clock::now();
 	      const ServerId& server = server_select_f(o);
-	      ReqPm rp = service_tracker.get_req_params(server);
+
+	      ReqPm rp =
+	      time_stats_type(internal_stats.mtx,
+			 internal_stats.get_req_params_time,
+			 [&]() -> ReqPm {
+			   return service_tracker.get_req_params(server);
+			 });
+	      count_stats(internal_stats.mtx,
+			  internal_stats.get_req_params_count);
+
 	      TestRequest req(server, o, 12);
 	      submit_f(server, req, id, rp);
 	      ++outstanding_ops;
@@ -260,7 +277,13 @@ namespace crimson {
 	    TestResponse& resp = item.response;
 #endif
 
-	    service_tracker.track_resp(item.server_id, item.resp_params);
+	    time_stats(internal_stats.mtx,
+		       internal_stats.track_resp_time,
+		       [&](){
+			 service_tracker.track_resp(item.server_id, item.resp_params);
+		       });
+	    count_stats(internal_stats.mtx,
+			internal_stats.track_resp_count);
 
 	    --outstanding_ops;
 	    if (notify_req_cv) {

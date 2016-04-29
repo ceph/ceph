@@ -152,7 +152,7 @@ namespace crimson {
 	time_stats(internal_stats.mtx,
 		   internal_stats.add_request_time,
 		   [&](){
-	     priority_queue->add_request(request, client_id, req_params);
+		     priority_queue->add_request(request, client_id, req_params);
 		   });
 	count_stats(internal_stats.mtx,
 		    internal_stats.add_request_count);

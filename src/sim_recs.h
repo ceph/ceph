@@ -46,7 +46,7 @@ namespace crimson {
     void debugger();
 #endif
 
-
+#if 1
     template<typename T>
     void time_stats(std::mutex& mtx,
 		    T& time_accumulate,
@@ -59,6 +59,23 @@ namespace crimson {
       std::lock_guard<std::mutex> lock(mtx);
       time_accumulate += cast_duration;
     }
+#endif
+
+#if 1
+    template<typename T, typename R>
+    R time_stats_type(std::mutex& mtx,
+		      T& time_accumulate,
+		      std::function<R()> code) {
+      auto t1 = std::chrono::steady_clock::now();
+      R result = code();
+      auto t2 = std::chrono::steady_clock::now();
+      auto duration = t2 - t1;
+      auto cast_duration = std::chrono::duration_cast<T>(duration);
+      std::lock_guard<std::mutex> lock(mtx);
+      time_accumulate += cast_duration;
+      return result;
+    }
+#endif
 
     template<typename T>
     void count_stats(std::mutex& mtx,
