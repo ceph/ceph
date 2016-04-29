@@ -210,6 +210,8 @@ namespace crimson {
 
       const Accum& get_accumulator() const { return accumulator; }
 
+      const InternalStats& get_internal_stats() const { return internal_stats; }
+
     protected:
 
       void run_req() {

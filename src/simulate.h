@@ -270,6 +270,7 @@ namespace crimson {
 	std::chrono::microseconds request_complete_time(0);
 	uint32_t add_request_count = 0;
 	uint32_t request_complete_count = 0;
+
 	for (uint i = 0; i < get_server_count(); ++i) {
 	  const auto& server = get_server(i);
 	  const auto& is = server.get_internal_stats();
@@ -278,19 +279,69 @@ namespace crimson {
 	  add_request_count += is.add_request_count;
 	  request_complete_count += is.request_complete_count;
 	}
+
+	double add_request_time_per_unit =
+	  double(add_request_time.count()) / add_request_count ;
 	out << "total time to add requests: " <<
-	  std::fixed << add_request_time.count() << " microsecs" <<
-	  "; count: " << add_request_count <<
-	  std::endl;
-	out << "total time to note requests complete: " <<
-	  std::fixed << request_complete_time.count() << " microsecs" <<
-	  "; count: " << request_complete_count <<
-	  std::endl;
+	  std::fixed << add_request_time.count() << " microsecs;" << std::endl <<
+	  "    count: " << add_request_count << ";" << std::endl <<
+	  "    average: " << add_request_time_per_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	double request_complete_time_unit =
+	  double(request_complete_time.count()) / request_complete_count ;
+	out << "total time to note requests complete: " << std::fixed <<
+	  request_complete_time.count() << " microsecs;" << std::endl << 
+	  "    count: " << request_complete_count << ";" << std::endl <<
+	  "    average: " << request_complete_time_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	out << std::endl;
+
+	assert(add_request_count == request_complete_count);
+	out << "server timing for QOS algorithm: " <<
+	  add_request_time_per_unit + request_complete_time_unit <<
+	  " microsecs per request/response" << std::endl;
       }
 
 
       void display_client_internal_stats(std::ostream& out) {
-	out << "no client internal stats to display" << std::endl;
+	std::chrono::microseconds track_resp_time(0);
+	std::chrono::microseconds get_req_params_time(0);
+	uint32_t track_resp_count = 0;
+	uint32_t get_req_params_count = 0;
+
+	for (uint i = 0; i < get_client_count(); ++i) {
+	  const auto& client = get_client(i);
+	  const auto& is = client.get_internal_stats();
+	  track_resp_time += is.track_resp_time;
+	  get_req_params_time += is.get_req_params_time;
+	  track_resp_count += is.track_resp_count;
+	  get_req_params_count += is.get_req_params_count;
+	}
+
+	double track_resp_time_unit =
+	  double(track_resp_time.count()) / track_resp_count;
+	out << "total time to track responses: " <<
+	  std::fixed << track_resp_time.count() << " microsecs;" << std::endl <<
+	  "    count: " << track_resp_count << ";" << std::endl <<
+	  "    average: " << track_resp_time_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	double get_req_params_time_unit =
+	  double(get_req_params_time.count()) / get_req_params_count;
+	out << "total time to get request parameters: " <<
+	  std::fixed << get_req_params_time.count() << " microsecs;" << std::endl <<
+	  "    count: " << get_req_params_count << ";" << std::endl <<
+	  "    average: " << get_req_params_time_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	out << std::endl;
+
+	assert(track_resp_count == get_req_params_count);
+	out << "client timing for QOS algorithm: " <<
+	  track_resp_time_unit + get_req_params_time_unit <<
+	  " microsecs per request/response" << std::endl;
       }
 
 
