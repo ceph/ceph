@@ -13,7 +13,7 @@
 #include "kv/KeyValueDB.h"
 
 class BitmapFreelistManager : public FreelistManager {
-  std::string prefix;
+  std::string meta_prefix, bitmap_prefix;
   KeyValueDB *kvdb;
   ceph::shared_ptr<KeyValueDB::MergeOperator> merge_op;
   std::mutex lock;
@@ -44,7 +44,8 @@ class BitmapFreelistManager : public FreelistManager {
     KeyValueDB::Transaction txn);
 
 public:
-  BitmapFreelistManager(KeyValueDB *db, string prefix);
+  BitmapFreelistManager(KeyValueDB *db, string meta_prefix,
+			string bitmap_prefix);
 
   static void setup_merge_operator(KeyValueDB *db, string prefix);
 

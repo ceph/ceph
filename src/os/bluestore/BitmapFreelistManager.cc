@@ -45,8 +45,12 @@ void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
   db->set_merge_operator(prefix, merge_op);
 }
 
-BitmapFreelistManager::BitmapFreelistManager(KeyValueDB *db, string prefix)
-  : prefix(prefix), kvdb(db)
+BitmapFreelistManager::BitmapFreelistManager(KeyValueDB *db,
+					     string meta_prefix,
+					     string bitmap_prefix)
+  : meta_prefix(meta_prefix),
+    bitmap_prefix(bitmap_prefix),
+    kvdb(db)
 {
 }
 
@@ -76,22 +80,22 @@ int BitmapFreelistManager::create(uint64_t new_size, KeyValueDB::Transaction txn
   {
     bufferlist bl;
     ::encode(bytes_per_block, bl);
-    txn->set(prefix, "bytes_per_block", bl);
+    txn->set(meta_prefix, "bytes_per_block", bl);
   }
   {
     bufferlist bl;
     ::encode(blocks_per_key, bl);
-    txn->set(prefix, "blocks_per_key", bl);
+    txn->set(meta_prefix, "blocks_per_key", bl);
   }
   {
     bufferlist bl;
     ::encode(blocks, bl);
-    txn->set(prefix, "blocks", bl);
+    txn->set(meta_prefix, "blocks", bl);
   }
   {
     bufferlist bl;
     ::encode(size, bl);
-    txn->set(prefix, "size", bl);
+    txn->set(meta_prefix, "size", bl);
   }
   return 0;
 }
@@ -100,7 +104,7 @@ int BitmapFreelistManager::init()
 {
   dout(1) << __func__ << dendl;
 
-  KeyValueDB::Iterator it = kvdb->get_iterator(prefix);
+  KeyValueDB::Iterator it = kvdb->get_iterator(meta_prefix);
   it->lower_bound(string());
 
   // load meta
@@ -208,7 +212,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
   // initial base case is a bit awkward
   if (enumerate_offset == 0) {
     dout(10) << __func__ << " start" << dendl;
-    enumerate_p = kvdb->get_iterator(prefix);
+    enumerate_p = kvdb->get_iterator(bitmap_prefix);
     enumerate_p->lower_bound(string());
     // we assert that the first block is always allocated; it's true,
     // and it simplifies our lives a bit.
@@ -354,7 +358,7 @@ void BitmapFreelistManager::_xor(
     dout(30) << __func__ << " " << first_key << ": ";
     bl.hexdump(*_dout);
     *_dout << dendl;
-    txn->merge(prefix, k, bl);
+    txn->merge(bitmap_prefix, k, bl);
   } else {
     // first key
     {
@@ -372,7 +376,7 @@ void BitmapFreelistManager::_xor(
       dout(30) << __func__ << " " << first_key << ": ";
       bl.hexdump(*_dout);
       *_dout << dendl;
-      txn->merge(prefix, k, bl);
+      txn->merge(bitmap_prefix, k, bl);
       first_key += bytes_per_block * blocks_per_key;
     }
     // middle keys
@@ -383,7 +387,7 @@ void BitmapFreelistManager::_xor(
 	dout(30) << __func__ << " " << first_key << ": ";
 	all_set_bl.hexdump(*_dout);
 	*_dout << dendl;
-	txn->merge(prefix, k, all_set_bl);
+	txn->merge(bitmap_prefix, k, all_set_bl);
 	first_key += bytes_per_block * blocks_per_key;
       }
     }
@@ -402,7 +406,7 @@ void BitmapFreelistManager::_xor(
       dout(30) << __func__ << " " << first_key << ": ";
       bl.hexdump(*_dout);
       *_dout << dendl;
-      txn->merge(prefix, k, bl);
+      txn->merge(bitmap_prefix, k, bl);
     }
   }
 }
