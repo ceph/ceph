@@ -17,17 +17,17 @@ using namespace std::placeholders;
 
 
 namespace crimson {
-  namespace test_dmc {
-void server_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ServerFilter server_disp_filter,
-		 int head_w, int data_w, int data_prec);
+    namespace test_dmc {
+        void server_data(std::ostream& out,
+                         test::MySim* sim,
+                         test::MySim::ServerFilter server_disp_filter,
+                         int head_w, int data_w, int data_prec);
 
-void client_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ClientFilter client_disp_filter,
-		 int head_w, int data_w, int data_prec);
-  }
+        void client_data(std::ostream& out,
+                         test::MySim* sim,
+                         test::MySim::ClientFilter client_disp_filter,
+                         int head_w, int data_w, int data_prec);
+    }
 }
 
 
