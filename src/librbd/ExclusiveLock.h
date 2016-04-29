@@ -32,6 +32,9 @@ public:
   bool is_lock_owner() const;
   bool accept_requests() const;
 
+  void block_requests();
+  void unblock_requests();
+
   void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
 
@@ -126,6 +129,8 @@ private:
   uint64_t m_watch_handle;
 
   ActionsContexts m_actions_contexts;
+
+  uint32_t m_request_blockers = 0;
 
   std::string encode_lock_cookie() const;
 
