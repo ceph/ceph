@@ -1045,8 +1045,6 @@ err_remove_id:
     }
 
     return r;
-
-    return r;
   }
 
   int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
