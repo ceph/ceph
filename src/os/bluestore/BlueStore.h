@@ -35,6 +35,7 @@
 
 #include "bluestore_types.h"
 #include "BlockDevice.h"
+#include "ExtentManager.h"
 class Allocator;
 class FreelistManager;
 class BlueFS;
@@ -57,67 +58,44 @@ enum {
   l_bluestore_last
 };
 
-class BlueStore : public ObjectStore {
+class BlueStore : public ObjectStore,
+		  public ExtentManager::BlockOpInterface,
+		  public ExtentManager::CompressorInterface,
+		  public ExtentManager::CheckSumVerifyInterface {
   // -----------------------------------------------------
   // types
 public:
 
   class TransContext;
 
-  /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
-  struct EnodeSet;
+  /// an in-memory blob map
+  struct Bnode {
+    std::atomic_int nref;  ///< reference count
 
-  struct Enode : public boost::intrusive::unordered_set_base_hook<> {
-    std::atomic_int nref;        ///< reference count
-    uint32_t hash;
-    string key;           ///< key under PREFIX_OBJ where we are stored
-    EnodeSet *enode_set;  ///< reference to the containing set
+    uint32_t bnode_id; ///< bnode identifier, in fact that's object hash for bnode identification.it's OK to have multiple objects under the same bnode
+    string key;     ///< key under PREFIX_OBJ where we are stored
+    boost::intrusive::list_member_hook<> lru_item;
 
-    bluestore_extent_ref_map_t ref_map;
+    bluestore_blob_map_t blobs;  ///< metadata stored as value in kv store
+    bool persistent;
 
-    Enode(uint32_t h, const string& k, EnodeSet *s)
+    Bnode(uint32_t id, const string& k, bool _persistent)
       : nref(0),
-	hash(h),
-	key(k),
-	enode_set(s) {}
+      bnode_id(id),
+      key(k),
+      persistent(_persistent) {
+    }
 
     void get() {
       ++nref;
     }
-    void put();
-
-    friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
-    friend void intrusive_ptr_release(Enode *e) { e->put(); }
-
-    friend bool operator==(const Enode &l, const Enode &r) {
-      return l.hash == r.hash;
+    void put() {
+      if (--nref == 0)
+	delete this;
     }
-    friend std::size_t hash_value(const Enode &e) {
-      return e.hash;
-    }
+
   };
-  typedef boost::intrusive_ptr<Enode> EnodeRef;
-
-  /// hash of Enodes, by (object) hash value
-  struct EnodeSet {
-    typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
-    typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
-
-    unsigned num_buckets;
-    vector<bucket_type> buckets;
-
-    boost::intrusive::unordered_set<Enode> uset;
-
-    explicit EnodeSet(unsigned n)
-      : num_buckets(n),
-	buckets(n),
-	uset(bucket_traits(buckets.data(), num_buckets)) {
-      assert(n > 0);
-    }
-    ~EnodeSet() {
-      assert(uset.empty());
-    }
-  };
+  typedef boost::intrusive_ptr<Bnode> BnodeRef;
 
   /// an in-memory object
   struct Onode {
@@ -127,7 +105,7 @@ public:
     string key;     ///< key under PREFIX_OBJ where we are stored
     boost::intrusive::list_member_hook<> lru_item;
 
-    EnodeRef enode;  ///< ref to Enode [optional]
+    BnodeRef bnode;  ///< ref to Bnode
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;
@@ -188,6 +166,30 @@ public:
     int _trim(int max);
   };
 
+  struct BnodeHashLRU {
+    typedef boost::intrusive::list<
+      Bnode,
+      boost::intrusive::member_hook<
+        Bnode,
+        boost::intrusive::list_member_hook<>,
+        &Bnode::lru_item> > lru_list_t;
+
+    std::mutex lock;
+    ceph::unordered_map<uint32_t, BnodeRef> bnode_map;  ///< forward lookups
+    lru_list_t lru;                                      ///< lru
+    size_t max_size;
+
+    BnodeHashLRU(size_t s) : max_size(s) {}
+
+    void add(uint32_t bnode_id, BnodeRef b);
+    void _touch(BnodeRef b);
+    BnodeRef lookup(uint32_t bnode_id);
+    void clear();
+    bool empty() const { return bnode_map.size() == 0; }
+    int trim(int max = -1);
+    int _trim(int max);
+  };
+
   struct Collection : public CollectionImpl {
     BlueStore *store;
     coll_t cid;
@@ -196,14 +198,16 @@ public:
 
     bool exists;
 
-    EnodeSet enode_set;      ///< open Enodes
-
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeHashLRU onode_map;
 
+    // cache bnodes on a per-collection basis to avoid lock
+    // contention.
+    BnodeHashLRU bnode_map;
+
     OnodeRef get_onode(const ghobject_t& oid, bool create);
-    EnodeRef get_enode(uint32_t hash);
+    BnodeRef get_bnode(uint32_t bnode_it, bool create);
 
     const coll_t &get_cid() override {
       return cid;
@@ -297,7 +301,7 @@ public:
     uint64_t ops, bytes;
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
-    set<EnodeRef> enodes;     ///< these enodes need to be updated/written
+    set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
@@ -338,9 +342,7 @@ public:
 
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
-    }
-    void write_enode(EnodeRef &e) {
-      enodes.insert(e);
+      bnodes.insert(o->bnode);
     }
   };
 
@@ -605,9 +607,6 @@ private:
   void _dump_onode(OnodeRef o, int log_leverl=30);
 
   TransContext *_txc_create(OpSequencer *osr);
-  void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
-		    uint64_t offset, uint64_t length,
-		    bool shared);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
@@ -642,8 +641,49 @@ private:
   int _wal_replay();
 
   // for fsck
-  int _verify_enode_shared(EnodeRef enode, vector<bluestore_extent_t>& v,
-			   interval_set<uint64_t> &used_blocks);
+  int _verify_bnode(uint32_t bnode_id,
+		    BnodeRef bnode,
+		    vector<bluestore_blob_id_t>& blob_ids,
+		    interval_set<uint64_t> &used_blocks);
+
+protected:
+  struct BluestoreReadContext {
+    IOContext ioc;
+    bool buffered;
+    BluestoreReadContext(bool _buffered) :
+      ioc(NULL), // FIXME?
+      buffered(_buffered) {
+    }
+  };
+
+  struct BluestoreWriteContext {
+    TransContext* txc;
+    bool buffered;
+    BluestoreWriteContext(TransContext* _txc, bool _buffered) :
+      txc(_txc),
+      buffered(_buffered) {
+    }
+  };
+
+  ////////////////BlockOpInterface implementation////////////
+  virtual uint64_t get_block_size();
+  virtual int read_block(uint64_t offset0, uint32_t length, void* opaque, bufferlist* result);
+  virtual int write_block(uint64_t offset, const bufferlist& data, void* opaque);
+  virtual int zero_block(uint64_t offset, uint64_t length, void* opaque);
+
+  //
+  //Method to allocate pextents
+  //Returns single or multiple pextents depending on the store state, i.e. if there is contiguous extent available or not
+  //
+  virtual int allocate_blocks(uint32_t length, void* opaque, bluestore_extent_vector_t* result);
+  virtual int release_block(uint64_t offset, uint32_t length, void* opaque);
+
+  ////////////////CompressorInterface implementation////////
+  virtual int compress(const ExtentManager::CompressInfo& cinfo, uint32_t source_offs, uint32_t length, const bufferlist& source, void* opaque, bufferlist* result);
+  virtual int decompress(const bufferlist& source, void* opaque, bufferlist* result);
+  ////////////////CheckSumVerifyInterface implementation////////
+  virtual int calculate(bluestore_blob_t::CSumType type, uint32_t csum_value_size, uint32_t csum_block_size, uint32_t source_offs, uint32_t source_len, const bufferlist& source, void* opaque, vector<char>* csum_data);
+  virtual int verify(bluestore_blob_t::CSumType type, uint32_t csum_value_size, uint32_t csum_block_size, const bufferlist& source, void* opaque, const vector<char>& csum_data);
 
 public:
   BlueStore(CephContext *cct, const string& path);
@@ -854,37 +894,6 @@ private:
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
-  bool _can_overlay_write(OnodeRef o, uint64_t length);
-  int _do_overlay_trim(TransContext *txc,
-		       OnodeRef o,
-		       uint64_t offset,
-		       uint64_t length);
-  int _do_overlay_write(TransContext *txc,
-			OnodeRef o,
-			uint64_t offset,
-			uint64_t length,
-			const bufferlist& bl);
-  int _do_write_overlays(TransContext *txc, CollectionRef& c, OnodeRef o,
-			 uint64_t offset, uint64_t length);
-  void _do_read_all_overlays(bluestore_wal_op_t& wo);
-  void _pad_zeros(TransContext *txc,
-		  OnodeRef o, bufferlist *bl, uint64_t *offset, uint64_t *length,
-		  uint64_t block_size);
-  void _pad_zeros_head(OnodeRef o, bufferlist *bl,
-		       uint64_t *offset, uint64_t *length,
-		       uint64_t block_size);
-  void _pad_zeros_tail(TransContext *txc,
-		       OnodeRef o, bufferlist *bl,
-		       uint64_t offset, uint64_t *length,
-		       uint64_t block_size);
-  int _do_allocate(TransContext *txc,
-		   CollectionRef& c,
-		   OnodeRef o,
-		   uint64_t offset, uint64_t length,
-		   uint32_t fadvise_flags,
-		   bool allow_overlay,
-		   uint64_t *rmw_cow_head,
-		   uint64_t *rmw_cow_tail);
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
@@ -894,15 +903,6 @@ private:
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o);
-  int _do_write_zero(TransContext *txc,
-		     CollectionRef &c,
-		     OnodeRef o,
-		     uint64_t offset, uint64_t length);
-  void _do_zero_tail_extent(
-    TransContext *txc,
-    CollectionRef& c,
-    OnodeRef& o,
-    uint64_t offset);
   int _do_zero(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
@@ -999,6 +999,13 @@ static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
 }
 static inline void intrusive_ptr_release(BlueStore::Onode *o) {
   o->put();
+}
+
+static inline void intrusive_ptr_add_ref(BlueStore::Bnode *b) {
+  b->get();
+}
+static inline void intrusive_ptr_release(BlueStore::Bnode *b) {
+  b->put();
 }
 
 static inline void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
