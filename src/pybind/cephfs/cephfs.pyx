@@ -135,6 +135,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)
+    int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     void ceph_buffer_free(char *buf)
 
@@ -505,6 +506,13 @@ cdef class LibCephFS(object):
             ret = ceph_sync_fs(self.cluster)
         if ret < 0:
             raise make_ex(ret, "sync_fs failed")
+
+    def fsync(self, int fd, int syncdataonly):
+        self.require_state("mounted")
+        with nogil:
+            ret = ceph_fsync(self.cluster, fd, syncdataonly)
+        if ret < 0:
+            raise make_ex(ret, "fsync failed")
 
     def getcwd(self):
         self.require_state("mounted")
