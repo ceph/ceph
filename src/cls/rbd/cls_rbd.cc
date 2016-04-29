@@ -331,15 +331,8 @@ int image_remove_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     return -EINVAL;
   }
 
-  map<string, bufferlist> existing_refs;
-
-  int r = cls_cxx_map_get_vals(hctx, "", RBD_CG_REF_KEY, RBD_MAX_KEYS_READ, &existing_refs);
-  if (r < 1) {
-    return -ENOENT;
-  }
-
   bufferlist refbl;
-  r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
+  int r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
   if (r < 0) {
     return r;
   }
