@@ -2019,6 +2019,50 @@ static void populate_with_generic_attrs(const req_state * const s,
 }
 
 
+static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
+                                   const std::set<std::string>& rmattr_names,
+                                   RGWQuotaInfo& quota)
+{
+  /* Put new limit on max objects. */
+  auto iter = add_attrs.find(RGW_ATTR_CQUOTA_NOBJS);
+  std::string err;
+  if (std::end(add_attrs) != iter) {
+    quota.max_objects =
+      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    add_attrs.erase(iter);
+  }
+
+  /* Put new limit on bucket (container) size. */
+  iter = add_attrs.find(RGW_ATTR_CQUOTA_MSIZE);
+  if (iter != add_attrs.end()) {
+    quota.max_size =
+      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    add_attrs.erase(iter);
+  }
+
+  for (const auto& name : rmattr_names) {
+    /* Remove limit on max objects. */
+    if (name.compare(RGW_ATTR_CQUOTA_NOBJS) == 0) {
+      quota.max_objects = -1;
+    }
+
+    /* Remove limit on max bucket size. */
+    if (name.compare(RGW_ATTR_CQUOTA_MSIZE) == 0) {
+      quota.max_size = -1;
+    }
+  }
+
+  quota.enabled = quota.max_size > 0 || quota.max_objects > 0;
+  return 0;
+}
+
+
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
@@ -3180,11 +3224,23 @@ void RGWPutMetadataBucket::execute()
       prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
       populate_with_generic_attrs(s, attrs);
 
+      /* According  to the Swift's behaviour and its container_quota WSGI middleware
+       * implementation: anyone with write permissions is able to set the bucket
+       * quota. This stays in contrast to account quotas that can be set only by
+       * clients holding reseller admin privileges. */
+      op_ret = filter_out_bucket_quota(attrs, rmattr_names, s->bucket_info.quota);
+      if (op_ret < 0) {
+	return op_ret;
+      }
+
       if (swift_ver_location) {
 	s->bucket_info.swift_ver_location = *swift_ver_location;
 	s->bucket_info.swift_versioning = (! swift_ver_location->empty());
       }
 
+      /* Setting attributes also stores the provided bucket info. Due
+       * to this fact, the new quota settings can be serialized with
+       * the same call. */
       op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
 				    &s->bucket_info.objv_tracker);
       return op_ret;
