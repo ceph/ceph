@@ -83,7 +83,7 @@ OSDMonitor::OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& se
 
 bool OSDMonitor::_have_pending_crush()
 {
-  return pending_inc.crush.length();
+  return pending_inc.crush.length() > 0;
 }
 
 CrushWrapper &OSDMonitor::_get_stable_crush()
