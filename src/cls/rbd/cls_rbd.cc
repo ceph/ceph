@@ -67,6 +67,7 @@ CLS_NAME(rbd)
 cls_handle_t h_class;
 cls_method_handle_t h_create;
 cls_method_handle_t h_create_cg;
+cls_method_handle_t h_cg_list_images;
 cls_method_handle_t h_cg_add_image;
 cls_method_handle_t h_cg_remove_image;
 cls_method_handle_t h_cg_dirty_link;
@@ -259,6 +260,11 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (r < 0)
     return r;
 
+  return 0;
+}
+
+int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
   return 0;
 }
 
@@ -3986,6 +3992,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "create_cg",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  create_cg, &h_create_cg);
+  cls_register_cxx_method(h_class, "cg_list_images",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_list_images, &h_cg_list_images);
   cls_register_cxx_method(h_class, "cg_add_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  cg_add_image, &h_cg_add_image);
