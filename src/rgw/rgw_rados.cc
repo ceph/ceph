@@ -1654,11 +1654,24 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
   }
 
   for (auto& i : zonegroup.zones) {
-    string& zone_id = i.second.id;
-    if (short_zone_ids.find(zone_id) == short_zone_ids.end()) {
-      uint32_t short_id = gen_short_zone_id(zone_id);
-      short_zone_ids[i.second.id] = short_id;
+    auto& zone = i.second;
+    if (short_zone_ids.find(zone.id) != short_zone_ids.end()) {
+      continue;
     }
+    // calculate the zone's short id
+    uint32_t short_id = gen_short_zone_id(zone.id);
+
+    // search for an existing zone with the same short id
+    for (auto& s : short_zone_ids) {
+      if (s.second == short_id) {
+        ldout(cct, 0) << "New zone '" << zone.name << "' (" << zone.id
+            << ") generates the same short_zone_id " << short_id
+            << " as existing zone id " << s.first << dendl;
+        return -EEXIST;
+      }
+    }
+
+    short_zone_ids[zone.id] = short_id;
   }
 
   return 0;
