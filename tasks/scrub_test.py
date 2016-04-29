@@ -236,9 +236,8 @@ class InconsistentObjChecker:
             log.info('shard = %r' % shard)
             log.info('attr = %s' % attr_name)
             assert 'osd' in shard
-            assert attr_name in shard
             osd = shard['osd']
-            attr = shard[attr_name]
+            attr = shard.get(attr_name, False)
             if osd == self.osd:
                 assert bad_attr is None, \
                     "multiple entries found for the given OSD"
@@ -302,10 +301,10 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
             with contextlib.closing(StringIO()) as out:
                 mon.run(args=cmd.split(), stdout=out)
                 objs = json.loads(out.getvalue())
-            assert len(objs) == 1
+            assert len(objs['inconsistents']) == 1
 
             checker = InconsistentObjChecker(osd_id, acting, obj_name)
-            inc_obj = objs[0]
+            inc_obj = objs['inconsistents'][0]
             log.info('inc = %r', inc_obj)
             checker.basic_checks(inc_obj)
             for check in checks:
