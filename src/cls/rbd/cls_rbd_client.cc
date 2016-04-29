@@ -156,6 +156,15 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "create_cg", bl, bl2);
     }
 
+    int cg_list_images(librados::IoCtx *ioctx, const std::string &oid,
+		       std::vector<std::pair<std::string,int64_t>>& images)
+    {
+      bufferlist bl, bl2;
+
+      int r = ioctx->exec(oid, "rbd", "cg_list_images", bl, bl2);
+      return r;
+    }
+
     int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
 	                 std::string &cg_id, int64_t pool_id)
     {

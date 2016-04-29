@@ -1059,6 +1059,36 @@ err_remove_id:
     return r;
   }
 
+  int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
+		     std::vector<std::pair<std::string, int64_t>> images)
+  {
+    CephContext *cct = (CephContext *)cg_ioctx.cct();
+    ldout(cct, 20) << "cg_list_images " << &cg_ioctx << " cg name " << cg_name << dendl;
+
+    string cg_id_obj = util::id_cg_name(cg_name);
+    string cg_id;
+
+    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
+    if (r < 0) {
+      lderr(cct) << "error reading consistency group id object: " << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    string cg_header_oid = util::cg_header_name(cg_id);
+
+    ldout(cct, 20) << "listing images in cg name " << cg_name << " cg id " << cg_header_oid << dendl;
+
+    r = cls_client::cg_list_images(&cg_ioctx, cg_header_oid, images);
+
+    if (r < 0) {
+      lderr(cct) << "error adding image reference to consistency group: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+
+    return 0;
+  }
   int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
                    librados::IoCtx& image_ioctx, const char *image_name)
   {

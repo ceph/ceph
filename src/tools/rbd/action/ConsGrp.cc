@@ -220,23 +220,23 @@ int execute_list_images(const po::variables_map &vm) {
   std::cerr << "Received cg name: " << cg_name << std::endl;
 
   librbd::RBD rbd;
-  std::vector<std::string> names;
-  /*
-  r = rbd.list_cgs(io_ctx, names);
+  std::vector<std::pair<std::string, int64_t>> images;
+
+  r = rbd.cg_list_images(io_ctx, cg_name.c_str(), images);
 
   if (r == -ENOENT)
     r = 0;
   if (r < 0)
     return r;
-  */
 
   if (f)
     f->open_array_section("consistency_groups");
-  for (auto i : names) {
-     if (f)
-       f->dump_string("name", i);
-     else
-       std::cout << i << std::endl;
+  for (auto i : images) {
+     if (f) {
+       f->dump_string("image id", i.first);
+       f->dump_int("pool id", i.second);
+     } else
+       std::cout << i.first << " " << i.second << std::endl;
   }
   if (f) {
     f->close_section();
