@@ -1614,6 +1614,19 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
   }
 }
 
+// run an MD5 hash on the zone_id and return the first 32 bits
+static uint32_t gen_short_zone_id(const std::string zone_id)
+{
+  unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  MD5 hash;
+  hash.Update((const byte *)zone_id.c_str(), zone_id.size());
+  hash.Final(md5);
+
+  uint32_t short_id;
+  memcpy((char *)&short_id, md5, sizeof(short_id));
+  return std::max(short_id, 1u);
+}
+
 int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
 {
   if (zonegroup.is_master && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
@@ -1644,18 +1657,7 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
     for (auto i : iter.second.zones) {
       string& zone_id = i.second.id;
       if (short_zone_ids.find(zone_id) == short_zone_ids.end()) {
-        uint32_t short_id;
-
-        unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
-        MD5 hash;
-        hash.Update((const byte *)zone_id.c_str(), zone_id.size());
-        hash.Final(md5);
-        memcpy((char *)&short_id, md5, sizeof(short_id));
-
-        if (short_id == 0) {
-          ++short_id;
-        }
-
+        uint32_t short_id = gen_short_zone_id(zone_id);
         short_zone_ids[i.second.id] = short_id;
       }
     }
