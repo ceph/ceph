@@ -82,6 +82,10 @@ void OpRequest::_unregistered() {
   request->clear_data();
   request->clear_payload();
   request->release_message_throttle();
+  auto conn = request->get_connection();
+  if (conn) {
+    conn->set_priv(nullptr);
+  }
 }
 
 bool OpRequest::check_rmw(int flag) {
