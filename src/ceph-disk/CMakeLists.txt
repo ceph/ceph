@@ -1,4 +1,4 @@
-set(CEPH_DISK_VIRTUALENV ${CMAKE_BINARY_DIR}/ceph-disk-virtualenv)
+set(CEPH_DISK_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv)
 
 add_custom_target(ceph-disk
   COMMAND
