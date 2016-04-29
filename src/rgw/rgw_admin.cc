@@ -803,8 +803,10 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
     RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
-    formatter->dump_int("size_kb", s.num_kb);
-    formatter->dump_int("size_kb_actual", s.num_kb_rounded);
+    formatter->dump_int("size", s.size);
+    formatter->dump_int("size_actual", s.size_rounded);
+    formatter->dump_int("size_kb", rgw_rounded_kb(s.size));
+    formatter->dump_int("size_kb_actual", rgw_rounded_kb(s.size_rounded));
     formatter->dump_int("num_objects", s.num_objects);
     formatter->close_section();
     formatter->flush(cout);
