@@ -69,6 +69,7 @@ Group:         System/Filesystems
 URL:		http://ceph.com/
 Source0:	%{name}-%{version}.tar.xz
 Source99:       ceph-rpmlintrc
+ExclusiveArch:  x86_64 aarch64
 #################################################################################
 # dependencies that apply across all distro families
 #################################################################################
