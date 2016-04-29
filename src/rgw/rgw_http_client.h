@@ -29,6 +29,8 @@ class RGWHTTPClient
   string last_url;
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
+  atomic_t stopped;
+
 protected:
   CephContext *cct;
 
@@ -62,9 +64,15 @@ public:
     headers.push_back(pair<string, string>(name, val));
   }
 
-  virtual int receive_header(void *ptr, size_t len) = 0;
-  virtual int receive_data(void *ptr, size_t len) = 0;
-  virtual int send_data(void *ptr, size_t len) = 0;
+  virtual int receive_header(void *ptr, size_t len) {
+    return 0;
+  }
+  virtual int receive_data(void *ptr, size_t len) {
+    return 0;
+  }
+  virtual int send_data(void *ptr, size_t len) {
+    return 0;
+  }
 
   void set_send_length(size_t len) {
     send_len = len;
