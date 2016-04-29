@@ -3222,7 +3222,10 @@ void OSD::load_pgs()
       up_primary,
       primary);
     int role = OSDMap::calc_pg_role(whoami, pg->acting);
-    pg->set_role(role);
+    if (pg->pool.info.is_replicated() || role == pg->pg_whoami.shard)
+      pg->set_role(role);
+    else
+      pg->set_role(-1);
 
     pg->reg_next_scrub();
 
