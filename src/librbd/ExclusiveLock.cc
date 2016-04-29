@@ -78,10 +78,30 @@ template <typename I>
 bool ExclusiveLock<I>::accept_requests() const {
   Mutex::Locker locker(m_lock);
 
-  bool accept_requests = (!is_shutdown() && m_state == STATE_LOCKED);
+  bool accept_requests = (!is_shutdown() && m_state == STATE_LOCKED &&
+                          m_request_blockers == 0);
   ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
                              << accept_requests << dendl;
   return accept_requests;
+}
+
+template <typename I>
+void ExclusiveLock<I>::block_requests() {
+  Mutex::Locker locker(m_lock);
+  ++m_request_blockers;
+
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
+                             << m_request_blockers << dendl;
+}
+
+template <typename I>
+void ExclusiveLock<I>::unblock_requests() {
+  Mutex::Locker locker(m_lock);
+  assert(m_request_blockers > 0);
+  --m_request_blockers;
+
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
+                             << m_request_blockers << dendl;
 }
 
 template <typename I>

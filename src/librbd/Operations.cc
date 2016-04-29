@@ -79,6 +79,9 @@ struct C_InvokeAsyncRequest : public Context {
    *    . . . . . .   |   . . . . . . . . . . . . . . . . . .
    *    .         .   |   .                                 .
    *    .         v   v   v                                 .
+   *    .       REFRESH_IMAGE (skip if not needed)          .
+   *    .             |                                     .
+   *    .             v                                     .
    *    .       ACQUIRE_LOCK (skip if exclusive lock        .
    *    .             |       disabled or has lock)         .
    *    .             |                                     .
@@ -116,6 +119,35 @@ struct C_InvokeAsyncRequest : public Context {
   }
 
   void send() {
+    send_refresh_image();
+  }
+
+  void send_refresh_image() {
+    if (!image_ctx.state->is_refresh_required()) {
+      send_acquire_exclusive_lock();
+      return;
+    }
+
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << __func__ << dendl;
+
+    Context *ctx = util::create_context_callback<
+      C_InvokeAsyncRequest<I>,
+      &C_InvokeAsyncRequest<I>::handle_refresh_image>(this);
+    image_ctx.state->refresh(ctx);
+  }
+
+  void handle_refresh_image(int r) {
+    CephContext *cct = image_ctx.cct;
+    ldout(cct, 20) << __func__ << ": r=" << r << dendl;
+
+    RWLock::RLocker owner_locker(image_ctx.owner_lock);
+    if (r < 0) {
+      lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
+      complete(r);
+      return;
+    }
+
     send_acquire_exclusive_lock();
   }
 
@@ -193,7 +225,7 @@ struct C_InvokeAsyncRequest : public Context {
 
     ldout(cct, 5) << request_type << " timed out notifying lock owner"
                   << dendl;
-    send_acquire_exclusive_lock();
+    send_refresh_image();
   }
 
   void send_local_request() {
@@ -213,7 +245,7 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r == -ERESTART) {
-      send_acquire_exclusive_lock();
+      send_refresh_image();
       return;
     }
     complete(r);

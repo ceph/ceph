@@ -225,7 +225,10 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
     break;
   }
 
-  if (r < 0) {
+  if (r == -ERESTART) {
+    ldout(cct, 5) << "rebuild object map operation interrupted" << dendl;
+    return true;
+  } else if (r < 0) {
     lderr(cct) << "rebuild object map encountered an error: " << cpp_strerror(r)
                << dendl;
     return true;

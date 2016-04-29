@@ -122,7 +122,10 @@ bool TrimRequest<I>::should_complete(int r)
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: r=" << r << dendl;
-  if (r < 0) {
+  if (r == -ERESTART) {
+    ldout(cct, 5) << "trim operation interrupted" << dendl;
+    return true;
+  } else if (r < 0) {
     lderr(cct) << "trim encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }

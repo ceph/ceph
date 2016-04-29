@@ -67,7 +67,10 @@ bool FlattenRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
-  if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
+  if (r == -ERESTART) {
+    ldout(cct, 5) << "flatten operation interrupted" << dendl;
+    return true;
+  } else if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }
