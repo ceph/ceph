@@ -38,7 +38,7 @@ public:
   int snap_create(const char *snap_name);
   void snap_create(const char *snap_name, Context *on_finish);
   void execute_snap_create(const char *snap_name, Context *on_finish,
-                           uint64_t journal_op_tid);
+                           uint64_t journal_op_tid, bool skip_object_map);
 
   int snap_rollback(const char *snap_name, ProgressContext& prog_ctx);
   void execute_snap_rollback(const char *snap_name, ProgressContext& prog_ctx,

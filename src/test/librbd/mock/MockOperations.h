@@ -22,9 +22,10 @@ struct MockOperations {
                                     Context *on_finish,
                                     uint64_t journal_op_tid));
   MOCK_METHOD2(snap_create, void(const char *snap_name, Context *on_finish));
-  MOCK_METHOD3(execute_snap_create, void(const char *snap_name,
+  MOCK_METHOD4(execute_snap_create, void(const char *snap_name,
                                          Context *on_finish,
-                                         uint64_t journal_op_tid));
+                                         uint64_t journal_op_tid,
+                                         bool skip_object_map));
   MOCK_METHOD2(snap_remove, void(const char *snap_name, Context *on_finish));
   MOCK_METHOD2(execute_snap_remove, void(const char *snap_name,
                                          Context *on_finish));
