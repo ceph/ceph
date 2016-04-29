@@ -159,7 +159,8 @@ add_executable(unittest_async_compressor EXCLUDE_FROM_ALL
   test_async_compressor.cc
 )
 add_ceph_unittest(unittest_async_compressor ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_async_compressor)
-target_link_libraries(unittest_async_compressor global compressor)
+target_link_libraries(unittest_async_compressor global)
+add_dependencies(unittest_async_compressor ceph_snappy)
 
 # unittest_interval_set
 add_executable(unittest_interval_set EXCLUDE_FROM_ALL

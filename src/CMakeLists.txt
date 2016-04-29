@@ -327,6 +327,7 @@ set(libcommon_files
   common/fs_types.cc
   ${arch_files}
   ${auth_files}
+  $<TARGET_OBJECTS:compressor_objs>
   ${mds_files})
 set(mon_common_files
   auth/AuthSessionHandler.cc
