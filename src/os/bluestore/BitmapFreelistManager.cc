@@ -218,7 +218,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     // and it simplifies our lives a bit.
     assert(enumerate_p->valid());
     string k = enumerate_p->key();
-    const char *p = k.c_str() + 1;
+    const char *p = k.c_str();
     _key_decode_u64(p, &enumerate_offset);
     enumerate_bl = enumerate_p->value();
     enumerate_bl_pos = 0;
@@ -252,7 +252,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
       break;
     }
     string k = enumerate_p->key();
-    const char *p = k.c_str() + 1;
+    const char *p = k.c_str();
     uint64_t next = enumerate_offset + bytes_per_block * blocks_per_key;
     _key_decode_u64(p, &enumerate_offset);
     enumerate_bl = enumerate_p->value();
@@ -287,7 +287,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 	break;
       }
       string k = enumerate_p->key();
-      const char *p = k.c_str() + 1;
+      const char *p = k.c_str();
       _key_decode_u64(p, &enumerate_offset);
       enumerate_bl = enumerate_p->value();
     }

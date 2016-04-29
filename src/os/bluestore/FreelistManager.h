@@ -20,6 +20,8 @@ public:
     KeyValueDB *db,
     string prefix);
 
+  static void setup_merge_operators(KeyValueDB *db);
+
   virtual int create(uint64_t size, KeyValueDB::Transaction txn) {
     release(0, size, txn);
     return 0;

@@ -21,3 +21,8 @@ FreelistManager *FreelistManager::create(
     return new BitmapFreelistManager(kvdb, "B", "b");
   return NULL;
 }
+
+void FreelistManager::setup_merge_operators(KeyValueDB *db)
+{
+  BitmapFreelistManager::setup_merge_operator(db, "b");
+}

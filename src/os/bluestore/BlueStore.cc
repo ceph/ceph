@@ -1400,6 +1400,8 @@ int BlueStore::_open_db(bool create)
     return -EIO;
   }
   
+  FreelistManager::setup_merge_operators(db);
+
   if (kv_backend == "rocksdb")
     options = g_conf->bluestore_rocksdb_options;
   db->init(options);
