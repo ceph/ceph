@@ -403,8 +403,14 @@ namespace ceph {
   }
 
   std::ostream& operator<<(std::ostream& m, const timespan& t);
-  std::ostream& operator<<(std::ostream& m, const real_time& t);
-  std::ostream& operator<<(std::ostream& m, const mono_time& t);
+  template<typename Clock,
+	   typename std::enable_if<!Clock::is_steady>::type* = nullptr>
+  std::ostream& operator<<(std::ostream& m,
+			   const std::chrono::time_point<Clock>& t);
+  template<typename Clock,
+	   typename std::enable_if<Clock::is_steady>::type* = nullptr>
+  std::ostream& operator<<(std::ostream& m,
+			   const std::chrono::time_point<Clock>& t);
 
   // The way std::chrono handles the return type of subtraction is not
   // wonderful. The difference of two unsigned types SHOULD be signed.
