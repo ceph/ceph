@@ -131,24 +131,28 @@ struct inconsistent_snapset_t {
     : object{head}
   {}
   enum {
-    ATTR_MISSING   = 1 << 0,
-    ATTR_CORRUPTED = 1 << 1,
+    SNAPSET_MISSING = 1 << 0,
+    SNAPSET_CORRUPTED = 1 << 1,
     CLONE_MISSING  = 1 << 2,
     SNAP_MISMATCH  = 1 << 3,
     HEAD_MISMATCH  = 1 << 4,
     HEADLESS_CLONE = 1 << 5,
     SIZE_MISMATCH  = 1 << 6,
+    OI_MISSING   = 1 << 7,
+    OI_CORRUPTED = 1 << 8,
+    EXTRA_CLONES = 1 << 9,
   };
   uint64_t errors = 0;
   object_id_t object;
+  // Extra clones
   std::vector<snap_t> clones;
   std::vector<snap_t> missing;
 
   bool ss_attr_missing() const {
-    return errors & ATTR_MISSING;
+    return errors & SNAPSET_MISSING;
   }
   bool ss_attr_corrupted() const {
-    return errors & ATTR_CORRUPTED;
+    return errors & SNAPSET_CORRUPTED;
   }
   bool clone_missing() const  {
     return errors & CLONE_MISSING;
@@ -164,6 +168,15 @@ struct inconsistent_snapset_t {
   }
   bool size_mismatch() const {
     return errors & SIZE_MISMATCH;
+  }
+  bool oi_attr_missing() const {
+    return errors & OI_MISSING;
+  }
+  bool oi_attr_corrupted() const {
+    return errors & OI_CORRUPTED;
+  }
+  bool extra_clones() const {
+    return errors & EXTRA_CLONES;
   }
 };
 
