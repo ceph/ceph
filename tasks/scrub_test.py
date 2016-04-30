@@ -248,9 +248,9 @@ class InconsistentObjChecker:
                     "multiple good attrs found"
                 good_attr = attr
         assert bad_attr is not None, \
-            "good {attr} not found".format(attr=attr_name)
-        assert good_attr is not None, \
             "bad {attr} not found".format(attr=attr_name)
+        assert good_attr is not None, \
+            "good {attr} not found".format(attr=attr_name)
         assert good_attr != bad_attr, \
             "bad attr is identical to the good ones: " \
             "{0} == {1}".format(good_attr, bad_attr)
