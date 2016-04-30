@@ -189,9 +189,10 @@ private:
     } else if ((ctx->command == NBD_CMD_READ) &&
                 ret < static_cast<int>(ctx->request.len)) {
       int pad_byte_count = static_cast<int> (ctx->request.len) - ret;
-      ctx->data.append('\x0', pad_byte_count);
+      ctx->data.append_zero(pad_byte_count);
       dout(20) << __func__ << ": " << *ctx << ": Pad byte count: " 
                << pad_byte_count << dendl;
+      ctx->reply.error = 0;
     } else {
       ctx->reply.error = htonl(0);
     }
