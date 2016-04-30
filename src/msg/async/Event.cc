@@ -229,7 +229,20 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
 
   ldout(cct, 10) << __func__ << " id=" << id << " trigger after " << microseconds << "us"<< dendl;
   EventCenter::TimeEvent event;
-  clock_type::time_point expire = clock_type::now() + std::chrono::microseconds(microseconds);
+  utime_t expire;
+  struct timeval tv;
+
+  if (microseconds < 5) {
+    tv.tv_sec = 0;
+    tv.tv_usec = microseconds;
+  } else {
+    expire = ceph_clock_now(cct);
+    expire.copy_to_timeval(&tv);
+    tv.tv_sec += microseconds / 1000000;
+    tv.tv_usec += microseconds % 1000000;
+  }
+  expire.set_from_timeval(&tv);
+
   event.id = id;
   event.time_cb = ctxt;
   time_events[expire].push_back(event);
@@ -247,7 +260,8 @@ void EventCenter::delete_time_event(uint64_t id)
   if (id >= time_event_next_id)
     return ;
 
-  for (auto it = time_events.begin(); it != time_events.end(); ++it) {
+  for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+       it != time_events.end(); ++it) {
     for (list<TimeEvent>::iterator j = it->second.begin();
          j != it->second.end(); ++j) {
       if (j->id == id) {
@@ -276,8 +290,9 @@ void EventCenter::wakeup()
 int EventCenter::process_time_events()
 {
   int processed = 0;
-  clock_type::time_point now = clock_type::now();
-  ldout(cct, 10) << __func__ << " cur time is " << now << dendl;
+  time_t now = time(NULL);
+  utime_t cur = ceph_clock_now(cct);
+  ldout(cct, 10) << __func__ << " cur time is " << cur << dendl;
 
   time_lock.Lock();
   /* If the system clock is moved to the future, and then set back to the
@@ -288,14 +303,18 @@ int EventCenter::process_time_events()
    * events to be processed ASAP when this happens: the idea is that
    * processing events earlier is less dangerous than delaying them
    * indefinitely, and practice suggests it is. */
-  bool clock_skewed = now < last_time;
+  bool clock_skewed = false;
+  if (now < last_time) {
+    clock_skewed = true;
+  }
   last_time = now;
 
-  map<clock_type::time_point, list<TimeEvent> >::iterator prev;
+  map<utime_t, list<TimeEvent> >::iterator prev;
   list<TimeEvent> need_process;
-  for (auto it = time_events.begin(); it != time_events.end(); ) {
+  for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+       it != time_events.end(); ) {
     prev = it;
-    if (now >= it->first || clock_skewed) {
+    if (cur >= it->first || clock_skewed) {
       need_process.splice(need_process.end(), it->second);
       ++it;
       time_events.erase(prev);
@@ -322,33 +341,39 @@ int EventCenter::process_events(int timeout_microseconds)
   struct timeval tv;
   int numevents;
   bool trigger_time = false;
-  auto now = clock_type::now();
 
+  utime_t now = ceph_clock_now(cct);;
   // If exists external events, don't block
   if (external_num_events.read()) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     next_time = now;
   } else {
-    clock_type::time_point shortest;
-    shortest = now + std::chrono::microseconds(timeout_microseconds); 
+    utime_t period, shortest;
+    now.copy_to_timeval(&tv);
+    if (timeout_microseconds > 0) {
+      tv.tv_sec += timeout_microseconds / 1000000;
+      tv.tv_usec += timeout_microseconds % 1000000;
+    }
+    shortest.set_from_timeval(&tv);
 
     Mutex::Locker l(time_lock);
-    auto it = time_events.begin();
-    if (it != time_events.end() && shortest > it->first) {
+    map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+    if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
       trigger_time = true;
       if (shortest > now) {
-        timeout_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-            shortest - now).count();
+        period = shortest - now;
+        period.copy_to_timeval(&tv);
       } else {
-        shortest = now;
-        timeout_microseconds = 0;
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
       }
+    } else {
+      tv.tv_sec = timeout_microseconds / 1000000;
+      tv.tv_usec = timeout_microseconds % 1000000;
     }
-    tv.tv_sec = timeout_microseconds / 1000000;
-    tv.tv_usec = timeout_microseconds % 1000000;
     next_time = shortest;
   }
 
