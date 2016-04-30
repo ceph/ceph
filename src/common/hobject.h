@@ -92,7 +92,7 @@ public:
     build_hash_cache();
   }
 
-  hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash,
+  hobject_t(object_t oid, const string& key, snapid_t snap, uint32_t hash,
 	    int64_t pool, string nspace)
     : oid(oid), snap(snap), hash(hash), max(false),
       pool(pool), nspace(nspace),

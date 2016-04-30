@@ -840,6 +840,8 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
+  op->mark_started();
+
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t;
   for (vector<PushOp>::iterator i = m->pushes.begin();
@@ -896,6 +898,8 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
+
+  op->mark_started();
 
   vector<PullOp> replies(1);
   ObjectStore::Transaction t;

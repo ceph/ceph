@@ -3637,7 +3637,6 @@ int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const g
   }
   r = _do_clone_range(**o, **n, srcoff, len, dstoff);
   if (r < 0) {
-    r = -errno;
     goto out3;
   }
 
@@ -5517,7 +5516,6 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_max_sync_interval",
     "filestore_queue_max_ops",
     "filestore_queue_max_bytes",
-    "filestore_queue_max_ops",
     "filestore_expected_throughput_bytes",
     "filestore_expected_throughput_ops",
     "filestore_queue_low_threshhold",
