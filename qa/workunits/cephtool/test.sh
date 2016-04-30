@@ -1625,7 +1625,12 @@ function test_mon_osd_misc()
 
   ceph osd reweight-by-utilization 110
   ceph osd reweight-by-utilization 110 .5
+  expect_false ceph osd reweight-by-utilization 110 0
+  expect_false ceph osd reweight-by-utilization 110 -0.1
   ceph osd test-reweight-by-utilization 110 .5 --no-increasing
+  ceph osd test-reweight-by-utilization 110 .5 4 --no-increasing
+  expect_false ceph osd test-reweight-by-utilization 110 .5 0 --no-increasing
+  expect_false ceph osd test-reweight-by-utilization 110 .5 -10 --no-increasing
   ceph osd reweight-by-pg 110
   ceph osd test-reweight-by-pg 110 .5
   ceph osd reweight-by-pg 110 rbd
