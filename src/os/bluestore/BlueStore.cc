@@ -3892,7 +3892,7 @@ void BlueStore::_txc_update_fm(TransContext *txc)
 	alloc->release(p.get_start(), p.get_len());
     }
 
-    if (bdev->supports_discard()) {
+    if (g_conf->bluestore_discard_on_release && bdev->supports_discard()) {
       uint64_t block_size = bdev->get_block_size();
       for (interval_set<uint64_t>::iterator p = txc->released.begin();
 	  p != txc->released.end() && (p.get_len() >= block_size);
@@ -3988,7 +3988,7 @@ void BlueStore::_kv_sync_thread()
 	      alloc->release(p.get_start(), p.get_len());
 	  }
 
-	  if (bdev->supports_discard()) {
+	  if (g_conf->bluestore_discard_on_release && bdev->supports_discard()) {
 	    uint64_t block_size = bdev->get_block_size();
 	    for (interval_set<uint64_t>::iterator p = txc->wal_txn->released.begin();
 		p != txc->wal_txn->released.end() && (p.get_len() >= block_size);
