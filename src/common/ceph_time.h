@@ -405,6 +405,8 @@ namespace ceph {
   std::ostream& operator<<(std::ostream& m, const timespan& t);
   std::ostream& operator<<(std::ostream& m, const real_time& t);
   std::ostream& operator<<(std::ostream& m, const mono_time& t);
+  std::ostream& operator<<(std::ostream& m, const coarse_real_time& t);
+  std::ostream& operator<<(std::ostream& m, const coarse_mono_time& t);
 
   // The way std::chrono handles the return type of subtraction is not
   // wonderful. The difference of two unsigned types SHOULD be signed.

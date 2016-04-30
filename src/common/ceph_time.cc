@@ -103,4 +103,32 @@ namespace ceph {
     m.unsetf(std::ios::right);
     return m;
   }
+
+  std::ostream& operator<<(std::ostream& m, const coarse_mono_time& t) {
+    return m << std::chrono::duration<double>(t.time_since_epoch()).count()
+             << "s";
+  }
+
+  std::ostream& operator<<(std::ostream& m, const coarse_real_time& t) {
+    m.setf(std::ios::right);
+    char oldfill = m.fill();
+    m.fill('0');
+    // localtime.  this looks like an absolute time.
+    //  aim for http://en.wikipedia.org/wiki/ISO_8601
+    struct tm bdt;
+    time_t tt = ceph::coarse_real_clock::to_time_t(t);
+    localtime_r(&tt, &bdt);
+    m << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
+      << '-' << std::setw(2) << (bdt.tm_mon+1)
+      << '-' << std::setw(2) << bdt.tm_mday
+      << ' '
+      << std::setw(2) << bdt.tm_hour
+      << ':' << std::setw(2) << bdt.tm_min
+      << ':' << std::setw(2) << bdt.tm_sec
+      << "." << std::setw(6) << duration_cast<microseconds>(
+        t.time_since_epoch() % seconds(1));
+    m.fill(oldfill);
+    m.unsetf(std::ios::right);
+    return m;
+  }
 };
