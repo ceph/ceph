@@ -770,6 +770,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL)
 {
+  zeros = buffer::create_page_aligned(128*1024);
+  zeros.zero();
   _init_logger();
 }
 
@@ -5730,7 +5732,12 @@ int BlueStore::_do_write_zero(
   uint64_t length)
 {
   bufferlist zl;
-  zl.append_zero(length);
+  uint64_t len = length;
+  while (len > 0) {
+    uint64_t size = MIN(zeros.length(), len);
+    len -= size;
+    zl.append(zeros, 0, size);
+  }
   uint64_t old_size = o->onode.size;
   int r = _do_write(txc, c, o, offset, length, zl, 0);
   // we do not modify onode size
