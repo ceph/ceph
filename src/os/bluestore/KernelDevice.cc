@@ -570,5 +570,7 @@ bool KernelDevice::supports_discard()
 
 int KernelDevice::discard(uint64_t off, uint64_t len)
 {
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
   return block_device_discard(fd_direct, off, len);
 }
