@@ -54,6 +54,7 @@ class KernelDevice : public BlockDevice {
   std::atomic_int injecting_crash;
 
   bool can_discard; //whether support discard
+  bool discard_zeroes_data; //whether after discard, read data are zero.
 
   void _aio_thread();
   int _aio_start();

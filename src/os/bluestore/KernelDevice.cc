@@ -43,7 +43,8 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
     aio_stop(false),
     aio_thread(this),
     injecting_crash(0),
-    can_discard(false)
+    can_discard(false),
+    discard_zeroes_data(false)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
@@ -142,9 +143,14 @@ int KernelDevice::open(string p)
   if (S_ISBLK(st.st_mode)) {
     char realname[PATH_MAX] = {0};
     if (readlink(path.c_str(), realname, sizeof(realname) - 1) != -1) {
-      can_discard = get_block_device_int_property(realname, "discard_granularity");
-	if (can_discard)
+      can_discard = !!get_block_device_int_property(realname, "discard_granularity");
+	if (can_discard) {
 	  dout(1) << realname << " support discard command"  << dendl;
+	  discard_zeroes_data = !!get_block_device_int_property(realname, "discard_zeroes_data");
+	  if (discard_zeroes_data)
+	    dout(1) << realname << " support discard zero data" << dendl;
+
+	}
       }
   }
 
@@ -469,6 +475,18 @@ int KernelDevice::aio_zero(
   assert(off + len <= size);
 
   bufferlist bl;
+
+  //discard bypass page cache, so we must invalidate the related page cache.
+  if (discard_zeroes_data) {
+    int r = invalidate_cache(off, len);
+    //if met error, use aio_write
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " invalidate_cache error: " << cpp_strerror(r) << dendl;
+    } else
+      return discard(off, len);
+  }
+
   while (len > 0) {
     bufferlist t;
     t.append(zeros, 0, MIN(zeros.length(), len));
