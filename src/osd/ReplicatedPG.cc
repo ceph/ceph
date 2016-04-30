@@ -420,7 +420,7 @@ void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
 bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
   /* The conditions below may clear (on_local_recover, before we queue
-   * the tranasction) before we actually requeue the degraded waiters
+   * the transaction) before we actually requeue the degraded waiters
    * in on_global_recover after the transaction completes.
    */
   if (waiting_for_degraded_object.count(soid))
@@ -465,6 +465,7 @@ void ReplicatedPG::block_write_on_full_cache(
 	   << " on full cache" << dendl;
   objects_blocked_on_cache_full.insert(oid);
   waiting_for_cache_not_full.push_back(op);
+  op->mark_delayed("waiting for cache not full");
 }
 
 void ReplicatedPG::block_write_on_snap_rollback(
@@ -577,7 +578,7 @@ bool PGLSParentFilter::filter(const hobject_t &obj,
   vector<inode_backpointer_t>::iterator vi;
   for (vi = bt.ancestors.begin(); vi != bt.ancestors.end(); ++vi) {
     generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
-    if ( vi->dirino == parent_ino) {
+    if (vi->dirino == parent_ino) {
       ::encode(*vi, outdata);
       return true;
     }
@@ -679,7 +680,7 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
   } else {
     // Successfully constructed and initialized, return it.
     *pfilter = filter;
-    return  0;
+    return 0;
   }
 }
 
@@ -829,7 +830,6 @@ int ReplicatedPG::do_command(
     {
       f->open_array_section("objects");
       int32_t num = 0;
-      bufferlist bl;
       for (; p != needs_recovery_map.end() && num < cct->_conf->osd_command_max_records; ++p) {
         if (missing_loc.is_unfound(p->first)) {
 	  f->open_object_section("object");
@@ -854,7 +854,7 @@ int ReplicatedPG::do_command(
       }
       f->close_section();
     }
-    f->dump_int("more", p != needs_recovery_map.end());
+    f->dump_bool("more", p != needs_recovery_map.end());
     f->close_section();
     f->flush(odata);
     return 0;
@@ -1310,6 +1310,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  }
 	  if (is_unreadable_object(oid)) {
 	    wait_for_unreadable_object(oid, op);
+            delete filter;
 	    return;
 	  }
 	  result = osd->store->read(ch, ghobject_t(oid), 0, 0, osd_op.outdata);
@@ -1420,7 +1421,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
-  snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  snapset_contexts_lock("ReplicatedPG::snapset_contexts_lock"),
   backfills_in_flight(hobject_t::Comparator(true)),
   pending_backfill_updates(hobject_t::Comparator(true)),
   new_backfill(false),
@@ -2821,6 +2822,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 	     << " blocked by scrub" << dendl;
     if (op) {
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for scrub");
       dout(10) << __func__ << " " << hoid
 	       << " placing op in waiting_for_active" << dendl;
     } else {
@@ -3198,9 +3200,6 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
       return;
     case CEPH_OSD_OP_SCRUB_UNRESERVE:
       sub_op_scrub_unreserve(op);
-      return;
-    case CEPH_OSD_OP_SCRUB_STOP:
-      sub_op_scrub_stop(op);
       return;
     case CEPH_OSD_OP_SCRUB_MAP:
       sub_op_scrub_map(op);
@@ -3843,7 +3842,7 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
     newop.op.op = CEPH_OSD_OP_READ;
     newop.op.extent.offset = 0;
     newop.op.extent.length = 0;
-    do_osd_ops(ctx, nops);
+    result = do_osd_ops(ctx, nops);
 
     dout(10) << "tmapup read " << newop.outdata.length() << dendl;
 
@@ -3887,7 +3886,6 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       ::decode(nextkey, ip);
       ::decode(nextval, ip);
     }
-    result = 0;
     while (!bp.end() && !result) {
       __u8 op;
       string key;
