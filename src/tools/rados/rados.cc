@@ -1331,19 +1331,24 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   dump_object_id(inc.object, f);
   f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
   f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
-  f.dump_bool("clone_missing", inc.clone_missing());
+  f.dump_bool("oi_attr_missing", inc.oi_attr_missing());
+  f.dump_bool("oi_attr_corrupted", inc.oi_attr_corrupted());
   f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
   f.dump_bool("head_mismatch", inc.head_mismatch());
   f.dump_bool("headless", inc.headless());
   f.dump_bool("size_mismatch", inc.size_mismatch());
 
-  if (inc.clone_missing()) {
-    f.open_array_section("clones");
+  f.dump_bool("extra_clones", inc.extra_clones());
+  if (inc.extra_clones()) {
+    f.open_array_section("extra clones");
     for (auto snap : inc.clones) {
       f.dump_unsigned("snap", snap);
     }
     f.close_section();
+  }
 
+  f.dump_bool("clone_missing", inc.clone_missing());
+  if (inc.clone_missing()) {
     f.open_array_section("missing");
     for (auto snap : inc.missing) {
       f.dump_unsigned("snap", snap);
