@@ -1785,7 +1785,7 @@ int BlueStore::mkfs()
     } else {
       fm->release(reserved, end, t);
     }
-    db->submit_transaction_sync(t);
+    assert(0 == db->submit_transaction_sync(t));
   }
 
   r = write_meta("kv_backend", g_conf->bluestore_kvbackend);
@@ -3623,11 +3623,11 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
 	  _txc_update_fm(txc);
-	  db->submit_transaction(txc->t);
+	  assert(0 == db->submit_transaction(txc->t));
 	}
       } else {
 	_txc_update_fm(txc);
-	db->submit_transaction_sync(txc->t);
+	assert(0 == db->submit_transaction_sync(txc->t));
       }
       {
 	std::lock_guard<std::mutex> l(kv_lock);
@@ -3720,7 +3720,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 	   p->state == TransContext::STATE_IO_DONE);
 }
 
-int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 {
   dout(20) << __func__ << " osr " << osr << " txc " << txc
 	   << " onodes " << txc->onodes << dendl;
@@ -3764,8 +3764,6 @@ int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     get_wal_key(txc->wal_txn->seq, &key);
     txc->t->set(PREFIX_WAL, key, bl);
   }
-
-  return 0;
 }
 
 void BlueStore::_txc_finish_kv(TransContext *txc)
@@ -3929,7 +3927,7 @@ void BlueStore::_kv_sync_thread()
 	     it != kv_committing.end();
 	     ++it) {
 	  _txc_update_fm((*it));
-	  db->submit_transaction((*it)->t);
+	  assert(0 == db->submit_transaction((*it)->t));
 	}
       }
 
@@ -3995,7 +3993,7 @@ void BlueStore::_kv_sync_thread()
 	get_wal_key(wt.seq, &key);
 	t->rm_single_key(PREFIX_WAL, key);
       }
-      db->submit_transaction_sync(t);
+      assert(0 == db->submit_transaction_sync(t));
 
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
@@ -4262,7 +4260,6 @@ int BlueStore::queue_transactions(
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  int r;
 
   // set up the sequencer
   OpSequencer *osr;
@@ -4290,8 +4287,7 @@ int BlueStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  r = _txc_finalize(osr, txc);
-  assert(r == 0);
+  _txc_finalize(osr, txc);
 
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);

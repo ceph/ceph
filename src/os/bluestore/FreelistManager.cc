@@ -114,7 +114,7 @@ void FreelistManager::_audit()
   }
 }
 
-int FreelistManager::allocate(
+void FreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
@@ -188,10 +188,9 @@ int FreelistManager::allocate(
   }
   if (g_conf->bluestore_debug_freelist)
     _audit();
-  return 0;
 }
 
-int FreelistManager::release(
+void FreelistManager::release(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
@@ -260,5 +259,4 @@ int FreelistManager::release(
 
   if (g_conf->bluestore_debug_freelist)
     _audit();
-  return 0;
 }
