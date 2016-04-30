@@ -3679,11 +3679,13 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
 	  _txc_update_fm(txc);
-	  assert(0 == db->submit_transaction(txc->t));
+	  int r = db->submit_transaction(txc->t);
+	  assert(r == 0);
 	}
       } else {
 	_txc_update_fm(txc);
-	assert(0 == db->submit_transaction_sync(txc->t));
+	int r = db->submit_transaction_sync(txc->t);
+	assert(r == 0);
       }
       {
 	std::lock_guard<std::mutex> l(kv_lock);
@@ -3983,7 +3985,8 @@ void BlueStore::_kv_sync_thread()
 	     it != kv_committing.end();
 	     ++it) {
 	  _txc_update_fm((*it));
-	  assert(0 == db->submit_transaction((*it)->t));
+	  int r = db->submit_transaction((*it)->t);
+	  assert(r == 0);
 	}
       }
 
@@ -4049,7 +4052,8 @@ void BlueStore::_kv_sync_thread()
 	get_wal_key(wt.seq, &key);
 	t->rm_single_key(PREFIX_WAL, key);
       }
-      assert(0 == db->submit_transaction_sync(t));
+      int r = db->submit_transaction_sync(t);
+      assert(r == 0);
 
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
