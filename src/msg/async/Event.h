@@ -42,7 +42,6 @@
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/unordered_map.h"
-#include "common/ceph_time.h"
 #include "common/WorkQueue.h"
 #include "net_handler.h"
 
@@ -86,7 +85,6 @@ class EventDriver {
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
 class EventCenter {
-  using clock_type = ceph::coarse_mono_clock;
   struct FileEvent {
     int mask;
     EventCallbackRef read_cb;
@@ -109,10 +107,10 @@ class EventCenter {
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
-  map<clock_type::time_point, list<TimeEvent> > time_events;
+  map<utime_t, list<TimeEvent> > time_events;
   uint64_t time_event_next_id;
-  clock_type::time_point last_time; // last time process time event
-  clock_type::time_point next_time; // next wake up time
+  time_t last_time; // last time process time event
+  utime_t next_time; // next wake up time
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
@@ -138,7 +136,7 @@ class EventCenter {
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
     notify_handler(NULL),
     already_wakeup(0) {
-    last_time = clock_type::now();
+    last_time = time(NULL);
   }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
