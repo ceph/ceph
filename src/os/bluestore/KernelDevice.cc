@@ -42,7 +42,8 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
     aio_callback_priv(cbpriv),
     aio_stop(false),
     aio_thread(this),
-    injecting_crash(0)
+    injecting_crash(0),
+    can_discard(false)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
@@ -136,6 +137,16 @@ int KernelDevice::open(string p)
 
   r = _aio_start();
   assert(r == 0);
+
+  //check disk whether support discard zero data
+  if (S_ISBLK(st.st_mode)) {
+    char realname[PATH_MAX] = {0};
+    if (readlink(path.c_str(), realname, sizeof(realname) - 1) != -1) {
+      can_discard = get_block_device_int_property(realname, "discard_granularity");
+	if (can_discard)
+	  dout(1) << realname << " support discard command"  << dendl;
+      }
+  }
 
   dout(1) << __func__
 	  << " size " << size
@@ -552,3 +563,12 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
+bool KernelDevice::supports_discard()
+{
+  return can_discard;
+}
+
+int KernelDevice::discard(uint64_t off, uint64_t len)
+{
+  return block_device_discard(fd_direct, off, len);
+}

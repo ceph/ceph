@@ -53,6 +53,8 @@ class KernelDevice : public BlockDevice {
 
   std::atomic_int injecting_crash;
 
+  bool can_discard; //whether support discard
+
   void _aio_thread();
   int _aio_start();
   void _aio_stop();
@@ -90,6 +92,9 @@ public:
   int invalidate_cache(uint64_t off, uint64_t len) override;
   int open(string path) override;
   void close() override;
+
+  bool supports_discard() override;
+  int discard(uint64_t off, uint64_t len) override;
 };
 
 #endif
