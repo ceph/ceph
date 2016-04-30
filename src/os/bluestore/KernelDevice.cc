@@ -477,7 +477,7 @@ int KernelDevice::aio_zero(
   bufferlist bl;
 
   //discard bypass page cache, so we must invalidate the related page cache.
-  if (discard_zeroes_data) {
+  if (g_conf->bdev_discard_on_zero && discard_zeroes_data) {
     int r = invalidate_cache(off, len);
     //if met error, use aio_write
     if (r < 0) {
