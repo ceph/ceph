@@ -1394,8 +1394,9 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     tbl << stringify(si_t(sum.num_bytes));
     int64_t kb_used = SHIFT_ROUND_UP(sum.num_bytes, 10);
     float used = 0.0;
-    if (pg_map.osd_sum.kb > 0)
-      used = (float)kb_used * raw_used_rate * curr_object_copies_rate / pg_map.osd_sum.kb;
+    int64_t kb_avail = SHIFT_ROUND_UP(avail, 10);
+    if (kb_avail > 0)
+      used = (float)kb_used * raw_used_rate * curr_object_copies_rate / kb_avail;
     tbl << percentify(used*100);
     tbl << si_t(avail);
     tbl << sum.num_objects;
