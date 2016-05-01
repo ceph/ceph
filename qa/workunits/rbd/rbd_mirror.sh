@@ -166,7 +166,7 @@ start_mirror()
     rbd-mirror \
 	--cluster ${cluster} \
 	--pid-file=$(daemon_pid_file "${cluster}") \
-	--log-file=${TEMPDIR}/rbd-mirror.\$cluster_daemon.\$pid.log \
+	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.\$pid.log \
 	--admin-socket=${TEMPDIR}/rbd-mirror.${cluster}_daemon.\$cluster.asok \
 	--debug-rbd=30 --debug-journaler=30 \
 	--debug-rbd_mirror=30 \
