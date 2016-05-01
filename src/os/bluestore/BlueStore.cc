@@ -5226,9 +5226,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	  no = c->get_onode(noid, false);
 	}
 	r = _rename(txc, c, o, no, noid);
-	if (r == -ENOENT && op->op == Transaction::OP_TRY_RENAME)
-	  r = 0;
-      }
+    }
       break;
 
     case Transaction::OP_OMAP_CLEAR:
