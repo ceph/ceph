@@ -2717,6 +2717,121 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
   cluster.wait_for_latest_osdmap();
 }
 
+
+int notify_sleep = 0;
+bufferlist notify_bl;
+std::set<uint64_t> notify_cookies;
+const char *notify_oid = 0;
+int notify_err = 0;
+IoCtx *notify_ioctx;
+
+class WatchNotifyTestCtx2 : public WatchCtx2
+{
+public:
+  void handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_gid,
+		     bufferlist& bl) {
+    std::cout << __func__ << " cookie " << cookie << " notify_id " << notify_id
+	      << " notifier_gid " << notifier_gid << std::endl;
+    notify_bl = bl;
+    notify_cookies.insert(cookie);
+    bufferlist reply;
+    reply.append("reply", 5);
+    if (notify_sleep)
+      sleep(notify_sleep);
+    notify_ioctx->notify_ack(notify_oid, notify_id, cookie, reply);
+  }
+
+  void handle_error(uint64_t cookie, int err) {
+    std::cout << __func__ << " cookie " << cookie
+	      << " err " << err << std::endl;
+    assert(cookie > 1000);
+    notify_err = err;
+  }
+};
+
+TEST_F(LibRadosTwoPoolsPP, EvictWatchedObject) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // verify the object is present in the cache tier
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+    ASSERT_TRUE(it->get_oid() == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+
+  notify_oid = "foo";
+  notify_ioctx = &cache_ioctx;
+  notify_cookies.clear();
+  notify_err = 0;
+  uint64_t handle;
+  WatchNotifyTestCtx2 ctx;
+  ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
+  ASSERT_GT(ioctx.watch_check(handle), 0);
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // evict
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+	 "foo", completion, &op, librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  int left = 300;
+  std::cout << "waiting up to " << left << " for disconnect notification ..."
+	    << std::endl;
+  while (notify_err == 0 && --left) {
+    sleep(1);
+  }
+  ASSERT_TRUE(left > 0);
+  ASSERT_EQ(-ENOTCONN, notify_err);
+  ioctx.unwatch2(handle);
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
@@ -5346,6 +5461,89 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsECPP, EvictWatchedObject) {
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  // verify the object is present in the cache tier
+  {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+    ASSERT_TRUE(it->get_oid() == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
+
+  notify_oid = "foo";
+  notify_ioctx = &cache_ioctx;
+  notify_cookies.clear();
+  notify_err = 0;
+  uint64_t handle;
+  WatchNotifyTestCtx2 ctx;
+  ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
+  ASSERT_GT(ioctx.watch_check(handle), 0);
+
+  // flush
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // evict
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+	 "foo", completion, &op, librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  int left = 300;
+  std::cout << "waiting up to " << left << " for disconnect notification ..."
+	    << std::endl;
+  while (notify_err == 0 && --left) {
+    sleep(1);
+  }
+  ASSERT_TRUE(left > 0);
+  ASSERT_EQ(-ENOTCONN, notify_err);
+  ioctx.unwatch2(handle);
 }
 
 int main(int argc, char **argv)
