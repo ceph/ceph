@@ -284,7 +284,8 @@ extern const char *ceph_osd_state_name(int s);
 	f(SCRUB,	__CEPH_OSD_OP1(SUB, 5),		"scrub")	    \
 	f(SCRUB_RESERVE, __CEPH_OSD_OP1(SUB, 6),	"scrub-reserve")    \
 	f(SCRUB_UNRESERVE, __CEPH_OSD_OP1(SUB, 7),	"scrub-unreserve")  \
-	f(SCRUB_MAP,	__CEPH_OSD_OP1(SUB, 8),		"scrub-map")	    \
+	/* 8 used to be scrub-stop */					\
+	f(SCRUB_MAP,	__CEPH_OSD_OP1(SUB, 9),		"scrub-map")	    \
 									    \
 	/** exec **/							    \
 	/* note: the RD bit here is wrong; see special-case below in helper */ \
