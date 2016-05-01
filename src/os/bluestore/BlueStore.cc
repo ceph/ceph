@@ -5296,15 +5296,13 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
 	if (r == -ENOENT && (op->op == Transaction::OP_CLONERANGE ||
 			     op->op == Transaction::OP_CLONE ||
-			     op->op == Transaction::OP_CLONERANGE2))
+			     op->op == Transaction::OP_CLONERANGE2)) {
 	  msg = "ENOENT on clone suggests osd bug";
-
-	if (r == -ENOSPC)
+	} else if (r == -ENOSPC) {
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
 	  msg = "ENOSPC handling not implemented";
-
-	if (r == -ENOTEMPTY) {
+	} else if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	}
 
