@@ -1455,7 +1455,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 {
   int ret;
 
-  ceph::shared_ptr<ObjectStore::Sequencer> osr(
+  std::unique_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("mkfs"));
   OSDSuperblock sb;
   bufferlist sbbl;
