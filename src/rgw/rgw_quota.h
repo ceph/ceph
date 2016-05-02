@@ -24,14 +24,27 @@ class RGWRados;
 class JSONObj;
 
 struct RGWQuotaInfo {
-  int64_t max_size_kb;
-  int64_t max_objects;
-  bool enabled;
+  template<class T> friend class RGWQuotaCache;
+protected:
+  /* The quota thresholds after which comparing against cached storage stats
+   * is disallowed. Those fields may be accessed only by the RGWQuotaCache.
+   * They are not intended as tunables but rather as a mean to store results
+   * of repeating calculations in the quota cache subsystem. */
   int64_t max_size_soft_threshold;
   int64_t max_objs_soft_threshold;
 
-  RGWQuotaInfo() : max_size_kb(-1), max_objects(-1), enabled(false),
-                   max_size_soft_threshold(-1), max_objs_soft_threshold(-1) {}
+public:
+  int64_t max_size_kb;
+  int64_t max_objects;
+  bool enabled;
+
+  RGWQuotaInfo()
+    : max_size_soft_threshold(-1),
+      max_objs_soft_threshold(-1),
+      max_size_kb(-1),
+      max_objects(-1),
+      enabled(false) {
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
