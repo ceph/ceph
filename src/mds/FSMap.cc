@@ -151,7 +151,8 @@ void FSMap::print_summary(Formatter *f, ostream *out)
 
     const fs_cluster_id_t fscid = mds_roles.at(info.global_id);
 
-    if (info.rank != MDS_RANK_NONE) {
+    if (info.rank != MDS_RANK_NONE &&
+        info.state != MDSMap::STATE_STANDBY_REPLAY) {
       if (f) {
         f->open_object_section("mds");
         f->dump_unsigned("filesystem_id", fscid);
