@@ -89,7 +89,7 @@ void SyncPointPruneRequest<I>::send_remove_snap() {
     return;
   }
 
-  std::string snap_name = m_snap_names.front();
+  const std::string &snap_name = m_snap_names.front();
 
   CephContext *cct = m_remote_image_ctx->cct;
   ldout(cct, 20) << ": snap_name=" << snap_name << dendl;
