@@ -28,6 +28,7 @@
 #include "common/Finisher.h"
 #include "common/errno.h"
 #include "common/debug.h"
+#include "common/safe_io.h"
 
 class MonitorDBStore
 {
@@ -659,6 +660,57 @@ class MonitorDBStore
 
   uint64_t get_estimated_size(map<string, uint64_t> &extras) {
     return db->get_estimated_size(extras);
+  }
+
+  /**
+   * write_meta - write a simple configuration key out-of-band
+   *
+   * Write a simple key/value pair for basic store configuration
+   * (e.g., a uuid or magic number) to an unopened/unmounted store.
+   * The default implementation writes this to a plaintext file in the
+   * path.
+   *
+   * A newline is appended.
+   *
+   * @param key key name (e.g., "fsid")
+   * @param value value (e.g., a uuid rendered as a string)
+   * @returns 0 for success, or an error code
+   */
+  int write_meta(const std::string& key,
+		 const std::string& value) const {
+    string v = value;
+    v += "\n";
+    int r = safe_write_file(path.c_str(), key.c_str(),
+			    v.c_str(), v.length());
+    if (r < 0)
+      return r;
+    return 0;
+  }
+
+  /**
+   * read_meta - read a simple configuration key out-of-band
+   *
+   * Read a simple key value to an unopened/mounted store.
+   *
+   * Trailing whitespace is stripped off.
+   *
+   * @param key key name
+   * @param value pointer to value string
+   * @returns 0 for success, or an error code
+   */
+  int read_meta(const std::string& key,
+		std::string *value) const {
+    char buf[4096];
+    int r = safe_read_file(path.c_str(), key.c_str(),
+			   buf, sizeof(buf));
+    if (r <= 0)
+      return r;
+    // drop trailing newlines
+    while (r && isspace(buf[r-1])) {
+      --r;
+    }
+    *value = string(buf, r);
+    return 0;
   }
 
   explicit MonitorDBStore(const string& path)
