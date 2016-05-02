@@ -1029,7 +1029,6 @@ public:
   void add_pgid(spg_t pgid, PG *pg) {
     Mutex::Locker l(pgid_lock);
     if (!pgid_tracker.count(pgid)) {
-      pgid_tracker[pgid] = 0;
       live_pgs[pgid] = pg;
     }
     pgid_tracker[pgid]++;
