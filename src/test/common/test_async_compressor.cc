@@ -211,7 +211,7 @@ int main(int argc, char **argv) {
   common_init_finish(g_ceph_context);
 
   const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : "lib");
+  string directory(env ? env : ".libs");
 
   // copy libceph_snappy.so into $plugin_dir/compressor for PluginRegistry
   // TODO: just build the compressor plugins in this subdir

@@ -15,7 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-CEPH_ROOT=${CEPH_ROOT:-..}
+source $(dirname $0)/detect-build-env-vars.sh
 
 CEPH_CLI_TEST_DUP_COMMAND=1 \
 MDS=1 MON=1 OSD=3 CEPH_START='mon osd mds' CEPH_PORT=7200 $CEPH_ROOT/src/test/vstart_wrapper.sh \

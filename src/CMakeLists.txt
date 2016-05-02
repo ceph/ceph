@@ -1004,6 +1004,9 @@ add_library(krbd_objs OBJECT krbd.cc)
 
 if(${WITH_RBD})
   add_subdirectory(librbd)
+  
+  add_executable(rbd-nbd tools/rbd_nbd/rbd-nbd.cc)
+  target_link_libraries(rbd-nbd rbd librados global ${Boost_REGEX_LIBRARY})
 
   set(rbd_mirror_internal
     tools/rbd_mirror/ClusterWatcher.cc 

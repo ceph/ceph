@@ -17,4 +17,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+source $(dirname $0)/detect-build-env-vars.sh
+
 $CEPH_ROOT/qa/workunits/ceph-helpers.sh TESTS

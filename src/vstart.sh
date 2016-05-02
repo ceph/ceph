@@ -30,11 +30,11 @@ fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install' 
 if [ -n "$CEPH_BUILD_ROOT" ]; then
-        [ -z $CEPH_BIN ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
-        [ -z $CEPH_LIB ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
-        [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB/erasure-code
-        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB/compressor
-        [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
+        [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
+        [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
+        [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
+        [ -z "$CS_PATH" ] && CS_PATH=$CEPH_LIB/compressor
+        [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
 elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
@@ -46,9 +46,9 @@ elif [ -n "$CEPH_ROOT" ]; then
 else
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
-        [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
-        [ -z $CS_PATH ] && CS_PATH=$CEPH_LIB
-        [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
+        [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+        [ -z "$CS_PATH" ] && CS_PATH=$CEPH_LIB
+        [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
 fi
 
 if [ -z "${CEPH_VSTART_WRAPPER}" ]; then

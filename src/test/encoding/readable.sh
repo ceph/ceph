@@ -1,5 +1,7 @@
 #!/bin/sh -e
 
+source $(dirname $0)/../detect-build-env-vars.sh
+
 [ -z "$CEPH_ROOT" ] && CEPH_ROOT=..
 
 dir=$CEPH_ROOT/ceph-object-corpus
