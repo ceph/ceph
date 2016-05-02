@@ -149,6 +149,7 @@ public:
   int set(int optname, uint64_t optval);
   int get(int optname, std::string* optval) const;
   int get(int optname, uint64_t* optval) const;
+  int is_set(int optname, bool* is_set);
   int unset(int optname);
   void clear();
   bool empty() const;

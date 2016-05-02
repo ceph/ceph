@@ -81,6 +81,8 @@ namespace librbd {
 			std::string* optval);
   int image_options_get(rbd_image_options_t opts, int optname,
 			uint64_t* optval);
+  int image_options_is_set(rbd_image_options_t opts, int optname,
+                           bool* is_set);
   int image_options_unset(rbd_image_options_t opts, int optname);
   void image_options_clear(rbd_image_options_t opts);
   bool image_options_is_empty(rbd_image_options_t opts);

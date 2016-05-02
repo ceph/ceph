@@ -487,6 +487,11 @@ namespace librbd {
     return librbd::image_options_get(opts, optname, optval);
   }
 
+  int ImageOptions::is_set(int optname, bool* is_set)
+  {
+    return librbd::image_options_is_set(opts, optname, is_set);
+  }
+
   int ImageOptions::unset(int optname)
   {
     return librbd::image_options_unset(opts, optname);
@@ -1316,6 +1321,12 @@ extern "C" int rbd_image_options_get_uint64(rbd_image_options_t opts, int optnam
 				 uint64_t* optval)
 {
   return librbd::image_options_get(opts, optname, optval);
+}
+
+extern "C" int rbd_image_options_is_set(rbd_image_options_t opts, int optname,
+                                        bool* is_set)
+{
+  return librbd::image_options_is_set(opts, optname, is_set);
 }
 
 extern "C" int rbd_image_options_unset(rbd_image_options_t opts, int optname)
