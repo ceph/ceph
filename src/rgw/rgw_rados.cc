@@ -310,12 +310,12 @@ void RGWZoneGroup::post_process_params()
   }
 }
 
-int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
+int RGWZoneGroup::remove_zone(const std::string& zone_id)
 {
-  map<string, RGWZone>::iterator iter = zones.find(zone_params.get_id());
-
+  map<string, RGWZone>::iterator iter = zones.find(zone_id);
   if (iter == zones.end()) {
-    ldout(cct, 0) << "zone " << zone_params.get_name() << " " << zone_params.get_id() << "is not a part of zonegroup "<< name << dendl;
+    ldout(cct, 0) << "zone id " << zone_id << " is not a part of zonegroup "
+        << name << dendl;
     return -ENOENT;
   }
 
