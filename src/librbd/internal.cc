@@ -750,6 +750,19 @@ remove_mirroring_image:
     return 0;
   }
 
+  int image_options_is_set(rbd_image_options_t opts, int optname,
+                           bool* is_set)
+  {
+    if (IMAGE_OPTIONS_TYPE_MAPPING.find(optname) ==
+          IMAGE_OPTIONS_TYPE_MAPPING.end()) {
+      return -EINVAL;
+    }
+
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+    *is_set = ((*opts_)->find(optname) != (*opts_)->end());
+    return 0;
+  }
+
   int image_options_unset(rbd_image_options_t opts, int optname)
   {
     image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
