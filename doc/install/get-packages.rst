@@ -252,8 +252,8 @@ Development packages have new features integrated quickly, while still
 undergoing several weeks of QA prior to release.
 
 The repository package installs the repository details on your local system for
-use with ``yum`` or ``up2date``. Replace ``{distro}`` with your Linux distribution,
-and ``{release}`` with the specific release of Ceph::
+use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
+``{release}`` with the specific release of Ceph::
 
     su -c 'rpm -Uvh http://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el6.noarch.rpm'
 
@@ -438,8 +438,7 @@ Ceph requires the following packages:
 Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 18 and 19
 (``f18`` and ``f19``), OpenSUSE 12.2 (``opensuse12.2``), and SLES (``sles11``)
 platforms. The repository package installs the repository details on your local
-system for use with ``yum`` or ``up2date``. Replace ``{distro}`` with your
-distribution. ::
+system for use with ``yum``. Replace ``{distro}`` with your distribution. ::
 
     su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
