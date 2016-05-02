@@ -31,6 +31,7 @@
 
 class MonitorDBStore
 {
+  string path;
   boost::scoped_ptr<KeyValueDB> db;
   bool do_dump;
   int dump_fd_binary;
@@ -577,57 +578,7 @@ class MonitorDBStore
     assert(r >= 0);
   }
 
-  int open(ostream &out) {
-    if (g_conf->mon_keyvaluedb == "rocksdb")
-      db->init(g_conf->mon_rocksdb_options);
-    else
-      db->init();
-    int r = db->open(out);
-    if (r < 0)
-      return r;
-    io_work.start();
-    is_open = true;
-    return 0;
-  }
-
-  int create_and_open(ostream &out) {
-    if (g_conf->mon_keyvaluedb == "rocksdb")
-      db->init(g_conf->mon_rocksdb_options);
-    else
-      db->init();
-    int r = db->create_and_open(out);
-    if (r < 0)
-      return r;
-    io_work.start();
-    is_open = true;
-    return 0;
-  }
-
-  void close() {
-    // there should be no work queued!
-    io_work.stop();
-    is_open = false;
-  }
-
-  void compact() {
-    db->compact();
-  }
-
-  void compact_prefix(const string& prefix) {
-    db->compact_prefix(prefix);
-  }
-
-  uint64_t get_estimated_size(map<string, uint64_t> &extras) {
-    return db->get_estimated_size(extras);
-  }
-
-  explicit MonitorDBStore(const string& path)
-    : db(0),
-      do_dump(false),
-      dump_fd_binary(-1),
-      dump_fmt(true),
-      io_work(g_ceph_context, "monstore", "fn_monstore"),
-      is_open(false) {
+  void _open() {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -666,6 +617,58 @@ class MonitorDBStore
       }
       do_dump = true;
     }
+    if (g_conf->mon_keyvaluedb == "rocksdb")
+      db->init(g_conf->mon_rocksdb_options);
+    else
+      db->init();
+  }
+
+  int open(ostream &out) {
+    _open();
+    int r = db->open(out);
+    if (r < 0)
+      return r;
+    io_work.start();
+    is_open = true;
+    return 0;
+  }
+
+  int create_and_open(ostream &out) {
+    _open();
+    int r = db->create_and_open(out);
+    if (r < 0)
+      return r;
+    io_work.start();
+    is_open = true;
+    return 0;
+  }
+
+  void close() {
+    // there should be no work queued!
+    io_work.stop();
+    is_open = false;
+  }
+
+  void compact() {
+    db->compact();
+  }
+
+  void compact_prefix(const string& prefix) {
+    db->compact_prefix(prefix);
+  }
+
+  uint64_t get_estimated_size(map<string, uint64_t> &extras) {
+    return db->get_estimated_size(extras);
+  }
+
+  explicit MonitorDBStore(const string& path)
+    : path(path),
+      db(0),
+      do_dump(false),
+      dump_fd_binary(-1),
+      dump_fmt(true),
+      io_work(g_ceph_context, "monstore", "fn_monstore"),
+      is_open(false) {
   }
   ~MonitorDBStore() {
     assert(!is_open);
