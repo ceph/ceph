@@ -118,7 +118,6 @@ private:
   struct xio_server *server;
   SubmitQueue submit_q;
   pthread_spinlock_t sp;
-  pthread_mutex_t mtx;
   void *ev_loop;
   string xio_uri;
   char *portal_id;
@@ -138,7 +137,6 @@ public:
     special_handling(0)
   {
     pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
-    pthread_mutex_init(&mtx, NULL);
 
     struct xio_context_params ctx_params;
     memset(&ctx_params, 0, sizeof(ctx_params));
