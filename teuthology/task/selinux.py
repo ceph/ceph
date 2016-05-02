@@ -114,6 +114,7 @@ class SELinux(Task):
             'chronyd.service',
             'name="cephtest"',
             'scontext=system_u:system_r:nrpe_t:s0',
+            'scontext=system_u:system_r:pcp_pmlogger_t',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
