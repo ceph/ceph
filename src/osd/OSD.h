@@ -47,7 +47,6 @@
 using namespace std;
 
 #include "include/unordered_map.h"
-#include "include/unordered_set.h"
 
 #include "Watch.h"
 #include "common/shared_cache.hpp"
