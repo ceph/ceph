@@ -56,12 +56,10 @@ Release Cycle
 
 Four times a year, the development roadmap is discussed online during
 the `Ceph Developer Summit <http://wiki.ceph.com/Planning/CDS/>`_. A
-new stable release (argonaut, cuttlefish, dumpling, emperor, firefly,
-giant, hammer, infernalis ...) is published at the same frequency. 
-Every other release (dumpling, firefly, hammer, ...) is a `Long Term Stable (LTS) <../../releases>`_.
-See `Understanding the release cycle
-<../../releases#understanding-the-release-cycle>`_ for more
-information.
+new stable release (hammer, infernalis, jewel ...) is published at the same
+frequency.  Every other release (firefly, hammer, jewel...) is a `Long Term
+Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
+<../../releases#understanding-the-release-cycle>`_ for more information.
 
 Merging bug fixes or features
 =============================
