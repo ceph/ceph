@@ -139,29 +139,35 @@ private:
   void send_v1_get_locks();
   Context *handle_v1_get_locks(int *result);
 
+  void send_v1_apply();
+  Context *handle_v1_apply(int *result);
+
   void send_v2_get_mutable_metadata();
   Context *handle_v2_get_mutable_metadata(int *result);
 
   void send_v2_get_flags();
   Context *handle_v2_get_flags(int *result);
 
-  Context *send_v2_get_snapshots();
+  void send_v2_get_snapshots();
   Context *handle_v2_get_snapshots(int *result);
 
-  Context *send_v2_refresh_parent();
+  void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);
 
-  Context *send_v2_init_exclusive_lock();
+  void send_v2_init_exclusive_lock();
   Context *handle_v2_init_exclusive_lock(int *result);
 
-  Context *send_v2_open_journal();
+  void send_v2_open_journal();
   Context *handle_v2_open_journal(int *result);
 
-  Context *send_v2_block_writes();
+  void send_v2_block_writes();
   Context *handle_v2_block_writes(int *result);
 
-  Context *send_v2_open_object_map();
+  void send_v2_open_object_map();
   Context *handle_v2_open_object_map(int *result);
+
+  void send_v2_apply();
+  Context *handle_v2_apply(int *result);
 
   Context *send_v2_finalize_refresh_parent();
   Context *handle_v2_finalize_refresh_parent(int *result);
