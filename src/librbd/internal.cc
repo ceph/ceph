@@ -1623,7 +1623,11 @@ remove_mirroring_image:
 
     // if disabling features w/ exclusive lock supported, we need to
     // acquire the lock to temporarily block IO against the image
-    if (ictx->exclusive_lock != nullptr && !enabled) {
+    bool acquired_lock = false;
+    if (ictx->exclusive_lock != nullptr &&
+        !ictx->exclusive_lock->is_lock_owner() && !enabled) {
+      acquired_lock = true;
+
       C_SaferCond lock_ctx;
       ictx->exclusive_lock->request_lock(&lock_ctx);
       r = lock_ctx.wait();
@@ -1812,6 +1816,16 @@ remove_mirroring_image:
           }
           img_ctx->state->close();
         }
+      }
+    }
+
+    if (ictx->exclusive_lock != nullptr && acquired_lock) {
+      C_SaferCond lock_ctx;
+      ictx->exclusive_lock->release_lock(&lock_ctx);
+      r = lock_ctx.wait();
+      if (r < 0) {
+        lderr(cct) << "failed to unlock image: " << cpp_strerror(r) << dendl;
+        return r;
       }
     }
 
