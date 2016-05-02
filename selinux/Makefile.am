@@ -10,9 +10,9 @@ ceph.pp: ceph.te ceph.fc ceph.if
 
 if ENABLE_SERVER
 if WITH_SELINUX
-all-local: ceph.pp
+all-local:: ceph.pp
 
-install-exec-local:
+install-exec-local::
 	$(INSTALL) -d $(SELINUXROOT)/packages
 	$(INSTALL) -m 644 ceph.pp $(SELINUXROOT)/packages/
 	$(INSTALL) -d $(SELINUXROOT)/devel/include/contrib
