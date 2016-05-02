@@ -15,7 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-CEPH_ROOT=${CEPH_ROOT:-..}
+source $(dirname $0)/detect-build-env-vars.sh
 
 CEPH_CLI_TEST_DUP_COMMAND=1 \
 # uses CEPH_PORT going from 7202 7203 and 7204 because
