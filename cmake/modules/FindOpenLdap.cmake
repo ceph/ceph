@@ -31,7 +31,6 @@ else (OPENLDAP_FOUND)
   endif (NOT OPENLDAP_INCLUDE_DIR)
 endif (OPENLDAP_FOUND)
 
-add_definitions(-DHAVE_OPENLDAP)
 set(OPENLDAP_LIBS ${LIBLDAP} ${LIBLBER})
 
 mark_as_advanced(
