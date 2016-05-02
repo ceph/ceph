@@ -8,8 +8,6 @@
 
 #include <arpa/inet.h>
 
-#include <boost/lexical_cast.hpp>
-
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
 #include "log/Entry.h"
@@ -55,8 +53,7 @@ void Graylog::set_destination(const std::string& host, int port)
 {
   try {
     boost::asio::ip::udp::resolver resolver(m_io_service);
-    boost::asio::ip::udp::resolver::query query(host,
-                                                boost::lexical_cast<std::string>(port));
+    boost::asio::ip::udp::resolver::query query(host, std::to_string(port));
     m_endpoint = *resolver.resolve(query);
     m_log_dst_valid = true;
   } catch (boost::system::system_error const& e) {
