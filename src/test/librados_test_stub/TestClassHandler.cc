@@ -46,7 +46,7 @@ void TestClassHandler::open_all_classes() {
   assert(m_class_handles.empty());
 
   const char* env = getenv("CEPH_LIB");
-  std::string CEPH_LIB(env ? env : "lib");
+  std::string CEPH_LIB(env ? env : ".libs");
   DIR *dir = ::opendir(CEPH_LIB.c_str());
   if (dir == NULL) {
     assert(false);;

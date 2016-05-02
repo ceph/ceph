@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
   common_init_finish(g_ceph_context);
 
   const char* env = getenv("CEPH_LIB");
-  std::string directory(env ? env : "lib");
+  std::string directory(env ? env : ".libs");
   string mkdir_compressor = "mkdir -p " + directory + "/compressor";
   int r = system(mkdir_compressor.c_str());
   (void)r;

@@ -13,6 +13,7 @@
 # GNU Library Public License for more details.
 #
 
+source $(dirname $0)/../detect-build-env-vars.sh
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {

@@ -18,6 +18,8 @@
 set -xe
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
+source $(dirname $0)/../detect-build-env-vars.sh
+
 DIR=mkfs
 export CEPH_CONF=/dev/null
 unset CEPH_ARGS
