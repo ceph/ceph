@@ -92,7 +92,7 @@ enum NotifyOp {
 
 struct AcquiredLockPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_ACQUIRED_LOCK;
-  static const bool CHECK_FOR_REFRESH = true;
+  static const bool CHECK_FOR_REFRESH = false;
 
   ClientId client_id;
 
@@ -106,7 +106,7 @@ struct AcquiredLockPayload {
 
 struct ReleasedLockPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_RELEASED_LOCK;
-  static const bool CHECK_FOR_REFRESH = true;
+  static const bool CHECK_FOR_REFRESH = false;
 
   ClientId client_id;
 
@@ -120,7 +120,7 @@ struct ReleasedLockPayload {
 
 struct RequestLockPayload {
   static const NotifyOp NOTIFY_OP = NOTIFY_OP_REQUEST_LOCK;
-  static const bool CHECK_FOR_REFRESH = true;
+  static const bool CHECK_FOR_REFRESH = false;
 
   ClientId client_id;
   bool force = false;
