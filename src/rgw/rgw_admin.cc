@@ -103,6 +103,7 @@ void _usage()
   cout << "  zonegroup get              show zone group info\n";
   cout << "  zonegroup modify           set/clear zonegroup master status\n";
   cout << "  zonegroup set              set zone group info (requires infile)\n";
+  cout << "  zonegroup remove           remove a zone from a zonegroup\n";
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup-map get          show zonegroup-map\n";
@@ -308,7 +309,8 @@ enum {
   OPT_ZONEGROUP_MODIFY,
   OPT_ZONEGROUP_SET,
   OPT_ZONEGROUP_LIST,
-  OPT_ZONEGROUP_RENAME ,  
+  OPT_ZONEGROUP_REMOVE,
+  OPT_ZONEGROUP_RENAME,
   OPT_ZONEGROUPMAP_GET,
   OPT_ZONEGROUPMAP_SET,
   OPT_ZONEGROUPMAP_UPDATE,
@@ -595,6 +597,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_LIST;
     if (strcmp(cmd, "set") == 0)
       return OPT_ZONEGROUP_SET;
+    if (strcmp(cmd, "remove") == 0)
+      return OPT_ZONEGROUP_REMOVE;
     if (strcmp(cmd, "rename") == 0)
       return OPT_ZONEGROUP_RENAME;
   } else if (strcmp(prev_cmd, "quota") == 0) {
@@ -2394,6 +2398,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||  
                          opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
 			 opt_cmd == OPT_ZONEGROUP_RENAME || opt_cmd == OPT_ZONEGROUP_MODIFY ||
+			 opt_cmd == OPT_ZONEGROUP_REMOVE ||
                          opt_cmd == OPT_ZONEGROUPMAP_GET || opt_cmd == OPT_ZONEGROUPMAP_SET ||
                          opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
 			 opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
@@ -3078,6 +3083,44 @@ int main(int argc, char **argv)
 
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
+      }
+      break;
+    case OPT_ZONEGROUP_REMOVE:
+      {
+        RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+        int ret = zonegroup.init(g_ceph_context, store);
+        if (ret < 0) {
+          cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        if (zone_id.empty()) {
+          if (zone_name.empty()) {
+            cerr << "no --zone-id or --rgw-zone name provided" << std::endl;
+            return EINVAL;
+          }
+          // look up zone id by name
+          for (auto& z : zonegroup.zones) {
+            if (zone_name == z.second.name) {
+              zone_id = z.second.id;
+              break;
+            }
+          }
+          if (zone_id.empty()) {
+            cerr << "zone name " << zone_name << " not found in zonegroup "
+                << zonegroup.get_name() << std::endl;
+            return ENOENT;
+          }
+        }
+
+        ret = zonegroup.remove_zone(zone_id);
+        if (ret < 0) {
+          cerr << "failed to remove zone: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        encode_json("zonegroup", zonegroup, formatter);
+        formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUP_RENAME:
