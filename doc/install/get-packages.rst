@@ -59,10 +59,10 @@ Add Keys
 ========
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``dumpling``, ``emperor``, ``firefly``) and development
-releases (``release-name-rc1``, ``release-name-rc2``), use the ``release.asc``
-key. For development testing packages, use the ``autobuild.asc`` key (developers
-and QA).
+major releases (e.g., ``hammer``, ``jewel``) and development releases
+(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key. For
+development testing packages, use the ``autobuild.asc`` key (developers and
+QA).
 
 
 APT
@@ -141,11 +141,11 @@ Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
 get the short codename, and replace ``{codename}`` in the following command. ::
 
-	sudo apt-add-repository 'deb http://download.ceph.com/debian-firefly/ {codename} main'
+	sudo apt-add-repository 'deb http://download.ceph.com/debian-jewel/ {codename} main'
 
 For early Linux distributions, you may execute the following command::
 
-	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-jewel/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
@@ -179,11 +179,11 @@ RPM Packages
 
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
-``{ceph-release}`` with  a major release of Ceph (e.g., ``dumpling``,
-``emperor``, etc.) and ``{distro}`` with your Linux distribution (e.g., ``el6``,
-``rhel6``, etc.).  You may view http://download.ceph.com/rpm-{ceph-release}/ directory to
-see which  distributions Ceph supports. Some Ceph packages (e.g., EPEL) must
-take priority over standard packages, so you must ensure that you set
+``{ceph-release}`` with  a major release of Ceph (e.g., ``hammer``, ``jewel``,
+etc.) and ``{distro}`` with your Linux distribution (e.g., ``el7``, etc.).  You
+may view http://download.ceph.com/rpm-{ceph-release}/ directory to see which
+distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
+over standard packages, so you must ensure that you set
 ``priority=2``. ::
 
 	[ceph]
@@ -255,7 +255,7 @@ The repository package installs the repository details on your local system for
 use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
 ``{release}`` with the specific release of Ceph::
 
-    su -c 'rpm -Uvh http://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el7.noarch.rpm'
 
 You can download the RPMs directly from::
 
@@ -292,9 +292,8 @@ RPM Packages
 
 For current development branches, you may add a Ceph entry to the
 ``/etc/yum.repos.d`` directory. Create a ``ceph.repo`` file. In the example
-below, replace ``{distro}`` with your Linux distribution (e.g., ``centos6``,
-``rhel6``, etc.), and ``{branch}`` with the name of the branch you want to
-install. ::
+below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
+``{branch}`` with the name of the branch you want to install. ::
 
 
 	[ceph-source]
@@ -333,8 +332,8 @@ RPM Packages
 
 You may add a Ceph entry to the ``/etc/yum.repos.d`` directory. Create a
 ``ceph-apache.repo`` file. In the example below, replace ``{distro}`` with your
-Linux distribution (e.g., ``el6``, ``rhel6``, etc.).  You may view
-http://gitbuilder.ceph.com directory to see which distributions Ceph supports.
+Linux distribution (e.g., ``el7``).  You may view http://gitbuilder.ceph.com
+directory to see which distributions Ceph supports.
 ::
 
 
@@ -435,20 +434,19 @@ Ceph requires the following packages:
 - gperftools-libs
 
 
-Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 18 and 19
-(``f18`` and ``f19``), OpenSUSE 12.2 (``opensuse12.2``), and SLES (``sles11``)
-platforms. The repository package installs the repository details on your local
-system for use with ``yum``. Replace ``{distro}`` with your distribution. ::
+Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
+repository package installs the repository details on your local system for use
+with ``yum``. Replace ``{distro}`` with your distribution. ::
 
-    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-jewel/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
-For example, for CentOS 6  (``el6``)::
+For example, for CentOS 7  (``el7``)::
 
-    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-jewel/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	http://download.ceph.com/rpm-firefly
+	http://download.ceph.com/rpm-jewel
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name
