@@ -750,6 +750,19 @@ remove_mirroring_image:
     return 0;
   }
 
+  int image_options_is_set(rbd_image_options_t opts, int optname,
+                           bool* is_set)
+  {
+    if (IMAGE_OPTIONS_TYPE_MAPPING.find(optname) ==
+          IMAGE_OPTIONS_TYPE_MAPPING.end()) {
+      return -EINVAL;
+    }
+
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+    *is_set = ((*opts_)->find(optname) != (*opts_)->end());
+    return 0;
+  }
+
   int image_options_unset(rbd_image_options_t opts, int optname)
   {
     image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
@@ -1221,6 +1234,8 @@ remove_mirroring_image:
 	     ImageOptions& opts)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 10) << __func__ << " name=" << imgname << ", "
+                   << "size=" << size << ", opts=" << opts << dendl;
 
     uint64_t format = cct->_conf->rbd_default_format;
     opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
@@ -1331,7 +1346,6 @@ remove_mirroring_image:
     uint64_t order = *c_order;
 
     ImageOptions opts;
-    opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
     opts.set(RBD_IMAGE_OPTION_FEATURES, features);
     opts.set(RBD_IMAGE_OPTION_ORDER, order);
     opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
@@ -1348,10 +1362,16 @@ remove_mirroring_image:
   {
     CephContext *cct = (CephContext *)p_ioctx.cct();
     ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
-		   << p_snap_name << "to child " << &c_ioctx << " name "
+		   << p_snap_name << " to child " << &c_ioctx << " name "
 		   << c_name << " opts = " << c_opts << dendl;
 
-    uint64_t format = cct->_conf->rbd_default_format;
+    bool default_format_set;
+    c_opts.is_set(RBD_IMAGE_OPTION_FORMAT, &default_format_set);
+    if (!default_format_set) {
+      c_opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
+    }
+
+    uint64_t format = 0;
     c_opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
     if (format < 2) {
       lderr(cct) << "format 2 or later required for clone" << dendl;
