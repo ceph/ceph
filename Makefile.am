@@ -72,7 +72,7 @@ check_SCRIPTS = \
 # "make distclean" both runs this and recurses into src/gtest, if
 # gtest is in DIST_SUBDIRS. Take extra care to not fail when
 # effectively cleaned twice.
-clean-local:
+clean-local::
 	@if test -e src/gmock/Makefile; then \
 	  echo "Making clean in src/gmock"; \
 	  cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) clean; \
