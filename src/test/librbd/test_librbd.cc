@@ -3935,6 +3935,13 @@ TEST_F(TestLibRBD, TestImageOptions)
   uint64_t stripe_count = 16;
   rbd_image_options_t opts;
   rbd_image_options_create(&opts);
+
+  bool is_set;
+  ASSERT_EQ(-EINVAL, rbd_image_options_is_set(opts, 12345, &is_set));
+  ASSERT_EQ(0, rbd_image_options_is_set(opts, RBD_IMAGE_OPTION_FORMAT,
+                                        &is_set));
+  ASSERT_FALSE(is_set);
+
   ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FORMAT,
 	  2));
   ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
@@ -3945,6 +3952,10 @@ TEST_F(TestLibRBD, TestImageOptions)
 	  stripe_unit));
   ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
 	  stripe_count));
+
+  ASSERT_EQ(0, rbd_image_options_is_set(opts, RBD_IMAGE_OPTION_FORMAT,
+                                        &is_set));
+  ASSERT_TRUE(is_set);
 
   std::string parent_name = get_temp_image_name();
 
