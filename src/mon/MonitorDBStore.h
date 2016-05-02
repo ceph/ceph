@@ -579,7 +579,7 @@ class MonitorDBStore
     assert(r >= 0);
   }
 
-  void _open() {
+  void _open(string kv_type) {
     string::const_reverse_iterator rit;
     int pos = 0;
     for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
@@ -591,11 +591,11 @@ class MonitorDBStore
     string full_path = os.str();
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
-					    g_conf->mon_keyvaluedb,
+					    kv_type,
 					    full_path);
     if (!db_ptr) {
       derr << __func__ << " error initializing "
-	   << g_conf->mon_keyvaluedb << " db back storage in "
+	   << kv_type << " db back storage in "
 	   << full_path << dendl;
       assert(0 != "MonitorDBStore: error initializing keyvaluedb back storage");
     }
@@ -618,15 +618,20 @@ class MonitorDBStore
       }
       do_dump = true;
     }
-    if (g_conf->mon_keyvaluedb == "rocksdb")
+    if (kv_type == "rocksdb")
       db->init(g_conf->mon_rocksdb_options);
     else
       db->init();
   }
 
   int open(ostream &out) {
-    _open();
-    int r = db->open(out);
+    string kv_type;
+    int r = read_meta("kv_backend", &kv_type);
+    if (r < 0 || kv_type.length() == 0)
+      kv_type = "leveldb";
+
+    _open(kv_type);
+    r = db->open(out);
     if (r < 0)
       return r;
     io_work.start();
@@ -635,8 +640,17 @@ class MonitorDBStore
   }
 
   int create_and_open(ostream &out) {
-    _open();
-    int r = db->create_and_open(out);
+    // record the type before open
+    string kv_type;
+    int r = read_meta("kv_backend", &kv_type);
+    if (r < 0) {
+      kv_type = g_conf->mon_keyvaluedb;
+      r = write_meta("kv_backend", kv_type);
+      if (r < 0)
+	return r;
+    }
+    _open(kv_type);
+    r = db->create_and_open(out);
     if (r < 0)
       return r;
     io_work.start();
