@@ -31,6 +31,7 @@ function vstart_setup()
     export LC_ALL=C # some tests are vulnerable to i18n
     export PATH="$(pwd):${PATH}"
     $CEPH_ROOT/src/vstart.sh \
+        --short \
         -o 'paxos propose interval = 0.01' \
         -n -l $CEPH_START || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf
