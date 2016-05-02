@@ -55,7 +55,7 @@ Scope     Lead            GitHub nick
 Ceph      Sage Weil       liewegas
 RADOS     Samuel Just     athanatos
 RGW       Yehuda Sadeh    yehudasa
-RBD       Josh Durgin     jdurgin
+RBD       Jason Dillaman  dillaman
 CephFS    Gregory Farnum  gregsfortytwo
 Build/Ops Ken Dreyer      ktdreyer
 ========= =============== =============

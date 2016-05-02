@@ -104,7 +104,7 @@ Each ``team`` is responsible for a project:
 * rgw lead is Yehuda Sadeh
 * CephFS lead is Gregory Farnum
 * rados lead is Samuel Just
-* rbd lead is Josh Durgin
+* rbd lead is Jason Dillaman
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:
