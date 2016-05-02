@@ -155,6 +155,8 @@ CEPH_RBD_API int rbd_image_options_get_string(rbd_image_options_t opts,
 					      size_t maxlen);
 CEPH_RBD_API int rbd_image_options_get_uint64(rbd_image_options_t opts,
 					      int optname, uint64_t* optval);
+CEPH_RBD_API int rbd_image_options_is_set(rbd_image_options_t opts,
+                                          int optname, bool* is_set);
 CEPH_RBD_API int rbd_image_options_unset(rbd_image_options_t opts, int optname);
 CEPH_RBD_API void rbd_image_options_clear(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_is_empty(rbd_image_options_t opts);
