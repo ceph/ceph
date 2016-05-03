@@ -516,6 +516,13 @@ struct bluestore_onode_t {
     return fp;
   }
 
+  bluestore_blob_t *get_blob_ptr(int64_t id) {
+    bluestore_blob_map_t::iterator p = blob_map.find(id);
+    if (p == blob_map.end())
+      return nullptr;
+    return &p->second;
+  }
+
   bool put_overlay_ref(uint64_t key) {
     map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
     if (q == overlay_refs.end())
