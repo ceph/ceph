@@ -538,7 +538,9 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(nid, bl);
   ::encode(size, bl);
   ::encode(attrs, bl);
+  ::encode(blob_map, bl);
   ::encode(block_map, bl);
+  ::encode(extent_map, bl);
   ::encode(overlay_map, bl);
   ::encode(overlay_refs, bl);
   ::encode(last_overlay_key, bl);
@@ -554,7 +556,9 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(nid, p);
   ::decode(size, p);
   ::decode(attrs, p);
+  ::decode(blob_map, p);
   ::decode(block_map, p);
+  ::decode(extent_map, p);
   ::decode(overlay_map, p);
   ::decode(overlay_refs, p);
   ::decode(last_overlay_key, p);
@@ -586,8 +590,24 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_object_section("blob_map");
+  for (const auto& p : blob_map) {
+    f->open_object_section("blob");
+    f->dump_unsigned("id", p.first);
+    p.second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("extent_map");
+  for (const auto& p : extent_map) {
+    f->open_object_section("extent");
+    f->dump_unsigned("offset", p.first);
+    p.second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
   f->open_object_section("overlays");
-  for (map<uint64_t, bluestore_overlay_t>::const_iterator p = overlay_map.begin();
+  for (map<uint64_t,bluestore_overlay_t>::const_iterator p = overlay_map.begin();
        p != overlay_map.end(); ++p) {
     f->open_object_section("overlay");
     f->dump_unsigned("offset", p->first);
