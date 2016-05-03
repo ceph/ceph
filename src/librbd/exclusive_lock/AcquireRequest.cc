@@ -218,7 +218,13 @@ Context *AcquireRequest<I>::handle_close_journal(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  return send_close_object_map(ret_val);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to close journal: " << cpp_strerror(*ret_val)
+               << dendl;
+  }
+
+  send_close_object_map();
+  return nullptr;
 }
 
 template <typename I>
@@ -250,10 +256,10 @@ Context *AcquireRequest<I>::handle_open_object_map(int *ret_val) {
 }
 
 template <typename I>
-Context *AcquireRequest<I>::send_close_object_map(int *ret_val) {
+void AcquireRequest<I>::send_close_object_map() {
   if (m_object_map == nullptr) {
-    revert(ret_val);
-    return m_on_finish;
+    send_unlock();
+    return;
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -263,7 +269,6 @@ Context *AcquireRequest<I>::send_close_object_map(int *ret_val) {
   Context *ctx = create_context_callback<
     klass, &klass::handle_close_object_map>(this);
   m_object_map->close(ctx);
-  return nullptr;
 }
 
 template <typename I>
@@ -273,6 +278,36 @@ Context *AcquireRequest<I>::handle_close_object_map(int *ret_val) {
 
   // object map should never result in an error
   assert(*ret_val == 0);
+  send_unlock();
+  return nullptr;
+}
+
+template <typename I>
+void AcquireRequest<I>::send_unlock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << dendl;
+
+  librados::ObjectWriteOperation op;
+  rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);
+
+  using klass = AcquireRequest<I>;
+  librados::AioCompletion *rados_completion =
+    create_rados_safe_callback<klass, &klass::handle_unlock>(this);
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
+                                         rados_completion, &op);
+  assert(r == 0);
+  rados_completion->release();
+}
+
+template <typename I>
+Context *AcquireRequest<I>::handle_unlock(int *ret_val) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to unlock image: " << cpp_strerror(*ret_val) << dendl;
+  }
+
   revert(ret_val);
   return m_on_finish;
 }
