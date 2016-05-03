@@ -206,6 +206,10 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 OPTION(ms_async_affinity_cores, OPT_STR, "")
 OPTION(ms_async_send_inline, OPT_BOOL, true)
 
+OPTION(ms_async_use_local_socket, OPT_BOOL, false) // should async msgr use AF_UNIX sockets for communication on localhost?
+OPTION(ms_async_require_local_socket, OPT_BOOL, false) // should local socket bind error be fatal?
+OPTION(ms_async_sndbuf, OPT_INT, 0) // local socket send buffer size
+
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")

@@ -286,6 +286,7 @@ class AsyncConnection : public Connection {
   ceph_msg_connect_reply connect_reply;
   // Accepting state
   entity_addr_t socket_addr;
+  entity_addr_t established_peer_addr;
   CryptoKey session_key;
   bool replacing;    // when replacing process happened, we will reply connect
                      // side with RETRY tag and accept side will clear replaced

@@ -71,6 +71,18 @@ int NetHandler::set_nonblock(int sd)
   return 0;
 }
 
+#ifdef SO_NOSIGPIPE
+void NetHandler::set_nosigpipe(int sd)
+{
+  int val = 1;
+  int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
+  if (r) {
+    r = -errno;
+    ldout(cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
+  }
+}
+#endif
+
 void NetHandler::set_socket_options(int sd)
 {
   // disable Nagle algorithm?
@@ -91,14 +103,27 @@ void NetHandler::set_socket_options(int sd)
     }
   }
 
-  // block ESIGPIPE
 #ifdef SO_NOSIGPIPE
-  int val = 1;
-  int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
-  if (r) {
-    r = -errno;
-    ldout(cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
+  // block ESIGPIPE
+  set_nosigpipe(sd);
+#endif
+}
+
+void NetHandler::set_unix_socket_options(int sd)
+{
+  if (cct->_conf->ms_async_sndbuf) {
+  // UNIX socket support only SO_SNDBUF.
+    int size = cct->_conf->ms_async_sndbuf;
+    int r = ::setsockopt(sd, SOL_SOCKET, SO_SNDBUF, (void*)&size, sizeof(size));
+    if (r < 0)  {
+      r = -errno;
+      ldout(cct, 0) << "couldn't set UNIX socket SO_SNDBUF to " << size << ": " << cpp_strerror(r) << dendl;
+    }
   }
+    
+#ifdef SO_NOSIGPIPE
+  // block ESIGPIPE
+  set_nosigpipe(sd);
 #endif
 }
 
@@ -117,14 +142,18 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
     }
   }
 
-  set_socket_options(s);
+  if ((addr.get_family() == AF_INET) || (addr.get_family() == AF_INET6)) {
+    set_socket_options(s);
+  } else {
+    set_unix_socket_options(s);
+  }
 
   ret = ::connect(s, (sockaddr*)&addr.addr, addr.addr_size());
   if (ret < 0) {
     if (errno == EINPROGRESS && nonblock)
       return s;
 
-    ldout(cct, 10) << __func__ << " connect: " << strerror(errno) << dendl;
+    ldout(cct, 10) << __func__ << " connect to " << addr << " (" << addr.addr << "): " << strerror(errno) << dendl;
     close(s);
     return -errno;
   }
@@ -156,5 +185,38 @@ int NetHandler::nonblock_connect(const entity_addr_t &addr)
   return generic_connect(addr, true);
 }
 
+// converts ip addr to unix equivalent
+// catch_all - whether it should try /var/run/ceph/ceph-mon.1aed when
+// /var/run/ceph-mon.192.168.40.10.1aed does not exist (because listens on 0.0.0.0)
+entity_addr_t NetHandler::ip_to_unix(const entity_addr_t &addr, int type, const string& path, bool catch_all)
+{
+  assert(addr.addr.ss_family == AF_INET);
+  entity_addr_t r;
+  r.type = addr.type;
+  r.nonce = addr.nonce;
+  r.addr.ss_family = AF_UNIX;
+  if (addr.addr4.sin_addr.s_addr == 0) {
+      // short name without IP
+      snprintf(&r.addrun.sun_path[0], sizeof(r.addrun.sun_path), "%s/ceph-%s.%.4x", path.c_str(),
+                ceph_entity_type_name(type), ntohs(addr.addr4.sin_port));
+  } else {
+      // long path with IP
+      snprintf(&r.addrun.sun_path[0], sizeof(r.addrun.sun_path), "%s/ceph-%s.%d.%d.%d.%d.%.4x", path.c_str(),
+                ceph_entity_type_name(type), (addr.addr4.sin_addr.s_addr & 0xFF), (addr.addr4.sin_addr.s_addr >> 8) & 0xFF,
+                (addr.addr4.sin_addr.s_addr >> 16) & 0xFF, (addr.addr4.sin_addr.s_addr >> 24) & 0xFF,
+                ntohs(addr.addr4.sin_port));
+      if (catch_all) {
+          // try something like /var/run/ceph/ceph-mon.1aed when server listens on 0.0.0.0
+          struct stat statbuf;
+          if (stat(r.addrun.sun_path, &statbuf) || (!S_ISSOCK(statbuf.st_mode)) ) {
+              snprintf(&r.addrun.sun_path[0], sizeof(r.addrun.sun_path), "%s/ceph-%s.%.4x", path.c_str(),
+                        ceph_entity_type_name(type), ntohs(addr.addr4.sin_port));
+              // if that doesn't exist either, upstream (try_unixify) will handle it and
+              // revert back to TCP socket
+          }
+      }
+  }
+  return r;
+}
 
 }

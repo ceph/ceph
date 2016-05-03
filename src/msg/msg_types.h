@@ -205,6 +205,7 @@ struct entity_addr_t {
     sockaddr_storage addr;
     sockaddr_in addr4;
     sockaddr_in6 addr6;
+    sockaddr_un addrun;
   };
 
   unsigned int addr_size() const {
@@ -215,11 +216,14 @@ struct entity_addr_t {
     case AF_INET6:
       return sizeof(addr6);
       break;
+    case AF_UNIX:
+      return sizeof(addrun);
+      break;
     }
     return sizeof(addr);
   }
 
-  entity_addr_t() : type(0), nonce(0) { 
+  entity_addr_t() : type(0), nonce(0) {
     memset(&addr, 0, sizeof(addr));
   }
   explicit entity_addr_t(const ceph_entity_addr &o) {

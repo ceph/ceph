@@ -32,7 +32,7 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
+  return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << established_peer_addr << " conn(" << this
                 << " sd=" << sd << " :" << port
                 << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq
@@ -1028,8 +1028,9 @@ ssize_t AsyncConnection::_process_connection()
           center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
           ::close(sd);
         }
+        established_peer_addr = async_msgr->try_unixify(get_peer_addr(), peer_type);
+        sd = net.nonblock_connect(established_peer_addr);
 
-        sd = net.nonblock_connect(get_peer_addr());
         if (sd < 0) {
           goto fail;
         }
@@ -1041,7 +1042,9 @@ ssize_t AsyncConnection::_process_connection()
 
     case STATE_CONNECTING_RE:
       {
-        r = net.reconnect(get_peer_addr(), sd);
+        // this works because established_peer_addr is either actually an unix addr
+        // or clone of addr.
+        r = net.reconnect(established_peer_addr, sd);
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
           goto fail;
@@ -1145,6 +1148,26 @@ ssize_t AsyncConnection::_process_connection()
           ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down or "
                                     << " replacing must be happened just now" << dendl;
           return 0;
+        }
+
+        // are we connected through TCP? can we connect through AF_UNIX?
+        // if so, drop existing TCP conenction and reconnect to UNIX socket
+        if (established_peer_addr.addr.ss_family != AF_UNIX) {
+          established_peer_addr = async_msgr->try_unixify(get_peer_addr(), peer_type);
+          if (established_peer_addr.addr.ss_family == AF_UNIX) {
+              // there is an unix socket for this peer, check if we're connected
+              // using TCP.
+              sockaddr_storage other;
+              socklen_t len = sizeof(other);
+              // Failure of getpeername is not fatal here.
+              r = ::getpeername(sd, (sockaddr*)&other, &len);
+              if ((r >= 0) && (other.ss_family != AF_UNIX)) {
+                ldout(async_msgr->cct, 10) << __func__ << " attempting to switch to " << string(&established_peer_addr.addrun.sun_path[0]) << dendl;
+                // everything will be handled in STATE_CONNECTING
+                state = STATE_CONNECTING;
+                break;
+              }
+          }
         }
 
         ::encode(async_msgr->get_myaddr(), myaddrbl);
@@ -1358,8 +1381,6 @@ ssize_t AsyncConnection::_process_connection()
         if (net.set_nonblock(sd) < 0)
           goto fail;
 
-        net.set_socket_options(sd);
-
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
         ::encode(async_msgr->get_myaddr(), bl);
@@ -1372,7 +1393,21 @@ ssize_t AsyncConnection::_process_connection()
                               << cpp_strerror(errno) << dendl;
           goto fail;
         }
+
+        if (socket_addr.addr.ss_family == AF_UNIX) {
+          net.set_unix_socket_options(sd);
+          // this prevents assert in socket_addr.encode();
+          socket_addr.addr.ss_family = AF_INET;
+        } else {
+          // we'll get really bad performance if we'll forget to set IP socket options...
+          net.set_socket_options(sd);
+        }
+
+        // at this point, when peer is using UNIX scket, socket_addr will be invalid.
+        // this is not a problem as such peer already knows its IP and won't use 
+        // provided socket_addr anyway.
         ::encode(socket_addr, bl);
+
         ldout(async_msgr->cct, 1) << __func__ << " sd=" << sd << " " << socket_addr << dendl;
 
         r = try_send(bl);
@@ -1470,7 +1505,8 @@ ssize_t AsyncConnection::_process_connection()
         ldout(async_msgr->cct, 10) << __func__ << " accept of host_type " << connect_msg.host_type
                                    << ", policy.lossy=" << policy.lossy << " policy.server="
                                    << policy.server << " policy.standby=" << policy.standby
-                                   << " policy.resetcheck=" << policy.resetcheck << dendl;
+                                   << " policy.resetcheck=" << policy.resetcheck
+                                   << dendl;
 
         r = handle_connect_msg(connect_msg, authorizer_bl, authorizer_reply);
         if (r < 0)
