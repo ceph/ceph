@@ -316,7 +316,7 @@ endif
 
 # local targets
 
-all-local: $(LOCAL_ALL)
-clean-local: $(LOCAL_CLEAN)
-install-exec-local: $(LOCAL_INSTALLEXEC)
-install-data-local: $(LOCAL_INSTALLDATA)
+all-local:: $(LOCAL_ALL)
+clean-local:: $(LOCAL_CLEAN)
+install-exec-local:: $(LOCAL_INSTALLEXEC)
+install-data-local:: $(LOCAL_INSTALLDATA)

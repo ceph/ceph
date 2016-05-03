@@ -24,7 +24,7 @@ sphinx-build.stamp:
 		${SPHINX_BUILD} -b man -d doctrees -c $(top_srcdir)/man $(top_srcdir)/doc/man $(top_builddir)/man; \
 	fi
 
-clean-local:
+clean-local::
 	@rm -rf doctrees
 
 MAINTAINERCLEANFILES = $(dist_man_MANS)
