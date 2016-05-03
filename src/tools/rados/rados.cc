@@ -1348,9 +1348,6 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   f.dump_bool("headless", inc.headless());
   f.dump_bool("size_mismatch", inc.size_mismatch());
 
-  if (inc.clone_missing()) {
-    f.open_array_section("clones");
-
   if (inc.ss_attr_missing())
     f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
   if (inc.ss_attr_corrupted())
@@ -1375,8 +1372,11 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
       f.dump_unsigned("snap", snap);
     }
     f.close_section();
+  }
 
   if (inc.clone_missing()) {
+    f.open_array_section("clones");
+
     f.dump_bool("clone_missing", inc.clone_missing());
     f.open_array_section("missing");
     for (auto snap : inc.missing) {
