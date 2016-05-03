@@ -10680,8 +10680,9 @@ int ReplicatedPG::prep_object_replica_pushes(
 
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContextRef obc = get_object_context(soid, false);
-  if (!obc) {
-    pg_log.missing_add(soid, v, eversion_t());
+  if (!obc || obc->obs.oi.version < v) {
+    eversion_t have = !obc ? eversion_t() : obc->obs.oi.prior_version;
+    pg_log.missing_add(soid, v, have);
     missing_loc.remove_location(soid, pg_whoami);
     bool uhoh = true;
     assert(!actingbackfill.empty());
