@@ -105,6 +105,7 @@
     replicalog delete          delete replica metadata log entry
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
+    orphans list-jobs          list the current job-ids for orphans search
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -193,6 +194,9 @@
      --num-shards              num of shards to use for keeping the temporary scan info
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
+  
+  Orphans list-jobs options:
+     --extra-info              provide extra info in job list
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name
