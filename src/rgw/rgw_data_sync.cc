@@ -1367,6 +1367,7 @@ int RGWDataSyncStatusManager::init()
   r = source_log.init(source_zone, conn, error_logger);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
+    finalize();
     return r;
   }
 
@@ -1374,6 +1375,7 @@ int RGWDataSyncStatusManager::init()
   r = source_log.read_log_info(&datalog_info);
   if (r < 0) {
     ldout(store->ctx(), 5) << "ERROR: master.read_log_info() returned r=" << r << dendl;
+    finalize();
     return r;
   }
 
@@ -1384,6 +1386,13 @@ int RGWDataSyncStatusManager::init()
   }
 
   return 0;
+}
+
+void RGWDataSyncStatusManager::finalize()
+{
+  delete error_logger;
+  error_logger = nullptr;
+  ioctx.close();
 }
 
 string RGWDataSyncStatusManager::sync_status_oid(const string& source_zone)
