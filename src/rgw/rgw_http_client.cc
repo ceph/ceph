@@ -138,13 +138,15 @@ struct rgw_http_req_data : public RefCountedObject {
   int ret;
   atomic_t done;
   RGWHTTPClient *client;
+  void *user_info;
   RGWHTTPManager *mgr;
   char error_buf[CURL_ERROR_SIZE];
 
   Mutex lock;
   Cond cond;
 
-  rgw_http_req_data() : easy_handle(NULL), h(NULL), id(-1), ret(0), client(NULL),
+  rgw_http_req_data() : easy_handle(NULL), h(NULL), id(-1), ret(0),
+                        client(nullptr), user_info(nullptr),
                         mgr(NULL), lock("rgw_http_req_data::lock") {
     memset(error_buf, 0, sizeof(error_buf));
   }
@@ -386,7 +388,7 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
     reqs.erase(iter);
   }
   if (completion_mgr) {
-    completion_mgr->complete(NULL, req_data->client->get_user_info());
+    completion_mgr->complete(NULL, req_data->user_info);
   }
   req_data->put();
 }
@@ -461,6 +463,7 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
 
   req_data->mgr = this;
   req_data->client = client;
+  req_data->user_info = client->get_user_info();
 
   register_request(req_data);
 
