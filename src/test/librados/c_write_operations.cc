@@ -248,14 +248,9 @@ TEST(LibRadosCWriteOps, CmpExt) {
 
   // compare and overwrite on (expected) match
   int val = 0;
-  size_t mismatch_len = 0;
-  char mismatch_buf[sizeof(hi)];
-  uint64_t mismatch_off = 0;
-  memset(mismatch_buf, 0, sizeof(mismatch_buf));
   op = rados_create_write_op();
   ASSERT_TRUE(op);
-  rados_write_op_cmpext(op, "four", 4, 0, mismatch_buf, &mismatch_len,
-			&mismatch_off, &val);
+  rados_write_op_cmpext(op, "four", 4, 0, &val);
   rados_write_op_write(op, "five", 4, 0);
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   ASSERT_EQ(0, val);
@@ -265,13 +260,9 @@ TEST(LibRadosCWriteOps, CmpExt) {
 
   // compare and bail before write due to mismatch
   val = 0;
-  mismatch_len = 0;
-  mismatch_off = 0;
-  memset(mismatch_buf, 0, sizeof(mismatch_buf));
   op = rados_create_write_op();
   ASSERT_TRUE(op);
-  rados_write_op_cmpext(op, "four", 4, 0, mismatch_buf, &mismatch_len,
-			&mismatch_off, &val);
+  rados_write_op_cmpext(op, "four", 4, 0, &val);
   rados_write_op_write(op, "six ", 4, 0);
   /* five (data) and four (cmpbuf) = mismatch at offset 1 */
   ASSERT_EQ(-1001, rados_write_op_operate(op, ioctx, "test", NULL, 0));
