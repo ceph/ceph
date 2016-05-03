@@ -222,7 +222,7 @@ void StrayManager::_purge_stray_purged(
     if (in->get_num_ref() != (int)in->is_dirty() ||
         dn->get_num_ref() != (int)dn->is_dirty() + !!in->get_num_ref() + 1/*PIN_PURGING*/) {
       // Nobody should be taking new references to an inode when it
-      // is being purged (aside from it it were 
+      // is being purged (aside from it were 
 
       derr << "Rogue reference after purge to " << *dn << dendl;
       assert(0 == "rogue reference to purging inode");
