@@ -197,10 +197,14 @@ public:
                                                 pattrs(NULL),
 						result(_result),
                                                 req(NULL) { }
+  ~RGWSimpleRadosReadCR() {
+    request_cleanup();
+  }
                                                          
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -272,10 +276,14 @@ public:
 						pool(_pool), oid(_oid),
                                                 pattrs(_pattrs),
                                                 req(NULL) { }
+  ~RGWSimpleRadosReadAttrsCR() {
+    request_cleanup();
+  }
                                                          
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -305,9 +313,14 @@ public:
     ::encode(_data, bl);
   }
 
+  ~RGWSimpleRadosWriteCR() {
+    request_cleanup();
+  }
+
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -344,10 +357,14 @@ public:
 						pool(_pool), oid(_oid),
                                                 attrs(_attrs), req(NULL) {
   }
+  ~RGWSimpleRadosWriteAttrsCR() {
+    request_cleanup();
+  }
 
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -431,6 +448,9 @@ public:
 		      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
 		      const string& _cookie,
 		      uint32_t _duration);
+  ~RGWSimpleRadosLockCR() {
+    request_cleanup();
+  }
   void request_cleanup();
 
   int send_request();
@@ -452,6 +472,9 @@ public:
   RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
 		      const string& _cookie);
+  ~RGWSimpleRadosUnlockCR() {
+    request_cleanup();
+  }
   void request_cleanup();
 
   int send_request();
@@ -522,11 +545,15 @@ public:
             int _secs) : RGWSimpleCoroutine(cct), cct(_cct),
                          async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs), req(NULL) {
   }
+  ~RGWWaitCR() {
+    request_cleanup();
+  }
 
   void request_cleanup() {
-    wakeup();
     if (req) {
+      wakeup();
       req->finish();
+      req = NULL;
     }
   }
 
@@ -621,9 +648,13 @@ public:
                         RGWBucketInfo *_bucket_info) : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                                        bucket_name(_bucket_name), bucket_id(_bucket_id),
                                                        bucket_info(_bucket_info), req(NULL) {}
+  ~RGWGetBucketInstanceInfoCR() {
+    request_cleanup();
+  }
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -698,9 +729,14 @@ public:
                                        copy_if_newer(_if_newer), req(NULL) {}
 
 
+  ~RGWFetchRemoteObjCR() {
+    request_cleanup();
+  }
+
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -812,10 +848,14 @@ public:
       owner_display_name = *_owner_display_name;
     }
   }
+  ~RGWRemoveObjCR() {
+    request_cleanup();
+  }
 
   void request_cleanup() {
     if (req) {
       req->finish();
+      req = NULL;
     }
   }
 
@@ -936,6 +976,9 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
 	  const rgw_obj& obj, uint64_t *psize = nullptr,
 	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
 	  RGWObjVersionTracker *objv_tracker = nullptr);
+  ~RGWStatObjCR() {
+    request_cleanup();
+  }
   void request_cleanup();
 
   int send_request() override;
