@@ -80,7 +80,7 @@ TEST(bluestore_extent_ref_map_t, get)
 TEST(bluestore_extent_ref_map_t, put)
 {
   bluestore_extent_ref_map_t m;
-  vector<bluestore_extent_t> r;
+  vector<bluestore_pextent_t> r;
   m.add(10, 30, 1);
   m.put(10, 30, &r);
   cout << m << " " << r << std::endl;
