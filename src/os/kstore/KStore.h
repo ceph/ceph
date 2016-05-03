@@ -260,7 +260,7 @@ public:
     Sequencer *parent;
 
     OpSequencer()
-	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
+	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL) {
     }
     ~OpSequencer() {
