@@ -724,8 +724,6 @@ AM_CONDITIONAL(ENABLE_XIO, [test "x$enable_xio" = "xyes"])
 if test "x$enable_xio" = x"yes"; then
    AC_CHECK_HEADER([libxio.h], [], AC_MSG_ERROR([Cannot find header 'libxio.h'.]))
    AC_CHECK_LIB([xio], [xio_init], [], AC_MSG_FAILURE([Accelio libxio not found]))
-   AC_CHECK_LIB([ibverbs], [ibv_query_device], [], AC_MSG_FAILURE([libibverbs not found]))
-   AC_CHECK_LIB([rdmacm], [rdma_connect], [], AC_MSG_FAILURE([librdmacm not found]))
 
    # Also require boost-regex, used in address_helper
    AC_CHECK_LIB(boost_regex, main, [],
@@ -733,7 +731,7 @@ if test "x$enable_xio" = x"yes"; then
 
    AC_DEFINE([HAVE_XIO], [1], [Accelio conditional compilation])
 
-   XIO_LIBS="-lxio -libverbs -lrdmacm"
+   XIO_LIBS="-lxio"
    AC_SUBST(XIO_LIBS)
 fi
 
