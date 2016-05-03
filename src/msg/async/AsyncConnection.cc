@@ -345,11 +345,8 @@ ssize_t AsyncConnection::do_sendmsg(struct msghdr &msg, unsigned len, bool more)
 
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
-ssize_t AsyncConnection::_try_send(bool send, bool more)
+ssize_t AsyncConnection::_try_send(bool more)
 {
-  if (!send)
-    return 0;
-
   if (async_msgr->cct->_conf->ms_inject_socket_failures && sd >= 0) {
     if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
       ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
@@ -729,7 +726,6 @@ void AsyncConnection::process()
             ldout(async_msgr->cct, 20) << __func__ << " got front " << front.length() << dendl;
           }
           state = STATE_OPEN_MESSAGE_READ_MIDDLE;
-          break;
         }
 
       case STATE_OPEN_MESSAGE_READ_MIDDLE:
@@ -751,7 +747,6 @@ void AsyncConnection::process()
           }
 
           state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
-          break;
         }
 
       case STATE_OPEN_MESSAGE_READ_DATA_PREPARE:
@@ -780,7 +775,6 @@ void AsyncConnection::process()
 
           msg_left = data_len;
           state = STATE_OPEN_MESSAGE_READ_DATA;
-          break;
         }
 
       case STATE_OPEN_MESSAGE_READ_DATA:
@@ -801,10 +795,10 @@ void AsyncConnection::process()
             msg_left -= read;
           }
 
-          if (msg_left == 0)
-            state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+          if (msg_left > 0)
+            break;
 
-          break;
+          state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
         }
 
       case STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH:
@@ -2379,7 +2373,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   logger->inc(l_msgr_send_bytes, outcoming_bl.length() - original_bl_len);
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
                              << " " << m << dendl;
-  ssize_t rc = _try_send(true, more);
+  ssize_t rc = _try_send(more);
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(errno) << dendl;
@@ -2489,7 +2483,7 @@ void AsyncConnection::handle_write()
       ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
       ack_left.sub(left);
       left = ack_left.read();
-      r = _try_send(true, left);
+      r = _try_send(left);
     } else if (is_queued()) {
       r = _try_send();
     }
