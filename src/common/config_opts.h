@@ -400,7 +400,7 @@ OPTION(client_permissions, OPT_BOOL, true)
 OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
-OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
+OPTION(fuse_use_invalidate_cb, OPT_BOOL, true) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_allow_other, OPT_BOOL, true)
 OPTION(fuse_default_permissions, OPT_BOOL, true)
 OPTION(fuse_big_writes, OPT_BOOL, true)
