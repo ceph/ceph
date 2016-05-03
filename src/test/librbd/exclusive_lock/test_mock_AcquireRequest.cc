@@ -52,6 +52,12 @@ public:
                   .WillOnce(Return(r));
   }
 
+  void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
+                  .WillOnce(Return(r));
+  }
+
   void expect_create_object_map(MockImageCtx &mock_image_ctx,
                                 MockObjectMap *mock_object_map) {
     EXPECT_CALL(mock_image_ctx, create_object_map(_))
@@ -293,6 +299,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   expect_open_journal(mock_image_ctx, *mock_journal, -EINVAL);
   expect_close_journal(mock_image_ctx, *mock_journal);
   expect_close_object_map(mock_image_ctx, *mock_object_map);
+  expect_unlock(mock_image_ctx, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
@@ -330,6 +337,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, AllocateJournalTagError) {
   expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, -EPERM);
   expect_close_journal(mock_image_ctx, *mock_journal);
   expect_close_object_map(mock_image_ctx, *mock_object_map);
+  expect_unlock(mock_image_ctx, 0);
 
   C_SaferCond acquire_ctx;
   C_SaferCond ctx;
