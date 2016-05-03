@@ -211,7 +211,8 @@ TEST(LibRadosCWriteOps, WriteSame) {
   rados_write_op_writesame(op, "four", 4, 4 * 4, 0);
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   char hi[4 * 4];
-  ASSERT_EQ(sizeof(hi), rados_read(ioctx, "test", hi, sizeof(hi), 0));
+  ASSERT_EQ(sizeof(hi), static_cast<std::size_t>(
+		rados_read(ioctx, "test", hi,sizeof(hi), 0)));
   rados_release_write_op(op);
   ASSERT_EQ(0, memcmp("fourfourfourfour", hi, sizeof(hi)));
 
