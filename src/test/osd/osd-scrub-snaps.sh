@@ -157,6 +157,32 @@ function TEST_scrub_snaps() {
     fi
     grep 'log_channel' $dir/osd.0.log
 
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pgid || return 1
+
+    rados list-inconsistent-snapset $pgid > $dir/json || return 1
+    test $(jq '.inconsistents | length' $dir/json) = "20" || return 1
+
+    jq -c -S '.inconsistents | sort' > $dir/checkcsjson << EOF
+{"inconsistents":[{"headless":true,"snap":"0x00000001","locator":"","nspace":"","name":"obj1"},{"size_mismatch":true,"snap":"0x00000001","locator":"","nspace":"","name":"obj10"},
+{"headless":true,"snap":"0x00000001","locator":"","nspace":"","name":"obj11"},{"size_mismatch":true,"snap":"0x00000001","locator":"","nspace":"","name":"obj14"},{"headless":true,
+"snap":"0x00000001","locator":"","nspace":"","name":"obj6"},{"headless":true,"snap":"0x00000001","locator":"","nspace":"","name":"obj7"},{"size_mismatch":true,"snap":"0x00000001",
+"locator":"","nspace":"","name":"obj9"},{"headless":true,"snap":"0x00000004","locator":"","nspace":"","name":"obj2"},{"size_mismatch":true,"snap":"0x00000004","locator":"",
+"nspace":"","name":"obj5"},{"headless":true,"snap":"0x00000007","locator":"","nspace":"","name":"obj2"},{"headless":true,"oi_attr_missing":true,"snap":"0x00000007","locator":"",
+"nspace":"","name":"obj5"},{"extra clones":[1],"extra_clones":true,"snap":"head","locator":"","nspace":"","name":"obj11"},{"head_mismatch":true,"snap":"head","locator":"",
+"nspace":"","name":"obj12"},{"size_mismatch":true,"snap":"head","locator":"","nspace":"","name":"obj3"},{"missing":[2,1],"clone_missing":true,"extra clones":[7],"extra_clones":true,
+"snap":"head","locator":"","nspace":"","name":"obj5"},{"extra clones":[1],"extra_clones":true,"snap":"head","locator":"","nspace":"","name":"obj6"},{"extra clones":[1],
+"extra_clones":true,"head_mismatch":true,"snap":"head","locator":"","nspace":"","name":"obj7"},{"snapset_mismatch":true,"snap":"head","locator":"","nspace":"","name":"obj8"},
+{"extra clones":[7,4],"extra_clones":true,"ss_attr_missing":true,"snap":"snapdir","locator":"","nspace":"","name":"obj2"},{"missing":[7],"clone_missing":true,"snap":"snapdir",
+"locator":"","nspace":"","name":"obj4"}],"epoch":18}
+EOF
+
+    jq -c -S '.inconsistents | sort' $dir/json > $dir/csjson
+    diff $dir/csjson $dir/checkcsjson || return 1
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
