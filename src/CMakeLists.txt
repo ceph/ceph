@@ -124,7 +124,7 @@ execute_process(
 
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${Xio_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${Xio_LIBRARY} ibverbs rdmacm pthread rt)
+  list(APPEND EXTRALIBS ${Xio_LIBRARY} pthread rt)
 endif(HAVE_XIO)
 
 # sort out which allocator to use
