@@ -2837,7 +2837,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type filter_prefix: str
         :para max_return: list no more than max_return key/value pairs
         :type max_return: int
-        :returns: an iterator over the the requested omap values, return value from this action
+        :returns: an iterator over the requested omap values, return value from this action
         """
 
         start_after = cstr(start_after, 'start_after') if start_after else None
@@ -2867,7 +2867,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type start_after: str
         :para max_return: list no more than max_return key/value pairs
         :type max_return: int
-        :returns: an iterator over the the requested omap values, return value from this action
+        :returns: an iterator over the requested omap values, return value from this action
         """
         start_after = cstr(start_after, 'start_after') if start_after else None
         cdef:
@@ -2892,7 +2892,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type read_op: ReadOp
         :para keys: input key tuple
         :type keys: tuple
-        :returns: an iterator over the the requested omap values, return value from this action
+        :returns: an iterator over the requested omap values, return value from this action
         """
         keys = cstr_list(keys, 'keys')
         cdef:
