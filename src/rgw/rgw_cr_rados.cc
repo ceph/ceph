@@ -309,6 +309,7 @@ void RGWSimpleRadosLockCR::request_cleanup()
 {
   if (req) {
     req->finish();
+    req = NULL;
   }
 }
 
@@ -345,6 +346,7 @@ void RGWSimpleRadosUnlockCR::request_cleanup()
 {
   if (req) {
     req->finish();
+    req = NULL;
   }
 }
 
@@ -639,6 +641,7 @@ void RGWStatObjCR::request_cleanup()
 {
   if (req) {
     req->finish();
+    req = NULL;
   }
 }
 
