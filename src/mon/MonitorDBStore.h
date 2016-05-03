@@ -654,7 +654,7 @@ class MonitorDBStore
         dump_fd_binary = ::open(
           g_conf->mon_debug_dump_location.c_str(),
           O_CREAT|O_APPEND|O_WRONLY, 0644);
-        if (!dump_fd_binary) {
+        if (dump_fd_binary < 0) {
           dump_fd_binary = -errno;
           derr << "Could not open log file, got "
                << cpp_strerror(dump_fd_binary) << dendl;
