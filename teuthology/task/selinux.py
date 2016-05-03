@@ -115,6 +115,7 @@ class SELinux(Task):
             'name="cephtest"',
             'scontext=system_u:system_r:nrpe_t:s0',
             'scontext=system_u:system_r:pcp_pmlogger_t',
+            'scontext=system_u:system_r:pcp_pmcd_t:s0',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
