@@ -2113,6 +2113,20 @@ void RGWDeleteBucket::execute()
      ldout(s->cct, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
 
+  if (!store->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
+				       NULL);
+    if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        /* adjust error, we want to return with NoSuchBucket and not
+	 * NoSuchKey */
+        op_ret = -ERR_NO_SUCH_BUCKET;
+      }
+      return;
+    }
+  }
+
   op_ret = store->delete_bucket(s->bucket, ot);
   if (op_ret == 0) {
     op_ret = rgw_unlink_bucket(store, s->user->user_id, s->bucket.tenant,
@@ -2127,19 +2141,6 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-  if (!store->is_meta_master()) {
-    bufferlist in_data;
-    op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				       NULL);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        /* adjust error, we want to return with NoSuchBucket and not
-	 * NoSuchKey */
-        op_ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return;
-    }
-  }
 
 }
 
