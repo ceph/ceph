@@ -110,6 +110,7 @@ class RGWHTTPManager {
   void *multi_handle;
   bool is_threaded;
   atomic_t going_down;
+  atomic_t is_stopped;
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
