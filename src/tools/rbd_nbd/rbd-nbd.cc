@@ -186,11 +186,13 @@ private:
 
     if (ret < 0) {
       ctx->reply.error = htonl(-ret);
-    } else if ((ctx->command == NBD_CMD_WRITE || ctx->command == NBD_CMD_READ)
-	       && ret != static_cast<int>(ctx->request.len)) {
-      derr << __func__ << ": " << *ctx << ": unexpected return value: " << ret
-	   << " (" << ctx->request.len << " expected)" << dendl;
-      ctx->reply.error = htonl(EIO);
+    } else if ((ctx->command == NBD_CMD_READ) &&
+                ret < static_cast<int>(ctx->request.len)) {
+      int pad_byte_count = static_cast<int> (ctx->request.len) - ret;
+      ctx->data.append_zero(pad_byte_count);
+      dout(20) << __func__ << ": " << *ctx << ": Pad byte count: " 
+               << pad_byte_count << dendl;
+      ctx->reply.error = 0;
     } else {
       ctx->reply.error = htonl(0);
     }

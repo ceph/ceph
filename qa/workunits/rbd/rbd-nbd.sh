@@ -81,8 +81,7 @@ ${SUDO} rbd-nbd list-mapped | grep "^${DEV}$"
 
 #write test
 dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
-${SUDO} dd if=${DATA} of=${DEV} bs=1M
-sync
+${SUDO} dd if=${DATA} of=${DEV} bs=1M oflag=direct
 [ "`dd if=${DATA} bs=1M | md5sum`" = "`rbd -p ${POOL} --no-progress export ${IMAGE} - | md5sum`" ]
 
 #trim test
