@@ -53,7 +53,7 @@
     zonegroup default          set default zone group
     zonegroup delete           delete a zone group info
     zonegroup get              show zone group info
-    zonegroup modify           set/clear zonegroup master status
+    zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
@@ -62,7 +62,7 @@
     zone create                create a new zone
     zone delete                delete a zone
     zone get                   show zone cluster params
-    zone modify                set/clear zone master status
+    zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
