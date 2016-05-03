@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 [ -z "$CEPH_ROOT" ] && CEPH_ROOT=..
 
