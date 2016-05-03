@@ -186,7 +186,7 @@ void ReplicatedPG::on_local_recover(
   }
 
   if (pg_log.get_missing().is_missing(recovery_info.soid) &&
-      pg_log.get_missing().missing.find(recovery_info.soid)->second.need > recovery_info.version) {
+      pg_log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
     assert(is_primary());
     const pg_log_entry_t *latest = pg_log.get_log().objects.find(recovery_info.soid)->second;
     if (latest->op == pg_log_entry_t::LOST_REVERT &&
@@ -236,7 +236,7 @@ void ReplicatedPG::on_local_recover(
       requeue_ops(waiting_for_unreadable_object[hoid]);
       waiting_for_unreadable_object.erase(hoid);
     }
-    if (pg_log.get_missing().missing.size() == 0) {
+    if (pg_log.get_missing().get_items().size() == 0) {
       requeue_ops(waiting_for_all_missing);
       waiting_for_all_missing.clear();
     }
@@ -354,7 +354,7 @@ PerfCounters *ReplicatedPG::get_logger()
 
 bool ReplicatedPG::is_missing_object(const hobject_t& soid) const
 {
-  return pg_log.get_missing().missing.count(soid);
+  return pg_log.get_missing().get_items().count(soid);
 }
 
 void ReplicatedPG::maybe_kick_recovery(
@@ -405,7 +405,7 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
    */
   if (waiting_for_degraded_object.count(soid))
     return true;
-  if (pg_log.get_missing().missing.count(soid))
+  if (pg_log.get_missing().get_items().count(soid))
     return true;
   assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
@@ -414,7 +414,7 @@ bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
     if (peer_missing.count(peer) &&
-	peer_missing[peer].missing.count(soid))
+	peer_missing[peer].get_items().count(soid))
       return true;
 
     // Object is degraded if after last_backfill AND
@@ -848,7 +848,7 @@ int ReplicatedPG::do_command(
 
 bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
 {
-  if (pg_log.get_missing().missing.empty())
+  if (pg_log.get_missing().get_items().empty())
     return false;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); ++p) {
     if (p->op.op == CEPH_OSD_OP_PGLS || p->op.op == CEPH_OSD_OP_PGNLS ||
@@ -957,18 +957,18 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  break;
 	}
 
-	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
+	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().get_items().empty());
 
 	// ensure sort order is correct
 	pg_log.resort_missing(get_sort_bitwise());
 
 	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
-	  pg_log.get_missing().missing.lower_bound(current);
+	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
 	while (1) {
 	  const hobject_t &mcand =
-	    missing_iter == pg_log.get_missing().missing.end() ?
+	    missing_iter == pg_log.get_missing().get_items().end() ?
 	    _max :
 	    missing_iter->first;
 	  const hobject_t &lcand =
@@ -1061,7 +1061,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	if (next.is_max() &&
-	    missing_iter == pg_log.get_missing().missing.end() &&
+	    missing_iter == pg_log.get_missing().get_items().end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
 
@@ -1144,18 +1144,18 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  break;
 	}
 
-	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
+	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().get_items().empty());
 
 	// ensure sort order is correct
 	pg_log.resort_missing(get_sort_bitwise());
 
 	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
-	  pg_log.get_missing().missing.lower_bound(current);
+	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
 	while (1) {
 	  const hobject_t &mcand =
-	    missing_iter == pg_log.get_missing().missing.end() ?
+	    missing_iter == pg_log.get_missing().get_items().end() ?
 	    _max :
 	    missing_iter->first;
 	  const hobject_t &lcand =
@@ -1230,7 +1230,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 					       candidate.get_key()));
 	}
 	if (next.is_max() &&
-	    missing_iter == pg_log.get_missing().missing.end() &&
+	    missing_iter == pg_log.get_missing().get_items().end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
 	}
@@ -9490,7 +9490,7 @@ int ReplicatedPG::recover_missing(
 	return PULL_NONE;
       } else {
 	int r = recover_missing(
-	  head, pg_log.get_missing().missing.find(head)->second.need, priority,
+	  head, pg_log.get_missing().get_items().find(head)->second.need, priority,
 	  h);
 	if (r != PULL_NONE)
 	  return PULL_OTHER;
@@ -9504,7 +9504,7 @@ int ReplicatedPG::recover_missing(
 	return PULL_NONE;
       } else {
 	int r = recover_missing(
-	  head, pg_log.get_missing().missing.find(head)->second.need, priority,
+	  head, pg_log.get_missing().get_items().find(head)->second.need, priority,
 	  h);
 	if (r != PULL_NONE)
 	  return PULL_OTHER;
@@ -9705,7 +9705,7 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   eversion_t v;
 
   assert(pg_log.get_missing().is_missing(oid));
-  v = pg_log.get_missing().missing.find(oid)->second.have;
+  v = pg_log.get_missing().get_items().find(oid)->second.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
   assert(!actingbackfill.empty());
@@ -9718,7 +9718,7 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
       assert(is_backfill_targets(peer));
       continue;
     }
-    eversion_t h = peer_missing[peer].missing[oid].have;
+    eversion_t h = peer_missing[peer].get_items().at(oid).have;
     dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << peer << dendl;
     if (h > v)
       v = h;
@@ -10471,7 +10471,7 @@ bool ReplicatedPG::start_recovery_ops(
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
     osd->clog->error() << info.pgid << " recovery ending with " << missing.num_missing()
-		      << ": " << missing.missing << "\n";
+		       << ": " << missing.get_items() << "\n";
     return work_in_progress;
   }
 
@@ -10528,7 +10528,7 @@ uint64_t ReplicatedPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
   dout(10) << "recover_primary recovering " << recovering.size()
 	   << " in pg" << dendl;
   dout(10) << "recover_primary " << missing << dendl;
-  dout(25) << "recover_primary " << missing.missing << dendl;
+  dout(25) << "recover_primary " << missing.get_items() << dendl;
 
   // look at log!
   pg_log_entry_t *latest = 0;
@@ -10537,8 +10537,8 @@ uint64_t ReplicatedPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   map<version_t, hobject_t>::const_iterator p =
-    missing.rmissing.lower_bound(pg_log.get_log().last_requested);
-  while (p != missing.rmissing.end()) {
+    missing.get_rmissing().lower_bound(pg_log.get_log().last_requested);
+  while (p != missing.get_rmissing().end()) {
     handle.reset_tp_timeout();
     hobject_t soid;
     version_t v = p->first;
@@ -10551,7 +10551,7 @@ uint64_t ReplicatedPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
       latest = 0;
       soid = p->second;
     }
-    const pg_missing_t::item& item = missing.missing.find(p->second)->second;
+    const pg_missing_t::item& item = missing.get_items().find(p->second)->second;
     ++p;
 
     hobject_t head = soid;
@@ -10629,7 +10629,7 @@ uint64_t ReplicatedPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 		 p != peer_missing.end();
 		 ++p)
 	      if (p->second.is_missing(soid, need) &&
-		  p->second.missing[soid].have == alternate_need) {
+		  p->second.get_items().at(soid).have == alternate_need) {
 		missing_loc.add_location(soid, p->first);
 	      }
 	    dout(10) << " will pull " << alternate_need << " or " << need
@@ -10758,12 +10758,12 @@ uint64_t ReplicatedPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     size_t m_sz = pm->second.num_missing();
 
     dout(10) << " peer osd." << peer << " missing " << m_sz << " objects." << dendl;
-    dout(20) << " peer osd." << peer << " missing " << pm->second.missing << dendl;
+    dout(20) << " peer osd." << peer << " missing " << pm->second.get_items() << dendl;
 
     // oldest first!
     const pg_missing_t &m(pm->second);
-    for (map<version_t, hobject_t>::const_iterator p = m.rmissing.begin();
-	   p != m.rmissing.end() && started < max;
+    for (map<version_t, hobject_t>::const_iterator p = m.get_rmissing().begin();
+	 p != m.get_rmissing().end() && started < max;
 	   ++p) {
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
@@ -10805,7 +10805,7 @@ uint64_t ReplicatedPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator r = m.missing.find(soid);
+      map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator r = m.get_items().find(soid);
       started += prep_object_replica_pushes(soid, r->second.need,
 					    h);
     }

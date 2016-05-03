@@ -2744,7 +2744,8 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
  *  kept in memory, as a supplement to pg_log_t
  *  also used to pass missing info in messages.
  */
-struct pg_missing_t {
+class pg_missing_t {
+public:
   struct item {
     eversion_t need, have;
     item() {}
@@ -2772,23 +2773,32 @@ struct pg_missing_t {
   }; 
   WRITE_CLASS_ENCODER(item)
 
+private:
   map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
 
+public:
+  const map<hobject_t, item, hobject_t::ComparatorWithDefault> &get_items() const {
+    return missing;
+  }
+  const map<version_t, hobject_t> &get_rmissing() const {
+    return rmissing;
+  }
   unsigned int num_missing() const;
   bool have_missing() const;
-  void swap(pg_missing_t& o);
   bool is_missing(const hobject_t& oid) const;
   bool is_missing(const hobject_t& oid, eversion_t v) const;
   eversion_t have_old(const hobject_t& oid) const;
+
+  void swap(pg_missing_t& o);
   void add_next_event(const pg_log_entry_t& e);
   void revise_need(hobject_t oid, eversion_t need);
   void revise_have(hobject_t oid, eversion_t have);
   void add(const hobject_t& oid, eversion_t need, eversion_t have);
   void rm(const hobject_t& oid, eversion_t v);
-  void rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m);
+  void rm(std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m);
   void got(const hobject_t& oid, eversion_t v);
-  void got(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m);
+  void got(std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m);
   void split_into(pg_t child_pgid, unsigned split_bits, pg_missing_t *omissing);
 
   void clear() {
