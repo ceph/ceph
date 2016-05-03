@@ -3120,7 +3120,7 @@ void ENoOp::replay(MDSRank *mds)
  * @param mds
  * MDSRank instance, just used for logging
  * @param old_to_new
- * Map of old journal segment segment sequence numbers to new journal segment sequence numbers
+ * Map of old journal segment sequence numbers to new journal segment sequence numbers
  *
  * @return
  * True if the event was modified.
