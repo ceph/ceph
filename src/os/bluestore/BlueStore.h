@@ -711,6 +711,7 @@ public:
     uint32_t op_flags = 0,
     bool allow_eio = false) override;
   int _do_read(
+    Collection *c,
     OnodeRef o,
     uint64_t offset,
     size_t len,
