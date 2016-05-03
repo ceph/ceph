@@ -383,8 +383,8 @@ public:
     }
     void add_active_missing(const pg_missing_t &missing) {
       for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i =
-	     missing.missing.begin();
-	   i != missing.missing.end();
+	     missing.get_items().begin();
+	   i != missing.get_items().end();
 	   ++i) {
 	map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator j =
 	  needs_recovery_map.find(i->first);
@@ -440,8 +440,8 @@ public:
       const map<pg_shard_t, pg_info_t> &pinfo) {
       recovered(hoid);
       boost::optional<pg_missing_t::item> item;
-      auto miter = missing.missing.find(hoid);
-      if (miter != missing.missing.end()) {
+      auto miter = missing.get_items().find(hoid);
+      if (miter != missing.get_items().end()) {
 	item = miter->second;
       } else {
 	for (auto &&i: to_recover) {
@@ -449,8 +449,8 @@ public:
 	    continue;
 	  auto pmiter = pmissing.find(i);
 	  assert(pmiter != pmissing.end());
-	  miter = pmiter->second.missing.find(hoid);
-	  if (miter != pmiter->second.missing.end()) {
+	  miter = pmiter->second.get_items().find(hoid);
+	  if (miter != pmiter->second.get_items().end()) {
 	    item = miter->second;
 	    break;
 	  }

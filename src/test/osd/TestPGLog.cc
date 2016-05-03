@@ -123,10 +123,10 @@ public:
       fulldiv.tail = divinfo.log_tail;
       divinfo.last_backfill = hobject_t::get_max();
 
-      if (init.missing.empty()) {
+      if (init.get_items().empty()) {
 	divinfo.last_complete = divinfo.last_update;
       } else {
-	eversion_t fmissing = init.missing[init.rmissing.begin()->second].need;
+	eversion_t fmissing = init.get_items().at(init.get_rmissing().begin()->second).need;
 	for (list<pg_log_entry_t>::const_iterator i = fulldiv.log.begin();
 	     i != fulldiv.log.end();
 	     ++i) {
@@ -176,14 +176,13 @@ public:
   void verify_missing(
     const TestCase &tcase,
     const pg_missing_t &missing) {
-    ASSERT_EQ(tcase.final.missing.size(), missing.missing.size());
-    for (map<hobject_t, pg_missing_t::item>::const_iterator i =
-	   missing.missing.begin();
-	 i != missing.missing.end();
+    ASSERT_EQ(tcase.final.get_items().size(), missing.get_items().size());
+    for (auto i = missing.get_items().begin();
+	 i != missing.get_items().end();
 	 ++i) {
-      EXPECT_TRUE(tcase.final.missing.count(i->first));
-      EXPECT_EQ(tcase.final.missing.find(i->first)->second.need, i->second.need);
-      EXPECT_EQ(tcase.final.missing.find(i->first)->second.have, i->second.have);
+      EXPECT_TRUE(tcase.final.get_items().count(i->first));
+      EXPECT_EQ(tcase.final.get_items().find(i->first)->second.need, i->second.need);
+      EXPECT_EQ(tcase.final.get_items().find(i->first)->second.have, i->second.have);
     }
   }
 
@@ -1515,7 +1514,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(eversion_t(1, 2), omissing.missing[divergent_object].need);
+    EXPECT_EQ(eversion_t(1, 2), omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(eversion_t(1, 6), oinfo.last_update);
     EXPECT_EQ(eversion_t(1, 1), oinfo.last_complete);
   }
@@ -1604,8 +1603,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
-    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
   }
 
@@ -1687,7 +1686,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(eversion_t(1, 3), omissing.missing[divergent_object].need);
+    EXPECT_EQ(eversion_t(1, 3), omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
@@ -1696,8 +1695,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
-    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.get_items().at(divergent_object).need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
   }
 
@@ -1783,7 +1782,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(divergent_version, omissing.missing[divergent_object].need);
+    EXPECT_EQ(divergent_version, omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
@@ -1791,7 +1790,7 @@ TEST_F(PGLogTest, proc_replica_log) {
 
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
-    EXPECT_TRUE(omissing.missing.begin()->second.need == eversion_t(1, 1));
+    EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
     EXPECT_EQ(eversion_t(0, 0), oinfo.last_complete);
   }

@@ -216,8 +216,8 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = omissing.missing.begin();
-       i != omissing.missing.end();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i = omissing.get_items().begin();
+       i != omissing.get_items().end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
 	     << " have " << i->second.have << dendl;
@@ -293,7 +293,7 @@ void PGLog::proc_replica_log(
 
   if (omissing.have_missing()) {
     eversion_t first_missing =
-      omissing.missing[omissing.rmissing.begin()->second].need;
+      omissing.get_items().at(omissing.get_rmissing().begin()->second).need;
     oinfo.last_complete = eversion_t();
     list<pg_log_entry_t>::const_iterator i = olog.log.begin();
     for (;
@@ -395,7 +395,7 @@ void PGLog::_merge_object_divergent_entries(
     // ensure missing has been updated appropriately
     if (objiter->second->is_update()) {
       assert(missing.is_missing(hoid) &&
-	     missing.missing[hoid].need == objiter->second->version);
+	     missing.get_items().at(hoid).need == objiter->second->version);
     } else {
       assert(!missing.is_missing(hoid));
     }
@@ -414,7 +414,7 @@ void PGLog::_merge_object_divergent_entries(
 		       << " deleting"
 		       << dendl;
     if (missing.is_missing(hoid))
-      missing.rm(missing.missing.find(hoid));
+      missing.rm(missing.get_items().find(hoid));
     if (rollbacker && !object_not_in_store)
       rollbacker->remove(hoid);
     return;
@@ -423,17 +423,17 @@ void PGLog::_merge_object_divergent_entries(
   if (missing.is_missing(hoid)) {
     /// Case 3)
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-		       << " missing, " << missing.missing[hoid]
+		       << " missing, " << missing.get_items().at(hoid)
 		       << " adjusting" << dendl;
 
-    if (missing.missing[hoid].have == prior_version) {
+    if (missing.get_items().at(hoid).have == prior_version) {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 	       << " missing.have is prior_version " << prior_version
 	       << " removing from missing" << dendl;
-      missing.rm(missing.missing.find(hoid));
+      missing.rm(missing.get_items().find(hoid));
     } else {
       ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-			 << " missing.have is " << missing.missing[hoid].have
+			 << " missing.have is " << missing.get_items().at(hoid).have
 			 << ", adjusting" << dendl;
       missing.revise_need(hoid, prior_version);
       if (prior_version <= info.log_tail) {
@@ -624,8 +624,8 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = missing.missing.begin();
-       i != missing.missing.end();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator i = missing.get_items().begin();
+       i != missing.get_items().end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
   }
