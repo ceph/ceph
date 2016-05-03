@@ -1,0 +1,60 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
+#include <memory>
+#include <type_traits>
+
+#ifndef CEPH_COMMON_BACKPORT14_H
+#define CEPH_COMMON_BACKPORT14_H
+
+// Library code from C++14 that can be implemented in C++11.
+
+namespace ceph {
+template<typename T>
+using remove_extent_t = typename std::remove_extent<T>::type;
+
+namespace _backport14 {
+template<typename T>
+struct uniquity {
+  using datum = std::unique_ptr<T>;
+};
+
+template<typename T>
+struct uniquity<T[]> {
+  using array = std::unique_ptr<T[]>;
+};
+
+template<typename T, std::size_t N>
+struct uniquity<T[N]> {
+  using verboten = void;
+};
+
+template<typename T, typename... Args>
+inline typename uniquity<T>::datum make_unique(Args&&... args) {
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+template<typename T>
+inline typename uniquity<T>::array make_unique(std::size_t n) {
+  return std::unique_ptr<T>(new remove_extent_t<T>[n]());
+}
+
+template<typename T, class... Args>
+typename uniquity<T>::verboten
+make_unique(Args&&...) = delete;
+} // namespace _backport14
+using _backport14::make_unique;
+} // namespace ceph
+
+#endif // CEPH_COMMON_BACKPORT14_H
