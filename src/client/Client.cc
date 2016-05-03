@@ -490,9 +490,9 @@ int Client::init()
   int r = monclient->init();
   if (r < 0) {
     // need to do cleanup because we're in an intermediate init state
-    objecter->shutdown();
     timer.shutdown();
     client_lock.Unlock();
+    objecter->shutdown();
     objectcacher->stop();
     monclient->shutdown();
     return r;
