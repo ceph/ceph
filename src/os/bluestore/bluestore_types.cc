@@ -213,8 +213,9 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
   _check();
 }
 
-void bluestore_extent_ref_map_t::put(uint64_t offset, uint32_t length,
-			   vector<bluestore_extent_t> *release)
+void bluestore_extent_ref_map_t::put(
+  uint64_t offset, uint32_t length,
+  vector<bluestore_pextent_t> *release)
 {
   map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
@@ -243,7 +244,7 @@ void bluestore_extent_ref_map_t::put(uint64_t offset, uint32_t length,
 	--p->second.refs;
 	_maybe_merge_left(p);
       } else {
-	release->push_back(bluestore_extent_t(p->first, length));
+	release->push_back(bluestore_pextent_t(p->first, length));
 	ref_map.erase(p);
       }
       return;
@@ -255,7 +256,7 @@ void bluestore_extent_ref_map_t::put(uint64_t offset, uint32_t length,
       _maybe_merge_left(p);
       ++p;
     } else {
-      release->push_back(bluestore_extent_t(p->first, p->second.length));
+      release->push_back(bluestore_pextent_t(p->first, p->second.length));
       ref_map.erase(p++);
     }
   }
