@@ -162,6 +162,20 @@ namespace librbd {
       bufferlist bl, bl2;
 
       int r = ioctx->exec(oid, "rbd", "cg_list_images", bl, bl2);
+      bufferlist::iterator iter = bl2.begin();
+      int64_t count;
+      ::decode(count, iter);
+      for (int i = 0; i < count; ++i) {
+	string image_id;
+	string pool_id;
+	int state;
+	::decode(image_id, iter);
+	::decode(pool_id, iter);
+	::decode(state, iter);
+
+	images.push_back(std::make_pair(image_id, 0));
+      }
+
       return r;
     }
 

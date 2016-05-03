@@ -1048,7 +1048,7 @@ err_remove_id:
   }
 
   int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
-		     std::vector<std::pair<std::string, int64_t>> images)
+		     std::vector<std::pair<std::string, int64_t>>& images)
   {
     CephContext *cct = (CephContext *)cg_ioctx.cct();
     ldout(cct, 20) << "cg_list_images " << &cg_ioctx << " cg name " << cg_name << dendl;

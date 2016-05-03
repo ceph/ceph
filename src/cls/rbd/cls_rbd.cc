@@ -37,6 +37,7 @@
 #include <sstream>
 #include <vector>
 #include <boost/lexical_cast.hpp>
+#include <boost/tokenizer.hpp>
 
 #include "common/bit_vector.hpp"
 #include "common/errno.h"
@@ -265,6 +266,49 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_LOG(20, "cg_list_images");
+
+  int max_read = RBD_MAX_KEYS_READ;
+  std::map<string, bufferlist> vals;
+  string last_read = RBD_SNAP_KEY_PREFIX;
+  int r;
+  do {
+    r = cls_cxx_map_get_vals(hctx, RBD_IMAGE_KEY_PREFIX, RBD_IMAGE_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0)
+      return r;
+
+    int64_t length = vals.size();
+    ::encode(length, *out);
+    CLS_LOG(20, "Discovered %ld images", length);
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end(); ++it) {
+      bufferlist::iterator iter = it->second.begin();
+      int64_t state;
+      try {
+	::decode(state, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding state for image: %s", it->first.c_str());
+	return -EIO;
+      }
+      typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
+      boost::char_separator<char> sep("_");
+      tokenizer tokens(it->first, sep);
+      tokenizer::iterator tok_iter = tokens.begin();
+      ++tok_iter;
+      string image_id = *tok_iter;
+
+      ++tok_iter;
+      string pool_id = *tok_iter;
+      CLS_LOG(20, "Discovered image %s %s %d", image_id.c_str(), pool_id.c_str(), (int)state);
+      ::encode(image_id.c_str(), *out);
+      ::encode(pool_id.c_str(), *out);
+      ::encode(state, *out);
+    }
+
+  } while (r == RBD_MAX_KEYS_READ);
+
   return 0;
 }
 
