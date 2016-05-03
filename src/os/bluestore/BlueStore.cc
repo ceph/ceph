@@ -2587,7 +2587,7 @@ int BlueStore::read(
   if (offset == length && offset == 0)
     length = o->onode.size;
 
-  r = _do_read(o, offset, length, bl, op_flags);
+  r = _do_read(c, o, offset, length, bl, op_flags);
 
  out:
   dout(10) << __func__ << " " << cid << " " << oid
@@ -2597,11 +2597,12 @@ int BlueStore::read(
 }
 
 int BlueStore::_do_read(
-    OnodeRef o,
-    uint64_t offset,
-    size_t length,
-    bufferlist& bl,
-    uint32_t op_flags)
+  Collection *c,
+  OnodeRef o,
+  uint64_t offset,
+  size_t length,
+  bufferlist& bl,
+  uint32_t op_flags)
 {
   map<uint64_t,bluestore_extent_t>::iterator bp, bend;
   map<uint64_t,bluestore_overlay_t>::iterator op, oend;
@@ -6286,7 +6287,7 @@ int BlueStore::_clone(TransContext *txc,
     newo->onode.size = oldo->onode.size;
   } else {
     // read + write
-    r = _do_read(oldo, 0, oldo->onode.size, bl, 0);
+    r = _do_read(c.get(), oldo, 0, oldo->onode.size, bl, 0);
     if (r < 0)
       goto out;
 
@@ -6353,7 +6354,7 @@ int BlueStore::_clone_range(TransContext *txc,
   newo->exists = true;
   _assign_nid(txc, newo);
 
-  r = _do_read(oldo, srcoff, length, bl, 0);
+  r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
   if (r < 0)
     goto out;
 
