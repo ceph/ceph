@@ -139,6 +139,10 @@ def maybe_remove_remotes(run_dir, days, dry_run=False):
     if days < 0:
         return
     contents = listdir(run_dir)
+    subdirs = dict(
+        remote='remote logs',
+        data='mon data',
+    )
     if PRESERVE_FILE in contents:
         return
     for child in contents:
@@ -148,11 +152,19 @@ def maybe_remove_remotes(run_dir, days, dry_run=False):
         if (should_preserve(item) or not os.path.isdir(item) or not
                 is_old_enough(item, days)):
             continue
-        # Does it have a remote subdir?
-        remote_path = os.path.join(item, 'remote')
-        if not os.path.isdir(remote_path):
-            continue
-        log.info("{job} is {days} days old; removing remote logs".format(
-            job=item, days=days))
-        if not dry_run:
-            remove(remote_path)
+        for (subdir, description) in subdirs.iteritems():
+            _maybe_remove_subdir(item, subdir, days, description, dry_run)
+
+
+def _maybe_remove_subdir(job_dir, subdir, days, description, dry_run=False):
+    # Does the subdir exist?
+    subdir_path = os.path.join(job_dir, subdir)
+    if not os.path.isdir(subdir_path):
+        return
+    log.info("{job} is {days} days old; removing {desc}".format(
+        job=job_dir,
+        days=days,
+        desc=description,
+    ))
+    if not dry_run:
+        remove(subdir_path)
