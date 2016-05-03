@@ -10,7 +10,7 @@
 #include "common/ceph_time.h"
 
 /*
- * this needs to be compatible with with rgw_bucket, as it replaces it
+ * this needs to be compatible with rgw_bucket, as it replaces it
  */
 struct cls_user_bucket {
   std::string name;
@@ -156,7 +156,7 @@ struct cls_user_stats {
 WRITE_CLASS_ENCODER(cls_user_stats)
 
 /*
- * this needs to be compatible with with rgw_bucket, as it replaces it
+ * this needs to be compatible with rgw_bucket, as it replaces it
  */
 struct cls_user_header {
   cls_user_stats stats;
