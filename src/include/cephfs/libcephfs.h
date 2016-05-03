@@ -560,7 +560,7 @@ int ceph_link(struct ceph_mount_info *cmount, const char *existing, const char *
  *
  * @param cmount the ceph mount handle to use for creating the link.
  * @param path the path to the symlink to read
- * @param buf the buffer to hold the the path of the file that the symlink points to.
+ * @param buf the buffer to hold the path of the file that the symlink points to.
  * @param size the length of the buffer
  * @returns number of bytes copied on success or negative error code on failure
  */
