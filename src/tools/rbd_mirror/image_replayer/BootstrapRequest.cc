@@ -509,11 +509,14 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
       local_image_ctx->journal->get_tag_data();
     dout(20) << ": local tag data: " << tag_data << dendl;
 
-    if (!((tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
-           remote_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
-           remote_tag_data.predecessor_mirror_uuid == m_local_mirror_uuid) ||
-          (tag_data.mirror_uuid == m_remote_mirror_uuid &&
-           m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING))) {
+    if (tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
+	remote_tag_data.mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
+	remote_tag_data.predecessor_mirror_uuid == m_local_mirror_uuid) {
+      dout(20) << ": local image was demoted" << dendl;
+    } else if (tag_data.mirror_uuid == m_remote_mirror_uuid &&
+	       m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING) {
+      dout(20) << ": local image is in clean replay state" << dendl;
+    } else {
       derr << ": split-brain detected -- skipping image replay" << dendl;
       m_ret_val = -EEXIST;
       close_local_image();
