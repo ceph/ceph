@@ -39,6 +39,7 @@ public:
     if (ret < 0) {
       log_error() << "failed to send http operation: " << op->to_str()
           << " ret=" << ret << std::endl;
+      op->put();
       return ret;
     }
     std::swap(http_op, op); // store reference in http_op on success
@@ -51,8 +52,10 @@ public:
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()
           << " status=" << op->get_http_status() << std::endl;
+      op->put();
       return ret;
     }
+    op->put();
     return 0;
   }
 
