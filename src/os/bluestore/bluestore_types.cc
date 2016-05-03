@@ -425,6 +425,7 @@ void bluestore_blob_t::encode(bufferlist& bl) const
   ::encode(csum_type, bl);
   ::encode(csum_block_order, bl);
   ::encode(num_refs, bl);
+  ::encode(ref_map, bl);
   ::encode(csum_data, bl);
   ENCODE_FINISH(bl);
 }
@@ -438,6 +439,7 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
   ::decode(csum_type, p);
   ::decode(csum_block_order, p);
   ::decode(num_refs, p);
+  ::decode(ref_map, p);
   ::decode(csum_data, p);
   DECODE_FINISH(p);
 }
@@ -454,6 +456,7 @@ void bluestore_blob_t::dump(Formatter *f) const
   f->dump_unsigned("csum_type", csum_type);
   f->dump_unsigned("csum_block_order", csum_block_order);
   f->dump_unsigned("num_refs", num_refs);
+  f->dump_object("ref_map", ref_map);
   f->open_array_section("csum_data");
   size_t n = get_csum_count();
   for (unsigned i = 0; i < n; ++i)
@@ -469,18 +472,22 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
   ls.back()->csum_type = CSUM_XXHASH32;
   ls.back()->csum_block_order = 16;
-  ls.back()->num_refs = 2;
   ls.back()->csum_data = vector<char>{1, 2, 3, 4};  // one uint32_t
+  ls.back()->num_refs = 3;
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
       << " len " << o.length
+      << " nref " << o.num_refs
       << " " << o.get_flags_string();
   if (o.csum_type) {
     out << " csum " << o.get_csum_type_string(o.csum_type)
 	<< " order " << o.csum_block_order;
+  }
+  if (!o.ref_map.empty()) {
+    out << " ref_map " << o.ref_map;
   }
   out << ")";
   return out;
