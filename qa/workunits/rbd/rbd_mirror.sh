@@ -102,6 +102,11 @@ daemon_pid_file()
     fi
 }
 
+testlog()
+{
+    echo $(date '+%F %T') $@ | tee -a "${TEMPDIR}/rbd-mirror.test.log"
+}
+
 setup()
 {
     local c
@@ -195,6 +200,16 @@ stop_mirror()
     rm -f $(daemon_pid_file "${cluster}")
 }
 
+admin_daemon()
+{
+    local cluster=$1 ; shift
+
+    local asok_file=$(daemon_asok_file "${cluster}" "${cluster}")
+    test -S "${asok_file}"
+
+    ceph --admin-daemon ${asok_file} $@
+}
+
 status()
 {
     local cluster daemon image
@@ -285,10 +300,7 @@ flush()
        cmd="${cmd} ${POOL}/${image}"
     fi
 
-    local asok_file=$(daemon_asok_file "${cluster}" "${cluster}")
-    test -S "${asok_file}"
-
-    ceph --admin-daemon ${asok_file} ${cmd}
+    admin_daemon "${cluster}" ${cmd}
 }
 
 test_image_replay_state()
@@ -298,11 +310,12 @@ test_image_replay_state()
     local test_state=$3
     local current_state=stopped
 
-    local asok_file=$(daemon_asok_file "${cluster}" "${cluster}")
-    test -S "${asok_file}"
+    admin_daemon "${cluster}" help |
+	fgrep "\"rbd mirror status ${POOL}/${image}\"" &&
+    admin_daemon "${cluster}" rbd mirror status ${POOL}/${image} |
+	grep -i 'state.*Replaying' &&
+    current_state=started
 
-    ceph --admin-daemon ${asok_file} help |
-	fgrep "\"rbd mirror status ${POOL}/${image}\"" && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
@@ -471,7 +484,7 @@ set -xe
 
 setup
 
-echo "TEST: add image and test replay"
+testlog "TEST: add image and test replay"
 start_mirror ${CLUSTER1}
 image=test
 create_image ${CLUSTER2} ${image}
@@ -482,7 +495,7 @@ test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
 compare_images ${image}
 
-echo "TEST: stop mirror, add image, start mirror and test replay"
+testlog "TEST: stop mirror, add image, start mirror and test replay"
 stop_mirror ${CLUSTER1}
 image1=test1
 create_image ${CLUSTER2} ${image1}
@@ -494,13 +507,56 @@ test_status_in_pool_dir ${CLUSTER1} ${image1} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
 compare_images ${image1}
 
-echo "TEST: test the first image is replaying after restart"
+testlog "TEST: test the first image is replaying after restart"
 write_image ${CLUSTER2} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 compare_images ${image}
 
-echo "TEST: failover and failback"
+testlog "TEST: stop/start/restart mirror via admin socket"
+admin_daemon ${CLUSTER1} rbd mirror stop
+wait_for_image_replay_stopped ${CLUSTER1} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror start
+wait_for_image_replay_started ${CLUSTER1} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror restart
+wait_for_image_replay_started ${CLUSTER1} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror stop
+wait_for_image_replay_stopped ${CLUSTER1} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror restart
+wait_for_image_replay_started ${CLUSTER1} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror stop ${CLUSTER2}
+wait_for_image_replay_stopped ${CLUSTER1} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_replay_started ${CLUSTER1} ${image}
+
+admin_daemon ${CLUSTER1} rbd mirror start
+wait_for_image_replay_started ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror start ${CLUSTER2}
+
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
+wait_for_image_replay_started ${CLUSTER1} ${image}
+
+admin_daemon ${CLUSTER1} rbd mirror restart ${CLUSTER2}
+wait_for_image_replay_started ${CLUSTER1} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${image1}
+
+admin_daemon ${CLUSTER1} rbd mirror flush
+admin_daemon ${CLUSTER1} rbd mirror status
+
+testlog "TEST: failover and failback"
 start_mirror ${CLUSTER2}
 
 # failover
