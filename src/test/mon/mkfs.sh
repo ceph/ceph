@@ -132,6 +132,7 @@ function auth_cephx_key() {
         return 1
     else
         rm -fr $MON_DIR/store.db
+        rm -fr $MON_DIR/kv_backend
     fi
 
     mon_mkfs --key=$key
