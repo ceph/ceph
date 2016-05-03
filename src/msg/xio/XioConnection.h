@@ -272,6 +272,7 @@ public:
     if (conn)
       xio_connection_destroy(conn);
   }
+  ostream& conn_prefix(std::ostream *_dout);
 
   bool is_connected() override { return connected.read(); }
 
