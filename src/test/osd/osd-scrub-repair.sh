@@ -1493,6 +1493,12 @@ EOF
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
 
+    rados -p $poolname --force repair-get ROBJ2 0 $epoch $dir/check || return 1
+    diff $dir/CORRUPT $dir/check || return 1
+    rados -p $poolname repair-get ROBJ2 1 $epoch $dir/check || return 1
+    # This assumes add_something() left ORIGINAL behind with what was written
+    diff $dir/ORIGINAL $dir/check || return 1
+
     rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
