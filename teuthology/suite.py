@@ -623,6 +623,7 @@ def schedule_suite(job_config,
     returns number of jobs scheduled
     """
     suite_name = job_config.suite
+    name = job_config.name
     log.debug('Suite %s in %s' % (suite_name, path))
     configs = [(combine_path(suite_name, item[0]), item[1]) for item in
                build_matrix(path, subset=subset)]
@@ -690,6 +691,7 @@ def schedule_suite(job_config,
         job = dict(
             yaml=parsed_yaml,
             desc=description,
+            sha1=job_config.sha1,
             args=arg
         )
 
@@ -727,8 +729,9 @@ def schedule_suite(job_config,
             log_prefix = "Missing Packages: "
             if not dry_run and not config.suite_allow_missing_packages:
                 schedule_fail(
-                    "At least one job needs packages that don't exist. "
-                    "See above."
+                    "At least one job needs packages that don't exist for hash"
+                    " {sha1}.".format(sha1=job_config.sha1),
+                    name,
                 )
         teuthology_schedule(
             args=job['args'],
