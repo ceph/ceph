@@ -3572,7 +3572,7 @@ void BlueStore::_txc_release(
   bool shared)
 {
   if (shared) {
-    vector<bluestore_extent_t> release;
+    vector<bluestore_pextent_t> release;
     if (!o->enode)
       o->enode = c->get_enode(o->oid.hobj.get_hash());
     o->enode->ref_map.put(offset, length, &release);
