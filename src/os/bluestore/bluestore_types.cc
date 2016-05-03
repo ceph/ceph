@@ -379,6 +379,145 @@ ostream& operator<<(ostream& out, const bluestore_overlay_t& o)
   return out;
 }
 
+
+// bluestore_pextent_t
+
+void bluestore_pextent_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
+ostream& operator<<(ostream& out, const bluestore_pextent_t& o) {
+  return out << o.offset << "~" << o.length;
+}
+
+void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls)
+{
+  ls.push_back(new bluestore_pextent_t);
+  ls.push_back(new bluestore_pextent_t(1, 2));
+}
+
+// bluestore_blob_t
+
+string bluestore_blob_t::get_flags_string(unsigned flags)
+{
+  string s;
+  if (flags & FLAG_IMMUTABLE) {
+    if (s.length())
+      s += '+';
+    s += "immutable";
+  }
+  if (flags & FLAG_COMPRESSED) {
+    if (s.length())
+      s += '+';
+    s += "compressed";
+  }
+  return s;
+}
+
+void bluestore_blob_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(extents, bl);
+  ::encode(length, bl);
+  ::encode(flags, bl);
+  ::encode(csum_type, bl);
+  ::encode(csum_block_order, bl);
+  ::encode(num_refs, bl);
+  ::encode(csum_data, bl);
+  ENCODE_FINISH(bl);
+}
+
+void bluestore_blob_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(extents, p);
+  ::decode(length, p);
+  ::decode(flags, p);
+  ::decode(csum_type, p);
+  ::decode(csum_block_order, p);
+  ::decode(num_refs, p);
+  ::decode(csum_data, p);
+  DECODE_FINISH(p);
+}
+
+void bluestore_blob_t::dump(Formatter *f) const
+{
+  f->open_array_section("extents");
+  for (auto& p : extents) {
+    f->dump_object("extent", p);
+  }
+  f->close_section();
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("flags", flags);
+  f->dump_unsigned("csum_type", csum_type);
+  f->dump_unsigned("csum_block_order", csum_block_order);
+  f->dump_unsigned("num_refs", num_refs);
+  f->open_array_section("csum_data");
+  size_t n = get_csum_count();
+  for (unsigned i = 0; i < n; ++i)
+    f->dump_unsigned("csum", get_csum_item(i));
+  f->close_section();
+}
+
+void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
+{
+  ls.push_back(new bluestore_blob_t);
+  ls.push_back(new bluestore_blob_t(4096, 0));
+  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
+  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
+  ls.back()->csum_type = CSUM_XXHASH32;
+  ls.back()->csum_block_order = 16;
+  ls.back()->num_refs = 2;
+  ls.back()->csum_data = vector<char>{1, 2, 3, 4};  // one uint32_t
+}
+
+ostream& operator<<(ostream& out, const bluestore_blob_t& o)
+{
+  out << "blob(" << o.extents
+      << " len " << o.length
+      << " " << o.get_flags_string();
+  if (o.csum_type) {
+    out << " csum " << o.get_csum_type_string(o.csum_type)
+	<< " order " << o.csum_block_order;
+  }
+  out << ")";
+  return out;
+}
+
+// bluestore_lextent_t
+
+string bluestore_lextent_t::get_flags_string(unsigned flags)
+{
+  string s;
+  return s;
+}
+
+void bluestore_lextent_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("blob", blob);
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("flags", flags);
+}
+
+void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& ls)
+{
+  ls.push_back(new bluestore_lextent_t);
+  ls.push_back(new bluestore_lextent_t(23232, 0, 4096, 0));
+  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192, 7));
+}
+
+ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
+{
+  out  << lb.offset << "~" << lb.length << "->" << lb.blob;
+  if (lb.flags)
+    out << ":" << bluestore_lextent_t::get_flags_string(lb.flags);
+  return out;
+}
+
+
 // bluestore_onode_t
 
 void bluestore_onode_t::encode(bufferlist& bl) const
