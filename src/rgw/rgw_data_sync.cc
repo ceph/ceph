@@ -173,6 +173,8 @@ public:
                                                       pmarker(_pmarker),
                                                       entries(_entries),
                                                       truncated(_truncated) {
+  }
+  ~RGWReadRemoteDataLogShardCR() {
     if (http_op) {
       http_op->put();
     }
