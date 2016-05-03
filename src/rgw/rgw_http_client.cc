@@ -562,6 +562,12 @@ int RGWHTTPManager::set_threaded()
 
 void RGWHTTPManager::stop()
 {
+  if (is_stopped.read()) {
+    return;
+  }
+
+  is_stopped.set(1);
+
   if (is_threaded) {
     going_down.set(1);
     signal_thread();
