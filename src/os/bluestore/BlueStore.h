@@ -74,6 +74,7 @@ public:
     EnodeSet *enode_set;  ///< reference to the containing set
 
     bluestore_extent_ref_map_t ref_map;
+    bluestore_blob_map_t blob_map;
 
     Enode(uint32_t h, const string& k, EnodeSet *s)
       : nref(0),
@@ -85,6 +86,13 @@ public:
       ++nref;
     }
     void put();
+
+    bluestore_blob_t *get_blob_ptr(int64_t id) {
+      bluestore_blob_map_t::iterator p = blob_map.find(id);
+      if (p == blob_map.end())
+	return nullptr;
+      return &p->second;
+    }
 
     friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
     friend void intrusive_ptr_release(Enode *e) { e->put(); }
@@ -145,6 +153,15 @@ public:
 	oid(o),
 	key(k),
 	exists(false) {
+    }
+
+    bluestore_blob_t *get_blob_ptr(int64_t id) {
+      if (id < 0) {
+	assert(enode);
+	return enode->get_blob_ptr(-id);
+      } else {
+	return onode.get_blob_ptr(id);
+      }
     }
 
     void flush();
