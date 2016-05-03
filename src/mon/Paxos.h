@@ -789,7 +789,7 @@ private:
    * knows something we don't and the Leader will have to abort the current
    * proposal in order to retry with the Proposal Number specified by the Peon.
    * It may also occur that the Peon replied with a lower Proposal Number, in
-   * which case we assume it is a reply to an an older value and we'll simply
+   * which case we assume it is a reply to an older value and we'll simply
    * drop it.
    * This function will also check if the Peon replied with an accepted but
    * yet uncommitted value. In this case, if its version is higher than our
