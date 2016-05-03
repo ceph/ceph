@@ -242,9 +242,10 @@ public:
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       source_log(store, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
-    delete error_logger;
+    finalize();
   }
   int init();
+  void finalize();
 
   rgw_data_sync_status& get_sync_status() { return sync_status; }
 

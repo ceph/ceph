@@ -2947,7 +2947,10 @@ public:
   }
 
   int process() {
-    while (!going_down()) {
+    while (!initialized) {
+      if (going_down()) {
+        return 0;
+      }
       int ret = sync.init();
       if (ret >= 0) {
         initialized = true;
