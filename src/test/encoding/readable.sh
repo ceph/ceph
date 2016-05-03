@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 source $(dirname $0)/../detect-build-env-vars.sh
 
