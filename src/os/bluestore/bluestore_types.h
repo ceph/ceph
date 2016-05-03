@@ -522,8 +522,8 @@ struct bluestore_wal_op_t {
     OP_ZERO = 4,
   } type_t;
   __u8 op = 0;
-  bluestore_extent_t extent;
-  bluestore_extent_t src_extent;
+  bluestore_pextent_t extent;
+  bluestore_pextent_t src_extent;
   uint64_t src_rmw_head, src_rmw_tail;
   bufferlist data;
   uint64_t nid;
