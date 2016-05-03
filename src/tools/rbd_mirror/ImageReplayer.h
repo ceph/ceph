@@ -88,8 +88,10 @@ public:
   void set_state_description(int r, const std::string &desc);
 
   void start(Context *on_finish = nullptr,
-	     const BootstrapParams *bootstrap_params = nullptr);
-  void stop(Context *on_finish = nullptr);
+	     const BootstrapParams *bootstrap_params = nullptr,
+	     bool manual = false);
+  void stop(Context *on_finish = nullptr, bool manual = false);
+  void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
 
   void print_status(Formatter *f, stringstream *ss);
@@ -226,6 +228,7 @@ private:
   librados::AioCompletion *m_update_status_comp = nullptr;
   bool m_update_status_pending = false;
   bool m_stop_requested = false;
+  bool m_manual_stop = false;
 
   AdminSocketHook *m_asok_hook = nullptr;
 
