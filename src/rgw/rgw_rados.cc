@@ -1496,7 +1496,6 @@ int RGWZoneParams::create(bool exclusive)
 
   r = RGWSystemMetaObj::create(exclusive);
   if (r < 0) {
-    ldout(cct, 0) << "RGWZoneParams::create(): error creating default zone params: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
