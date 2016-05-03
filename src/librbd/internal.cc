@@ -1076,6 +1076,14 @@ err_remove_id:
 
     return 0;
   }
+
+  int image_name_by_id(librados::IoCtx& image_ioctx, const char *image_id, std::string& image_name)
+  {
+    std::string id(image_id);
+    int r = cls_client::dir_get_name(&image_ioctx, RBD_DIRECTORY, id, &image_name);
+    return r;
+  }
+
   int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
                    librados::IoCtx& image_ioctx, const char *image_name)
   {

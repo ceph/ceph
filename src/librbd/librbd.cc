@@ -278,6 +278,12 @@ namespace librbd {
     return r;
   }
 
+  int RBD::image_name_by_id(IoCtx& image_ioctx, const char *image_id, std::string& image_name)
+  {
+    int r = librbd::image_name_by_id(image_ioctx, image_id, image_name);
+    return r;
+  }
+
   int RBD::cg_add_image(IoCtx& cg_ioctx, const char *cg_name, IoCtx& image_ioctx, const char *image_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));

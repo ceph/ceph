@@ -553,6 +553,17 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
   return 0;
 }
 
+int init_io_ctx2(librados::Rados &rados, int64_t pool_id,
+                librados::IoCtx *io_ctx) {
+  int r = rados.ioctx_create2(pool_id, *io_ctx);
+  if (r < 0) {
+    std::cerr << "rbd: error opening pool " << pool_id << ": "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image) {
   int r;
