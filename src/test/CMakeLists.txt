@@ -786,3 +786,23 @@ add_ceph_unittest(unittest_pageset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pa
 
 #make check ends here
 
+# unittest_direct_messenger
+add_executable(unittest_direct_messenger EXCLUDE_FROM_ALL
+                messenger/test_direct_messenger.cc)
+add_test(unittest_direct_messenger unittest_direct_messenger)
+add_dependencies(check unittest_direct_messenger)
+target_link_libraries(unittest_direct_messenger global boost_system)
+set_target_properties(unittest_direct_messenger
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS}
+)
+
+add_executable(time_direct EXCLUDE_FROM_ALL
+                messenger/time_direct.cc)
+add_test(time_direct time_direct)
+add_dependencies(check time_direct)
+target_link_libraries(time_direct global boost_system
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS})
+set_target_properties(time_direct
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS}
+)
