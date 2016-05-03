@@ -238,7 +238,8 @@ struct bluestore_blob_t {
   uint8_t csum_type;               ///< CSUM_*
   uint8_t csum_block_order;        ///< csum block size is 1<<block_order bytes
 
-  uint16_t num_refs;               ///< reference count (always 1 when in onode)
+  uint32_t num_refs;               ///< num lextents that point to me
+  bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   vector<char> csum_data;          ///< opaque vector of csum data
 
   bluestore_blob_t(uint32_t l = 0, uint32_t f = 0)
@@ -246,7 +247,8 @@ struct bluestore_blob_t {
       flags(f),
       csum_type(CSUM_NONE),
       csum_block_order(12),
-      num_refs(1) {}
+      num_refs(1) {
+  }
 
   bluestore_blob_t(uint32_t l, const bluestore_pextent_t& ext, uint32_t f = 0)
     : length(l),
@@ -380,6 +382,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
 /// blob id: positive = local, negative = shared bnode
 typedef int64_t bluestore_blob_id_t;
+
 
 /// lextent: logical data block back by the extent
 struct bluestore_lextent_t {
