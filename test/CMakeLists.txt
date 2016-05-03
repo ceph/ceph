@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src/crimson/src)
+include_directories(${BOOST_INCLUDE_DIR})
 
 # set(local_flags "-g -O0")
 
@@ -27,6 +28,6 @@ function(make_tests)
   endforeach()
 endfunction()
 
-make_tests(dmclock_server dmclock_client test_client)
+make_tests(dmclock_server dmclock_server_pull dmclock_client test_client)
 
 add_dependencies(check tests)

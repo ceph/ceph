@@ -42,6 +42,23 @@ namespace crimson {
 
     public:
 
+      struct InternalStats {
+	std::mutex mtx;
+	std::chrono::microseconds add_request_time;
+	std::chrono::microseconds request_complete_time;
+	uint32_t add_request_count;
+	uint32_t request_complete_count;
+
+	InternalStats() :
+	  add_request_time(0),
+	  request_complete_time(0),
+	  add_request_count(0),
+	  request_complete_count(0)
+	{
+	  // empty
+	}
+      };
+
       using ClientRespFunc = std::function<void(ClientId,
 						const TestResponse&,
 						const ServerId&,
@@ -74,6 +91,8 @@ namespace crimson {
 
       ServerAccumFunc accum_f;
       Accum accumulator;
+
+      InternalStats internal_stats;
 
     public:
 
@@ -128,8 +147,15 @@ namespace crimson {
 
       void post(const TestRequest& request,
 		const ClientId& client_id,
-		const ReqPm& req_params) {
-	priority_queue->add_request(request, client_id, req_params);
+		const ReqPm& req_params)
+      {
+	time_stats(internal_stats.mtx,
+		   internal_stats.add_request_time,
+		   [&](){
+		     priority_queue->add_request(request, client_id, req_params);
+		   });
+	count_stats(internal_stats.mtx,
+		    internal_stats.add_request_count);
       }
 
       bool has_avail_thread() {
@@ -138,8 +164,8 @@ namespace crimson {
       }
 
       const Accum& get_accumulator() const { return accumulator; }
-
       const Q& get_priority_queue() const { return *priority_queue; }
+      const InternalStats& get_internal_stats() const { return internal_stats; }
 
     protected:
 
@@ -154,7 +180,6 @@ namespace crimson {
 					   additional));
 	inner_queue_cv.notify_one();
       }
-
 
       void run(std::chrono::milliseconds check_period) {
 	Lock l(inner_queue_mtx);
@@ -180,7 +205,13 @@ namespace crimson {
 	    // pass in a function that does this mapping?
 	    client_resp_f(client, resp, id, additional);
 
-	    priority_queue->request_completed();
+	    time_stats(internal_stats.mtx,
+		       internal_stats.request_complete_time,
+		       [&](){
+			 priority_queue->request_completed();
+		       });
+	    count_stats(internal_stats.mtx,
+			internal_stats.request_complete_count);
 
 	    l.lock(); // in prep for next iteration of loop
 	  } else {

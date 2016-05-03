@@ -43,7 +43,9 @@ namespace crimson {
       std::vector<ServerId> server_ids;
 
       TimePoint early_time;
+      TimePoint servers_created_time;
       TimePoint clients_created_time;
+      TimePoint clients_finished_time;
       TimePoint late_time;
 
       std::default_random_engine prng;
@@ -90,7 +92,9 @@ namespace crimson {
       uint get_server_count() const { return server_count; }
       TC& get_client(ClientId id) { return *clients[id]; }
       TS& get_server(ServerId id) { return *servers[id]; }
-      const ServerId& get_server_id(uint index) const { return server_ids[index]; }
+      const ServerId& get_server_id(uint index) const {
+	return server_ids[index];
+      }
 
 
       void add_servers(uint count,
@@ -100,6 +104,8 @@ namespace crimson {
 	  servers[i] = create_server_f(server_count + i);
 	}
 	server_count += count;
+
+	servers_created_time = now();
       }
 
 
@@ -126,9 +132,11 @@ namespace crimson {
 	  i.second->wait_until_done();
 	}
 
-	late_time = now();
+	late_time = clients_finished_time = now();
 
-	std::cout << "simulation complete" << std::endl;
+	std::cout << "simulation completed in " <<
+	  std::chrono::duration_cast<std::chrono::milliseconds>(clients_finished_time - servers_created_time).count() <<
+	  " millisecs" << std::endl;
 
 	has_run = true;
       } // run
@@ -136,14 +144,19 @@ namespace crimson {
 
       void display_stats(std::ostream& out,
 			 ServerDataOutF server_out_f, ClientDataOutF client_out_f,
-			 ServerFilter server_filter = [](const ServerId&) { return true; },
-			 ClientFilter client_filter = [](const ClientId&) { return true; },
+			 ServerFilter server_filter =
+			 [] (const ServerId&) { return true; },
+			 ClientFilter client_filter =
+			 [] (const ClientId&) { return true; },
 			 int head_w = 12, int data_w = 8, int data_prec = 2) {
 	assert(has_run);
-    
-	const std::chrono::seconds skip_amount(0); // skip first 2 secondsd of data
-	const std::chrono::seconds measure_unit(2); // calculate in groups of 5 seconds
-	const std::chrono::seconds report_unit(1); // unit to output reports in
+
+	// skip first 2 secondsd of data
+	const std::chrono::seconds skip_amount(0);
+	// calculate in groups of 5 seconds
+	const std::chrono::seconds measure_unit(2);
+	// unit to output reports in
+	const std::chrono::seconds report_unit(1);
 
 	// compute and display stats
 
@@ -223,6 +236,8 @@ namespace crimson {
 
 	client_out_f(out, this, client_filter, head_w, data_w, data_prec);
 
+	display_client_internal_stats(out);
+
 	out << std::endl << "==== Server Data ====" << std::endl;
 
 	out << std::setw(head_w) << "server:";
@@ -233,6 +248,8 @@ namespace crimson {
 	out << std::setw(data_w) << "total" << std::endl;
 
 	server_out_f(out, this, server_filter, head_w, data_w, data_prec);
+
+	display_server_internal_stats(out);
 
 	// clean up clients then servers
 
@@ -248,17 +265,99 @@ namespace crimson {
       } // display_stats
 
 
+      void display_server_internal_stats(std::ostream& out) {
+	std::chrono::microseconds add_request_time(0);
+	std::chrono::microseconds request_complete_time(0);
+	uint32_t add_request_count = 0;
+	uint32_t request_complete_count = 0;
+
+	for (uint i = 0; i < get_server_count(); ++i) {
+	  const auto& server = get_server(i);
+	  const auto& is = server.get_internal_stats();
+	  add_request_time += is.add_request_time;
+	  request_complete_time += is.request_complete_time;
+	  add_request_count += is.add_request_count;
+	  request_complete_count += is.request_complete_count;
+	}
+
+	double add_request_time_per_unit =
+	  double(add_request_time.count()) / add_request_count ;
+	out << "total time to add requests: " <<
+	  std::fixed << add_request_time.count() << " microsecs;" << std::endl <<
+	  "    count: " << add_request_count << ";" << std::endl <<
+	  "    average: " << add_request_time_per_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	double request_complete_time_unit =
+	  double(request_complete_time.count()) / request_complete_count ;
+	out << "total time to note requests complete: " << std::fixed <<
+	  request_complete_time.count() << " microsecs;" << std::endl << 
+	  "    count: " << request_complete_count << ";" << std::endl <<
+	  "    average: " << request_complete_time_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	out << std::endl;
+
+	assert(add_request_count == request_complete_count);
+	out << "server timing for QOS algorithm: " <<
+	  add_request_time_per_unit + request_complete_time_unit <<
+	  " microsecs per request/response" << std::endl;
+      }
+
+
+      void display_client_internal_stats(std::ostream& out) {
+	std::chrono::microseconds track_resp_time(0);
+	std::chrono::microseconds get_req_params_time(0);
+	uint32_t track_resp_count = 0;
+	uint32_t get_req_params_count = 0;
+
+	for (uint i = 0; i < get_client_count(); ++i) {
+	  const auto& client = get_client(i);
+	  const auto& is = client.get_internal_stats();
+	  track_resp_time += is.track_resp_time;
+	  get_req_params_time += is.get_req_params_time;
+	  track_resp_count += is.track_resp_count;
+	  get_req_params_count += is.get_req_params_count;
+	}
+
+	double track_resp_time_unit =
+	  double(track_resp_time.count()) / track_resp_count;
+	out << "total time to track responses: " <<
+	  std::fixed << track_resp_time.count() << " microsecs;" << std::endl <<
+	  "    count: " << track_resp_count << ";" << std::endl <<
+	  "    average: " << track_resp_time_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	double get_req_params_time_unit =
+	  double(get_req_params_time.count()) / get_req_params_count;
+	out << "total time to get request parameters: " <<
+	  std::fixed << get_req_params_time.count() << " microsecs;" << std::endl <<
+	  "    count: " << get_req_params_count << ";" << std::endl <<
+	  "    average: " << get_req_params_time_unit <<
+	  " microsecs per request/response" << std::endl;
+
+	out << std::endl;
+
+	assert(track_resp_count == get_req_params_count);
+	out << "client timing for QOS algorithm: " <<
+	  track_resp_time_unit + get_req_params_time_unit <<
+	  " microsecs per request/response" << std::endl;
+      }
+
+
       // **** server selection functions ****
 
 
-      const ServerId& server_select_alternate(uint64_t seed, uint16_t client_idx) {
+      const ServerId& server_select_alternate(uint64_t seed,
+					      uint16_t client_idx) {
 	uint index = (client_idx + seed) % server_count;
 	return server_ids[index];
       }
 
 
       // returns a lambda using the range specified as servers_per (client)
-      ClientBasedServerSelectFunc make_server_select_alt_range(uint16_t servers_per) {
+      ClientBasedServerSelectFunc
+      make_server_select_alt_range(uint16_t servers_per) {
 	return [servers_per,this](uint64_t seed, uint16_t client_idx)
 	  -> const ServerId& {
 	  double factor = double(server_count) / client_count;
@@ -277,7 +376,8 @@ namespace crimson {
 
   
       // function to choose a server randomly
-      ClientBasedServerSelectFunc make_server_select_ran_range(uint16_t servers_per) {
+      ClientBasedServerSelectFunc
+      make_server_select_ran_range(uint16_t servers_per) {
 	return [servers_per,this](uint64_t seed, uint16_t client_idx)
 	  -> const ServerId& {
 	  double factor = double(server_count) / client_count;

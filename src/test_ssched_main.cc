@@ -116,7 +116,8 @@ int main(int argc, char* argv[]) {
 				  server_post_f,
 				  std::bind(server_select_f, _1, id),
 				  test::simple_client_accumulate_f,
-				  id < (client_count - client_wait_count) ? no_wait : wait);
+				  id < (client_count - client_wait_count)
+				  ? no_wait : wait);
   };
 
   simulation->add_servers(server_count, create_server_f);

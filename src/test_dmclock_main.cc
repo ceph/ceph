@@ -17,17 +17,17 @@ using namespace std::placeholders;
 
 
 namespace crimson {
-  namespace test_dmc {
-void server_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ServerFilter server_disp_filter,
-		 int head_w, int data_w, int data_prec);
+    namespace test_dmc {
+        void server_data(std::ostream& out,
+                         test::MySim* sim,
+                         test::MySim::ServerFilter server_disp_filter,
+                         int head_w, int data_w, int data_prec);
 
-void client_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ClientFilter client_disp_filter,
-		 int head_w, int data_w, int data_prec);
-  }
+        void client_data(std::ostream& out,
+                         test::MySim* sim,
+                         test::MySim::ClientFilter client_disp_filter,
+                         int head_w, int data_w, int data_prec);
+    }
 }
 
 
@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
     const uint server_count = 100;
     const uint server_iops = 40;
     const uint server_threads = 1;
-    const bool server_soft_limit = false;
+    const bool server_soft_limit = true;
 
     // client params
 
@@ -54,8 +54,9 @@ int main(int argc, char* argv[]) {
     const double client_limit = 60.0;
     const double client_weight = 1.0;
 
-    test::dmc::ClientInfo client_info =
-        { client_weight, client_reservation, client_limit };
+    test::dmc::ClientInfo client_info(client_reservation,
+                                      client_weight,
+                                      client_limit);
 
     auto client_info_f = [=](const ClientId& c) -> test::dmc::ClientInfo {
         return client_info;

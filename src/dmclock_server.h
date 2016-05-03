@@ -13,7 +13,7 @@
  * would help with is quickly finding the mininum proportion/prioity
  * when an idle client became active
  */
-// #define USE_PROP_HEAP 
+// #define USE_PROP_HEAP
 
 #pragma once
 
@@ -30,8 +30,9 @@
 #include <condition_variable>
 #include <thread>
 #include <iostream>
+#include <limits>
 
-#include "boost/variant.hpp"
+#include <boost/variant.hpp>
 
 #include "indirect_intrusive_heap.h"
 #include "run_every.h"
@@ -47,6 +48,9 @@ namespace crimson {
 
     namespace c = crimson;
 
+    constexpr double max_tag = std::numeric_limits<double>::max();
+    constexpr double min_tag = std::numeric_limits<double>::lowest();
+
     struct ClientInfo {
       const double reservation;  // minimum
       const double weight;       // proportional
@@ -58,7 +62,8 @@ namespace crimson {
       const double weight_inv;
       const double limit_inv;
 
-      ClientInfo(double _weight, double _reservation, double _limit) :
+      // order parameters -- min, "normal", max
+      ClientInfo(double _reservation, double _weight, double _limit) :
 	reservation(_reservation),
 	weight(_weight),
 	limit(_limit),
@@ -101,18 +106,21 @@ namespace crimson {
 	reservation(tag_calc(time,
 			     prev_tag.reservation,
 			     client.reservation_inv,
-			     req_params.rho)),
+			     req_params.rho,
+			     true)),
 	proportion(tag_calc(time,
 			    prev_tag.proportion,
 			    client.weight_inv,
-			    req_params.delta)),
+			    req_params.delta,
+			    true)),
 	limit(tag_calc(time,
 		       prev_tag.limit,
 		       client.limit_inv,
-		       req_params.delta)),
+		       req_params.delta,
+		       false)),
 	ready(false)
       {
-	// empty
+	assert(reservation < max_tag || proportion < max_tag);
       }
 
       RequestTag(double _res, double _prop, double _lim) :
@@ -121,7 +129,7 @@ namespace crimson {
 	limit(_lim),
 	ready(false)
       {
-	// empty
+	assert(reservation < max_tag || proportion < max_tag);
       }
 
       RequestTag(const RequestTag& other) :
@@ -138,12 +146,13 @@ namespace crimson {
       static double tag_calc(const Time& time,
 			     double prev,
 			     double increment,
-			     uint32_t dist_req_val) {
+			     uint32_t dist_req_val,
+			     bool extreme_is_high) {
 	if (0 != dist_req_val) {
 	  increment *= dist_req_val;
 	}
 	if (0.0 == increment) {
-	  return 0.0;
+	  return extreme_is_high ? max_tag : min_tag;
 	} else {
 	  return std::max(time, prev + increment);
 	}
@@ -337,7 +346,7 @@ namespace crimson {
 	boost::variant<Retn,Time> data;
       };
 
-      
+
       // this is returned from next_req to tell the caller the situation
       struct NextReq {
 	NextReqType type;
@@ -353,6 +362,26 @@ namespace crimson {
 
     protected:
 
+      // The ClientCompare functor is essentially doing a precedes?
+      // operator, returning true if and only if the first parameter
+      // must precede the second parameter. If the second must precede
+      // the first, or if they are equivalent, false should be
+      // returned. The reason for this behavior is that it will be
+      // called to test if two items are out of order and if true is
+      // returned it will reverse the items. Therefore false is the
+      // default return when it doesn't matter to prevent unnecessary
+      // re-ordering.
+      //
+      // The template is supporting variations in sorting based on the
+      // heap in question and allowing these variations to be handled
+      // at compile-time.
+      //
+      // tag_field determines which tag is being used for comparison
+      //
+      // ready_opt determines how the ready flag influences the sort
+      //
+      // use_prop_delta determines whether the proportial delta is
+      // added in for comparison
       template<double RequestTag::*tag_field,
 	       ReadyOption ready_opt,
 	       bool use_prop_delta>
@@ -584,14 +613,14 @@ namespace crimson {
 		    get_time());
       }
 
-      
+
       void add_request(RequestRef&& request,
 		       const C& client_id,
 		       const ReqParams& req_params) {
 	add_request(request, req_params, client_id, get_time());
       }
 
-      
+
       void add_request(const R& request,
 		       const C& client_id,
 		       const ReqParams& req_params,
@@ -691,14 +720,19 @@ namespace crimson {
 
 
       PullReq pull_request() {
+	return pull_request(get_time());
+      }
+
+
+      PullReq pull_request(Time now) {
 	assert(Mechanism::pull == mechanism);
 
 	PullReq result;
 	DataGuard g(data_mtx);
 
-	NextReq next = next_request();
+	NextReq next = next_request(now);
 	result.type = next.type;
-	switch(next.status) {
+	switch(next.type) {
 	case NextReqType::none:
 	  return result;
 	  break;
@@ -732,16 +766,23 @@ namespace crimson {
 	  ++reserv_sched_count;
 	  break;
 	case HeapId::ready:
-	  pop_process_request(ready_heap, process_f(result, PhaseType::priority));
-	  reduce_reservation_tags(result.client);
+	{
+	  pop_process_request(ready_heap,
+			      process_f(result, PhaseType::priority));
+	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	  reduce_reservation_tags(retn.client);
 	  ++prop_sched_count;
-	  break;
+	}
+	break;
 #if USE_PROP_HEAP
 	case HeapId::proportional:
+	{
 	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
-	  reduce_reservation_tags(result.client);
+	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	  reduce_reservation_tags(retn.client);
 	  ++limit_break_sched_count;
-	  break;
+	}
+	break;
 #endif
 	default:
 	  assert(false);
@@ -892,7 +933,7 @@ namespace crimson {
 	return next_request(get_time());
       }
 
-      
+
       // data_mtx should be held when called
       NextReq next_request(Time now) {
 	NextReq result;
@@ -934,12 +975,31 @@ namespace crimson {
 	  limits = &limit_heap.top();
 	}
 
-	auto readys = &ready_heap.top();
-	if (readys->has_request() &&
-	    (readys->next_request().tag.ready || allow_limit_break)) {
+	auto& readys = ready_heap.top();
+	if (readys.has_request() &&
+	    readys.next_request().tag.ready &&
+	    readys.next_request().tag.proportion < max_tag) {
 	  result.type = NextReqType::returning;
 	  result.heap_id = HeapId::ready;
 	  return result;
+	}
+
+	// if nothing is schedulable by reservation or
+	// proportion/weight, and if we allow limit break, try to
+	// schedule something with the lowest proportion tag or
+	// alternatively lowest reservation tag.
+	if (allow_limit_break) {
+	  if (readys.has_request() &&
+	      readys.next_request().tag.proportion < max_tag) {
+	    result.type = NextReqType::returning;
+	    result.heap_id = HeapId::ready;
+	    return result;
+	  } else if (reserv.has_request() &&
+		     reserv.next_request().tag.reservation < max_tag) {
+	    result.type = NextReqType::returning;
+	    result.heap_id = HeapId::reservation;
+	    return result;
+	  }
 	}
 
 	// nothing scheduled; make sure we re-run when next

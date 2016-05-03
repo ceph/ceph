@@ -28,8 +28,8 @@ namespace crimson {
    *   and that must allow dereferencing (via operator*) to yield a
    *   T&.
    *
-   * C is a functor when given T& will return true if the first
-   *   definitely precedes the first.
+   * C is a functor when given two T&'s will return true if the first
+   *   must precede the second.
    *
    * heap_info is a data member pointer as to where the heap data in T
    * is stored.

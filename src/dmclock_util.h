@@ -30,7 +30,9 @@ namespace crimson {
 
     inline Time get_time() {
       struct timeval now;
-      assert(0 == gettimeofday(&now, NULL));
+      auto result = gettimeofday(&now, NULL);
+      (void) result;
+      assert(0 == result);
       return now.tv_sec + (now.tv_usec / 1000000.0);
     }
 
