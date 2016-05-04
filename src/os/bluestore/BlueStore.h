@@ -883,6 +883,8 @@ private:
 		   uint64_t offset, uint64_t length,
 		   uint32_t fadvise_flags,
 		   bool allow_overlay,
+		   uint64_t *alloc_offset,
+		   uint64_t *alloc_length,
 		   uint64_t *rmw_cow_head,
 		   uint64_t *rmw_cow_tail);
   int _do_write(TransContext *txc,

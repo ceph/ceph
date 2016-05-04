@@ -5010,6 +5010,8 @@ int BlueStore::_do_allocate(
   uint64_t orig_offset, uint64_t orig_length,
   uint32_t fadvise_flags,
   bool allow_overlay,
+  uint64_t *alloc_offset,
+  uint64_t *alloc_length,
   uint64_t *cow_rmw_head,
   uint64_t *cow_rmw_tail)
 {
@@ -5248,13 +5250,13 @@ int BlueStore::_do_allocate(
       }
     }
 
+    *alloc_offset = offset;
+    *alloc_length = length;
+
     // allocate our new extent(s)
     uint64_t alloc_start = offset;
     while (length > 0) {
       bluestore_extent_t e;
-      // for safety, set the UNWRITTEN flag here.  We should clear this in
-      // _do_write or else we likely have problems.
-      e.flags |= bluestore_extent_t::FLAG_UNWRITTEN;
       int r = alloc->allocate(length, min_alloc_size, hint,
 			      &e.offset, &e.length);
       assert(r == 0);
@@ -5330,6 +5332,7 @@ int BlueStore::_do_write(
   uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   map<uint64_t, bluestore_extent_t>::iterator bp;
   uint64_t length;
+  uint64_t alloc_offset = 0, alloc_length = 0;
   uint64_t cow_rmw_head = 0;
   uint64_t cow_rmw_tail = 0;
 
@@ -5339,6 +5342,7 @@ int BlueStore::_do_write(
   }
 
   r = _do_allocate(txc, c, o, orig_offset, orig_length, fadvise_flags, true,
+		   &alloc_offset, &alloc_length,
 		   &cow_rmw_head, &cow_rmw_tail);
   if (r < 0) {
     derr << __func__ << " allocate failed, " << cpp_strerror(r) << dendl;
@@ -5397,7 +5401,8 @@ int BlueStore::_do_write(
       assert(offset % block_size == 0);
       assert(length % block_size == 0);
       uint64_t x_off = offset - bp->first;
-      if (bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN) &&
+      if (bp->first >= alloc_offset &&
+	  bp->first + bp->second.length <= alloc_offset + alloc_length &&
 	  !bp->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD)) {
 	if (x_off > 0) {
 	  // extent is unwritten; zero up until x_off
@@ -5420,7 +5425,6 @@ int BlueStore::_do_write(
       dout(20) << __func__ << " write " << offset << "~" << length
 	       << " x_off " << x_off << dendl;
       bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
-      bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
       ++bp;
       continue;
     }
@@ -5459,11 +5463,11 @@ int BlueStore::_do_write(
 	bl.swap(t);
       }
       assert(offset == tail_start);
-      assert(!bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN) ||
+      assert((bp->first + bp->second.length <= alloc_offset ||
+	      bp->first >= alloc_offset + alloc_length) ||
 	     bp->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD) ||
 	     offset == bp->first);
       bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
-      bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
       _pad_zeros(txc, o, &bl, &offset, &length, block_size);
       uint64_t x_off = offset - bp->first;
       dout(20) << __func__ << " write " << offset << "~" << length
@@ -5481,10 +5485,12 @@ int BlueStore::_do_write(
 
     if (offset % min_alloc_size == 0 &&
 	length % min_alloc_size == 0) {
-      assert(bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN));
+      assert(bp->first >= alloc_offset &&
+	     bp->first + bp->second.length <= alloc_offset + alloc_length);
     }
 
-    if (bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN)) {
+    if (bp->first >= alloc_offset &&
+	bp->first + bp->second.length <= alloc_offset + alloc_length) {
       // NOTE: we may need to zero before or after our write if the
       // prior extent wasn't allocated but we are still doing some COW.
       uint64_t z_end = offset & block_mask;
@@ -5516,7 +5522,6 @@ int BlueStore::_do_write(
 		 << " x_off " << x_off << dendl;
 	_do_overlay_trim(txc, o, offset, length);
 	bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
-	bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
 	bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
 	bp->second.clear_flag(bluestore_extent_t::FLAG_COW_TAIL);
 	++bp;
@@ -5561,7 +5566,6 @@ int BlueStore::_do_write(
     }
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
     bp->second.clear_flag(bluestore_extent_t::FLAG_COW_TAIL);
-    bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
     op->extent.offset = bp->second.offset + offset - bp->first;
     op->extent.length = length;
     op->data = bl;
@@ -5586,12 +5590,6 @@ int BlueStore::_do_write(
   for (map<uint64_t,bluestore_extent_t>::iterator p = o->onode.block_map.begin();
        p != o->onode.block_map.end();
        ++p) {
-    if (p->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN)) {
-      derr << __func__ << " left behind an unwritten extent, out of sync with "
-	   << "_do_allocate" << dendl;
-      _dump_onode(o, 0);
-      assert(0 == "leaked unwritten extent");
-    }
     if (p->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD) ||
 	p->second.has_flag(bluestore_extent_t::FLAG_COW_TAIL)) {
       derr << __func__ << " left behind a COW extent, out of sync with "
