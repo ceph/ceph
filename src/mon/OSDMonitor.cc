@@ -599,10 +599,13 @@ int OSDMonitor::reweight_by_utilization(int oload,
     util_by_osd.push_back(osd_util);
   }
 
-  // sort and iterate from most to least utilized
-  std::sort(util_by_osd.begin(), util_by_osd.end(), [](std::pair<int, float> l, std::pair<int, float> r) {
-    return l.second > r.second;
-  });
+  // sort by absolute deviation from the mean utilization,
+  // in descending order.
+  std::sort(util_by_osd.begin(), util_by_osd.end(),
+    [average_util](std::pair<int, float> l, std::pair<int, float> r) {
+      return abs(l.second - average_util) > abs(r.second - average_util);
+    }
+  );
 
   OSDMap::Incremental newinc;
 
@@ -1710,6 +1713,13 @@ bool OSDMonitor::check_failures(utime_t now)
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
+  // already pending failure?
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return true;
+  }
+
   set<string> reporters_by_subtree;
   string reporter_subtree_level = g_conf->mon_osd_reporter_subtree_level;
   utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
@@ -1764,14 +1774,6 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << grace << " grace (" << orig_grace << " + " << my_grace
 	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
-
-  // already pending failure?
-  if (pending_inc.new_state.count(target_osd) &&
-      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
-    dout(10) << " already pending failure" << dendl;
-    return true;
-  }
-
 
   if (failed_for >= grace &&
       (int)reporters_by_subtree.size() >= g_conf->mon_osd_min_down_reporters) {
