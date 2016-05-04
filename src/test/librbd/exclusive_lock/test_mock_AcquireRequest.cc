@@ -65,9 +65,9 @@ public:
   }
 
   void expect_open_object_map(MockImageCtx &mock_image_ctx,
-                              MockObjectMap &mock_object_map) {
+                              MockObjectMap &mock_object_map, int r) {
     EXPECT_CALL(mock_object_map, open(_))
-                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+                  .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_close_object_map(MockImageCtx &mock_image_ctx,
@@ -192,7 +192,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   MockObjectMap mock_object_map;
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, &mock_object_map);
-  expect_open_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, mock_object_map, 0);
 
   MockJournal mock_journal;
   MockJournalPolicy mock_journal_policy;
@@ -228,7 +228,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   MockObjectMap mock_object_map;
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, &mock_object_map);
-  expect_open_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, mock_object_map, 0);
 
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
 
@@ -291,7 +291,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   MockObjectMap *mock_object_map = new MockObjectMap();
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, mock_object_map);
-  expect_open_object_map(mock_image_ctx, *mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map, 0);
 
   MockJournal *mock_journal = new MockJournal();
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
@@ -326,7 +326,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, AllocateJournalTagError) {
   MockObjectMap *mock_object_map = new MockObjectMap();
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, mock_object_map);
-  expect_open_object_map(mock_image_ctx, *mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map, 0);
 
   MockJournal *mock_journal = new MockJournal();
   MockJournalPolicy mock_journal_policy;
@@ -651,6 +651,43 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockError) {
                                                        nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockExclusiveLockAcquireRequest, OpenObjectMapError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
+  expect_lock(mock_image_ctx, 0);
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_create_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map, -EFBIG);
+
+  MockJournal mock_journal;
+  MockJournalPolicy mock_journal_policy;
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+  expect_create_journal(mock_image_ctx, &mock_journal);
+  expect_open_journal(mock_image_ctx, mock_journal, 0);
+  expect_get_journal_policy(mock_image_ctx, mock_journal_policy);
+  expect_allocate_journal_tag(mock_image_ctx, mock_journal_policy, 0);
+
+  C_SaferCond acquire_ctx;
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(0, acquire_ctx.wait());
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(nullptr, mock_image_ctx.object_map);
 }
 
 } // namespace exclusive_lock
