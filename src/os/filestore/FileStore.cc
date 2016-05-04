@@ -4928,7 +4928,7 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   Index index;
-  const char *where = 0;
+  const char *where = "()";
   int r = get_index(c, &index);
   if (r < 0) {
     where = " (get_index)";
@@ -4946,6 +4946,7 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
   r = object_map->get_values(hoid, keys, out);
   if (r < 0 && r != -ENOENT) {
     assert(!m_filestore_fail_eio || r != -EIO);
+    where = " (get_values)";
     goto out;
   }
   r = 0;
