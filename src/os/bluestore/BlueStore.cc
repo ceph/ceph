@@ -3757,6 +3757,9 @@ void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 
   // journal wal items
   if (txc->wal_txn) {
+    txc->wal_txn->released.swap(txc->released);
+    assert(txc->released.empty());
+
     txc->wal_txn->seq = wal_seq.inc();
     bufferlist bl;
     ::encode(*txc->wal_txn, bl);
@@ -3873,20 +3876,15 @@ void BlueStore::_txc_update_fm(TransContext *txc)
     fm->allocate(p.get_start(), p.get_len(), txc->t);
   }
 
-  if (txc->wal_txn) {
-    txc->wal_txn->released.swap(txc->released);
-    assert(txc->released.empty());
-  } else {
-    for (interval_set<uint64_t>::iterator p = txc->released.begin();
-	p != txc->released.end();
-	++p) {
-      dout(20) << __func__ << " release " << p.get_start()
-	<< "~" << p.get_len() << dendl;
-      fm->release(p.get_start(), p.get_len(), txc->t);
+  for (interval_set<uint64_t>::iterator p = txc->released.begin();
+      p != txc->released.end();
+      ++p) {
+    dout(20) << __func__ << " release " << p.get_start()
+      << "~" << p.get_len() << dendl;
+    fm->release(p.get_start(), p.get_len(), txc->t);
 
-      if (!g_conf->bluestore_debug_no_reuse_blocks)
-	alloc->release(p.get_start(), p.get_len());
-    }
+    if (!g_conf->bluestore_debug_no_reuse_blocks)
+      alloc->release(p.get_start(), p.get_len());
   }
 }
 
