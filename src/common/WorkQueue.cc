@@ -94,7 +94,9 @@ void ThreadPool::worker(WorkThread *wt)
   ldout(cct,10) << "worker start" << dendl;
   
   std::stringstream ss;
-  ss << name << " thread " << (void*)pthread_self();
+  char name[16] = {0};
+  pthread_getname_np(pthread_self(), name, sizeof(name));
+  ss << name << " thread " << name;
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!_stop) {
@@ -297,7 +299,9 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
   ldout(cct,10) << "worker start" << dendl;
 
   std::stringstream ss;
-  ss << name << " thread " << (void*)pthread_self();
+  char name[16] = {0};
+  pthread_getname_np(pthread_self(), name, sizeof(name));
+  ss << name << " thread " << name;
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!stop_threads.read()) {
