@@ -2697,30 +2697,23 @@ int BlueStore::_do_read(
     if (bp != bend && bp->first <= offset) {
       uint64_t x_off = offset - bp->first;
       x_len = MIN(x_len, bp->second.length - x_off);
-      if (!bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN)) {
-	dout(30) << __func__ << " data " << bp->first << ": " << bp->second
-		 << " use " << x_off << "~" << x_len
-		 << " final offset " << x_off + bp->second.offset
-		 << dendl;
-	uint64_t front_extra = x_off % block_size;
-	uint64_t r_off = x_off - front_extra;
-	uint64_t r_len = ROUND_UP_TO(x_len + front_extra, block_size);
-	dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
-	bufferlist t;
-	r = bdev->read(r_off + bp->second.offset, r_len, &t, &ioc, buffered);
-	if (r < 0) {
-	  goto out;
-	}
-	r = r_len;
-	bufferlist u;
-	u.substr_of(t, front_extra, x_len);
-	bl.claim_append(u);
-      } else {
-	// unwritten (zero) extent
-	dout(30) << __func__ << " data " << bp->first << ": " << bp->second
-		 << ", use " << x_len << " zeros" << dendl;
-	bl.append_zero(x_len);
+      dout(30) << __func__ << " data " << bp->first << ": " << bp->second
+	       << " use " << x_off << "~" << x_len
+	       << " final offset " << x_off + bp->second.offset
+	       << dendl;
+      uint64_t front_extra = x_off % block_size;
+      uint64_t r_off = x_off - front_extra;
+      uint64_t r_len = ROUND_UP_TO(x_len + front_extra, block_size);
+      dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
+      bufferlist t;
+      r = bdev->read(r_off + bp->second.offset, r_len, &t, &ioc, buffered);
+      if (r < 0) {
+	goto out;
       }
+      r = r_len;
+      bufferlist u;
+      u.substr_of(t, front_extra, x_len);
+      bl.claim_append(u);
       offset += x_len;
       length -= x_len;
       if (x_off + x_len == bp->second.length) {
