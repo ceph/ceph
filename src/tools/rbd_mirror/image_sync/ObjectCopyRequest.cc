@@ -333,7 +333,6 @@ void ObjectCopyRequest<I>::compute_diffs() {
                                                     end_size, 0U, bufferlist());
       }
     } else {
-      m_snap_object_states[end_snap_id] = OBJECT_NONEXISTENT;
       if (prev_exists) {
         // object remove
         ldout(cct, 20) << ": remove op" << dendl;
