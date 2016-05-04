@@ -36,16 +36,6 @@
 %if %{with selinux}
 # get selinux policy version
 %{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
-
-%define relabel_files() \
-restorecon -R %{_bindir}/ceph-mon > /dev/null 2>&1; \
-restorecon -R %{_bindir}/ceph-osd > /dev/null 2>&1; \
-restorecon -R %{_bindir}/ceph-mds > /dev/null 2>&1; \
-restorecon -R %{_bindir}/radosgw > /dev/null 2>&1; \
-restorecon -R %{_localstatedir}/run/ceph > /dev/null 2>&1; \
-restorecon -R %{_localstatedir}/lib/ceph > /dev/null 2>&1; \
-restorecon -R %{_localstatedir}/log/ceph > /dev/null 2>&1; \
-restorecon -R %{_localstatedir}/log/radosgw > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -1409,21 +1399,22 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph_selinux.8*
 
 %post selinux
+# backup file_contexts before update
+. /etc/selinux/config
+FILE_CONTEXT=/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts
+cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
+
 # Install the policy
-OLD_POLVER=$(/usr/sbin/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
-/usr/sbin/semodule -n -i /usr/share/selinux/packages/ceph.pp
-NEW_POLVER=$(/usr/sbin/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+/usr/sbin/semodule -X 100 -i %{_datadir}/selinux/packages/ceph.pp
 
 # Load the policy if SELinux is enabled
-if /usr/sbin/selinuxenabled; then
-    /usr/sbin/load_policy
-else
+if ! /usr/sbin/selinuxenabled; then
     # Do not relabel if selinux is not enabled
     exit 0
 fi
 
-if test "$OLD_POLVER" = "$NEW_POLVER"; then
-   # Do not relabel if policy version did not change
+if diff ${FILE_CONTEXT} ${FILE_CONTEXT}.pre > /dev/null 2>&1; then
+   # Do not relabel if file contexts did not change
    exit 0
 fi
 
@@ -1437,24 +1428,27 @@ if test $STATUS -eq 0; then
 fi
 
 # Now, relabel the files
-%relabel_files
+/usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
+rm -f ${FILE_CONTEXT}.pre
 
 # Start the daemons iff they were running before
 if test $STATUS -eq 0; then
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
 fi
-
 exit 0
 
 %postun selinux
 if [ $1 -eq 0 ]; then
+    # backup file_contexts before update
+    . /etc/selinux/config
+    FILE_CONTEXT=/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts
+    cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
+
     # Remove the module
     /usr/sbin/semodule -n -r ceph
 
     # Reload the policy if SELinux is enabled
-    if /usr/sbin/selinuxenabled ; then
-        /usr/sbin/load_policy
-    else
+    if ! /usr/sbin/selinuxenabled ; then
         # Do not relabel if SELinux is not enabled
         exit 0
     fi
@@ -1468,8 +1462,8 @@ if [ $1 -eq 0 ]; then
         /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
     fi
 
-    # Now, relabel the files
-    %relabel_files
+    /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
+    rm -f ${FILE_CONTEXT}.pre
 
     # Start the daemons if they were running before
     if test $STATUS -eq 0; then
