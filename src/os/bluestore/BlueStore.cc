@@ -5568,9 +5568,6 @@ int BlueStore::_do_write(
     op->extent.offset = bp->second.offset + offset - bp->first;
     op->extent.length = length;
     op->data = bl;
-    if (offset + length - bp->first > bp->second.length) {
-      op->extent.length = offset + length - bp->first;
-    }
     dout(20) << __func__ << " wal write "
 	     << offset << "~" << length << " to " << op->extent
 	     << dendl;
