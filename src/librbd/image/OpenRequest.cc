@@ -58,8 +58,8 @@ Context *OpenRequest<I>::handle_v1_detect_header(int *result) {
     }
     send_close_image(*result);
   } else {
-    lderr(cct) << "RBD image format 1 is deprecated. "
-               << "Please copy this image to image format 2." << dendl;
+    ldout(cct, 1) << "RBD image format 1 is deprecated. "
+                  << "Please copy this image to image format 2." << dendl;
 
     m_image_ctx->old_format = true;
     m_image_ctx->header_oid = util::old_header_name(m_image_ctx->name);
