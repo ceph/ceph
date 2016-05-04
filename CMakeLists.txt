@@ -282,7 +282,7 @@ endif(CRYPTOPP_FOUND)
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
   find_package(xio REQUIRED)
-set(HAVE_XIO ${Xio_FOUND})
+set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
 #option for RGW
