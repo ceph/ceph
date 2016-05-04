@@ -5562,7 +5562,8 @@ int BlueStore::_do_write(
       if (!partly_overwrite_tail) {
 	bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
 	bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
-	_pad_zeros(txc, o, &bl, &offset, &length, block_size);
+	if ((offset % block_size) || ((offset + length) % block_size))
+	  _pad_zeros(txc, o, &bl, &offset, &length, block_size);
 	uint64_t x_off = offset - bp->first;
 	dout(20) << __func__ << " write " << offset << "~" << length
 	  << " x_off " << x_off << dendl;
