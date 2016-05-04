@@ -123,8 +123,8 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if(HAVE_XIO)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${Xio_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${Xio_LIBRARY} pthread rt)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
+  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
 endif(HAVE_XIO)
 
 # sort out which allocator to use

@@ -25,7 +25,7 @@ if(HAVE_XIO)
     )
   target_link_libraries(xio_server
     os global common ${Boost_REGEX_LIBRARY}
-    ${Xio_LIBRARY} pthread rt
+    ${XIO_LIBRARY} pthread rt
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
@@ -36,7 +36,7 @@ if(HAVE_XIO)
     )
   target_link_libraries(xio_client
     os global common ${Boost_REGEX_LIBRARY}
-    ${Xio_LIBRARY} pthread rt
+    ${XIO_LIBRARY} pthread rt
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
