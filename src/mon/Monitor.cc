@@ -86,6 +86,7 @@
 #include "common/config.h"
 #include "common/cmdparse.h"
 #include "include/assert.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -5018,7 +5019,7 @@ int Monitor::write_default_keyring(bufferlist& bl)
   err = bl.write_fd(fd);
   if (!err)
     ::fsync(fd);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 
   return err;
 }
