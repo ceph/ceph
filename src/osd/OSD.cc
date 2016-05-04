@@ -5712,13 +5712,6 @@ bool OSD::heartbeat_dispatch(Message *m)
     handle_osd_ping(static_cast<MOSDPing*>(m));
     break;
 
-  case CEPH_MSG_OSD_MAP:
-    {
-      ConnectionRef self = cluster_messenger->get_loopback_connection();
-      self->send_message(m);
-    }
-    break;
-
   default:
     dout(0) << "dropping unexpected message " << *m << " from " << m->get_source_inst() << dendl;
     m->put();
