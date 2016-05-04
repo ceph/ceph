@@ -3762,14 +3762,14 @@ void Monitor::handle_ping(MonOpRequestRef op)
   MPing *reply = new MPing;
   entity_inst_t inst = m->get_source_inst();
   bufferlist payload;
-  Formatter *f = new JSONFormatter(true);
+  boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
   list<string> health_str;
-  get_health(health_str, NULL, f);
+  get_health(health_str, NULL, f.get());
   {
     stringstream ss;
-    get_mon_status(f, ss);
+    get_mon_status(f.get(), ss);
   }
 
   f->close_section();
