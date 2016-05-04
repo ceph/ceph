@@ -56,7 +56,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     quoted_path %=
       lexeme[lit("\"") >> *(char_ - '"') >> '"'] | 
       lexeme[lit("'") >> *(char_ - '\'') >> '\''];
-    unquoted_path %= +char_("a-zA-Z0-9_.-/");
+    unquoted_path %= +char_("a-zA-Z0-9_./-");
 
     // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
     path %= (spaces >> lit("path") >> lit('=') >> (quoted_path | unquoted_path));
