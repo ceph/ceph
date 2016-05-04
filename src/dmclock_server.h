@@ -173,9 +173,12 @@ namespace crimson {
 			     const crimson::dmclock::RequestTag& tag);
 
 
+    enum class QMechanism { push, pull };
+
+
     // C is client identifier type, R is request type
     template<typename C, typename R>
-    class PriorityQueue {
+    class PriorityQueueBase {
       FRIEND_TEST(dmclock_server, client_idle_erase);
 
     public:
@@ -196,7 +199,7 @@ namespace crimson {
 
 
       class ClientReq {
-	friend PriorityQueue;
+	friend PriorityQueueBase;
 
 	RequestTag tag;
 	C          client_id;
@@ -222,7 +225,7 @@ namespace crimson {
 
 
       class ClientRec {
-	friend PriorityQueue<C,R>;
+	friend PriorityQueueBase<C,R>;
 
 	C                     client;
 	RequestTag            prev_tag;
@@ -298,7 +301,7 @@ namespace crimson {
 
 	friend std::ostream&
 	operator<<(std::ostream& out,
-		   const typename PriorityQueue<C,R>::ClientRec& e) {
+		   const typename PriorityQueueBase<C,R>::ClientRec& e) {
 	  out << "{ client:" << e.client << " top req: " <<
 	    (e.has_request() ? e.next_request() : "none") << " }";
 	  return out;
@@ -311,16 +314,6 @@ namespace crimson {
 
     public:
 
-      // a function to see whether the server can handle another request
-      using CanHandleRequestFunc = std::function<bool(void)>;
-
-      // a function to submit a request to the server; the second
-      // parameter is a callback when it's completed
-      using HandleRequestFunc =
-	std::function<void(const C&,RequestRef,PhaseType)>;
-
-      enum class Mechanism { push, pull };
-
       // when we try to get the next request, we'll be in one of three
       // situations -- we'll have one to return, have one that can
       // fire in the future, or not have any
@@ -332,19 +325,6 @@ namespace crimson {
 	  , proportional
 #endif
 	  };
-
-
-      // When a request is pulled, this is the return type.
-      struct PullReq {
-	struct Retn {
-	  C           client;
-	  RequestRef  request;
-	  PhaseType   phase;
-	};
-
-	NextReqType               type;
-	boost::variant<Retn,Time> data;
-      };
 
 
       // this is returned from next_req to tell the caller the situation
@@ -419,10 +399,7 @@ namespace crimson {
 	}
       };
 
-
       ClientInfoFunc       client_info_f;
-      CanHandleRequestFunc can_handle_f;
-      HandleRequestFunc    handle_f;
 
       mutable std::mutex data_mtx;
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
@@ -462,14 +439,8 @@ namespace crimson {
       // limit, this will allow the request next in terms of
       // proportion to still get issued
       bool             allow_limit_break;
-      Mechanism        mechanism;
 
       std::atomic_bool finishing;
-
-      // for handling timed scheduling
-      std::mutex  sched_ahead_mtx;
-      std::condition_variable sched_ahead_cv;
-      Time sched_ahead_when = TimeZero;
 
       // every request creates a tick
       Counter tick = 0;
@@ -484,24 +455,21 @@ namespace crimson {
       Duration                  check_time;
       std::deque<MarkPoint>     clean_mark_points;
 
-      // NB: All threads declared at end, so they're destructed firs!
+      // NB: All threads declared at end, so they're destructed first!
 
-      std::thread sched_ahead_thd;
       std::unique_ptr<RunEvery> cleaning_job;
 
 
       // COMMON constructor that others feed into; we can accept three
       // different variations of durations
       template<typename Rep, typename Per>
-      PriorityQueue(ClientInfoFunc _client_info_f,
-		    std::chrono::duration<Rep,Per> _idle_age,
-		    std::chrono::duration<Rep,Per> _erase_age,
-		    std::chrono::duration<Rep,Per> _check_time,
-		    bool _allow_limit_break,
-		    Mechanism _mechanism) :
+      PriorityQueueBase(ClientInfoFunc _client_info_f,
+			std::chrono::duration<Rep,Per> _idle_age,
+			std::chrono::duration<Rep,Per> _erase_age,
+			std::chrono::duration<Rep,Per> _check_time,
+			bool _allow_limit_break) :
 	client_info_f(_client_info_f),
 	allow_limit_break(_allow_limit_break),
-	mechanism(_mechanism),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
@@ -512,95 +480,15 @@ namespace crimson {
 	cleaning_job =
 	  std::unique_ptr<RunEvery>(
 	    new RunEvery(check_time,
-			 std::bind(&PriorityQueue::do_clean, this)));
+			 std::bind(&PriorityQueueBase::do_clean, this)));
       }
-
-    public:
-
-      // PUSH constructors -- full and convenience
-
-
-      // push full constructor
-      template<typename Rep, typename Per>
-      PriorityQueue(ClientInfoFunc _client_info_f,
-		    CanHandleRequestFunc _can_handle_f,
-		    HandleRequestFunc _handle_f,
-		    std::chrono::duration<Rep,Per> _idle_age,
-		    std::chrono::duration<Rep,Per> _erase_age,
-		    std::chrono::duration<Rep,Per> _check_time,
-		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
-		      _idle_age, _erase_age, _check_time,
-		      _allow_limit_break, Mechanism::push)
-      {
-	can_handle_f = _can_handle_f;
-	handle_f = _handle_f;
-	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
-      }
-
-
-      // push convenience constructor
-      PriorityQueue(ClientInfoFunc _client_info_f,
-		    CanHandleRequestFunc _can_handle_f,
-		    HandleRequestFunc _handle_f,
-		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
-		      _can_handle_f,
-		      _handle_f,
-		      std::chrono::minutes(10),
-		      std::chrono::minutes(15),
-		      std::chrono::minutes(6),
-		      _allow_limit_break)
-      {
-	// empty
-      }
-
-
-      // PULL constructors -- full and convenience
-
-      template<typename Rep, typename Per>
-      PriorityQueue(ClientInfoFunc _client_info_f,
-		    std::chrono::duration<Rep,Per> _idle_age,
-		    std::chrono::duration<Rep,Per> _erase_age,
-		    std::chrono::duration<Rep,Per> _check_time,
-		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
-		      _idle_age, _erase_age, _check_time,
-		      _allow_limit_break, Mechanism::pull)
-      {
-	// empty
-      }
-
-
-      // pull convenience constructor
-      PriorityQueue(ClientInfoFunc _client_info_f,
-		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
-		      std::chrono::minutes(10),
-		      std::chrono::minutes(15),
-		      std::chrono::minutes(6),
-		      _allow_limit_break)
-      {
-	// empty
-      }
-
-
-      // NB: the reason the convenience constructors overload the
-      // constructor rather than using default values for the timing
-      // arguments is so that callers have to either use all defaults
-      // or specify all timings. Mixing default and passed could be
-      // problematic as they have to be consistent with one another.
 
 
     public:
 
 
-      ~PriorityQueue() {
+      ~PriorityQueueBase() {
 	finishing = true;
-	if (Mechanism::push == mechanism) {
-	  sched_ahead_cv.notify_one();
-	  sched_ahead_thd.join();
-	}
       }
 
 
@@ -704,92 +592,7 @@ namespace crimson {
 #if USE_PROP_HEAP
 	prop_heap.adjust(client);
 #endif
-
-	if (Mechanism::push == mechanism) {
-	  schedule_request();
-	}
       } // add_request
-
-
-      void request_completed() {
-	if (Mechanism::push == mechanism) {
-	  DataGuard g(data_mtx);
-	  schedule_request();
-	}
-      }
-
-
-      PullReq pull_request() {
-	return pull_request(get_time());
-      }
-
-
-      PullReq pull_request(Time now) {
-	assert(Mechanism::pull == mechanism);
-
-	PullReq result;
-	DataGuard g(data_mtx);
-
-	NextReq next = next_request(now);
-	result.type = next.type;
-	switch(next.type) {
-	case NextReqType::none:
-	  return result;
-	  break;
-	case NextReqType::future:
-	  result.data = next.when_ready;
-	  return result;
-	  break;
-	case NextReqType::returning:
-	  // to avoid nesting, break out and let code below handle this case
-	  break;
-	default:
-	  assert(false);
-	}
-
-	// we'll only get here if we're returning an entry
-
-	auto process_f =
-	  [&] (PullReq& pull_result, PhaseType phase) ->
-	  std::function<void(const C&,
-			     RequestRef&)> {
-	  return [&pull_result, phase](const C& client, RequestRef& request) {
-	    pull_result.data =
-	    typename PullReq::Retn{client, std::move(request), phase};
-	  };
-	};
-
-	switch(next.heap_id) {
-	case HeapId::reservation:
-	  pop_process_request(resv_heap,
-			      process_f(result, PhaseType::reservation));
-	  ++reserv_sched_count;
-	  break;
-	case HeapId::ready:
-	{
-	  pop_process_request(ready_heap,
-			      process_f(result, PhaseType::priority));
-	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	  reduce_reservation_tags(retn.client);
-	  ++prop_sched_count;
-	}
-	break;
-#if USE_PROP_HEAP
-	case HeapId::proportional:
-	{
-	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
-	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	  reduce_reservation_tags(retn.client);
-	  ++limit_break_sched_count;
-	}
-	break;
-#endif
-	default:
-	  assert(false);
-	}
-
-	return result;
-      }
 
 
       // data_mtx should be held when called; top of heap should have
@@ -815,23 +618,6 @@ namespace crimson {
 	// process
 	process(top.client, request);
       } // pop_process_request
-
-
-      // data_mtx should be held when called; furthermore, the heap
-      // should not be empty and the top element of the heap should
-      // not be already handled
-      template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
-      C submit_top_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
-			   PhaseType phase) {
-	C client_result;
-	pop_process_request(heap,
-			    [this, phase, &client_result]
-			    (const C& client, RequestRef& request) {
-			      client_result = client;
-			      handle_f(client, std::move(request), phase);
-			    });
-	return client_result;
-      }
 
 
     protected:
@@ -882,67 +668,9 @@ namespace crimson {
 
 
       // data_mtx should be held when called
-      void schedule_request() {
-	NextReq next_req = next_request();
-	switch (next_req.type) {
-	case NextReqType::none:
-	  return;
-	case NextReqType::future:
-	  sched_at(next_req.when_ready);
-	  break;
-	case NextReqType::returning:
-	  submit_request(next_req.heap_id);
-	  break;
-	default:
-	  assert(false);
-	}
-      }
-
-
-      // data_mtx should be held when called
-      void submit_request(HeapId heap_id) {
-	C client;
-	switch(heap_id) {
-	case HeapId::reservation:
-	  // don't need to note client
-	  (void) submit_top_request(resv_heap, PhaseType::reservation);
-	  // unlike the other two cases, we do not reduce reservation
-	  // tags here
-	  ++reserv_sched_count;
-	  break;
-	case HeapId::ready:
-	  client = submit_top_request(ready_heap, PhaseType::priority);
-	  reduce_reservation_tags(client);
-	  ++prop_sched_count;
-	  break;
-#if USE_PROP_HEAP
-	case HeapId::proportional:
-	  client = submit_top_request(prop_heap, PhaseType::priority);
-	  reduce_reservation_tags(client);
-	  ++limit_break_sched_count;
-	  break;
-#endif
-	default:
-	  assert(false);
-	}
-      }
-
-
-      // data_mtx should be held when called
-      NextReq next_request() {
-	return next_request(get_time());
-      }
-
-
-      // data_mtx should be held when called
       NextReq next_request(Time now) {
 	NextReq result;
 	
-	if (Mechanism::push == mechanism && !can_handle_f()) {
-	  result.type = NextReqType::none;
-	  return result;
-	}
-
 	// if reservation queue is empty, all are empty (i.e., no active clients)
 	if(resv_heap.empty()) {
 	  result.type = NextReqType::none;
@@ -1036,42 +764,6 @@ namespace crimson {
       }
 
 
-      // this is the thread that handles running schedule_request at
-      // future times when nothing can be scheduled immediately
-      void run_sched_ahead() {
-	std::unique_lock<std::mutex> l(sched_ahead_mtx);
-
-	while (!finishing) {
-	  if (TimeZero == sched_ahead_when) {
-	    sched_ahead_cv.wait(l);
-	  } else {
-	    Time now;
-	    while (!finishing.load() && (now = get_time()) < sched_ahead_when) {
-	      long microseconds_l = long(1 + 1000000 * (sched_ahead_when - now));
-	      auto microseconds = std::chrono::microseconds(microseconds_l);
-	      sched_ahead_cv.wait_for(l, microseconds);
-	    }
-	    sched_ahead_when = TimeZero;
-	    if (finishing) return;
-
-	    l.unlock();
-	    if (!finishing) {
-	      DataGuard g(data_mtx);
-	      schedule_request();
-	    }
-	    l.lock();
-	  }
-	}
-      }
-
-
-      void sched_at(Time when) {
-	std::lock_guard<std::mutex> l(sched_ahead_mtx);
-	if (TimeZero == sched_ahead_when || when < sched_ahead_when) {
-	  sched_ahead_when = when;
-	  sched_ahead_cv.notify_one();
-	}
-      }
 
 
     protected:
@@ -1139,6 +831,337 @@ namespace crimson {
 	delete_from_heap(client, limit_heap);
 	delete_from_heap(client, ready_heap);
       }
-    }; // class PriorityQueue
+    }; // class PriorityQueueBase
+
+
+    // PULL version
+    template<typename C, typename R, QMechanism M>
+    class PriorityQueue : public PriorityQueueBase<C,R> {
+      using super = PriorityQueueBase<C,R>;
+
+      // When a request is pulled, this is the return type.
+      struct PullReq {
+	struct Retn {
+	  C           client;
+	  typename super::RequestRef  request;
+	  PhaseType   phase;
+	};
+
+	typename super::NextReqType        type;
+	boost::variant<Retn,Time> data;
+      };
+
+      template<typename Rep, typename Per>
+      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+		    std::chrono::duration<Rep,Per> _idle_age,
+		    std::chrono::duration<Rep,Per> _erase_age,
+		    std::chrono::duration<Rep,Per> _check_time,
+		    bool _allow_limit_break = false) :
+	super(_client_info_f,
+	      _idle_age, _erase_age, _check_time,
+	      _allow_limit_break)
+      {
+	// empty
+      }
+
+
+      // pull convenience constructor
+      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      std::chrono::minutes(10),
+		      std::chrono::minutes(15),
+		      std::chrono::minutes(6),
+		      _allow_limit_break)
+      {
+	// empty
+      }
+
+
+      // data_mtx should be held when called; unfortunately this
+      // function has to be repeated in both push & pull
+      // specializations
+      typename super::NextReq next_request() {
+	return next_request(get_time());
+      }
+
+
+      PullReq pull_request() {
+	return pull_request(get_time());
+      }
+
+
+      PullReq pull_request(Time now) {
+	PullReq result;
+	typename super::DataGuard g(typename super::data_mtx);
+
+	typename super::NextReq next = next_request(now);
+	result.type = next.type;
+	switch(next.type) {
+	case super::NextReqType::none:
+	  return result;
+	  break;
+	case super::NextReqType::future:
+	  result.data = next.when_ready;
+	  return result;
+	  break;
+	case super::NextReqType::returning:
+	  // to avoid nesting, break out and let code below handle this case
+	  break;
+	default:
+	  assert(false);
+	}
+
+	// we'll only get here if we're returning an entry
+
+	auto process_f =
+	  [&] (PullReq& pull_result, PhaseType phase) ->
+	  std::function<void(const C&,
+			     typename super::RequestRef&)> {
+	  return [&pull_result, phase](const C& client,
+				       typename super::RequestRef& request) {
+	    pull_result.data =
+	    typename PullReq::Retn{client, std::move(request), phase};
+	  };
+	};
+
+	switch(next.heap_id) {
+	case super::HeapId::reservation:
+	  pop_process_request(super::resv_heap,
+			      process_f(result, PhaseType::reservation));
+	  ++super::reserv_sched_count;
+	  break;
+	case super::HeapId::ready:
+	{
+	  pop_process_request(super::ready_heap,
+			      process_f(result, PhaseType::priority));
+	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	  reduce_reservation_tags(retn.client);
+	  ++super::prop_sched_count;
+	}
+	break;
+#if USE_PROP_HEAP
+	case super::HeapId::proportional:
+	{
+	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
+	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	  reduce_reservation_tags(retn.client);
+	  ++super::limit_break_sched_count;
+	}
+	break;
+#endif
+	default:
+	  assert(false);
+	}
+
+	return result;
+      } // pull_request
+    };
+
+
+    // PUSH version
+    template<typename C, typename R>
+    class PriorityQueue<C,R,QMechanism::push> : public PriorityQueueBase<C,R> {
+      using super = PriorityQueueBase<C,R>;
+
+      // a function to see whether the server can handle another request
+      using CanHandleRequestFunc = std::function<bool(void)>;
+
+      // a function to submit a request to the server; the second
+      // parameter is a callback when it's completed
+      using HandleRequestFunc =
+	std::function<void(const C&,RequestRef,PhaseType)>;
+
+      CanHandleRequestFunc can_handle_f;
+      HandleRequestFunc    handle_f;
+      // for handling timed scheduling
+      std::mutex  sched_ahead_mtx;
+      std::condition_variable sched_ahead_cv;
+      Time sched_ahead_when = TimeZero;
+
+      // NB: threads declared last, so constructed last and destructed first
+
+      std::thread sched_ahead_thd;
+
+      // push full constructor
+      template<typename Rep, typename Per>
+      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+		    CanHandleRequestFunc _can_handle_f,
+		    HandleRequestFunc _handle_f,
+		    std::chrono::duration<Rep,Per> _idle_age,
+		    std::chrono::duration<Rep,Per> _erase_age,
+		    std::chrono::duration<Rep,Per> _check_time,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      _idle_age, _erase_age, _check_time,
+		      _allow_limit_break, Mechanism::push)
+      {
+	can_handle_f = _can_handle_f;
+	handle_f = _handle_f;
+	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+      }
+
+
+      // push convenience constructor
+      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+		    CanHandleRequestFunc _can_handle_f,
+		    HandleRequestFunc _handle_f,
+		    bool _allow_limit_break = false) :
+	PriorityQueue(_client_info_f,
+		      _can_handle_f,
+		      _handle_f,
+		      std::chrono::minutes(10),
+		      std::chrono::minutes(15),
+		      std::chrono::minutes(6),
+		      _allow_limit_break)
+      {
+	// empty
+      }
+
+
+      virtual ~PriorityQueue() {
+	  sched_ahead_cv.notify_one();
+	  sched_ahead_thd.join();
+      }
+
+
+      // data_mtx should be held when called; furthermore, the heap
+      // should not be empty and the top element of the heap should
+      // not be already handled
+      template<typename C1, IndIntruHeapData ClientRec::*C2, typename C3>
+      C submit_top_request(IndIntruHeap<C1, ClientRec, C2, C3>& heap,
+			   PhaseType phase) {
+	C client_result;
+	pop_process_request(heap,
+			    [this, phase, &client_result]
+			    (const C& client, RequestRef& request) {
+			      client_result = client;
+			      handle_f(client, std::move(request), phase);
+			    });
+	return client_result;
+      }
+
+
+      // data_mtx should be held when called
+      void submit_request(HeapId heap_id) {
+	C client;
+	switch(heap_id) {
+	case HeapId::reservation:
+	  // don't need to note client
+	  (void) submit_top_request(resv_heap, PhaseType::reservation);
+	  // unlike the other two cases, we do not reduce reservation
+	  // tags here
+	  ++reserv_sched_count;
+	  break;
+	case HeapId::ready:
+	  client = submit_top_request(ready_heap, PhaseType::priority);
+	  reduce_reservation_tags(client);
+	  ++prop_sched_count;
+	  break;
+#if USE_PROP_HEAP
+	case HeapId::proportional:
+	  client = submit_top_request(prop_heap, PhaseType::priority);
+	  reduce_reservation_tags(client);
+	  ++limit_break_sched_count;
+	  break;
+#endif
+	default:
+	  assert(false);
+	}
+      } // submit_request
+
+
+      // data_mtx should be held when called; unfortunately this
+      // function has to be repeated in both push & pull
+      // specializations
+      NextReq next_request() {
+	return next_request(get_time());
+      }
+
+
+      // data_mtx should be held when called; overrides member
+      // function in base class to add check for whether a request can
+      // be pushed to the server
+      NextReq next_request(Time now) {
+	if (!can_handle_f()) {
+	  NextReq result;
+	  result.type = NextReqType::none;
+	  return result;
+	} else {
+	  return PriorityQueueBase::next_request(now);
+      }
+
+      
+      // data_mtx should be held when called
+      void schedule_request() {
+	NextReq next_req = next_request();
+	switch (next_req.type) {
+	case NextReqType::none:
+	  return;
+	case NextReqType::future:
+	  sched_at(next_req.when_ready);
+	  break;
+	case NextReqType::returning:
+	  submit_request(next_req.heap_id);
+	  break;
+	default:
+	  assert(false);
+	}
+      }
+
+      
+      void add_request(RequestRef&&     request,
+		       const C&         client_id,
+		       const ReqParams& req_params,
+		       const Time       time) {
+	PriorityQueueBase::add_request(request, client_id, req_params, time);
+	schedule_request();
+      }
+
+      
+      void request_completed() {
+	DataGuard g(data_mtx);
+	schedule_request();
+      }
+
+
+      // this is the thread that handles running schedule_request at
+      // future times when nothing can be scheduled immediately
+      void run_sched_ahead() {
+	std::unique_lock<std::mutex> l(sched_ahead_mtx);
+
+	while (!finishing) {
+	  if (TimeZero == sched_ahead_when) {
+	    sched_ahead_cv.wait(l);
+	  } else {
+	    Time now;
+	    while (!finishing.load() && (now = get_time()) < sched_ahead_when) {
+	      long microseconds_l = long(1 + 1000000 * (sched_ahead_when - now));
+	      auto microseconds = std::chrono::microseconds(microseconds_l);
+	      sched_ahead_cv.wait_for(l, microseconds);
+	    }
+	    sched_ahead_when = TimeZero;
+	    if (finishing) return;
+
+	    l.unlock();
+	    if (!finishing) {
+	      DataGuard g(data_mtx);
+	      schedule_request();
+	    }
+	    l.lock();
+	  }
+	}
+      }
+
+
+      void sched_at(Time when) {
+	std::lock_guard<std::mutex> l(sched_ahead_mtx);
+	if (TimeZero == sched_ahead_when || when < sched_ahead_when) {
+	  sched_ahead_when = when;
+	  sched_ahead_cv.notify_one();
+	}
+      }
+    };
+
   } // namespace dmclock
 } // namespace crimson
