@@ -423,7 +423,7 @@ void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
   ls.push_back(new rgw_bi_log_entry);
   ls.back()->id = "midf";
   ls.back()->object = "obj";
-  ls.back()->timestamp = ceph::real_clock::from_ceph_timespec({2, 3});
+  ls.back()->timestamp = ceph::real_clock::from_ceph_timespec({{2}, {3}});
   ls.back()->index_ver = 4323;
   ls.back()->tag = "tagasdfds";
   ls.back()->op = CLS_RGW_OP_DEL;
