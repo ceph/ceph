@@ -734,20 +734,6 @@ make %{?_smp_mflags} check-local
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_example.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_fail_to_initialize.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_fail_to_register.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_hangs.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_missing_entry_point.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_missing_version.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_jerasure_generic.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_jerasure_neon.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_jerasure_sse3.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_jerasure_sse4.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_shec_generic.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_shec_neon.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_shec_sse3.so
-rm -f $RPM_BUILD_ROOT%{_libdir}/ceph/erasure-code/libec_test_shec_sse4.so
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/etc-rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
