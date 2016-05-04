@@ -671,6 +671,97 @@ void RGWUserStatsCache::data_modified(const rgw_user& user, rgw_bucket& bucket)
 }
 
 
+class RGWQuotaInfoApplier {
+  /* NOTE: no non-static field allowed as instances are supposed to live in
+   * the static memory only. */
+protected:
+  RGWQuotaInfoApplier() = default;
+
+public:
+  virtual ~RGWQuotaInfoApplier() {}
+
+  virtual bool is_size_exceeded(const char * const entity,
+                                const RGWQuotaInfo& qinfo,
+                                const RGWStorageStats& stats,
+                                const uint64_t size) const = 0;
+
+  virtual bool is_num_objs_exceeded(const char * const entity,
+                                    const RGWQuotaInfo& qinfo,
+                                    const RGWStorageStats& stats,
+                                    const uint64_t num_objs) const = 0;
+
+  static const RGWQuotaInfoApplier& get_instance(const RGWQuotaInfo& qinfo);
+};
+
+class RGWQuotaInfoDefApplier : public RGWQuotaInfoApplier {
+public:
+  virtual bool is_size_exceeded(const char * const entity,
+                                const RGWQuotaInfo& qinfo,
+                                const RGWStorageStats& stats,
+                                const uint64_t size) const;
+
+  virtual bool is_num_objs_exceeded(const char * const entity,
+                                    const RGWQuotaInfo& qinfo,
+                                    const RGWStorageStats& stats,
+                                    const uint64_t num_objs) const;
+};
+
+
+bool RGWQuotaInfoDefApplier::is_size_exceeded(const char * const entity,
+                                              const RGWQuotaInfo& qinfo,
+                                              const RGWStorageStats& stats,
+                                              const uint64_t size) const
+{
+  if (qinfo.max_size_kb < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  /* Handling quota in KiBs due to backward compatibility. */
+  const uint64_t add_size_kb = rgw_rounded_objsize_kb(size);
+  /* XXX: just div 1024 should be enough. */
+  const uint64_t cur_size_kb = rgw_rounded_kb(stats.size_rounded);
+  const uint64_t stats_num_kb_rounded = rgw_rounded_kb(stats.size_rounded);
+
+  if (cur_size_kb + add_size_kb > static_cast<uint64_t>(qinfo.max_size_kb)) {
+    dout(10) << "quota exceeded: stats_num_kb_rounded=" << stats_num_kb_rounded
+             << " size_kb=" << add_size_kb << " "
+             << entity << "_quota.max_size_kb=" << qinfo.max_size_kb << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+bool RGWQuotaInfoDefApplier::is_num_objs_exceeded(const char * const entity,
+                                                  const RGWQuotaInfo& qinfo,
+                                                  const RGWStorageStats& stats,
+                                                  const uint64_t num_objs) const
+{
+  if (qinfo.max_objects < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  if (stats.num_objects + num_objs > static_cast<uint64_t>(qinfo.max_objects)) {
+    dout(10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+             << " " << entity << "_quota.max_objects=" << qinfo.max_objects
+             << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+const RGWQuotaInfoApplier& RGWQuotaInfoApplier::get_instance(
+  const RGWQuotaInfo& qinfo)
+{
+  static RGWQuotaInfoDefApplier default_qapplier;
+
+  return default_qapplier;
+}
+
+
 class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWRados *store;
   RGWBucketStatsCache bucket_stats_cache;
@@ -687,35 +778,19 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
       return 0;
     }
 
+    const auto& quota_applier = RGWQuotaInfoApplier::get_instance(quota);
+
     ldout(store->ctx(), 20) << entity
                             << " quota: max_objects=" << quota.max_objects
                             << " max_size_kb=" << quota.max_size_kb << dendl;
 
-    if (quota.max_objects >= 0 &&
-        stats.num_objects + num_objs > (uint64_t)quota.max_objects) {
-      ldout(store->ctx(), 10) << "quota exceeded: stats.num_objects="
-                              << stats.num_objects
-                              << " " << entity << "_quota.max_objects="
-                              << quota.max_objects << dendl;
 
+    if (quota_applier.is_num_objs_exceeded(entity, quota, stats, num_objs)) {
       return -ERR_QUOTA_EXCEEDED;
     }
 
-    /* Handling quota in KiBs due to backward compatibility. */
-    if (quota.max_size_kb >= 0) {
-      const uint64_t size_kb = rgw_rounded_objsize_kb(size);
-      /* XXX: just div 1024 should be enough. */
-      const uint64_t stats_num_kb_rounded = rgw_rounded_kb(stats.size_rounded);
-
-      if (stats_num_kb_rounded + size_kb > (uint64_t)quota.max_size_kb) {
-        ldout(store->ctx(), 10) << "quota exceeded: stats_num_kb_rounded="
-                                << stats_num_kb_rounded
-                                << " size_kb=" << size_kb << " " << entity
-                                << "_quota.max_size_kb="
-                                << quota.max_size_kb << dendl;
-
-        return -ERR_QUOTA_EXCEEDED;
-      }
+    if (quota_applier.is_size_exceeded(entity, quota, stats, size)) {
+      return -ERR_QUOTA_EXCEEDED;
     }
 
     return 0;
