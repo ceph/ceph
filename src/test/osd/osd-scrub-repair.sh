@@ -352,6 +352,55 @@ function TEST_list_missing_erasure_coded() {
     teardown $dir || return 1
 }
 
+#
+# Corrupt one copy of a replicated pool
+#
+function TEST_corrupt_scrub_replicated() {
+    local dir=$1
+    local poolname=csr_pool
+    local total_objs=4
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    wait_for_clean || return 1
+
+    ceph osd pool create $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 0 $total_objs) ; do
+      objname=OBJ${i}
+      add_something $dir $poolname $objname
+      if [ $i = "0" ];
+      then
+        local payload=UVWXYZ
+        echo $payload > $dir/CORRUPT
+        objectstore_tool $dir $(expr $i % 2) $objname set-bytes $dir/CORRUPT || return 1
+      else
+        objectstore_tool $dir $(expr $i % 2) $objname remove || return 1
+      fi
+    done
+
+    local pg=$(get_pg $poolname OBJ0)
+    pg_scrub $pg
+
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pg || return 1
+
+    rados list-inconsistent-obj $pg > $dir/json || return 1
+    # Get epoch for repair-get requests
+    epoch=$(jq .epoch $dir/json)
+    # Check object count
+    test $(jq '.inconsistents | length' $dir/json) = "$total_objs" || return 1
+
+    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    teardown $dir || return 1
+}
+
 
 main osd-scrub-repair "$@"
 

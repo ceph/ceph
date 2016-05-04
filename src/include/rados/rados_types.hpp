@@ -52,6 +52,7 @@ struct object_id_t {
 
 struct err_t {
   enum {
+    ATTR_UNEXPECTED      = 1 << 0,
     SHARD_MISSING        = 1 << 1,
     SHARD_STAT_ERR       = 1 << 2,
     SHARD_READ_ERR       = 1 << 3,
@@ -59,12 +60,15 @@ struct err_t {
     OMAP_DIGEST_MISMATCH = 1 << 5,
     SIZE_MISMATCH        = 1 << 6,
     ATTR_MISMATCH        = 1 << 7,
-    SNAPSET_MISSING      = 1 << 8,
+    ATTR_MISSING         = 1 << 8,
     DATA_DIGEST_MISMATCH_OI = 1 << 9,
     OMAP_DIGEST_MISMATCH_OI = 1 << 10,
     SIZE_MISMATCH_OI        = 1 << 11,
   };
   uint64_t errors = 0;
+  bool has_attr_unexpected() const {
+    return errors & ATTR_UNEXPECTED;
+  }
   bool has_shard_missing() const {
     return errors & SHARD_MISSING;
   }
@@ -97,6 +101,9 @@ struct err_t {
   bool has_attr_mismatch() const {
     return errors & ATTR_MISMATCH;
   }
+  bool has_attr_missing() const {
+    return errors & ATTR_MISSING;
+  }
 };
 
 struct shard_info_t : err_t {
@@ -124,24 +131,28 @@ struct inconsistent_snapset_t {
     : object{head}
   {}
   enum {
-    ATTR_MISSING   = 1 << 0,
-    ATTR_CORRUPTED = 1 << 1,
+    SNAPSET_MISSING = 1 << 0,
+    SNAPSET_CORRUPTED = 1 << 1,
     CLONE_MISSING  = 1 << 2,
     SNAP_MISMATCH  = 1 << 3,
     HEAD_MISMATCH  = 1 << 4,
     HEADLESS_CLONE = 1 << 5,
     SIZE_MISMATCH  = 1 << 6,
+    OI_MISSING   = 1 << 7,
+    OI_CORRUPTED = 1 << 8,
+    EXTRA_CLONES = 1 << 9,
   };
   uint64_t errors = 0;
   object_id_t object;
+  // Extra clones
   std::vector<snap_t> clones;
   std::vector<snap_t> missing;
 
   bool ss_attr_missing() const {
-    return errors & ATTR_MISSING;
+    return errors & SNAPSET_MISSING;
   }
   bool ss_attr_corrupted() const {
-    return errors & ATTR_CORRUPTED;
+    return errors & SNAPSET_CORRUPTED;
   }
   bool clone_missing() const  {
     return errors & CLONE_MISSING;
@@ -157,6 +168,15 @@ struct inconsistent_snapset_t {
   }
   bool size_mismatch() const {
     return errors & SIZE_MISMATCH;
+  }
+  bool oi_attr_missing() const {
+    return errors & OI_MISSING;
+  }
+  bool oi_attr_corrupted() const {
+    return errors & OI_CORRUPTED;
+  }
+  bool extra_clones() const {
+    return errors & EXTRA_CLONES;
   }
 };
 
