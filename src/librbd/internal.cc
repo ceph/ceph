@@ -1066,7 +1066,8 @@ err_remove_id:
 
     ldout(cct, 20) << "listing images in cg name " << cg_name << " cg id " << cg_header_oid << dendl;
 
-    r = cls_client::cg_list_images(&cg_ioctx, cg_header_oid, images);
+    std::vector<std::pair<std::string, int64_t>> image_ids;
+    r = cls_client::cg_list_images(&cg_ioctx, cg_header_oid, image_ids);
 
     if (r < 0) {
       lderr(cct) << "error adding image reference to consistency group: "
@@ -1074,14 +1075,19 @@ err_remove_id:
       return r;
     }
 
-    return 0;
-  }
+    for (auto i : image_ids) {
+      librados::Rados rados(cg_ioctx);
+      IoCtx ioctx;
+      rados.ioctx_create2(i.second, ioctx);
+      std::string image_name;
+      r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, i.first, &image_name);
+      if (r < 0) {
+	return r;
+      }
+      images.push_back(std::make_pair(image_name, i.second));
+    }
 
-  int image_name_by_id(librados::IoCtx& image_ioctx, const char *image_id, std::string& image_name)
-  {
-    std::string id(image_id);
-    int r = cls_client::dir_get_name(&image_ioctx, RBD_DIRECTORY, id, &image_name);
-    return r;
+    return 0;
   }
 
   int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,

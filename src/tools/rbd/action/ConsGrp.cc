@@ -232,20 +232,13 @@ int execute_list_images(const po::variables_map &vm) {
   if (f)
     f->open_array_section("consistency_groups");
   for (auto i : images) {
-    librados::IoCtx i_io_ctx;
-    r = utils::init_io_ctx2(rados, i.second, &i_io_ctx);
-    if (r < 0)
-      return r;
-    std::string image_name;
-    r = rbd.image_name_by_id(i_io_ctx, i.first.c_str(), image_name);
     if (r < 0)
       return r;
     if (f) {
-      //f->dump_string("image id", i.first);
-      f->dump_string("image id", image_name);
+      f->dump_string("image name", i.first);
       f->dump_int("pool id", i.second);
     } else
-      std::cout << image_name << " " << i.second << std::endl;
+      std::cout << i.first << " " << i.second << std::endl;
   }
   if (f) {
     f->close_section();
