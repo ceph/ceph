@@ -26,8 +26,8 @@ void UpdateRequest::send() {
   // safe to update in-memory state first without handling rollback since any
   // failures will invalidate the object map
   std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
-  ldout(cct, 20) << &m_image_ctx << " updating object map"
-                 << ": oid=" << oid << ", ["
+  ldout(cct, 20) << this << " updating object map"
+                 << ": ictx=" << &m_image_ctx << ", oid=" << oid << ", ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
 		 << (m_current_state ?
 		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
@@ -62,7 +62,7 @@ void UpdateRequest::send() {
 }
 
 void UpdateRequest::finish_request() {
-  ldout(m_image_ctx.cct, 20) << &m_image_ctx << " on-disk object map updated"
+  ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
                              << dendl;
 }
 
