@@ -138,9 +138,6 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
     ret = store->get_bucket_entrypoint_info(obj_ctx, bucket_name, ep, &ot, NULL, &attrs);
     if (ret < 0 && ret != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned " << ret << dendl;
-    } else if (ret >= 0 && ep.linked && ep.owner != user_id) {
-      ldout(store->ctx(), 0) << "can't link bucket, already linked to a different user: " << ep.owner << dendl;
-      return -EINVAL;
     }
   }
 
@@ -542,7 +539,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
       return -EIO;
     }
 
-    r = rgw_unlink_bucket(store, owner.get_id(), bucket.name);
+    r = rgw_unlink_bucket(store, owner.get_id(), bucket.name, false);
     if (r < 0) {
       set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id());
       return r;
@@ -568,6 +565,17 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     r = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
     if (r < 0)
       return r;
+
+    RGWAccessControlPolicy policy_instance;
+    policy_instance.create_default(user_info.user_id, display_name);
+    aclbl.clear();
+    policy_instance.encode(aclbl);
+
+    string oid_bucket_instance = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
+    rgw_bucket bucket_instance;
+    bucket_instance.name = oid_bucket_instance;
+    rgw_obj obj_bucket_instance(bucket_instance, no_oid);
+    r = store->set_attr(NULL, obj_bucket_instance, RGW_ATTR_ACL, aclbl, &objv_tracker);
 
     r = rgw_link_bucket(store, user_info.user_id, bucket, 0);
     if (r < 0)
