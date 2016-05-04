@@ -1246,18 +1246,25 @@ static void dump_shard(const shard_info_t& shard,
 		       const inconsistent_obj_t& inc,
 		       Formatter &f)
 {
-  f.dump_bool("missing", shard.has_shard_missing());
   if (shard.has_shard_missing()) {
+    f.dump_bool("missing", shard.has_shard_missing());
     return;
   }
-  f.dump_bool("read_error", shard.has_read_error());
-  f.dump_bool("data_digest_mismatch", shard.has_data_digest_mismatch());
-  f.dump_bool("omap_digest_mismatch", shard.has_omap_digest_mismatch());
-  f.dump_bool("size_mismatch", shard.has_size_mismatch());
+  if (shard.has_read_error())
+    f.dump_bool("read_error", shard.has_read_error());
+  if (shard.has_data_digest_mismatch())
+    f.dump_bool("data_digest_mismatch", shard.has_data_digest_mismatch());
+  if (shard.has_omap_digest_mismatch())
+    f.dump_bool("omap_digest_mismatch", shard.has_omap_digest_mismatch());
+  if (shard.has_size_mismatch())
+    f.dump_bool("size_mismatch", shard.has_size_mismatch());
   if (!shard.has_read_error()) {
-    f.dump_bool("data_digest_mismatch_oi", shard.has_data_digest_mismatch_oi());
-    f.dump_bool("omap_digest_mismatch_oi", shard.has_omap_digest_mismatch_oi());
-    f.dump_bool("size_mismatch_oi", shard.has_size_mismatch_oi());
+    if (shard.has_data_digest_mismatch_oi())
+      f.dump_bool("data_digest_mismatch_oi", shard.has_data_digest_mismatch_oi());
+    if (shard.has_omap_digest_mismatch_oi())
+      f.dump_bool("omap_digest_mismatch_oi", shard.has_omap_digest_mismatch_oi());
+    if (shard.has_size_mismatch_oi())
+      f.dump_bool("size_mismatch_oi", shard.has_size_mismatch_oi());
   }
   f.dump_unsigned("size", shard.size);
   if (shard.omap_digest_present) {
@@ -1279,6 +1286,10 @@ static void dump_shard(const shard_info_t& shard,
     }
     f.close_section();
   }
+  if (shard.has_attr_missing())
+    f.dump_bool("attr_missing", shard.has_attr_missing());
+  if (shard.has_attr_unexpected())
+    f.dump_bool("attr_unexpected", shard.has_attr_unexpected());
 }
 
 static void dump_object_id(const object_id_t& object,
@@ -1306,13 +1317,20 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
   f.open_object_section("object");
   dump_object_id(inc.object, f);
   f.close_section();
-  f.dump_bool("missing", inc.has_shard_missing());
-  f.dump_bool("stat_err", inc.has_stat_error());
-  f.dump_bool("read_err", inc.has_read_error());
-  f.dump_bool("data_digest_mismatch", inc.has_data_digest_mismatch());
-  f.dump_bool("omap_digest_mismatch", inc.has_omap_digest_mismatch());
-  f.dump_bool("size_mismatch", inc.has_size_mismatch());
-  f.dump_bool("attr_mismatch", inc.has_attr_mismatch());
+  if (inc.has_shard_missing())
+    f.dump_bool("missing", inc.has_shard_missing());
+  if (inc.has_stat_error())
+    f.dump_bool("stat_err", inc.has_stat_error());
+  if (inc.has_read_error())
+    f.dump_bool("read_err", inc.has_read_error());
+  if (inc.has_data_digest_mismatch())
+    f.dump_bool("data_digest_mismatch", inc.has_data_digest_mismatch());
+  if (inc.has_omap_digest_mismatch())
+    f.dump_bool("omap_digest_mismatch", inc.has_omap_digest_mismatch());
+  if (inc.has_size_mismatch())
+    f.dump_bool("size_mismatch", inc.has_size_mismatch());
+  if (inc.has_attr_mismatch())
+    f.dump_bool("attr_mismatch", inc.has_attr_mismatch());
   f.open_array_section("shards");
   for (auto osd_shard : inc.shards) {
     f.open_object_section("shard");
@@ -1321,35 +1339,46 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
     f.close_section();
   }
   f.close_section();
-  f.close_section();
 }
 
 static void dump_inconsistent(const inconsistent_snapset_t& inc,
 			      Formatter &f)
 {
   dump_object_id(inc.object, f);
-  f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
-  f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
-  f.dump_bool("clone_missing", inc.clone_missing());
-  f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
-  f.dump_bool("head_mismatch", inc.head_mismatch());
-  f.dump_bool("headless", inc.headless());
-  f.dump_bool("size_mismatch", inc.size_mismatch());
+  if (inc.ss_attr_missing())
+    f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
+  if (inc.ss_attr_corrupted())
+    f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
+  if (inc.oi_attr_missing())
+    f.dump_bool("oi_attr_missing", inc.oi_attr_missing());
+  if (inc.oi_attr_corrupted())
+    f.dump_bool("oi_attr_corrupted", inc.oi_attr_corrupted());
+  if (inc.snapset_mismatch())
+    f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
+  if (inc.head_mismatch())
+    f.dump_bool("head_mismatch", inc.head_mismatch());
+  if (inc.headless())
+    f.dump_bool("headless", inc.headless());
+  if (inc.size_mismatch())
+    f.dump_bool("size_mismatch", inc.size_mismatch());
 
-  if (inc.clone_missing()) {
-    f.open_array_section("clones");
+  if (inc.extra_clones()) {
+    f.dump_bool("extra_clones", inc.extra_clones());
+    f.open_array_section("extra clones");
     for (auto snap : inc.clones) {
       f.dump_unsigned("snap", snap);
     }
     f.close_section();
+  }
 
+  if (inc.clone_missing()) {
+    f.dump_bool("clone_missing", inc.clone_missing());
     f.open_array_section("missing");
     for (auto snap : inc.missing) {
       f.dump_unsigned("snap", snap);
     }
     f.close_section();
   }
-  f.close_section();
 }
 
 // dispatch the call by type
@@ -1392,9 +1421,9 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     cerr << "bad pg: " << nargs[1] << std::endl;
     return ret;
   }
-
-  uint32_t interval = 0;
+  uint32_t interval = 0, first_interval = 0;
   const unsigned max_item_num = 32;
+  bool opened = false;
   for (librados::object_id_t start;;) {
     std::vector<T> items;
     auto completion = librados::Rados::aio_create_completion();
@@ -1403,16 +1432,29 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     completion->wait_for_safe();
     ret = completion->get_return_value();
     completion->release();
-    if (ret == -EAGAIN) {
-      cerr << "interval#" << interval << " expired." << std::endl;
+    if (ret < 0) {
+      if (ret == -EAGAIN)
+        cerr << "interval#" << interval << " expired." << std::endl;
+      else if (ret == -ENOENT)
+        cerr << "No scrub information available for pg " << pg << std::endl;
+      else
+        cerr << "Unknown error " << cpp_strerror(ret) << std::endl;
       break;
     }
+    // It must be the same interval every time.  EAGAIN would
+    // occur if interval changes.
+    assert(start.name.empty() || first_interval == interval);
     if (start.name.empty()) {
+      first_interval = interval;
+      formatter.open_object_section("info");
+      formatter.dump_int("epoch", interval);
       formatter.open_array_section("inconsistents");
+      opened = true;
     }
     for (auto& inc : items) {
       formatter.open_object_section("inconsistent");
       dump_inconsistent(inc, formatter);
+      formatter.close_section();
     }
     if (items.size() < max_item_num) {
       formatter.close_section();
@@ -1423,7 +1465,10 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     items.clear();
   }
-  formatter.flush(cout);
+  if (opened) {
+    formatter.close_section();
+    formatter.flush(cout);
+  }
   return ret;
 }
 
