@@ -516,6 +516,8 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
     } else if (tag_data.mirror_uuid == m_remote_mirror_uuid &&
 	       m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_REPLAYING) {
       dout(20) << ": local image is in clean replay state" << dendl;
+    } else if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
+      dout(20) << ": previous sync was canceled" << dendl;
     } else {
       derr << ": split-brain detected -- skipping image replay" << dendl;
       m_ret_val = -EEXIST;
