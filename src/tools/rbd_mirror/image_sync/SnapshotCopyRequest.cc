@@ -276,7 +276,8 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
   ldout(cct, 20) << ": "
                  << "snap_name=" << m_snap_name << ", "
-                 << "snap_id=" << m_prev_snap_id << dendl;
+                 << "snap_id=" << m_prev_snap_id << ", "
+                 << "size=" << size << dendl;
 
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
