@@ -16,6 +16,8 @@ namespace ceph { class Formatter; }
 namespace cls {
 namespace rbd {
 
+static const uint32_t MAX_OBJECT_MAP_OBJECT_COUNT = 256000000;
+
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
