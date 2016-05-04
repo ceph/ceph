@@ -901,6 +901,11 @@ if ! getent passwd ceph >/dev/null ; then
     getent passwd $CEPH_USER_ID >/dev/null || CEPH_USER_ID_OPTION="-u $CEPH_USER_ID"
     useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
 fi
+# fix ownership of log files
+[ -d /var/log/ceph ] || exit 0
+[ "$(stat -c %U /var/log/ceph)" = "ceph" ] && exit 0
+find /var/log/ceph -type f -name '*.log' -exec chown ceph.ceph {} \;
+chown ceph.ceph /var/log/ceph
 %endif
 exit 0
 
@@ -1093,6 +1098,15 @@ fi
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
+
+%pre radosgw
+%if 0%{?suse_version}
+# fix ownership of log files
+[ -d /var/log/ceph-radosgw ] || exit 0
+[ "$(stat -c %U /var/log/ceph-radosgw)" = "ceph" ] && exit 0
+find /var/log/ceph-radosgw -type f -name '*.log' -exec chown ceph.ceph {} \;
+chown ceph.ceph /var/log/ceph-radosgw
+%endif
 
 %post radosgw
 %if 0%{?suse_version}
