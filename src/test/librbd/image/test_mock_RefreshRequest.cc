@@ -261,10 +261,10 @@ public:
   }
 
   void expect_open_object_map(MockRefreshImageCtx &mock_image_ctx,
-                              MockObjectMap &mock_object_map, int r) {
+                              MockObjectMap *mock_object_map, int r) {
     EXPECT_CALL(mock_image_ctx, create_object_map(_))
-                  .WillOnce(Return(&mock_object_map));
-    EXPECT_CALL(mock_object_map, open(_))
+                  .WillOnce(Return(mock_object_map));
+    EXPECT_CALL(*mock_object_map, open(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
@@ -419,7 +419,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   expect_get_snapshots(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-    expect_open_object_map(mock_image_ctx, mock_object_map, 0);
+    expect_open_object_map(mock_image_ctx, &mock_object_map, 0);
   }
   expect_add_snap(mock_image_ctx, "snap", ictx->snap_ids.begin()->second);
   expect_get_snap_id(mock_image_ctx, "snap", ictx->snap_ids.begin()->second);
@@ -664,7 +664,7 @@ TEST_F(TestMockImageRefreshRequest, EnableObjectMapWithExclusiveLock) {
   expect_get_mutable_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_open_object_map(mock_image_ctx, mock_object_map, 0);
+  expect_open_object_map(mock_image_ctx, &mock_object_map, 0);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &ctx);
@@ -743,6 +743,41 @@ TEST_F(TestMockImageRefreshRequest, DisableObjectMap) {
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+
+  MockRefreshImageCtx mock_image_ctx(*ictx);
+  MockRefreshParentRequest mock_refresh_parent_request;
+
+  MockExclusiveLock mock_exclusive_lock;
+  mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_test_features(mock_image_ctx);
+  expect_is_exclusive_lock_owner(mock_exclusive_lock, true);
+
+  // object map should be immediately opened if exclusive lock owned
+  InSequence seq;
+  expect_get_mutable_metadata(mock_image_ctx, 0);
+  expect_get_flags(mock_image_ctx, 0);
+  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  expect_open_object_map(mock_image_ctx, mock_object_map, -EFBIG);
+
+  C_SaferCond ctx;
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &ctx);
+  req->send();
+
+  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(nullptr, mock_image_ctx.object_map);
 }
 
 } // namespace image

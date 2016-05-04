@@ -607,7 +607,13 @@ Context *RefreshRequest<I>::handle_v2_open_object_map(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << "failed to open object map: " << cpp_strerror(*result)
+               << dendl;
+    delete m_object_map;
+    m_object_map = nullptr;
+  }
+
   send_v2_open_journal();
   return nullptr;
 }
