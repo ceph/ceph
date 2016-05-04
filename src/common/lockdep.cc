@@ -144,7 +144,7 @@ int lockdep_register(const char *name)
       for (auto& p : lock_names) {
 	lockdep_dout(0) << "  lock " << p.first << " " << p.second << dendl;
       }
-      assert(free_ids.empty());
+      assert(!free_ids.empty());
     }
     id = free_ids.front();
     free_ids.pop_front();
