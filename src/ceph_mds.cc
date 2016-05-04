@@ -97,10 +97,6 @@ int main(int argc, const char **argv)
 	      0, "mds_data");
   ceph_heap_profiler_init();
 
-  // mds specific args
-  MDSMap::DaemonState shadow = MDSMap::STATE_NULL;
-  std::string dump_file;
-
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -110,30 +106,13 @@ int main(int argc, const char **argv)
       usage();
       break;
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--journal-check", (char*)NULL)) {
-      int r = parse_rank("journal-check", val);
-      if (shadow != MDSMap::STATE_NULL) {
-        dout(0) << "Error: can only select one standby state" << dendl;
-        return -1;
-      }
-      dout(0) << "requesting oneshot_replay for mds." << r << dendl;
-      shadow = MDSMap::STATE_ONESHOT_REPLAY;
-      char rb[32];
-      snprintf(rb, sizeof(rb), "%d", r);
-      g_conf->set_val("mds_standby_for_rank", rb);
-      g_conf->apply_changes(NULL);
-    }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       int r = parse_rank("hot-standby", val);
-      if (shadow != MDSMap::STATE_NULL) {
-        dout(0) << "Error: can only select one standby state" << dendl;
-        return -1;
-      }
       dout(0) << "requesting standby_replay for mds." << r << dendl;
-      shadow = MDSMap::STATE_STANDBY_REPLAY;
       char rb[32];
       snprintf(rb, sizeof(rb), "%d", r);
       g_conf->set_val("mds_standby_for_rank", rb);
+      g_conf->set_val("mds_standby_replay", "true");
       g_conf->apply_changes(NULL);
     }
     else {
@@ -193,8 +172,7 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
-  if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
-    global_init_daemonize(g_ceph_context);
+  global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   // get monmap
@@ -212,10 +190,7 @@ int main(int argc, const char **argv)
   mds->orig_argc = argc;
   mds->orig_argv = argv;
 
-  if (shadow != MDSMap::STATE_NULL)
-    r = mds->init(shadow);
-  else
-    r = mds->init();
+  r = mds->init();
   if (r < 0) {
     msgr->wait();
     goto shutdown;
