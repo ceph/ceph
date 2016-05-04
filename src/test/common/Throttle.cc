@@ -52,6 +52,7 @@ protected:
     }
 
     virtual void *entry() {
+      usleep(5);
       waited = throttle.get(count);
       throttle.put(count);
       return NULL;
@@ -123,6 +124,7 @@ TEST_F(ThrottleTest, get) {
       delay *= 2;
   } while(!waited);
 
+  delay = 1;
   do {
     cout << "Trying (2) with delay " << delay << "us\n";
 
