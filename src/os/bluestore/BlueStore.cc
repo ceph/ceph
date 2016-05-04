@@ -5520,6 +5520,7 @@ int BlueStore::_do_write(
 
     // use cached tail block?
     uint64_t tail_start = o->onode.size - o->onode.size % block_size;
+    bool partly_overwrite_tail = false;
     if (offset >= bp->first &&
 	offset > tail_start &&
 	offset + length >= o->onode.size &&
@@ -5545,6 +5546,9 @@ int BlueStore::_do_write(
 	bl.swap(t);
       } else {
 	bufferlist t;
+	//partly overwrite cache tail. Block size don't equal sector size
+	//so block update isn't a atomic op.
+	partly_overwrite_tail = true;
 	t.substr_of(o->tail_bl, 0, tail_off);
 	offset -= t.length();
 	length += t.length();
@@ -5555,15 +5559,17 @@ int BlueStore::_do_write(
       assert(!bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN) ||
 	     bp->second.has_flag(bluestore_extent_t::FLAG_COW_HEAD) ||
 	     offset == bp->first);
-      bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
-      bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
-      _pad_zeros(txc, o, &bl, &offset, &length, block_size);
-      uint64_t x_off = offset - bp->first;
-      dout(20) << __func__ << " write " << offset << "~" << length
-	       << " x_off " << x_off << dendl;
-      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
-      ++bp;
-      continue;
+      if (!partly_overwrite_tail) {
+	bp->second.clear_flag(bluestore_extent_t::FLAG_COW_HEAD);
+	bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
+	_pad_zeros(txc, o, &bl, &offset, &length, block_size);
+	uint64_t x_off = offset - bp->first;
+	dout(20) << __func__ << " write " << offset << "~" << length
+	  << " x_off " << x_off << dendl;
+	bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
+	++bp;
+	continue;
+      }
     }
 
     if (offset + length > (o->onode.size & block_mask) &&
@@ -5573,7 +5579,7 @@ int BlueStore::_do_write(
     }
 
     if (offset % min_alloc_size == 0 &&
-	length % min_alloc_size == 0) {
+	length % min_alloc_size == 0 && !partly_overwrite_tail) {
       assert(bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN));
     }
 
