@@ -505,7 +505,7 @@ public:
   Cond pre_publish_cond;
   void pre_publish_map(OSDMapRef map) {
     Mutex::Locker l(pre_publish_lock);
-    next_osdmap = map;
+    next_osdmap = std::move(map);
   }
 
   void activate_map();
