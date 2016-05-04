@@ -102,11 +102,6 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
 string bluestore_extent_t::get_flags_string(unsigned flags)
 {
   string s;
-  if (flags & FLAG_UNWRITTEN) {
-    if (s.length())
-      s += '+';
-    s += "unwritten";
-  }
   if (flags & FLAG_SHARED) {
     if (s.length())
       s += '+';
