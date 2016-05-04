@@ -7645,6 +7645,11 @@ done:
     }
     int64_t max_osds = g_conf->mon_reweight_max_osds;
     cmd_getval(g_ceph_context, cmdmap, "max_osds", max_osds);
+    if (max_osds <= 0) {
+      ss << "max_osds " << max_osds << " must be positive";
+      err = -EINVAL;
+      goto reply;
+    }
     string no_increasing;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
