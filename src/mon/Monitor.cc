@@ -464,6 +464,7 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "host",
     "fsid",
     // periodic health to clog
     "mon_health_to_clog",
