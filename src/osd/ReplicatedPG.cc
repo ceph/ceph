@@ -762,6 +762,13 @@ int ReplicatedPG::do_command(
     f->flush(odata);
     return 0;
   }
+  else if (command == "log") {
+    f->open_object_section("pg_log");
+    pg_log.get_log().dump(f.get());
+    f->close_section();
+    f->flush(odata);
+    return 0;
+  }
   else if (command == "mark_unfound_lost") {
     string mulcmd;
     cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
