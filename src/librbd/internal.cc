@@ -95,16 +95,24 @@ int remove_object_map(ImageCtx *ictx) {
   }
   return 0;
 }
+
 int create_object_map(ImageCtx *ictx) {
   assert(ictx->snap_lock.is_locked());
   CephContext *cct = ictx->cct;
 
   int r;
+  uint64_t max_size = ictx->size;
   std::vector<uint64_t> snap_ids;
   snap_ids.push_back(CEPH_NOSNAP);
   for (std::map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
        it != ictx->snap_info.end(); ++it) {
+    max_size = MAX(max_size, it->second.size);
     snap_ids.push_back(it->first);
+  }
+
+  if (!ObjectMap::is_compatible(ictx->layout, max_size)) {
+    lderr(cct) << "image size not compatible with object map" << dendl;
+    return -EINVAL;
   }
 
   for (std::vector<uint64_t>::iterator it = snap_ids.begin();
@@ -1096,6 +1104,11 @@ remove_mirroring_image:
       } else {
         layout.stripe_unit = stripe_unit;
         layout.stripe_count = stripe_count;
+      }
+
+      if (!ObjectMap::is_compatible(layout, size)) {
+        lderr(cct) << "image size not compatible with object map" << dendl;
+        goto err_remove_header;
       }
 
       librados::ObjectWriteOperation op;
