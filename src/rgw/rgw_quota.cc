@@ -101,9 +101,9 @@ public:
 template<class T>
 bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& cached_stats)
 {
-  if (quota.max_size_kb >= 0) {
+  if (quota.max_size >= 0) {
     if (quota.max_size_soft_threshold < 0) {
-      quota.max_size_soft_threshold = quota.max_size_kb * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
     }
 
     const auto cached_stats_num_kb_rounded = rgw_rounded_kb(cached_stats.size_rounded);
@@ -712,21 +712,17 @@ bool RGWQuotaInfoDefApplier::is_size_exceeded(const char * const entity,
                                               const RGWStorageStats& stats,
                                               const uint64_t size) const
 {
-  if (qinfo.max_size_kb < 0) {
+  if (qinfo.max_size < 0) {
     /* The limit is not enabled. */
     return false;
   }
 
-  /* Handling quota in KiBs due to backward compatibility. */
-  const uint64_t add_size_kb = rgw_rounded_objsize_kb(size);
-  /* XXX: just div 1024 should be enough. */
-  const uint64_t cur_size_kb = rgw_rounded_kb(stats.size_rounded);
-  const uint64_t stats_num_kb_rounded = rgw_rounded_kb(stats.size_rounded);
+  const uint64_t cur_size = stats.size_rounded;
 
-  if (cur_size_kb + add_size_kb > static_cast<uint64_t>(qinfo.max_size_kb)) {
-    dout(10) << "quota exceeded: stats_num_kb_rounded=" << stats_num_kb_rounded
-             << " size_kb=" << add_size_kb << " "
-             << entity << "_quota.max_size_kb=" << qinfo.max_size_kb << dendl;
+  if (cur_size + size > static_cast<uint64_t>(qinfo.max_size)) {
+    dout(10) << "quota exceeded: stats.size_rounded=" << stats.size_rounded
+             << " size=" << size << " "
+             << entity << "_quota.max_size=" << qinfo.max_size << dendl;
     return true;
   }
 
@@ -782,7 +778,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
 
     ldout(store->ctx(), 20) << entity
                             << " quota: max_objects=" << quota.max_objects
-                            << " max_size_kb=" << quota.max_size_kb << dendl;
+                            << " max_size=" << quota.max_size << dendl;
 
 
     if (quota_applier.is_num_objs_exceeded(entity, quota, stats, num_objs)) {
@@ -802,7 +798,7 @@ public:
       def_bucket_quota.enabled = true;
     }
     if (store->ctx()->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      def_bucket_quota.max_size_kb = store->ctx()->_conf->rgw_bucket_default_quota_max_size;
+      def_bucket_quota.max_size = store->ctx()->_conf->rgw_bucket_default_quota_max_size * 1024;
       def_bucket_quota.enabled = true;
     }
     if (store->ctx()->_conf->rgw_user_default_quota_max_objects >= 0) {
@@ -810,7 +806,7 @@ public:
       def_user_quota.enabled = true;
     }
     if (store->ctx()->_conf->rgw_user_default_quota_max_size >= 0) {
-      def_user_quota.max_size_kb = store->ctx()->_conf->rgw_user_default_quota_max_size;
+      def_user_quota.max_size = store->ctx()->_conf->rgw_user_default_quota_max_size * 1024;
       def_user_quota.enabled = true;
     }
   }

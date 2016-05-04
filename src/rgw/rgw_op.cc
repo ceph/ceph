@@ -2839,7 +2839,7 @@ static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
     if (!err.empty()) {
       return -EINVAL;
     }
-    quota.max_size_kb = rgw_rounded_kb(max_size);
+    quota.max_size = max_size;
     add_attrs.erase(iter);
   }
 
@@ -2851,11 +2851,11 @@ static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
 
     /* Remove limit on max bucket size. */
     if (name.compare(RGW_ATTR_CQUOTA_MSIZE) == 0) {
-      quota.max_size_kb = -1;
+      quota.max_size = -1;
     }
   }
 
-  quota.enabled = quota.max_size_kb > 0 || quota.max_objects > 0;
+  quota.enabled = quota.max_size > 0 || quota.max_objects > 0;
   return 0;
 }
 

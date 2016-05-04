@@ -487,13 +487,20 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 void RGWQuotaInfo::dump(Formatter *f) const
 {
   f->dump_bool("enabled", enabled);
-  f->dump_int("max_size_kb", max_size_kb);
+  f->dump_int("max_size", max_size);
+  f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
   f->dump_int("max_objects", max_objects);
 }
 
 void RGWQuotaInfo::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
+  if (false == JSONDecoder::decode_json("max_size", max_size, obj)) {
+    /* We're parsing an older version of the struct. */
+    int64_t max_size_kb = 0;
+
+    JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
+    max_size = max_size_kb * 1024;
+  }
   JSONDecoder::decode_json("max_objects", max_objects, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
