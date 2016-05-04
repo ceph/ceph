@@ -555,6 +555,8 @@ private:
 
   PerfCounters *logger;
 
+  bufferptr zeros;
+
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 

@@ -770,6 +770,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL)
 {
+  zeros = buffer::create_page_aligned(128*1024);
+  zeros.zero();
   _init_logger();
 }
 
@@ -3887,6 +3889,19 @@ void BlueStore::_txc_update_fm(TransContext *txc)
       if (!g_conf->bluestore_debug_no_reuse_blocks)
 	alloc->release(p.get_start(), p.get_len());
     }
+
+    if (g_conf->bluestore_discard_on_release && bdev->supports_discard()) {
+      uint64_t block_size = bdev->get_block_size();
+      for (interval_set<uint64_t>::iterator p = txc->released.begin();
+	  p != txc->released.end() && (p.get_len() >= block_size);
+	  ++p) {
+	uint64_t off = ROUND_UP_TO(p.get_start(), block_size);
+	uint64_t len = p.get_len() - (off - p.get_start());
+	len -= len % block_size;
+	if (len)
+	  bdev->discard(off, len); //we don't care the result
+      }
+    }
   }
 }
 
@@ -3969,6 +3984,19 @@ void BlueStore::_kv_sync_thread()
 	    fm->release(p.get_start(), p.get_len(), t);
 	    if (!g_conf->bluestore_debug_no_reuse_blocks)
 	      alloc->release(p.get_start(), p.get_len());
+	  }
+
+	  if (g_conf->bluestore_discard_on_release && bdev->supports_discard()) {
+	    uint64_t block_size = bdev->get_block_size();
+	    for (interval_set<uint64_t>::iterator p = txc->wal_txn->released.begin();
+		p != txc->wal_txn->released.end() && (p.get_len() >= block_size);
+		++p) {
+	      uint64_t off = ROUND_UP_TO(p.get_start(), block_size);
+	      uint64_t len = p.get_len() - (off - p.get_start());
+	      len -= len % block_size;
+	      if (len)
+		bdev->discard(off, len); //we don't care the result
+	    }
 	  }
 	}
       }
@@ -5727,7 +5755,12 @@ int BlueStore::_do_write_zero(
   uint64_t length)
 {
   bufferlist zl;
-  zl.append_zero(length);
+  uint64_t len = length;
+  while (len > 0) {
+    uint64_t size = MIN(zeros.length(), len);
+    len -= size;
+    zl.append(zeros, 0, size);
+  }
   uint64_t old_size = o->onode.size;
   int r = _do_write(txc, c, o, offset, length, zl, 0);
   // we do not modify onode size

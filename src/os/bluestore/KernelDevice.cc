@@ -42,7 +42,9 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
     aio_callback_priv(cbpriv),
     aio_stop(false),
     aio_thread(this),
-    injecting_crash(0)
+    injecting_crash(0),
+    can_discard(false),
+    discard_zeroes_data(false)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
@@ -136,6 +138,21 @@ int KernelDevice::open(string p)
 
   r = _aio_start();
   assert(r == 0);
+
+  //check disk whether support discard zero data
+  if (S_ISBLK(st.st_mode)) {
+    char realname[PATH_MAX] = {0};
+    if (readlink(path.c_str(), realname, sizeof(realname) - 1) != -1) {
+      can_discard = !!get_block_device_int_property(realname, "discard_granularity");
+	if (can_discard) {
+	  dout(1) << realname << " support discard command"  << dendl;
+	  discard_zeroes_data = !!get_block_device_int_property(realname, "discard_zeroes_data");
+	  if (discard_zeroes_data)
+	    dout(1) << realname << " support discard zero data" << dendl;
+
+	}
+      }
+  }
 
   dout(1) << __func__
 	  << " size " << size
@@ -459,6 +476,18 @@ int KernelDevice::aio_zero(
   assert(off + len <= size);
 
   bufferlist bl;
+
+  //discard bypass page cache, so we must invalidate the related page cache.
+  if (g_conf->bdev_discard_on_zero && discard_zeroes_data) {
+    int r = invalidate_cache(off, len);
+    //if met error, use aio_write
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " invalidate_cache error: " << cpp_strerror(r) << dendl;
+    } else
+      return discard(off, len);
+  }
+
   while (len > 0) {
     bufferlist t;
     t.append(zeros, 0, MIN(zeros.length(), len));
@@ -544,7 +573,16 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
-  int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
+
+  //POSIX_FADV_DONTNEED can't free dirty page. So we must firstly make those direty pages clean and then free.
+  int r = sync_file_range(fd_buffered, off , len, SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
   if (r < 0) {
     r = -errno;
     derr << __func__ << " " << off << "~" << len << " error: "
@@ -553,3 +591,14 @@ int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
+bool KernelDevice::supports_discard()
+{
+  return can_discard;
+}
+
+int KernelDevice::discard(uint64_t off, uint64_t len)
+{
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  return block_device_discard(fd_direct, off, len);
+}
