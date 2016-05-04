@@ -400,15 +400,12 @@ TEST_F(TestImageReplayer, StartInterrupted)
   ASSERT_EQ(0, stop_cond.wait());
 }
 
-TEST_F(TestImageReplayer, ErrorJournalReset)
+TEST_F(TestImageReplayer, JournalReset)
 {
   bootstrap();
-
   ASSERT_EQ(0, librbd::Journal<>::reset(m_remote_ioctx, m_remote_image_id));
-
-  C_SaferCond cond;
-  m_replayer->start(&cond);
-  ASSERT_EQ(-EEXIST, cond.wait());
+  // try to recover
+  bootstrap();
 }
 
 TEST_F(TestImageReplayer, ErrorNoJournal)
