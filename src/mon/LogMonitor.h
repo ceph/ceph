@@ -22,9 +22,10 @@ using namespace std;
 #include "include/types.h"
 #include "msg/Messenger.h"
 #include "PaxosService.h"
-
+#include "common/Mutex.h"
 #include "common/LogEntry.h"
 #include "messages/MLog.h"
+#include "common/Graylog.h"
 
 class MMonCommand;
 
@@ -41,6 +42,7 @@ class LogMonitor : public PaxosService,
 private:
   multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
+  Mutex conf_lock;
 
   struct log_channel_info {
 
@@ -174,7 +176,8 @@ private:
 
  public:
   LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 
-    : PaxosService(mn, p, service_name) { }
+    : PaxosService(mn, p, service_name),
+      conf_lock("conf") { }
 
   void init() {
     generic_dout(10) << "LogMonitor::init" << dendl;
