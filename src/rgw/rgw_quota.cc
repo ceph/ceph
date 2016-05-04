@@ -706,6 +706,19 @@ public:
                                     const uint64_t num_objs) const;
 };
 
+class RGWQuotaInfoRawApplier : public RGWQuotaInfoApplier {
+public:
+  virtual bool is_size_exceeded(const char * const entity,
+                                const RGWQuotaInfo& qinfo,
+                                const RGWStorageStats& stats,
+                                const uint64_t size) const;
+
+  virtual bool is_num_objs_exceeded(const char * const entity,
+                                    const RGWQuotaInfo& qinfo,
+                                    const RGWStorageStats& stats,
+                                    const uint64_t num_objs) const;
+};
+
 
 bool RGWQuotaInfoDefApplier::is_size_exceeded(const char * const entity,
                                               const RGWQuotaInfo& qinfo,
@@ -749,12 +762,59 @@ bool RGWQuotaInfoDefApplier::is_num_objs_exceeded(const char * const entity,
   return false;
 }
 
+bool RGWQuotaInfoRawApplier::is_size_exceeded(const char * const entity,
+                                              const RGWQuotaInfo& qinfo,
+                                              const RGWStorageStats& stats,
+                                              const uint64_t size) const
+{
+  if (qinfo.max_size < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  const uint64_t cur_size = stats.size;
+
+  if (cur_size + size > static_cast<uint64_t>(qinfo.max_size)) {
+    dout(10) << "quota exceeded: stats.size=" << stats.size
+             << " size=" << size << " "
+             << entity << "_quota.max_size=" << qinfo.max_size << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+bool RGWQuotaInfoRawApplier::is_num_objs_exceeded(const char * const entity,
+                                                  const RGWQuotaInfo& qinfo,
+                                                  const RGWStorageStats& stats,
+                                                  const uint64_t num_objs) const
+{
+  if (qinfo.max_objects < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  if (stats.num_objects + num_objs > static_cast<uint64_t>(qinfo.max_objects)) {
+    dout(10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+             << " " << entity << "_quota.max_objects=" << qinfo.max_objects
+             << dendl;
+    return true;
+  }
+
+  return false;
+}
+
 const RGWQuotaInfoApplier& RGWQuotaInfoApplier::get_instance(
   const RGWQuotaInfo& qinfo)
 {
   static RGWQuotaInfoDefApplier default_qapplier;
+  static RGWQuotaInfoRawApplier raw_qapplier;
 
-  return default_qapplier;
+  if (qinfo.check_on_raw) {
+    return raw_qapplier;
+  } else {
+    return default_qapplier;
+  }
 }
 
 
