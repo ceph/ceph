@@ -64,7 +64,7 @@ void bluestore_bdev_label_t::generate_test_instances(
 ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
 {
   return out << "bdev(osd_uuid " << l.osd_uuid
-	     << " size " << l.size
+	     << " size 0x" << std::hex << l.size << std::dec
 	     << " btime " << l.btime
 	     << " desc " << l.description << ")";
 }
@@ -333,7 +333,8 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
   for (auto p = m.ref_map.begin(); p != m.ref_map.end(); ++p) {
     if (p != m.ref_map.begin())
       out << ",";
-    out << p->first << "~" << p->second.length << "=" << p->second.refs;
+    out << std::hex << "0x" << p->first << "~0x" << p->second.length << std::dec
+	<< "=" << p->second.refs;
   }
   out << ")";
   return out;
@@ -374,8 +375,8 @@ void bluestore_overlay_t::generate_test_instances(list<bluestore_overlay_t*>& o)
 
 ostream& operator<<(ostream& out, const bluestore_overlay_t& o)
 {
-  out << "overlay(" << o.value_offset << "~" << o.length
-      << " key " << o.key << ")";
+  out << "overlay(0x" << std::hex << o.value_offset << "~0x" << o.length
+      << std::dec << " key " << o.key << ")";
   return out;
 }
 
@@ -389,7 +390,7 @@ void bluestore_pextent_t::dump(Formatter *f) const
 }
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o) {
-  return out << o.offset << "~" << o.length;
+  return out << "0x" << std::hex << o.offset << "~0x" << o.length << std::dec;
 }
 
 void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls)
@@ -479,7 +480,7 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " len " << std::hex << o.length
+      << " len 0x" << std::hex << o.length << std::dec
       << " nref " << o.num_refs;
   if (o.flags) {
     out << " " << o.get_flags_string();
@@ -520,7 +521,8 @@ void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& ls
 
 ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
 {
-  out  << lb.offset << "~" << lb.length << "->" << lb.blob;
+  out  << "0x" << std::hex << lb.offset << "~0x" << lb.length << std::dec
+       << "->" << lb.blob;
   if (lb.flags)
     out << ":" << bluestore_lextent_t::get_flags_string(lb.flags);
   return out;
