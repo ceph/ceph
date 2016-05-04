@@ -4,8 +4,10 @@
 #include "SnapshotCreateRequest.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -149,15 +151,43 @@ void SnapshotCreateRequest<I>::handle_snap_create(int r) {
 }
 template <typename I>
 void SnapshotCreateRequest<I>::send_create_object_map() {
-  // TODO
-  if (true) {
+  CephContext *cct = m_local_image_ctx->cct;
+
+  if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP)) {
     finish(0);
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  m_local_image_ctx->snap_lock.get_read();
+  auto snap_it = m_local_image_ctx->snap_ids.find(m_snap_name);
+  if (snap_it == m_local_image_ctx->snap_ids.end()) {
+    lderr(cct) << "failed to locate snap: " << m_snap_name << dendl;
+    m_local_image_ctx->snap_lock.put_read();
+    finish(-ENOENT);
+    return;
+  }
+  librados::snap_t local_snap_id = snap_it->second;
+  m_local_image_ctx->snap_lock.put_read();
 
+  std::string object_map_oid(librbd::ObjectMap::object_map_name(
+    m_local_image_ctx->id, local_snap_id));
+  uint64_t object_count = Striper::get_num_objects(m_local_image_ctx->layout,
+                                                   m_size);
+  ldout(cct, 20) << ": "
+                 << "object_map_oid=" << object_map_oid << ", "
+                 << "object_count=" << object_count << dendl;
+
+  // initialize an empty object map of the correct size (object sync
+  // will populate the object map)
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::object_map_resize(&op, object_count, OBJECT_NONEXISTENT);
+
+  librados::AioCompletion *comp = create_rados_safe_callback<
+    SnapshotCreateRequest<I>,
+    &SnapshotCreateRequest<I>::handle_create_object_map>(this);
+  int r = m_local_image_ctx->md_ctx.aio_operate(object_map_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
 template <typename I>
