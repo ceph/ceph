@@ -1,0 +1,11 @@
+meta:
+- desc: |
+   add test details here
+   run s3tests
+workload:
+  sequential:
+  - rgw: [client.1]
+  - s3tests:
+      client.0:
+        force-branch: hammer
+        rgw_server: client.1
