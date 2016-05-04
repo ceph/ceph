@@ -298,6 +298,9 @@ def task(ctx, config):
 
     ctx.manager.wait_for_all_up()
 
+    ctx.manager.raw_cluster_cmd('osd', 'set', 'noscrub')
+    ctx.manager.raw_cluster_cmd('osd', 'set', 'nodeep-scrub')
+
     repair_test_1(ctx, mdataerr, choose_primary, "scrub")
     repair_test_1(ctx, mdataerr, choose_replica, "scrub")
     repair_test_1(ctx, dataerr, choose_primary, "deep-scrub")
