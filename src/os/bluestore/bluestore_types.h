@@ -58,7 +58,6 @@ WRITE_CLASS_ENCODER(bluestore_cnode_t)
 struct bluestore_extent_t {
   enum {
     FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
-    FLAG_COW_TAIL = 8,    ///< extent has pending wal OP_COPY for tail
   };
   static string get_flags_string(unsigned flags);
 
