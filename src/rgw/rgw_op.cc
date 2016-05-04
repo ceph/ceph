@@ -2855,6 +2855,8 @@ static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
     }
   }
 
+  /* Swift requries checking on raw usage instead of the 4 KiB rounded one. */
+  quota.check_on_raw = true;
   quota.enabled = quota.max_size > 0 || quota.max_objects > 0;
   return 0;
 }
