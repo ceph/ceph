@@ -209,14 +209,14 @@ these under ``[mon]`` or under the entry for a specific monitor.
 
 	[mon]
 		mon host = hostname1,hostname2,hostname3
-		mon addr = 10.0.0.10:6789,10.0.0.11:6789,10.0.0.12:6789
+		mon addr = 10.0.0.10:3300,10.0.0.11:3300,10.0.0.12:3300
 
 
 .. code-block:: ini
 
 	[mon.a]
 		host = hostname1
-		mon addr = 10.0.0.10:6789
+		mon addr = 10.0.0.10:3300
 
 See the `Network Configuration Reference`_ for details.
 

@@ -26,7 +26,8 @@ When creating a map with --create, a new monitor map with a new,
 random UUID will be created. It should be followed by one or more
 monitor addresses.
 
-The default Ceph monitor port is 6789.
+The default Ceph monitor port is 3300, as assigned by the IANA.  Prior to
+the kraken 11.2.z release the default was 6789.
 
 
 Options
@@ -80,8 +81,8 @@ Example
 
 To create a new map with three monitors (for a fresh Ceph file system)::
 
-        monmaptool  --create  --add  mon.a 192.168.0.10:6789 --add mon.b 192.168.0.11:6789 \
-          --add mon.c 192.168.0.12:6789 --clobber monmap
+        monmaptool  --create  --add  mon.a 192.168.0.10:3300 --add mon.b 192.168.0.11:3300 \
+          --add mon.c 192.168.0.12:3300 --clobber monmap
 
 To display the contents of the map::
 
@@ -89,7 +90,7 @@ To display the contents of the map::
 
 To replace one monitor::
 
-        monmaptool --rm mon.a --add mon.a 192.168.0.9:6789 --clobber monmap
+        monmaptool --rm mon.a --add mon.a 192.168.0.9:3300 --clobber monmap
 
 
 Availability

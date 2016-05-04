@@ -123,7 +123,7 @@ Take the following example of ``mon_status``::
         "mons": [
               { "rank": 0,
                 "name": "a",
-                "addr": "127.0.0.1:6789\/0"},
+                "addr": "127.0.0.1:3300\/0"},
               { "rank": 1,
                 "name": "b",
                 "addr": "127.0.0.1:6790\/0"},
@@ -150,7 +150,7 @@ By the way, how are ranks established?
 
   Ranks are (re)calculated whenever you add or remove monitors and follow a
   simple rule: the **greater** the ``IP:PORT`` combination, the **lower** the
-  rank is. In this case, considering that ``127.0.0.1:6789`` is lower than all
+  rank is. In this case, considering that ``127.0.0.1:3300`` is lower than all
   the remaining ``IP:PORT`` combinations, ``mon.a`` has rank 0.
 
 Most Common Monitor Issues
@@ -164,7 +164,7 @@ you should be seeing something similar to::
 
       $ ceph health detail
       [snip]
-      mon.a (rank 0) addr 127.0.0.1:6789/0 is down (out of quorum)
+      mon.a (rank 0) addr 127.0.0.1:3300/0 is down (out of quorum)
 
 How to troubleshoot this?
 
@@ -262,7 +262,7 @@ monitors::
       fsid 5c4e9d53-e2e1-478a-8061-f543f8be4cf8
       last_changed 2013-10-30 04:12:01.945629
       created 2013-10-29 14:14:41.914786
-      0: 127.0.0.1:6789/0 mon.a
+      0: 127.0.0.1:3300/0 mon.a
       1: 127.0.0.1:6790/0 mon.b
       2: 127.0.0.1:6795/0 mon.c
       
@@ -349,7 +349,7 @@ How do I know there's a clock skew?
   The monitors will warn you in the form of a ``HEALTH_WARN``. ``ceph health
   detail`` should show something in the form of::
 
-      mon.c addr 10.10.0.1:6789/0 clock skew 0.08235s > max 0.05s (latency 0.0045s)
+      mon.c addr 10.10.0.1:3300/0 clock skew 0.08235s > max 0.05s (latency 0.0045s)
 
   That means that ``mon.c`` has been flagged as suffering from a clock skew.
 
@@ -378,10 +378,10 @@ like this appropriately::
 
 You may also need to add rules to IP tables on your Ceph hosts to ensure
 that clients can access the ports associated with your Ceph monitors (i.e., port
-6789 by default) and Ceph OSDs (i.e., 6800 through 7300 by default). For
+3300 by default) and Ceph OSDs (i.e., 6800 through 7300 by default). For
 example::
 
-	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
+	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 3300,6800:7300 -j ACCEPT
 
 
 Everything Failed! Now What?

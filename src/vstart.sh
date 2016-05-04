@@ -369,7 +369,7 @@ fi
 # export CEPH_ARGS="--lockdep 1"
 
 if [ -z "$CEPH_PORT" ]; then
-    CEPH_PORT=6789
+    CEPH_PORT=3300
     [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
 fi
 

@@ -200,8 +200,9 @@ class MonMap {
    *
    * @param cct context (and associated config)
    * @param errout ostream to send error messages too
+   * @param include_legacy  include legacy mon port (if not specified)
    */
-  int build_initial(CephContext *cct, ostream& errout);
+  int build_initial(CephContext *cct, ostream& errout, bool include_legacy);
 
   /**
    * build a monmap from a list of hosts or ips
@@ -210,9 +211,11 @@ class MonMap {
    *
    * @param hosts  list of hosts, space or comma separated
    * @param prefix prefix to prepend to generated mon names
+   * @param include_legacy  include legacy mon port (if not specified)
    * @return 0 for success, -errno on error
    */
-  int build_from_host_list(std::string hosts, std::string prefix);
+  int build_from_host_list(std::string hosts, std::string prefix,
+			   bool include_legacy);
 
   /**
    * filter monmap given a set of initial members.

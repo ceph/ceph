@@ -7,17 +7,17 @@ monitor host IP address(es), or use the ``mount.ceph`` utility to resolve the
 monitor host name(s) into IP address(es) for you. For example:: 
 
 	sudo mkdir /mnt/mycephfs
-	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs
+	sudo mount -t ceph 192.168.0.1:3300:/ /mnt/mycephfs
 
 To mount the Ceph file system with ``cephx`` authentication enabled, you must
 specify a user name and a secret. ::
 
-	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
+	sudo mount -t ceph 192.168.0.1:3300:/ /mnt/mycephfs -o name=admin,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
 The foregoing usage leaves the secret in the Bash history. A more secure
 approach reads the secret from a file. For example::
 
-	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secretfile=/etc/ceph/admin.secret
+	sudo mount -t ceph 192.168.0.1:3300:/ /mnt/mycephfs -o name=admin,secretfile=/etc/ceph/admin.secret
 	
 See `Authentication`_ for details on cephx.
 

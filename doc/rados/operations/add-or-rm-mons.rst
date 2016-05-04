@@ -265,13 +265,13 @@ For example, lets assume there are three monitors in place, such as ::
 
 	[mon.a]
 		host = host01
-		addr = 10.0.0.1:6789
+		addr = 10.0.0.1:3300
 	[mon.b]
 		host = host02
-		addr = 10.0.0.2:6789
+		addr = 10.0.0.2:3300
 	[mon.c]
 		host = host03
-		addr = 10.0.0.3:6789
+		addr = 10.0.0.3:3300
 
 To change ``mon.c`` to ``host04`` with the IP address  ``10.0.0.4``, follow the
 steps in `Adding a Monitor (Manual)`_ by adding a  new monitor ``mon.d``. Ensure
@@ -314,9 +314,9 @@ networks  are unable to communicate.  Use the following procedure:
 	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
 	last_changed 2012-12-17 02:46:41.591248
 	created 2012-12-17 02:46:41.591248
-	0: 10.0.0.1:6789/0 mon.a
-	1: 10.0.0.2:6789/0 mon.b
-	2: 10.0.0.3:6789/0 mon.c
+	0: 10.0.0.1:3300/0 mon.a
+	1: 10.0.0.2:3300/0 mon.b
+	2: 10.0.0.3:3300/0 mon.c
 
 #. Remove the existing monitors. ::
 
@@ -330,7 +330,7 @@ networks  are unable to communicate.  Use the following procedure:
 
 #. Add the new monitor locations. ::
 
-	$ monmaptool --add a 10.1.0.1:6789 --add b 10.1.0.2:6789 --add c 10.1.0.3:6789 {tmp}/{filename}
+	$ monmaptool --add a 10.1.0.1:3300 --add b 10.1.0.2:3300 --add c 10.1.0.3:3300 {tmp}/{filename}
 	
 	monmaptool: monmap file {tmp}/{filename}
 	monmaptool: writing epoch 1 to {tmp}/{filename} (3 monitors)
@@ -344,9 +344,9 @@ networks  are unable to communicate.  Use the following procedure:
 	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
 	last_changed 2012-12-17 02:46:41.591248
 	created 2012-12-17 02:46:41.591248
-	0: 10.1.0.1:6789/0 mon.a
-	1: 10.1.0.2:6789/0 mon.b
-	2: 10.1.0.3:6789/0 mon.c
+	0: 10.1.0.1:3300/0 mon.a
+	1: 10.1.0.2:3300/0 mon.b
+	2: 10.1.0.3:3300/0 mon.c
 
 At this point, we assume the monitors (and stores) are installed at the new
 location. The next step is to propagate the modified monmap to the new 

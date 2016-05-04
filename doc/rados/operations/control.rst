@@ -319,7 +319,7 @@ Show monitor stats::
 	ceph mon stat
 	
 	2011-12-14 10:40:59.044395 mon {- [mon,stat]
-	2011-12-14 10:40:59.057111 mon.1 -} 'e3: 5 mons at {a=10.1.2.3:6789/0,b=10.1.2.4:6789/0,c=10.1.2.5:6789/0,d=10.1.2.6:6789/0,e=10.1.2.7:6789/0}, election epoch 16, quorum 0,1,2,3' (0)
+	2011-12-14 10:40:59.057111 mon.1 -} 'e3: 5 mons at {a=10.1.2.3:3300/0,b=10.1.2.4:3300/0,c=10.1.2.5:3300/0,d=10.1.2.6:3300/0,e=10.1.2.7:3300/0}, election epoch 16, quorum 0,1,2,3' (0)
 
 The ``quorum`` list at the end lists monitor nodes that are part of the current quorum.
 
@@ -344,7 +344,7 @@ This is also available more directly::
 	      "mons": [
 	            { "rank": 0,
 	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
+	              "addr": "127.0.0.1:3300\/0"},
 	            { "rank": 1,
 	              "name": "b",
 	              "addr": "127.0.0.1:6790\/0"},
@@ -381,7 +381,7 @@ to select)::
 	      "mons": [
 	            { "rank": 0,
 	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
+	              "addr": "127.0.0.1:3300\/0"},
 	            { "rank": 1,
 	              "name": "b",
 	              "addr": "127.0.0.1:6790\/0"},
@@ -399,7 +399,7 @@ A dump of the monitor state::
 	fsid 444b489c-4f16-4b75-83f0-cb8097468898
 	last_changed 2011-12-12 13:28:27.505520
 	created 2011-12-12 13:28:27.505520
-	0: 127.0.0.1:6789/0 mon.a
+	0: 127.0.0.1:3300/0 mon.a
 	1: 127.0.0.1:6790/0 mon.b
 	2: 127.0.0.1:6791/0 mon.c
 

@@ -114,7 +114,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   int r;
 
   MonMap monmap;
-  r = monmap.build_initial(cct, cerr);
+  r = monmap.build_initial(cct, cerr, true);
   if (r < 0)
     return r;
 

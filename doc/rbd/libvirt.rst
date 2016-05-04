@@ -189,7 +189,7 @@ commands, refer to `Virsh Command Reference`_.
 
 	<disk type='network' device='disk'>
 		<source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
-			<host name='{monitor-host}' port='6789'/>
+			<host name='{monitor-host}' port='3300'/>
 		</source>
 		<target dev='vda' bus='virtio'/>
 	</disk>

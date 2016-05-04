@@ -471,9 +471,9 @@ CEPH_RADOS_API int rados_conf_read_file(rados_t cluster, const char *path);
  * argv can contain any common Ceph command line option, including any
  * configuration parameter prefixed by '--' and replacing spaces with
  * dashes or underscores. For example, the following options are equivalent:
- * - --mon-host 10.0.0.1:6789
- * - --mon_host 10.0.0.1:6789
- * - -m 10.0.0.1:6789
+ * - --mon-host 10.0.0.1:3300
+ * - --mon_host 10.0.0.1:3300
+ * - -m 10.0.0.1:3300
  *
  * @pre rados_connect() has not been called on the cluster handle
  *

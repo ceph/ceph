@@ -9,14 +9,8 @@
  * Data types for message passing layer used by Ceph.
  */
 
-#define CEPH_MON_PORT    6789  /* default monitor port */
-
-/*
- * client-side processes will try to bind to ports in this
- * range, simply for the benefit of tools like nmap or wireshark
- * that would like to identify the protocol.
- */
-#define CEPH_PORT_FIRST  6789
+#define CEPH_MON_PORT         3300  /* (ce4h) IANA assigned monitor port */
+#define CEPH_MON_PORT_LEGACY  6789  /* old default monitor port */
 
 /*
  * tcp connection banner.  include a protocol version. and adjust

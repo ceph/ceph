@@ -281,7 +281,7 @@ The procedure is as follows:
 
 	cluster a7f64266-0894-4f1e-a635-d0aeaca0e993
 	  health HEALTH_ERR 192 pgs stuck inactive; 192 pgs stuck unclean; no osds
-	  monmap e1: 1 mons at {node1=192.168.0.1:6789/0}, election epoch 1, quorum 0 node1
+	  monmap e1: 1 mons at {node1=192.168.0.1:3300/0}, election epoch 1, quorum 0 node1
 	  osdmap e1: 0 osds: 0 up, 0 in
 	  pgmap v2: 192 pgs, 3 pools, 0 bytes data, 0 objects
 	     0 kB used, 0 kB / 0 kB avail

@@ -1,0 +1,16 @@
+v11.0.0
+-------
+
+* The default monitor port has changed from 6789 to 3300, which has
+  been assigned to us by IANA.  Existing monitor will continue to use
+  the ports they were created with, while new clusters will default to the
+  new port.
+
+  Clients will try first the new port and then the old port if it is
+  not explicitly specified, except in one case.  If the monitor
+  addresses are specified in the ``ceph.conf`` file by the ``mon
+  addr`` option, we will default to the new port and will not try the
+  old port as well.  Note that this method specifying monitors is
+  deprecated.  Please use ``mon hosts`` in the ``[global]`` section
+  instead, or modify the options to explicitly specify the old port
+  6789 if needed.

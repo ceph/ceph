@@ -149,7 +149,8 @@ void MonMap::dump(Formatter *f) const
 }
 
 
-int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
+int MonMap::build_from_host_list(std::string hostlist, std::string prefix,
+				 bool include_legacy)
 {
   vector<entity_addr_t> addrs;
   if (parse_ip_port_vec(hostlist.c_str(), addrs)) {
@@ -159,8 +160,13 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
       char n[2];
       n[0] = 'a' + i;
       n[1] = 0;
-      if (addrs[i].get_port() == 0)
+      if (addrs[i].get_port() == 0) {
 	addrs[i].set_port(CEPH_MON_PORT);
+	if (include_legacy) {
+	  addrs.push_back(addrs[i]);
+	  addrs.back().set_port(CEPH_MON_PORT_LEGACY);
+	}
+      }
       string name = prefix;
       name += n;
       if (!contains(addrs[i]))
@@ -186,8 +192,13 @@ int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
     char n[2];
     n[0] = 'a' + i;
     n[1] = 0;
-    if (addrs[i].get_port() == 0)
+    if (addrs[i].get_port() == 0) {
       addrs[i].set_port(CEPH_MON_PORT);
+      if (include_legacy) {
+	addrs.push_back(addrs[i]);
+	addrs.back().set_port(CEPH_MON_PORT_LEGACY);
+      }
+    }
     string name = prefix;
     name += n;
     if (!contains(addrs[i]) &&
@@ -242,7 +253,8 @@ void MonMap::set_initial_members(CephContext *cct,
 }
 
 
-int MonMap::build_initial(CephContext *cct, ostream& errout)
+int MonMap::build_initial(CephContext *cct, ostream& errout,
+			  bool include_legacy)
 {
   const md_config_t *conf = cct->_conf;
   // file?
@@ -268,7 +280,8 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 
   // -m foo?
   if (!conf->mon_host.empty()) {
-    int r = build_from_host_list(conf->mon_host, "noname-");
+    int r = build_from_host_list(conf->mon_host, "noname-",
+				 include_legacy);
     if (r < 0) {
       errout << "unable to parse addrs in '" << conf->mon_host << "'"
              << std::endl;

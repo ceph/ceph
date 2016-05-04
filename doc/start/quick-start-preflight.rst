@@ -250,7 +250,7 @@ Address hostname resolution issues as necessary.
 Open Required Ports
 -------------------
 
-Ceph Monitors communicate using port ``6789`` by default. Ceph OSDs communicate
+Ceph Monitors communicate using port ``3300`` by default. Ceph OSDs communicate
 in a port range of ``6800:7300`` by default. See the `Network Configuration
 Reference`_ for details. Ceph OSDs can use multiple network connections to
 communicate with clients, monitors, other OSDs for replication, and other OSDs
@@ -260,16 +260,16 @@ On some distributions (e.g., RHEL), the default firewall configuration is fairly
 strict. You may need to adjust your firewall settings allow inbound requests so
 that clients in your network can communicate with daemons on your Ceph nodes.
 
-For ``firewalld`` on RHEL 7, add port ``6789`` for Ceph Monitor nodes and ports
+For ``firewalld`` on RHEL 7, add port ``3300`` for Ceph Monitor nodes and ports
 ``6800:7300`` for Ceph OSDs to the public zone and ensure that you make the
 setting permanent so that it is enabled on reboot. For example::
 
-	sudo firewall-cmd --zone=public --add-port=6789/tcp --permanent
+	sudo firewall-cmd --zone=public --add-port=3300/tcp --permanent
 
-For ``iptables``, add port ``6789`` for Ceph Monitors and ports ``6800:7300``
+For ``iptables``, add port ``3300`` for Ceph Monitors and ports ``6800:7300``
 for Ceph OSDs. For example::
 
-	sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
+	sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 3300 -j ACCEPT
 
 Once you have finished configuring ``iptables``, ensure that you make the
 changes persistent on each node so that they will be in effect when your nodes
