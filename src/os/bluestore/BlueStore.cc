@@ -32,6 +32,459 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
+
+ struct BlueStore::Enode : public boost::intrusive::unordered_set_base_hook<> {
+   std::atomic_int nref;        ///< reference count
+   uint32_t hash;
+   string key;           ///< key under PREFIX_OBJ where we are stored
+   EnodeSet *enode_set;  ///< reference to the containing set
+
+   bluestore_extent_ref_map_t ref_map;
+
+   Enode(uint32_t h, const string& k, EnodeSet *s)
+     : nref(0),
+       hash(h),
+       key(k),
+       enode_set(s) {}
+
+   void get() {
+     ++nref;
+   }
+   void put();
+
+   friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
+   friend void intrusive_ptr_release(Enode *e) { e->put(); }
+
+   friend bool operator==(const Enode &l, const Enode &r) {
+     return l.hash == r.hash;
+   }
+   friend std::size_t hash_value(const Enode &e) {
+     return e.hash;
+   }
+ };
+
+/// hash of Enodes, by (object) hash value
+struct BlueStore::EnodeSet {
+  typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
+  typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
+
+  unsigned num_buckets;
+  vector<bucket_type> buckets;
+
+  boost::intrusive::unordered_set<Enode> uset;
+
+  explicit EnodeSet(unsigned n)
+    : num_buckets(n),
+      buckets(n),
+      uset(bucket_traits(buckets.data(), num_buckets)) {
+    assert(n > 0);
+  }
+  ~EnodeSet() {
+    assert(uset.empty());
+  }
+};
+
+/// an in-memory object
+struct BlueStore::Onode {
+  std::atomic_int nref;  ///< reference count
+
+  ghobject_t oid;
+  string key;     ///< key under PREFIX_OBJ where we are stored
+  boost::intrusive::list_member_hook<> lru_item;
+
+  EnodeRef enode;  ///< ref to Enode [optional]
+
+  bluestore_onode_t onode;  ///< metadata stored as value in kv store
+  bool exists;
+
+  std::mutex flush_lock;  ///< protect flush_txns
+  std::condition_variable flush_cond;   ///< wait here for unapplied txns
+  set<TransContext*> flush_txns;   ///< committing or wal txns
+
+  uint64_t tail_offset = 0;
+  uint64_t tail_txc_seq = 0;
+  bufferlist tail_bl;
+
+  Onode(const ghobject_t& o, const string& k)
+    : nref(0),
+      oid(o),
+      key(k),
+      exists(false) {
+  }
+
+  void flush();
+  void get() {
+    ++nref;
+  }
+  void put() {
+    if (--nref == 0)
+      delete this;
+  }
+
+  void clear_tail() {
+    tail_offset = 0;
+    tail_bl.clear();
+  }
+
+  friend void intrusive_ptr_add_ref(Onode *o) {
+    o->get();
+  }
+  friend void intrusive_ptr_release(Onode *o) {
+    o->put();
+  }
+};
+
+
+struct BlueStore::OnodeHashLRU {
+  typedef boost::intrusive::list<
+    Onode,
+    boost::intrusive::member_hook<
+      Onode,
+      boost::intrusive::list_member_hook<>,
+      &Onode::lru_item> > lru_list_t;
+
+  std::mutex lock;
+  ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
+  lru_list_t lru;                                      ///< lru
+  size_t max_size;
+
+  OnodeHashLRU(size_t s) : max_size(s) {}
+
+  void add(const ghobject_t& oid, OnodeRef o);
+  void _touch(OnodeRef o);
+  OnodeRef lookup(const ghobject_t& o);
+  void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
+  void clear();
+  bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
+  int trim(int max=-1);
+  int _trim(int max);
+};
+
+struct BlueStore::Collection : public CollectionImpl {
+  BlueStore *store;
+  coll_t cid;
+  bluestore_cnode_t cnode;
+  RWLock lock;
+
+  bool exists;
+
+  EnodeSet enode_set;      ///< open Enodes
+
+  // cache onodes on a per-collection basis to avoid lock
+  // contention.
+  OnodeHashLRU onode_map;
+
+  OnodeRef get_onode(const ghobject_t& oid, bool create);
+  EnodeRef get_enode(uint32_t hash);
+
+  const coll_t &get_cid() override {
+    return cid;
+  }
+
+  bool contains(const ghobject_t& oid) {
+    if (cid.is_meta())
+      return oid.hobj.pool == -1;
+    spg_t spgid;
+    if (cid.is_pg(&spgid))
+      return
+        spgid.pgid.contains(cnode.bits, oid) &&
+        oid.shard_id == spgid.shard;
+    return false;
+  }
+
+  Collection(BlueStore *ns, coll_t c);
+};
+
+class BlueStore::OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
+  CollectionRef c;
+  OnodeRef o;
+  KeyValueDB::Iterator it;
+  string head, tail;
+public:
+  OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
+  int seek_to_first();
+  int upper_bound(const string &after);
+  int lower_bound(const string &to);
+  bool valid();
+  int next(bool validate=true);
+  string key();
+  bufferlist value();
+  int status() {
+    return 0;
+  }
+};
+
+struct BlueStore::TransContext {
+  typedef enum {
+    STATE_PREPARE,
+    STATE_AIO_WAIT,
+    STATE_IO_DONE,
+    STATE_KV_QUEUED,
+    STATE_KV_COMMITTING,
+    STATE_KV_DONE,
+    STATE_WAL_QUEUED,
+    STATE_WAL_APPLYING,
+    STATE_WAL_AIO_WAIT,
+    STATE_WAL_CLEANUP,   // remove wal kv record
+    STATE_WAL_DONE,
+    STATE_FINISHING,
+    STATE_DONE,
+  } state_t;
+
+  state_t state;
+
+  const char *get_state_name() {
+    switch (state) {
+    case STATE_PREPARE: return "prepare";
+    case STATE_AIO_WAIT: return "aio_wait";
+    case STATE_IO_DONE: return "io_done";
+    case STATE_KV_QUEUED: return "kv_queued";
+    case STATE_KV_COMMITTING: return "kv_committing";
+    case STATE_KV_DONE: return "kv_done";
+    case STATE_WAL_QUEUED: return "wal_queued";
+    case STATE_WAL_APPLYING: return "wal_applying";
+    case STATE_WAL_AIO_WAIT: return "wal_aio_wait";
+    case STATE_WAL_CLEANUP: return "wal_cleanup";
+    case STATE_WAL_DONE: return "wal_done";
+    case STATE_FINISHING: return "finishing";
+    case STATE_DONE: return "done";
+    }
+    return "???";
+  }
+
+  void log_state_latency(PerfCounters *logger, int state) {
+    utime_t lat, now = ceph_clock_now(g_ceph_context);
+    lat = now - start;
+    logger->tinc(state, lat);
+    start = now;
+  }
+
+  OpSequencerRef osr;
+  boost::intrusive::list_member_hook<> sequencer_item;
+
+  uint64_t ops, bytes;
+
+  set<OnodeRef> onodes;     ///< these onodes need to be updated/written
+  set<EnodeRef> enodes;     ///< these enodes need to be updated/written
+  KeyValueDB::Transaction t; ///< then we will commit this
+  Context *oncommit;         ///< signal on commit
+  Context *onreadable;         ///< signal on readable
+  Context *onreadable_sync;         ///< signal on readable
+  list<Context*> oncommits;  ///< more commit completions
+  list<CollectionRef> removed_collections; ///< colls we removed
+
+  boost::intrusive::list_member_hook<> wal_queue_item;
+  bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
+  vector<OnodeRef> wal_op_onodes;
+
+  interval_set<uint64_t> allocated, released;
+
+  IOContext ioc;
+
+  CollectionRef first_collection;  ///< first referenced collection
+
+  uint64_t seq = 0;
+  utime_t start;
+
+  explicit TransContext(OpSequencer *o)
+    : state(STATE_PREPARE),
+      osr(o),
+      ops(0),
+      bytes(0),
+      oncommit(NULL),
+      onreadable(NULL),
+      onreadable_sync(NULL),
+      wal_txn(NULL),
+      ioc(this),
+      start(ceph_clock_now(g_ceph_context)) {
+    //cout << "txc new " << this << std::endl;
+  }
+  ~TransContext() {
+    delete wal_txn;
+    //cout << "txc del " << this << std::endl;
+  }
+
+  void write_onode(OnodeRef &o) {
+    onodes.insert(o);
+  }
+  void write_enode(EnodeRef &e) {
+    enodes.insert(e);
+  }
+};
+
+class BlueStore::OpSequencer : public Sequencer_impl {
+public:
+  std::mutex qlock;
+  std::condition_variable qcond;
+  typedef boost::intrusive::list<
+    TransContext,
+    boost::intrusive::member_hook<
+      TransContext,
+      boost::intrusive::list_member_hook<>,
+      &TransContext::sequencer_item> > q_list_t;
+  q_list_t q;  ///< transactions
+
+  typedef boost::intrusive::list<
+    TransContext,
+    boost::intrusive::member_hook<
+      TransContext,
+      boost::intrusive::list_member_hook<>,
+      &TransContext::wal_queue_item> > wal_queue_t;
+  wal_queue_t wal_q; ///< transactions
+
+  boost::intrusive::list_member_hook<> wal_osr_queue_item;
+
+  Sequencer *parent;
+
+  std::mutex wal_apply_mutex;
+  std::unique_lock<std::mutex> wal_apply_lock;
+
+  uint64_t last_seq = 0;
+
+  OpSequencer()
+      //set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
+    : parent(NULL),
+      wal_apply_lock(wal_apply_mutex, std::defer_lock) {
+  }
+  ~OpSequencer() {
+    assert(q.empty());
+  }
+
+  void queue_new(TransContext *txc) {
+    std::lock_guard<std::mutex> l(qlock);
+    txc->seq = ++last_seq;
+    q.push_back(*txc);
+  }
+
+  void flush() {
+    std::unique_lock<std::mutex> l(qlock);
+    while (!q.empty())
+      qcond.wait(l);
+  }
+
+  bool flush_commit(Context *c) {
+    std::lock_guard<std::mutex> l(qlock);
+    if (q.empty()) {
+      return true;
+    }
+    TransContext *txc = &q.back();
+    if (txc->state >= TransContext::STATE_KV_DONE) {
+      return true;
+    }
+    assert(txc->state < TransContext::STATE_KV_DONE);
+    txc->oncommits.push_back(c);
+    return false;
+  }
+
+  /// if there is a wal on @seq, wait for it to apply
+  void wait_for_wal_on_seq(uint64_t seq) {
+    std::unique_lock<std::mutex> l(qlock);
+    restart:
+    for (OpSequencer::q_list_t::reverse_iterator p = q.rbegin();
+	 p != q.rend();
+	 ++p) {
+      if (p->seq == seq) {
+	TransContext *txc = &(*p);
+	if (txc->wal_txn) {
+	  while (txc->state < TransContext::STATE_WAL_CLEANUP) {
+	    txc->osr->qcond.wait(l);
+	    goto restart;  // txc may have gone away
+	  }
+	}
+	break;
+      }
+      if (p->seq < seq)
+	break;
+    }
+  }
+
+  friend inline ostream& operator<<(ostream& out,
+				    const BlueStore::OpSequencer& s) {
+    return out << *s.parent;
+  }
+
+  friend void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
+    o->get();
+  }
+  friend void intrusive_ptr_release(BlueStore::OpSequencer *o) {
+    o->put();
+  }
+
+};
+
+
+class BlueStore::WALWQ : public ThreadPool::WorkQueue<TransContext> {
+  // We need to order WAL items within each Sequencer.  To do that,
+  // queue each txc under osr, and queue the osr's here.  When we
+  // dequeue an txc, requeue the osr if there are more pending, and
+  // do it at the end of the list so that the next thread does not
+  // get a conflicted txc.  Hold an osr mutex while doing the wal to
+  // preserve the ordering.
+public:
+  typedef boost::intrusive::list<
+    OpSequencer,
+    boost::intrusive::member_hook<
+      OpSequencer,
+      boost::intrusive::list_member_hook<>,
+      &OpSequencer::wal_osr_queue_item> > wal_osr_queue_t;
+
+private:
+  BlueStore *store;
+  wal_osr_queue_t wal_queue;
+
+public:
+  WALWQ(BlueStore *s, time_t ti, time_t sti, ThreadPool *tp)
+    : ThreadPool::WorkQueue<TransContext>("BlueStore::WALWQ", ti, sti, tp),
+      store(s) {
+  }
+  bool _empty() {
+    return wal_queue.empty();
+  }
+  bool _enqueue(TransContext *i) {
+    if (i->osr->wal_q.empty()) {
+      wal_queue.push_back(*i->osr);
+    }
+    i->osr->wal_q.push_back(*i);
+    return true;
+  }
+  void _dequeue(TransContext *p) {
+    assert(0 == "not needed, not implemented");
+  }
+  TransContext *_dequeue() {
+    if (wal_queue.empty())
+      return NULL;
+    OpSequencer *osr = &wal_queue.front();
+    TransContext *i = &osr->wal_q.front();
+    osr->wal_q.pop_front();
+    wal_queue.pop_front();
+    if (!osr->wal_q.empty()) {
+      // requeue at the end to minimize contention
+      wal_queue.push_back(*i->osr);
+    }
+
+    // preserve wal ordering for this sequencer by taking the lock
+    // while still holding the queue lock
+    i->osr->wal_apply_lock.lock();
+    return i;
+  }
+  void _process(TransContext *i, ThreadPool::TPHandle &) override {
+    store->_wal_apply(i);
+    i->osr->wal_apply_lock.unlock();
+  }
+  void _clear() {
+    assert(wal_queue.empty());
+  }
+
+  void flush() {
+    lock();
+    while (!wal_queue.empty()) {
+      _wait();
+    }
+    unlock();
+    drain();
+  }
+};
+
 const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_COLL = "C";    // collection name -> cnode_t
 const string PREFIX_OBJ = "O";     // object name -> onode_t
@@ -761,10 +1214,10 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
            "tp_wal",
 	   cct->_conf->bluestore_wal_threads,
 	   "bluestore_wal_threads"),
-    wal_wq(this,
+    wal_wq(new WALWQ(this,
 	     cct->_conf->bluestore_wal_thread_timeout,
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
-	     &wal_tp),
+	     &wal_tp)),
     finisher(cct),
     kv_sync_thread(this),
     kv_stop(false),
@@ -1904,7 +2357,7 @@ int BlueStore::mount()
 
  out_stop:
   _kv_stop();
-  wal_wq.drain();
+  wal_wq->drain();
   wal_tp.stop();
   finisher.wait_for_empty();
   finisher.stop();
@@ -1935,7 +2388,7 @@ int BlueStore::umount()
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   dout(20) << __func__ << " draining wal_wq" << dendl;
-  wal_wq.drain();
+  wal_wq->drain();
   dout(20) << __func__ << " stopping wal_tp" << dendl;
   wal_tp.stop();
   dout(20) << __func__ << " draining finisher" << dendl;
@@ -3648,7 +4101,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	if (g_conf->bluestore_sync_wal_apply) {
 	  _wal_apply(txc);
 	} else {
-	  wal_wq.queue(txc);
+	  wal_wq->queue(txc);
 	}
 	return;
       }
