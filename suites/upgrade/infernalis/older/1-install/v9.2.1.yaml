@@ -1,0 +1,13 @@
+meta:
+- desc: |
+   install ceph/infernalis v9.2.1
+   run workload and upgrade-sequence in parallel
+tasks:
+- install:
+    tag: v9.2.1
+- print: "**** done v9.2.1 install"
+- ceph:
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel v9.2.1"

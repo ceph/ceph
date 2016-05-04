@@ -1,0 +1,234 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - reached quota
+    - scrub
+    - osd_map_max_advance
+    fs: xfs
+    conf:
+      mon:
+        mon debug unsafe allow tier with nonempty snaps: true
+      osd:
+        osd map max advance: 1000
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+- - client.1
+tasks:
+- print: "****  v9.2.0 about to install"
+- install:
+    tag: v9.2.0
+- print: "**** done v9.2.0 install"
+- ceph:
+   fs: xfs
+- print: "**** done ceph xfs"
+- sequential:
+   - workload
+- print: "**** done workload v9.2.0"
+
+- parallel:
+   - workload1
+   - upgrade-sequence1
+- print: "**** done parallel v9.2.1"
+
+###- parallel:
+###   - workloadX
+###   - upgrade-sequenceX
+###- print: "**** done parallel v9.2.X"
+
+- parallel:
+   - workload_infernalis
+   - upgrade-sequence_infernalis
+- print: "**** done parallel infernalis branch"
+#######################
+workload:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - suites/blogbench.sh
+   - print: "**** done suites/blogbench.sh workload"
+
+workload1:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+         - rados/load-gen-big.sh
+   - print: "**** done rados/load-gen-big.sh workload1"
+   - workunit:
+       clients:
+         client.0:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload1"
+   - workunit:
+       clients:
+         client.0:
+         - rbd/test_librbd.sh
+   - print: "**** done rbd/test_librbd.sh workload1"
+upgrade-sequence1:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         tag: v9.2.1
+       mon.b:
+         tag: v9.2.1
+       client.1:
+         tag: v9.2.1
+   - print: "**** done v9.2.1 install.upgrade"
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 30
+   - print: "**** done ceph.restart all mon/mds/osd v0.94.1"
+
+
+### =====
+###workloadX:
+###   sequential:
+###   - workunit:
+###       clients:
+###         client.0:
+###         - rados/load-gen-big.sh
+###   - print: "**** done rados/load-gen-big.sh workload1"
+###   - workunit:
+###       clients:
+###         client.0:
+###         - rados/test.sh
+###         - cls
+###   - print: "**** done rados/test.sh &  cls workload1"
+###   - workunit:
+###       clients:
+###         client.0:
+###         - rbd/test_librbd.sh
+###   - print: "**** done rbd/test_librbd.sh workload1"
+###upgrade-sequenceX:
+###   sequential:
+###   - install.upgrade:
+###       mon.a:
+###         tag: v9.2.X
+###       mon.b:
+###         tag: v9.2.X
+###       client.1:
+###         tag: v9.2.X
+###   - print: "**** done v9.2.X install.upgrade"
+###   - ceph.restart: [mon.a]
+###   - sleep:
+###       duration: 60
+###   - ceph.restart: [mon.b]
+###   - sleep:
+###       duration: 60
+###   - ceph.restart: [mon.c]
+###   - sleep:
+###       duration: 60
+###   - ceph.restart: [mds.a]
+###   - sleep:
+###       duration: 60
+###   - ceph.restart: [osd.0]
+###   - sleep:
+###       duration: 30
+###   - ceph.restart: [osd.1]
+###   - sleep:
+###       duration: 30
+###   - ceph.restart: [osd.2]
+###   - sleep:
+###       duration: 30
+###   - ceph.restart: [osd.3]
+###   - sleep:
+###       duration: 30
+###   - ceph.restart: [osd.4]
+###   - sleep:
+###       duration: 30
+###   - ceph.restart: [osd.5]
+###   - sleep:
+###       duration: 30
+###   - print: "**** done ceph.restart all mon/mds/osd v0.94.X"
+
+workload_infernalis:
+   sequential:
+   - rgw: [client.0]
+   - print: "**** done rgw workload_infernalis"
+   - s3tests:
+       client.0:
+         # for s3tests ceph-infernalis should be used 
+         # for new similar tests should check with Yehuda about the branch name 
+         force-branch: ceph-infernalis
+         rgw_server: client.0
+   - print: "**** done s3tests workload_infernalis"
+upgrade-sequence_infernalis:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         branch: infernalis
+       mon.b:
+         branch: infernalis
+       client.1:
+         branch: infernalis
+   - print: "**** done branch: infernalis install.upgrade"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all infernalis current branch mds/osd/mon"

@@ -1,0 +1,13 @@
+meta:
+- desc: |
+   install ceph/hammer latest release
+   run workload and upgrade-sequence in parallel
+tasks:
+- install:
+    branch: hammer
+- print: "**** done latest hammer install"
+- ceph:
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel hammer"

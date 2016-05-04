@@ -1,0 +1,32 @@
+meta:
+- desc: |
+   Run ceph on two nodes, using one of them as a client,
+   with a separate client-only node. 
+   Use xfs beneath the osds.
+overrides:
+  ceph:
+    log-whitelist:
+    - scrub
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    - log bound mismatch
+    - failed to encode map
+    - soft lockup
+    - detected stalls on CPUs
+    fs: xfs
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+- - client.1
+  - client.2
