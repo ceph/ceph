@@ -474,6 +474,14 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     cmd = CFSD_PREFIX + "--op set-osdmap --file {osdmap_file} --epoch {epoch} --force"
     cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
     ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
+
+    try:
+        os.unlink(osdmap_file.name)
+        os.unlink(new_crush_file.name)
+        os.unlink(old_crush_file.name)
+    except:
+        pass
+
     return ret == 0
 
 def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
@@ -500,6 +508,13 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     for line in output.strip().split('\n'):
         osd_id, weight, osd_name = re.split('\s+', line)
         weights.append(float(weight))
+
+    try:
+        os.unlink(osdmap_file.name)
+        os.unlink(crush_file.name)
+    except:
+        pass
+
     return weights
 
 
@@ -569,6 +584,14 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
         if ret:
             logging.error("Failed to revert the changed inc-osdmap")
             errors += 1
+
+    try:
+        os.unlink(file_e2.name)
+        os.unlink(file_e1_read.name)
+        os.unlink(file_e1_backup.name)
+    except:
+        pass
+
     return errors
 
 
