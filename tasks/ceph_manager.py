@@ -104,6 +104,9 @@ class Thrasher:
         self.minin = self.config.get("min_in", 3)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
         self.sighup_delay = self.config.get('sighup_delay')
+        self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
+        self.dump_ops_enable = self.config.get('dump_ops_enable')
+        self.noscrub_toggle_delay = self.config.get('noscrub_toggle_delay')
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -129,6 +132,12 @@ class Thrasher:
         self.thread = gevent.spawn(self.do_thrash)
         if self.sighup_delay:
             self.sighup_thread = gevent.spawn(self.do_sighup)
+        if self.optrack_toggle_delay:
+            self.optrack_toggle_thread = gevent.spawn(self.do_optrack_toggle)
+        if self.dump_ops_enable == "true":
+            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
+        if self.noscrub_toggle_delay:
+            self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
         if self.config.get('powercycle') or not self.cmd_exists_on_osds("ceph-objectstore-tool"):
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
@@ -425,6 +434,15 @@ class Thrasher:
         if self.sighup_delay:
             self.log("joining the do_sighup greenlet")
             self.sighup_thread.get()
+        if self.optrack_toggle_delay:
+            self.log("joining the do_optrack_toggle greenlet")
+            self.optrack_toggle_thread.join()
+        if self.dump_ops_enable == "true":
+            self.log("joining the do_dump_ops greenlet")
+            self.dump_ops_thread.join()
+        if self.noscrub_toggle_delay:
+            self.log("joining the do_noscrub_toggle greenlet")
+            self.noscrub_toggle_thread.join()
 
     def grow_pool(self):
         """
@@ -657,6 +675,69 @@ class Thrasher:
             time.sleep(delay)
 
     @log_exc
+    def do_optrack_toggle(self):
+        """
+        Loops and toggle op tracking to all osds.
+
+        Loop delay is controlled by the config value optrack_toggle_delay.
+        """
+        delay = float(self.optrack_toggle_delay)
+        osd_state = "true"
+        self.log("starting do_optrack_toggle with a delay of {0}".format(delay))
+        while not self.stopping:
+            if osd_state == "true":
+                osd_state = "false"
+            else:
+                osd_state = "true"
+            self.ceph_manager.raw_cluster_cmd_result('tell', 'osd.*',
+                             'injectargs', '--osd_enable_op_tracker=%s' % osd_state)
+            gevent.sleep(delay)
+
+    @log_exc
+    def do_dump_ops(self):
+        """
+        Loops and does op dumps on all osds
+        """
+        self.log("starting do_dump_ops")
+        while not self.stopping:
+            for osd in self.live_osds:
+                # Ignore errors because live_osds is in flux
+                self.ceph_manager.osd_admin_socket(osd, command=['dump_ops_in_flight'],
+                                     check_status=False, timeout=30)
+                self.ceph_manager.osd_admin_socket(osd, command=['dump_blocked_ops'],
+                                     check_status=False, timeout=30)
+                self.ceph_manager.osd_admin_socket(osd, command=['dump_historic_ops'],
+                                     check_status=False, timeout=30)
+            gevent.sleep(0)
+
+    @log_exc
+    def do_noscrub_toggle(self):
+        """
+        Loops and toggle noscrub flags
+
+        Loop delay is controlled by the config value noscrub_toggle_delay.
+        """
+        delay = float(self.noscrub_toggle_delay)
+        scrub_state = "none"
+        self.log("starting do_noscrub_toggle with a delay of {0}".format(delay))
+        while not self.stopping:
+            if scrub_state == "none":
+                self.ceph_manager.raw_cluster_cmd('osd', 'set', 'noscrub')
+                scrub_state = "noscrub"
+            elif scrub_state == "noscrub":
+                self.ceph_manager.raw_cluster_cmd('osd', 'set', 'nodeep-scrub')
+                scrub_state = "both"
+            elif scrub_state == "both":
+                self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+                scrub_state = "nodeep-scrub"
+            else:
+                self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
+                scrub_state = "none"
+            gevent.sleep(delay)
+        self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+        self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
+
+    @log_exc
     def do_thrash(self):
         """
         Loop to select random actions to thrash ceph manager with.
@@ -802,6 +883,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            '120',
             'ceph',
         ]
         ceph_args.extend(args)
@@ -821,6 +904,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            '120',
             'ceph',
         ]
         ceph_args.extend(args)
@@ -927,8 +1012,8 @@ class CephManager:
             check_status=False
         ).exitstatus
 
-    def osd_admin_socket(self, osd_id, command, check_status=True):
-        return self.admin_socket('osd', osd_id, command, check_status)
+    def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0):
+        return self.admin_socket('osd', osd_id, command, check_status, timeout)
 
     def find_remote(self, service_type, service_id):
         """
@@ -949,7 +1034,7 @@ class CephManager:
                                                           service_id))
 
     def admin_socket(self, service_type, service_id,
-                     command, check_status=True):
+                     command, check_status=True, timeout=0):
         """
         Remotely start up ceph specifying the admin socket
         :param command: a list of words to use as the command
@@ -962,6 +1047,8 @@ class CephManager:
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
+            'timeout',
+            str(timeout),
             'ceph',
             '--admin-daemon',
             '/var/run/ceph/ceph-{type}.{id}.asok'.format(
