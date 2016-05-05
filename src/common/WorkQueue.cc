@@ -95,7 +95,7 @@ void ThreadPool::worker(WorkThread *wt)
   
   std::stringstream ss;
   ss << name << " thread " << (void*)pthread_self();
-  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str());
+  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!_stop) {
 
@@ -298,7 +298,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 
   std::stringstream ss;
   ss << name << " thread " << (void*)pthread_self();
-  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str());
+  heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
   while (!stop_threads.read()) {
     if(pause_threads.read()) {
