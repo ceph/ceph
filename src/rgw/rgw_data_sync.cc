@@ -478,11 +478,11 @@ int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers
 
 int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger)
 {
+  sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger, _source_zone);
+
   if (initialized) {
     return 0;
   }
-
-  sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger, _source_zone);
 
   int ret = http_manager.set_threaded();
   if (ret < 0) {
