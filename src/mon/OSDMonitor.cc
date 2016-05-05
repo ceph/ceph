@@ -519,6 +519,10 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	if (*q >= (int)pgs_by_osd.size())
 	  pgs_by_osd.resize(*q);
 	if (pgs_by_osd[*q] == 0) {
+          if (osdmap.crush->get_item_weightf(*q) <= 0) {
+            //skip if we currently can not identify item
+            continue;
+          }
 	  weight_sum += osdmap.crush->get_item_weightf(*q);
 	  ++num_osds;
 	}
@@ -598,6 +602,12 @@ int OSDMonitor::reweight_by_utilization(int oload,
         // belonging to the specified pool(s).
         continue;
       }
+
+      if (osdmap.crush->get_item_weightf(p->first) <= 0) {
+        // skip if we are unable to locate item.
+        continue;
+      }
+
       osd_util.second = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
     } else {
       osd_util.second = (double)p->second.kb_used / (double)p->second.kb;
