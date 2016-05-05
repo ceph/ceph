@@ -160,6 +160,11 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
     ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
+#define WRITE_CLASS_ENCODER_OPTIONAL_FEATURES(cl)				\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features = 0) {	\
+    ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
+  inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
+
 
 // string
 inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
