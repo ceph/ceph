@@ -3499,6 +3499,9 @@ int main(int argc, char **argv)
             cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
+
+        encode_json("zone", zone, formatter);
+        formatter->flush(cout);
       }
       break;
     case OPT_ZONE_RENAME:
