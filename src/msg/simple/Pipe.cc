@@ -2513,7 +2513,7 @@ ssize_t Pipe::do_recv(char *buf, size_t len, int flags)
 again:
   ssize_t got = ::recv( sd, buf, len, flags );
   if (got < 0) {
-    if (errno == EAGAIN || errno == EINTR) {
+    if (errno == EINTR) {
       goto again;
     }
     ldout(msgr->cct, 10) << __func__ << " socket " << sd << " returned "
