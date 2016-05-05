@@ -369,13 +369,12 @@ int EventCenter::process_events(int timeout_microseconds)
   auto now = clock_type::now();
 
   bool blocking = pollers.empty() && !external_num_events.load();
+  auto it = time_events.begin();
   // If exists external events or exists poller, don't block
   if (blocking) {
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
 
-    Mutex::Locker l(time_lock);
-    auto it = time_events.begin();
     if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
@@ -394,7 +393,6 @@ int EventCenter::process_events(int timeout_microseconds)
     ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
     next_time = shortest;
   } else {
-    map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
     if (it != time_events.end() && now >= it->first)
       trigger_time = true;
     tv.tv_sec = 0;
