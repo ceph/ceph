@@ -1838,7 +1838,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     }
     existing->requeue_sent();
 
-    swap(existing->sd, sd);
     existing->can_write = WriteStatus::NOWRITE;
     existing->open_write = false;
     existing->replacing = true;
