@@ -536,7 +536,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
     average_util = (double)num_pg_copies / weight_sum;
   } else {
     // by osd utilization
-    int num_osd = MIN(1, pgm.osd_stat.size());
+    int num_osd = MAX(1, pgm.osd_stat.size());
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       ostringstream oss;
