@@ -55,6 +55,10 @@ RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
 if ! test -f $RADOS_TOOL ; then
     RADOS_TOOL=$(which rados)
 fi
+CEPH_TOOL="`readlink -f \"$DNAME/../ceph\"`"
+if ! test -f $CEPH_TOOL ; then
+    RADOS_TOOL=$(which ceph)
+fi
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
@@ -306,11 +310,11 @@ test_xattr() {
 }
 test_rmobj() {
     p=`uuidgen`
-    ceph osd pool create $p 1
-    ceph osd pool set-quota $p max_objects 1
+    $CEPH_TOOL osd pool create $p 1
+    $CEPH_TOOL osd pool set-quota $p max_objects 1
     V1=`mktemp fooattrXXXXXXX`
     rados put $OBJ $V1 -p $p
-    while ! ceph osd dump | grep 'full max_objects'
+    while ! $CEPH_TOOL osd dump | grep 'full max_objects'
     do
 	sleep 2
     done
@@ -319,9 +323,114 @@ test_rmobj() {
     rm $V1
 }
 
+test_ls() {
+    echo "Testing rados ls command"
+    p=`uuidgen`
+    $CEPH_TOOL osd pool create $p 1
+    NS=10
+    OBJS=20
+    # Include default namespace (0) in the total
+    TOTAL=$(expr $OBJS \* $(expr $NS + 1))
+
+    for nsnum in `seq 0 $NS`
+    do
+        for onum in `seq 1 $OBJS`
+        do
+	    if [ "$nsnum" = "0" ];
+	    then
+                "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
+            else
+                "$RADOS_TOOL" -p $p -N "NS${nsnum}" put obj${onum} /etc/fstab 2> /dev/null
+	    fi
+	done
+    done
+    CHECK=$("$RADOS_TOOL" -p $p ls 2> /dev/null | wc -l)
+    if test "$OBJS" != "$CHECK";
+    then
+        die "Created $OBJS objects in default namespace but saw $CHECK"
+    fi
+    TESTNS=NS${NS}
+    CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
+    if test "$OBJS" != "$CHECK";
+    then
+        die "Created $OBJS objects in $TESTNS namespace but saw $CHECK"
+    fi
+    CHECK=$("$RADOS_TOOL" -p $p --all ls 2> /dev/null | wc -l)
+    if test "$TOTAL" != "$CHECK";
+    then
+        die "Created $TOTAL objects but saw $CHECK"
+    fi
+
+    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+}
+
+test_cleanup() {
+    echo "Testing rados cleanup command"
+    p=`uuidgen`
+    $CEPH_TOOL osd pool create $p 1
+    NS=5
+    OBJS=4
+    # Include default namespace (0) in the total
+    TOTAL=$(expr $OBJS \* $(expr $NS + 1))
+
+    for nsnum in `seq 0 $NS`
+    do
+        for onum in `seq 1 $OBJS`
+        do
+	    if [ "$nsnum" = "0" ];
+	    then
+                "$RADOS_TOOL" -p $p put obj${onum} /etc/fstab 2> /dev/null
+            else
+                "$RADOS_TOOL" -p $p -N "NS${nsnum}" put obj${onum} /etc/fstab 2> /dev/null
+	    fi
+	done
+    done
+
+    $RADOS_TOOL -p $p --all ls > $TDIR/before.ls.out 2> /dev/null
+
+    $RADOS_TOOL -p $p bench 3 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS1 bench 3 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS2 bench 3 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS3 bench 3 write --no-cleanup 2> /dev/null
+    # Leave dangling objects without a benchmark_last_metadata in NS4
+    expect_false timeout 3 $RADOS_TOOL -p $p -N NS4 bench 30 write --no-cleanup 2> /dev/null
+    $RADOS_TOOL -p $p -N NS5 bench 3 write --no-cleanup 2> /dev/null
+
+    $RADOS_TOOL -p $p -N NS3 cleanup 2> /dev/null
+    #echo "Check NS3 after specific cleanup"
+    CHECK=$($RADOS_TOOL -p $p -N NS3 ls | wc -l)
+    if test "$OBJS" != "$CHECK";
+    then
+        die "Expected $OBJS objects in NS3 but saw $CHECK"
+    fi
+
+    #echo "Try to cleanup all"
+    $RADOS_TOOL -p $p --all cleanup
+    #echo "Check all namespaces"
+    $RADOS_TOOL -p $p --all ls > $TDIR/after.ls.out 2> /dev/null
+    CHECK=$(cat $TDIR/after.ls.out | wc -l)
+    if test "$TOTAL" != "$CHECK";
+    then
+        die "Expected $TOTAL objects but saw $CHECK"
+    fi
+    if ! diff $TDIR/before.ls.out $TDIR/after.ls.out
+    then
+        die "Different objects found after cleanup"
+    fi
+
+    set +e
+    run_expect_fail $RADOS_TOOL -p $p cleanup --prefix illegal_prefix
+    run_expect_succ $RADOS_TOOL -p $p cleanup --prefix benchmark_data_otherhost
+    set -e
+
+    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+}
+
 test_xattr
 test_omap
 test_rmobj
+test_ls
+test_cleanup
 
 echo "SUCCESS!"
 exit 0
