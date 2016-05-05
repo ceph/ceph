@@ -940,9 +940,13 @@ int Pipe::connect()
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
   if (rc < 0) {
-    rc = -errno;
+    int stored_errno = errno;
     ldout(msgr->cct,2) << "connect error " << peer_addr
-	     << ", " << cpp_strerror(rc) << dendl;
+	     << ", " << cpp_strerror(stored_errno) << dendl;
+    if (stored_errno == ECONNREFUSED) {
+      ldout(msgr->cct, 2) << "connection refused!" << dendl;
+      msgr->dispatch_queue.queue_refused(connection_state.get());
+    }
     goto fail;
   }
 

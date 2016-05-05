@@ -218,6 +218,10 @@ class ClientStub : public TestStub
     return false;
   }
 
+  bool ms_handle_refused(Connection *con) {
+    return false;
+  }
+
   const string get_name() {
     return "client";
   }
@@ -901,6 +905,10 @@ class OSDStub : public TestStub
       return false;
     session->put();
     return true;
+  }
+
+  bool ms_handle_refused(Connection *con) {
+    return false;
   }
 
   const string get_name() {

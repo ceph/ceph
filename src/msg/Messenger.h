@@ -671,6 +671,24 @@ public:
 	 ++p)
       (*p)->ms_handle_remote_reset(con);
   }
+
+  /**
+   * Notify each Dispatcher of a Connection for which reconnection
+   * attempts are being refused. Call this function whenever you
+   * detect that a lossy Connection has been disconnected and it's
+   * impossible to reconnect.
+   *
+   * @param con Pointer to the broken Connection.
+   */
+  void ms_deliver_handle_refused(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+         p != dispatchers.end();
+         ++p) {
+      if ((*p)->ms_handle_refused(con))
+        return;
+    }
+  }
+
   /**
    * Get the AuthAuthorizer for a new outgoing Connection.
    *

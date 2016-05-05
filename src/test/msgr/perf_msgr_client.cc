@@ -54,6 +54,7 @@ class MessengerClient {
     void ms_fast_dispatch(Message *m);
     bool ms_handle_reset(Connection *con) { return true; }
     void ms_handle_remote_reset(Connection *con) {}
+    bool ms_handle_refused(Connection *con) { return false; }
     bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                               bufferlist& authorizer, bufferlist& authorizer_reply,
                               bool& isvalid, CryptoKey& session_key) {

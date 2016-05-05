@@ -74,6 +74,8 @@ public:
    * a reference to it.
    */
   virtual void ms_handle_remote_reset(Connection *con);
+  
+  virtual bool ms_handle_refused(Connection *con) { return false; }
 
   /**
    * @defgroup Authentication

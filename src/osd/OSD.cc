@@ -4748,6 +4748,11 @@ bool OSD::ms_handle_reset(Connection *con)
   return true;
 }
 
+bool OSD::ms_handle_refused(Connection *con)
+{
+  return false;
+}
+
 struct C_OSD_GetVersion : public Context {
   OSD *osd;
   uint64_t oldest, newest;
