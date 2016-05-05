@@ -3,9 +3,6 @@ overrides:
     log-whitelist:
     - reached quota
     - wrongly marked me down
-  conf:
-    global:
-      osd_max_object_name_len: 800
 tasks:
 - install:
 - ceph:
