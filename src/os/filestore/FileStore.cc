@@ -3693,6 +3693,9 @@ void FileStore::sync_entry()
     if (force_sync) {
       dout(20) << "sync_entry force_sync set" << dendl;
       force_sync = false;
+    } else if (stop) {
+      dout(20) << __func__ << " stop set" << dendl;
+      break;
     } else {
       // wait for at least the min interval
       utime_t woke = ceph_clock_now(g_ceph_context);
