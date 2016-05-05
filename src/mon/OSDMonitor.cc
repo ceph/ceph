@@ -592,6 +592,12 @@ int OSDMonitor::reweight_by_utilization(int oload,
     std::pair<int, float> osd_util;
     osd_util.first = p->first;
     if (by_pg) {
+      if (p->first >= (int)pgs_by_osd.size() ||
+        pgs_by_osd[p->first] == 0) {
+        // skip if this OSD does not contain any pg
+        // belonging to the specified pool(s).
+        continue;
+      }
       osd_util.second = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
     } else {
       osd_util.second = (double)p->second.kb_used / (double)p->second.kb;
