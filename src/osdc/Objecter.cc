@@ -2171,7 +2171,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
+  } else if ((op->target.flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
 	     !(op->target.flags & (CEPH_OSD_FLAG_FULL_TRY |
 				   CEPH_OSD_FLAG_FULL_FORCE)) &&
              (_osdmap_full_flag() ||
