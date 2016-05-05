@@ -2,9 +2,6 @@ overrides:
   ceph:
     log-whitelist:
       - reached quota
-    conf:
-      global:
-        osd_max_object_name_len: 800
 tasks:
 - ceph-fuse:
 - workunit:
