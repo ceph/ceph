@@ -208,7 +208,8 @@ inline void deleter::append(deleter d) {
   impl* next_impl = _impl;
   deleter* next_d = this;
   while (next_impl) {
-    assert(next_impl != d._impl);
+    if (next_impl == d._impl)
+      return ;
     if (is_raw_object(next_impl)) {
       next_d->_impl = next_impl = new free_deleter_impl(to_raw_object(next_impl));
     }
