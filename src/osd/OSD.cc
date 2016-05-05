@@ -5462,7 +5462,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
     osd_lock.Unlock();
-    cct->_conf->injectargs(args, &ss);
+    r = cct->_conf->injectargs(args, &ss);
     osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {

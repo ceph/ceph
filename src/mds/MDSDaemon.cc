@@ -769,7 +769,7 @@ int MDSDaemon::_handle_command(
     string args = argsvec.front();
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
-    cct->_conf->injectargs(args, &ss);
+    r = cct->_conf->injectargs(args, &ss);
   } else if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";

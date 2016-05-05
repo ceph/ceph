@@ -196,11 +196,14 @@ function test_mon_injectargs()
   check_response "osd_enable_op_tracker = 'true'"
   ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
   check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
-  ceph tell osd.0 injectargs -- '--osd_op_history_duration' >& $TMPFILE || return 1
-  check_response "Option --osd_op_history_duration requires an argument"
+  expect_failure $TMPDIR "Option --osd_op_history_duration requires an argument" \
+                 ceph tell osd.0 injectargs -- '--osd_op_history_duration'
 
   ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
   check_response "mon_lease = '6' (unchangeable)"
+
+  # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
+  expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1
 }
 
 function test_mon_injectargs_SI()
@@ -228,6 +231,7 @@ function test_mon_injectargs_SI()
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
   expect_false ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10F'
+  expect_false ceph tell mon.a injectargs '--mon_globalid_prealloc -1'
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 }
 
@@ -734,6 +738,7 @@ function test_mds_tell()
   for mds_gid in $old_mds_gids ; do
       ceph tell mds.$mds_gid injectargs "--debug-mds 20"
   done
+  expect_false ceph tell mds.a injectargs mds_max_file_recover -1
 
   # Test respawn by rank
   ceph tell mds.0 respawn
@@ -1668,11 +1673,12 @@ function test_osd_bench()
   # max block size: 2097152   # 2MB
   # duration: 10              # 10 seconds
 
-  ceph tell osd.0 injectargs "\
+  local args="\
     --osd-bench-duration 10 \
     --osd-bench-max-block-size 2097152 \
     --osd-bench-large-size-max-throughput 10485760 \
     --osd-bench-small-size-max-iops 10"
+  ceph tell osd.0 injectargs ${args## }
 
   # anything with a bs larger than 2097152  must fail
   expect_false ceph tell osd.0 bench 1 2097153
