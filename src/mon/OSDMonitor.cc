@@ -632,13 +632,17 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	 util_by_osd.begin();
        p != util_by_osd.end();
        ++p) {
+    unsigned weight = osdmap.get_weight(p->first);
+    if (weight == 0) {
+      // skip if OSD is currently out
+      continue;
+    }
     float util = p->second;
 
     if (util >= overload_util) {
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
-      unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       if (weight > max_change)
 	new_weight = MAX(new_weight, weight - max_change);
@@ -665,7 +669,6 @@ int OSDMonitor::reweight_by_utilization(int oload,
     }
     if (!no_increasing && util <= underload_util) {
       // assign a higher weight.. if we can.
-      unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = MIN(new_weight, weight + max_change);
       if (new_weight > 0x10000)
