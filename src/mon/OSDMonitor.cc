@@ -570,9 +570,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
   ostringstream oss;
   if (f) {
     f->open_object_section("reweight_by_utilization");
-    f->dump_unsigned("overload_min", oload);
+    f->dump_int("overload_min", oload);
     f->dump_float("max_change", max_changef);
-    f->dump_float("max_change_osds", max_osds);
+    f->dump_int("max_change_osds", max_osds);
     f->dump_float("average_utilization", average_util);
     f->dump_float("overload_utilization", overload_util);
   } else {
@@ -653,7 +653,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
       }
       if (f) {
 	f->open_object_section("osd");
-	f->dump_unsigned("osd", p->first);
+	f->dump_int("osd", p->first);
 	f->dump_float("weight", (float)weight / (float)0x10000);
 	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
 	f->close_section();
