@@ -1010,6 +1010,15 @@ int OSDMap::identify_osd(const uuid_d& u) const
   return -1;
 }
 
+int OSDMap::identify_osd_on_all_channels(const entity_addr_t& addr) const
+{
+  for (int i=0; i<max_osd; i++)
+    if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr ||
+	get_hb_back_addr(i) == addr || get_hb_front_addr(i) == addr))
+      return i;
+  return -1;
+}
+
 int OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
   for (int i=0; i<max_osd; i++)

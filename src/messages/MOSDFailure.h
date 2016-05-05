@@ -24,22 +24,41 @@ class MOSDFailure : public PaxosServiceMessage {
   static const int HEAD_VERSION = 3;
 
  public:
+  enum {
+    FLAG_ALIVE = 0,      // use this on its own to mark as "I'm still alive"
+    FLAG_FAILED = 1,     // if set, failure; if not, recovery
+    FLAG_IMMEDIATE = 2,  // known failure, not a timeout
+  };
+  
   uuid_d fsid;
   entity_inst_t target_osd;
-  __u8 is_failed;
+  __u8 flags;
   epoch_t       epoch;
   int32_t failed_for;  // known to be failed since at least this long
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)
     : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
-      fsid(fs), target_osd(f), is_failed(true), epoch(e), failed_for(duration) { }
+      fsid(fs), target_osd(f),
+      flags(FLAG_FAILED),
+      epoch(e), failed_for(duration) { }
+  MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, 
+              epoch_t e, __u8 extra_flags)
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+      fsid(fs), target_osd(f),
+      flags(extra_flags),
+      epoch(e), failed_for(duration) { }
 private:
   ~MOSDFailure() {}
 
 public: 
   entity_inst_t get_target() { return target_osd; }
-  bool if_osd_failed() { return is_failed; }
+  bool if_osd_failed() const { 
+    return flags & FLAG_FAILED; 
+  }
+  bool is_immediate() const { 
+    return flags & FLAG_IMMEDIATE; 
+  }
   epoch_t get_epoch() { return epoch; }
 
   void decode_payload() {
@@ -49,9 +68,9 @@ public:
     ::decode(target_osd, p);
     ::decode(epoch, p);
     if (header.version >= 2)
-      ::decode(is_failed, p);
+      ::decode(flags, p);
     else
-      is_failed = true;
+      flags = FLAG_FAILED;
     if (header.version >= 3)
       ::decode(failed_for, p);
     else
@@ -62,14 +81,15 @@ public:
     ::encode(fsid, payload);
     ::encode(target_osd, payload);
     ::encode(epoch, payload);
-    ::encode(is_failed, payload);
+    ::encode(flags, payload);
     ::encode(failed_for, payload);
   }
 
   const char *get_type_name() const { return "osd_failure"; }
   void print(ostream& out) const {
     out << "osd_failure("
-	<< (is_failed ? "failed " : "recovered ")
+	<< (if_osd_failed() ? "failed " : "recovered ")
+	<< (is_immediate() ? "immediate " : "timeout ")
 	<< target_osd << " for " << failed_for << "sec e" << epoch
 	<< " v" << version << ")";
   }

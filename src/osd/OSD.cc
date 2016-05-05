@@ -4762,8 +4762,8 @@ bool OSD::ms_handle_refused(Connection *con)
   if (monc && (type == CEPH_ENTITY_TYPE_OSD)) {
     OSDMapRef osdmap = get_osdmap();
     if (osdmap) {
-      int id = osdmap->identify_osd(con->get_peer_addr());
-      if (osdmap->is_up(id)) {
+      int id = osdmap->identify_osd_on_all_channels(con->get_peer_addr());
+      if (id >= 0 && osdmap->is_up(id)) {
 	// I'm cheating mon heartbeat grace logic, because we know it's not going
 	// to respawn alone. +1 so we won't hit any boundary case.
 	monc->send_mon_message(new MOSDFailure(monc->get_fsid(),
@@ -5093,8 +5093,7 @@ void OSD::send_failures()
 
 void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch);
-  m->is_failed = false;
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch, MOSDFailure::FLAG_ALIVE);
   monc->send_mon_message(m);
 }
 
