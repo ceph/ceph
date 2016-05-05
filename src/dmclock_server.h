@@ -804,6 +804,8 @@ namespace crimson {
     class PriorityQueue : public PriorityQueueBase<C,R> {
       using super = PriorityQueueBase<C,R>;
 
+    public:
+
       // When a request is pulled, this is the return type.
       struct PullReq {
 	struct Retn {
@@ -815,6 +817,7 @@ namespace crimson {
 	typename super::NextReqType        type;
 	boost::variant<Retn,Time> data;
       };
+
 
       template<typename Rep, typename Per>
       PriorityQueue(typename super::ClientInfoFunc _client_info_f,
@@ -846,7 +849,7 @@ namespace crimson {
       void add_request(const R& request,
 		       const C& client_id,
 		       const ReqParams& req_params) {
-	add_request(RequestRef(new R(request)),
+	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
 		    get_time());
@@ -864,7 +867,10 @@ namespace crimson {
 		       const C& client_id,
 		       const ReqParams& req_params,
 		       const Time time) {
-	add_request(RequestRef(new R(request)), client_id, req_params, time);
+	add_request(typename super::RequestRef(new R(request)),
+		    client_id,
+		    req_params,
+		    time);
       }
 
 
@@ -873,16 +879,8 @@ namespace crimson {
 		       const ReqParams& req_params,
 		       const Time       time) {
 	typename super::DataGuard g(super::data_mtx);
-	do_add_request(request, client_id, req_params, time);
+	super::do_add_request(std::move(request), client_id, req_params, time);
 	// no call to schedule_request for pull version
-      }
-
-
-      // data_mtx should be held when called; unfortunately this
-      // function has to be repeated in both push & pull
-      // specializations
-      typename super::NextReq next_request() {
-	return next_request(get_time());
       }
 
 
@@ -893,9 +891,9 @@ namespace crimson {
 
       PullReq pull_request(Time now) {
 	PullReq result;
-	typename super::DataGuard g(typename super::data_mtx);
+	typename super::DataGuard g(super::data_mtx);
 
-	typename super::NextReq next = next_request(now);
+	typename super::NextReq next = super::next_request(now);
 	result.type = next.type;
 	switch(next.type) {
 	case super::NextReqType::none:
@@ -927,25 +925,25 @@ namespace crimson {
 
 	switch(next.heap_id) {
 	case super::HeapId::reservation:
-	  pop_process_request(super::resv_heap,
-			      process_f(result, PhaseType::reservation));
+	  super::pop_process_request(super::resv_heap,
+				     process_f(result, PhaseType::reservation));
 	  ++super::reserv_sched_count;
 	  break;
 	case super::HeapId::ready:
 	{
-	  pop_process_request(super::ready_heap,
-			      process_f(result, PhaseType::priority));
+	  super::pop_process_request(super::ready_heap,
+				     process_f(result, PhaseType::priority));
 	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	  reduce_reservation_tags(retn.client);
+	  super::reduce_reservation_tags(retn.client);
 	  ++super::prop_sched_count;
 	}
 	break;
 #if USE_PROP_HEAP
 	case super::HeapId::proportional:
 	{
-	  pop_process_request(prop_heap, process_f(result, PhaseType::priority));
+	  super::pop_process_request(prop_heap, process_f(result, PhaseType::priority));
 	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	  reduce_reservation_tags(retn.client);
+	  super::reduce_reservation_tags(retn.client);
 	  ++super::limit_break_sched_count;
 	}
 	break;
@@ -956,6 +954,17 @@ namespace crimson {
 
 	return result;
       } // pull_request
+
+
+    protected:
+
+
+      // data_mtx should be held when called; unfortunately this
+      // function has to be repeated in both push & pull
+      // specializations
+      typename super::NextReq next_request() {
+	return next_request(get_time());
+      }
     };
 
 
@@ -1027,9 +1036,8 @@ namespace crimson {
 	// empty
       }
 
-    protected:
 
-      virtual ~PriorityQueue() {
+      ~PriorityQueue() {
 	sched_ahead_cv.notify_one();
 	sched_ahead_thd.join();
       }
