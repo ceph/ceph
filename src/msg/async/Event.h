@@ -39,11 +39,14 @@
 
 #include <pthread.h>
 
-#include "include/atomic.h"
-#include "include/Context.h"
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+
+#include "include/utime.h"
 #include "include/unordered_map.h"
 #include "common/ceph_time.h"
-#include "common/WorkQueue.h"
+#include "common/dout.h"
 #include "net_handler.h"
 
 #define EVENT_NONE 0
@@ -87,6 +90,8 @@ class EventDriver {
  */
 class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
+  thread_local static pthread_t thread_id;
+
   struct FileEvent {
     int mask;
     EventCallbackRef read_cb;
@@ -104,8 +109,8 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
-  Mutex external_lock, file_lock, time_lock;
-  atomic_t external_num_events;
+  std::mutex external_lock;
+  std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
@@ -116,7 +121,7 @@ class EventCenter {
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
-  pthread_t owner;
+  pthread_t owner = 0;
   EventCallbackRef notify_handler;
 
   int process_time_events();
@@ -130,9 +135,6 @@ class EventCenter {
 
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
-    external_lock("AsyncMessenger::external_lock"),
-    file_lock("AsyncMessenger::file_lock"),
-    time_lock("AsyncMessenger::time_lock"),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
@@ -157,6 +159,50 @@ class EventCenter {
 
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
+  inline bool in_thread() const {
+    return thread_id == owner;
+  }
+ private:
+  template <typename func>
+  class C_submit_event : public EventCallback {
+    std::mutex lock;
+    std::condition_variable cond;
+    bool done = false;
+    func &&f;
+    bool nonwait;
+   public:
+    C_submit_event(func &&_f, bool nw)
+      : f(std::move(_f)), nonwait(nw) {}
+    void do_request(int id) {
+      f();
+      std::lock_guard<std::mutex> l(lock);
+      cond.notify_all();
+      done = true;
+      if (nonwait)
+        delete this;
+    }
+    void wait() {
+      std::unique_lock<std::mutex> l(lock);
+      while (!done)
+        cond.wait(l);
+    }
+  };
+ public:
+  template <typename func>
+  void submit_event(func &&f, bool nowait = false) {
+    if (in_thread()) {
+      f();
+      return ;
+    }
+    if (nowait) {
+      C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
+      dispatch_event_external(event);
+    } else {
+      C_submit_event<func> event(std::move(f), false);
+      dispatch_event_external(&event);
+      event.wait();
+    }
+  };
 };
 
 #endif

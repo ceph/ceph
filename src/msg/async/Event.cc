@@ -61,7 +61,7 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
-static thread_local pthread_t thread_id = 0;
+thread_local pthread_t EventCenter::thread_id = 0;
 
 int EventCenter::init(int n)
 {
@@ -117,7 +117,7 @@ int EventCenter::init(int n)
 EventCenter::~EventCenter()
 {
   {
-    Mutex::Locker l(external_lock);
+    std::lock_guard<std::mutex> l(external_lock);
     while (!external_events.empty()) {
       EventCallbackRef e = external_events.front();
       if (e)
@@ -127,10 +127,8 @@ EventCenter::~EventCenter()
   }
   assert(time_events.empty());
 
-  if (notify_receive_fd >= 0) {
-    delete_file_event(notify_receive_fd, EVENT_READABLE);
+  if (notify_receive_fd >= 0)
     ::close(notify_receive_fd);
-  }
   if (notify_send_fd >= 0)
     ::close(notify_send_fd);
 
@@ -146,8 +144,8 @@ void EventCenter::set_owner()
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
+  assert(in_thread());
   int r = 0;
-  Mutex::Locker l(file_lock);
   if (fd >= nevent) {
     int new_size = nevent << 2;
     while (fd > new_size)
@@ -192,7 +190,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 void EventCenter::delete_file_event(int fd, int mask)
 {
   assert(fd >= 0);
-  Mutex::Locker l(file_lock);
+  assert(in_thread());
   if (fd >= nevent) {
     ldout(cct, 1) << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
                   << "mask=" << mask << dendl;
@@ -224,7 +222,7 @@ void EventCenter::delete_file_event(int fd, int mask)
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
 {
-  Mutex::Locker l(time_lock);
+  assert(in_thread());
   uint64_t id = time_event_next_id++;
 
   ldout(cct, 10) << __func__ << " id=" << id << " trigger after " << microseconds << "us"<< dendl;
@@ -242,7 +240,7 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
 // TODO: Ineffective implementation now!
 void EventCenter::delete_time_event(uint64_t id)
 {
-  Mutex::Locker l(time_lock);
+  assert(in_thread());
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
   if (id >= time_event_next_id)
     return ;
@@ -279,7 +277,6 @@ int EventCenter::process_time_events()
   clock_type::time_point now = clock_type::now();
   ldout(cct, 10) << __func__ << " cur time is " << now << dendl;
 
-  time_lock.Lock();
   /* If the system clock is moved to the future, and then set back to the
    * right value, time events may be delayed in a random way. Often this
    * means that scheduled operations will not be performed soon enough.
@@ -303,7 +300,6 @@ int EventCenter::process_time_events()
       break;
     }
   }
-  time_lock.Unlock();
 
   for (list<TimeEvent>::iterator it = need_process.begin();
        it != need_process.end(); ++it) {
@@ -325,7 +321,7 @@ int EventCenter::process_events(int timeout_microseconds)
   auto now = clock_type::now();
 
   // If exists external events, don't block
-  if (external_num_events.read()) {
+  if (external_num_events.load()) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     next_time = now;
@@ -335,7 +331,7 @@ int EventCenter::process_events(int timeout_microseconds)
 
     Mutex::Locker l(time_lock);
     auto it = time_events.begin();
-    if (it != time_events.end() && shortest > it->first) {
+    if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
       trigger_time = true;
@@ -355,51 +351,43 @@ int EventCenter::process_events(int timeout_microseconds)
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
-  file_lock.Lock();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
     EventCallbackRef cb;
     event = _get_file_event(fired_events[j].fd);
 
-    // FIXME: Actually we need to pick up some ways to reduce potential
-    // file_lock contention here.
     /* note the event->mask & mask & ... code: maybe an already processed
     * event removed an element that fired and we still didn't
     * processed, so we check if the event is still valid. */
     if (event->mask & fired_events[j].mask & EVENT_READABLE) {
       rfired = 1;
       cb = event->read_cb;
-      file_lock.Unlock();
       cb->do_request(fired_events[j].fd);
-      file_lock.Lock();
     }
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
       if (!rfired || event->read_cb != event->write_cb) {
         cb = event->write_cb;
-        file_lock.Unlock();
         cb->do_request(fired_events[j].fd);
-        file_lock.Lock();
       }
     }
 
     ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
-  file_lock.Unlock();
 
   if (trigger_time)
     numevents += process_time_events();
 
-  if (external_num_events.read()) {
-    external_lock.Lock();
+  if (external_num_events.load()) {
+    external_lock.lock();
     if (external_events.empty()) {
-      external_lock.Unlock();
+      external_lock.unlock();
     } else {
       deque<EventCallbackRef> cur_process;
       cur_process.swap(external_events);
-      external_num_events.set(0);
-      external_lock.Unlock();
+      external_num_events.store(0);
+      external_lock.unlock();
       while (!cur_process.empty()) {
         EventCallbackRef e = cur_process.front();
         if (e)
@@ -414,12 +402,10 @@ int EventCenter::process_events(int timeout_microseconds)
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  external_lock.Lock();
+  external_lock.lock();
   external_events.push_back(e);
-  uint64_t num = external_num_events.inc();
-  external_lock.Unlock();
+  ++external_num_events;
+  external_lock.unlock();
   if (thread_id != owner)
     wakeup();
-
-  ldout(cct, 10) << __func__ << " " << e << " pending " << num << dendl;
 }
