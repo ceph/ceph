@@ -1,8 +1,3 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        osd_max_object_name_len: 800
 tasks:
 - install: null
 - ceph:
