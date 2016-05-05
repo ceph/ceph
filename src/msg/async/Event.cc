@@ -169,15 +169,7 @@ int EventCenter::init(int n, unsigned idx)
 
 EventCenter::~EventCenter()
 {
-  {
-    std::lock_guard<std::mutex> l(external_lock);
-    while (!external_events.empty()) {
-      EventCallbackRef e = external_events.front();
-      if (e)
-        e->do_request(0);
-      external_events.pop_front();
-    }
-  }
+  assert(external_events.empty());
   assert(time_events.empty());
 
   if (notify_receive_fd >= 0)

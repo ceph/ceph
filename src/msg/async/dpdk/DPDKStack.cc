@@ -133,7 +133,7 @@ void DPDKWorker::initialize()
 
   sdev->workers[i] = this;
   _impl = std::unique_ptr<DPDKWorker::Impl>(
-          new DPDKWorker::Impl(cct, &center, sdev));
+          new DPDKWorker::Impl(cct, i, &center, sdev));
   {
     Mutex::Locker l(lock);
     if (!--queue_init_done) {
@@ -176,8 +176,8 @@ static bool match_available_address(const vector<AvailableIPAddress> &avails,
   return false;
 }
 
-DPDKWorker::Impl::Impl(CephContext *cct, EventCenter *c, std::shared_ptr<DPDKDevice> dev)
-    : _netif(cct, std::move(dev), c), _inet(cct, c, &_netif)
+DPDKWorker::Impl::Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared_ptr<DPDKDevice> dev)
+    : id(i), _netif(cct, dev, c), _dev(dev), _inet(cct, c, &_netif)
 {
   vector<AvailableIPAddress> tuples;
   bool parsed = parse_available_address(cct->_conf->ms_dpdk_host_ipv4_addr,

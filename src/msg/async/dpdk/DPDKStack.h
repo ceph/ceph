@@ -207,9 +207,14 @@ void DPDKServerSocketImpl<Protocol>::abort_accept() {
 
 class DPDKWorker : public Worker {
   struct Impl {
+    unsigned id;
     interface _netif;
+    std::shared_ptr<DPDKDevice> _dev;
     ipv4 _inet;
-    Impl(CephContext *cct, EventCenter *c, std::shared_ptr<DPDKDevice> dev);
+    Impl(CephContext *cct, unsigned i, EventCenter *c, std::shared_ptr<DPDKDevice> dev);
+    ~Impl() {
+      _dev->unset_local_queue(id);
+    }
   };
   std::unique_ptr<Impl> _impl;
 

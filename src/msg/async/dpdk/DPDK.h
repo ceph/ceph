@@ -448,10 +448,9 @@ class DPDKQueuePair {
     tx_buf_factory(CephContext *c, DPDKDevice *dev, uint8_t qid);
     ~tx_buf_factory() {
       // put all mbuf back into mempool in order to make the next factory work
-      gc();
+      while (gc());
       rte_mempool_put_bulk(_pool, (void**)_ring.data(),
                            _ring.size());
-      assert(rte_mempool_free_count(_pool) == 0);
     }
 
 
@@ -537,6 +536,9 @@ class DPDKQueuePair {
  public:
   explicit DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid);
   ~DPDKQueuePair() {
+    if (device_stat_time_fd) {
+      center->delete_time_event(device_stat_time_fd);
+    }
     rx_gc(true);
   }
 
@@ -553,6 +555,9 @@ class DPDKQueuePair {
 
   DPDKDevice& port() const { return *_dev; }
   tx_buf* get_tx_buf() { return _tx_buf_factory.get(); }
+
+  void handle_stats();
+
  private:
   template <class Func>
   uint32_t _send(circular_buffer<Packet>& pb, Func &&packet_to_tx_buf_p) {
@@ -692,6 +697,7 @@ class DPDKQueuePair {
   std::vector<fragment> _frags;
   std::vector<char*> _bufs;
   size_t _num_rx_free_segs = 0;
+  uint64_t device_stat_time_fd = 0;
 
 #ifdef CEPH_PERF_DEV
   uint64_t rx_cycles = 0;
@@ -760,7 +766,7 @@ class DPDKDevice {
   size_t _rss_table_bits = 0;
   uint8_t _port_idx;
   uint16_t _num_queues;
-  unsigned  cores;
+  unsigned cores;
   hw_features _hw_features;
   uint8_t _queues_ready = 0;
   unsigned _home_cpu;
@@ -876,6 +882,10 @@ class DPDKDevice {
     assert(!_queues[i]);
     _queues[i] = std::move(qp);
   }
+  void unset_local_queue(unsigned i) {
+    assert(_queues[i]);
+    _queues[i].reset();
+  }
   template <typename Func>
   unsigned forward_dst(unsigned src_cpuid, Func&& hashfn) {
     auto& qp = queue_for_cpu(src_cpuid);
@@ -915,8 +925,6 @@ class DPDKDevice {
   bool is_vmxnet3_device() const {
     return _is_vmxnet3_device;
   }
-
-  void handle_stats(EventCenter *c);
 };
 
 

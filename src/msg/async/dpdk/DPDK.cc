@@ -598,12 +598,11 @@ int DPDKDevice::check_port_link_status()
 }
 
 class C_handle_dev_stats : public EventCallback {
-  DPDKDevice* _dev;
-  EventCenter *center;
+  DPDKQueuePair *_qp;
  public:
-  C_handle_dev_stats(DPDKDevice* dev, EventCenter *c): _dev(dev), center(c) { }
+  C_handle_dev_stats(DPDKQueuePair *qp): _qp(qp) { }
   void do_request(int id) {
-    _dev->handle_stats(center);
+    _qp->handle_stats();
   }
 };
 
@@ -651,9 +650,30 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
 
-  if (!_qid) {
-    center->create_time_event(1000*1000, new C_handle_dev_stats(_dev, center));
+  if (!_qid)
+    device_stat_time_fd = center->create_time_event(1000*1000, new C_handle_dev_stats(this));
+}
+
+void DPDKQueuePair::handle_stats()
+{
+  ldout(cct, 20) << __func__ << " started." << dendl;
+  rte_eth_stats rte_stats = {};
+  int rc = rte_eth_stats_get(_dev_port_idx, &rte_stats);
+
+  if (rc) {
+    ldout(cct, 0) << __func__ << " failed to get port statistics: " << cpp_strerror(rc) << dendl;
+    return ;
   }
+
+  _dev->perf_logger->set(l_dpdk_dev_rx_mcast, rte_stats.imcasts);
+
+  _dev->perf_logger->set(l_dpdk_dev_rx_badcrc_errors, rte_stats.ibadcrc);
+  _dev->perf_logger->set(l_dpdk_dev_rx_dropped_errors, rte_stats.imissed);
+  _dev->perf_logger->set(l_dpdk_dev_rx_nombuf_errors, rte_stats.rx_nombuf);
+
+  _dev->perf_logger->set(l_dpdk_dev_rx_total_errors, rte_stats.ierrors);
+  _dev->perf_logger->set(l_dpdk_dev_tx_total_errors, rte_stats.oerrors);
+  device_stat_time_fd = center->create_time_event(1000*1000, new C_handle_dev_stats(this));
 }
 
 bool DPDKQueuePair::poll_tx() {
@@ -1249,27 +1269,6 @@ void DPDKDevice::set_rss_table()
   if (rte_eth_dev_rss_reta_update(_port_idx, reta_conf, _dev_info.reta_size)) {
     rte_exit(EXIT_FAILURE, "Port %d: Failed to update an RSS indirection table", _port_idx);
   }
-}
-
-void DPDKDevice::handle_stats(EventCenter *c)
-{
-  rte_eth_stats rte_stats = {};
-  int rc = rte_eth_stats_get(_port_idx, &rte_stats);
-
-  if (rc) {
-    ldout(cct, 0) << __func__ << " failed to get port statistics: " << cpp_strerror(rc) << dendl;
-    return ;
-  }
-
-  perf_logger->set(l_dpdk_dev_rx_mcast, rte_stats.imcasts);
-
-  perf_logger->set(l_dpdk_dev_rx_badcrc_errors, rte_stats.ibadcrc);
-  perf_logger->set(l_dpdk_dev_rx_dropped_errors, rte_stats.imissed);
-  perf_logger->set(l_dpdk_dev_rx_nombuf_errors, rte_stats.rx_nombuf);
-
-  perf_logger->set(l_dpdk_dev_rx_total_errors, rte_stats.ierrors);
-  perf_logger->set(l_dpdk_dev_tx_total_errors, rte_stats.oerrors);
-  c->create_time_event(1000*1000, new C_handle_dev_stats(this, c));
 }
 
 /******************************** Interface functions *************************/
