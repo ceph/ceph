@@ -4737,6 +4737,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
 
   int count = 0;
   bool truncated = true;
+  int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead,max);
 
   result->clear();
 
@@ -4793,7 +4794,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
     std::map<string, RGWObjEnt> ent_map;
-    int r = store->cls_bucket_list(bucket, shard_id, cur_marker, cur_prefix, max + 1 - count, params.list_versions, ent_map,
+    int r = store->cls_bucket_list(bucket, shard_id, cur_marker, cur_prefix, read_ahead + 1 - count, params.list_versions, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
