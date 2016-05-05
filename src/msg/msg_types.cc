@@ -14,11 +14,16 @@ void entity_name_t::dump(Formatter *f) const
   f->dump_unsigned("num", num());
 }
 
-
 void entity_addr_t::dump(Formatter *f) const
 {
   f->dump_unsigned("nonce", nonce);
   f->dump_stream("addr") << get_sockaddr();
+}
+
+void entity_inst_t::dump(Formatter *f) const
+{
+  f->dump_object("name", name);
+  f->dump_object("addr", addr);
 }
 
 void entity_name_t::generate_test_instances(list<entity_name_t*>& o)
@@ -44,6 +49,15 @@ void entity_addr_t::generate_test_instances(list<entity_addr_t*>& o)
   b->set_in4_quad(3, 2);
   b->set_port(2);
   o.push_back(b);
+}
+
+void entity_inst_t::generate_test_instances(list<entity_inst_t*>& o)
+{
+  o.push_back(new entity_inst_t());
+  entity_name_t name;
+  entity_addr_t addr;
+  entity_inst_t *a = new entity_inst_t(name, addr);
+  o.push_back(a);
 }
 
 bool entity_addr_t::parse(const char *s, const char **end)
@@ -129,8 +143,6 @@ bool entity_addr_t::parse(const char *s, const char **end)
   //cout << *this << std::endl;
   return true;
 }
-
-
 
 ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
