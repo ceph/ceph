@@ -885,7 +885,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
 
 void PGMap::dump_osd_stats(ostream& ss) const
 {
-  ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
+  ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out\tpg sum" << std::endl;
   for (ceph::unordered_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p) {
@@ -895,6 +895,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
        << "\t" << p->second.kb
        << "\t" << p->second.hb_in
        << "\t" << p->second.hb_out
+       << "\t" << get_num_pg_by_osd(p->first)
        << std::endl;
   }
   ss << " sum\t" << osd_sum.kb_used
