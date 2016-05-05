@@ -28,7 +28,8 @@ namespace crimson {
       uint64_t proportion_count = 0;
     };
 
-    using DmcQueue = dmc::PriorityQueue<ClientId,sim::TestRequest>;
+    using DmcQueue =
+      dmc::PriorityQueue<ClientId,sim::TestRequest,dmc::QMechanism::push>;
 
     using DmcServer = sim::SimulatedServer<DmcQueue,
 					   dmc::ReqParams,

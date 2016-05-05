@@ -962,7 +962,12 @@ namespace crimson {
     // PUSH version
     template<typename C, typename R>
     class PriorityQueue<C,R,QMechanism::push> : public PriorityQueueBase<C,R> {
+
+    protected:
+
       using super = PriorityQueueBase<C,R>;
+
+    public:
 
       // a function to see whether the server can handle another request
       using CanHandleRequestFunc = std::function<bool(void)>;
@@ -971,6 +976,8 @@ namespace crimson {
       // parameter is a callback when it's completed
       using HandleRequestFunc =
 	std::function<void(const C&,typename super::RequestRef,PhaseType)>;
+
+    protected:
 
       CanHandleRequestFunc can_handle_f;
       HandleRequestFunc    handle_f;
@@ -983,6 +990,8 @@ namespace crimson {
 
       std::thread sched_ahead_thd;
 
+    public:
+
       // push full constructor
       template<typename Rep, typename Per>
       PriorityQueue(typename super::ClientInfoFunc _client_info_f,
@@ -992,9 +1001,9 @@ namespace crimson {
 		    std::chrono::duration<Rep,Per> _erase_age,
 		    std::chrono::duration<Rep,Per> _check_time,
 		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
-		      _idle_age, _erase_age, _check_time,
-		      _allow_limit_break, QMechanism::push)
+	super(_client_info_f,
+	      _idle_age, _erase_age, _check_time,
+	      _allow_limit_break)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -1018,12 +1027,59 @@ namespace crimson {
 	// empty
       }
 
+    protected:
 
       virtual ~PriorityQueue() {
 	sched_ahead_cv.notify_one();
 	sched_ahead_thd.join();
       }
 
+    public:
+
+      void add_request(const R& request,
+		       const C& client_id,
+		       const ReqParams& req_params) {
+	add_request(typename super::RequestRef(new R(request)),
+		    client_id,
+		    req_params,
+		    get_time());
+      }
+
+
+      void add_request(typename super::RequestRef&& request,
+		       const C& client_id,
+		       const ReqParams& req_params) {
+	add_request(request, req_params, client_id, get_time());
+      }
+
+
+      void add_request(const R& request,
+		       const C& client_id,
+		       const ReqParams& req_params,
+		       const Time time) {
+	add_request(typename super::RequestRef(new R(request)),
+		    client_id,
+		    req_params,
+		    time);
+      }
+
+
+      void add_request(typename super::RequestRef&&     request,
+		       const C&         client_id,
+		       const ReqParams& req_params,
+		       const Time       time) {
+	typename super::DataGuard g(super::data_mtx);
+	super::do_add_request(std::move(request), client_id, req_params, time);
+	schedule_request();
+      }
+
+
+      void request_completed() {
+	typename super::DataGuard g(super::data_mtx);
+	schedule_request();
+      }
+
+    protected:
 
       // data_mtx should be held when called; furthermore, the heap
       // should not be empty and the top element of the heap should
@@ -1032,12 +1088,12 @@ namespace crimson {
       C submit_top_request(IndIntruHeap<C1, typename super::ClientRec, C2, C3>& heap,
 			   PhaseType phase) {
 	C client_result;
-	pop_process_request(heap,
-			    [this, phase, &client_result]
-			    (const C& client, typename super::RequestRef& request) {
-			      client_result = client;
-			      handle_f(client, std::move(request), phase);
-			    });
+	super::pop_process_request(heap,
+				   [this, phase, &client_result]
+				   (const C& client, typename super::RequestRef& request) {
+				     client_result = client;
+				     handle_f(client, std::move(request), phase);
+				   });
 	return client_result;
       }
 
@@ -1055,13 +1111,13 @@ namespace crimson {
 	  break;
 	case super::HeapId::ready:
 	  client = submit_top_request(super::ready_heap, PhaseType::priority);
-	  reduce_reservation_tags(client);
+	  super::reduce_reservation_tags(client);
 	  ++super::prop_sched_count;
 	  break;
 #if USE_PROP_HEAP
 	case super::HeapId::proportional:
 	  client = submit_top_request(super::prop_heap, PhaseType::priority);
-	  reduce_reservation_tags(client);
+	  super::reduce_reservation_tags(client);
 	  ++super::limit_break_sched_count;
 	  break;
 #endif
@@ -1108,47 +1164,6 @@ namespace crimson {
 	default:
 	  assert(false);
 	}
-      }
-
-
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
-	add_request(RequestRef(new R(request)),
-		    client_id,
-		    req_params,
-		    get_time());
-      }
-
-
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
-	add_request(request, req_params, client_id, get_time());
-      }
-
-
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time) {
-	add_request(RequestRef(new R(request)), client_id, req_params, time);
-      }
-
-
-      void add_request(typename super::RequestRef&&     request,
-		       const C&         client_id,
-		       const ReqParams& req_params,
-		       const Time       time) {
-	typename super::DataGuard g(super::data_mtx);
-	do_add_request(request, client_id, req_params, time);
-	schedule_request();
-      }
-
-
-      void request_completed() {
-	typename super::DataGuard g(super::data_mtx);
-	schedule_request();
       }
 
 
