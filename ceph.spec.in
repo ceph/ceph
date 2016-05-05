@@ -91,6 +91,7 @@ BuildRequires:	fuse-devel
 BuildRequires:	gcc-c++
 BuildRequires:	gdbm
 BuildRequires:	hdparm
+BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
