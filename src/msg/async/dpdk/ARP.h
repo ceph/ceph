@@ -194,6 +194,10 @@ class arp_for : public arp_for_protocol {
       : arp_for_protocol(a, L3::arp_protocol_type()), cct(c), center(cen) {
     _table[L3::broadcast_address()] = ethernet::broadcast_address();
   }
+  ~arp_for() {
+    for (auto && p : _in_progress)
+      center->delete_time_event(p.second.timeout_fd);
+  }
   void wait(const l3addr& addr, Packet p, resolution_cb cb);
   void learn(l2addr l2, l3addr l3);
   void run();
