@@ -485,6 +485,10 @@ public:
   void set_fsid(uuid_d u);
   uuid_d get_fsid();
 
+  uint64_t estimate_objects_overhead(uint64_t num_objects) override {
+    return 0; //do not care
+  }
+
   objectstore_perf_stat_t get_cur_stats();
 
   int queue_transactions(
