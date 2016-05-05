@@ -1038,6 +1038,7 @@ namespace crimson {
 
 
       ~PriorityQueue() {
+	this->finishing = true;
 	sched_ahead_cv.notify_one();
 	sched_ahead_thd.join();
       }
