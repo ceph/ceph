@@ -72,7 +72,7 @@ MDSRank::MDSRank(
     suicide_hook(suicide_hook_),
     standby_replaying(false)
 {
-  hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank");
+  hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
   finisher = new Finisher(msgr->cct);
 
