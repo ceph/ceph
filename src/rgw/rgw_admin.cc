@@ -2868,6 +2868,9 @@ int main(int argc, char **argv)
 	       << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+
+        encode_json("zonegroup", zonegroup, formatter);
+        formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUP_CREATE:
