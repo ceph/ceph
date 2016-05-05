@@ -538,7 +538,6 @@ class DPDKQueuePair {
   explicit DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid);
   ~DPDKQueuePair() {
     rx_gc(true);
-    assert(rte_mempool_free_count(_pktmbuf_pool_rx) == 0);
   }
 
   void rx_start() {
