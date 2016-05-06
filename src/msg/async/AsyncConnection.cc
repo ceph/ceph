@@ -223,10 +223,14 @@ void AsyncConnection::maybe_start_delay_thread()
  * return 0 means EAGAIN or EINTR */
 ssize_t AsyncConnection::read_bulk(int fd, char *buf, unsigned len)
 {
-  ssize_t nread = ::read(fd, buf, len);
+  ssize_t nread;
+ again:
+  nread = ::read(fd, buf, len);
   if (nread == -1) {
-    if (errno == EAGAIN || errno == EINTR) {
+    if (errno == EAGAIN) {
       nread = 0;
+    } else if (errno == EINTR) {
+      goto again;
     } else {
       ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << fd
                           << " : "<< strerror(errno) << dendl;
@@ -2051,7 +2055,7 @@ int AsyncConnection::send_message(Message *m)
                               << f << " != " << get_features() << dendl;
   }
   if (!is_queued() && can_write == WriteStatus::CANWRITE && async_msgr->cct->_conf->ms_async_send_inline) {
-    if (!can_fast_prepare)
+    if (!bl.length())
       prepare_send_message(get_features(), m, bl);
     logger->inc(l_msgr_send_messages_inline);
     if (write_message(m, bl, false) < 0) {

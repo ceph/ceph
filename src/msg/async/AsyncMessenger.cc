@@ -191,6 +191,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   entity_addr_t addr = msgr->get_myaddr();
   addr.nonce = nonce;
   msgr->set_myaddr(addr);
+  msgr->need_addr = false;
 
   msgr->init_local_connection();
 
