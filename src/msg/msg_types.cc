@@ -18,7 +18,7 @@ void entity_name_t::dump(Formatter *f) const
 void entity_addr_t::dump(Formatter *f) const
 {
   f->dump_unsigned("nonce", nonce);
-  f->dump_stream("addr") << addr;
+  f->dump_stream("addr") << get_sockaddr();
 }
 
 void entity_name_t::generate_test_instances(list<entity_name_t*>& o)
