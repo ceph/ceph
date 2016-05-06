@@ -26,6 +26,7 @@ namespace ceph {
 }
 
 extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
+extern ostream& operator<<(ostream& out, const sockaddr *sa);
 
 class entity_name_t {
 public:
