@@ -48,8 +48,6 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
     global_seq(0),
     cluster_protocol(0),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname,
-		       cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
     local_connection(new PipeConnection(cct, this))
@@ -195,16 +193,6 @@ int SimpleMessenger::get_proto_version(int peer_type, bool connect)
  */
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-
-void SimpleMessenger::dispatch_throttle_release(uint64_t msize)
-{
-  if (msize) {
-    ldout(cct,10) << "dispatch_throttle_release " << msize << " to dispatch throttler "
-	    << dispatch_throttler.get_current() << "/"
-	    << dispatch_throttler.get_max() << dendl;
-    dispatch_throttler.put(msize);
-  }
-}
 
 void SimpleMessenger::reaper_entry()
 {
@@ -484,6 +472,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
   if (my_inst.addr == dest_addr) {
     // local
     ldout(cct,20) << "submit_message " << *m << " local" << dendl;
+    m->set_connection(local_connection.get());
     dispatch_queue.local_delivery(m, m->get_priority());
     return;
   }
