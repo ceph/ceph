@@ -100,6 +100,7 @@ struct MockJournaler {
 
   MOCK_METHOD3(start_append, void(int flush_interval, uint64_t flush_bytes,
                                   double flush_age));
+  MOCK_CONST_METHOD0(get_max_append_size, uint64_t());
   MOCK_METHOD2(append, MockFutureProxy(uint64_t tag_id,
                                        const bufferlist &bl));
   MOCK_METHOD1(flush, void(Context *on_safe));
@@ -185,6 +186,9 @@ struct MockJournalerProxy {
                                                flush_age);
   }
 
+  uint64_t get_max_append_size() const {
+    return MockJournaler::get_instance().get_max_append_size();
+  }
   MockFutureProxy append(uint64_t tag_id, const bufferlist &bl) {
     return MockJournaler::get_instance().append(tag_id, bl);
   }
