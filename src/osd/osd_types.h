@@ -2017,12 +2017,14 @@ struct pg_history_t {
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
   utime_t last_clean_scrub_stamp;
+  utime_t last_flush_evict_stamp; // last cache tier flush/evict timestamp
 
   pg_history_t()
     : epoch_created(0),
       last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
       last_epoch_marked_full(0),
-      same_up_since(0), same_interval_since(0), same_primary_since(0) {}
+      same_up_since(0), same_interval_since(0), same_primary_since(0),
+      last_flush_evict_stamp(utime_t()) {}
   
   bool merge(const pg_history_t &other) {
     // Here, we only update the fields which cannot be calculated from the OSDmap.
@@ -2065,6 +2067,10 @@ struct pg_history_t {
     }
     if (other.last_clean_scrub_stamp > last_clean_scrub_stamp) {
       last_clean_scrub_stamp = other.last_clean_scrub_stamp;
+      modified = true;
+    }
+    if (other.last_flush_evict_stamp > last_flush_evict_stamp) {
+      last_flush_evict_stamp = other.last_flush_evict_stamp;
       modified = true;
     }
     return modified;
