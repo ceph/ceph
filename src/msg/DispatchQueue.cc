@@ -141,9 +141,9 @@ void DispatchQueue::dispatch_throttle_release(uint64_t msize)
 
 /*
  * This function delivers incoming messages to the Messenger.
- * Pipes with messages are kept in queues; when beginning a message
- * delivery the highest-priority queue is selected, the pipe from the
- * front of the queue is removed, and its message read. If the pipe
+ * Connections with messages are kept in queues; when beginning a message
+ * delivery the highest-priority queue is selected, the connection from the
+ * front of the queue is removed, and its message read. If the connection
  * has remaining messages at that priority level, it is re-placed on to the
  * end of the queue. If the queue is empty; it's removed.
  * The message is then delivered and the process starts again.
