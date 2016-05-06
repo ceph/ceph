@@ -4,7 +4,7 @@ RGW Multisite
 
 .. versionadded:: Jewel
 
-From Ceph release Jewel and beyond, you may configure each :term`Ceph Object
+From Ceph release Jewel and beyond, you may configure each :term:`Ceph Object
 Gateway` to work in an active active zone configuration, allowing for writes to
 non-master zones. Following are the basic terminologies that would be used:
 
@@ -551,7 +551,7 @@ Starting the radosgw
 --------------------
 
 On the node that is hosting the radosgw of the secondary zone, you would start
-it, similar to the `Starting the Radosgw`_, changing the ``rgw zone=us-east-2``
+it, similar to the `Starting the radosgw`_, changing the ``rgw zone=us-east-2``
 in the configuration file this time. For eg::
 
   [client.rgw.us-east-2]
@@ -748,4 +748,6 @@ And start the radosgw depending on your Operating system's init system, for eg::
   $ sudo systemctl start ceph-radosgw.service
 
 
-.. _`Ceph Object Gateway - Create Pools`: ../config#create_pools
+.. _`Ceph Object Gateway - Create Pools`: ../config#create-pools
+.. _`Install Ceph Gateway`: ../../install/install-ceph-gateway
+.. _`Starting the radosgw`: #starting-the-radosgw
