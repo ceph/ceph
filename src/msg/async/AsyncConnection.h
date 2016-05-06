@@ -140,12 +140,13 @@ class AsyncConnection : public Connection {
     AsyncMessenger *msgr;
     EventCenter *center;
     DispatchQueue *dispatch_queue;
+    uint64_t conn_id;
 
    public:
     explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
-                             DispatchQueue *q)
+                             DispatchQueue *q, uint64_t cid)
       : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c), dispatch_queue(q) { }
+        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid) { }
     ~DelayedDelivery() {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
