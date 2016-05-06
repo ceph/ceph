@@ -1198,6 +1198,26 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
 
+  template<bool is_const>
+  size_t buffer::list::iterator_impl<is_const>::get_ptr_and_advance(
+    size_t want, const char **data)
+  {
+    if (p == ls->end()) {
+      seek(off);
+      if (p == ls->end()) {
+	return 0;
+      }
+    }
+    *data = p->c_str() + p_off;
+    size_t l = MIN(p->length() - p_off, want);
+    p_off += l;
+    if (p_off == p->length()) {
+      ++p;
+      p_off = 0;
+    }
+    return l;
+  }
+
   // explicitly instantiate only the iterator types we need, so we can hide the
   // details in this compilation unit without introducing unnecessary link time
   // dependencies.
