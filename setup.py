@@ -50,6 +50,7 @@ setup(
     ],
     install_requires=['setuptools',
                       'gevent',
+                      # For teuthology-coverage
                       'MySQL-python == 1.2.3',
                       'PyYAML',
                       'argparse >= 1.2.1',
@@ -83,8 +84,6 @@ setup(
                       'python-neutronclient',
                       'prettytable',
                       'libvirt-python',
-                      # For teuthology-coverage
-                      'mysqlclient',
                       ],
 
 
