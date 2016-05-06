@@ -305,12 +305,14 @@ int Pipe::accept()
   port = msgr->my_inst.addr.get_port();
 
   // and peer's socket addr (they might not know their ip)
-  len = sizeof(socket_addr.ss_addr());
-  r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
+  sockaddr_storage ss;
+  len = sizeof(ss);
+  r = ::getpeername(sd, (sockaddr*)&ss, &len);
   if (r < 0) {
     ldout(msgr->cct,0) << "accept failed to getpeername " << cpp_strerror(errno) << dendl;
     goto fail_unlocked;
   }
+  socket_addr.set_sockaddr((sockaddr*)&ss);
   ::encode(socket_addr, addrs);
 
   r = tcp_write(addrs.c_str(), addrs.length());
