@@ -1229,6 +1229,14 @@ int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, ui
   return io_ctx_impl->read(obj, bl, len, off);
 }
 
+int librados::IoCtx::repair_read(const std::string& oid, bufferlist& bl,
+				 size_t len, uint64_t off, int flags,
+				 int32_t osdid, epoch_t e)
+{
+  object_t obj(oid);
+  return io_ctx_impl->repair_read(obj, bl, len, off, flags, osdid, e);
+}
+
 int librados::IoCtx::remove(const std::string& oid)
 {
   object_t obj(oid);
@@ -1455,6 +1463,13 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
 {
   object_t obj(oid);
   return io_ctx_impl->operate_read(obj, &o->impl->o, pbl);
+}
+
+int librados::IoCtx::operate_repair_read(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl,
+  uint32_t osdid, int32_t epoch, int op_flags)
+{
+  object_t obj(oid);
+  return io_ctx_impl->operate_repair_read(obj, (::ObjectOperation*)o->impl, pbl, 0, osdid, epoch, op_flags);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1830,6 +1845,13 @@ int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioComple
 {
   return io_ctx_impl->aio_sparse_read(oid, c->pc,
 				      m, data_bl, len, off, snapid);
+}
+
+int librados::IoCtx::aio_repair_read(const std::string& oid, librados::AioCompletion *c,
+			      bufferlist *pbl, size_t len, uint64_t off,
+			      uint64_t snapid, int flags, int32_t osdid, epoch_t e)
+{
+  return io_ctx_impl->aio_repair_read(oid, c->pc, pbl, len, off, snapid, flags, osdid, e);
 }
 
 int librados::IoCtx::aio_write(const std::string& oid, librados::AioCompletion *c,

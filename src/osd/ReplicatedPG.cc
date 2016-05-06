@@ -1756,7 +1756,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+			 CEPH_OSD_FLAG_LOCALIZE_READS |
+			 CEPH_OSD_FLAG_REPAIR_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
@@ -2014,7 +2015,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // we have to wait for the object.
     if (is_primary() ||
 	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS)) &&
-	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)))) {
+	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+	 !(m->has_flag(CEPH_OSD_FLAG_REPAIR_READS)))) {
       // missing the specific snap we need; requeue and wait.
       assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);
@@ -2365,7 +2367,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       op->get_req() &&
       op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
       (static_cast<MOSDOp *>(op->get_req())->get_flags() &
-       CEPH_OSD_FLAG_IGNORE_CACHE)) {
+       (CEPH_OSD_FLAG_IGNORE_CACHE|CEPH_OSD_FLAG_REPAIR_READS))) {
     dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
     return cache_result_t::NOOP;
   }
@@ -6132,6 +6134,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  assert(ctx->copy_cb->get_result() >= 0);
 	  finish_copyfrom(ctx);
 	  result = 0;
+	}
+      }
+      break;
+
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      ++ctx->num_read;
+      {
+	epoch_t epoch = op.assert_interval.epoch;
+	epoch_t pg_epoch = get_epoch();
+	tracepoint(osd, do_osd_op_pre_assert_interval, soid.oid.name.c_str(), soid.snap.val, epoch);
+	dout(5) << "Check interval " << soid << " epoch " << epoch << " pg epoch " << pg_epoch << dendl;
+	if (epoch > pg_epoch) {
+	  result = -ERANGE;
+	  break;
+	}
+	if (pg_has_reset_since(epoch)) {
+	  result = -EINVAL;
 	}
       }
       break;

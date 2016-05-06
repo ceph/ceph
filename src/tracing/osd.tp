@@ -790,3 +790,15 @@ TRACEPOINT_EVENT(osd, do_osd_op_post,
         ctf_integer_hex(int, result, result)
     )
 )
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_assert_interval,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint32_t, epoch),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint32_t, epoch, epoch)
+    )
+)

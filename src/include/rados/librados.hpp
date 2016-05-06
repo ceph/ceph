@@ -714,6 +714,7 @@ namespace librados
                    const std::string& src_oid, uint64_t src_off,
                    size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    int repair_read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off, int flags, int32_t osdid, uint32_t e);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
@@ -905,6 +906,8 @@ namespace librados
     int aio_sparse_read(const std::string& oid, AioCompletion *c,
 			std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 			size_t len, uint64_t off);
+    int aio_repair_read(const std::string& oid, AioCompletion *c,
+		 bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid, int flags, int32_t osdid, uint32_t e);
     /**
      * Asynchronously read existing extents from an object at a
      * particular snapshot
@@ -997,6 +1000,8 @@ namespace librados
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
+    int operate_repair_read(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl,
+		       uint32_t osdid, int32_t epoch, int op_flags);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**

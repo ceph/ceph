@@ -2754,6 +2754,9 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
 	t->sort_bitwise,
 	sort_bitwise,
 	pg_t(prev_seed, pgid.pool(), pgid.preferred()))) {
+    // If the interval has changed, then don't resend for repair read
+    if (t->use_osd_epoch)
+      return RECALC_OP_TARGET_NO_ACTION;
     force_resend = true;
   }
 
@@ -2788,7 +2791,12 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
     } else {
       int osd;
       bool read = is_read && !is_write;
-      if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+      if (t->use_osd_epoch) {
+	assert(read);
+	osd = t->osd;
+	// We may be using a replica, but don't need to set used_replica
+	// because this operation never switches back to the primary.
+      } else if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;
@@ -3268,6 +3276,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   int rc = m->get_result();
 
   if (m->is_redirect_reply()) {
+    assert(!(op->target.flags & CEPH_OSD_FLAG_REPAIR_READS));
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     if (op->onack)
       num_unacked.dec();

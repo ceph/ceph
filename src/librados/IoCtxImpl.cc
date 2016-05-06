@@ -739,6 +739,65 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   return r;
 }
 
+int librados::IoCtxImpl::aio_operate_repair_read(const object_t& oid,
+				      ::ObjectOperation *o,
+				      AioCompletionImpl *c,
+				      bufferlist *pbl,
+				      int flags, int32_t osdid, epoch_t e, int op_flags)
+{
+  if (!o->size())
+    return 0;
+
+  Context *onack = new C_aio_Ack(c);
+
+  c->is_read = true;
+  c->io = this;
+
+  version_t ver;
+
+  int op = o->ops[0].op.op;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
+  // Prepend assert_interval op
+  OSDOp tmp;
+  tmp.op.op = CEPH_OSD_OP_ASSERT_INTERVAL;
+  tmp.op.assert_interval.epoch = e;
+  o->ops.insert(o->ops.begin(), tmp);
+  int size = o->ops.size();
+  o->out_bl.resize(size);
+  o->out_handler.resize(size);
+  o->out_rval.resize(size);
+  o->out_bl[1] = pbl;
+  o->ops[1].op.flags = op_flags;
+  Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
+	                                      *o, snap_seq, NULL,
+	                                      flags | CEPH_OSD_FLAG_REPAIR_READS | CEPH_OSD_FLAG_IGNORE_OVERLAY,
+	                                      onack, &ver);
+  objecter_op->target.osd = osdid;
+  objecter_op->target.use_osd_epoch = true;
+  objecter_op->target.epoch = e;
+  objecter->op_submit(objecter_op, &c->tid);
+  return c->tid;
+}
+
+int librados::IoCtxImpl::operate_repair_read(const object_t& oid,
+				      ::ObjectOperation *o,
+				      bufferlist *pbl,
+				      int flags, int32_t osdid, epoch_t e, int op_flags)
+{
+  librados::AioCompletionImpl *c = new librados::AioCompletionImpl;
+
+  int r = aio_operate_repair_read(oid, o, c, pbl, flags, osdid, e, op_flags);
+  if (r < 0)
+    return r;
+
+  c->wait_for_complete();
+
+  if (c->get_return_value() >= 0)
+    set_sync_op_version(c->get_version());
+
+  return c->get_return_value();
+}
+
 int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  ::ObjectOperation *o,
 					  AioCompletionImpl *c,
@@ -859,6 +918,21 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
+}
+
+int librados::IoCtxImpl::aio_repair_read(const object_t oid, AioCompletionImpl *c,
+				  bufferlist *bl, size_t len, uint64_t off,
+				  uint64_t snapid, int flags, int32_t osdid, epoch_t e)
+{
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.read(off, len, bl, NULL, NULL);
+  // Only 1 flag can be passed from user
+  flags &= CEPH_OSD_OP_FLAG_FAILOK;
+  return aio_operate_repair_read(oid, &rd, c, bl, 0, osdid, e, flags);
 }
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
@@ -1290,6 +1364,29 @@ int librados::IoCtxImpl::read(const object_t& oid,
   prepare_assert_ops(&rd);
   rd.read(off, len, &bl, NULL, NULL);
   int r = operate_read(oid, &rd, &bl);
+  if (r < 0)
+    return r;
+
+  if (bl.length() < len) {
+    ldout(client->cct, 10) << "Returned length " << bl.length()
+	     << " less than original length "<< len << dendl;
+  }
+
+  return bl.length();
+}
+
+int librados::IoCtxImpl::repair_read(const object_t& oid, bufferlist& bl,
+		size_t len, uint64_t off, int flags, int32_t osdid, epoch_t e)
+{
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.read(off, len, &bl, NULL, NULL);
+  // Only 1 flag can be passed from user
+  flags &= CEPH_OSD_OP_FLAG_FAILOK;
+  int r = operate_repair_read(oid, &rd, &bl, 0, osdid, e, flags);
   if (r < 0)
     return r;
 
