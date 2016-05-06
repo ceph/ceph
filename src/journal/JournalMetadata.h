@@ -83,6 +83,9 @@ public:
   inline uint8_t get_order() const {
     return m_order;
   }
+  inline uint64_t get_object_size() const {
+    return 1 << m_order;
+  }
   inline uint8_t get_splay_width() const {
     return m_splay_width;
   }

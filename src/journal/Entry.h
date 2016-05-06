@@ -24,6 +24,8 @@ public:
   {
   }
 
+  static uint32_t get_fixed_size();
+
   inline uint64_t get_tag_tid() const {
     return m_tag_tid;
   }
