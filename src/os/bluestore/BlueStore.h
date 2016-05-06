@@ -65,56 +65,68 @@ public:
   class TransContext;
 
   /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
-  struct EnodeSet;
+  struct BnodeSet;
 
-  struct Enode : public boost::intrusive::unordered_set_base_hook<> {
+  struct Bnode : public boost::intrusive::unordered_set_base_hook<> {
     std::atomic_int nref;        ///< reference count
     uint32_t hash;
     string key;           ///< key under PREFIX_OBJ where we are stored
-    EnodeSet *enode_set;  ///< reference to the containing set
+    BnodeSet *bnode_set;  ///< reference to the containing set
 
     bluestore_extent_ref_map_t ref_map;
+    bluestore_blob_map_t blob_map;
 
-    Enode(uint32_t h, const string& k, EnodeSet *s)
+    Bnode(uint32_t h, const string& k, BnodeSet *s)
       : nref(0),
 	hash(h),
 	key(k),
-	enode_set(s) {}
+	bnode_set(s) {}
 
     void get() {
       ++nref;
     }
     void put();
 
-    friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
-    friend void intrusive_ptr_release(Enode *e) { e->put(); }
+    bluestore_blob_t *get_blob_ptr(int64_t id) {
+      bluestore_blob_map_t::iterator p = blob_map.find(id);
+      if (p == blob_map.end())
+	return nullptr;
+      return &p->second;
+    }
 
-    friend bool operator==(const Enode &l, const Enode &r) {
+    int64_t get_new_blob_id() {
+      return blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
+    }
+
+    friend void intrusive_ptr_add_ref(Bnode *e) { e->get(); }
+    friend void intrusive_ptr_release(Bnode *e) { e->put(); }
+
+    friend bool operator==(const Bnode &l, const Bnode &r) {
       return l.hash == r.hash;
     }
-    friend std::size_t hash_value(const Enode &e) {
+    friend std::size_t hash_value(const Bnode &e) {
       return e.hash;
     }
   };
-  typedef boost::intrusive_ptr<Enode> EnodeRef;
+  typedef boost::intrusive_ptr<Bnode> BnodeRef;
 
-  /// hash of Enodes, by (object) hash value
-  struct EnodeSet {
-    typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
-    typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
+  /// hash of Bnodes, by (object) hash value
+  struct BnodeSet {
+    typedef boost::intrusive::unordered_set<Bnode>::bucket_type bucket_type;
+    typedef boost::intrusive::unordered_set<Bnode>::bucket_traits bucket_traits;
 
     unsigned num_buckets;
     vector<bucket_type> buckets;
 
-    boost::intrusive::unordered_set<Enode> uset;
+    boost::intrusive::unordered_set<Bnode> uset;
 
-    explicit EnodeSet(unsigned n)
+    explicit BnodeSet(unsigned n)
       : num_buckets(n),
 	buckets(n),
 	uset(bucket_traits(buckets.data(), num_buckets)) {
       assert(n > 0);
     }
-    ~EnodeSet() {
+    ~BnodeSet() {
       assert(uset.empty());
     }
   };
@@ -127,7 +139,7 @@ public:
     string key;     ///< key under PREFIX_OBJ where we are stored
     boost::intrusive::list_member_hook<> lru_item;
 
-    EnodeRef enode;  ///< ref to Enode [optional]
+    BnodeRef bnode;  ///< ref to Bnode [optional]
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;
@@ -145,6 +157,15 @@ public:
 	oid(o),
 	key(k),
 	exists(false) {
+    }
+
+    bluestore_blob_t *get_blob_ptr(int64_t id) {
+      if (id < 0) {
+	assert(bnode);
+	return bnode->get_blob_ptr(-id);
+      } else {
+	return onode.get_blob_ptr(id);
+      }
     }
 
     void flush();
@@ -196,14 +217,20 @@ public:
 
     bool exists;
 
-    EnodeSet enode_set;      ///< open Enodes
+    BnodeSet bnode_set;      ///< open Bnodes
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeHashLRU onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
-    EnodeRef get_enode(uint32_t hash);
+    BnodeRef get_bnode(uint32_t hash);
+
+    bluestore_blob_t *get_blob_ptr(OnodeRef& o, int64_t blob) {
+      if (blob < 0 && !o->bnode)
+	o->bnode = get_bnode(o->oid.hobj.get_hash());
+      return o->get_blob_ptr(blob);
+    }
 
     const coll_t &get_cid() override {
       return cid;
@@ -297,7 +324,7 @@ public:
     uint64_t ops, bytes;
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
-    set<EnodeRef> enodes;     ///< these enodes need to be updated/written
+    set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
@@ -339,8 +366,8 @@ public:
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
     }
-    void write_enode(EnodeRef &e) {
-      enodes.insert(e);
+    void write_bnode(BnodeRef &e) {
+      bnodes.insert(e);
     }
   };
 
@@ -642,7 +669,8 @@ private:
   int _wal_replay();
 
   // for fsck
-  int _verify_enode_shared(EnodeRef enode, vector<bluestore_extent_t>& v,
+  int _verify_bnode_shared(BnodeRef bnode,
+			   map<int64_t,vector<bluestore_pextent_t>>& v,
 			   interval_set<uint64_t> &used_blocks);
 
 public:
@@ -711,6 +739,7 @@ public:
     uint32_t op_flags = 0,
     bool allow_eio = false) override;
   int _do_read(
+    Collection *c,
     OnodeRef o,
     uint64_t offset,
     size_t len,
