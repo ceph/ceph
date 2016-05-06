@@ -398,7 +398,7 @@ WRITE_CLASS_ENCODER(entity_addr_t)
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << addr.addr << '/' << addr.nonce;
+  return out << addr.get_sockaddr() << '/' << addr.nonce;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
