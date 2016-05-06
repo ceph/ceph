@@ -5780,6 +5780,11 @@ int BlueStore::_do_zero(TransContext *txc,
     ++bp;
   }
 
+  if (o->tail_bl.length() && offset + length > o->tail_offset) {
+    dout(20) << __func__ << " clearing cached tail" << dendl;
+    o->clear_tail();
+  }
+
   if (offset + length > o->onode.size) {
     o->onode.size = offset + length;
     dout(20) << __func__ << " extending size to " << offset + length
