@@ -57,10 +57,8 @@
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
-  #define CEPH_BUFFER_DETAILS __attribute__ ((visibility ("hidden")))
 #else
   #define CEPH_BUFFER_API
-  #define CEPH_BUFFER_DETAILS
 #endif
 
 #if defined(HAVE_XIO)
@@ -270,7 +268,7 @@ namespace buffer CEPH_BUFFER_API {
 
   private:
     template <bool is_const>
-    class CEPH_BUFFER_DETAILS iterator_impl
+    class CEPH_BUFFER_API iterator_impl
       : public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,
