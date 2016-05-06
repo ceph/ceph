@@ -66,7 +66,6 @@ void usage(ostream& out)
 "   lspools                          list pools\n"
 "   mkpool <pool-name> [123[ 4]]     create pool <pool-name>'\n"
 "                                    [with auid 123[and using crush rule 4]]\n"
-"   cppool <pool-name> <dest-pool>   copy content of a pool\n"
 "   rmpool <pool-name> [<pool-name> --yes-i-really-really-mean-it]\n"
 "                                    remove pool <pool-name>'\n"
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
@@ -345,47 +344,6 @@ static int do_clone_data(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, 
   write_op.truncate(0);
   write_op.clone_range(0, oid, 0, size);
   return target_ctx.operate(target_oid, &write_op);
-}
-
-static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_pool)
-{
-  IoCtx src_ctx, target_ctx;
-  int ret = rados.ioctx_create(src_pool, src_ctx);
-  if (ret < 0) {
-    cerr << "cannot open source pool: " << src_pool << std::endl;
-    return ret;
-  }
-  ret = rados.ioctx_create(target_pool, target_ctx);
-  if (ret < 0) {
-    cerr << "cannot open target pool: " << target_pool << std::endl;
-    return ret;
-  }
-  src_ctx.set_namespace(all_nspaces);
-  librados::NObjectIterator i = src_ctx.nobjects_begin();
-  librados::NObjectIterator i_end = src_ctx.nobjects_end();
-  for (; i != i_end; ++i) {
-    string nspace = i->get_nspace();
-    string oid = i->get_oid();
-    string locator = i->get_locator();
-
-    string target_name = (nspace.size() ? nspace + "/" : "") + oid;
-    string src_name = target_name;
-    if (locator.size())
-        src_name += "(@" + locator + ")";
-    cout << src_pool << ":" << src_name  << " => "
-      << target_pool << ":" << target_name << std::endl;
-
-    src_ctx.locator_set_key(locator);
-    src_ctx.set_namespace(nspace);
-    target_ctx.set_namespace(nspace);
-    ret = do_copy(src_ctx, oid.c_str(), target_ctx, oid.c_str());
-    if (ret < 0) {
-      cerr << "error copying object: " << cpp_strerror(errno) << std::endl;
-      return ret;
-    }
-  }
-
-  return 0;
 }
 
 static int do_put(IoCtx& io_ctx, RadosStriper& striper,
@@ -2603,26 +2561,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     cout << "successfully created pool " << nargs[1] << std::endl;
-  }
-  else if (strcmp(nargs[0], "cppool") == 0) {
-    if (nargs.size() != 3)
-      usage_exit();
-    const char *src_pool = nargs[1];
-    const char *target_pool = nargs[2];
-
-    if (strcmp(src_pool, target_pool) == 0) {
-      cerr << "cannot copy pool into itself" << std::endl;
-      ret = -1;
-      goto out;
-    }
-
-    ret = do_copy_pool(rados, src_pool, target_pool);
-    if (ret < 0) {
-      cerr << "error copying pool " << src_pool << " => " << target_pool << ": "
-	   << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    cout << "successfully copied pool " << nargs[1] << std::endl;
   }
   else if (strcmp(nargs[0], "rmpool") == 0) {
     if (nargs.size() < 2)
