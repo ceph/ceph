@@ -1735,6 +1735,14 @@ void OSD::handle_signal(int signum)
   shutdown();
 }
 
+void OSD::handle_signal_info(int signum,siginfo_t * siginfo, void * content)
+{
+  assert(signum == SIGINT || signum == SIGTERM );
+  derr << "*** Got signal " << sys_siglist[signum] << " ***" << dendl;
+  derr << "*** PID: "<<siginfo->si_pid<<"***UID: "<<siginfo->si_uid<<dendl;
+  shutdown();
+}
+
 int OSD::pre_init()
 {
   Mutex::Locker lock(osd_lock);
