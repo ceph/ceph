@@ -89,6 +89,7 @@ namespace crimson {
       auto submit_req_f = [] (const ClientId& c,
 			      std::unique_ptr<Request> req,
 			      dmc::PhaseType phase) {
+	// empty; do nothing
       };
 
       Queue pq(client_info_f,

@@ -531,6 +531,9 @@ namespace crimson {
 	  // keeps the minimum on proportional tag alone (we're
 	  // instead using a ready queue), we'll have to check each
 	  // client.
+	  //
+	  // The alternative would be to maintain a proportional queue
+	  // (define USE_PROP_TAG) and do an O(1) operation here.
 	  double lowest_prop_tag = NaN; // mark unset value as NaN
 	  for (auto const &c : client_map) {
 	    // don't use ourselves (or anything else that might be
@@ -612,7 +615,7 @@ namespace crimson {
 	  prop_heap.display_sorted(std::cout << "PROPO:", filter) << std::endl;
 	}
 #endif
-      }
+      } // display_queues
 
 
       // data_mtx should be held when called
@@ -638,7 +641,7 @@ namespace crimson {
 
 
       // data_mtx should be held when called
-      NextReq next_request(Time now) {
+      NextReq do_next_request(Time now) {
 	NextReq result;
 	
 	// if reservation queue is empty, all are empty (i.e., no active clients)
@@ -780,6 +783,7 @@ namespace crimson {
       } // do_clean
 
 
+      // data_mtx must be held by caller
       template<IndIntruHeapData ClientRec::*C1,typename C2>
       void delete_from_heap(ClientRecRef& client,
 			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2>& heap) {
@@ -788,6 +792,7 @@ namespace crimson {
       }
 
 
+      // data_mtx must be held by caller
       void delete_from_heaps(ClientRecRef& client) {
 	delete_from_heap(client, resv_heap);
 #if USE_PROP_HEAP
@@ -878,7 +883,7 @@ namespace crimson {
 		       const C&         client_id,
 		       const ReqParams& req_params,
 		       const Time       time) {
-	typename super::DataGuard g(super::data_mtx);
+	typename super::DataGuard g(this->data_mtx);
 	super::do_add_request(std::move(request), client_id, req_params, time);
 	// no call to schedule_request for pull version
       }
@@ -891,9 +896,9 @@ namespace crimson {
 
       PullReq pull_request(Time now) {
 	PullReq result;
-	typename super::DataGuard g(super::data_mtx);
+	typename super::DataGuard g(this->data_mtx);
 
-	typename super::NextReq next = super::next_request(now);
+	typename super::NextReq next = super::do_next_request(now);
 	result.type = next.type;
 	switch(next.type) {
 	case super::NextReqType::none:
@@ -925,26 +930,27 @@ namespace crimson {
 
 	switch(next.heap_id) {
 	case super::HeapId::reservation:
-	  super::pop_process_request(super::resv_heap,
+	  super::pop_process_request(this->resv_heap,
 				     process_f(result, PhaseType::reservation));
-	  ++super::reserv_sched_count;
+	  ++this->reserv_sched_count;
 	  break;
 	case super::HeapId::ready:
 	{
-	  super::pop_process_request(super::ready_heap,
+	  super::pop_process_request(this->ready_heap,
 				     process_f(result, PhaseType::priority));
 	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
 	  super::reduce_reservation_tags(retn.client);
-	  ++super::prop_sched_count;
+	  ++this->prop_sched_count;
 	}
 	break;
 #if USE_PROP_HEAP
 	case super::HeapId::proportional:
 	{
-	  super::pop_process_request(prop_heap, process_f(result, PhaseType::priority));
+	  super::pop_process_request(this->prop_heap,
+				     process_f(result, PhaseType::priority));
 	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
 	  super::reduce_reservation_tags(retn.client);
-	  ++super::limit_break_sched_count;
+	  ++this->limit_break_sched_count;
 	}
 	break;
 #endif
@@ -1077,14 +1083,14 @@ namespace crimson {
 		       const C&         client_id,
 		       const ReqParams& req_params,
 		       const Time       time) {
-	typename super::DataGuard g(super::data_mtx);
+	typename super::DataGuard g(this->data_mtx);
 	super::do_add_request(std::move(request), client_id, req_params, time);
 	schedule_request();
       }
 
 
       void request_completed() {
-	typename super::DataGuard g(super::data_mtx);
+	typename super::DataGuard g(this->data_mtx);
 	schedule_request();
       }
 
@@ -1094,12 +1100,13 @@ namespace crimson {
       // should not be empty and the top element of the heap should
       // not be already handled
       template<typename C1, IndIntruHeapData super::ClientRec::*C2, typename C3>
-      C submit_top_request(IndIntruHeap<C1, typename super::ClientRec, C2, C3>& heap,
+      C submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3>& heap,
 			   PhaseType phase) {
 	C client_result;
 	super::pop_process_request(heap,
 				   [this, phase, &client_result]
-				   (const C& client, typename super::RequestRef& request) {
+				   (const C& client,
+				    typename super::RequestRef& request) {
 				     client_result = client;
 				     handle_f(client, std::move(request), phase);
 				   });
@@ -1113,21 +1120,21 @@ namespace crimson {
 	switch(heap_id) {
 	case super::HeapId::reservation:
 	  // don't need to note client
-	  (void) submit_top_request(super::resv_heap, PhaseType::reservation);
+	  (void) submit_top_request(this->resv_heap, PhaseType::reservation);
 	  // unlike the other two cases, we do not reduce reservation
 	  // tags here
-	  ++super::reserv_sched_count;
+	  ++this->reserv_sched_count;
 	  break;
 	case super::HeapId::ready:
-	  client = submit_top_request(super::ready_heap, PhaseType::priority);
+	  client = submit_top_request(this->ready_heap, PhaseType::priority);
 	  super::reduce_reservation_tags(client);
-	  ++super::prop_sched_count;
+	  ++this->prop_sched_count;
 	  break;
 #if USE_PROP_HEAP
 	case super::HeapId::proportional:
-	  client = submit_top_request(super::prop_heap, PhaseType::priority);
+	  client = submit_top_request(this->prop_heap, PhaseType::priority);
 	  super::reduce_reservation_tags(client);
-	  ++super::limit_break_sched_count;
+	  ++this->limit_break_sched_count;
 	  break;
 #endif
 	default:
@@ -1153,7 +1160,7 @@ namespace crimson {
 	  result.type = super::NextReqType::none;
 	  return result;
 	} else {
-	  return super::next_request(now);
+	  return super::do_next_request(now);
 	}
       } // next_request
 
@@ -1181,22 +1188,22 @@ namespace crimson {
       void run_sched_ahead() {
 	std::unique_lock<std::mutex> l(sched_ahead_mtx);
 
-	while (!super::finishing) {
+	while (!this->finishing) {
 	  if (TimeZero == sched_ahead_when) {
 	    sched_ahead_cv.wait(l);
 	  } else {
 	    Time now;
-	    while (!super::finishing && (now = get_time()) < sched_ahead_when) {
+	    while (!this->finishing && (now = get_time()) < sched_ahead_when) {
 	      long microseconds_l = long(1 + 1000000 * (sched_ahead_when - now));
 	      auto microseconds = std::chrono::microseconds(microseconds_l);
 	      sched_ahead_cv.wait_for(l, microseconds);
 	    }
 	    sched_ahead_when = TimeZero;
-	    if (super::finishing) return;
+	    if (this->finishing) return;
 
 	    l.unlock();
-	    if (!super::finishing) {
-	      typename super::DataGuard g(super::data_mtx);
+	    if (!this->finishing) {
+	      typename super::DataGuard g(this->data_mtx);
 	      schedule_request();
 	    }
 	    l.lock();

@@ -105,7 +105,6 @@ int main(int argc, char* argv[]) {
                                                            phase);
     };
 
-
     test::CreateQueueF create_queue_f =
         [&](test::DmcQueue::CanHandleRequestFunc can_f,
             test::DmcQueue::HandleRequestFunc handle_f) -> test::DmcQueue* {
