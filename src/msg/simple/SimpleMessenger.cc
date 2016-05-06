@@ -42,7 +42,7 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
 				 string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
-    dispatch_queue(cct, this),
+    dispatch_queue(cct, this, mname),
     reaper_thread(this),
     nonce(_nonce),
     lock("SimpleMessenger::lock"), need_addr(true), did_bind(false),
