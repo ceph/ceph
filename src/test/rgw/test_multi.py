@@ -155,7 +155,6 @@ class RGWRealm:
         self.credentials = credentials
         self.clusters = clusters
         self.zones = {}
-        self.total_zones = 0
 
     def init_zone(self, cluster, zg, zone_name, first_zone_port):
         is_master = (first_zone_port == cluster.port)
@@ -172,25 +171,18 @@ class RGWRealm:
 
     def add_zone(self, cluster, zg, zone_name, is_master):
         zone = RGWZone(self.realm, cluster, zg, zone_name)
-        self.zones[self.total_zones] = zone
-        self.total_zones += 1
+        self.zones[zone_name] = zone
 
         if is_master:
             self.master_zone = zone
 
 
-    def get_zone(self, num):
-        if num >= self.total_zones:
-            return None
-        return self.zones[num]
+    def get_zone(self, zone_name):
+        return self.zones[zone_name]
 
     def get_zones(self):
         for (k, zone) in self.zones.iteritems():
             yield zone
-
-
-    def num_zones(self):
-        return self.total_zones
 
     def meta_sync_status(self, zone):
         if zone.zone_name == self.master_zone.zone_name:
@@ -744,11 +736,11 @@ def test_multi_period_incremental_sync():
     realm.meta_checkpoint()
 
     # kill zone 3 gateway to freeze sync status to incremental in first period
-    z3 = realm.get_zone(2)
+    z3 = realm.get_zone('us-3')
     z3.cluster.stop_rgw()
 
     # change master to zone 2 -> period 2
-    realm.set_master_zone(realm.get_zone(1))
+    realm.set_master_zone(realm.get_zone('us-2'))
 
     for zone, bucket_name in zone_bucket.iteritems():
         if zone == z3:
@@ -758,10 +750,10 @@ def test_multi_period_incremental_sync():
             k.set_contents_from_string('qweqwe')
 
     # wait for zone 1 to sync
-    realm.zone_meta_checkpoint(realm.get_zone(0))
+    realm.zone_meta_checkpoint(realm.get_zone('us-1'))
 
     # change master back to zone 1 -> period 3
-    realm.set_master_zone(realm.get_zone(0))
+    realm.set_master_zone(realm.get_zone('us-1'))
 
     for zone, bucket_name in zone_bucket.iteritems():
         if zone == z3:
