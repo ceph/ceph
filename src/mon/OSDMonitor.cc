@@ -539,14 +539,12 @@ int OSDMonitor::reweight_by_utilization(int oload,
     int num_osd = MIN(1, pgm.osd_stat.size());
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
-      ostringstream oss;
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
 	  << " kb across all osds!\n";
       return -EDOM;
     }
     if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
-      ostringstream oss;
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
 	  << " kb used across all osds!\n";
       return -EDOM;
@@ -2780,29 +2778,6 @@ void OSDMonitor::tick()
       do_propose = true;
     }
   }
-  // ---------------
-#define SWAP_PRIMARIES_AT_START 0
-#define SWAP_TIME 1
-#if 0
-  if (SWAP_PRIMARIES_AT_START) {
-    // For all PGs that have OSD 0 as the primary,
-    // switch them to use the first replca
-    ps_t numps = osdmap.get_pg_num();
-    for (int64_t pool=0; pool<1; pool++)
-      for (ps_t ps = 0; ps < numps; ++ps) {
-	pg_t pgid = pg_t(pg_t::TYPE_REPLICATED, ps, pool, -1);
-	vector<int> osds;
-	osdmap.pg_to_osds(pgid, osds);
-	if (osds[0] == 0) {
-	  pending_inc.new_pg_swap_primary[pgid] = osds[1];
-	  dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
-		  << osds[1] << dendl;
-	  do_propose = true;
-	}
-      }
-  }
-#endif
-  // ---------------
 
   if (update_pools_status())
     do_propose = true;
@@ -2843,24 +2818,6 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
   if (new_down) {
     propose_pending();
   }
-}
-
-void OSDMonitor::mark_all_down()
-{
-  assert(mon->is_leader());
-
-  dout(7) << "mark_all_down" << dendl;
-
-  set<int32_t> ls;
-  osdmap.get_all_osds(ls);
-  for (set<int32_t>::iterator it = ls.begin();
-       it != ls.end();
-       ++it) {
-    if (osdmap.is_down(*it)) continue;
-    pending_inc.new_state[*it] = CEPH_OSD_UP;
-  }
-
-  propose_pending();
 }
 
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
