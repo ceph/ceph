@@ -139,11 +139,13 @@ class AsyncConnection : public Connection {
     Mutex delay_lock;
     AsyncMessenger *msgr;
     EventCenter *center;
+    DispatchQueue *dispatch_queue;
 
    public:
-    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c)
+    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
+                             DispatchQueue *q)
       : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c) { }
+        msgr(omsgr), center(c), dispatch_queue(q) { }
     ~DelayedDelivery() {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
@@ -158,6 +160,7 @@ class AsyncConnection : public Connection {
       Mutex::Locker l(delay_lock);
       while (!delay_queue.empty()) {
         Message *m = delay_queue.front().second;
+        dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
         m->put();
         delay_queue.pop_front();
       }
@@ -169,7 +172,7 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, EventCenter *c, PerfCounters *p);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -273,6 +276,7 @@ class AsyncConnection : public Connection {
   }
 
   AsyncMessenger *async_msgr;
+  uint64_t conn_id;
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
@@ -283,6 +287,8 @@ class AsyncConnection : public Connection {
   int sd;
   int port;
   Messenger::Policy policy;
+
+  DispatchQueue *dispatch_queue;
 
   Mutex write_lock;
   enum class WriteStatus {
