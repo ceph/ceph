@@ -706,7 +706,9 @@ int Objecter::linger_check(LingerOp *info)
 		 << " age " << age << dendl;
   if (info->last_error)
     return info->last_error;
-  return std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
+  // return a safe upper bound (we are truncating to ms)
+  return
+    1 + std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
 }
 
 void Objecter::linger_cancel(LingerOp *info)
