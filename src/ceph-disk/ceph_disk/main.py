@@ -38,11 +38,15 @@ import pwd
 import grp
 import types
 import textwrap
+import ConfigParser
+
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
 
 KEY_MANAGEMENT_MODE_V1 = 'ceph-mon v1'
+
+FLASHCACHE_UUID = '0b3d2740-0da6-47d2-ac25-4c01093d1d7b'
 
 PTYPE = {
     'regular': {
@@ -1774,6 +1778,123 @@ class Prepare(object):
         Prepare.factory(args).prepare()
 
 
+class PrepareFlashcache(object):
+    def __init__(self, args):
+        self.args = args
+        self.fcache = args.fcache
+        self.fcache_size = args.fcache_size
+        if args.fcache_uuid is None:
+            self.fcache_uuid = str(uuid.uuid4())
+        else:
+            self.fcache_uuid = args.fcache_uuid
+
+    @staticmethod
+    def parser():
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument(
+        '--fcache',
+        metavar='fcache',
+        help='fcache',
+        )
+        parser.add_argument(
+        '--fcache_size',
+        metavar='fcache_size',
+        help='fcache_size',
+        )
+        parser.add_argument(
+        '--fcache-uuid',
+        metavar='UUID',
+        help='unique uuid to assign to the fcache',
+        )
+        
+        return parser
+
+    def prepare_fcache(self):
+        """
+        prepare for the flashcache partition
+        """
+
+        fmode = os.stat(self.fcache).st_mode
+        if stat.S_ISBLK(fmode):
+            return self.prepare_fcache_dev()
+        raise Error('fcache %s is not a block device' % fcache)
+
+    def prepare_fcache_dev(self):
+        """
+        create the flashcache partition
+        """
+
+        num = get_free_partition_index(dev=self.fcache)
+        fcache_part = '{num}:0:+{size}M'.format(
+            num=num,
+            size=self.fcache_size,
+            )
+
+        dev_size = get_dev_size(self.fcache)
+        if self.fcache_size > dev_size:
+            raise Error(
+                '%s device size (%sM) is not big enough for fcache' % (self.fcache, dev_size)
+            )
+
+        try:
+            # create the flashcache partition
+            LOG.debug('Creating fcache partition num %d size %d on %s', num, self.fcache_size, self.fcache)
+            command_check_call(
+                [
+                    'sgdisk',
+                    '--new={part}'.format(part=fcache_part),
+                    '--change-name={num}:Flashcache'.format(num=num),
+                    '--partition-guid={num}:{fcache_uuid}'.format(
+                        num=num,
+                        fcache_uuid=self.fcache_uuid,
+                        ),
+                    '--typecode={num}:{uuid}'.format(
+                        num=num,
+                        uuid=FLASHCACHE_UUID,
+                        ),
+                    '--mbrtogpt',
+                    '--',
+                    self.fcache,
+                    ]
+                )
+
+            update_partition(self.fcache, 'created')
+
+            #LOG.debug('fcache is GPT partition %s', fcache_symlink)
+
+            command(
+                    [
+                        # wait for udev event queue to clear
+                        'udevadm',
+                        'settle',
+                        ],
+                    )
+
+            return self.fcache_uuid
+
+        except subprocess.CalledProcessError as err:
+            raise Error(err)
+
+    def prepare(self):
+        # create the flashcache partition
+        if self.fcache:
+            if self.fcache_size:
+                self.fcache_size = int(self.fcache_size)*1024
+            else:
+                raise Error("Flashcache Size is None")
+            if self.fcache_uuid is None:
+                self.fcache_uuid = str(uuid.uuid4())
+            # create the flashcache disk part
+            fcache_uuid = self.prepare_fcache()
+                    
+    def populate_data_path(self, path):
+        # write the fcache_uuid and pre_ready in the disk
+        if self.fcache is not None and self.fcache_uuid is not None:
+            LOG.debug('Preparing flashcache info to %s', path)
+            write_one_line(path, 'fcache_uuid', self.fcache_uuid)
+            write_one_line(path, 'fready', 'pre_ready')
+
+
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
@@ -1781,17 +1902,19 @@ class PrepareFilestore(Prepare):
             self.lockbox = Lockbox(args)
         self.data = PrepareFilestoreData(args)
         self.journal = PrepareJournal(args)
+        self.flashcache = PrepareFlashcache(args)
 
     @staticmethod
     def parent_parsers():
         return [
+            PrepareFlashcache.parser(),
             PrepareJournal.parser(),
         ]
 
     def prepare_locked(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
-        self.data.prepare(self.journal)
+        self.data.prepare(self.journal, self.flashcache)
 
 
 class PrepareBluestore(Prepare):
@@ -2744,6 +2867,21 @@ def get_mount_point(cluster, osd_id):
     )
 
 
+def get_flashcache_mode():
+    """
+    get the flashcache mode for ceph
+    """
+
+    cf = ConfigParser.ConfigParser()
+    cf.read("/etc/ceph/ceph.conf")
+    mode = None
+    if(cf.has_option("global", "flash_cache_mode")):
+        mode = cf.get("global", "flash_cache_mode")
+    if mode == None:
+        mode = 'around'
+    return mode
+
+
 def move_mount(
     dev,
     path,
@@ -2766,16 +2904,25 @@ def move_mount(
     # /etc/mtab, which *still* isn't a symlink to /proc/mounts despite
     # this being 2013.  Instead, mount the original device at the final
     # location.
-    command_check_call(
-        [
-            '/bin/mount',
-            '-o',
-            mount_options,
-            '--',
-            dev,
-            osd_data,
-        ],
-    )
+
+    #read fcache and check the osd has flashcache feature
+    fcache_symlink = None
+    fcache_uuid = None
+    fcache_ready = None
+
+    # get the flashcache mode
+    cache_mode = get_flashcache_mode()
+    if os.path.exists(os.path.join(path, 'fcache_uuid')):
+        fcache_uuid = read_one_line(path, 'fcache_uuid')
+        fcache_symlink = '/dev/disk/by-partuuid/{fcache_uuid}'.format(
+            fcache_uuid=fcache_uuid,
+            )
+        fcache_ready = read_one_line(path, 'fready')
+        # the mode 'back' will modify the pre_read to ready
+        if fcache_ready == 'pre_ready' and cache_mode == 'back':
+            write_one_line(path, 'fready', 'ready')
+
+    # umount the temporary  dir
     command_check_call(
         [
             '/bin/umount',
@@ -2785,6 +2932,92 @@ def move_mount(
             path,
         ],
     )
+
+    if 'mapper' not in dev and fcache_uuid:
+        dev_path = None
+        dev_uuid = None
+        dev_symlink = None
+
+        if os.path.islink(dev):
+            link_path = os.readlink(dev)
+            if os.path.isabs(link_path):
+                dev_path = link_path
+            else:
+                dev_path = os.path.abspath(os.path.join(os.path.dirname(dev), link_path))
+        else:
+            dev_path = dev
+        dev_uuid = get_partition_uuid(dev_path)
+        dev_symlink = '/dev/disk/by-partuuid/{dev_uuid}'.format(
+                    dev_uuid=dev_uuid,
+                )
+
+        dev = '/dev/mapper/{dev_uuid}'.format(
+                dev_uuid=dev_uuid,
+            )
+
+        # pre_ready: need create the flashcache (writeback, around, through)
+        # ready: need load the flashcache (writeback)
+        if fcache_ready == 'pre_ready':
+            command_check_call(
+                [
+                    'sudo',
+                    'PATH=/sbin',
+                    'flashcache_create',
+                    '-p', cache_mode,
+                    '-b', '4k',
+                    '-a', '1024',
+                    dev_uuid,
+                    fcache_symlink,
+                    dev_symlink
+                    ]
+                )
+        else:
+            # the writeback need load the flashcache
+            command_check_call(
+                [
+                    'sudo',
+                    'PATH=/sbin',
+                    'flashcache_load',
+                    fcache_symlink
+                    ]
+                )
+
+            # set the dirty_thresh_pct = 70
+            cmd = 'dev.flashcache.{fcache_uuid}+{dev_uuid}.dirty_thresh_pct=70'.format(
+                fcache_uuid=fcache_uuid,
+                dev_uuid=dev_uuid
+                )
+            command_check_call(
+                [
+                    'sysctl',
+                    '-w',
+                    cmd,
+                    ]
+                )
+
+        # for all cache mode, set the policy is LRU
+        cmd = 'dev.flashcache.{fcache_uuid}+{dev_uuid}.reclaim_policy=1'.format(
+            fcache_uuid=fcache_uuid,
+            dev_uuid=dev_uuid
+            )
+        command_check_call(
+            [
+                'sysctl',
+                '-w',
+                cmd,
+                ]
+            )
+
+    command_check_call(
+        [
+            '/bin/mount',
+            '-o',
+            mount_options,
+            '--',
+            dev,
+            osd_data,
+            ],
+        )    
 
 
 def start_daemon(
@@ -2797,6 +3030,36 @@ def start_daemon(
         cluster=cluster, osd_id=osd_id)
 
     try:
+        # check the start osd command in the shell file, if not in the file, write it
+        is_to_start = str(os.popen("cat /var/lib/ceph/shell/start_ceph.sh | grep 'start ceph-osd id=%s' | wc -l" % osd_id).read().rstrip())
+        if is_to_start == '0':
+            with open('/var/lib/ceph/shell/start_ceph.sh', 'a+') as fdata:
+                writeline = ('start ceph-osd id={id}\n').format(
+                    id=osd_id)
+                fdata.write(writeline)
+
+                writeline = 'sleep 1 \n'
+                fdata.write(writeline)
+            fdata.close()
+
+        # check when start the system, the shell will run or not, if not run, write the command in the file
+        is_in_rc = str(os.popen("cat /etc/rc.local | grep 'bash /var/lib/ceph/shell/start_ceph.sh' | wc -l").read().rstrip())
+        if is_in_rc == '0':
+            with open('/etc/rc.local', 'r') as fdata:
+                content = fdata.read()
+            fdata.close()
+
+            pos = content.find('exit 0')
+            appendline = '\nif [ -f /var/lib/ceph/shell/start_ceph.sh ]; then\n    bash /var/lib/ceph/shell/start_ceph.sh\nfi\n'
+            if pos != -1:
+                content = content[:pos] + appendline + content[pos:]
+            else:
+                content = content + appendline
+
+            with open('/etc/rc.local', 'w') as fdata:
+                fdata.write(content)
+            fdata.close()
+            
         if os.path.exists(os.path.join(path, 'upstart')):
             command_check_call(
                 [
@@ -3000,7 +3263,22 @@ def mount_activate(
     if mount_options is not None:
         mount_options = "".join(mount_options.split())
 
-    path = mount(dev=dev, fstype=fstype, options=mount_options)
+    # the flashcache is exist, mount the flashcache to temporary  dir
+    if os.path.islink(dev):
+        link_path = os.readlink(dev)
+        if os.path.isabs(link_path):
+            dev_path = link_path
+        else:
+            dev_path = os.path.abspath(os.path.join(os.path.dirname(dev), link_path))
+    else:
+        dev_path = dev
+    dev_uuid = get_partition_uuid(dev_path)
+    fcache = '/dev/mapper/{dev_uuid}'.format(dev_uuid=dev_uuid)
+    path = None
+    if os.path.exists(fcache):
+        path = mount(dev=fcache, fstype=fstype, options=mount_options)
+    else:
+        path = mount(dev=dev, fstype=fstype, options=mount_options)
 
     # check if the disk is deactive, change the journal owner, group
     # mode for correct user and group.
@@ -3063,14 +3341,25 @@ def mount_activate(
                         '(old/different cluster instance?); unmounting ours.'
                         % (cluster, osd_id))
         else:
-            move_mount(
-                dev=dev,
-                path=path,
-                cluster=cluster,
-                osd_id=osd_id,
-                fstype=fstype,
-                mount_options=mount_options,
-            )
+            # the flashcache is exist, move the flashcache to osd_id dir
+            if os.path.islink(fcache):
+                move_mount(
+                    dev=fcache,
+                    path=path,
+                    cluster=cluster,
+                    osd_id=osd_id,
+                    fstype=fstype,
+                    mount_options=mount_options,
+                    )
+            else:
+                move_mount(
+                    dev=dev,
+                    path=path,
+                    cluster=cluster,
+                    osd_id=osd_id,
+                    fstype=fstype,
+                    mount_options=mount_options,
+                    )
         return (cluster, osd_id)
 
     except:
@@ -3154,6 +3443,52 @@ def find_cluster_by_uuid(_uuid):
     return None
 
 
+def get_journal_uuid_maps():
+    partmap = list_all_partitions()
+    journal_map = {}
+    for base, parts in sorted(partmap.iteritems()):
+        for p in parts:
+            dev = get_dev_path(p)
+            out, _, _ = command(
+                [
+                    'blkid',
+                    '-o',
+                    'udev',
+                    '-p',
+                    dev,
+                ]
+            )
+
+            p = {}
+            for line in out.splitlines():
+                (key, value) = line.split('=')
+                p[key] = value
+
+            ptype = p.get('ID_PART_ENTRY_TYPE')
+            part_uuid = p.get('ID_PART_ENTRY_UUID')
+            if ptype in (PTYPE['regular']['journal']['ready'],PTYPE['luks']['journal']['ready'],PTYPE['plain']['journal']['ready'],PTYPE['mpath']['journal']['ready']):
+                journal_map[part_uuid.lower()] = dev
+    return journal_map
+
+
+def check_journal_available(journal_uuid):
+    journal_map = get_journal_uuid_maps()
+    journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+        journal_uuid=journal_uuid,
+        )
+    if journal_uuid in journal_map:
+        journal_part = journal_map.get(journal_uuid)
+        if not os.path.exists(journal_symlink):
+            adjust_symlink(os.path.relpath(journal_part, os.path.dirname(journal_symlink)), journal_symlink)
+        journal_type = get_partition_type(journal_part)
+        journal_type_symlink = '/dev/disk/by-parttypeuuid/{journal_type}.{journal_uuid}'.format(
+            journal_type=journal_type,
+            journal_uuid=journal_uuid,
+            )
+        if not os.path.exists(journal_type_symlink):
+            adjust_symlink(os.path.relpath(journal_part, os.path.dirname(journal_type_symlink)), journal_type_symlink)
+
+
 def activate(
     path,
     activate_key_template,
@@ -3177,6 +3512,12 @@ def activate(
     if fsid is None:
         raise Error('No OSD uuid assigned.')
     LOG.debug('OSD uuid is %s', fsid)
+
+    juuid = read_one_line(path, 'journal_uuid')
+    if juuid is None:
+        raise Error('No Journal uuid assigned')
+    LOG.debug('Journal uuid is %s', juuid)
+    check_journal_available(juuid)
 
     keyring = activate_key_template.format(cluster=cluster,
                                            statedir=STATEDIR)
@@ -3857,7 +4198,18 @@ def list_dev_osd(dev, uuid_map, desc):
         more_osd_info(desc['mount'], uuid_map, desc)
     elif desc['fs_type']:
         try:
-            tpath = mount(dev=dev, fstype=desc['fs_type'], options='')
+            # the flashcache is exist, mount the flashcache to temporary  dir
+            tpath = None
+            part_uuid = get_partition_uuid(dev)
+            if part_uuid:
+                fcache = '/dev/mapper/%s'%part_uuid
+                if os.path.exists(fcache):
+                    tpath = mount(dev=fcache, fstype=desc['fs_type'], options='')
+                else:
+                    tpath = mount(dev=dev, fstype=desc['fs_type'], options='')
+            else:
+                tpath = mount(dev=dev, fstype=desc['fs_type'], options='')
+                
             if tpath:
                 try:
                     magic = get_oneliner(tpath, 'magic')
@@ -4088,7 +4440,13 @@ def list_devices():
                 fs_type = get_dev_fs(dev_to_mount)
                 if fs_type is not None:
                     try:
-                        tpath = mount(dev=dev_to_mount,
+                        # the flashcache is exist, mount the flashcache to temporary  dir
+                        tpath = None
+                        fcache = '/dev/mapper/%s'%part_uuid
+                        if os.path.exists(fcache):
+                            tpath = mount(dev=fcache, fstype=fs_type, options='')
+                        else:
+                            tpath = mount(dev=dev_to_mount,
                                       fstype=fs_type, options='')
                         try:
                             for name in Space.NAMES:
@@ -4226,6 +4584,506 @@ def main_unsuppress(args):
 def main_zap(args):
     for dev in args.dev:
         zap(dev)
+
+
+def rmfcache(fcache_uuid, dev, fastremove):
+    """
+    remove the flashcache of the disk(dev)
+    """
+
+    data = get_partition_dev(dev, 1)
+    dev_uuid = get_partition_uuid(data)
+    fcache_path = None
+    fcache_symlink = '/dev/disk/by-partuuid/{fcache_uuid}'.format(
+        fcache_uuid=fcache_uuid,
+        )
+
+    # get the flashcache base path
+    link_path = os.readlink(fcache_symlink)
+    if os.path.isabs(link_path):
+        fcache_path = link_path
+    else:
+        fcache_path = os.path.abspath(os.path.join(os.path.dirname(fcache_symlink), link_path))
+
+    # get the flashcache mode, fast remove only in back mode
+    cache_mode = get_flashcache_mode()
+    if cache_mode == 'back':
+        if fastremove == '1':
+            # sysctl the fast_remove is support
+            cmd = 'dev.flashcache.{fcache_uuid}+{dev_uuid}.fast_remove=1'.format(
+                fcache_uuid=fcache_uuid,
+                dev_uuid=dev_uuid
+                )
+
+            command_check_call(
+                [
+                    'sysctl',
+                    '-w',
+                    cmd,
+                    ]
+                )
+        # dmsetup remove the flashcache
+        command_check_call(
+            [
+                'dmsetup',
+                'remove',
+                dev_uuid,
+                ]
+            )
+        # destory the flashcache base by force
+        command_check_call(
+            [
+                'flashcache_destroy',
+                fcache_path,
+                '-f'
+                ]
+            )
+    else:
+        # the around and thru only use dmsetup remove
+        command_check_call(
+            [
+                'dmsetup',
+                'remove',
+                dev_uuid,
+                ]
+            )
+
+    # delete the part in the ssd
+    fcache_dev, partnum = split_dev_base_partnum(fcache_path)
+    command_check_call(
+            [
+                'sgdisk',
+                '--delete',
+                partnum,
+                fcache_dev
+                ]
+            )
+    update_partition(fcache_dev, 'delete')
+
+
+def main_rmfcache(args):
+    """
+    remove flashcache to disk
+    """
+
+    if args.fcache and args.dev:
+        if args.fastremove:
+            # fast remove
+            rmfcache(args.fcache, args.dev, '1')
+        else:
+            rmfcache(args.fcache, args.dev, '0')
+
+
+def get_uuid_maps():
+    """
+    get all the ceph data, journal and flashcache part
+    """
+
+    partmap = list_all_partitions()
+    uuid_map = {}
+    for _, parts in sorted(partmap.iteritems()):
+        for part in parts:
+            dev = get_dev_path(part)
+            out, _, _ = command(
+                [
+                    'blkid',
+                    '-o',
+                    'udev',
+                    '-p',
+                    dev,
+                ]
+            )
+
+            pmap = {}
+            for line in out.splitlines():
+                (key, value) = line.split('=')
+                pmap[key] = value
+            # select osd, journal, fcache disk part
+            ptype = pmap.get('ID_PART_ENTRY_TYPE')
+            part_uuid = pmap.get('ID_PART_ENTRY_UUID')
+            if ptype and part_uuid and ptype in (PTYPE['regular']['journal']['ready'],PTYPE['luks']['journal']['ready'],PTYPE['plain']['journal']['ready'],PTYPE['mpath']['journal']['ready']):
+                uuid_map[part_uuid.lower()] = dev
+            if ptype and part_uuid and ptype in (PTYPE['regular']['osd']['ready'],PTYPE['luks']['osd']['ready'],PTYPE['plain']['osd']['ready'],PTYPE['mpath']['osd']['ready']):
+                uuid_map[part_uuid.lower()] = dev
+            if ptype and part_uuid and ptype == FLASHCACHE_UUID:
+                uuid_map[part_uuid.lower()] = dev
+    return uuid_map
+
+
+def check_symlink_available():
+    """
+    check the symlink and repair the lost link
+    """
+
+    uuid_map = get_uuid_maps()
+
+    for part_uuid in uuid_map.keys():
+        part = uuid_map.get(part_uuid)
+        symlink = '/dev/disk/by-partuuid/{part_uuid}'.format(
+            part_uuid=part_uuid,
+            )
+        # repair the lost link
+        if not os.path.exists(symlink):
+            adjust_symlink(os.path.relpath(part, os.path.dirname(symlink)), symlink)
+
+        part_type = get_partition_type(part)
+        type_symlink = '/dev/disk/by-parttypeuuid/{part_type}.{part_uuid}'.format(
+            part_type=part_type,
+            part_uuid=part_uuid,
+            )
+        # repair the lost link
+        if not os.path.exists(type_symlink):
+            adjust_symlink(os.path.relpath(part, os.path.dirname(type_symlink)), type_symlink)
+
+
+def repair_fcache():
+    """
+    repair flashcache
+    """
+    all_fsids = []
+    osd_dir = '/var/lib/ceph/osd/'
+    for name in os.listdir(osd_dir):
+        data_uuid = '/var/lib/ceph/osd/%s/fsid' % name
+        try:
+            with open(data_uuid, 'r') as fdata:
+                all_fsids.append(fdata.read().split('\n')[0])
+            fdata.close()
+        except IOError as err:
+            print('File Error:'+str(err))
+
+    fcache_dir = '/dev/mapper/'
+    for name in os.listdir(fcache_dir):
+        if len(name) == 36 and name not in all_fsids:
+            fcache = fcache_dir + name
+            command(
+                [
+                    '/bin/umount',
+                    fcache,
+                    ]
+                )
+            command_check_call(
+                [
+                    'dmsetup',
+                    'remove',
+                    name,
+                    ]
+                )
+
+
+def delete_fcache():
+    """
+    delete flashcache
+    """
+
+    all_fcaches = []
+    osd_dir = '/var/lib/ceph/osd/'
+    for name in os.listdir(osd_dir):
+        fcache_uuid = '/var/lib/ceph/osd/%s/fcache_uuid' % name
+
+        try:
+            if os.path.exists(fcache_uuid):
+                with open(fcache_uuid, 'r') as fdata:
+                    all_fcaches.append(fdata.read().split('\n')[0])
+                fdata.close()
+        except IOError as err:
+            print('File Error:'+str(err))
+
+    type_dir = '/dev/disk/by-parttypeuuid'
+    if not os.path.exists(type_dir):
+        return
+    for name in os.listdir(type_dir):
+        if name.find('.') < 0:
+            continue
+        (tag, part_uuid) = name.split('.')
+
+        if tag == FLASHCACHE_UUID:
+            if part_uuid not in all_fcaches:
+                fcache_path = None
+                fcache_symlink = '/dev/disk/by-partuuid/{fcache_uuid}'.format(
+                    fcache_uuid=part_uuid,
+                    )
+
+                # get the flashcache base path
+                link_path = os.readlink(fcache_symlink)
+                if os.path.isabs(link_path):
+                    fcache_path = link_path
+                else:
+                    fcache_path = os.path.abspath(os.path.join(os.path.dirname(fcache_symlink), link_path))
+
+                # the first part is marktype part
+                fcache_dev, partnum = split_dev_base_partnum(fcache_path)
+                if partnum == '1':
+                    continue
+
+                # if mode is 'back', then should destroy the flashcache superblock
+                cache_mode = get_flashcache_mode()
+                if cache_mode == 'back':
+                    command_check_call(
+                        [
+                            'flashcache_destroy',
+                            fcache_path,
+                            '-f'
+                            ]
+                        )
+
+                # delete the part in the ssd
+                command_check_call(
+                    [
+                        'sgdisk',
+                        '--delete',
+                        partnum,
+                        fcache_dev
+                        ]
+                    )
+                update_partition(fcache_dev, 'delete')
+
+
+def main_repair(args):
+    """
+    repair the disk, such as repair link, remove fcache, and delete the unused fcache
+    """
+    if args.link:
+        check_symlink_available()
+    if args.fcache:
+        repair_fcache()
+    if args.delete:
+        delete_fcache()
+
+
+def get_cachesize(typeid):
+    """
+    get the cache (journal or flashcache) disk used count and unused size
+    """
+
+    # get the part uuid
+    uuid_map = get_uuid_maps()
+
+    cache_used_map = {}
+    residue_size_map = {}
+
+    # circulate all the map and select the part blong to typeid
+    for part_uuid in uuid_map.keys():
+        # get the part and part type
+        part = uuid_map.get(part_uuid)
+        part_type = get_partition_type(part)
+
+        if part_type == typeid:
+            part_size = get_dev_size(part)
+
+            # get the part's base and the size
+            dev_base = get_partition_base(part)
+            dev_size = get_dev_size(dev_base)
+
+            # decrease the use part
+            devname = dev_base.split('/')[-1]
+
+            # filter the hdd
+            path = '/sys/block/{devname}/queue/'.format(
+                devname=devname,
+                )
+            is_ssd = read_one_line(path, 'rotational')
+            if is_ssd != '0':
+                continue
+            # calculate the used count and unused disk size
+            if devname not in residue_size_map:
+                cache_used_map[devname] = -1
+                residue_size_map[devname] = dev_size
+            residue_size_map[devname] -= part_size
+            cache_used_map[devname] += 1
+
+    # cache_used_map: cache used part count
+    # residue_size_map: dev residue size
+    return (cache_used_map, residue_size_map)
+
+    
+def get_cachebase(typeid):
+    """
+    get the cache (journal or flashcache) disk
+    such as the output format is 'sdb', which means that sdb belong to typeid.
+    but output is 0 mean no disk belong to typeid
+    """
+
+    devs = None
+    # get the cache (typeid is journal or flashcache) unused map
+    _, residue_size_map = get_cachesize(typeid)
+
+    for devname in residue_size_map:
+        if devs is None:
+            devs = devname
+        else:
+            devs = devs + ',' + devname
+
+    if devs:
+        print devs
+    else:
+        print 0
+
+        
+def get_cachelist(typeid, cache_size=None):
+    """
+    get the available cache (journal or flashcache)
+    such as the output format is '4', which means that the unused part is four.
+    but output is 0 mean there is no unused part
+    """
+
+    residue_all = 0
+
+    if cache_size == None:
+        raise Error("Cache Size is None")
+
+    # get the cache (typeid is journal or flashcache) unused map
+    _, residue_size_map = get_cachesize(typeid)
+
+    # calculate the disk detail info
+    for devname in residue_size_map:
+        residue = residue_size_map[devname]/(cache_size*1024)
+        if residue_size_map[devname] > residue*(cache_size*1024):
+            residue_all += residue
+        elif residue != 0:
+            residue_all = residue_all + residue -1
+
+    print residue_all
+
+
+def get_cachebaselist(typeid, cache_size=None):
+    """
+    get the cache (journal or flashcache) detail info
+    such as the output format is 'sdb:2|1', which means that the sdb's unused part
+    is two and used part is one, and the sdb's type is typeid.
+    but output is 0 mean there is no disk as typeid
+    """
+
+    output = None
+
+    if cache_size == None:
+        raise Error("Cache Size is None")
+
+    # get the cache (typeid is journal or flashcache) used and unused map
+    fcache_used_map, residue_size_map = get_cachesize(typeid)
+
+    # calculate the disk detail info
+    for devname in residue_size_map:
+        residue = residue_size_map[devname]/(cache_size*1024)
+        if residue_size_map[devname] > residue*(cache_size*1024):
+            pass
+        elif residue != 0:
+            residue -= 1
+        info = devname +':'+ str(residue) +'|'+ str(fcache_used_map[devname])
+        if output is None:
+            output = info
+        else:
+            output = output + ',' + info
+
+    if output is None:
+        print 0
+    else:
+        print output
+
+
+def main_cachebase(args):
+    """
+    get the cache (journal or flashcache) base info
+    """
+
+    # get the typeid is journal or flashcache
+    typeid = None
+
+    if args.journal and args.fcache:
+        raise Error("Can not mark type")
+    if args.journal:
+        typeid = PTYPE['regular']['journal']['ready']
+    elif args.fcache:
+        typeid = FLASHCACHE_UUID
+    else:
+        raise Error("Can not mark type")
+
+    # get the cache (journal or flashcache) disk
+    if args.base:
+        get_cachebase(typeid)
+
+    # get the available cache (journal or flashcache)
+    if args.list:
+        get_cachelist(typeid, int(args.size))
+
+    # get the cache (journal or flashcache) detail info
+    if args.baselist:
+        get_cachebaselist(typeid, int(args.size))
+
+
+def marktype(typeid, dev):
+    """
+    Mark the dev as typeid (journal or flashcache)
+    """
+
+    num = 1
+    size = 16
+
+    # get the part size
+    journal_fcache_part = '{num}:0:+{size}M'.format(
+        num=num,
+        size=size,
+        )
+
+    # get the part name ('ceph journal' or 'Flashcache')
+    change_name = None
+    if typeid == PTYPE['regular']['journal']['ready']:
+        change_name = '{num}:{name}'.format(num=num, name='ceph journal')
+    elif typeid == FLASHCACHE_UUID:
+        change_name = '{num}:{name}'.format(num=num, name='Flashcache')
+    else:
+        raise Error("Can not mark type")
+
+    # create the mark part
+    try:
+        partuuid = str(uuid.uuid4())
+        LOG.debug('Creating type partition num %d size %d on %s', num, size, dev)
+        command_check_call(
+            [
+                'sgdisk',
+                '--new={part}'.format(part=journal_fcache_part),
+                '--change-name={change_name}'.format(change_name=change_name),
+                '--partition-guid={num}:{partuuid}'.format(
+                    num=num,
+                    partuuid=partuuid,
+                    ),
+                '--typecode={num}:{uuid}'.format(
+                    num=num,
+                    uuid=typeid,
+                    ),
+                '--mbrtogpt',
+                '--',
+                dev,
+                ]
+            )
+
+        update_partition(dev, 'created')
+
+        command(
+                [
+                    # wait for udev event queue to clear
+                    'udevadm',
+                    'settle',
+                    ],
+                )
+
+    except subprocess.CalledProcessError as err:
+        raise Error(err)
+
+
+def main_marktype(args):
+    """
+    Mark the SSD as Journal or Flashcache
+    """
+
+    if args.journal and args.fcache:
+        raise Error("journal and fcache is all true, can not mark type")
+    # mark journal type
+    if args.journal:
+        marktype(PTYPE['regular']['journal']['ready'], args.dev)
+
+    # mark flashcache type
+    if args.fcache:
+        marktype(FLASHCACHE_UUID, args.dev)
 
 
 def main_trigger(args):
@@ -4451,6 +5309,10 @@ def parse_args(argv):
     make_deactivate_parser(subparsers)
     make_destroy_parser(subparsers)
     make_zap_parser(subparsers)
+    make_rmfcache_parse(subparsers)
+    make_repair_parse(subparsers)
+    make_cachebase_parse(subparsers)
+    make_marktype_parse(subparsers)
     make_trigger_parser(subparsers)
 
     args = parser.parse_args(argv)
@@ -4892,6 +5754,133 @@ def make_zap_parser(subparsers):
         func=main_zap,
     )
     return zap_parser
+
+
+def make_rmfcache_parse(subparsers):
+    rmfcache_parse = subparsers.add_parser(
+        'rmfcache',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        
+        """)),
+        help='rmfcache from a device\'s partition table (and contents)')
+    rmfcache_parse.add_argument(
+        '--fcache',
+        metavar='fcache',
+        help='fcache uuid',
+        )
+    rmfcache_parse.add_argument(
+        '--fastremove',
+        action='store_true', default=None,
+        help='fast remove',
+        )
+    rmfcache_parse.add_argument(
+        'dev',
+        metavar='DEV',
+        help='path to block device',
+        )
+    rmfcache_parse.set_defaults(
+        func=main_rmfcache,
+        )
+
+
+def make_repair_parse(subparsers):
+    repair_parse = subparsers.add_parser(
+        'repair',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        
+        """)),
+        help='repair to a device\'s partition table (and contents)')
+    repair_parse.add_argument(
+        '--link',
+        action='store_true', default=None,
+        help='repair link',
+        )
+    repair_parse.add_argument(
+        '--fcache',
+        action='store_true', default=None,
+        help='repair flashcache',
+        )
+    repair_parse.add_argument(
+        '--delete',
+        action='store_true', default=None,
+        help='delete flashcache',
+        )
+    repair_parse.set_defaults(
+        func=main_repair,
+        )
+
+
+def make_cachebase_parse(subparsers):
+    cachebase_parse = subparsers.add_parser(
+        'cachebase',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        
+        """)),
+        help='list cache to a device\'s partition table (and contents)')
+    cachebase_parse.add_argument(
+        '--fcache',
+        action='store_true', default=None,
+        help='fcache dev',
+        )
+    cachebase_parse.add_argument(
+        '--journal',
+        action='store_true', default=None,
+        help='journal dev',
+        )
+    cachebase_parse.add_argument(
+        '--size',
+        metavar='size',
+        help='cache_size',
+        )
+    cachebase_parse.add_argument(
+        '--base',
+        action='store_true', default=None,
+        help='cache base',
+        )
+    cachebase_parse.add_argument(
+        '--list',
+        action='store_true', default=None,
+        help='cache list',
+        )
+    cachebase_parse.add_argument(
+        '--baselist',
+        action='store_true', default=None,
+        help='base cache list',
+        )
+    cachebase_parse.set_defaults(
+        func=main_cachebase,
+        )
+
+
+def make_marktype_parse(subparsers):
+    marktype_parse = subparsers.add_parser(
+        'marktype',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        
+        """)),
+        help='identify to a device\'s partition table (and contents)')
+    marktype_parse.add_argument(
+        '--dev',
+        metavar='DEV',
+        help='path to block device',
+        )
+    marktype_parse.add_argument(
+        '--journal',
+        action='store_true', default=None,
+        help='mark dev to journal',
+        )
+    marktype_parse.add_argument(
+        '--fcache',
+        action='store_true', default=None,
+        help='mark dev to flashcache',
+        )
+    marktype_parse.set_defaults(
+        func=main_marktype,
+        )
 
 
 def main(argv):
