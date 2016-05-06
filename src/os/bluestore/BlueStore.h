@@ -669,7 +669,8 @@ private:
   int _wal_replay();
 
   // for fsck
-  int _verify_enode_shared(EnodeRef enode, vector<bluestore_extent_t>& v,
+  int _verify_enode_shared(EnodeRef enode,
+			   map<int64_t,vector<bluestore_pextent_t>>& v,
 			   interval_set<uint64_t> &used_blocks);
 
 public:
