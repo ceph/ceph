@@ -94,6 +94,10 @@ public:
       return &p->second;
     }
 
+    int64_t get_new_blob_id() {
+      return blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
+    }
+
     friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
     friend void intrusive_ptr_release(Enode *e) { e->put(); }
 
@@ -221,6 +225,12 @@ public:
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     EnodeRef get_enode(uint32_t hash);
+
+    bluestore_blob_t *get_blob_ptr(OnodeRef& o, int64_t blob) {
+      if (blob < 0 && !o->enode)
+	o->enode = get_enode(o->oid.hobj.get_hash());
+      return o->get_blob_ptr(blob);
+    }
 
     const coll_t &get_cid() override {
       return cid;
