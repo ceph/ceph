@@ -1009,15 +1009,26 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive)
 
 int RGWPeriod::delete_obj()
 {
-  string pool_name = get_pool_name(cct);
-  rgw_bucket pool(pool_name.c_str());
+  rgw_bucket pool(get_pool_name(cct));
 
-  rgw_obj object_id(pool, get_period_oid());
-  int ret = store->delete_system_obj(object_id);
-  if (ret < 0) {
-    ldout(cct, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
+  // delete the object for each period epoch
+  for (epoch_t e = 1; e <= epoch; e++) {
+    RGWPeriod p{get_id(), e};
+    rgw_obj oid{pool, p.get_period_oid()};
+    int ret = store->delete_system_obj(oid);
+    if (ret < 0) {
+      ldout(cct, 0) << "WARNING: failed to delete period object " << oid
+          << ": " << cpp_strerror(-ret) << dendl;
+    }
   }
 
+  // delete the .latest_epoch object
+  rgw_obj oid{pool, get_period_oid_prefix() + get_latest_epoch_oid()};
+  int ret = store->delete_system_obj(oid);
+  if (ret < 0) {
+    ldout(cct, 0) << "WARNING: failed to delete period object " << oid
+        << ": " << cpp_strerror(-ret) << dendl;
+  }
   return ret;
 }
 
