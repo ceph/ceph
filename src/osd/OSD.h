@@ -562,7 +562,7 @@ public:
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to,
                                        OSDSuperblock& superblock);
   bool should_share_map(entity_name_t name, Connection *con, epoch_t epoch,
-                        OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
+                        const OSDMapRef& osdmap, const epoch_t *sent_epoch_p);
   void share_map(entity_name_t name, Connection *con, epoch_t epoch,
                  OSDMapRef& osdmap, epoch_t *sent_epoch_p);
   void share_map_peer(int peer, Connection *con,

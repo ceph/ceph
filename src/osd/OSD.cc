@@ -936,7 +936,7 @@ void OSDService::forget_peer_epoch(int peer, epoch_t as_of)
 }
 
 bool OSDService::should_share_map(entity_name_t name, Connection *con,
-                                  epoch_t epoch, OSDMapRef& osdmap,
+                                  epoch_t epoch, const OSDMapRef& osdmap,
                                   const epoch_t *sent_epoch_p)
 {
   bool should_send = false;
