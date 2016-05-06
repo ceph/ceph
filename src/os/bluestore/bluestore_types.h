@@ -288,6 +288,46 @@ struct bluestore_blob_t {
     return p->offset + x_off;
   }
 
+  void map(uint64_t x_off, uint64_t x_len,
+	   std::function<void(uint64_t,uint64_t)> f) {
+    auto p = extents.begin();
+    assert(p != extents.end());
+    while (x_off >= p->length) {
+      x_off -= p->length;
+      ++p;
+      assert(p != extents.end());
+    }
+    while (x_len > 0) {
+      uint64_t l = MIN(p->length - x_off, x_len);
+      f(p->offset + x_off, l);
+      x_off = 0;
+      x_len -= l;
+      ++p;
+    }
+  }
+  void map_bl(uint64_t x_off,
+	      bufferlist& bl,
+	      std::function<void(uint64_t,uint64_t,bufferlist&)> f) {
+    auto p = extents.begin();
+    assert(p != extents.end());
+    while (x_off >= p->length) {
+      x_off -= p->length;
+      ++p;
+      assert(p != extents.end());
+    }
+    bufferlist::iterator it = bl.begin();
+    uint64_t x_len = bl.length();
+    while (x_len > 0) {
+      uint64_t l = MIN(p->length - x_off, x_len);
+      bufferlist t;
+      it.copy(l, t);
+      f(p->offset + x_off, l, t);
+      x_off = 0;
+      x_len -= l;
+      ++p;
+    }
+  }
+
   uint32_t get_ondisk_length() const {
     uint32_t len = 0;
     for (auto &p : extents) {
