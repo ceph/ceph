@@ -307,9 +307,6 @@ class AsyncConnection : public Connection {
   utime_t backoff;         // backoff time
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
-  EventCallbackRef reset_handler;
-  EventCallbackRef remote_reset_handler;
-  EventCallbackRef connect_handler;
   EventCallbackRef wakeup_handler;
   struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
@@ -368,16 +365,13 @@ class AsyncConnection : public Connection {
   void stop() {
     lock.Lock();
     if (state != STATE_CLOSED)
-      center->dispatch_event_external(reset_handler);
+      dispatch_queue->queue_reset(this);
     lock.Unlock();
     mark_down();
   }
   void cleanup_handler() {
     delete read_handler;
     delete write_handler;
-    delete reset_handler;
-    delete remote_reset_handler;
-    delete connect_handler;
     delete wakeup_handler;
     if (delay_state) {
       delete delay_state;
