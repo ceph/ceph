@@ -251,7 +251,21 @@ struct entity_addr_t {
     return addr6;
   }
 
-  bool set_sockaddr(struct sockaddr *sa)
+  const sockaddr *get_sockaddr() const {
+    return (const sockaddr *)&addr4;
+  }
+  size_t get_sockaddr_len() const {
+    switch (addr.ss_family) {
+    case AF_INET:
+      return sizeof(addr4);
+      break;
+    case AF_INET6:
+      return sizeof(addr6);
+      break;
+    }
+    return sizeof(addr);
+  }
+  bool set_sockaddr(const struct sockaddr *sa)
   {
     switch (sa->sa_family) {
     case AF_INET:
@@ -264,6 +278,10 @@ struct entity_addr_t {
       return false;
     }
     return true;
+  }
+
+  sockaddr_storage get_sockaddr_storage() const {
+    return addr;
   }
 
   void set_in4_quad(int pos, int val) {
