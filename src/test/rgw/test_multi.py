@@ -176,6 +176,8 @@ class RGWRealm:
         if is_master:
             self.master_zone = zone
 
+    def remove_zone(self, zone_name):
+        del self.zones[zone_name]
 
     def get_zone(self, zone_name):
         return self.zones[zone_name]
@@ -776,6 +778,25 @@ def test_multi_period_incremental_sync():
 
             check_bucket_eq(source_zone, target_zone, bucket)
 
+# TODO: test this in isolation, so it doesn't have side effects on other tests
+def test_zonegroup_remove():
+    z1 = realm.get_zone('us-1')
+
+    # try to 'zone delete' us-2 from cluster 1
+    # must fail with ENOENT because the zone is local to cluster 2
+    (_, retcode) = z1.cluster.rgw_admin('zone delete --rgw-zone=us-2', False)
+    assert(retcode == 2) # ENOENT
+
+    # use 'zonegroup remove', expecting success
+    z1.cluster.rgw_admin('zonegroup remove --rgw-zone=us-2', True)
+
+    # another 'zonegroup remove' should fail with ENOENT
+    (_, retcode) = z1.cluster.rgw_admin('zonegroup remove --rgw-zone=us-2', False)
+    assert(retcode == 2) # ENOENT
+
+    # validate the resulting period
+    z1.cluster.rgw_admin('period update --commit', True)
+    realm.remove_zone('us-2')
 
 def init(parse_args):
     cfg = ConfigParser.RawConfigParser({
