@@ -91,10 +91,11 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
             continue;
         }
 
-        rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
+        rc = ::bind(listen_sd, listen_addr.get_sockaddr(),
+		    listen_addr.get_sockaddr_len());
         if (rc < 0) {
-            lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-                             << ": " << cpp_strerror(errno) << dendl;
+            lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr
+			     << ": " << cpp_strerror(errno) << dendl;
             r = -errno;
             continue;
         }
@@ -105,12 +106,13 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
                 continue;
 
             listen_addr.set_port(port);
-            rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
+            rc = ::bind(listen_sd, listen_addr.get_sockaddr(),
+			listen_addr.get_sockaddr_len());
             if (rc == 0)
                 break;
         }
         if (rc < 0) {
-            lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
+            lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr
                              << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
                              << "-" << msgr->cct->_conf->ms_bind_port_max
                              << ": " << cpp_strerror(errno)
