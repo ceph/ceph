@@ -914,7 +914,7 @@ int Pipe::connect()
 
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
-  rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
+  rc = ::connect(sd, peer_addr.get_sockaddr(), peer_addr.get_sockaddr_len());
   if (rc < 0) {
     rc = -errno;
     ldout(msgr->cct,2) << "connect error " << peer_addr
