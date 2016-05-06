@@ -249,14 +249,14 @@ static void get_coll_key_range(const coll_t& cid, int bits,
   }
 }
 
-static bool is_enode_key(const string& key)
+static bool is_bnode_key(const string& key)
 {
   if (key.size() == 2 + 8 + 4)
     return true;
   return false;
 }
 
-static void get_enode_key(shard_id_t shard, int64_t pool, uint32_t hash,
+static void get_bnode_key(shard_id_t shard, int64_t pool, uint32_t hash,
 			  string *key)
 {
   key->clear();
@@ -265,7 +265,7 @@ static void get_enode_key(shard_id_t shard, int64_t pool, uint32_t hash,
   _key_encode_u32(hobject_t::_reverse_bits(hash), key);
 }
 
-static int get_key_enode(const string& key, shard_id_t *shard,
+static int get_key_bnode(const string& key, shard_id_t *shard,
 			 int64_t *pool, uint32_t *hash)
 {
   const char *p = key.c_str();
@@ -436,16 +436,16 @@ static void get_wal_key(uint64_t seq, string *out)
   _key_encode_u64(seq, out);
 }
 
-// Enode
+// Bnode
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.enode(" << this << ") "
+#define dout_prefix *_dout << "bluestore.bnode(" << this << ") "
 
-void BlueStore::Enode::put()
+void BlueStore::Bnode::put()
 {
   if (--nref == 0) {
-    dout(20) << __func__ << " removing self from set " << enode_set << dendl;
-    enode_set->uset.erase(*this);
+    dout(20) << __func__ << " removing self from set " << bnode_set << dendl;
+    bnode_set->uset.erase(*this);
     delete this;
   }
 }
@@ -626,24 +626,24 @@ BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
     cid(c),
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
-    enode_set(g_conf->bluestore_onode_map_size),
+    bnode_set(g_conf->bluestore_onode_map_size),
     onode_map(g_conf->bluestore_onode_map_size)
 {
 }
 
-BlueStore::EnodeRef BlueStore::Collection::get_enode(
+BlueStore::BnodeRef BlueStore::Collection::get_bnode(
   uint32_t hash
   )
 {
-  Enode dummy(hash, string(), NULL);
-  auto p = enode_set.uset.find(dummy);
-  if (p == enode_set.uset.end()) {
+  Bnode dummy(hash, string(), NULL);
+  auto p = bnode_set.uset.find(dummy);
+  if (p == bnode_set.uset.end()) {
     spg_t pgid;
     if (!cid.is_pg(&pgid))
       pgid = spg_t();  // meta
     string key;
-    get_enode_key(pgid.shard, pgid.pool(), hash, &key);
-    EnodeRef e = new Enode(hash, key, &enode_set);
+    get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
+    BnodeRef e = new Bnode(hash, key, &bnode_set);
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
 	     << " created " << e << dendl;
 
@@ -659,7 +659,7 @@ BlueStore::EnodeRef BlueStore::Collection::get_enode(
       dout(10) << __func__ << " hash " <<std::hex << hash << std::dec
 	       << " missed, new ref_map" << dendl;
     }
-    enode_set.uset.insert(*e);
+    bnode_set.uset.insert(*e);
     return e;
   } else {
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
@@ -1964,17 +1964,17 @@ int BlueStore::umount()
   return 0;
 }
 
-int BlueStore::_verify_enode_shared(
-  EnodeRef enode,
+int BlueStore::_verify_bnode_shared(
+  BnodeRef bnode,
   map<int64_t,vector<bluestore_pextent_t>>& v,
   interval_set<uint64_t> &used_blocks)
 {
   int errors = 0;
-  dout(10) << __func__ << " hash " << enode->hash << " v " << v << dendl;
-  for (auto& b : enode->blob_map) {
+  dout(10) << __func__ << " hash " << bnode->hash << " v " << v << dendl;
+  for (auto& b : bnode->blob_map) {
     auto pv = v.find(b.first);
     if (pv == v.end()) {
-      derr << " hash " << enode->hash << " blob " << b.first
+      derr << " hash " << bnode->hash << " blob " << b.first
 	   << " exists in bnode but has no refs" << dendl;
       ++errors;
     }
@@ -1996,7 +1996,7 @@ int BlueStore::_verify_enode_shared(
       span.insert(t);
     }
     if (b.second.ref_map != ref_map) {
-      derr << " hash " << enode->hash << " blob " << b.first
+      derr << " hash " << bnode->hash << " blob " << b.first
 	   << " ref_map " << b.second.ref_map
 	   << " != expected " << ref_map << dendl;
       ++errors;
@@ -2006,7 +2006,7 @@ int BlueStore::_verify_enode_shared(
       e.insert(p.offset, p.length);
       i.intersection_of(e, used_blocks);
       if (!i.empty()) {
-	derr << " hash " << enode->hash << " extent(s) " << i
+	derr << " hash " << bnode->hash << " extent(s) " << i
 	     << " already allocated" << dendl;
 	++errors;
       } else {
@@ -2016,7 +2016,7 @@ int BlueStore::_verify_enode_shared(
     v.erase(b.first);
   }
   for (auto& p : v) {
-    derr << " hash " << enode->hash << " blob " << p.first
+    derr << " hash " << bnode->hash << " blob " << p.first
 	 << " dne, has extent refs "
 	 << p.second << dendl;
     ++errors;
@@ -2032,7 +2032,7 @@ int BlueStore::fsck()
   set<uint64_t> used_omap_head;
   interval_set<uint64_t> used_blocks;
   KeyValueDB::Iterator it;
-  EnodeRef enode;
+  BnodeRef bnode;
   map<int64_t,vector<bluestore_pextent_t>> hash_shared;
 
   int r = _open_path();
@@ -2108,10 +2108,10 @@ int BlueStore::fsck()
 	  ++errors;
 	  continue; // go for next object
 	}
-	if (!enode || enode->hash != o->oid.hobj.get_hash()) {
-	  if (enode)
-	    errors += _verify_enode_shared(enode, hash_shared, used_blocks);
-	  enode = c->get_enode(o->oid.hobj.get_hash());
+	if (!bnode || bnode->hash != o->oid.hobj.get_hash()) {
+	  if (bnode)
+	    errors += _verify_bnode_shared(bnode, hash_shared, used_blocks);
+	  bnode = c->get_bnode(o->oid.hobj.get_hash());
 	  hash_shared.clear();
 	}
 	if (o->onode.nid) {
@@ -2268,13 +2268,13 @@ int BlueStore::fsck()
       }
     }
   }
-  if (enode) {
-    errors += _verify_enode_shared(enode, hash_shared, used_blocks);
+  if (bnode) {
+    errors += _verify_bnode_shared(bnode, hash_shared, used_blocks);
     hash_shared.clear();
-    enode.reset();
+    bnode.reset();
   }
 
-  dout(1) << __func__ << " checking for stray enodes and onodes" << dendl;
+  dout(1) << __func__ << " checking for stray bnodes and onodes" << dendl;
   it = db->get_iterator(PREFIX_OBJ);
   if (it) {
     CollectionRef c;
@@ -2284,13 +2284,13 @@ int BlueStore::fsck()
     uint32_t expecting_hash;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       ghobject_t oid;
-      if (is_enode_key(it->key())) {
+      if (is_bnode_key(it->key())) {
 	if (expecting_objects) {
-	  dout(30) << __func__ << "  had enode but no objects for "
+	  dout(30) << __func__ << "  had bnode but no objects for "
 		   << std::hex << expecting_hash << std::dec << dendl;
 	  ++errors;
 	}
-	get_key_enode(it->key(), &expecting_shard, &expecting_pool,
+	get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
 		      &expecting_hash);
 	continue;
       }
@@ -2303,7 +2303,7 @@ int BlueStore::fsck()
       }
       if (expecting_objects) {
 	if (oid.hobj.get_bitwise_key_u32() != expecting_hash) {
-	  dout(30) << __func__ << "  had enode but no objects for "
+	  dout(30) << __func__ << "  had bnode but no objects for "
 		   << std::hex << expecting_hash << std::dec << dendl;
 	  ++errors;
 	}
@@ -2329,7 +2329,7 @@ int BlueStore::fsck()
       }
     }
     if (expecting_objects) {
-      dout(30) << __func__ << "  had enode but no objects for "
+      dout(30) << __func__ << "  had bnode but no objects for "
 	       << std::hex << expecting_hash << std::dec << dendl;
       ++errors;
       expecting_objects = false;
@@ -2647,7 +2647,7 @@ int BlueStore::_do_read(
   uint64_t block_size = bdev->get_block_size();
   int r = 0;
   IOContext ioc(NULL);   // FIXME?
-  EnodeRef enode;
+  BnodeRef bnode;
 
   // generally, don't buffer anything, unless the client explicitly requests
   // it.
@@ -3140,10 +3140,10 @@ int BlueStore::collection_list(
       }
       break;
     }
-    if (is_enode_key(it->key())) {
+    if (is_bnode_key(it->key())) {
       dout(20) << __func__ << " key "
 	       << pretty_binary_string(it->key())
-	       << " (enode, skipping)" << dendl;
+	       << " (bnode, skipping)" << dendl;
       it->next();
       continue;
     }
@@ -3637,13 +3637,13 @@ void BlueStore::_txc_release(
 {
   if (shared) {
     vector<bluestore_pextent_t> release;
-    if (!o->enode)
-      o->enode = c->get_enode(o->oid.hobj.get_hash());
-    o->enode->ref_map.put(offset, length, &release);
+    if (!o->bnode)
+      o->bnode = c->get_bnode(o->oid.hobj.get_hash());
+    o->bnode->ref_map.put(offset, length, &release);
     dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
-	     << std::dec << " shared: ref_map now " << o->enode->ref_map
+	     << std::dec << " shared: ref_map now " << o->bnode->ref_map
 	     << " releasing " << release << dendl;
-    txc->write_enode(o->enode);
+    txc->write_bnode(o->bnode);
     for (auto& p : release) {
       txc->released.insert(p.offset, p.length);
     }
@@ -3796,18 +3796,18 @@ void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     (*p)->flush_txns.insert(txc);
   }
 
-  // finalize enodes
-  for (set<EnodeRef>::iterator p = txc->enodes.begin();
-       p != txc->enodes.end();
+  // finalize bnodes
+  for (set<BnodeRef>::iterator p = txc->bnodes.begin();
+       p != txc->bnodes.end();
        ++p) {
     if ((*p)->ref_map.empty()) {
-      dout(20) << "  enode " << std::hex << (*p)->hash << std::dec
+      dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
 	       << " ref_map is empty" << dendl;
       txc->t->rmkey(PREFIX_OBJ, (*p)->key);
     } else {
       bufferlist bl;
       ::encode((*p)->ref_map, bl);
-      dout(20) << "  enode " << std::hex << (*p)->hash << std::dec
+      dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
 	       << " ref_map is " << bl.length() << dendl;
       txc->t->set(PREFIX_OBJ, (*p)->key, bl);
     }
@@ -5206,8 +5206,8 @@ int BlueStore::_do_allocate(
   // COW head and/or tail?
   bluestore_wal_op_t *cow_head_op = nullptr;
   bluestore_wal_op_t *cow_tail_op = nullptr;
-  if ((shared_head || shared_tail) && !o->enode)
-    o->enode = c->get_enode(o->oid.hobj.get_hash());
+  if ((shared_head || shared_tail) && !o->bnode)
+    o->bnode = c->get_bnode(o->oid.hobj.get_hash());
   if (shared_head) {
     uint64_t cow_offset = offset;
     uint64_t cow_end = MIN(orig_offset & block_mask,
@@ -5370,7 +5370,7 @@ int BlueStore::_do_allocate(
 	    if (bp->second.blob >= 0)
 	      o->onode.blob_map.erase(bp->second.blob);
 	    else
-	      o->enode->blob_map.erase(bp->second.blob);
+	      o->bnode->blob_map.erase(bp->second.blob);
 	  }
 	  hint = bp->first + bp->second.length;
 	  o->onode.extent_map.erase(bp++);
@@ -5941,7 +5941,7 @@ int BlueStore::_do_zero(TransContext *txc,
 	if (bp->second.blob >= 0)
 	  o->onode.blob_map.erase(bp->second.blob);
 	else
-	  o->enode->blob_map.erase(-bp->second.blob);
+	  o->bnode->blob_map.erase(-bp->second.blob);
       }
       o->onode.extent_map.erase(bp++);
       continue;
@@ -6041,7 +6041,7 @@ int BlueStore::_do_truncate(
 	if (bp->second.blob >= 0)
 	  o->onode.blob_map.erase(bp->second.blob);
 	else
-	  o->enode->blob_map.erase(-bp->second.blob);
+	  o->bnode->blob_map.erase(-bp->second.blob);
       }
       if (bp != o->onode.extent_map.begin()) {
 	o->onode.extent_map.erase(bp--);
@@ -6461,7 +6461,7 @@ int BlueStore::_clone(TransContext *txc,
 
   if (g_conf->bluestore_clone_cow) {
     if (!oldo->onode.extent_map.empty()) {
-      EnodeRef e = c->get_enode(newo->oid.hobj.get_hash());
+      BnodeRef e = c->get_bnode(newo->oid.hobj.get_hash());
       map<int64_t,int64_t> moved_blobs;
       for (auto& p : oldo->onode.extent_map) {
 	if (p.second.is_shared()) {
@@ -6484,10 +6484,10 @@ int BlueStore::_clone(TransContext *txc,
 	}
       }
       newo->onode.extent_map = oldo->onode.extent_map;
-      newo->enode = e;
+      newo->bnode = e;
       dout(20) << __func__ << " extent_map " << newo->onode.extent_map << dendl;
       dout(20) << __func__ << " blob_map " << e->blob_map << dendl;
-      txc->write_enode(e);
+      txc->write_bnode(e);
       if (!moved_blobs.empty())
 	txc->write_onode(oldo);
     }
