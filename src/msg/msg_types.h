@@ -203,20 +203,21 @@ struct entity_addr_t {
   __u32 type;
   __u32 nonce;
   union {
-    sockaddr_storage addr;
-    sockaddr_in addr4;
-    sockaddr_in6 addr6;
-  };
+    sockaddr_storage ss;
+    sockaddr sa;
+    sockaddr_in sin;
+    sockaddr_in6 sin6;
+  } u;
 
   entity_addr_t() : type(0), nonce(0) { 
-    memset(&addr, 0, sizeof(addr));
+    memset(&u, 0, sizeof(u));
   }
   explicit entity_addr_t(const ceph_entity_addr &o) {
     type = o.type;
     nonce = o.nonce;
-    addr = o.in_addr;
+    u.ss = o.in_addr;
 #if !defined(__FreeBSD__)
-    addr.ss_family = ntohs(addr.ss_family);
+    u.sa.sa_family = ntohs(u.sa.sa_family);
 #endif
   }
 
@@ -224,41 +225,41 @@ struct entity_addr_t {
   void set_nonce(__u32 n) { nonce = n; }
 
   int get_family() const {
-    return addr.ss_family;
+    return u.sa.sa_family;
   }
   void set_family(int f) {
-    addr.ss_family = f;
+    u.sa.sa_family = f;
   }
   
   sockaddr_in &in4_addr() {
-    return addr4;
+    return u.sin;
   }
   sockaddr_in6 &in6_addr() {
-    return addr6;
+    return u.sin6;
   }
 
   const sockaddr *get_sockaddr() const {
-    return (const sockaddr *)&addr4;
+    return &u.sa;
   }
   size_t get_sockaddr_len() const {
-    switch (addr.ss_family) {
+    switch (u.sa.sa_family) {
     case AF_INET:
-      return sizeof(addr4);
+      return sizeof(u.sin);
       break;
     case AF_INET6:
-      return sizeof(addr6);
+      return sizeof(u.sin6);
       break;
     }
-    return sizeof(addr);
+    return sizeof(u.ss);
   }
   bool set_sockaddr(const struct sockaddr *sa)
   {
     switch (sa->sa_family) {
     case AF_INET:
-      memcpy(&addr4, sa, sizeof(sockaddr_in));
+      memcpy(&u.sin, sa, sizeof(u.sin));
       break;
     case AF_INET6:
-      memcpy(&addr6, sa, sizeof(sockaddr_in6));
+      memcpy(&u.sin6, sa, sizeof(u.sin6));
       break;
     default:
       return false;
@@ -267,33 +268,33 @@ struct entity_addr_t {
   }
 
   sockaddr_storage get_sockaddr_storage() const {
-    return addr;
+    return u.ss;
   }
 
   void set_in4_quad(int pos, int val) {
-    addr4.sin_family = AF_INET;
-    unsigned char *ipq = (unsigned char*)&addr4.sin_addr.s_addr;
+    u.sin.sin_family = AF_INET;
+    unsigned char *ipq = (unsigned char*)&u.sin.sin_addr.s_addr;
     ipq[pos] = val;
   }
   void set_port(int port) {
-    switch (addr.ss_family) {
+    switch (u.sa.sa_family) {
     case AF_INET:
-      addr4.sin_port = htons(port);
+      u.sin.sin_port = htons(port);
       break;
     case AF_INET6:
-      addr6.sin6_port = htons(port);
+      u.sin6.sin6_port = htons(port);
       break;
     default:
       assert(0);
     }
   }
   int get_port() const {
-    switch (addr.ss_family) {
+    switch (u.sa.sa_family) {
     case AF_INET:
-      return ntohs(addr4.sin_port);
+      return ntohs(u.sin.sin_port);
       break;
     case AF_INET6:
-      return ntohs(addr6.sin6_port);
+      return ntohs(u.sin6.sin6_port);
       break;
     }
     return 0;
@@ -303,9 +304,9 @@ struct entity_addr_t {
     ceph_entity_addr a;
     a.type = 0;
     a.nonce = nonce;
-    a.in_addr = addr;
+    a.in_addr = u.ss;
 #if !defined(__FreeBSD__)
-    a.in_addr.ss_family = htons(addr.ss_family);
+    a.in_addr.ss_family = htons(a.in_addr.ss_family);
 #endif
     return a;
   }
@@ -317,36 +318,36 @@ struct entity_addr_t {
       return false;
     if (is_blank_ip() || o.is_blank_ip())
       return true;
-    if (memcmp(&addr, &o.addr, sizeof(addr)) == 0)
+    if (memcmp(&u, &o.u, sizeof(u)) == 0)
       return true;
     return false;
   }
   
   bool is_same_host(const entity_addr_t &o) const {
-    if (addr.ss_family != o.addr.ss_family)
+    if (u.sa.sa_family != o.u.sa.sa_family)
       return false;
-    if (addr.ss_family == AF_INET)
-      return addr4.sin_addr.s_addr == o.addr4.sin_addr.s_addr;
-    if (addr.ss_family == AF_INET6)
-      return memcmp(addr6.sin6_addr.s6_addr,
-		    o.addr6.sin6_addr.s6_addr,
-		    sizeof(addr6.sin6_addr.s6_addr)) == 0;
+    if (u.sa.sa_family == AF_INET)
+      return u.sin.sin_addr.s_addr == o.u.sin.sin_addr.s_addr;
+    if (u.sa.sa_family == AF_INET6)
+      return memcmp(u.sin6.sin6_addr.s6_addr,
+		    o.u.sin6.sin6_addr.s6_addr,
+		    sizeof(u.sin6.sin6_addr.s6_addr)) == 0;
     return false;
   }
 
   bool is_blank_ip() const {
-    switch (addr.ss_family) {
+    switch (u.sa.sa_family) {
     case AF_INET:
-      return addr4.sin_addr.s_addr == INADDR_ANY;
+      return u.sin.sin_addr.s_addr == INADDR_ANY;
     case AF_INET6:
-      return memcmp(&addr6.sin6_addr, &in6addr_any, sizeof(in6addr_any)) == 0;
+      return memcmp(&u.sin6.sin6_addr, &in6addr_any, sizeof(in6addr_any)) == 0;
     default:
       return true;
     }
   }
 
   bool is_ip() const {
-    switch (addr.ss_family) {
+    switch (u.sa.sa_family) {
     case AF_INET:
     case AF_INET6:
       return true;
@@ -366,13 +367,13 @@ struct entity_addr_t {
     ::encode(type, bl);
     ::encode(nonce, bl);
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::encode(addr, bl);
+    ::encode(u.ss, bl);
 #else
     ceph_sockaddr_storage wireaddr;
     ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(addr));
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(u.ss));
     // ceph_sockaddr_storage is in host byte order
-    ::memcpy(&wireaddr, &addr, copysize);
+    ::memcpy(&wireaddr, &u.ss, copysize);
     ::encode(wireaddr, bl);
 #endif
   }
@@ -380,13 +381,13 @@ struct entity_addr_t {
     ::decode(type, bl);
     ::decode(nonce, bl);
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::decode(addr, bl);
+    ::decode(u.ss, bl);
 #else
     ceph_sockaddr_storage wireaddr;
     ::memset(&wireaddr, '\0', sizeof(wireaddr));
     ::decode(wireaddr, bl);
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(addr));
-    ::memcpy(&addr, &wireaddr, copysize);
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(u.ss));
+    ::memcpy(&u.ss, &wireaddr, copysize);
 #endif
   }
 

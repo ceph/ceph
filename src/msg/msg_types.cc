@@ -87,12 +87,12 @@ bool entity_addr_t::parse(const char *s, const char **end)
   struct in_addr a4;
   struct in6_addr a6;
   if (inet_pton(AF_INET, buf4, &a4)) {
-    addr4.sin_addr.s_addr = a4.s_addr;
-    addr.ss_family = AF_INET;
+    u.sin.sin_addr.s_addr = a4.s_addr;
+    u.sa.sa_family = AF_INET;
     p = start + strlen(buf4);
   } else if (inet_pton(AF_INET6, buf6, &a6)) {
-    addr.ss_family = AF_INET6;
-    memcpy(&addr6.sin6_addr, &a6, sizeof(a6));
+    u.sa.sa_family = AF_INET6;
+    memcpy(&u.sin6.sin6_addr, &a6, sizeof(a6));
     p = start + strlen(buf6);
   } else {
     return false;

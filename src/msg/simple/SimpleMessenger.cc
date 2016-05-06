@@ -151,7 +151,7 @@ void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
 {
   if (my_inst.addr.is_blank_ip()) {
     int port = my_inst.addr.get_port();
-    my_inst.addr.addr = addr.addr;
+    my_inst.addr.u = addr.u;
     my_inst.addr.set_port(port);
     init_local_connection();
   }
@@ -705,9 +705,9 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr.addr, sizeof(my_inst.addr.addr),
+    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr.u, sizeof(my_inst.addr.u),
                                "SimpleMessenger learned addr");
-    my_inst.addr.addr = t.addr;
+    my_inst.addr.u = t.u;
     ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     init_local_connection();
