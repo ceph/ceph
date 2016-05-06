@@ -334,7 +334,7 @@ int Pipe::accept()
     goto fail_unlocked;
   }
   {
-    bufferptr tp(sizeof(peer_addr));
+    bufferptr tp(sizeof(ceph_entity_addr));
     addrbl.push_back(std::move(tp));
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
@@ -949,7 +949,7 @@ int Pipe::connect()
   // identify peer
   {
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    bufferptr p(sizeof(paddr) * 2);
+    bufferptr p(sizeof(ceph_entity_addr) * 2);
 #else
     int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
     bufferptr p(wirelen * 2);
