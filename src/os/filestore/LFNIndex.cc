@@ -720,7 +720,6 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 			   string *mangled_name, string *out_path,
 			   int *hardlink)
 {
-  string subdir_path = get_full_path_subdir(path);
   string full_name = lfn_generate_object_name(oid);
   int r;
 
@@ -879,8 +878,6 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
       return -errno;
     return 0;
   }
-  string subdir_path = get_full_path_subdir(path);
-
 
   int i = 0;
   for ( ; ; ++i) {
