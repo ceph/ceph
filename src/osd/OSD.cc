@@ -6642,7 +6642,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap *o = new OSDMap;
       if (e > 1) {
 	bufferlist obl;
-	get_map_bl(e - 1, obl);
+        bool got = get_map_bl(e - 1, obl);
+        assert(got);
 	o->decode(obl);
       }
 
