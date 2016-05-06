@@ -57,7 +57,7 @@ if ! test -f $RADOS_TOOL ; then
 fi
 CEPH_TOOL="`readlink -f \"$DNAME/../ceph\"`"
 if ! test -f $CEPH_TOOL ; then
-    RADOS_TOOL=$(which ceph)
+    CEPH_TOOL=$(which ceph)
 fi
 KEEP_TEMP_FILES=0
 POOL=trs_pool
