@@ -1124,7 +1124,7 @@ ssize_t AsyncConnection::_process_connection()
         entity_addr_t paddr, peer_addr_for_me;
         bufferlist myaddrbl;
 
-        r = read_until(sizeof(paddr)*2, state_buffer);
+        r = read_until(sizeof(ceph_entity_addr)*2, state_buffer);
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " read identify peeraddr failed" << dendl;
           goto fail;
@@ -1133,7 +1133,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         bufferlist bl;
-        bl.append(state_buffer, sizeof(paddr)*2);
+        bl.append(state_buffer, sizeof(ceph_entity_addr)*2);
         bufferlist::iterator p = bl.begin();
         try {
           ::decode(paddr, p);
@@ -1428,7 +1428,7 @@ ssize_t AsyncConnection::_process_connection()
         bufferlist addr_bl;
         entity_addr_t peer_addr;
 
-        r = read_until(strlen(CEPH_BANNER) + sizeof(peer_addr), state_buffer);
+        r = read_until(strlen(CEPH_BANNER) + sizeof(ceph_entity_addr), state_buffer);
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " read peer banner and addr failed" << dendl;
           goto fail;
@@ -1442,7 +1442,7 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
         }
 
-        addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(peer_addr));
+        addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(ceph_entity_addr));
         {
           bufferlist::iterator ti = addr_bl.begin();
           ::decode(peer_addr, ti);
