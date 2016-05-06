@@ -422,11 +422,13 @@ public:
 
   void dequeue_pg(PG *pg, list<OpRequestRef> *dequeued);
 
+private:
   // -- map epoch lower bound --
   Mutex pg_epoch_lock;
   multiset<epoch_t> pg_epochs;
   map<spg_t,epoch_t> pg_epoch;
 
+public:
   void pg_add_epoch(spg_t pgid, epoch_t epoch) {
     Mutex::Locker l(pg_epoch_lock);
     map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
@@ -458,9 +460,12 @@ public:
       return *pg_epochs.begin();
   }
 
+private:
   // -- superblock --
   Mutex publish_lock, pre_publish_lock; // pre-publish orders before publish
   OSDSuperblock superblock;
+
+public:
   OSDSuperblock get_superblock() {
     Mutex::Locker l(publish_lock);
     return superblock;
