@@ -28,7 +28,7 @@
 class CephContext;
 class DispatchQueue;
 class Pipe;
-class SimpleMessenger;
+class Messenger;
 class Message;
 struct Connection;
 
@@ -36,7 +36,7 @@ struct Connection;
  * The DispatchQueue contains all the Pipes which have Messages
  * they want to be dispatched, carefully organized by Message priority
  * and permitted to deliver in a round-robin fashion.
- * See SimpleMessenger::dispatch_entry for details.
+ * See Messenger::dispatch_entry for details.
  */
 class DispatchQueue {
   class QueueItem {
@@ -64,7 +64,7 @@ class DispatchQueue {
   };
     
   CephContext *cct;
-  SimpleMessenger *msgr;
+  Messenger *msgr;
   mutable Mutex lock;
   Cond cond;
 
@@ -122,7 +122,11 @@ class DispatchQueue {
   uint64_t pre_dispatch(Message *m);
   void post_dispatch(Message *m, uint64_t msize);
 
-  public:
+ public:
+
+  /// Throttle preventing us from building up a big backlog waiting for dispatch
+  Throttle dispatch_throttler;
+
   bool stop;
   void local_delivery(Message *m, int priority);
   void run_local_delivery();
@@ -133,7 +137,14 @@ class DispatchQueue {
     Mutex::Locker l(lock);
     return mqueue.length();
   }
-    
+
+  /**
+   * Release memory accounting back to the dispatch throttler.
+   *
+   * @param msize The amount of memory to release.
+   */
+  void dispatch_throttle_release(uint64_t msize);
+
   void queue_connect(Connection *con) {
     Mutex::Locker l(lock);
     if (stop)
@@ -191,16 +202,18 @@ class DispatchQueue {
   void shutdown();
   bool is_started() const {return dispatch_thread.is_started();}
 
-  DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
+  DispatchQueue(CephContext *cct, Messenger *msgr)
     : cct(cct), msgr(msgr),
-      lock("SimpleMessenger::DispatchQueue::lock"),
+      lock("Messenger::DispatchQueue::lock"),
       mqueue(cct->_conf->ms_pq_max_tokens_per_priority,
 	     cct->_conf->ms_pq_min_cost),
       next_pipe_id(1),
       dispatch_thread(this),
-      local_delivery_lock("SimpleMessenger::DispatchQueue::local_delivery_lock"),
+      local_delivery_lock("Messenger::DispatchQueue::local_delivery_lock"),
       stop_local_delivery(false),
       local_delivery_thread(this),
+      dispatch_throttler(cct, string("msgr_dispatch_throttler-") + msgr->get_myname(),
+                         cct->_conf->ms_dispatch_throttle_bytes),
       stop(false)
     {}
 };
