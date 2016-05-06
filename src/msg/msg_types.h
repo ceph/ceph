@@ -207,18 +207,6 @@ struct entity_addr_t {
     sockaddr_in6 addr6;
   };
 
-  unsigned int addr_size() const {
-    switch (addr.ss_family) {
-    case AF_INET:
-      return sizeof(addr4);
-      break;
-    case AF_INET6:
-      return sizeof(addr6);
-      break;
-    }
-    return sizeof(addr);
-  }
-
   entity_addr_t() : type(0), nonce(0) { 
     memset(&addr, 0, sizeof(addr));
   }
@@ -241,9 +229,6 @@ struct entity_addr_t {
     addr.ss_family = f;
   }
   
-  sockaddr_storage &ss_addr() {
-    return addr;
-  }
   sockaddr_in &in4_addr() {
     return addr4;
   }
