@@ -516,6 +516,11 @@ struct bluestore_onode_t {
     return fp;
   }
 
+  bluestore_blob_t *add_blob(int64_t *id) {
+    *id = blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
+    return &blob_map[*id];
+  }
+
   bluestore_blob_t *get_blob_ptr(int64_t id) {
     bluestore_blob_map_t::iterator p = blob_map.find(id);
     if (p == blob_map.end())
