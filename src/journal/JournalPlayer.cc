@@ -154,12 +154,13 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
   ldout(m_cct, 20) << __func__ << dendl;
   Mutex::Locker locker(m_lock);
 
-  m_handler_notified = false;
   if (m_state != STATE_PLAYBACK) {
+    m_handler_notified = false;
     return false;
   }
 
   if (!is_object_set_ready()) {
+    m_handler_notified = false;
     return false;
   }
 
@@ -167,6 +168,7 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
     if (!m_watch_enabled) {
       notify_complete(0);
     } else if (!m_watch_scheduled) {
+      m_handler_notified = false;
       schedule_watch();
     }
     return false;
@@ -396,7 +398,6 @@ bool JournalPlayer::verify_playback_ready() {
   // set of data before advancing to a new tag
   if (m_watch_enabled && m_watch_required) {
     m_watch_required = false;
-    schedule_watch();
     return false;
   }
 
