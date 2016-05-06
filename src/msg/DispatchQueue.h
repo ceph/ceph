@@ -202,17 +202,17 @@ class DispatchQueue {
   void shutdown();
   bool is_started() const {return dispatch_thread.is_started();}
 
-  DispatchQueue(CephContext *cct, Messenger *msgr)
+  DispatchQueue(CephContext *cct, Messenger *msgr, string &name)
     : cct(cct), msgr(msgr),
-      lock("Messenger::DispatchQueue::lock"),
+      lock("Messenger::DispatchQueue::lock" + name),
       mqueue(cct->_conf->ms_pq_max_tokens_per_priority,
 	     cct->_conf->ms_pq_min_cost),
       next_pipe_id(1),
       dispatch_thread(this),
-      local_delivery_lock("Messenger::DispatchQueue::local_delivery_lock"),
+      local_delivery_lock("Messenger::DispatchQueue::local_delivery_lock" + name),
       stop_local_delivery(false),
       local_delivery_thread(this),
-      dispatch_throttler(cct, string("msgr_dispatch_throttler-") + msgr->get_myname(),
+      dispatch_throttler(cct, string("msgr_dispatch_throttler-") + name,
                          cct->_conf->ms_dispatch_throttle_bytes),
       stop(false)
     {}
