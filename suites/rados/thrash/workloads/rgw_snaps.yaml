@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug rgw: 20
+        debug ms: 1
 tasks:
 - rgw:
     default_idle_timeout: 3600
