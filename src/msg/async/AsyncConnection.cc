@@ -1395,13 +1395,15 @@ ssize_t AsyncConnection::_process_connection()
         ::encode(async_msgr->get_myaddr(), bl);
         port = async_msgr->get_myaddr().get_port();
         // and peer's socket addr (they might not know their ip)
-        socklen_t len = sizeof(socket_addr.ss_addr());
-        r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
+	sockaddr_storage ss;
+        socklen_t len = sizeof(ss);
+        r = ::getpeername(sd, (sockaddr*)&ss, &len);
         if (r < 0) {
           ldout(async_msgr->cct, 0) << __func__ << " failed to getpeername "
                               << cpp_strerror(errno) << dendl;
           goto fail;
         }
+	socket_addr.set_sockaddr((sockaddr*)&ss);
         ::encode(socket_addr, bl);
         ldout(async_msgr->cct, 1) << __func__ << " sd=" << sd << " " << socket_addr << dendl;
 
