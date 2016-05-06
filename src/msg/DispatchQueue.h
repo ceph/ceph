@@ -27,13 +27,12 @@
 
 class CephContext;
 class DispatchQueue;
-class Pipe;
 class Messenger;
 class Message;
 struct Connection;
 
 /**
- * The DispatchQueue contains all the Pipes which have Messages
+ * The DispatchQueue contains all the connections which have Messages
  * they want to be dispatched, carefully organized by Message priority
  * and permitted to deliver in a round-robin fashion.
  * See Messenger::dispatch_entry for details.
@@ -88,7 +87,7 @@ class DispatchQueue {
     marrival_map.erase(i);
   }
 
-  uint64_t next_pipe_id;
+  uint64_t next_id;
     
   enum { D_CONNECT = 1, D_ACCEPT, D_BAD_REMOTE_RESET, D_BAD_RESET, D_NUM_CODES };
 
@@ -194,7 +193,7 @@ class DispatchQueue {
   void discard_local();
   uint64_t get_id() {
     Mutex::Locker l(lock);
-    return next_pipe_id++;
+    return next_id++;
   }
   void start();
   void entry();
@@ -207,7 +206,7 @@ class DispatchQueue {
       lock("Messenger::DispatchQueue::lock" + name),
       mqueue(cct->_conf->ms_pq_max_tokens_per_priority,
 	     cct->_conf->ms_pq_min_cost),
-      next_pipe_id(1),
+      next_id(1),
       dispatch_thread(this),
       local_delivery_lock("Messenger::DispatchQueue::local_delivery_lock" + name),
       stop_local_delivery(false),
