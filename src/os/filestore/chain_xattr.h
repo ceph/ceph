@@ -4,6 +4,7 @@
 #ifndef __CEPH_OSD_CHAIN_XATTR_H
 #define __CEPH_OSD_CHAIN_XATTR_H
 
+#include "include/compat.h"
 #include "common/xattr.h"
 #include "include/assert.h"
 #include "include/buffer.h"
@@ -18,6 +19,10 @@
 #elif defined(__APPLE__)
 #include <sys/xattr.h>
 #define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_MAXNAMELEN + 1) / 2)
+#elif defined(__FreeBSD__)
+#include <sys/syslimits.h>
+#include <sys/extattr.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((NAME_MAX + 1) / 2)
 #else
 #define CHAIN_XATTR_MAX_NAME_LEN  128
 #endif
@@ -30,6 +35,13 @@
  */
 #define CHAIN_XATTR_SHORT_BLOCK_LEN 250
 #define CHAIN_XATTR_SHORT_LEN_THRESHOLD 1000
+
+#if defined(__FreeBSD__)
+  // After all the includes are done
+  // Make sure compatability has worked
+  static_assert( ENODATA != 9919, "ENODATA used from /usr/include/c++/v1/cerrno");
+  static_assert( ENODATA == 87, "ENODATA does not equal ENOATTR" );
+#endif
 
 // wrappers to hide annoying errno handling.
 
