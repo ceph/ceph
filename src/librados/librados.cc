@@ -1266,6 +1266,26 @@ int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, ui
   return io_ctx_impl->read(obj, bl, len, off);
 }
 
+int librados::IoCtx::repair_read(const std::string& oid, bufferlist& bl,
+				 size_t len, uint64_t off, int flags,
+				 int32_t osdid, epoch_t epoch)
+{
+  auto c = librados::Rados::aio_create_completion();
+  int r = aio_repair_read(oid, c, &bl, len, off, CEPH_NOSNAP, flags, osdid, epoch);
+  if (r < 0) {
+    c->release();
+    return r;    
+  }
+  c->wait_for_complete();
+  r = c->get_return_value();
+  if (r >= 0)
+    io_ctx_impl->set_sync_op_version(c->get_version64());
+  c->release();
+  if (r < 0)
+    return r;
+  return bl.length();
+}
+
 int librados::IoCtx::remove(const std::string& oid)
 {
   object_t obj(oid);
@@ -1541,6 +1561,16 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperati
 {
   object_t obj(oid);
   return io_ctx_impl->operate_read(obj, &o->impl->o, pbl);
+}
+
+int librados::IoCtx::aio_operate_repair_read(const std::string& oid,
+					     AioCompletion *c,
+					     librados::ObjectReadOperation *o,
+					     uint32_t osdid, int32_t epoch)
+{
+  return io_ctx_impl->aio_operate_repair_read(oid, &o->impl->o, c->pc,
+					      io_ctx_impl->snap_seq, 0,
+					      osdid, epoch);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1928,6 +1958,21 @@ int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioComple
 {
   return io_ctx_impl->aio_sparse_read(oid, c->pc,
 				      m, data_bl, len, off, snapid);
+}
+
+int librados::IoCtx::aio_repair_read(const std::string& oid, librados::AioCompletion *c,
+				     bufferlist *pbl, size_t len, uint64_t off,
+				     uint64_t snapid, int flags, int32_t osdid, epoch_t e)
+{
+  if (len > (size_t) INT_MAX)
+    return -EDOM;
+  ::ObjectOperation rd;
+  io_ctx_impl->prepare_assert_ops(&rd);
+  rd.read(off, len, pbl, NULL, NULL);
+  // Only 1 flag can be passed from user
+  rd.set_last_op_flags(flags & CEPH_OSD_OP_FLAG_FAILOK);
+  return io_ctx_impl->aio_operate_repair_read(oid, &rd, c->pc,
+					      snapid, 0, osdid, e);
 }
 
 int librados::IoCtx::aio_write(const std::string& oid, librados::AioCompletion *c,

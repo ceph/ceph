@@ -151,6 +151,9 @@ void usage(ostream& out)
 "   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
 "   list-inconsistent-obj <pgid>     list inconsistent objects in given pg\n"
 "   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given pg\n"
+"   repair-get [--force] <obj-name> <osdid> <epoch> [outfile]\n"
+"                                    fetch a particular shard/replica of an object\n"
+"                                    --force ignores EIO and returns whatever data it can\n"
 "\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
@@ -318,6 +321,51 @@ static int do_get(IoCtx& io_ctx, RadosStriper& striper,
 
  out:
   if (fd != 1)
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+static int do_repair_get(IoCtx& io_ctx, const char *objname,
+	const char *outfile, unsigned op_size, int32_t osdid, epoch_t epoch,
+	bool force)
+{
+  string oid(objname);
+
+  int fd;
+  if (strcmp(outfile, "-") == 0) {
+    fd = STDOUT_FILENO;
+  } else {
+    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    if (fd < 0) {
+      int err = errno;
+      cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
+      return -err;
+    }
+  }
+
+  uint64_t offset = 0;
+  int ret = 0;
+  while (true) {
+    bufferlist outdata;
+    int flags = 0;
+    if (force) flags |= LIBRADOS_OP_FLAG_FAILOK;
+    ret = io_ctx.repair_read(oid, outdata, op_size, offset, flags, osdid, epoch);
+    if (ret <= 0) {
+      if (ret == -EINVAL)
+	cerr << "Specified epoch does not match scrub interval" << std::endl;
+      break;
+    }
+    ret = outdata.write_fd(fd);
+    if (ret < 0) {
+      cerr << "error writing to file: " << cpp_strerror(ret) << std::endl;
+      break;
+    }
+    if (outdata.length() < op_size)
+      break;
+    offset += outdata.length();
+  }
+
+  if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
@@ -1640,6 +1688,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::string run_name;
   std::string prefix;
   bool forcefull = false;
+  bool force = false;
   Formatter *formatter = NULL;
   bool pretty_format = false;
   const char *output = NULL;
@@ -1689,6 +1738,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("force-full");
   if (i != opts.end()) {
     forcefull = true;
+  }
+  i = opts.find("force");
+  if (i != opts.end()) {
+    force = true;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
@@ -2251,6 +2304,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = do_get(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
     if (ret < 0) {
       cerr << "error getting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "repair-get") == 0) {
+    if (!pool_name || nargs.size() < 5)
+      usage_exit();
+    if (use_striper) {
+      cerr << "Specifing striper not allowed for repair-get operation" << std::endl;
+      goto out;
+    }
+    int32_t osdid = atoi(nargs[2]);
+    epoch_t e = atoi(nargs[3]);
+    ret = do_repair_get(io_ctx, nargs[1], nargs[4], op_size, osdid, e, force);
+    if (ret < 0) {
+      cerr << "error getting shard from osd " << osdid << " of " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
   }

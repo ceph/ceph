@@ -780,6 +780,33 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   return r;
 }
 
+int librados::IoCtxImpl::aio_operate_repair_read(const object_t& oid,
+				      ::ObjectOperation *o,
+				      AioCompletionImpl *c,
+				      uint64_t snapid,
+				      int flags, int32_t osdid, epoch_t e)
+{
+  auto onack = new C_aio_Complete(c);
+
+  c->is_read = true;
+  c->io = this;
+
+  // Prepend assert_interval op
+  o->assert_interval(e);
+  for (int i = o->size() - 1; i > 0; i--) {
+    std::swap(o->ops[i - 1], o->ops[i]);
+    std::swap(o->out_bl[i - 1], o->out_bl[i]);
+    std::swap(o->out_rval[i - 1], o->out_rval[i]);
+  }
+  Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
+	                                      *o, snapid, NULL,
+	                                      flags | CEPH_OSD_FLAG_REPAIR_READS | CEPH_OSD_FLAG_IGNORE_OVERLAY,
+	                                      onack, &c->objver);
+  objecter_op->target.forced_osd = osdid;
+  objecter->op_submit(objecter_op, &c->tid);
+  return 0;
+}
+
 int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  ::ObjectOperation *o,
 					  AioCompletionImpl *c,

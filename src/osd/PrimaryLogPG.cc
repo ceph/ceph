@@ -1729,7 +1729,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+			 CEPH_OSD_FLAG_LOCALIZE_READS |
+			 CEPH_OSD_FLAG_REPAIR_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
@@ -1867,7 +1868,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // missing object?
-  if (is_unreadable_object(head)) {
+  if (is_unreadable_object(head) && !m->has_flag(CEPH_OSD_FLAG_REPAIR_READS)) {
     wait_for_unreadable_object(head, op);
     return;
   }
@@ -2238,7 +2239,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
       op->get_req() &&
       op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
       (static_cast<MOSDOp *>(op->get_req())->get_flags() &
-       CEPH_OSD_FLAG_IGNORE_CACHE)) {
+       (CEPH_OSD_FLAG_IGNORE_CACHE|CEPH_OSD_FLAG_REPAIR_READS))) {
     dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
     return cache_result_t::NOOP;
   }
@@ -5946,6 +5947,23 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  assert(ctx->copy_cb->get_result() >= 0);
 	  finish_copyfrom(ctx);
 	  result = 0;
+	}
+      }
+      break;
+
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      ++ctx->num_read;
+      {
+	epoch_t epoch = op.assert_interval.epoch;
+	epoch_t pg_epoch = get_epoch();
+	tracepoint(osd, do_osd_op_pre_assert_interval, soid.oid.name.c_str(), soid.snap.val, epoch);
+	dout(5) << "Check interval " << soid << " epoch " << epoch << " pg epoch " << pg_epoch << dendl;
+	if (epoch > pg_epoch) {
+	  result = -ERANGE;
+	  break;
+	}
+	if (pg_has_reset_since(epoch)) {
+	  result = -EINVAL;
 	}
       }
       break;

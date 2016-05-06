@@ -5271,7 +5271,9 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if (m->get_map_epoch() < pool.info.last_force_op_resend &&
+  // Don't care about last_force_op_resend for recovery reads
+  if (!(m->get_flags() & CEPH_OSD_FLAG_REPAIR_READS) &&
+      m->get_map_epoch() < pool.info.last_force_op_resend &&
       m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
     dout(7) << __func__ << " sent before last_force_op_resend "
 	    << pool.info.last_force_op_resend << ", dropping" << *m << dendl;

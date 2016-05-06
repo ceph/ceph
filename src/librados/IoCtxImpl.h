@@ -151,6 +151,10 @@ struct librados::IoCtxImpl {
 
   int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0);
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
+  int aio_operate_repair_read(const object_t& oid, ::ObjectOperation *o,
+			      AioCompletionImpl *c,
+			      uint64_t snapid, int flags,
+			      int32_t osdid, epoch_t e);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
 		  int flags);
@@ -189,6 +193,9 @@ struct librados::IoCtxImpl {
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		      size_t len, uint64_t off, uint64_t snapid);
+  int aio_repair_read(const object_t oid, AioCompletionImpl *c,
+	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid,
+	       int flags, int32_t osdid, epoch_t e);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off);
   int aio_append(const object_t &oid, AioCompletionImpl *c,

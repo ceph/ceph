@@ -1206,7 +1206,7 @@ public:
 
     bool used_replica = false;
     bool paused = false;
-
+    int forced_osd = -1; ///< the osd designated by user, -1 if not specified
     int osd = -1;      ///< the final target osd, or -1
 
     epoch_t last_force_resend = 0;

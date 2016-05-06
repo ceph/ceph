@@ -2770,7 +2770,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     } else {
       int osd;
       bool read = is_read && !is_write;
-      if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+      if (t->forced_osd != -1) {
+	assert(read);
+	osd = osdmap->is_up(t->forced_osd) ? t->forced_osd : -1;
+	// We may be using a replica, but don't need to set used_replica
+	// because this operation never switches back to the primary.
+      } else if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;
@@ -3239,6 +3244,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   int rc = m->get_result();
 
   if (m->is_redirect_reply()) {
+    assert(!(op->target.flags & CEPH_OSD_FLAG_REPAIR_READS));
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     if (op->onfinish)
       num_in_flight.dec();
