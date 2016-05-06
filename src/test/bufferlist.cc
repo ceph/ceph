@@ -1037,6 +1037,27 @@ TEST(BufferListIterator, advance) {
   }
 }
 
+TEST(BufferListIterator, get_ptr_and_advance)
+{
+  bufferptr a("one", 3);
+  bufferptr b("two", 3);
+  bufferptr c("three", 5);
+  bufferlist bl;
+  bl.append(a);
+  bl.append(b);
+  bl.append(c);
+  const char *ptr;
+  bufferlist::iterator p = bl.begin();
+  ASSERT_EQ(3u, p.get_ptr_and_advance(11, &ptr));
+  ASSERT_EQ(0, memcmp(ptr, "one", 3));
+  ASSERT_EQ(2u, p.get_ptr_and_advance(2, &ptr));
+  ASSERT_EQ(0, memcmp(ptr, "tw", 2));
+  ASSERT_EQ(1u, p.get_ptr_and_advance(4, &ptr));
+  ASSERT_EQ(0, memcmp(ptr, "o", 1));
+  ASSERT_EQ(5u, p.get_ptr_and_advance(5, &ptr));
+  ASSERT_EQ(0, memcmp(ptr, "three", 5));
+}
+
 TEST(BufferListIterator, seek) {
   bufferlist bl;
   bl.append("ABC", 3);
