@@ -210,6 +210,7 @@ class AsyncConnection : public Connection {
     STATE_OPEN_MESSAGE_HEADER,
     STATE_OPEN_MESSAGE_THROTTLE_MESSAGE,
     STATE_OPEN_MESSAGE_THROTTLE_BYTES,
+    STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE,
     STATE_OPEN_MESSAGE_READ_FRONT,
     STATE_OPEN_MESSAGE_READ_MIDDLE,
     STATE_OPEN_MESSAGE_READ_DATA_PREPARE,
@@ -247,6 +248,7 @@ class AsyncConnection : public Connection {
                                         "STATE_OPEN_MESSAGE_HEADER",
                                         "STATE_OPEN_MESSAGE_THROTTLE_MESSAGE",
                                         "STATE_OPEN_MESSAGE_THROTTLE_BYTES",
+                                        "STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE",
                                         "STATE_OPEN_MESSAGE_READ_FRONT",
                                         "STATE_OPEN_MESSAGE_READ_MIDDLE",
                                         "STATE_OPEN_MESSAGE_READ_DATA_PREPARE",
@@ -321,6 +323,7 @@ class AsyncConnection : public Connection {
   utime_t recv_stamp;
   utime_t throttle_stamp;
   unsigned msg_left;
+  uint64_t cur_msg_size;
   ceph_msg_header current_header;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
