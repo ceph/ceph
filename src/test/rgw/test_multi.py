@@ -323,7 +323,10 @@ class RGWRealm:
         markers={}
         for entry in sync_status:
             val = entry['val']
-            pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
+            if val['status'] == 'incremental-sync':
+                pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
+            else:
+                pos = ''
             markers[entry['key']] = pos
 
         return markers
