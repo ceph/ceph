@@ -350,7 +350,7 @@ int Pipe::accept()
   if (peer_addr.is_blank_ip()) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     int port = peer_addr.get_port();
-    peer_addr.addr = socket_addr.addr;
+    peer_addr.u = socket_addr.u;
     peer_addr.set_port(port);
     ldout(msgr->cct,0) << "accept peer addr is really " << peer_addr
 	    << " (socket is " << socket_addr << ")" << dendl;
