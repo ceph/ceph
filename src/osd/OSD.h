@@ -1146,7 +1146,7 @@ public:
     return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
   static ghobject_t get_inc_osdmap_pobject_name(epoch_t epoch) {
-    char foo[20];
+    char foo[22];
     snprintf(foo, sizeof(foo), "inc_osdmap.%d", epoch);
     return ghobject_t(hobject_t(sobject_t(object_t(foo), 0)));
   }
