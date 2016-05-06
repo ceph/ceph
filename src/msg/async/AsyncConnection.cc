@@ -99,18 +99,6 @@ class C_handle_remote_reset : public EventCallback {
   }
 };
 
-class C_handle_dispatch : public EventCallback {
-  AsyncMessenger *msgr;
-  Message *m;
-
- public:
-  C_handle_dispatch(AsyncMessenger *msgr, Message *m): msgr(msgr), m(m) {}
-  void do_request(int id) {
-    msgr->ms_deliver_dispatch(m);
-    delete this;
-  }
-};
-
 class C_deliver_connect : public EventCallback {
   AsyncMessenger *msgr;
   AsyncConnectionRef conn;
@@ -175,10 +163,12 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(p), global_seq(0), connect_seq(0), 
-    peer_global_seq(0), out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1),
-    port(-1), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
+                                 EventCenter *c, PerfCounters *p)
+  : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
+    logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
+    out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1), port(-1),
+    dispatch_queue(q), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
@@ -949,7 +939,7 @@ void AsyncConnection::process()
             async_msgr->ms_fast_dispatch(message);
             lock.Lock();
           } else {
-            center->dispatch_event_external(EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
+            dispatch_queue->enqueue(message, message->get_priority(), conn_id);
           }
           break;
         }
@@ -2236,6 +2226,7 @@ void AsyncConnection::was_session_reset()
   Mutex::Locker l(write_lock);
   if (delay_state)
     delay_state->discard();
+  dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
 
   center->dispatch_event_external(remote_reset_handler);
@@ -2266,6 +2257,7 @@ void AsyncConnection::_stop()
   if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
+  dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
   async_msgr->unregister_conn(this);
 

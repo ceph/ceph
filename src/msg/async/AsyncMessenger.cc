@@ -377,6 +377,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     processor(this, cct, _nonce),
+    dispatch_queue(cct, this),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), need_addr(true), did_bind(false),
     global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
@@ -385,7 +386,8 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   ceph_spin_init(&global_seq_lock);
   cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
   local_worker = pool->get_worker();
-  local_connection = new AsyncConnection(cct, this, &local_worker->center, local_worker->get_perf_counter());
+  local_connection = new AsyncConnection(
+      cct, this, &dispatch_queue, &local_worker->center, local_worker->get_perf_counter());
   local_features = features;
   init_local_connection();
   reap_handler = new C_handle_reap(this);
@@ -409,6 +411,7 @@ void AsyncMessenger::ready()
   Mutex::Locker l(lock);
   Worker *w = pool->get_worker();
   processor.start(w);
+  dispatch_queue.start();
 }
 
 int AsyncMessenger::shutdown()
@@ -417,6 +420,7 @@ int AsyncMessenger::shutdown()
 
   // break ref cycles on the loopback connection
   processor.stop();
+  dispatch_queue.shutdown();
   mark_down_all();
   local_connection->set_priv(NULL);
   pool->barrier();
@@ -502,6 +506,13 @@ void AsyncMessenger::wait()
   did_bind = false;
   ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
 
+  if (dispatch_queue.is_started()) {
+    ldout(cct, 10) << __func__ << ": waiting for dispatch queue" << dendl;
+    dispatch_queue.wait();
+    dispatch_queue.discard_local();
+    ldout(cct, 10) << __func__ << ": dispatch queue is stopped" << dendl;
+  }
+
   // close all connections
   mark_down_all();
 
@@ -514,7 +525,7 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
 {
   lock.Lock();
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, &w->center, w->get_perf_counter());
   conn->accept(sd);
   accepting_conns.insert(conn);
   lock.Unlock();
@@ -531,7 +542,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 
   // create connection
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, &w->center, w->get_perf_counter());
   conn->connect(addr, type);
   assert(!conns.count(addr));
   conns[addr] = conn;
