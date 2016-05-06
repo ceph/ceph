@@ -1881,10 +1881,15 @@ public:
 static void dump_bl_mismatch(bufferlist& expected, bufferlist& actual)
 {
   cout << __func__ << std::endl;
-  unsigned offset = 0;
-  while (expected[offset] == actual[offset])
-    ++offset;
-  cout << "--- buffer mismatch at offset 0x" << std::hex << offset << std::dec
+  unsigned first = 0;
+  while (expected[first] == actual[first])
+    ++first;
+  assert(expected.length() == actual.length());
+  unsigned last = expected.length() - 1;
+  while (expected[last] == actual[last])
+    --last;
+  cout << "--- buffer mismatch between offset 0x" << std::hex << first
+       << " and 0x" << last+1 << ", total 0x" << expected.length() << std::dec
        << std::endl;
   cout << "--- expected:\n";
   expected.hexdump(cout);
