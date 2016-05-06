@@ -35,7 +35,7 @@ using namespace std;
 #include "msg/Message.h"
 #include "include/assert.h"
 
-#include "DispatchQueue.h"
+#include "msg/DispatchQueue.h"
 #include "Pipe.h"
 #include "Accepter.h"
 
