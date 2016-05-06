@@ -238,9 +238,9 @@ void *Accepter::entry()
     if (done) break;
 
     // accept
-    entity_addr_t addr;
-    socklen_t slen = sizeof(addr.ss_addr());
-    int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
+    sockaddr_storage ss;
+    socklen_t slen = sizeof(ss);
+    int sd = ::accept(listen_sd, (sockaddr*)&ss, &slen);
     if (sd >= 0) {
       errors = 0;
       ldout(msgr->cct,10) << "accepted incoming on sd " << sd << dendl;
