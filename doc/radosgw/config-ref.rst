@@ -983,7 +983,7 @@ Keystone Settings
 :Default: ``15 * 60``
 
 
-``rgw keystone verify ssl`
+``rgw keystone verify ssl``
 
 :Description: Verify SSL certificates while making token requests to keystone.
 :Type: Boolean

@@ -195,7 +195,7 @@ quorum of Ceph Monitors.
 
 .. ditaa::
            /------------------\         /----------------\
-           |    ceph–deploy   |         |     node1      |
+           |    ceph-deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |
            |                  +-------->+   mon.node1    |
            |                  |         |     osd.2      |
