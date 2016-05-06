@@ -203,7 +203,6 @@ struct entity_addr_t {
   __u32 type;
   __u32 nonce;
   union {
-    sockaddr_storage ss;
     sockaddr sa;
     sockaddr_in sin;
     sockaddr_in6 sin6;
@@ -215,7 +214,7 @@ struct entity_addr_t {
   explicit entity_addr_t(const ceph_entity_addr &o) {
     type = o.type;
     nonce = o.nonce;
-    u.ss = o.in_addr;
+    memcpy(&u, &o.in_addr, sizeof(u));
 #if !defined(__FreeBSD__)
     u.sa.sa_family = ntohs(u.sa.sa_family);
 #endif
@@ -250,7 +249,7 @@ struct entity_addr_t {
       return sizeof(u.sin6);
       break;
     }
-    return sizeof(u.ss);
+    return sizeof(u);
   }
   bool set_sockaddr(const struct sockaddr *sa)
   {
@@ -268,7 +267,10 @@ struct entity_addr_t {
   }
 
   sockaddr_storage get_sockaddr_storage() const {
-    return u.ss;
+    sockaddr_storage ss;
+    memcpy(&ss, &u, sizeof(u));
+    memset((char*)&ss + sizeof(u), 0, sizeof(ss) - sizeof(u));
+    return ss;
   }
 
   void set_in4_quad(int pos, int val) {
@@ -304,7 +306,7 @@ struct entity_addr_t {
     ceph_entity_addr a;
     a.type = 0;
     a.nonce = nonce;
-    a.in_addr = u.ss;
+    a.in_addr = get_sockaddr_storage();
 #if !defined(__FreeBSD__)
     a.in_addr.ss_family = htons(a.in_addr.ss_family);
 #endif
@@ -366,29 +368,32 @@ struct entity_addr_t {
   void encode(bufferlist& bl) const {
     ::encode(type, bl);
     ::encode(nonce, bl);
+    sockaddr_storage ss = get_sockaddr_storage();
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::encode(u.ss, bl);
+    ::encode(ss, bl);
 #else
     ceph_sockaddr_storage wireaddr;
     ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(u.ss));
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
     // ceph_sockaddr_storage is in host byte order
-    ::memcpy(&wireaddr, &u.ss, copysize);
+    ::memcpy(&wireaddr, &ss, copysize);
     ::encode(wireaddr, bl);
 #endif
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(type, bl);
     ::decode(nonce, bl);
+    sockaddr_storage ss;
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::decode(u.ss, bl);
+    ::decode(ss, bl);
 #else
     ceph_sockaddr_storage wireaddr;
     ::memset(&wireaddr, '\0', sizeof(wireaddr));
     ::decode(wireaddr, bl);
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(u.ss));
-    ::memcpy(&u.ss, &wireaddr, copysize);
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
+    ::memcpy(&ss, &wireaddr, copysize);
 #endif
+    set_sockaddr((sockaddr*)&ss);
   }
 
   void dump(Formatter *f) const;
