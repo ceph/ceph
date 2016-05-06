@@ -13,9 +13,9 @@ Device`.
 
 .. ditaa:: 
            /------------------\         /----------------\
-           |    Admin Node    |         |   ceph–client  |
+           |    Admin Node    |         |   ceph-client  |
            |                  +-------->+ cCCC           |
-           |    ceph–deploy   |         |      ceph      |
+           |    ceph-deploy   |         |      ceph      |
            \------------------/         \----------------/
 
 
