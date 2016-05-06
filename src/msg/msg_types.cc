@@ -149,6 +149,25 @@ ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 	      NI_NUMERICHOST | NI_NUMERICSERV);
   if (ss.ss_family == AF_INET6)
     return out << '[' << buf << "]:" << serv;
-  return out //<< ss.ss_family << ":"
-	     << buf << ':' << serv;
+  return out << buf << ':' << serv;
+}
+
+ostream& operator<<(ostream& out, const sockaddr *sa)
+{
+  char buf[NI_MAXHOST] = { 0 };
+  char serv[NI_MAXSERV] = { 0 };
+  size_t hostlen;
+
+  if (sa->sa_family == AF_INET)
+    hostlen = sizeof(struct sockaddr_in);
+  else if (sa->sa_family == AF_INET6)
+    hostlen = sizeof(struct sockaddr_in6);
+  else
+    hostlen = sizeof(struct sockaddr_storage);
+  getnameinfo(sa, hostlen, buf, sizeof(buf),
+	      serv, sizeof(serv),
+	      NI_NUMERICHOST | NI_NUMERICSERV);
+  if (sa->sa_family == AF_INET6)
+    return out << '[' << buf << "]:" << serv;
+  return out << buf << ':' << serv;
 }
