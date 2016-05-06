@@ -447,7 +447,6 @@ struct bluestore_onode_t {
   uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  map<uint64_t, bluestore_extent_t> block_map;   ///< block data
   map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
   map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
   map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
@@ -465,30 +464,6 @@ struct bluestore_onode_t {
       omap_head(0),
       expected_object_size(0),
       expected_write_size(0) {}
-
-  map<uint64_t,bluestore_extent_t>::iterator find_extent(uint64_t offset) {
-    map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
-    if (fp != block_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    if (fp != block_map.end() && fp->first > offset)
-      return block_map.end();  // extent is past offset
-    return fp;
-  }
-
-  map<uint64_t,bluestore_extent_t>::iterator seek_extent(uint64_t offset) {
-    map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
-    if (fp != block_map.begin()) {
-      --fp;
-      if (fp->first + fp->second.length <= offset) {
-	++fp;
-      }
-    }
-    return fp;
-  }
 
   map<uint64_t,bluestore_lextent_t>::iterator find_lextent(uint64_t offset) {
     map<uint64_t,bluestore_lextent_t>::iterator fp =
