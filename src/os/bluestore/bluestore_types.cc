@@ -479,9 +479,11 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " len " << o.length
-      << " nref " << o.num_refs
-      << " " << o.get_flags_string();
+      << " len " << std::hex << o.length
+      << " nref " << o.num_refs;
+  if (o.flags) {
+    out << " " << o.get_flags_string();
+  }
   if (o.csum_type) {
     out << " csum " << o.get_csum_type_string(o.csum_type)
 	<< " order " << o.csum_block_order;
