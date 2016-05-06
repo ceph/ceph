@@ -86,7 +86,7 @@ void *ObjBencher::status_printer(void *_bencher) {
 
     if (i % 20 == 0) {
       if (i > 0)
-	cur_time.localtime(cout) << "min lat: " << data.min_latency
+	cur_time.localtime(cout) << " min lat: " << data.min_latency
 	     << " max lat: " << data.max_latency
 	     << " avg lat: " << data.avg_latency << std::endl;
       //I'm naughty and don't reset the fill
