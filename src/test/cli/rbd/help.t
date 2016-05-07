@@ -6,6 +6,12 @@
   Positional arguments:
     <command>
       bench-write                 Simple write benchmark.
+      cg add image                Add an image to a consistency group.
+      cg create                   Create a consistency group.
+      cg list (cg ls)             Dump list of consistency groups.
+      cg list images              Dump list of images in a consistency group.
+      cg remove (cg rm)           Delete a consistency group.
+      cg remove image             Remove an image from a consistency group.
       children                    Display children of snapshot.
       clone                       Clone a snapshot into a COW child image.
       copy (cp)                   Copy src image to dest.
@@ -106,6 +112,82 @@
     --io-threads arg     ios in flight
     --io-total arg       total size to write (in B/K/M/G/T)
     --io-pattern arg     write pattern (rand or seq)
+  
+  rbd help cg add image
+  usage: rbd cg add image [--pool <pool>] [--cg-name <cg-name>] 
+                          <image-spec> 
+  
+  Add an image to a consistency group.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --cg-name arg        consistency group name
+  
+  rbd help cg create
+  usage: rbd cg create [--pool <pool>] 
+                       <cg-name> 
+  
+  Create a consistency group.
+  
+  Positional arguments
+    <cg-name>            Name of consistency group
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help cg list
+  usage: rbd cg list [--pool <pool>] [--format <format>] [--pretty-format] 
+  
+  Dump list of consistency groups.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help cg list images
+  usage: rbd cg list images [--pool <pool>] [--format <format>] [--pretty-format] 
+                            <cg-name> 
+  
+  Dump list of images in a consistency group.
+  
+  Positional arguments
+    <cg-name>            Name of consistency group
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help cg remove
+  usage: rbd cg remove [--pool <pool>] 
+                       <cg-name> 
+  
+  Delete a consistency group.
+  
+  Positional arguments
+    <cg-name>            Name of consistency group
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help cg remove image
+  usage: rbd cg remove image [--pool <pool>] [--cg-name <cg-name>] 
+                             <image-spec> 
+  
+  Remove an image from a consistency group.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --cg-name arg        consistency group name
   
   rbd help children
   usage: rbd children [--pool <pool>] [--image <image>] [--snap <snap>] 
