@@ -6,6 +6,7 @@
 #include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rbd/object_map_types.h"
+#include "include/rbd/cg_types.h"
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -76,9 +77,15 @@ public:
     return "image" + stringify(_image_number);
   }
 
+  std::string get_temp_cg_name() {
+    ++_image_number;
+    return "cg" + stringify(_cg_number);
+  }
+
   static std::string _pool_name;
   static librados::Rados _rados;
   static uint64_t _image_number;
+  static uint64_t _cg_number;
 
 };
 
@@ -1418,4 +1425,56 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(0, mirror_image_list(&ioctx, &image_ids));
   expected_image_ids = {};
   ASSERT_EQ(expected_image_ids, image_ids);
+}
+
+TEST_F(TestClsRbd, create_cg) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cg_id";
+  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
+
+  uint64_t psize;
+  time_t pmtime;
+  ASSERT_EQ(0, ioctx.stat(cg_id, &psize, &pmtime));
+}
+
+TEST_F(TestClsRbd, dir_add_cg) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cgid";
+  string cg_name = "cgname";
+  ASSERT_EQ(0, dir_add_cg(&ioctx, CG_DIRECTORY, cg_name, cg_id));
+
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(CG_DIRECTORY, "", 10, &keys));
+  ASSERT_EQ(2, keys.size());
+  ASSERT_EQ("id_" + cg_id, *keys.begin());
+  ASSERT_EQ("name_" + cg_name, *keys.rbegin());
+}
+
+TEST_F(TestClsRbd, dir_list_cgs) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id1 = "cgid1";
+  string cg_name1 = "cgname1";
+  string cg_id2 = "cgid2";
+  string cg_name2 = "cgname2";
+  ASSERT_EQ(0, dir_add_cg(&ioctx, CG_DIRECTORY, cg_name1, cg_id1));
+  ASSERT_EQ(0, dir_add_cg(&ioctx, CG_DIRECTORY, cg_name2, cg_id2));
+
+  map<string, string> cgs;
+  ASSERT_EQ(0, dir_list_cgs(&ioctx, CG_DIRECTORY, "", 10, &cgs));
+
+  ASSERT_EQ(2, cgs.size());
+
+  auto it = cgs.begin();
+  ASSERT_EQ(cg_id1, it->second);
+  ASSERT_EQ(cg_name1, it->first);
+
+  ++it;
+  ASSERT_EQ(cg_id2, it->second);
+  ASSERT_EQ(cg_name2, it->first);
 }
