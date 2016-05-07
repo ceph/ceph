@@ -1639,31 +1639,34 @@ int BlueStore::_setup_block_symlink_or_file(
 	  VOID_TEMP_FAILURE_RETRY(::close(fd));
 	  return r;
 	}
+
+	if (g_conf->bluestore_block_preallocate_file) {
 #ifdef HAVE_POSIX_FALLOCATE
-	r = ::posix_fallocate(fd, 0, size);
-	if (r < 0) {
-	  r = -errno;
-	  derr << __func__ << " failed to prefallocate " << name << " file to "
-	       << size << ": " << cpp_strerror(r) << dendl;
-	  VOID_TEMP_FAILURE_RETRY(::close(fd));
-	  return r;
-	}
-#else
-	char data[1024*128];
-	for (uint64_t off = 0; off < size; off += sizeof(data)) {
-	  if (off + sizeof(data) > size)
-	    r = ::write(fd, data, size - off);
-	  else
-	    r = ::write(fd, data, sizeof(data));
+	  r = ::posix_fallocate(fd, 0, size);
 	  if (r < 0) {
 	    r = -errno;
-	    derr << __func__ << " failed to prefallocate w/ write " << name << " file to "
+	    derr << __func__ << " failed to prefallocate " << name << " file to "
 	      << size << ": " << cpp_strerror(r) << dendl;
 	    VOID_TEMP_FAILURE_RETRY(::close(fd));
 	    return r;
 	  }
-	}
+#else
+	  char data[1024*128];
+	  for (uint64_t off = 0; off < size; off += sizeof(data)) {
+	    if (off + sizeof(data) > size)
+	      r = ::write(fd, data, size - off);
+	    else
+	      r = ::write(fd, data, sizeof(data));
+	    if (r < 0) {
+	      r = -errno;
+	      derr << __func__ << " failed to prefallocate w/ write " << name << " file to "
+		<< size << ": " << cpp_strerror(r) << dendl;
+	      VOID_TEMP_FAILURE_RETRY(::close(fd));
+	      return r;
+	    }
+	  }
 #endif
+	}
 	dout(1) << __func__ << " resized " << name << " file to "
 		<< pretty_si_t(size) << "B" << dendl;
       }
