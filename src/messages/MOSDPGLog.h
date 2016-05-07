@@ -42,18 +42,24 @@ public:
   spg_t get_pgid() { return spg_t(info.pgid.pgid, to); }
   epoch_t get_query_epoch() { return query_epoch; }
 
-  MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) { 
+    set_priority(CEPH_MSG_PRIO_HIGH); 
+  }
   MOSDPGLog(shard_id_t to, shard_id_t from, version_t mv, pg_info_t& i)
     : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(mv),
       to(to), from(from),
-      info(i)  { }
+      info(i)  {
+    set_priority(CEPH_MSG_PRIO_HIGH); 
+  }
   MOSDPGLog(shard_id_t to, shard_id_t from,
 	    version_t mv, pg_info_t& i, epoch_t query_epoch)
     : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(query_epoch),
       to(to), from(from),
-      info(i)  { }
+      info(i)  {
+    set_priority(CEPH_MSG_PRIO_HIGH);
+  }
 
 private:
   ~MOSDPGLog() {}
