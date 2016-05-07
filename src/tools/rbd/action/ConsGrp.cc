@@ -294,13 +294,13 @@ void get_remove_image_arguments(po::options_description *positional,
 }
 
 Shell::Action action_add(
-  {"cg", "add", "image"}, {}, "Add an image to the consistency group.", "",
+  {"cg", "add", "image"}, {}, "Add an image to a consistency group.", "",
   &get_add_arguments, &execute_add);
 Shell::Action action_remove_image(
-  {"cg", "remove", "image"}, {}, "Remove an image from the consistency group.", "",
+  {"cg", "remove", "image"}, {}, "Remove an image from a consistency group.", "",
   &get_remove_image_arguments, &execute_remove_image);
 Shell::Action action_list_images(
-  {"cg", "list", "images"}, {}, "Dump list of images in consistency group.", "",
+  {"cg", "list", "images"}, {}, "Dump list of images in a consistency group.", "",
   &get_list_images_arguments, &execute_list_images);
 Shell::Action action_list(
   {"cg", "list"}, {"cg", "ls"}, "Dump list of consistency groups.", "",
