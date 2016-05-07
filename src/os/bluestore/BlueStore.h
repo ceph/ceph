@@ -374,7 +374,7 @@ public:
     uint64_t last_seq = 0;
 
     OpSequencer()
-	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
+	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : parent(NULL),
 	wal_apply_lock(wal_apply_mutex, std::defer_lock) {
     }
@@ -602,7 +602,7 @@ private:
 
   void _assign_nid(TransContext *txc, OnodeRef o);
 
-  void _dump_onode(OnodeRef o, int log_leverl=30);
+  void _dump_onode(OnodeRef o, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
@@ -830,7 +830,7 @@ public:
     return fsid;
   }
 
-  uint64_t estimate_objects_overhead(uint64_t num_objects) override { 
+  uint64_t estimate_objects_overhead(uint64_t num_objects) override {
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
