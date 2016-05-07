@@ -1,6 +1,9 @@
 overrides:
   ceph:
     crush_tunables: optimal
+    conf:
+      osd:
+        osd_discard_disconnected_ops: false
 tasks:
 - rados:
     clients: [client.0]
