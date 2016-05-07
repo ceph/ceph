@@ -310,7 +310,7 @@ void PG::proc_replica_log(
 {
     dout(10) << "proc_replica_log for osd." << from << ": "
              << oinfo << " " << olog << " " << omissing << dendl;
-
+    //这函数主要就是处理divergent log, 并据divergent来更新peer missing
     pg_log.proc_replica_log(t, oinfo, olog, omissing, from);
 
     peer_info[from] = oinfo;
@@ -4749,7 +4749,7 @@ void PG::share_pg_log()
             peer.shard, pg_whoami.shard,
             info.last_update.epoch, info);
         m->log.copy_after(pg_log.get_log(), pinfo.last_update);
-
+        //share的同时更新peer missing，这些pglog全部都是副本缺少的，因而都得加到missing
         for (list<pg_log_entry_t>::const_iterator i = m->log.log.begin();
                 i != m->log.log.end();
                 ++i)

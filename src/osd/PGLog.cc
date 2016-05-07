@@ -302,6 +302,7 @@ void PGLog::proc_replica_log(
         0,
         0);
 
+	//这个非常关键，决定了后面primary给replica发送auth log的起点
     if (lu < oinfo.last_update)
     {
         dout(10) << " peer osd." << from << " last_update now " << lu << dendl;
@@ -309,6 +310,8 @@ void PGLog::proc_replica_log(
     }
 
     //这里更新了pg info，但是没有更新missing,在activate中补充了非divergent的missing信息
+    //2016-5-7,这里就不该更新missing,这里是处理replica的log，要更新peer missing
+    //这一段主要是修正peer的last_complete
     if (omissing.have_missing())
     {
         eversion_t first_missing =
@@ -682,6 +685,8 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     }
 
     // extend on head?
+    //说白了就是2步，第一步合并别人正统的pglog
+    //第二步，就是回滚自己divergent log
     if (olog.head > log.head)
     {
         dout(10) << "merge_log extending head to " << olog.head << dendl;
