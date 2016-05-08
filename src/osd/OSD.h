@@ -477,7 +477,10 @@ public:
   int get_nodeid() const { return whoami; }
 
   std::atomic<epoch_t> max_oldest_map;
+private:
   OSDMapRef osdmap;
+
+public:
   OSDMapRef get_osdmap() {
     Mutex::Locker l(publish_lock);
     return osdmap;
@@ -505,8 +508,11 @@ public:
    * down, without worrying about reopening connections from threads
    * working from old maps.
    */
+private:
   OSDMapRef next_osdmap;
   Cond pre_publish_cond;
+
+public:
   void pre_publish_map(OSDMapRef map) {
     Mutex::Locker l(pre_publish_lock);
     next_osdmap = std::move(map);
@@ -591,10 +597,13 @@ public:
     return cluster_messenger->get_myname();
   }
 
+private:
   // -- scrub scheduling --
   Mutex sched_scrub_lock;
   int scrubs_pending;
   int scrubs_active;
+
+public:
   struct ScrubJob {
     /// pg to be scrubbed
     spg_t pgid;
@@ -660,6 +669,7 @@ public:
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
 
+private:
   // -- agent shared state --
   Mutex agent_lock;
   Cond agent_cond;
@@ -682,6 +692,7 @@ public:
   Mutex agent_timer_lock;
   SafeTimer agent_timer;
 
+public:
   void agent_entry();
   void agent_stop();
 
@@ -783,12 +794,14 @@ public:
     flush_mode_high_count --;
   }
 
+private:
   /// throttle promotion attempts
   atomic_t promote_probability_millis; ///< probability thousands. one word.
   PromoteCounter promote_counter;
   utime_t last_recalibrate;
   unsigned long promote_max_objects, promote_max_bytes;
 
+public:
   bool promote_throttle() {
     // NOTE: lockless!  we rely on the probability being a single word.
     promote_counter.attempt();
@@ -924,12 +937,14 @@ public:
   void start_shutdown();
   void shutdown();
 
+private:
   // split
   Mutex in_progress_split_lock;
   map<spg_t, spg_t> pending_splits; // child -> parent
   map<spg_t, set<spg_t> > rev_pending_splits; // parent -> [children]
   set<spg_t> in_progress_splits;       // child
 
+public:
   void _start_split(spg_t parent, const set<spg_t> &children);
   void start_split(spg_t parent, const set<spg_t> &children) {
     Mutex::Locker l(in_progress_split_lock);
