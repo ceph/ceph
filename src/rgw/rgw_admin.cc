@@ -1352,7 +1352,7 @@ static int send_to_url(const string& url, const string& access,
   key.id = access;
   key.key = secret;
 
-  list<pair<string, string> > params;
+  param_vec_t params;
   RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
 
   bufferlist response;
