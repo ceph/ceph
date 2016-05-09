@@ -7572,6 +7572,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     history.epoch_created = created;
     history.last_scrub_stamp = ci->second;
     history.last_deep_scrub_stamp = ci->second;
+    history.last_clean_scrub_stamp = ci->second;
 
     // project history from created epoch (handle_pg_peering_evt does
     // it from msg send epoch)
