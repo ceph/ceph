@@ -7063,9 +7063,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
         failure_pending.erase(it++);
       }
     }
-    osd_lock.Unlock();
-    shutdown();
-    osd_lock.Lock();
+    // trigger shutdown in a different thread
+    dout(0) << __func__ << " shutdown OSD via async signal" << dendl;
+    queue_async_signal(SIGINT);
   }
   else if (is_preboot()) {
     if (m->get_source().is_mon())
