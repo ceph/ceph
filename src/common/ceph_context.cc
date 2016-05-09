@@ -239,6 +239,7 @@ public:
   const char** get_tracked_conf_keys() const {
     static const char *KEYS[] = {
       "enable_experimental_unrecoverable_data_corrupting_features",
+      "crush_location",
       NULL
     };
     return KEYS;
@@ -246,13 +247,20 @@ public:
 
   void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) {
-    ceph_spin_lock(&cct->_feature_lock);
-    get_str_set(conf->enable_experimental_unrecoverable_data_corrupting_features,
-		cct->_experimental_features);
-    ceph_spin_unlock(&cct->_feature_lock);
-    if (!cct->_experimental_features.empty())
-      lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
-		 << cct->_experimental_features << dendl;
+    if (changed.count(
+	  "enable_experimental_unrecoverable_data_corrupting_features")) {
+      ceph_spin_lock(&cct->_feature_lock);
+      get_str_set(
+	conf->enable_experimental_unrecoverable_data_corrupting_features,
+	cct->_experimental_features);
+      ceph_spin_unlock(&cct->_feature_lock);
+      if (!cct->_experimental_features.empty())
+	lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
+		   << cct->_experimental_features << dendl;
+    }
+    if (changed.count("crush_location")) {
+      cct->crush_location.update_from_conf();
+    }
   }
 };
 
@@ -459,6 +467,7 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _crypto_aes(NULL),
     _plugin_registry(NULL),
     _lockdep_obs(NULL),
+    crush_location(this),
     _cct_perf(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
