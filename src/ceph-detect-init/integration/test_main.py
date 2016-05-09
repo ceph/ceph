@@ -49,7 +49,7 @@ docker run -v $toplevel:$toplevel -w $(pwd) --user $(id -u) {name} bash -x {name
     init = open(name + '/init').read().strip()
     shutil.rmtree(name)
     return init
-    
+
 
 class TestCephDetectInit(testtools.TestCase):
 

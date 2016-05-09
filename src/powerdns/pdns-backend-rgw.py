@@ -145,7 +145,7 @@ def parse_region_map(map):
     for region in map['regions']:
         url = urlparse(region['val']['endpoints'][0])
         regions.update({region['key']: url.netloc})
- 
+
     return regions
 
 def str2bool(s):
@@ -210,7 +210,7 @@ def init_config():
 def generate_app(config):
     # The Flask App
     app = Flask(__name__)
-    
+
     # Get the RGW Region Map
     region_map = parse_region_map(do_rgw_request('config'))
 
