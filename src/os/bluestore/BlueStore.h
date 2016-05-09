@@ -520,6 +520,7 @@ private:
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
   BlockDevice *bdev;
+  std::string freelist_type;
   FreelistManager *fm;
   Allocator *alloc;
   uuid_d fsid;
@@ -576,6 +577,8 @@ private:
   void _close_bdev();
   int _open_db(bool create);
   void _close_db();
+  int _open_fm(bool create);
+  void _close_fm();
   int _open_alloc();
   void _close_alloc();
   int _open_collections(int *errors=0);
