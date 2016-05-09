@@ -35,6 +35,9 @@ cdef extern from "Python.h":
 
 ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
+cdef extern from "limits.h":
+    cdef uint64_t INT64_MAX
+
 cdef extern from "rbd/librbd.h" nogil:
     enum:
         _RBD_FEATURE_LAYERING "RBD_FEATURE_LAYERING"
@@ -148,6 +151,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
     int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
                               int *is_protected)
+    int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
+    int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
     int rbd_flatten(rbd_image_t image)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
@@ -266,6 +271,9 @@ class ConnectionShutdown(Error):
 class Timeout(Error):
     pass
 
+class DiskQuotaExceeded(Error):
+    pass
+
 
 cdef errno_to_exception = {
     errno.EPERM     : PermissionError,
@@ -281,6 +289,7 @@ cdef errno_to_exception = {
     errno.EDOM      : ArgumentOutOfRange,
     errno.ESHUTDOWN : ConnectionShutdown,
     errno.ETIMEDOUT : Timeout,
+    errno.EDQUOT    : DiskQuotaExceeded,
 }
 
 cdef make_ex(ret, msg):
@@ -1030,6 +1039,45 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error checking if snapshot %s@%s is protected' % (self.name, name))
         return is_protected == 1
+
+    def get_snap_limit(self):
+        """
+        Get the snapshot limit for an image.
+        """
+
+        cdef:
+            uint64_t limit
+        with nogil:
+            ret = rbd_snap_get_limit(self.image, &limit)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot limit for %s' % self.name)
+        return limit
+
+    def set_snap_limit(self, limit):
+        """
+        Set the snapshot limit for an image.
+
+        :param limit: the new limit to set
+        """
+
+        cdef:
+            uint64_t _limit = limit
+        with nogil:
+            ret = rbd_snap_set_limit(self.image, _limit)
+        if ret != 0:
+            raise make_ex(ret, 'error setting snapshot limit for %s' % self.name)
+        return ret
+
+    def remove_snap_limit(self):
+        """
+        Remove the snapshot limit for an image, essentially setting
+        the limit to the maximum size allowed by the implementation.
+        """
+        with nogil:
+            ret = rbd_snap_set_limit(self.image, UINT64_MAX)
+        if ret != 0:
+            raise make_ex(ret, 'error removing snapshot limit for %s' % self.name)
+        return ret
 
     def set_snap(self, name):
         """

@@ -2148,6 +2148,17 @@ remove_mirroring_image:
     return 0;
   }
 
+  int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
+  {
+    return cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,
+					  limit);
+  }
+
+  int snap_set_limit(ImageCtx *ictx, uint64_t limit)
+  {
+    return ictx->operations->snap_set_limit(limit);
+  }
+
   struct CopyProgressCtx {
     explicit CopyProgressCtx(ProgressContext &p)
       : destictx(NULL), src_size(0), prog_ctx(p)
