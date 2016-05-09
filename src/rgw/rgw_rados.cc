@@ -5032,6 +5032,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
+                            const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
                             obj_version *pobjv,
@@ -5089,10 +5090,14 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
-    if (real_clock::is_zero(creation_time))
+    if (real_clock::is_zero(creation_time)) {
       creation_time = ceph::real_clock::now(cct);
-    else
+    } else {
       info.creation_time = creation_time;
+    }
+    if (pquota_info) {
+      info.quota = *pquota_info;
+    }
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
