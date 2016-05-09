@@ -30,17 +30,18 @@ def task(ctx, config):
         min_snaps = config.get('min_snaps', 5)
         period = config.get('period', 30)
         snaps = []
+        manager = ctx.managers['ceph']
         def remove_snap():
             assert len(snaps) > 0
             snap = random.choice(snaps)
             log.info("Removing snap %s" % (snap,))
             for pool in pools:
-                ctx.manager.remove_pool_snap(pool, str(snap))
+                manager.remove_pool_snap(pool, str(snap))
             snaps.remove(snap)
         def add_snap(snap):
             log.info("Adding snap %s" % (snap,))
             for pool in pools:
-                ctx.manager.add_pool_snap(pool, str(snap))
+                manager.add_pool_snap(pool, str(snap))
             snaps.append(snap)
         index = 0
         while not stopping:

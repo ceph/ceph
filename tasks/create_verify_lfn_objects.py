@@ -28,6 +28,7 @@ def task(ctx, config):
     name_length = config.get('name_length', [400])
     namespace = config.get('namespace', [None])
     prefix = config.get('prefix', None)
+    manager = ctx.managers['ceph']
 
     objects = []
     for l in name_length:
@@ -43,7 +44,7 @@ def task(ctx, config):
             objects += [(ns, object_name(i)) for i in  range(num_objects)]
 
     for ns, name in objects:
-        err = ctx.manager.do_put(
+        err = manager.do_put(
             pool,
             name,
             '/etc/resolv.conf',
@@ -56,7 +57,7 @@ def task(ctx, config):
     finally:
         log.info('ceph_verify_lfn_objects verifying...')
         for ns, name in objects:
-            err = ctx.manager.do_get(
+            err = manager.do_get(
                 pool,
                 name,
                 namespace=ns)
@@ -65,7 +66,7 @@ def task(ctx, config):
 
         log.info('ceph_verify_lfn_objects deleting...')
         for ns, name in objects:
-            err = ctx.manager.do_rm(
+            err = manager.do_rm(
                 pool,
                 name,
                 namespace=ns)
@@ -74,7 +75,7 @@ def task(ctx, config):
 
         log.info('ceph_verify_lfn_objects verifying absent...')
         for ns, name in objects:
-            err = ctx.manager.do_get(
+            err = manager.do_get(
                 pool,
                 name,
                 namespace=ns)

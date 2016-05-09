@@ -173,16 +173,7 @@ def task(ctx, config):
     log.info(osds)
     log.info(osds.remotes)
 
-    first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    manager = ceph_manager.CephManager(
-        mon,
-        ctx=ctx,
-        config=config,
-        logger=log.getChild('ceph_manager'),
-        )
-    ctx.manager = manager
-
+    manager = ctx.managers['ceph']
     while (len(manager.get_osd_status()['up']) !=
            len(manager.get_osd_status()['raw'])):
         time.sleep(10)
@@ -222,7 +213,7 @@ def task(ctx, config):
 
 
 def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
-    manager = ctx.manager
+    manager = ctx.managers['ceph']
 
     osds = ctx.cluster.only(teuthology.is_type('osd'))
 

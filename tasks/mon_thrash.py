@@ -156,7 +156,7 @@ class MonitorThrasher:
         Thrash the monitor specified.
         :param mon: monitor to thrash
         """
-        addr = self.ctx.ceph.conf['mon.%s' % mon]['mon addr']
+        addr = self.ctx.ceph['ceph'].conf['mon.%s' % mon]['mon addr']
         self.log('thrashing mon.{id}@{addr} store'.format(id=mon, addr=addr))
         out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force')
         j = json.loads(out)

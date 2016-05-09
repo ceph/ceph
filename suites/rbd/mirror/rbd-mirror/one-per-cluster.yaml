@@ -1,0 +1,14 @@
+meta:
+- desc: run one rbd-mirror daemon per cluster
+overrides:
+  ceph:
+    conf:
+      client.mirror:
+        # override to make these names predictable
+        admin socket: /var/run/ceph/$cluster-$name.asok
+        pid file: /var/run/ceph/$cluster-$name.pid
+tasks:
+- rbd-mirror:
+    client: cluster1.client.mirror
+- rbd-mirror:
+    client: cluster2.client.mirror
