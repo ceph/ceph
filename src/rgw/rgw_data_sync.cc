@@ -1379,6 +1379,8 @@ int RGWDataSyncStatusManager::init()
 
 void RGWDataSyncStatusManager::finalize()
 {
+  source_log.finish();
+  sync_env = RGWDataSyncEnv{};
   delete error_logger;
   error_logger = nullptr;
   ioctx.close();
