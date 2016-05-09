@@ -267,6 +267,8 @@ private:
 		    object_stat_sum_t *stat = 0,
                     bool cache_dont_need = true);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
+			ObjectRecoveryProgress &before_progress,
+			ObjectRecoveryProgress &after_progress,
 			bool first,
 			bool complete,
 			bool cache_dont_need,
