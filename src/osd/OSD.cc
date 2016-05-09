@@ -6530,6 +6530,44 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
+void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
+{
+  epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
+  if (min <= superblock.oldest_map)
+    return;
+
+  int num = 0;
+  ObjectStore::Transaction t;
+  for (epoch_t e = superblock.oldest_map; e < min; ++e) {
+    dout(20) << " removing old osdmap epoch " << e << dendl;
+    t.remove(coll_t::meta(), get_osdmap_pobject_name(e));
+    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
+    superblock.oldest_map = e + 1;
+    num++;
+    if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
+      service.publish_superblock(superblock);
+      write_superblock(t);
+      store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+      num = 0;
+      if (!skip_maps) {
+	// skip_maps leaves us with a range of old maps if we fail to remove all
+	// of them before moving superblock.oldest_map forward to the first map
+	// in the incoming MOSDMap msg. so we should continue removing them in
+	// this case, even we could do huge series of delete transactions all at
+	// once.
+	break;
+      }
+    }
+  }
+  if (num > 0) {
+    service.publish_superblock(superblock);
+    write_superblock(t);
+    store->queue_transaction(service.meta_osr.get(), std::move(t), nullptr);
+  }
+  // we should not remove the cached maps
+  assert(min <= service.map_cache.cached_key_lower_bound());
+}
+
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
@@ -6705,23 +6743,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (superblock.oldest_map) {
-    int num = 0;
-    epoch_t cache_lb = service.map_cache.cached_key_lower_bound();
-    epoch_t min = MIN(m->oldest_map, cache_lb);
-    dout(20) << __func__ << " oldest_map " << m->oldest_map
-	     << " cache lb " << cache_lb
-	     << " min " << min << dendl;
-    for (epoch_t e = superblock.oldest_map; e < min; ++e) {
-      dout(20) << " removing old osdmap epoch " << e << dendl;
-      t.remove(coll_t::meta(), get_osdmap_pobject_name(e));
-      t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
-      superblock.oldest_map = e+1;
-      num++;
-      // make sure we at least keep pace with incoming maps
-      if (num >= cct->_conf->osd_target_transaction_size &&
-	  (uint64_t)num > (last - first))
-	break;
-    }
+    // make sure we at least keep pace with incoming maps
+    trim_maps(m->oldest_map, last - first + 1, skip_maps);
   }
 
   if (!superblock.oldest_map || skip_maps)
