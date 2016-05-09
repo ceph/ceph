@@ -6991,8 +6991,12 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     if (it == dir->dentries.end())
       return -EAGAIN;
     Dentry *dn = it->second;
+    assert(dir_result_t::fpos_cmp(dn->offset, dirp->offset) < 0);
     pd = xlist<Dentry*>::iterator(&dn->item_dentry_list);
     ++pd;
+    while (!pd.end() &&
+	   dir_result_t::fpos_cmp((*pd)->offset, dirp->offset) < 0)
+      ++pd;
   }
 
   string dn_name;
