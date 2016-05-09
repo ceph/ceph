@@ -617,7 +617,7 @@ def check_object_eq(k1, k2, check_extra = True):
     eq(k1.content_disposition, k2.content_disposition)
     eq(k1.content_language, k2.content_language)
     eq(k1.etag, k2.etag)
-    # eq(k1.last_modified, k2.last_modified)
+    eq(k1.last_modified, k2.last_modified)
     if check_extra:
         eq(k1.owner.id, k2.owner.id)
         eq(k1.owner.display_name, k2.owner.display_name)
