@@ -3450,7 +3450,7 @@ int RGWRados::init_zg_from_period(bool *initialized)
     return 0;
   }
   if (ret < 0) {
-    ldout(cct, 0) << "failed reading zonegroup info: " << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "failed reading zonegroup info: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   ldout(cct, 20) << "period zonegroup name " << zonegroup.get_name() << dendl;
