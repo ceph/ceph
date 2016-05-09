@@ -5031,23 +5031,18 @@ void OSD::got_full_map(epoch_t e)
 	     << ", ignoring" << dendl;
     return;
   }
-  if (e > requested_full_first) {
+  if (e >= requested_full_last) {
     dout(10) << __func__ << " " << e << ", requested " << requested_full_first
 	     << ".." << requested_full_last << ", resetting" << dendl;
     requested_full_first = requested_full_last = 0;
     return;
   }
-  if (requested_full_first == requested_full_last) {
-    dout(10) << __func__ << " " << e << ", requested " << requested_full_first
-	     << ".." << requested_full_last
-	     << ", now done" << dendl;
-    requested_full_first = requested_full_last = 0;
-  } else {
-    dout(10) << __func__ << " " << e << ", requested " << requested_full_first
-	     << ".." << requested_full_last
-	     << ", still need more" << dendl;
-    ++requested_full_first;
-  }
+  
+  requested_full_first = e + 1;
+
+  dout(10) << __func__ << " " << e << ", requested " << requested_full_first
+           << ".." << requested_full_last
+           << ", still need more" << dendl;
 }
 
 void OSD::requeue_failures()
