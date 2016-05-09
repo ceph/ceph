@@ -155,3 +155,94 @@ TEST(bluestore_extent_ref_map_t, contains)
   ASSERT_FALSE(m.contains(40, 3000));
   ASSERT_FALSE(m.contains(4000, 30));
 }
+
+TEST(bluestore_onode_t, punch_hole)
+{
+  bluestore_onode_t on;
+  vector<bluestore_lextent_t> r;
+  on.extent_map[0] = bluestore_lextent_t(1, 0, 100, 0);
+  on.extent_map[100] = bluestore_lextent_t(2, 0, 100, 0);
+
+  on.punch_hole(0, 100, &r);
+  ASSERT_EQ(1u, on.extent_map.size());
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(1, r[0].blob);
+  ASSERT_EQ(0u, r[0].offset);
+  ASSERT_EQ(100u, r[0].length);
+  r.clear();
+
+  on.punch_hole(150, 10, &r);
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(100u, on.extent_map.begin()->first);
+  ASSERT_EQ(0u, on.extent_map.begin()->second.offset);
+  ASSERT_EQ(50u, on.extent_map.begin()->second.length);
+  ASSERT_EQ(160u, on.extent_map.rbegin()->first);
+  ASSERT_EQ(60u, on.extent_map.rbegin()->second.offset);
+  ASSERT_EQ(40u, on.extent_map.rbegin()->second.length);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(50u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+  r.clear();
+
+  on.punch_hole(140, 20, &r);
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(100u, on.extent_map.begin()->first);
+  ASSERT_EQ(0u, on.extent_map.begin()->second.offset);
+  ASSERT_EQ(40u, on.extent_map.begin()->second.length);
+  ASSERT_EQ(160u, on.extent_map.rbegin()->first);
+  ASSERT_EQ(60u, on.extent_map.rbegin()->second.offset);
+  ASSERT_EQ(40u, on.extent_map.rbegin()->second.length);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(40u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+  r.clear();
+
+  on.punch_hole(130, 40, &r);
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(100u, on.extent_map.begin()->first);
+  ASSERT_EQ(0u, on.extent_map.begin()->second.offset);
+  ASSERT_EQ(30u, on.extent_map.begin()->second.length);
+  ASSERT_EQ(170u, on.extent_map.rbegin()->first);
+  ASSERT_EQ(70u, on.extent_map.rbegin()->second.offset);
+  ASSERT_EQ(30u, on.extent_map.rbegin()->second.length);
+  ASSERT_EQ(2u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(30u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+  ASSERT_EQ(2, r[1].blob);
+  ASSERT_EQ(60u, r[1].offset);
+  ASSERT_EQ(10u, r[1].length);
+  r.clear();
+
+  on.punch_hole(110, 10, &r);
+  ASSERT_EQ(3u, on.extent_map.size());
+  ASSERT_EQ(100u, on.extent_map.begin()->first);
+  ASSERT_EQ(0u, on.extent_map.begin()->second.offset);
+  ASSERT_EQ(10u, on.extent_map.begin()->second.length);
+  ASSERT_EQ(20u, on.extent_map[120].offset);
+  ASSERT_EQ(10u, on.extent_map[120].length);
+  ASSERT_EQ(170u, on.extent_map.rbegin()->first);
+  ASSERT_EQ(70u, on.extent_map.rbegin()->second.offset);
+  ASSERT_EQ(30u, on.extent_map.rbegin()->second.length);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(10u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+  r.clear();
+
+  on.punch_hole(0, 1000, &r);
+  ASSERT_EQ(0u, on.extent_map.size());
+  ASSERT_EQ(3u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(0u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+  ASSERT_EQ(2, r[1].blob);
+  ASSERT_EQ(20u, r[1].offset);
+  ASSERT_EQ(10u, r[1].length);
+  ASSERT_EQ(2, r[2].blob);
+  ASSERT_EQ(70u, r[2].offset);
+  ASSERT_EQ(30u, r[2].length);
+  r.clear();
+}
