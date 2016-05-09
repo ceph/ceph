@@ -628,6 +628,73 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   // FIXME
 }
 
+void bluestore_onode_t::punch_hole(
+  uint64_t offset,
+  uint64_t length,
+  vector<bluestore_lextent_t> *deref)
+{
+  auto p = seek_lextent(offset);
+  uint64_t end = offset + length;
+  while (p != extent_map.end()) {
+    if (p->first >= end) {
+      break;
+    }
+    if (p->first < offset) {
+      if (p->first + p->second.length > end) {
+	// split and deref middle
+	uint64_t front = offset - p->first;
+	deref->emplace_back(
+	  bluestore_lextent_t(
+	    p->second.blob,
+	    p->second.offset + front,
+	    length,
+	    p->second.flags));
+	extent_map[end] = bluestore_lextent_t(
+	  p->second.blob,
+	  p->second.offset + front + length,
+	  p->second.length - front - length,
+	  p->second.flags);
+	p->second.length = front;
+	break;
+      } else {
+	// deref tail
+	assert(p->first + p->second.length > offset); // else bug in find_lextent
+	uint64_t keep = offset - p->first;
+	deref->emplace_back(
+	  bluestore_lextent_t(
+	    p->second.blob,
+	    p->second.offset + keep,
+	    p->second.length - keep,
+	    p->second.flags));
+	p->second.length = keep;
+	++p;
+	continue;
+      }
+    }
+    if (p->first + p->second.length <= end) {
+      // deref whole lextent
+      deref->push_back(p->second);
+      extent_map.erase(p++);
+      continue;
+    }
+    // deref head
+    uint64_t keep = (p->first + p->second.length) - end;
+    deref->emplace_back(
+      bluestore_lextent_t(
+	p->second.blob,
+	p->second.offset,
+	p->second.length - keep,
+	p->second.flags));
+    extent_map[end] = bluestore_lextent_t(
+      p->second.blob,
+      p->second.offset + p->second.length - keep,
+      keep,
+      p->second.flags);
+    extent_map.erase(p++);
+    break;
+  }
+}
+
 // bluestore_wal_op_t
 
 void bluestore_wal_op_t::encode(bufferlist& bl) const

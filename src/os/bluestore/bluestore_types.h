@@ -505,6 +505,10 @@ struct bluestore_onode_t {
     return &p->second;
   }
 
+  /// punch a logical hole.  add lextents to deref to target list.
+  void punch_hole(uint64_t offset, uint64_t length,
+		  vector<bluestore_lextent_t> *deref);
+
   bool put_overlay_ref(uint64_t key) {
     map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
     if (q == overlay_refs.end())
