@@ -7,7 +7,7 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   ceph::unordered_map<string, Dentry*> dentries;
-  xlist<Dentry*> dentry_list;
+  vector<Dentry*> readdir_cache;
 
   explicit Dir(Inode* in) { parent_inode = in; }
 

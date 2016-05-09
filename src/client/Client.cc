@@ -175,7 +175,7 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 
 dir_result_t::dir_result_t(Inode *in)
   : inode(in), owner_uid(-1), owner_gid(-1), offset(0), next_offset(2),
-    release_count(0), ordered_count(0), start_shared_gen(0)
+    release_count(0), ordered_count(0), cache_index(0), start_shared_gen(0)
   { }
 
 void Client::_reset_faked_inos()
@@ -715,10 +715,7 @@ void Client::trim_dentry(Dentry *dn)
   if (dn->inode) {
     Inode *diri = dn->dir->parent_inode;
     diri->dir_release_count++;
-    if (diri->flags & I_COMPLETE) {
-      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
-      diri->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
-    }
+    clear_dir_complete_and_ordered(diri, true);
   }
   unlink(dn, false, false);  // drop dir, drop dentry
 }
@@ -954,13 +951,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->flags |= I_COMPLETE | I_DIR_ORDERED;
     if (in->dir) {
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentry_list.size() << " entries, marking all dentries null" << dendl;
-      for (xlist<Dentry*>::iterator p = in->dir->dentry_list.begin();
-	   !p.end();
+		     << in->dir->dentries.size() << " entries, marking all dentries null" << dendl;
+      in->dir->readdir_cache.clear();
+      for (auto p = in->dir->dentries.begin();
+	   p != in->dir->dentries.end();
 	   ++p) {
-	unlink(*p, true, true);  // keep dir, keep dentry
+	unlink(p->second, true, true);  // keep dir, keep dentry
       }
-      if (in->dir->dentry_list.empty())
+      if (in->dir->dentries.empty())
 	close_dir(in->dir);
     }
   }
@@ -1004,19 +1002,13 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
       if (old_dentry->dir != dir) {
 	Inode *old_diri = old_dentry->dir->parent_inode;
 	old_diri->dir_ordered_count++;
-	if (old_diri->flags & I_DIR_ORDERED) {
-	  ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *old_diri << dendl;
-	  old_diri->flags &= ~I_DIR_ORDERED;
-	}
+	clear_dir_complete_and_ordered(old_diri, false);
       }
       unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
     }
     Inode *diri = dir->parent_inode;
     diri->dir_ordered_count++;
-    if (diri->flags & I_DIR_ORDERED) {
-	ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *diri << dendl;
-	diri->flags &= ~I_DIR_ORDERED;
-    }
+    clear_dir_complete_and_ordered(diri, false);
     dn = link(dir, dname, in, dn);
   }
 
@@ -1080,6 +1072,23 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   */
 }
 
+void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
+{
+  if (diri->flags & I_COMPLETE) {
+    if (complete) {
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
+      diri->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+    } else {
+      if (diri->flags & I_DIR_ORDERED) {
+	ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *diri << dendl;
+	diri->flags &= ~I_DIR_ORDERED;
+      }
+    }
+    if (diri->dir)
+      diri->dir->readdir_cache.clear();
+  }
+}
+
 /*
  * insert results from readdir or lssnap into the metadata cache.
  */
@@ -1137,10 +1146,12 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 		   << ", hash_order=" << hash_order << ", offset " << readdir_offset
 		   << ", readdir_start " << readdir_start << dendl;
 
-    if (fg.is_leftmost() && readdir_offset == 2) {
+    if (diri->snapid != CEPH_SNAPDIR &&
+	fg.is_leftmost() && readdir_offset == 2) {
       dirp->release_count = diri->dir_release_count;
       dirp->ordered_count = diri->dir_ordered_count;
       dirp->start_shared_gen = diri->shared_gen;
+      dirp->cache_index = 0;
     }
 
     dirp->buffer_frag = fg;
@@ -1170,7 +1181,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  // keep existing dn
 	  dn = olddn;
 	  touch_dn(dn);
-	  dn->item_dentry_list.move_to_back();
 	}
       } else {
 	// new dn
@@ -1186,6 +1196,26 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
       } else {
 	dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
+      }
+      // add to readdir cache
+      if (dirp->release_count == diri->dir_release_count &&
+	  dirp->ordered_count == diri->dir_ordered_count &&
+	  dirp->start_shared_gen == diri->shared_gen) {
+	if (dirp->cache_index == dir->readdir_cache.size()) {
+	  if (i == 0) {
+	    assert(!dirp->inode->is_complete_and_ordered());
+	    dir->readdir_cache.reserve(dirp->cache_index + numdn);
+	  }
+	  dir->readdir_cache.push_back(dn);
+	} else if (dirp->cache_index < dir->readdir_cache.size()) {
+	  if (dirp->inode->is_complete_and_ordered())
+	    assert(dir->readdir_cache[dirp->cache_index] == dn);
+	  else
+	    dir->readdir_cache[dirp->cache_index] = dn;
+	} else {
+	  assert(0 == "unexpected readdir buffer idx");
+	}
+	dirp->cache_index++;
       }
       // add to cached result list
       dirp->buffer.push_back(dir_result_t::dentry(dn->offset, dname, in));
@@ -1228,13 +1258,10 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
 
     Dentry *d = request->dentry();
-    if (d && d->dir) {
+    if (d) {
       Inode *diri = d->dir->parent_inode;
       diri->dir_release_count++;
-      if (diri->flags & I_COMPLETE) {
-	ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
-	diri->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
-      }
+      clear_dir_complete_and_ordered(diri, true);
     }
 
     if (d && reply->get_result() == 0) {
@@ -1313,10 +1340,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode) {
 	  diri->dir_ordered_count++;
-	  if (diri->flags & I_DIR_ORDERED) {
-	    ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *diri << dendl;
-	    diri->flags &= ~I_DIR_ORDERED;
-	  }
+	  clear_dir_complete_and_ordered(diri, false);
 	  unlink(dn, true, true);  // keep dir, dentry
 	}
       }
@@ -2865,7 +2889,6 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     // link to dir
     dn->dir = dir;
     dir->dentries[dn->name] = dn;
-    dir->dentry_list.push_back(&dn->item_dentry_list);
     lru.lru_insert_mid(dn);    // mid or top?
 
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
@@ -2873,7 +2896,6 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   } else {
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (old dn)" << dendl;
-    dn->item_dentry_list.move_to_back();
   }
 
   if (in) {    // link to inode
@@ -2891,6 +2913,9 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     if (in->is_dir() && !in->dn_set.empty()) {
       Dentry *olddn = in->get_first_parent();
       assert(olddn->dir != dir || olddn->name != name);
+      Inode *old_diri = olddn->dir->parent_inode;
+      old_diri->dir_release_count++;
+      clear_dir_complete_and_ordered(old_diri, true);
       unlink(olddn, true, true);  // keep dir, dentry
     }
 
@@ -2931,7 +2956,6 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
-    dn->item_dentry_list.remove_myself();
     if (dn->dir->is_empty() && !keepdir)
       close_dir(dn->dir);
     dn->dir = 0;
@@ -3688,10 +3712,8 @@ void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
       !(had & CEPH_CAP_FILE_SHARED)) {
     in->shared_gen++;
 
-    if (in->is_dir() && (in->flags & I_COMPLETE)) {
-      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *in << dendl;
-      in->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
-    }
+    if (in->is_dir())
+      clear_dir_complete_and_ordered(in, true);
   }
 }
 
@@ -4753,10 +4775,10 @@ void Client::_try_to_trim_inode(Inode *in)
 {
   int ref = in->get_num_ref();
 
-  if (in->dir && !in->dir->dentry_list.empty()) {
-    for (xlist<Dentry*>::iterator p = in->dir->dentry_list.begin();
-	!p.end(); ) {
-      Dentry *dn = *p;
+  if (in->dir && !in->dir->dentries.empty()) {
+    for (auto p = in->dir->dentries.begin();
+	 p != in->dir->dentries.end(); ) {
+      Dentry *dn = p->second;
       ++p;
       if (dn->lru_is_expireable())
 	unlink(dn, false, false);  // close dir, drop dentry
@@ -6862,6 +6884,14 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
 
   ldout(cct, 3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
 
+  if (offset == dirp->offset)
+    return;
+
+  if (offset > dirp->offset)
+    dirp->release_count = 0;   // bump if we do a forward seek
+  else
+    dirp->ordered_count = 0;   // disable filling readdir cache
+
   if (dirp->hash_order()) {
     if (dirp->offset > offset) {
       _readdir_drop_dirp_buffer(dirp);
@@ -6875,9 +6905,6 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
       dirp->reset();
     }
   }
-
-  if (offset > dirp->offset)
-    dirp->release_count--;   // bump if we do a forward seek
 
   dirp->offset = offset;
 }
@@ -7008,11 +7035,17 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   return res;
 }
 
+struct dentry_off_lt {
+  bool operator()(const Dentry* dn, int64_t off) const {
+    return dir_result_t::fpos_cmp(dn->offset, off) < 0;
+  }
+};
+
 int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 {
   assert(client_lock.is_locked());
   ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
-	   << " at_cache_name " << dirp->at_cache_name << " offset " << hex << dirp->offset << dec
+	   << " last_name " << dirp->last_name << " offset " << hex << dirp->offset << dec
 	   << dendl;
   Dir *dir = dirp->inode->dir;
 
@@ -7022,25 +7055,15 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     return 0;
   }
 
-  xlist<Dentry*>::iterator pd = dir->dentry_list.begin();
-  if (dirp->at_cache_name.length()) {
-    ceph::unordered_map<string,Dentry*>::iterator it = dir->dentries.find(dirp->at_cache_name);
-    if (it == dir->dentries.end())
-      return -EAGAIN;
-    Dentry *dn = it->second;
-    assert(dir_result_t::fpos_cmp(dn->offset, dirp->offset) < 0);
-    pd = xlist<Dentry*>::iterator(&dn->item_dentry_list);
-    ++pd;
-    while (!pd.end() &&
-	   dir_result_t::fpos_cmp((*pd)->offset, dirp->offset) < 0)
-      ++pd;
-  }
+  vector<Dentry*>::iterator pd = std::lower_bound(dir->readdir_cache.begin(),
+						  dir->readdir_cache.end(),
+						  dirp->offset, dentry_off_lt());
 
   string dn_name;
   while (true) {
     if (!dirp->inode->is_complete_and_ordered())
       return -EAGAIN;
-    if (pd.end())
+    if (pd == dir->readdir_cache.end())
       break;
     Dentry *dn = *pd;
     if (dn->inode == NULL) {
@@ -7060,7 +7083,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
 
     uint64_t next_off = dn->offset + 1;
     ++pd;
-    if (pd.end())
+    if (pd == dir->readdir_cache.end())
       next_off = dir_result_t::END;
 
     fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, next_off);
@@ -7081,7 +7104,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
       dirp->next_offset = 2;
     else
       dirp->next_offset = dirp->offset_low();
-    dirp->at_cache_name = dn_name; // we successfully returned this one; update!
+    dirp->last_name = dn_name; // we successfully returned this one; update!
     if (r > 0)
       return r;
   }
@@ -7155,22 +7178,17 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   }
 
   // can we read from our cache?
-  ldout(cct, 10) << "offset " << hex << dirp->offset << dec << " at_cache_name " << dirp->at_cache_name
+  ldout(cct, 10) << "offset " << hex << dirp->offset
 	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
-  if ((dirp->offset == 2 || dirp->at_cache_name.length()) &&
-      dirp->inode->snapid != CEPH_SNAPDIR &&
+  if (dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
     int err = _readdir_cache_cb(dirp, cb, p);
     if (err != -EAGAIN)
       return err;
-  }
-  if (dirp->at_cache_name.length()) {
-    dirp->last_name = dirp->at_cache_name;
-    dirp->at_cache_name.clear();
   }
 
   while (1) {
@@ -7229,6 +7247,10 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 	diri->dir_release_count == dirp->release_count) {
       if (diri->dir_ordered_count == dirp->ordered_count) {
 	ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
+	if (diri->dir) {
+	  assert(diri->dir->readdir_cache.size() >= dirp->cache_index);
+	  diri->dir->readdir_cache.resize(dirp->cache_index);
+	}
 	diri->flags |= I_COMPLETE | I_DIR_ORDERED;
       } else {
 	ldout(cct, 10) << " marking I_COMPLETE on " << *diri << dendl;
