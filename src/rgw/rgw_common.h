@@ -88,9 +88,9 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
-/* Container quota of the Swift API. */
-#define RGW_ATTR_CQUOTA_NOBJS   RGW_ATTR_META_PREFIX "quota-count"
-#define RGW_ATTR_CQUOTA_MSIZE   RGW_ATTR_META_PREFIX "quota-bytes"
+/* Account/container quota of the Swift API. */
+#define RGW_ATTR_QUOTA_NOBJS    RGW_ATTR_META_PREFIX "quota-count"
+#define RGW_ATTR_QUOTA_MSIZE    RGW_ATTR_META_PREFIX "quota-bytes"
 
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
