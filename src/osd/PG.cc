@@ -5871,8 +5871,23 @@ PG::RecoveryState::Primary::Primary(my_context ctx)
   assert(pg->want_acting.empty());
 
   // set CREATING bit until we have peered for the first time.
-  if (pg->info.history.last_epoch_started == 0)
+  if (pg->info.history.last_epoch_started == 0) {
     pg->state_set(PG_STATE_CREATING);
+    // use the history timestamp, which ultimately comes from the
+    // monitor in the create case.
+    utime_t t = pg->info.history.last_scrub_stamp;
+    pg->info.stats.last_fresh = t;
+    pg->info.stats.last_active = t;
+    pg->info.stats.last_change = t;
+    pg->info.stats.last_peered = t;
+    pg->info.stats.last_clean = t;
+    pg->info.stats.last_unstale = t;
+    pg->info.stats.last_undegraded = t;
+    pg->info.stats.last_fullsized = t;
+    pg->info.stats.last_scrub_stamp = t;
+    pg->info.stats.last_deep_scrub_stamp = t;
+    pg->info.stats.last_clean_scrub_stamp = t;
+  }
 }
 
 boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& notevt)
