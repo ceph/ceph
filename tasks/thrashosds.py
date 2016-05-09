@@ -22,6 +22,8 @@ def task(ctx, config):
 
     The config is optional, and is a dict containing some or all of:
 
+    cluster: (default 'ceph') the name of the cluster to thrash
+
     min_in: (default 3) the minimum number of OSDs to keep in the
        cluster
 
@@ -112,6 +114,7 @@ def task(ctx, config):
     tasks:
     - ceph:
     - thrashosds:
+        cluster: ceph
         chance_down: 10
         op_delay: 3
         min_in: 1
@@ -132,6 +135,7 @@ def task(ctx, config):
     config['noscrub_toggle_delay'] = config.get('noscrub_toggle_delay', 2.0)
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
+    cluster = config.get('cluster', 'ceph')
 
     if 'powercycle' in config:
 
@@ -171,7 +175,7 @@ def task(ctx, config):
                     log.debug('console ready on %s' % cname)
 
             # check that all osd remotes have a valid console
-            osds = ctx.cluster.only(teuthology.is_type('osd'))
+            osds = ctx.cluster.only(teuthology.is_type('osd', cluster))
             for remote, _ in osds.remotes.iteritems():
                 if not remote.console:
                     raise Exception(
@@ -180,8 +184,9 @@ def task(ctx, config):
                             r=remote.name))
 
     log.info('Beginning thrashosds...')
+    cluster_manager = ctx.managers[cluster]
     thrash_proc = ceph_manager.Thrasher(
-        ctx.manager,
+        cluster_manager,
         config,
         logger=log.getChild('thrasher')
         )
@@ -190,4 +195,4 @@ def task(ctx, config):
     finally:
         log.info('joining thrashosds')
         thrash_proc.do_join()
-        ctx.manager.wait_for_recovery(config.get('timeout', 360))
+        cluster_manager.wait_for_recovery(config.get('timeout', 360))

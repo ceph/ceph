@@ -168,14 +168,14 @@ class MDSCluster(object):
         return self.json_asok(['config', 'get', key], service_type, service_id)[key]
 
     def set_ceph_conf(self, subsys, key, value):
-        if subsys not in self._ctx.ceph.conf:
-            self._ctx.ceph.conf[subsys] = {}
-        self._ctx.ceph.conf[subsys][key] = value
+        if subsys not in self._ctx.ceph['ceph'].conf:
+            self._ctx.ceph['ceph'].conf[subsys] = {}
+        self._ctx.ceph['ceph'].conf[subsys][key] = value
         write_conf(self._ctx)  # XXX because we don't have the ceph task's config object, if they
                                # used a different config path this won't work.
 
     def clear_ceph_conf(self, subsys, key):
-        del self._ctx.ceph.conf[subsys][key]
+        del self._ctx.ceph['ceph'].conf[subsys][key]
         write_conf(self._ctx)
 
     def json_asok(self, command, service_type, service_id):
