@@ -318,9 +318,8 @@ uint64_t AioImageWrite::append_journal_event(
   bufferlist bl;
   bl.append(m_buf, m_len);
 
-  uint64_t tid = m_image_ctx.journal->append_write_event(m_aio_comp, m_off,
-                                                         m_len, bl, requests,
-                                                         synchronous);
+  uint64_t tid = m_image_ctx.journal->append_write_event(m_off, m_len, bl,
+                                                         requests, synchronous);
   if (m_image_ctx.object_cacher == NULL) {
     m_aio_comp->associate_journal_event(tid);
   }
@@ -378,8 +377,7 @@ void AioImageWrite::update_stats(size_t length) {
 uint64_t AioImageDiscard::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   journal::EventEntry event_entry(journal::AioDiscardEvent(m_off, m_len));
-  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
-                                                      std::move(event_entry),
+  uint64_t tid = m_image_ctx.journal->append_io_event(std::move(event_entry),
                                                       requests, m_off, m_len,
                                                       synchronous);
   m_aio_comp->associate_journal_event(tid);
@@ -452,7 +450,7 @@ void AioImageFlush::send_request() {
   if (journaling) {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = m_image_ctx.journal->append_io_event(
-      m_aio_comp, journal::EventEntry(journal::AioFlushEvent()),
+      journal::EventEntry(journal::AioFlushEvent()),
       AioObjectRequests(), 0, 0, false);
 
     C_FlushJournalCommit *ctx = new C_FlushJournalCommit(m_image_ctx,
