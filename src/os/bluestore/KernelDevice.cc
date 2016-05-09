@@ -373,9 +373,8 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!buffered && (!bl.is_n_align_sized(block_size) || !bl.is_aligned(block_size))) {
+  if (!buffered && bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
-    bl.rebuild_aligned(block_size);
   }
 
   dout(40) << "data: ";

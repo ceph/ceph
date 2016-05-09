@@ -378,7 +378,6 @@ int BlueFS::_write_super()
   ::encode(crc, bl);
   assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
-  bl.rebuild();
 
   IOContext ioc(NULL);
   bdev[BDEV_DB]->aio_write(get_super_offset(), bl, &ioc, false);
