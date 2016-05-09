@@ -566,7 +566,6 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
   }
 
   cls::journal::Client client(id, data);
-  key = key_from_client_id(id);
   r = write_key(hctx, key, client);
   if (r < 0) {
     return r;
