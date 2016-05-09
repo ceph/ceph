@@ -3364,76 +3364,74 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    if (1 /* || *iter != default_zonegroup_name */) {
-      RGWZoneGroup zonegroup(*iter);
-      zonegroup.set_id(*iter);
-      int ret = zonegroup.init(cct, this, true, true);
+    RGWZoneGroup zonegroup(*iter);
+    zonegroup.set_id(*iter);
+    int ret = zonegroup.init(cct, this, true, true);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    zonegroup.realm_id = realm.get_id();
+    ret = zonegroup.update();
+    if (ret < 0 && ret != -EEXIST) {
+      ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+        << dendl;
+      return ret;
+    }
+    ret = zonegroup.update_name();
+    if (ret < 0 && ret != -EEXIST) {
+      ldout(cct, 0) << "failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+        << dendl;
+      return ret;
+    }
+    if (zonegroup.get_name() == default_region) {
+      ret = zonegroup.set_as_default();
       if (ret < 0) {
-	ldout(cct, 0) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-	return ret;
+        ldout(cct, 0) << "failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+          << dendl;
+        return ret;
+      }
+    }
+    for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
+         iter ++) {
+      RGWZoneParams zoneparams(iter->first, iter->first);
+      zoneparams.set_id(iter->first);
+      ret = zoneparams.init(cct, this);
+      if (ret < 0) {
+        ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+        return ret;
       }
       zonegroup.realm_id = realm.get_id();
-      ret = zonegroup.update();
+      ret = zoneparams.update();
       if (ret < 0 && ret != -EEXIST) {
-	ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
-		   << dendl;
-	return ret;
+        ldout(cct, 0) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+        return ret;
       }
-      ret = zonegroup.update_name();
+      ret = zoneparams.update_name();
       if (ret < 0 && ret != -EEXIST) {
-	ldout(cct, 0) << "failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
-		   << dendl;
-	return ret;
+        ldout(cct, 0) << "failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+        return ret;
       }
-      if (zonegroup.get_name() == default_region) {
-	ret = zonegroup.set_as_default();
-	if (ret < 0) {
-	  ldout(cct, 0) << "failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
-		     << dendl;
-	  return ret;
-	}
-      }
-      for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
-	   iter ++) {
-	RGWZoneParams zoneparams(iter->first, iter->first);
-        zoneparams.set_id(iter->first);
-	ret = zoneparams.init(cct, this);
-	if (ret < 0) {
-	  ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
-	  return ret;
-	}
-	zonegroup.realm_id = realm.get_id();
-	ret = zoneparams.update();
-	if (ret < 0 && ret != -EEXIST) {
-	  ldout(cct, 0) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
-	  return ret;
-	}
-	ret = zoneparams.update_name();
-	if (ret < 0 && ret != -EEXIST) {
-	  ldout(cct, 0) << "failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
-	  return ret;
-	}
-      }
+    }
 
-      if (!current_period.get_id().empty()) {
-	ret = current_period.add_zonegroup(zonegroup);
-	if (ret < 0) {
-	  ldout(cct, 0) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
-	  return ret;
-	}
-	ret = current_period.update();
-	if (ret < 0) {
-	  ldout(cct, 0) << "failed to update current_period: " << cpp_strerror(-ret) << dendl;
-	  return ret;
-	}
+    if (!current_period.get_id().empty()) {
+      ret = current_period.add_zonegroup(zonegroup);
+      if (ret < 0) {
+        ldout(cct, 0) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
+        return ret;
       }
+      ret = current_period.update();
+      if (ret < 0) {
+        ldout(cct, 0) << "failed to update current_period: " << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+    }
 
-      ret = zonegroup.delete_obj(true);
-      if (ret < 0 && ret != -ENOENT) {
-	ldout(cct, 0) << "failed to delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
-		   << dendl;
-	return ret;
-      }
+    ret = zonegroup.delete_obj(true);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << "failed to delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+        << dendl;
+      return ret;
     }
   }
 
