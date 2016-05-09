@@ -7492,11 +7492,14 @@ int RGWRados::Object::Delete::delete_obj()
     }
   }
 
+  if (!state->exists) {
+    target->invalidate_state();
+    return -ENOENT;
+  }
+
   r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true);
   if (r < 0)
     return r;
-
-  bool ret_not_existed = (!state->exists);
 
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -7526,7 +7529,7 @@ int RGWRados::Object::Delete::delete_obj()
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0) {
-    r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), params.remove_objs);
+    r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), state->mtime, params.remove_objs);
   } else {
     int ret = index_op.cancel();
     if (ret < 0) {
@@ -7547,9 +7550,6 @@ int RGWRados::Object::Delete::delete_obj()
 
   if (r < 0)
     return r;
-
-  if (ret_not_existed)
-    return -ENOENT;
 
   /* update quota cache */
   store->quota_handler->update_stats(params.bucket_owner, bucket, -1, 0, obj_size);
@@ -7616,7 +7616,8 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
 
-  int r = index_op.complete_del(-1 /* pool */, 0, NULL);
+  real_time removed_mtime;
+  int r = index_op.complete_del(-1 /* pool */, 0, removed_mtime, NULL);
 
   return r;
 }
@@ -8556,6 +8557,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
 }
 
 int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
+                                                real_time& removed_mtime,
                                                 list<rgw_obj_key> *remove_objs)
 {
   if (blind) {
@@ -8569,7 +8571,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
     return ret;
   }
 
-  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, remove_objs, bilog_flags);
+  ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags);
 
   int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
   if (r < 0) {
@@ -11040,10 +11042,12 @@ int RGWRados::cls_obj_complete_add(BucketShard& bs, string& tag,
 int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
                                    int64_t pool, uint64_t epoch,
                                    rgw_obj& obj,
+                                   real_time& removed_mtime,
                                    list<rgw_obj_key> *remove_objs,
                                    uint16_t bilog_flags)
 {
   RGWObjEnt ent;
+  ent.mtime = removed_mtime;
   obj.get_index_key(&ent.key);
   return cls_obj_complete_op(bs, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, remove_objs, bilog_flags);
 }
