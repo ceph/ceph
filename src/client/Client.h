@@ -205,6 +205,7 @@ struct dir_result_t {
 
   uint64_t release_count;
   uint64_t ordered_count;
+  unsigned cache_index;
   int start_shared_gen;  // dir shared_gen at start of readdir
 
   frag_t buffer_frag;
@@ -223,8 +224,6 @@ struct dir_result_t {
     }
   };
   vector<dentry> buffer;
-
-  string at_cache_name;  // last entry we successfully returned
 
   explicit dir_result_t(Inode *in);
 
@@ -249,9 +248,10 @@ struct dir_result_t {
 
   void reset() {
     last_name.clear();
-    at_cache_name.clear();
     next_offset = 2;
     offset = 0;
+    ordered_count = 0;
+    cache_index = 0;
     buffer.clear();
   }
 };
@@ -696,6 +696,7 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
+  void clear_dir_complete_and_ordered(Inode *diri, bool complete);
   void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_bits(Inode *in,
