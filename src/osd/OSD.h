@@ -2404,6 +2404,8 @@ protected:
   }
 
 private:
+  int update_crush_location();
+
   static int write_meta(ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 

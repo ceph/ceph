@@ -321,6 +321,8 @@ void global_init(std::vector < const char * > *alt_def_args,
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
+
+  g_ceph_context->crush_location.init_on_startup();
 }
 
 void global_print_banner(void)
