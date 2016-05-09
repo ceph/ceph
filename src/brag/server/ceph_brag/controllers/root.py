@@ -23,7 +23,7 @@ class RootController(RestController):
                 result = db.get_versions(args[0])
             except Exception as e:
                 return self.fail(status_code=500, msg="Internal Server Error")
-           
+
             if result is None:
                 return self.fail(400, msg="Invalid UUID")
         elif len(args) is 2 or len(args) is 3 and args[2] == '':
@@ -51,23 +51,23 @@ class RootController(RestController):
             return self.fail(status_code=422, msg=msg)
         except Exception as e:
             return self.fail(status_code=500, msg="Internal Server Error : " + str(e))
-       
+
         response.status = 201
         return "CREATED"
-    
+
     @expose()
     def delete(self, *args, **kwargs):
         if 'uuid' not in kwargs:
             return self.fail(status_code=400, msg="Required uuid parameter")
-        
+
         uuid = kwargs['uuid']
         try:
             status = db.delete_uuid(uuid)
         except Exception as e:
             return self.fail(status_code=500, msg="Internal Server Error")
-        
+
         if status is not None:
             return self.fail(status_code=status['status'], msg=status['msg'])
-    
+
         response.status=200
         return "DELETED"
