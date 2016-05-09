@@ -24,7 +24,7 @@ class TestRootController(FunctionalTest):
         assert response.status_int == 422
 
     def test_5_put_incomplete_json(self):
-        response = self.app.request('/', method='PUT', body='{\"uuid\":\"adfs-12312ad\"}', 
+        response = self.app.request('/', method='PUT', body='{\"uuid\":\"adfs-12312ad\"}',
                                     expect_errors=True)
         assert response.status_int == 422
 

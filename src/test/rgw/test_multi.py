@@ -205,7 +205,7 @@ class RGWRealm:
 
         log(20, 'current meta sync status=', meta_sync_status_json)
         sync_status = json.loads(meta_sync_status_json)
-        
+
         global_sync_status=sync_status['sync_status']['info']['status']
         num_shards=sync_status['sync_status']['info']['num_shards']
 
@@ -290,7 +290,7 @@ class RGWRealm:
 
         log(20, 'current data sync status=', data_sync_status_json)
         sync_status = json.loads(data_sync_status_json)
-        
+
         global_sync_status=sync_status['sync_status']['info']['status']
         num_shards=sync_status['sync_status']['info']['num_shards']
 
