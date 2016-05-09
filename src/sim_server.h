@@ -44,8 +44,8 @@ namespace crimson {
 
       struct InternalStats {
 	std::mutex mtx;
-	std::chrono::microseconds add_request_time;
-	std::chrono::microseconds request_complete_time;
+	std::chrono::nanoseconds add_request_time;
+	std::chrono::nanoseconds request_complete_time;
 	uint32_t add_request_count;
 	uint32_t request_complete_count;
 

@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <signal.h>
 
 #include <sys/time.h>
 
@@ -28,23 +29,10 @@ using ServerId = uint;
 
 namespace crimson {
   namespace qos_simulation {
-#if 0 // STILL NEEDED?
-    using Time = double;
-    static const Time TimeZero = 0.0;
-    static const Time TimeMax = std::numeric_limits<Time>::max();
-    static const double NaN = nan("");
 
-
-    inline Time get_time() {
-      struct timeval now;
-      assert(0 == gettimeofday(&now, NULL));
-      return now.tv_sec + (now.tv_usec / 1000000.0);
+    inline void debugger() {
+      raise(SIGCONT);
     }
-
-    std::string format_time(const Time& time, uint modulo = 1000);
-
-    void debugger();
-#endif
 
     template<typename T>
     void time_stats(std::mutex& mtx,
@@ -63,9 +51,9 @@ namespace crimson {
     // and therefore when called the template params might have to be
     // explicit
     template<typename T, typename R>
-    R time_stats_type(std::mutex& mtx,
-		      T& time_accumulate,
-		      std::function<R()> code) {
+    R time_stats_w_return(std::mutex& mtx,
+			  T& time_accumulate,
+			  std::function<R()> code) {
       auto t1 = std::chrono::steady_clock::now();
       R result = code();
       auto t2 = std::chrono::steady_clock::now();

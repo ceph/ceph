@@ -72,8 +72,8 @@ namespace crimson {
 
       struct InternalStats {
 	std::mutex mtx;
-	std::chrono::microseconds track_resp_time;
-	std::chrono::microseconds get_req_params_time;
+	std::chrono::nanoseconds track_resp_time;
+	std::chrono::nanoseconds get_req_params_time;
 	uint32_t track_resp_count;
 	uint32_t get_req_params_count;
 
@@ -231,12 +231,12 @@ namespace crimson {
 	      const ServerId& server = server_select_f(o);
 
 	      ReqPm rp =
-		time_stats_type<decltype(internal_stats.get_req_params_time),
-		ReqPm>(internal_stats.mtx,
-		       internal_stats.get_req_params_time,
-		       [&]() -> ReqPm {
-			 return service_tracker.get_req_params(server);
-		       });
+		time_stats_w_return<decltype(internal_stats.get_req_params_time),
+				    ReqPm>(internal_stats.mtx,
+					   internal_stats.get_req_params_time,
+					   [&]() -> ReqPm {
+					     return service_tracker.get_req_params(server);
+					   });
 	      count_stats(internal_stats.mtx,
 			  internal_stats.get_req_params_count);
 
