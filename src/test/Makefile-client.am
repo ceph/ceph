@@ -319,6 +319,8 @@ noinst_LTLIBRARIES += librados_test_stub.la
 
 libjournal_test_mock_la_SOURCES = \
 	test/journal/mock/MockJournaler.cc
+noinst_HEADERS += \
+	test/journal/mock/MockJournaler.h
 libjournal_test_mock_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += libjournal_test_mock.la
 
