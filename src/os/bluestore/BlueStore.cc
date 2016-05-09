@@ -2055,7 +2055,7 @@ int BlueStore::_verify_bnode_shared(
       dout(20) << __func__ << "  extent " << p << " t " << t << " i " << i
 	       << dendl;
       for (interval_set<uint64_t>::iterator q = t.begin(); q != t.end(); ++q) {
-	ref_map.add(q.get_start(), q.get_len(), 1);
+	ref_map.get(q.get_start(), q.get_len());
       }
       for (interval_set<uint64_t>::iterator q = i.begin(); q != i.end(); ++q) {
 	ref_map.get(q.get_start(), q.get_len());

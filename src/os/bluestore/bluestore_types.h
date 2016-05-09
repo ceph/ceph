@@ -156,7 +156,6 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
-  void add(uint64_t offset, uint32_t len, unsigned ref=2);
   void get(uint64_t offset, uint32_t len);
   void put(uint64_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
