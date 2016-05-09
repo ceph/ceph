@@ -1293,4 +1293,3 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
             raise
 
     return ret, outbuf, outs
-
