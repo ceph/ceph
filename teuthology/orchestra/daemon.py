@@ -2,6 +2,7 @@ import logging
 import struct
 
 from . import run
+from .. import misc
 
 log = logging.getLogger(__name__)
 
@@ -146,17 +147,21 @@ class DaemonGroup(object):
         """
         self.daemons = {}
 
-    def add_daemon(self, remote, role, id_, *args, **kwargs):
+    def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
         Add a daemon.  If there already is a daemon for this id_ and role, stop
         that daemon and.  Restart the damon once the new value is set.
 
         :param remote: Remote site
-        :param role: Role (osd, mds, mon, rgw,  for example)
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
         :param id_: Id (index into role dictionary)
         :param args: Daemonstate positional parameters
         :param kwargs: Daemonstate keyword parameters
         """
+        # for backwards compatibility with older ceph-qa-suite branches,
+        # we can only get optional args from unused kwargs entries
+        cluster = kwargs.pop('cluster', 'ceph')
+        role = cluster + '.' + type_
         if role not in self.daemons:
             self.daemons[role] = {}
         if id_ in self.daemons[role]:
@@ -166,27 +171,29 @@ class DaemonGroup(object):
                                               **kwargs)
         self.daemons[role][id_].restart()
 
-    def get_daemon(self, role, id_):
+    def get_daemon(self, type_, id_, cluster='ceph'):
         """
         get the daemon associated with this id_ for this role.
 
-        :param role: Role (osd, mds, mon, rgw,  for example)
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
         :param id_: Id (index into role dictionary)
         """
+        role = cluster + '.' + type_
         if role not in self.daemons:
             return None
         return self.daemons[role].get(str(id_), None)
 
-    def iter_daemons_of_role(self, role):
+    def iter_daemons_of_role(self, type_, cluster='ceph'):
         """
         Iterate through all daemon instances for this role.  Return dictionary
         of daemon values.
 
-        :param role: Role (osd, mds, mon, rgw,  for example)
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
         """
+        role = cluster + '.' + type_
         return self.daemons.get(role, {}).values()
 
-    def resolve_role_list(self, roles, types):
+    def resolve_role_list(self, roles, types, cluster_aware=False):
         """
         Resolve a configuration setting that may be None or contain wildcards
         into a list of roles (where a role is e.g. 'mds.a' or 'osd.0').  This
@@ -212,6 +219,10 @@ class DaemonGroup(object):
 
         :param roles: List (of roles or wildcards) or None (select all suitable roles)
         :param types: List of acceptable role types, for example ['osd', 'mds'].
+        :param cluster_aware: bool to determine whether to consider include
+                              cluster in the returned roles - just for
+                              backwards compatibility with pre-jewel versions of
+                              ceph-qa-suite
         :return: List of strings like ["mds.0", "osd.2"]
         """
         assert (isinstance(roles, list) or roles is None)
@@ -220,23 +231,32 @@ class DaemonGroup(object):
         if roles is None:
             # Handle default: all roles available
             for type_ in types:
-                for daemon in self.iter_daemons_of_role(type_):
-                    resolved.append(type_ + '.' + daemon.id_)
+                for role, daemons in self.daemons.items():
+                    if not role.endswith('.' + type_):
+                        continue
+                    for daemon in daemons.values():
+                        prefix = type_
+                        if cluster_aware:
+                            prefix = daemon.role
+                        resolved.append(prefix + daemon.id_)
         else:
             # Handle explicit list of roles or wildcards
             for raw_role in roles:
                 try:
-                    role_type, role_id = raw_role.split(".")
+                    cluster, role_type, role_id = misc.split_role(raw_role)
                 except ValueError:
-                    raise RuntimeError("Invalid role '{0}', roles must be of format <type>.<id>".format(raw_role))
+                    raise RuntimeError("Invalid role '{0}', roles must be of format [<cluster>.]<type>.<id>".format(raw_role))
 
                 if role_type not in types:
                     raise RuntimeError("Invalid role type '{0}' in role '{1}'".format(role_type, raw_role))
 
                 if role_id == "*":
                     # Handle wildcard, all roles of the type
-                    for daemon in self.iter_daemons_of_role(role_type):
-                        resolved.append(role_type + '.' + daemon.id_)
+                    for daemon in self.iter_daemons_of_role(role_type, cluster=cluster):
+                        prefix = role_type
+                        if cluster_aware:
+                            prefix = daemon.role
+                        resolved.append(prefix + daemon.id_)
                 else:
                     # Handle explicit role
                     resolved.append(raw_role)

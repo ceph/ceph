@@ -272,9 +272,10 @@ def get_mons(roles, ips):
     mons = {}
     mon_ports = {}
     mon_id = 0
+    is_mon = is_type('mon')
     for idx, roles in enumerate(roles):
         for role in roles:
-            if not role.startswith('mon.'):
+            if not is_mon(role):
                 continue
             if ips[idx] not in mon_ports:
                 mon_ports[ips[idx]] = 6789
@@ -318,7 +319,7 @@ def generate_caps(type_):
         yield capability
 
 
-def skeleton_config(ctx, roles, ips):
+def skeleton_config(ctx, roles, ips, cluster='ceph'):
     """
     Returns a ConfigObj that is prefilled with a skeleton config.
 
@@ -332,33 +333,72 @@ def skeleton_config(ctx, roles, ips):
     conf = configobj.ConfigObj(StringIO(skconf), file_error=True)
     mons = get_mons(roles=roles, ips=ips)
     for role, addr in mons.iteritems():
-        conf.setdefault(role, {})
-        conf[role]['mon addr'] = addr
+        mon_cluster, _, _ = split_role(role)
+        if mon_cluster != cluster:
+            continue
+        name = ceph_role(role)
+        conf.setdefault(name, {})
+        conf[name]['mon addr'] = addr
     # set up standby mds's
+    is_mds = is_type('mds', cluster)
     for roles_subset in roles:
         for role in roles_subset:
-            if role.startswith('mds.'):
-                conf.setdefault(role, {})
-                if role.find('-s-') != -1:
-                    standby_mds = role[role.find('-s-') + 3:]
-                    conf[role]['mds standby for name'] = standby_mds
+            if is_mds(role):
+                name = ceph_role(role)
+                conf.setdefault(name, {})
+                if '-s-' in name:
+                    standby_mds = name[name.find('-s-') + 3:]
+                    conf[name]['mds standby for name'] = standby_mds
     return conf
 
 
+def ceph_role(role):
+    """
+    Return the ceph name for the role, without any cluster prefix, e.g. osd.0.
+    """
+    _, type_, id_ = split_role(role)
+    return type_ + '.' + id_
+
+
+def split_role(role):
+    """
+    Return a tuple of cluster, type, and id
+    If no cluster is included in the role, the default cluster, 'ceph', is used
+    """
+    cluster = 'ceph'
+    if role.count('.') > 1:
+        cluster, role = role.split('.', 1)
+    type_, id_ = role.split('.', 1)
+    return cluster, type_, id_
+
+
 def roles_of_type(roles_for_host, type_):
+    """
+    Generator of ids.
+
+    Each call returns the next possible role of the type specified.
+    :param roles_for host: list of roles possible
+    :param type_: type of role
+    """
+    for role in cluster_roles_of_type(roles_for_host, type_, None):
+        _, _, id_ = split_role(role)
+        yield id_
+
+
+def cluster_roles_of_type(roles_for_host, type_, cluster):
     """
     Generator of roles.
 
     Each call returns the next possible role of the type specified.
     :param roles_for host: list of roles possible
     :param type_: type of role
+    :param cluster: cluster name
     """
-    prefix = '{type}.'.format(type=type_)
-    for name in roles_for_host:
-        if not name.startswith(prefix):
+    is_type_in_cluster = is_type(type_, cluster)
+    for role in roles_for_host:
+        if not is_type_in_cluster(role):
             continue
-        id_ = name[len(prefix):]
-        yield id_
+        yield role
 
 
 def all_roles(cluster):
@@ -380,48 +420,51 @@ def all_roles_of_type(cluster, type_):
     :param cluster: Cluster extracted from the ctx.
     :type_: role type
     """
-    prefix = '{type}.'.format(type=type_)
     for _, roles_for_host in cluster.remotes.iteritems():
-        for name in roles_for_host:
-            if not name.startswith(prefix):
-                continue
-            id_ = name[len(prefix):]
+        for id_ in roles_of_type(roles_for_host, type_):
             yield id_
 
 
-def is_type(type_):
+def is_type(type_, cluster=None):
     """
     Returns a matcher function for whether role is of type given.
-    """
-    prefix = '{type}.'.format(type=type_)
 
+    :param cluster: cluster name to check in matcher (default to no check for cluster)
+    """
     def _is_type(role):
         """
-        Return type based on the starting role name.  This should
-        probably be improved in the future.
+        Return type based on the starting role name.
+
+        If there is more than one period, strip the first part
+        (ostensibly a cluster name) and check the remainder for the prefix.
         """
-        return role.startswith(prefix)
+        role_cluster, role_type, _ = split_role(role)
+        if cluster is not None and role_cluster != cluster:
+            return False
+        return role_type == type_
     return _is_type
 
 
-def num_instances_of_type(cluster, type_):
+def num_instances_of_type(cluster, type_, ceph_cluster='ceph'):
     """
     Total the number of instances of the role type specified in all remotes.
 
     :param cluster: Cluster extracted from ctx.
     :param type_: role
+    :param ceph_cluster: filter for ceph cluster name
     """
     remotes_and_roles = cluster.remotes.items()
     roles = [roles for (remote, roles) in remotes_and_roles]
-    prefix = '{type}.'.format(type=type_)
-    num = sum(sum(1 for role in hostroles if role.startswith(prefix))
+    is_ceph_type = is_type(type_, ceph_cluster)
+    num = sum(sum(1 for role in hostroles if is_ceph_type(role))
               for hostroles in roles)
     return num
 
 
-def create_simple_monmap(ctx, remote, conf):
+def create_simple_monmap(ctx, remote, conf, path=None):
     """
-    Writes a simple monmap based on current ceph.conf into <tmpdir>/monmap.
+    Writes a simple monmap based on current ceph.conf into path, or
+    <testdir>/monmap by default.
 
     Assumes ceph_conf is up to date.
 
@@ -458,9 +501,11 @@ def create_simple_monmap(ctx, remote, conf):
     ]
     for (name, addr) in addresses:
         args.extend(('--add', name, addr))
+    if not path:
+        path = '{tdir}/monmap'.format(tdir=testdir)
     args.extend([
         '--print',
-        '{tdir}/monmap'.format(tdir=testdir),
+        path
     ])
 
     r = remote.run(
@@ -867,7 +912,7 @@ def get_scratch_devices(remote):
     return retval
 
 
-def wait_until_healthy(ctx, remote):
+def wait_until_healthy(ctx, remote, ceph_cluster='ceph'):
     """
     Wait until a Ceph cluster is healthy. Give up after 15min.
     """
@@ -880,6 +925,7 @@ def wait_until_healthy(ctx, remote):
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'ceph',
+                    '--cluster', ceph_cluster,
                     'health',
                 ],
                 stdout=StringIO(),
@@ -892,9 +938,9 @@ def wait_until_healthy(ctx, remote):
             time.sleep(1)
 
 
-def wait_until_osds_up(ctx, cluster, remote):
+def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
     """Wait until all Ceph OSDs are booted."""
-    num_osds = num_instances_of_type(cluster, 'osd')
+    num_osds = num_instances_of_type(cluster, 'osd', ceph_cluster)
     testdir = get_testdir(ctx)
     while True:
         r = remote.run(
@@ -903,6 +949,7 @@ def wait_until_osds_up(ctx, cluster, remote):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
+                '--cluster', ceph_cluster,
                 'osd', 'dump', '--format=json'
             ],
             stdout=StringIO(),
@@ -986,9 +1033,8 @@ def get_clients(ctx, roles):
     """
     for role in roles:
         assert isinstance(role, basestring)
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
+        assert 'client.' in role
+        _, _, id_ = split_role(role)
         (remote,) = ctx.cluster.only(role).remotes.iterkeys()
         yield (id_, remote)
 
@@ -1000,26 +1046,24 @@ def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
 
 
-def get_mon_names(ctx):
+def get_mon_names(ctx, cluster='ceph'):
     """
     :returns: a list of monitor names
     """
-    mons = []
-    for remote, roles in ctx.cluster.remotes.items():
-        for role in roles:
-            if not role.startswith('mon.'):
-                continue
-            mons.append(role)
-    return mons
+    is_mon = is_type('mon', cluster)
+    host_mons = [[role for role in roles if is_mon(role)]
+                 for roles in ctx.cluster.remotes.values()]
+    return [mon for mons in host_mons for mon in mons]
 
 
-def get_first_mon(ctx, config):
+def get_first_mon(ctx, config, cluster='ceph'):
     """
-    return the "first" mon (alphanumerically, for lack of anything better)
+    return the "first" mon role (alphanumerically, for lack of anything better)
     """
-    firstmon = sorted(get_mon_names(ctx))[0]
-    assert firstmon
-    return firstmon
+    mons = get_mon_names(ctx, cluster)
+    if mons:
+        return sorted(mons)[0]
+    assert False, 'no mon for cluster found'
 
 
 def replace_all_with_clients(cluster, config):
@@ -1151,13 +1195,13 @@ def ssh_keyscan_wait(hostname):
             log.info("try ssh_keyscan again for " + str(hostname))
         return success
 
-def stop_daemons_of_type(ctx, type_):
+def stop_daemons_of_type(ctx, type_, cluster='ceph'):
     """
     :param type_: type of daemons to be stopped.
     """
     log.info('Shutting down %s daemons...' % type_)
     exc_info = (None, None, None)
-    for daemon in ctx.daemons.iter_daemons_of_role(type_):
+    for daemon in ctx.daemons.iter_daemons_of_role(type_, cluster):
         try:
             daemon.stop()
         except (CommandFailedError,

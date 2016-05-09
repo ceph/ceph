@@ -74,15 +74,6 @@ def generic_mount(ctx, config, devname_rtn):
     else:
         role_images = [(role, None) for role in config]
 
-    def strip_client_prefix(role):
-        """
-        Extract the number from the name of a client role
-        """
-        prefix = 'client.'
-        assert role.startswith(prefix)
-        id_ = role[len(prefix):]
-        return id_
-
     testdir = teuthology.get_testdir(ctx)
 
     mnt_template = '{tdir}/mnt.{id}'
@@ -91,7 +82,7 @@ def generic_mount(ctx, config, devname_rtn):
         if image is None:
             image = default_image_name(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
-        id_ = strip_client_prefix(role)
+        _, _, id_ = teuthology.split_role(role)
         mnt = mnt_template.format(tdir=testdir, id=id_)
         mounted.append((remote, mnt))
         remote.run(

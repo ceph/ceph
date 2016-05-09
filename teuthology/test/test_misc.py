@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime
 
-from mock import patch
+from mock import Mock, patch
 from ..orchestra import cluster
 from .. import misc
 from ..config import config
@@ -89,6 +89,85 @@ def test_get_clients_simple():
         next(g)
 
 
+def test_get_mon_names():
+    expected = [
+        ([['mon.a', 'osd.0', 'mon.c']], 'ceph', ['mon.a', 'mon.c']),
+        ([['ceph.mon.a', 'osd.0', 'ceph.mon.c']], 'ceph', ['ceph.mon.a', 'ceph.mon.c']),
+        ([['mon.a', 'osd.0', 'mon.c'], ['ceph.mon.b']], 'ceph', ['mon.a', 'mon.c', 'ceph.mon.b']),
+        ([['mon.a', 'osd.0', 'mon.c'], ['foo.mon.a']], 'ceph', ['mon.a', 'mon.c']),
+        ([['mon.a', 'osd.0', 'mon.c'], ['foo.mon.a']], 'foo', ['foo.mon.a']),
+    ]
+    for remote_roles, cluster_name, expected_mons in expected:
+        ctx = argparse.Namespace()
+        ctx.cluster = Mock()
+        ctx.cluster.remotes = {i: roles for i, roles in enumerate(remote_roles)}
+        mons = misc.get_mon_names(ctx, cluster_name)
+        assert expected_mons == mons
+
+
+def test_get_first_mon():
+    expected = [
+        ([['mon.a', 'osd.0', 'mon.c']], 'ceph', 'mon.a'),
+        ([['ceph.mon.a', 'osd.0', 'ceph.mon.c']], 'ceph', 'ceph.mon.a'),
+        ([['mon.a', 'osd.0', 'mon.c'], ['ceph.mon.b']], 'ceph', 'ceph.mon.b'),
+        ([['mon.a', 'osd.0', 'mon.c'], ['foo.mon.a']], 'ceph', 'mon.a'),
+        ([['foo.mon.b', 'osd.0', 'mon.c'], ['foo.mon.a']], 'foo', 'foo.mon.a'),
+    ]
+    for remote_roles, cluster_name, expected_mon in expected:
+        ctx = argparse.Namespace()
+        ctx.cluster = Mock()
+        ctx.cluster.remotes = {i: roles for i, roles in enumerate(remote_roles)}
+        mon = misc.get_first_mon(ctx, None, cluster_name)
+        assert expected_mon == mon
+
+
+def test_roles_of_type():
+    expected = [
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'osd', ['0', '1']),
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'client', ['0']),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'mon', []),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client',
+         ['1', '2.3']),
+        ]
+    for roles_for_host, type_, expected_ids in expected:
+        ids = list(misc.roles_of_type(roles_for_host, type_))
+        assert ids == expected_ids
+
+
+def test_cluster_roles_of_type():
+    expected = [
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'osd', 'ceph',
+         ['osd.0', 'ceph.osd.1']),
+        (['client.0', 'osd.0', 'ceph.osd.1'], 'client', 'ceph',
+         ['client.0']),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'mon', None, []),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client', None,
+         ['foo.client.1', 'bar.client.2.3']),
+        (['foo.client.1', 'bar.client.2.3', 'baz.osd.1'], 'client', 'bar',
+         ['bar.client.2.3']),
+        ]
+    for roles_for_host, type_, cluster_, expected_roles in expected:
+        roles = list(misc.cluster_roles_of_type(roles_for_host, type_, cluster_))
+        assert roles == expected_roles
+
+
+def test_all_roles_of_type():
+    expected = [
+        ([['client.0', 'osd.0', 'ceph.osd.1'], ['bar.osd.2']],
+         'osd', ['0', '1', '2']),
+        ([['client.0', 'osd.0', 'ceph.osd.1'], ['bar.osd.2', 'baz.client.1']],
+         'client', ['0', '1']),
+        ([['foo.client.1', 'bar.client.2.3'], ['baz.osd.1']], 'mon', []),
+        ([['foo.client.1', 'bar.client.2.3'], ['baz.osd.1', 'ceph.client.bar']],
+         'client', ['1', '2.3', 'bar']),
+        ]
+    for host_roles, type_, expected_ids in expected:
+        cluster_ = Mock()
+        cluster_.remotes = dict(enumerate(host_roles))
+        ids = list(misc.all_roles_of_type(cluster_, type_))
+        assert ids == expected_ids
+
+
 def test_get_http_log_path():
     # Fake configuration
     archive_server = "http://example.com/server_root"
@@ -113,6 +192,66 @@ def test_get_http_log_path():
     path = misc.get_http_log_path(archive_dir)
     assert path == "http://qa-proxy.ceph.com/teuthology/teuthology-2013-09-12_11:49:50-ceph-deploy-master-testing-basic-vps/"
 
+
+def test_is_type():
+    is_client = misc.is_type('client')
+    assert is_client('client.0')
+    assert is_client('ceph.client.0')
+    assert is_client('foo.client.0')
+    assert is_client('foo.client.bar.baz')
+
+    with pytest.raises(ValueError):
+        is_client('')
+        is_client('client')
+    assert not is_client('foo.bar.baz')
+    assert not is_client('ceph.client')
+    assert not is_client('hadoop.master.0')
+
+
+def test_is_type_in_cluster():
+    is_c1_osd = misc.is_type('osd', 'c1')
+    with pytest.raises(ValueError):
+        is_c1_osd('')
+    assert not is_c1_osd('osd.0')
+    assert not is_c1_osd('ceph.osd.0')
+    assert not is_c1_osd('ceph.osd.0')
+    assert not is_c1_osd('c11.osd.0')
+    assert is_c1_osd('c1.osd.0')
+    assert is_c1_osd('c1.osd.999')
+
+
+def test_get_mons():
+    ips = ['1.1.1.1', '2.2.2.2', '3.3.3.3']
+    addrs = ['1.1.1.1:6789', '1.1.1.1:6790', '1.1.1.1:6791']
+
+    mons = misc.get_mons([['mon.a']], ips)
+    assert mons == {'mon.a': addrs[0]}
+
+    mons = misc.get_mons([['cluster-a.mon.foo', 'client.b'], ['osd.0']], ips)
+    assert mons == {'cluster-a.mon.foo': addrs[0]}
+
+    mons = misc.get_mons([['mon.a', 'mon.b', 'ceph.mon.c']], ips)
+    assert mons == {'mon.a': addrs[0],
+                    'mon.b': addrs[1],
+                    'ceph.mon.c': addrs[2]}
+
+    mons = misc.get_mons([['mon.a'], ['mon.b'], ['ceph.mon.c']], ips)
+    assert mons == {'mon.a': addrs[0],
+                    'mon.b': ips[1] + ':6789',
+                    'ceph.mon.c': ips[2] + ':6789'}
+
+
+def test_split_role():
+    expected = {
+        'client.0': ('ceph', 'client', '0'),
+        'foo.client.0': ('foo', 'client', '0'),
+        'bar.baz.x.y.z': ('bar', 'baz', 'x.y.z'),
+        'mds.a-s-b': ('ceph', 'mds', 'a-s-b'),
+    }
+
+    for role, expected_split in expected.items():
+        actual_split = misc.split_role(role)
+        assert actual_split == expected_split
 
 class TestHostnames(object):
     def setup(self):
