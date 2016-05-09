@@ -1856,6 +1856,8 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
         if (aiter != std::end(out_attrs)) {
           out_attrs.erase(aiter);
         }
+      } else {
+        out_attrs[name] = kv.second;
       }
     } else if (out_attrs.find(name) == std::end(out_attrs)) {
       out_attrs[name] = kv.second;
@@ -2772,10 +2774,22 @@ void RGWPutMetadataAccount::execute()
     return;
   }
 
+  op_ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, orig_attrs,
+                                     &acct_op_tracker);
+  if (op_ret < 0) {
+    return;
+  }
+
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
-  RGWUserInfo orig_uinfo;
-  rgw_get_user_info_by_uid(store, s->user->user_id, orig_uinfo, &acct_op_tracker);
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
+
+  RGWUserInfo orig_uinfo;
+  op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, orig_uinfo,
+                                    &acct_op_tracker);
+  if (op_ret < 0) {
+    return;
+  }
 
   /* Handle the TempURL-related stuff. */
   map<int, string> temp_url_keys;
