@@ -134,17 +134,6 @@ ostream& operator<<(ostream& out, const bluestore_extent_t& e)
 
 // bluestore_extent_ref_map_t
 
-void bluestore_extent_ref_map_t::add(uint64_t offset, uint32_t len, unsigned ref)
-{
-  map<uint64_t,record_t>::iterator p = ref_map.insert(
-    map<uint64_t,record_t>::value_type(offset, record_t(len, ref))).first;
-  _maybe_merge_left(p);
-  ++p;
-  if (p != ref_map.end())
-    _maybe_merge_left(p);
-  _check();
-}
-
 void bluestore_extent_ref_map_t::_check() const
 {
   uint64_t pos = 0;
@@ -176,22 +165,40 @@ void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint64_t,record_t>::itera
 void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 {
   map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
-  if (p == ref_map.end() || p->first > offset) {
-    if (p == ref_map.begin()) {
-      assert(0 == "get on missing extent (nothing before)");
-    }
+  if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
-      assert(0 == "get on missing extent (gap)");
+      ++p;
     }
   }
-  if (p->first < offset) {
-    uint64_t left = p->first + p->second.length - offset;
-    p->second.length = offset - p->first;
-    p = ref_map.insert(map<uint64_t,record_t>::value_type(
-			 offset, record_t(left, p->second.refs))).first;
-  }
   while (length > 0) {
+    if (p == ref_map.end()) {
+      // nothing after offset; add the whole thing.
+      p = ref_map.insert(
+	map<uint64_t,record_t>::value_type(offset, record_t(length, 1))).first;
+      break;
+    }
+    if (p->first > offset) {
+      // gap
+      uint64_t newlen = MIN(p->first - offset, length);
+      p = ref_map.insert(
+	map<uint64_t,record_t>::value_type(offset,
+					   record_t(newlen, 1))).first;
+      offset += newlen;
+      length -= newlen;
+      _maybe_merge_left(p);
+      ++p;
+      continue;
+    }
+    if (p->first < offset) {
+      // split off the portion before offset
+      assert(p->first + p->second.length > offset);
+      uint64_t left = p->first + p->second.length - offset;
+      p->second.length = offset - p->first;
+      p = ref_map.insert(map<uint64_t,record_t>::value_type(
+			   offset, record_t(left, p->second.refs))).first;
+      // continue below
+    }
     assert(p->first == offset);
     if (length < p->second.length) {
       ref_map.insert(make_pair(offset + length,
@@ -199,8 +206,7 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 					p->second.refs)));
       p->second.length = length;
       ++p->second.refs;
-      _maybe_merge_left(p);
-      return;
+      break;
     }
     ++p->second.refs;
     offset += p->second.length;
@@ -244,7 +250,8 @@ void bluestore_extent_ref_map_t::put(
 	--p->second.refs;
 	_maybe_merge_left(p);
       } else {
-	release->push_back(bluestore_pextent_t(p->first, length));
+	if (release)
+	  release->push_back(bluestore_pextent_t(p->first, length));
 	ref_map.erase(p);
       }
       return;
@@ -256,7 +263,8 @@ void bluestore_extent_ref_map_t::put(
       _maybe_merge_left(p);
       ++p;
     } else {
-      release->push_back(bluestore_pextent_t(p->first, p->second.length));
+      if (release)
+	release->push_back(bluestore_pextent_t(p->first, p->second.length));
       ref_map.erase(p++);
     }
   }
@@ -323,8 +331,10 @@ void bluestore_extent_ref_map_t::generate_test_instances(list<bluestore_extent_r
 {
   o.push_back(new bluestore_extent_ref_map_t);
   o.push_back(new bluestore_extent_ref_map_t);
-  o.back()->add(10, 10);
-  o.back()->add(20, 20, 3);
+  o.back()->get(10, 10);
+  o.back()->get(18, 22);
+  o.back()->get(20, 20);
+  o.back()->get(10, 25);
   o.back()->get(15, 20);
 }
 
@@ -472,6 +482,7 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->csum_type = CSUM_XXHASH32;
   ls.back()->csum_block_order = 16;
   ls.back()->csum_data = vector<char>{1, 2, 3, 4};  // one uint32_t
+  ls.back()->ref_map.get(3, 5);
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
