@@ -25,6 +25,10 @@ public:
       path(_path), params(make_param_list(params)), result(_result)
   {}
 
+  ~RGWReadRESTResourceCR() {
+    request_cleanup();
+  }
+
   int send_request() {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
         new RGWRESTReadResource(conn, path, params, NULL, http_manager));
@@ -35,6 +39,7 @@ public:
     if (ret < 0) {
       log_error() << "failed to send http operation: " << op->to_str()
           << " ret=" << ret << std::endl;
+      op->put();
       return ret;
     }
     std::swap(http_op, op); // store reference in http_op on success
@@ -47,14 +52,17 @@ public:
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()
           << " status=" << op->get_http_status() << std::endl;
+      op->put();
       return ret;
     }
+    op->put();
     return 0;
   }
 
   void request_cleanup() {
     if (http_op) {
       http_op->put();
+      http_op = NULL;
     }
   }
 };
@@ -78,6 +86,10 @@ public:
       path(_path), params(make_param_list(_params)), result(_result),
       input(_input)
   {}
+
+  ~RGWPostRESTResourceCR() {
+    request_cleanup();
+  }
 
   int send_request() {
     auto op = boost::intrusive_ptr<RGWRESTPostResource>(
@@ -119,12 +131,14 @@ public:
       op->put();
       return ret;
     }
+    op->put();
     return 0;
   }
 
   void request_cleanup() {
     if (http_op) {
       http_op->put();
+      http_op = NULL;
     }
   }
 };
