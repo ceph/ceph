@@ -300,6 +300,24 @@ bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) cons
   return true;
 }
 
+bool bluestore_extent_ref_map_t::intersects(
+  uint64_t offset,
+  uint32_t length) const
+{
+  map<uint64_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  if (p != ref_map.begin()) {
+    --p;
+    if (p->first + p->second.length <= offset) {
+      ++p;
+    }
+  }
+  if (p == ref_map.end())
+    return false;
+  if (p->first >= offset + length)
+    return false;
+  return true;  // intersects p!
+}
+
 void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
