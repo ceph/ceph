@@ -660,12 +660,14 @@ set(libos_srcs
   os/kstore/kstore_types.cc
   os/bluestore/kv.cc
   os/bluestore/Allocator.cc
+  os/bluestore/BitmapFreelistManager.cc
   os/bluestore/BlockDevice.cc
   os/bluestore/BlueFS.cc
   os/bluestore/bluefs_types.cc
   os/bluestore/BlueRocksEnv.cc
   os/bluestore/BlueStore.cc
   os/bluestore/bluestore_types.cc
+  os/bluestore/ExtentFreelistManager.cc
   os/bluestore/FreelistManager.cc
   os/bluestore/KernelDevice.cc
   os/bluestore/StupidAllocator.cc
