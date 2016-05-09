@@ -5937,6 +5937,9 @@ void BlueStore::_do_zero_tail_extent(
   bp = o->onode.seek_lextent(offset);
   pp = o->onode.find_lextent(o->onode.size);
 
+  if (pp == o->onode.extent_map.end())
+    return;
+
   dout(10) << __func__ << " offset 0x" << std::hex << offset << " extent 0x"
 	   << pp->first << std::dec << ": " << pp->second << dendl;
   assert(offset > o->onode.size);
