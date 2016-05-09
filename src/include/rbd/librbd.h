@@ -354,6 +354,23 @@ CEPH_RBD_API int rbd_snap_unprotect(rbd_image_t image, const char *snap_name);
  */
 CEPH_RBD_API int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
 			               int *is_protected);
+/**
+ * Get the current snapshot limit for an image. If no limit is set,
+ * UINT64_MAX is returned.
+ *
+ * @param limit pointer where the limit will be stored on success
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit);
+
+/**
+ * Set a limit for the number of snapshots that may be taken of an image.
+ *
+ * @param limit the maximum number of snapshots allowed in the future.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_snap_set_limit(rbd_image_t image, uint64_t limit);
+
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);

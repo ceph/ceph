@@ -108,6 +108,8 @@ cls_method_handle_t h_metadata_set;
 cls_method_handle_t h_metadata_remove;
 cls_method_handle_t h_metadata_list;
 cls_method_handle_t h_metadata_get;
+cls_method_handle_t h_snapshot_get_limit;
+cls_method_handle_t h_snapshot_set_limit;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -1499,6 +1501,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist snap_namebl, snap_idbl;
   cls_rbd_snap snap_meta;
+  uint64_t snap_limit;
 
   try {
     bufferlist::iterator iter = in->begin();
@@ -1542,7 +1545,16 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  r = read_key(hctx, "snap_limit", &snap_limit);
+  if (r == -ENOENT) {
+    snap_limit = UINT64_MAX;
+  } else if (r < 0) {
+    CLS_ERR("Could not read snapshot limit off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
   int max_read = RBD_MAX_KEYS_READ;
+  uint64_t total_read = 0;
   string last_read = RBD_SNAP_KEY_PREFIX;
   do {
     map<string, bufferlist> vals;
@@ -1550,6 +1562,12 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 			     max_read, &vals);
     if (r < 0)
       return r;
+
+    total_read += vals.size();
+    if (total_read >= snap_limit) {
+      CLS_ERR("Attempt to create snapshot over limit of %lu", snap_limit);
+      return -EDQUOT;
+    }
 
     for (map<string, bufferlist>::iterator it = vals.begin();
 	 it != vals.end(); ++it) {
@@ -2675,6 +2693,50 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int snapshot_get_limit(cls_method_context_t hctx, bufferlist *in,
+		       bufferlist *out)
+{
+  int rc;
+  uint64_t snap_limit;
+
+  rc = read_key(hctx, "snap_limit", &snap_limit);
+  if (rc == -ENOENT) {
+    rc = 0;
+    ::encode(UINT64_MAX, *out);
+  } else {
+    ::encode(snap_limit, *out);
+  }
+
+  CLS_LOG(20, "read snapshot limit %lu", snap_limit);
+  return rc;
+}
+
+int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
+		       bufferlist *out)
+{
+  int rc;
+  uint64_t new_limit;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(new_limit, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (new_limit == UINT64_MAX) {
+    CLS_LOG(20, "remove snapshot limit\n");
+    rc = cls_cxx_map_remove_key(hctx, "snap_limit");
+  } else {
+    CLS_LOG(20, "set snapshot limit to %lu\n", new_limit);
+    ::encode(new_limit, bl);
+    rc = cls_cxx_map_set_val(hctx, "snap_limit", &bl);
+  }
+
+  return rc;
+}
+
 
 /****************************** Old format *******************************/
 
@@ -2745,6 +2807,17 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   if (header->snap_seq > snap_id)
     return -ESTALE;
+
+  uint64_t snap_limit;
+  rc = read_key(hctx, "snap_limit", &snap_limit);
+  if (rc == -ENOENT) {
+    snap_limit = UINT64_MAX;
+  } else if (rc < 0) {
+    return rc;
+  }
+
+  if (header->snap_count >= snap_limit)
+    return -EDQUOT;
 
   const char *cur_snap_name;
   for (cur_snap_name = snap_names; cur_snap_name < end; cur_snap_name += strlen(cur_snap_name) + 1) {
@@ -2966,6 +3039,7 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     return rc;
   return 0;
 }
+
 
 namespace mirror {
 
@@ -4215,6 +4289,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "metadata_get",
                           CLS_METHOD_RD,
 			  metadata_get, &h_metadata_get);
+  cls_register_cxx_method(h_class, "snapshot_get_limit",
+			  CLS_METHOD_RD,
+			  snapshot_get_limit, &h_snapshot_get_limit);
+  cls_register_cxx_method(h_class, "snapshot_set_limit",
+			  CLS_METHOD_WR,
+			  snapshot_set_limit, &h_snapshot_set_limit);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
