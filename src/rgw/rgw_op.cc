@@ -2019,12 +2019,12 @@ static void populate_with_generic_attrs(const req_state * const s,
 }
 
 
-static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
-                                   const std::set<std::string>& rmattr_names,
-                                   RGWQuotaInfo& quota)
+static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
+                                 const std::set<std::string>& rmattr_names,
+                                 RGWQuotaInfo& quota)
 {
   /* Put new limit on max objects. */
-  auto iter = add_attrs.find(RGW_ATTR_CQUOTA_NOBJS);
+  auto iter = add_attrs.find(RGW_ATTR_QUOTA_NOBJS);
   std::string err;
   if (std::end(add_attrs) != iter) {
     quota.max_objects =
@@ -2036,7 +2036,7 @@ static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
   }
 
   /* Put new limit on bucket (container) size. */
-  iter = add_attrs.find(RGW_ATTR_CQUOTA_MSIZE);
+  iter = add_attrs.find(RGW_ATTR_QUOTA_MSIZE);
   if (iter != add_attrs.end()) {
     quota.max_size =
       static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
@@ -2048,12 +2048,12 @@ static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
 
   for (const auto& name : rmattr_names) {
     /* Remove limit on max objects. */
-    if (name.compare(RGW_ATTR_CQUOTA_NOBJS) == 0) {
+    if (name.compare(RGW_ATTR_QUOTA_NOBJS) == 0) {
       quota.max_objects = -1;
     }
 
     /* Remove limit on max bucket size. */
-    if (name.compare(RGW_ATTR_CQUOTA_MSIZE) == 0) {
+    if (name.compare(RGW_ATTR_QUOTA_MSIZE) == 0) {
       quota.max_size = -1;
     }
   }
@@ -2178,7 +2178,7 @@ void RGWCreateBucket::execute()
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
 
-    op_ret = filter_out_bucket_quota(attrs, rmattr_names, quota_info);
+    op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
     if (op_ret < 0) {
       return;
     }
@@ -2266,7 +2266,7 @@ void RGWCreateBucket::execute()
       rgw_get_request_metadata(s->cct, s->info, attrs, false);
       prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
       populate_with_generic_attrs(s, attrs);
-      op_ret = filter_out_bucket_quota(attrs, rmattr_names, s->bucket_info.quota);
+      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
       if (op_ret < 0) {
         return;
       }
@@ -3245,7 +3245,7 @@ void RGWPutMetadataBucket::execute()
        * implementation: anyone with write permissions is able to set the bucket
        * quota. This stays in contrast to account quotas that can be set only by
        * clients holding reseller admin privileges. */
-      op_ret = filter_out_bucket_quota(attrs, rmattr_names, s->bucket_info.quota);
+      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
       if (op_ret < 0) {
 	return op_ret;
       }
