@@ -226,6 +226,7 @@ int ObjBencher::aio_bench(
   int num_objects = 0;
   int r = 0;
   int prevPid = 0;
+  utime_t runtime;
 
   // default metadata object is used if user does not specify one
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
@@ -286,8 +287,14 @@ int ObjBencher::aio_bench(
       goto out;
     }
 
+    data.start_time = ceph_clock_now(cct);
+    out(cout) << "Cleaning up (deleting benchmark objects)" << std::endl;
+
     r = clean_up(num_objects, prevPid, concurrentios);
     if (r != 0) goto out;
+
+    runtime = ceph_clock_now(cct) - data.start_time;
+    out(cout) << "Clean up completed and total clean up time :" << runtime << std::endl;
 
     // lastrun file
     r = sync_remove(run_name_meta);
