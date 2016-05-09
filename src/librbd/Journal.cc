@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/Journal.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
@@ -802,8 +801,7 @@ void Journal<I>::flush_commit_position(Context *on_finish) {
 }
 
 template <typename I>
-uint64_t Journal<I>::append_write_event(AioCompletion *aio_comp,
-                                        uint64_t offset, size_t length,
+uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                         const bufferlist &bl,
                                         const AioObjectRequests &requests,
                                         bool flush_entry) {
@@ -833,13 +831,12 @@ uint64_t Journal<I>::append_write_event(AioCompletion *aio_comp,
     bytes_remaining -= event_length;
   } while (bytes_remaining > 0);
 
-  return append_io_events(aio_comp, journal::EVENT_TYPE_AIO_WRITE, bufferlists,
-                          requests, offset, length, flush_entry);
+  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists, requests,
+                          offset, length, flush_entry);
 }
 
 template <typename I>
-uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
-                                     journal::EventEntry &&event_entry,
+uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
                                      uint64_t offset, size_t length,
                                      bool flush_entry) {
@@ -847,13 +844,12 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
 
   bufferlist bl;
   ::encode(event_entry, bl);
-  return append_io_events(aio_comp, event_entry.get_event_type(), {bl},
-                          requests, offset, length, flush_entry);
+  return append_io_events(event_entry.get_event_type(), {bl}, requests, offset,
+                          length, flush_entry);
 }
 
 template <typename I>
-uint64_t Journal<I>::append_io_events(AioCompletion *aio_comp,
-                                      journal::EventType event_type,
+uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const Bufferlists &bufferlists,
                                       const AioObjectRequests &requests,
                                       uint64_t offset, size_t length,
@@ -875,7 +871,7 @@ uint64_t Journal<I>::append_io_events(AioCompletion *aio_comp,
       assert(bl.length() <= m_max_append_size);
       futures.push_back(m_journaler->append(m_tag_tid, bl));
     }
-    m_events[tid] = Event(futures, aio_comp, requests, offset, length);
+    m_events[tid] = Event(futures, requests, offset, length);
   }
 
   CephContext *cct = m_image_ctx.cct;
