@@ -172,6 +172,14 @@ struct dir_result_t {
   static unsigned fpos_off(uint64_t p) {
     return p & MASK;
   }
+  static int fpos_cmp(uint64_t l, uint64_t r) {
+    int c = ceph_frag_compare(fpos_high(l), fpos_high(r));
+    if (c)
+      return c;
+    if (fpos_low(l) == fpos_low(r))
+      return 0;
+    return fpos_low(l) < fpos_low(r) ? -1 : 1;
+  }
 
 
   InodeRef inode;
