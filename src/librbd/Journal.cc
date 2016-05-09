@@ -1477,7 +1477,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
     lderr(cct) << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
   }
 
-  AioCompletion *aio_comp;
   AioObjectRequests aio_object_requests;
   Contexts on_safe_contexts;
   {
@@ -1486,7 +1485,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
     assert(it != m_events.end());
 
     Event &event = it->second;
-    aio_comp = event.aio_comp;
     aio_object_requests.swap(event.aio_object_requests);
     on_safe_contexts.swap(event.on_safe_contexts);
 
@@ -1507,15 +1505,14 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
   }
 
   ldout(cct, 20) << "completing tid=" << tid << dendl;
-
-  if (r < 0) {
-    // don't send aio requests if the journal fails -- bubble error up
-    aio_comp->fail(cct, r);
-  } else {
-    // send any waiting aio requests now that journal entry is safe
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    for (AioObjectRequests::iterator it = aio_object_requests.begin();
-         it != aio_object_requests.end(); ++it) {
+  for (AioObjectRequests::iterator it = aio_object_requests.begin();
+       it != aio_object_requests.end(); ++it) {
+    if (r < 0) {
+      // don't send aio requests if the journal fails -- bubble error up
+      (*it)->complete(r);
+    } else {
+      // send any waiting aio requests now that journal entry is safe
+      RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
       (*it)->send();
     }
   }
