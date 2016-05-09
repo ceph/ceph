@@ -161,6 +161,33 @@ TEST(bluestore_extent_ref_map_t, contains)
   ASSERT_FALSE(m.contains(4000, 30));
 }
 
+TEST(bluestore_extent_ref_map_t, intersects)
+{
+  bluestore_extent_ref_map_t m;
+  m.get(10, 30);
+  ASSERT_TRUE(m.intersects(10, 30));
+  ASSERT_TRUE(m.intersects(0, 11));
+  ASSERT_TRUE(m.intersects(10, 40));
+  ASSERT_TRUE(m.intersects(15, 40));
+  ASSERT_FALSE(m.intersects(0, 10));
+  ASSERT_FALSE(m.intersects(0, 5));
+  ASSERT_FALSE(m.intersects(40, 20));
+  ASSERT_FALSE(m.intersects(41, 20));
+  m.get(40, 10);
+  m.get(40, 10);
+  ASSERT_TRUE(m.intersects(0, 100));
+  ASSERT_TRUE(m.intersects(10, 35));
+  ASSERT_TRUE(m.intersects(45, 10));
+  ASSERT_FALSE(m.intersects(50, 5));
+  m.get(60, 100);
+  ASSERT_TRUE(m.intersects(45, 10));
+  ASSERT_TRUE(m.intersects(55, 10));
+  ASSERT_TRUE(m.intersects(50, 11));
+  ASSERT_FALSE(m.intersects(50, 10));
+  ASSERT_FALSE(m.intersects(51, 9));
+  ASSERT_FALSE(m.intersects(55, 1));
+}
+
 TEST(bluestore_onode_t, punch_hole)
 {
   bluestore_onode_t on;

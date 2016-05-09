@@ -160,6 +160,7 @@ struct bluestore_extent_ref_map_t {
   void put(uint64_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
   bool contains(uint64_t offset, uint32_t len) const;
+  bool intersects(uint64_t offset, uint32_t len) const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
