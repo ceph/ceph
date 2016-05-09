@@ -6871,9 +6871,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       }
     }
 
-    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) &&
-	!newmap->test_flag(CEPH_OSDMAP_NOUP)) {
-      dout(10) << __func__ << " NOUP flag cleared in " << newmap->get_epoch()
+    if (osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
+	newmap->test_flag(CEPH_OSDMAP_NOUP)) {
+      dout(10) << __func__ << " NOUP flag changed in " << newmap->get_epoch()
 	       << dendl;
       if (is_booting()) {
 	// this captures the case where we sent the boot message while
