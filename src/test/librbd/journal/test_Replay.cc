@@ -47,8 +47,8 @@ public:
     librbd::Journal<>::AioObjectRequests requests;
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0,
-				     0, true);
+      ictx->journal->append_io_event(std::move(event_entry), requests, 0, 0,
+                                     true);
     }
   }
 
