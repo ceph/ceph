@@ -1897,14 +1897,14 @@ def remove_btrfs_subvolumes(path):
     result = subprocess.Popen("stat -f -c '%%T' %s" % path, shell=True, stdout=subprocess.PIPE)
     filesystem = result.stdout.readlines()[0]
     if filesystem.rstrip('\n') == "btrfs":
-        result = subprocess.Popen("btrfs subvolume list %s" % path, shell=True, stdout=subprocess.PIPE)
+        result = subprocess.Popen("sudo btrfs subvolume list %s" % path, shell=True, stdout=subprocess.PIPE)
         for line in result.stdout.readlines():
             subvolume=line.split()[8]
             # extracting the relative volume name
             m = re.search(".*(%s.*)" % path, subvolume)
             if m:
                 found = m.group(1)
-                call("btrfs subvolume delete %s" % found, shell=True)
+                call("sudo btrfs subvolume delete %s" % found, shell=True)
 
 
 if __name__ == "__main__":
