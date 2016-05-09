@@ -176,15 +176,12 @@ void KernelDevice::close()
 
 int KernelDevice::flush()
 {
-  // serialize flushers, so that we can avoid weird io_since_flush
-  // races (w/ multipler flushers).
-  Mutex::Locker l(flush_lock);
-  if (io_since_flush.read() == 0) {
+  bool ret = io_since_flush.compare_and_swap(1, 0);
+  if (!ret) {
     dout(10) << __func__ << " no-op (no ios since last flush)" << dendl;
     return 0;
   }
   dout(10) << __func__ << " start" << dendl;
-  io_since_flush.set(0);
   if (g_conf->bdev_inject_crash) {
     ++injecting_crash;
     // sleep for a moment to give other threads a chance to submit or
@@ -202,6 +199,7 @@ int KernelDevice::flush()
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fdatasync got: " << cpp_strerror(r) << dendl;
+    assert(0);
   }
   dout(5) << __func__ << " in " << dur << dendl;;
   return r;
