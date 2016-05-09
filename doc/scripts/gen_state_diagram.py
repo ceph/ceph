@@ -96,7 +96,7 @@ class StateMachineRenderer(object):
     def get_state(self, line):
         if "boost::statechart::state_machine" in line:
             tokens = re.search(
-                r"boost::statechart::state_machine<\s*(\w*),\s*(\w*)\s*>", 
+                r"boost::statechart::state_machine<\s*(\w*),\s*(\w*)\s*>",
                 line)
             if tokens is None:
                 raise "Error: malformed state_machine line: " + line

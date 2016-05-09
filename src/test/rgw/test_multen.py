@@ -132,7 +132,7 @@ def test4(cluster):
             "command: key create --uid %s, returned user_id %s" %
             (tid_uid, outj['user_id']))
     skj = outj['swift_keys'][0]
-    if skj['secret_key'] != swift_secret: 
+    if skj['secret_key'] != swift_secret:
         raise TestException(
             "command: key create --uid %s, returned swift key %s" %
             (tid_uid, skj['secret_key']))
