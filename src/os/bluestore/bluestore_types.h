@@ -371,6 +371,13 @@ struct bluestore_blob_t {
       assert(0 == "unrecognized csum word size");
     }
   }
+
+  void init_csum(unsigned type, unsigned order) {
+    csum_type = type;
+    csum_block_order = order;
+    csum_data.resize(get_csum_value_size() * get_ondisk_length() /
+		     get_csum_block_size());
+  }
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)
 
