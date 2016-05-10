@@ -161,7 +161,10 @@ Context *ResizeRequest<I>::handle_trim_image(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result == -ERESTART) {
+    ldout(cct, 5) << "resize operation interrupted" << dendl;
+    return this->create_context_finisher();
+  } else if (*result < 0) {
     lderr(cct) << "failed to trim image: " << cpp_strerror(*result) << dendl;
     return this->create_context_finisher();
   }
