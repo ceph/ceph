@@ -35,9 +35,20 @@ public:
 
   KVTest() : db(0) {}
 
+  void rm_r(string path) {
+    string cmd = string("rm -r ") + path;
+    cout << "==> " << cmd << std::endl;
+    int r = ::system(cmd.c_str());
+    if (r) {
+      cerr << "failed with exit code " << r
+	   << ", continuing anyway" << std::endl;
+    }
+  }
+
   void init() {
+    cout << "Creating " << string(GetParam()) << "\n";
     db.reset(KeyValueDB::create(g_ceph_context, string(GetParam()),
-				string("kv_test_temp_dir")));
+				"kv_test_temp_dir"));
   }
   void fini() {
     db.reset(NULL);
@@ -47,14 +58,15 @@ public:
     int r = ::mkdir("kv_test_temp_dir", 0777);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
-      cerr << __func__ << ": unable to create kv_test_temp_dir"
-	   << ": " << cpp_strerror(r) << std::endl;
+      cerr << __func__ << ": unable to create kv_test_temp_dir: "
+	   << cpp_strerror(r) << std::endl;
       return;
     }
     init();
   }
   virtual void TearDown() {
     fini();
+    rm_r("kv_test_temp_dir");
   }
 };
 
@@ -87,11 +99,11 @@ TEST_P(KVTest, PutReopen) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    bufferlist v;
-    ASSERT_EQ(0, db->get("prefix", "key", &v));
-    ASSERT_EQ(v.length(), 5u);
-    ASSERT_EQ(0, db->get("prefix", "key2", &v));
-    ASSERT_EQ(v.length(), 5u);
+    bufferlist v1, v2;
+    ASSERT_EQ(0, db->get("prefix", "key", &v1));
+    ASSERT_EQ(v1.length(), 5u);
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 5u);
   }
   {
     KeyValueDB::Transaction t = db->get_transaction();
@@ -104,11 +116,11 @@ TEST_P(KVTest, PutReopen) {
   init();
   ASSERT_EQ(0, db->open(cout));
   {
-    bufferlist v;
-    ASSERT_EQ(-ENOENT, db->get("prefix", "key", &v));
-    ASSERT_EQ(0, db->get("prefix", "key2", &v));
-    ASSERT_EQ(v.length(), 5u);
-    ASSERT_EQ(-ENOENT, db->get("prefix", "key3", &v));
+    bufferlist v1, v2, v3;
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key", &v1));
+    ASSERT_EQ(0, db->get("prefix", "key2", &v2));
+    ASSERT_EQ(v2.length(), 5u);
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key3", &v3));
   }
   fini();
 }
@@ -144,6 +156,7 @@ TEST_P(KVTest, BenchCommit) {
   utime_t dur = end - start;
   cout << n << " commits in " << dur << ", avg latency " << (dur / (double)n)
        << std::endl;
+  fini();
 }
 
 
