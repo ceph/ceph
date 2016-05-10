@@ -352,7 +352,7 @@ public:
     return peer_info;
   }
   using PGBackend::Listener::get_shard_info;  
-  const pg_missing_t &get_local_missing() const {
+  const pg_missing_tracker_t &get_local_missing() const {
     return pg_log.get_missing();
   }
   const PGLog &get_log() const {

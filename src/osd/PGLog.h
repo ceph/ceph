@@ -426,7 +426,8 @@ protected:
   //////////////////// data members ////////////////////
 
   map<eversion_t, hobject_t> divergent_priors;
-  pg_missing_t     missing;
+
+  pg_missing_tracker_t missing;
   IndexedLog  log;
 
   eversion_t dirty_to;         ///< must clear/writeout all keys <= dirty_to
@@ -515,7 +516,7 @@ public:
 
   //////////////////// get or set missing ////////////////////
 
-  const pg_missing_t& get_missing() const { return missing; }
+  const pg_missing_tracker_t& get_missing() const { return missing; }
   void resort_missing(bool sort_bitwise) {
     missing.resort(sort_bitwise);
   }
