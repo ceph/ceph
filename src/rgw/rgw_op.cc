@@ -2817,6 +2817,51 @@ void RGWPutMetadataBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static int filter_out_bucket_quota(std::map<std::string, bufferlist>& add_attrs,
+                                   const std::set<std::string>& rmattr_names,
+                                   RGWQuotaInfo& quota)
+{
+  /* Put new limit on max objects. */
+  auto iter = add_attrs.find(RGW_ATTR_CQUOTA_NOBJS);
+  std::string err;
+  if (std::end(add_attrs) != iter) {
+    quota.max_objects = (int64_t)strict_strtoll(iter->second.c_str(), 10, &err);
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    add_attrs.erase(iter);
+  }
+
+  /* Put new limit on bucket (container) size. */
+  iter = add_attrs.find(RGW_ATTR_CQUOTA_MSIZE);
+  if (iter != add_attrs.end()) {
+    const int64_t max_size =
+      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    quota.max_size = max_size;
+    add_attrs.erase(iter);
+  }
+
+  for (const auto& name : rmattr_names) {
+    /* Remove limit on max objects. */
+    if (name.compare(RGW_ATTR_CQUOTA_NOBJS) == 0) {
+      quota.max_objects = -1;
+    }
+
+    /* Remove limit on max bucket size. */
+    if (name.compare(RGW_ATTR_CQUOTA_MSIZE) == 0) {
+      quota.max_size = -1;
+    }
+  }
+
+  /* Swift requries checking on raw usage instead of the 4 KiB rounded one. */
+  quota.check_on_raw = true;
+  quota.enabled = quota.max_size > 0 || quota.max_objects > 0;
+  return 0;
+}
+
 void RGWPutMetadataBucket::execute()
 {
   map<string, buffer::list> orig_attrs;
@@ -2838,6 +2883,12 @@ void RGWPutMetadataBucket::execute()
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
+  /* FIXME: priv check. */
+  op_ret = filter_out_bucket_quota(attrs, rmattr_names, s->bucket_info.quota);
+  if (op_ret < 0) {
+    return;
+  }
+
   if (has_policy) {
     buffer::list bl;
     policy.encode(bl);
@@ -2853,6 +2904,8 @@ void RGWPutMetadataBucket::execute()
   s->bucket_info.swift_ver_location = swift_ver_location;
   s->bucket_info.swift_versioning = (!swift_ver_location.empty());
 
+  /* Setting attributes also stores the provided bucket info. Due to this
+   * fact, the new quota settings can be serialized with the same call. */
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
 				&s->bucket_info.objv_tracker);
 }

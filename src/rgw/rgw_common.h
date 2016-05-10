@@ -88,6 +88,10 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
+/* Container quota of the Swift API. */
+#define RGW_ATTR_CQUOTA_NOBJS   RGW_ATTR_META_PREFIX "quota-count"
+#define RGW_ATTR_CQUOTA_MSIZE   RGW_ATTR_META_PREFIX "quota-bytes"
+
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
 #define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
@@ -1061,11 +1065,15 @@ WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 struct RGWStorageStats
 {
   RGWObjCategory category;
-  uint64_t num_kb;
-  uint64_t num_kb_rounded;
+  uint64_t size;
+  uint64_t size_rounded;
   uint64_t num_objects;
 
-  RGWStorageStats() : category(RGW_OBJ_CATEGORY_NONE), num_kb(0), num_kb_rounded(0), num_objects(0) {}
+  RGWStorageStats()
+    : category(RGW_OBJ_CATEGORY_NONE),
+      size(0),
+      size_rounded(0),
+      num_objects(0) {}
 
   void dump(Formatter *f) const;
 };
@@ -1825,6 +1833,11 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
 static inline uint64_t rgw_rounded_kb(uint64_t bytes)
 {
   return (bytes + 1023) / 1024;
+}
+
+static inline uint64_t rgw_rounded_objsize(uint64_t bytes)
+{
+  return ((bytes + 4095) & ~4095);
 }
 
 static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)

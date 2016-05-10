@@ -101,14 +101,15 @@ public:
 template<class T>
 bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& cached_stats)
 {
-  if (quota.max_size_kb >= 0) {
+  if (quota.max_size >= 0) {
     if (quota.max_size_soft_threshold < 0) {
-      quota.max_size_soft_threshold = quota.max_size_kb * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
     }
 
-    if (cached_stats.num_kb_rounded >= (uint64_t)quota.max_size_soft_threshold) {
+    const auto cached_stats_num_kb_rounded = rgw_rounded_kb(cached_stats.size_rounded);
+    if (cached_stats_num_kb_rounded >= (uint64_t)quota.max_size_soft_threshold) {
       ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (size): "
-        << cached_stats.num_kb_rounded << " >= " << quota.max_size_soft_threshold << dendl;
+        << cached_stats_num_kb_rounded << " >= " << quota.max_size_soft_threshold << dendl;
       return false;
     }
   }
@@ -211,18 +212,24 @@ int RGWQuotaCache<T>::get_stats(const rgw_user& user, rgw_bucket& bucket, RGWSto
 
 template<class T>
 class RGWQuotaStatsUpdate : public lru_map<T, RGWQuotaCacheStats>::UpdateContext {
-  int objs_delta;
-  uint64_t added_bytes;
-  uint64_t removed_bytes;
+  const int objs_delta;
+  const uint64_t added_bytes;
+  const uint64_t removed_bytes;
 public:
-  RGWQuotaStatsUpdate(int _objs_delta, uint64_t _added_bytes, uint64_t _removed_bytes) : 
-                    objs_delta(_objs_delta), added_bytes(_added_bytes), removed_bytes(_removed_bytes) {}
-  bool update(RGWQuotaCacheStats *entry) {
-    uint64_t rounded_kb_added = rgw_rounded_objsize_kb(added_bytes);
-    uint64_t rounded_kb_removed = rgw_rounded_objsize_kb(removed_bytes);
+  RGWQuotaStatsUpdate(const int objs_delta,
+                      const uint64_t added_bytes,
+                      const uint64_t removed_bytes)
+    : objs_delta(objs_delta),
+      added_bytes(added_bytes),
+      removed_bytes(removed_bytes) {
+  }
 
-    entry->stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
-    entry->stats.num_kb += (added_bytes - removed_bytes) / 1024;
+  bool update(RGWQuotaCacheStats * const entry) override {
+    const uint64_t rounded_added = rgw_rounded_objsize(added_bytes);
+    const uint64_t rounded_removed = rgw_rounded_objsize(removed_bytes);
+
+    entry->stats.size += added_bytes - removed_bytes;
+    entry->stats.size_rounded += rounded_added - rounded_removed;
     entry->stats.num_objects += objs_delta;
 
     return true;
@@ -269,7 +276,7 @@ int BucketAsyncRefreshHandler::init_fetch()
   return 0;
 }
 
-void BucketAsyncRefreshHandler::handle_response(int r)
+void BucketAsyncRefreshHandler::handle_response(const int r)
 {
   if (r < 0) {
     ldout(store->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
@@ -278,11 +285,11 @@ void BucketAsyncRefreshHandler::handle_response(int r)
 
   RGWStorageStats bs;
 
-  map<RGWObjCategory, RGWStorageStats>::iterator iter;
-  for (iter = stats->begin(); iter != stats->end(); ++iter) {
-    RGWStorageStats& s = iter->second;
-    bs.num_kb += s.num_kb;
-    bs.num_kb_rounded += s.num_kb_rounded;
+  for (const auto& pair : *stats) {
+    const RGWStorageStats& s = pair.second;
+
+    bs.size += s.size;
+    bs.size_rounded += s.size_rounded;
     bs.num_objects += s.num_objects;
   }
 
@@ -322,19 +329,21 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, rgw_buck
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  int r = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats, NULL);
+  int r = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver,
+                                  &master_ver, bucket_stats, nullptr);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
+    ldout(store->ctx(), 0) << "could not get bucket info for bucket="
+                           << bucket.name << dendl;
     return r;
   }
 
   stats = RGWStorageStats();
 
-  map<RGWObjCategory, RGWStorageStats>::iterator iter;
-  for (iter = bucket_stats.begin(); iter != bucket_stats.end(); ++iter) {
-    RGWStorageStats& s = iter->second;
-    stats.num_kb += s.num_kb;
-    stats.num_kb_rounded += s.num_kb_rounded;
+  for (const auto& pair : bucket_stats) {
+    const RGWStorageStats& s = pair.second;
+
+    stats.size += s.size;
+    stats.size_rounded += s.size_rounded;
     stats.num_objects += s.num_objects;
   }
 
@@ -662,6 +671,153 @@ void RGWUserStatsCache::data_modified(const rgw_user& user, rgw_bucket& bucket)
 }
 
 
+class RGWQuotaInfoApplier {
+  /* NOTE: no non-static field allowed as instances are supposed to live in
+   * the static memory only. */
+protected:
+  RGWQuotaInfoApplier() = default;
+
+public:
+  virtual ~RGWQuotaInfoApplier() {}
+
+  virtual bool is_size_exceeded(const char * const entity,
+                                const RGWQuotaInfo& qinfo,
+                                const RGWStorageStats& stats,
+                                const uint64_t size) const = 0;
+
+  virtual bool is_num_objs_exceeded(const char * const entity,
+                                    const RGWQuotaInfo& qinfo,
+                                    const RGWStorageStats& stats,
+                                    const uint64_t num_objs) const = 0;
+
+  static const RGWQuotaInfoApplier& get_instance(const RGWQuotaInfo& qinfo);
+};
+
+class RGWQuotaInfoDefApplier : public RGWQuotaInfoApplier {
+public:
+  virtual bool is_size_exceeded(const char * const entity,
+                                const RGWQuotaInfo& qinfo,
+                                const RGWStorageStats& stats,
+                                const uint64_t size) const;
+
+  virtual bool is_num_objs_exceeded(const char * const entity,
+                                    const RGWQuotaInfo& qinfo,
+                                    const RGWStorageStats& stats,
+                                    const uint64_t num_objs) const;
+};
+
+class RGWQuotaInfoRawApplier : public RGWQuotaInfoApplier {
+public:
+  virtual bool is_size_exceeded(const char * const entity,
+                                const RGWQuotaInfo& qinfo,
+                                const RGWStorageStats& stats,
+                                const uint64_t size) const;
+
+  virtual bool is_num_objs_exceeded(const char * const entity,
+                                    const RGWQuotaInfo& qinfo,
+                                    const RGWStorageStats& stats,
+                                    const uint64_t num_objs) const;
+};
+
+
+bool RGWQuotaInfoDefApplier::is_size_exceeded(const char * const entity,
+                                              const RGWQuotaInfo& qinfo,
+                                              const RGWStorageStats& stats,
+                                              const uint64_t size) const
+{
+  if (qinfo.max_size < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  const uint64_t cur_size = stats.size_rounded;
+
+  if (cur_size + size > static_cast<uint64_t>(qinfo.max_size)) {
+    dout(10) << "quota exceeded: stats.size_rounded=" << stats.size_rounded
+             << " size=" << size << " "
+             << entity << "_quota.max_size=" << qinfo.max_size << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+bool RGWQuotaInfoDefApplier::is_num_objs_exceeded(const char * const entity,
+                                                  const RGWQuotaInfo& qinfo,
+                                                  const RGWStorageStats& stats,
+                                                  const uint64_t num_objs) const
+{
+  if (qinfo.max_objects < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  if (stats.num_objects + num_objs > static_cast<uint64_t>(qinfo.max_objects)) {
+    dout(10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+             << " " << entity << "_quota.max_objects=" << qinfo.max_objects
+             << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+bool RGWQuotaInfoRawApplier::is_size_exceeded(const char * const entity,
+                                              const RGWQuotaInfo& qinfo,
+                                              const RGWStorageStats& stats,
+                                              const uint64_t size) const
+{
+  if (qinfo.max_size < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  const uint64_t cur_size = stats.size;
+
+  if (cur_size + size > static_cast<uint64_t>(qinfo.max_size)) {
+    dout(10) << "quota exceeded: stats.size=" << stats.size
+             << " size=" << size << " "
+             << entity << "_quota.max_size=" << qinfo.max_size << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+bool RGWQuotaInfoRawApplier::is_num_objs_exceeded(const char * const entity,
+                                                  const RGWQuotaInfo& qinfo,
+                                                  const RGWStorageStats& stats,
+                                                  const uint64_t num_objs) const
+{
+  if (qinfo.max_objects < 0) {
+    /* The limit is not enabled. */
+    return false;
+  }
+
+  if (stats.num_objects + num_objs > static_cast<uint64_t>(qinfo.max_objects)) {
+    dout(10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+             << " " << entity << "_quota.max_objects=" << qinfo.max_objects
+             << dendl;
+    return true;
+  }
+
+  return false;
+}
+
+const RGWQuotaInfoApplier& RGWQuotaInfoApplier::get_instance(
+  const RGWQuotaInfo& qinfo)
+{
+  static RGWQuotaInfoDefApplier default_qapplier;
+  static RGWQuotaInfoRawApplier raw_qapplier;
+
+  if (qinfo.check_on_raw) {
+    return raw_qapplier;
+  } else {
+    return default_qapplier;
+  }
+}
+
+
 class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWRados *store;
   RGWBucketStatsCache bucket_stats_cache;
@@ -669,25 +825,27 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWQuotaInfo def_bucket_quota;
   RGWQuotaInfo def_user_quota;
 
-  int check_quota(const char *entity, RGWQuotaInfo& quota, RGWStorageStats& stats,
-                  uint64_t num_objs, uint64_t size_kb) {
-    if (!quota.enabled)
+  int check_quota(const char * const entity,
+                  const RGWQuotaInfo& quota,
+                  const RGWStorageStats& stats,
+                  const uint64_t num_objs,
+                  const uint64_t size) {
+    if (!quota.enabled) {
       return 0;
+    }
 
-    ldout(store->ctx(), 20) << entity << " quota: max_objects=" << quota.max_objects
-                            << " max_size_kb=" << quota.max_size_kb << dendl;
+    const auto& quota_applier = RGWQuotaInfoApplier::get_instance(quota);
 
-    if (quota.max_objects >= 0 &&
-        stats.num_objects + num_objs > (uint64_t)quota.max_objects) {
-      ldout(store->ctx(), 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
-                              << " " << entity << "_quota.max_objects=" << quota.max_objects << dendl;
+    ldout(store->ctx(), 20) << entity
+                            << " quota: max_objects=" << quota.max_objects
+                            << " max_size=" << quota.max_size << dendl;
 
+
+    if (quota_applier.is_num_objs_exceeded(entity, quota, stats, num_objs)) {
       return -ERR_QUOTA_EXCEEDED;
     }
-    if (quota.max_size_kb >= 0 &&
-               stats.num_kb_rounded + size_kb > (uint64_t)quota.max_size_kb) {
-      ldout(store->ctx(), 10) << "quota exceeded: stats.num_kb_rounded=" << stats.num_kb_rounded << " size_kb=" << size_kb
-                              << " " << entity << "_quota.max_size_kb=" << quota.max_size_kb << dendl;
+
+    if (quota_applier.is_size_exceeded(entity, quota, stats, size)) {
       return -ERR_QUOTA_EXCEEDED;
     }
 
@@ -700,7 +858,7 @@ public:
       def_bucket_quota.enabled = true;
     }
     if (store->ctx()->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      def_bucket_quota.max_size_kb = store->ctx()->_conf->rgw_bucket_default_quota_max_size;
+      def_bucket_quota.max_size = store->ctx()->_conf->rgw_bucket_default_quota_max_size * 1024;
       def_bucket_quota.enabled = true;
     }
     if (store->ctx()->_conf->rgw_user_default_quota_max_objects >= 0) {
@@ -708,58 +866,70 @@ public:
       def_user_quota.enabled = true;
     }
     if (store->ctx()->_conf->rgw_user_default_quota_max_size >= 0) {
-      def_user_quota.max_size_kb = store->ctx()->_conf->rgw_user_default_quota_max_size;
+      def_user_quota.max_size = store->ctx()->_conf->rgw_user_default_quota_max_size * 1024;
       def_user_quota.enabled = true;
     }
   }
-  virtual int check_quota(const rgw_user& user, rgw_bucket& bucket,
-                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, uint64_t size) {
+
+  virtual int check_quota(const rgw_user& user,
+                          rgw_bucket& bucket,
+                          RGWQuotaInfo& user_quota,
+                          RGWQuotaInfo& bucket_quota,
+                          uint64_t num_objs,
+                          uint64_t size) override {
 
     if (!bucket_quota.enabled && !user_quota.enabled && !def_bucket_quota.enabled && !def_user_quota.enabled)
       return 0;
 
-    uint64_t size_kb = rgw_rounded_objsize_kb(size);
-
     RGWStorageStats bucket_stats;
 
     /*
-     * we need to fetch bucket stats if the user quota is enabled, because the whole system relies
-     * on us periodically updating the user's bucket stats in the user's header, this happens in
-     * get_stats() if we actually fetch that info and not rely on cached data
+     * we need to fetch bucket stats if the user quota is enabled, because
+     * the whole system relies on us periodically updating the user's bucket
+     * stats in the user's header, this happens in get_stats() if we actually
+     * fetch that info and not rely on cached data
      */
 
-    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
-    if (ret < 0)
+    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
+                                           bucket_quota);
+    if (ret < 0) {
       return ret;
+    }
 
     if (bucket_quota.enabled) {
-      ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
-      if (ret < 0)
+      ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size);
+      if (ret < 0) {
         return ret;
+      }
     }
 
     if (def_bucket_quota.enabled) {
-      ret = check_quota("def_bucket", def_bucket_quota, bucket_stats, num_objs, size_kb);
-      if (ret < 0)
+      ret = check_quota("def_bucket", def_bucket_quota, bucket_stats,
+                        num_objs, size);
+      if (ret < 0) {
         return ret;
+      }
     }
 
     if (user_quota.enabled || def_user_quota.enabled) {
       RGWStorageStats user_stats;
 
       ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
-      if (ret < 0)
+      if (ret < 0) {
         return ret;
+      }
 
       if (user_quota.enabled) {
-	ret = check_quota("user", user_quota, user_stats, num_objs, size_kb);
-	if (ret < 0)
+	ret = check_quota("user", user_quota, user_stats, num_objs, size);
+	if (ret < 0) {
 	  return ret;
+        }
       } else if (def_user_quota.enabled) {
-        ret = check_quota("def_user", def_user_quota, user_stats, num_objs, size_kb);
-        if (ret < 0)
+        ret = check_quota("def_user", def_user_quota, user_stats,
+                          num_objs, size);
+        if (ret < 0) {
           return ret;
+        }
       }
     }
 
