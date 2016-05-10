@@ -124,6 +124,8 @@ typedef enum {
 } rbd_mirror_image_status_state_t;
 
 typedef struct {
+  char *name;
+  rbd_mirror_image_info_t info;
   rbd_mirror_image_status_state_t state;
   char *description;
   time_t last_update;
@@ -228,9 +230,12 @@ CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
                                              const char *uuid,
                                              const char *cluster_name);
 CEPH_RBD_API int rbd_mirror_image_status_list(rados_ioctx_t io_ctx,
-    const char *start, size_t max, char **image_names,
-    rbd_mirror_image_info_t *images, rbd_mirror_image_status_t *image_statuses,
-    size_t *len);
+					      const char *start_id, size_t max,
+					      char **image_ids,
+					      rbd_mirror_image_status_t *images,
+					      size_t *len);
+CEPH_RBD_API void rbd_mirror_image_status_list_cleanup(char **image_ids,
+    rbd_mirror_image_status_t *images, size_t len);
 CEPH_RBD_API int rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
     rbd_mirror_image_status_state_t *states, int *counts, size_t *maxlen);
 
@@ -633,7 +638,8 @@ CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
                                            rbd_mirror_image_info_t *mirror_image_info,
                                            size_t info_size);
 CEPH_RBD_API int rbd_mirror_image_get_status(rbd_image_t image,
-    rbd_mirror_image_status_t *mirror_image_status, size_t info_size);
+                                             rbd_mirror_image_status_t *mirror_image_status,
+                                             size_t status_size);
 
 #ifdef __cplusplus
 }
