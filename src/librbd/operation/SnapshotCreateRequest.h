@@ -60,7 +60,8 @@ public:
    * (if enabled) and bubble the originating error code back to the client.
    */
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
-		        const std::string &snap_name, uint64_t journal_op_tid);
+		        const std::string &snap_name, uint64_t journal_op_tid,
+                        bool skip_object_map);
 
 protected:
   virtual void send_op();
@@ -76,6 +77,7 @@ protected:
 
 private:
   std::string m_snap_name;
+  bool m_skip_object_map;
 
   int m_ret_val;
 

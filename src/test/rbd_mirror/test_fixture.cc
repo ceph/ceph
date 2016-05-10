@@ -38,6 +38,14 @@ void TestFixture::TearDownTestCase() {
 }
 
 void TestFixture::SetUp() {
+  static bool seeded = false;
+  if (!seeded) {
+    seeded = true;
+    int seed = getpid();
+    cout << "seed " << seed << std::endl;
+    srand(seed);
+  }
+
   ASSERT_EQ(0, _rados.ioctx_create(_local_pool_name.c_str(), m_local_io_ctx));
   ASSERT_EQ(0, _rados.ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));
   m_image_name = get_temp_image_name();

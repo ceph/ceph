@@ -5,6 +5,7 @@
 
 namespace journal {
 
+MockFuture *MockFuture::s_instance = nullptr;
 MockReplayEntry *MockReplayEntry::s_instance = nullptr;
 MockJournaler *MockJournaler::s_instance = nullptr;
 
