@@ -4151,6 +4151,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     bufferlist::iterator bp = osd_op.indata.begin();
 
+    if ((op.op == CEPH_OSD_OP_CACHE_PIN) && (osd_op.indata.length())) {
+      // CEPH_OSD_OP_CACHE_PIN opcode was used in SES2[.1] for WRITESAME.
+      // Luckily this is easily detectable via the data buffer, which is only
+      // present in WRITESAME requests.
+      dout(10) << "munging CACHE_PIN -> WRITESAME. datalen:"
+	       << osd_op.indata.length() << " off:" << op.writesame.offset
+	       << " len:" << op.writesame.length << dendl;
+      op.op = CEPH_OSD_OP_WRITESAME;
+    }
+
     // user-visible modifcation?
     switch (op.op) {
       // non user-visible modifications
