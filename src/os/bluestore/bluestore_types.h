@@ -230,6 +230,19 @@ struct bluestore_blob_t {
     default: return "???";
     }
   }
+  static int get_csum_string_type(const std::string &s) {
+    if (s == "none")
+      return CSUM_NONE;
+    if (s == "xxhash32")
+      return CSUM_XXHASH32;
+    if (s == "xxhash64")
+      return CSUM_XXHASH64;
+    if (s == "crc32c")
+      return CSUM_CRC32C;
+    if (s == "crc16")
+      return CSUM_CRC16;
+    return -EINVAL;
+  }
 
   vector<bluestore_pextent_t> extents; ///< raw data position on device
   uint32_t length;                 ///< logical (decompressed) length
@@ -335,6 +348,10 @@ struct bluestore_blob_t {
     return len;
   }
 
+  bool has_csum_data() const {
+    return csum_data.size() > 0;
+  }
+
   uint32_t get_csum_block_size() const {
     return 1 << csum_block_order;
   }
@@ -370,6 +387,14 @@ struct bluestore_blob_t {
     default:
       assert(0 == "unrecognized csum word size");
     }
+  }
+  const char *get_csum_item_ptr(unsigned i) const {
+    size_t cs = get_csum_value_size();
+    return &csum_data[cs * i];
+  }
+  char *get_csum_item_ptr(unsigned i) {
+    size_t cs = get_csum_value_size();
+    return &csum_data[cs * i];
   }
 
   void init_csum(unsigned type, unsigned order) {
