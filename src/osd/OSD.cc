@@ -3970,6 +3970,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
   }
 
   OSDMapRef curmap = service.get_osdmap();
+  assert(curmap);
 
   switch (m->op) {
 
