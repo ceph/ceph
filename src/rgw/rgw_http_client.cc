@@ -41,6 +41,7 @@ struct rgw_http_req_data : public RefCountedObject {
     return ret;
   }
 
+
   void finish(int r) {
     Mutex::Locker l(lock);
     ret = r;
@@ -63,6 +64,11 @@ struct rgw_http_req_data : public RefCountedObject {
   int get_retcode() {
     Mutex::Locker l(lock);
     return ret;
+  }
+
+  RGWHTTPManager *get_manager() {
+    Mutex::Locker l(lock);
+    return mgr;
   }
 };
 
@@ -328,7 +334,10 @@ int RGWHTTPClient::wait()
 RGWHTTPClient::~RGWHTTPClient()
 {
   if (req_data) {
-    req_data->mgr->remove_request(this);
+    RGWHTTPManager *http_manager = req_data->get_manager();
+    if (http_manager) {
+      http_manager->remove_request(this);
+    }
 
     req_data->put();
   }
@@ -474,6 +483,10 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(req_data->id);
   if (iter != reqs.end()) {
     reqs.erase(iter);
+  }
+  {
+    Mutex::Locker l(req_data->lock);
+    req_data->mgr = nullptr;
   }
   if (completion_mgr) {
     completion_mgr->complete(NULL, req_data->user_info);
@@ -790,7 +803,14 @@ void *RGWHTTPManager::reqs_thread_entry()
     }
   }
 
+
   RWLock::WLocker rl(reqs_lock);
+  for (auto r : unregistered_reqs) {
+    _finish_request(r, -ECANCELED);
+  }
+
+  unregistered_reqs.clear();
+
   auto all_reqs = std::move(reqs);
   for (auto iter : all_reqs) {
     _finish_request(iter.second, -ECANCELED);
