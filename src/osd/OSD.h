@@ -125,6 +125,11 @@ enum {
 
   l_osd_waiting_for_map,
 
+  l_osd_map_cache_hit,
+  l_osd_map_cache_miss,
+  l_osd_map_cache_miss_low,
+  l_osd_map_cache_miss_low_avg,
+
   l_osd_stat_bytes,
   l_osd_stat_bytes_used,
   l_osd_stat_bytes_avail,

@@ -1326,7 +1326,19 @@ OSDMapRef OSDService::try_get_map(epoch_t epoch)
   OSDMapRef retval = map_cache.lookup(epoch);
   if (retval) {
     dout(30) << "get_map " << epoch << " -cached" << dendl;
+    if (logger) {
+      logger->inc(l_osd_map_cache_hit);
+    }
     return retval;
+  }
+  if (logger) {
+    logger->inc(l_osd_map_cache_miss);
+    epoch_t lb = map_cache.cached_key_lower_bound();
+    if (epoch < lb) {
+      dout(30) << "get_map " << epoch << " - miss, below lower bound" << dendl;
+      logger->inc(l_osd_map_cache_miss_low);
+      logger->inc(l_osd_map_cache_miss_low_avg, lb - epoch);
+    }
   }
 
   OSDMap *map = new OSDMap;
@@ -2491,6 +2503,10 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");         // osdmap epochs
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups", "OSD map duplicates"); // dup osdmap epochs
   osd_plb.add_u64_counter(l_osd_waiting_for_map, "messages_delayed_for_map", "Operations waiting for OSD map"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_map_cache_hit, "osd_map_cache_hit", "osdmap cache hit");
+  osd_plb.add_u64_counter(l_osd_map_cache_miss, "osd_map_cache_miss", "osdmap cache miss");
+  osd_plb.add_u64_counter(l_osd_map_cache_miss_low, "osd_map_cache_miss_low", "osdmap cache miss below cache lower bound");
+  osd_plb.add_u64_avg(l_osd_map_cache_miss_low_avg, "osd_map_cache_miss_low_avg", "osdmap cache miss, avg distance below cache lower bound");
 
   osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes", "OSD size");
   osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used", "Used space");
