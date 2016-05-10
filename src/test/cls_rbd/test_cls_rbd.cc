@@ -1528,15 +1528,9 @@ TEST_F(TestClsRbdCg, dir_remove_cg) {
   ASSERT_EQ(0, keys.size());
 }
 
-TEST_F(TestClsRbdCg, cg_add_image) {
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+void test_add_image(librados::IoCtx &ioctx, const string& cg_id,
+		    const string& image_id, int64_t pool_id) {
 
-  string cg_id = "cg_id";
-  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
-
-  int64_t pool_id = ioctx.get_id();
-  string image_id = "image_id";
   ASSERT_EQ(0, cg_add_image(&ioctx, cg_id, image_id, pool_id));
 
   set<string> keys;
@@ -1548,4 +1542,34 @@ TEST_F(TestClsRbdCg, cg_add_image) {
   ASSERT_EQ(image_key, *it);
   ++it;
   ASSERT_EQ("snap_seq", *it);
+}
+
+TEST_F(TestClsRbdCg, cg_add_image) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cg_id";
+  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  test_add_image(ioctx, cg_id, image_id, pool_id);
+}
+
+TEST_F(TestClsRbdCg, cg_remove_image) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cg_id";
+  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  test_add_image(ioctx, cg_id, image_id, pool_id);
+
+  ASSERT_EQ(0, cg_remove_image(&ioctx, cg_id, image_id, pool_id));
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(cg_id, "", 10, &keys));
+  ASSERT_EQ(1, keys.size());
+  ASSERT_EQ("snap_seq", *(keys.begin()));
 }

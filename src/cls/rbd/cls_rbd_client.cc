@@ -200,7 +200,7 @@ namespace librbd {
     }
 
     int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
-	             std::string &image_id, int64_t pool_id)
+	             const std::string &image_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(image_id, bl);
