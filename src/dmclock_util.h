@@ -12,9 +12,11 @@
 #include <unistd.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <math.h>
 
 #include <limits>
 #include <cmath>
+#include <chrono>
 
 
 namespace crimson {
@@ -39,5 +41,46 @@ namespace crimson {
     std::string format_time(const Time& time, uint modulo = 1000);
 
     void debugger();
-  }
-}
+
+    template<typename T>
+    class ProfileTimer {
+      using clock = std::chrono::steady_clock;
+
+      uint count = 0;
+      typename T::rep sum = 0;
+      typename T::rep sum_squares = 0;
+
+      bool is_timing = false;
+      clock::time_point start_time;
+
+    public:
+
+      ProfileTimer() {
+      }
+
+      void start() {
+	assert(!is_timing);
+	start_time = clock::now;
+	is_timing = true;
+      }
+
+      void stop() {
+	assert(is_timing);
+	T duration = std::chrono::duration_cast<T>(clock::now - start_time);
+	typename T::rep count = duration.count();
+	sum += count;
+	sum_squares += count * count;
+	is_timing = false;
+      }
+
+      uint get_count() { return count; }
+      double get_mean() { return sum / count; }
+      double get_std_dev() {
+	if (count < 2) return 0;
+	typename T::rep variance =
+	  (count * sum_squares - sum * sum) / (count * (count - 1));
+	return sqrt(double(variance));
+      }
+    };
+  } // namespace dmclock
+} // namespace crimson

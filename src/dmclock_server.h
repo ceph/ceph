@@ -7,6 +7,8 @@
 
 
 #define DEBUGGER
+#define PROFILE
+
 
 /*
  * The prop_heap does not seem to be necessary. The only thing it
@@ -38,6 +40,7 @@
 #include "run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
+
 
 #include "gtest/gtest_prod.h"
 
@@ -196,7 +199,6 @@ namespace crimson {
       // forward decl for friend decls
       template<double RequestTag::*, ReadyOption, bool>
       struct ClientCompare;
-
 
       class ClientReq {
 	friend PriorityQueueBase;
@@ -454,6 +456,10 @@ namespace crimson {
       Duration                  erase_age;
       Duration                  check_time;
       std::deque<MarkPoint>     clean_mark_points;
+
+#ifdef PROFILE
+      ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+#endif
 
       // NB: All threads declared at end, so they're destructed first!
 
