@@ -68,7 +68,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-// prefix pgmeta_oid keys with _ so that PGLog::read_log() can
+// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
 const string infover_key("_infover");
 const string info_key("_info");
@@ -3119,7 +3119,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   assert(r >= 0);
 
   ostringstream oss;
-  pg_log.read_log(store,
+  pg_log.read_log_and_missing(store,
 		  coll,
 		  info_struct_v < 8 ? coll_t::meta() : coll,
 		  ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
