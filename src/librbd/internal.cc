@@ -2933,28 +2933,25 @@ remove_mirroring_image:
       return -ERANGE;
     }
 
-    cls::rbd::MirrorImageStatus
-      s(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
-
-    cls::rbd::MirrorImage image;
-    int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &image);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
-		 << dendl;
+    mirror_image_info_t info;
+    int r = mirror_image_get_info(ictx, &info, sizeof(info));
+    if (r < 0) {
       return r;
     }
 
-    if (r == 0) {
-      r = cls_client::mirror_image_status_get(&ictx->md_ctx,
-					      image.global_image_id, &s);
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "failed to retrieve image mirror status: "
-		   << cpp_strerror(r) << dendl;
-	return r;
-      }
+    cls::rbd::MirrorImageStatus
+      s(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
+
+    r = cls_client::mirror_image_status_get(&ictx->md_ctx, info.global_id, &s);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to retrieve image mirror status: "
+		 << cpp_strerror(r) << dendl;
+      return r;
     }
 
     *status = mirror_image_status_t{
+      ictx->name,
+      info,
       static_cast<mirror_image_status_state_t>(s.state),
       s.description,
       s.last_update.sec(),
@@ -3327,9 +3324,8 @@ remove_mirroring_image:
     return 0;
   }
 
-  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start,
-      size_t max, std::map<std::string, mirror_image_info_t> *images,
-      std::map<std::string, mirror_image_status_t> *statuses) {
+  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, mirror_image_status_t> *images) {
     CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
     int r;
 
@@ -3348,7 +3344,7 @@ remove_mirroring_image:
     map<std::string, cls::rbd::MirrorImage> images_;
     map<std::string, cls::rbd::MirrorImageStatus> statuses_;
 
-    r = librbd::cls_client::mirror_image_status_list(&io_ctx, start, max,
+    r = librbd::cls_client::mirror_image_status_list(&io_ctx, start_id, max,
 						     &images_, &statuses_);
     if (r < 0) {
       lderr(cct) << "Failed to list mirror image statuses: "
@@ -3356,8 +3352,8 @@ remove_mirroring_image:
       return r;
     }
 
-    cls::rbd::MirrorImageStatus
-      unknown_status(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
+    cls::rbd::MirrorImageStatus unknown_status(
+      cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "status not found");
 
     for (auto it = images_.begin(); it != images_.end(); ++it) {
       auto &image_id = it->first;
@@ -3368,13 +3364,14 @@ remove_mirroring_image:
 		   << ", using image id as name" << dendl;
 	image_name = image_id;
       }
-      (*images)[image_name] = mirror_image_info_t{
-	info.global_image_id,
-	static_cast<mirror_image_state_t>(info.state),
-	false}; // XXX: To set "primary" properly would require additional call.
       auto s_it = statuses_.find(image_id);
       auto &s = s_it != statuses_.end() ? s_it->second : unknown_status;
-      (*statuses)[image_name] = mirror_image_status_t{
+      (*images)[image_id] = mirror_image_status_t{
+	image_name,
+	mirror_image_info_t{
+	  info.global_image_id,
+	  static_cast<mirror_image_state_t>(info.state),
+	  false}, // XXX: To set "primary" right would require an additional call.
 	static_cast<mirror_image_status_state_t>(s.state),
 	s.description,
 	s.last_update.sec(),

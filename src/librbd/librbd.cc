@@ -141,6 +141,8 @@ void mirror_image_info_cpp_to_c(const librbd::mirror_image_info_t &cpp_info,
 
 void mirror_image_status_cpp_to_c(const librbd::mirror_image_status_t &cpp_status,
 				  rbd_mirror_image_status_t *c_status) {
+  c_status->name = strdup(cpp_status.name.c_str());
+  mirror_image_info_cpp_to_c(cpp_status.info, &c_status->info);
   c_status->state = cpp_status.state;
   c_status->description = strdup(cpp_status.description.c_str());
   c_status->last_update = cpp_status.last_update;
@@ -426,11 +428,9 @@ namespace librbd {
     return librbd::mirror_peer_set_cluster(io_ctx, uuid, cluster_name);
   }
 
-  int RBD::mirror_image_status_list(IoCtx& io_ctx, const std::string &start,
-      size_t max, std::map<std::string, mirror_image_info_t> *images,
-      std::map<std::string, mirror_image_status_t> *statuses) {
-    return librbd::mirror_image_status_list(io_ctx, start, max, images,
-					    statuses);
+  int RBD::mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, mirror_image_status_t> *images) {
+    return librbd::mirror_image_status_list(io_ctx, start_id, max, images);
   }
 
   int RBD::mirror_image_status_summary(IoCtx& io_ctx,
@@ -1470,16 +1470,14 @@ extern "C" int rbd_mirror_peer_set_cluster(rados_ioctx_t p, const char *uuid,
   return librbd::mirror_peer_set_cluster(io_ctx, uuid, cluster_name);
 }
 
-extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p, const char *start,
-    size_t max, char **image_names, rbd_mirror_image_info_t *images,
-    rbd_mirror_image_status_t *statuses, size_t *len) {
+extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p,
+    const char *start_id, size_t max, char **image_ids,
+    rbd_mirror_image_status_t *images, size_t *len) {
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  std::map<std::string, librbd::mirror_image_info_t> cpp_images;
-  std::map<std::string, librbd::mirror_image_status_t> cpp_statuses;
+  std::map<std::string, librbd::mirror_image_status_t> cpp_images;
 
-  int r = librbd::mirror_image_status_list(io_ctx, start, max, &cpp_images,
-					   &cpp_statuses);
+  int r = librbd::mirror_image_status_list(io_ctx, start_id, max, &cpp_images);
   if (r < 0) {
     return r;
   }
@@ -1487,14 +1485,23 @@ extern "C" int rbd_mirror_image_status_list(rados_ioctx_t p, const char *start,
   size_t i = 0;
   for (auto &it : cpp_images) {
     assert(i < max);
-    const std::string &image_name = it.first;
-    image_names[i] = strdup(image_name.c_str());
-    mirror_image_info_cpp_to_c(it.second, &images[i]);
-    mirror_image_status_cpp_to_c(cpp_statuses[image_name], &statuses[i]);
+    const std::string &image_id = it.first;
+    image_ids[i] = strdup(image_id.c_str());
+    mirror_image_status_cpp_to_c(it.second, &images[i]);
     i++;
   }
   *len = i;
   return 0;
+}
+
+extern "C" void rbd_mirror_image_status_list_cleanup(char **image_ids,
+    rbd_mirror_image_status_t *images, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    free(image_ids[i]);
+    free(images[i].name);
+    free(images[i].info.global_id);
+    free(images[i].description);
+  }
 }
 
 extern "C" int rbd_mirror_image_status_summary(rados_ioctx_t p,
