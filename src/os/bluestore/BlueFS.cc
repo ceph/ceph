@@ -278,9 +278,11 @@ void BlueFS::_init_alloc()
   dout(20) << __func__ << dendl;
   alloc.resize(MAX_BDEV);
   for (unsigned id = 0; id < bdev.size(); ++id) {
-    if (!bdev[id])
+    if (!bdev[id]) {
       continue;
-    alloc[id] = Allocator::create("stupid");
+    }
+    assert(bdev[id]->get_size());
+    alloc[id] = Allocator::create(g_conf->bluestore_block_allocator, bdev[id]->get_size());
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());

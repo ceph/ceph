@@ -910,6 +910,7 @@ OPTION(bdev_block_size, OPT_INT, 4096)
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL, false)
 OPTION(bdev_nvme_retry_count, OPT_INT, -1) // -1 means by default which is 4
 
+OPTION(bluestore_block_allocator, OPT_STR, "stupid")  // or "bitmap"
 OPTION(bluefs_alloc_size, OPT_U64, 1048576)
 OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
 OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
