@@ -1405,7 +1405,7 @@ FILE_CONTEXT=/etc/selinux/${SELINUXTYPE}/contexts/files/file_contexts
 cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
 
 # Install the policy
-/usr/sbin/semodule -X 100 -i %{_datadir}/selinux/packages/ceph.pp
+/usr/sbin/semodule -i %{_datadir}/selinux/packages/ceph.pp
 
 # Load the policy if SELinux is enabled
 if ! /usr/sbin/selinuxenabled; then
