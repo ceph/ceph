@@ -2744,80 +2744,360 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
  *  kept in memory, as a supplement to pg_log_t
  *  also used to pass missing info in messages.
  */
-class pg_missing_t {
+struct pg_missing_item {
+  eversion_t need, have;
+  pg_missing_item() {}
+  explicit pg_missing_item(eversion_t n) : need(n) {}  // have no old version
+  pg_missing_item(eversion_t n, eversion_t h) : need(n), have(h) {}
+
+  void encode(bufferlist& bl) const {
+    ::encode(need, bl);
+    ::encode(have, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(need, bl);
+    ::decode(have, bl);
+  }
+  void dump(Formatter *f) const {
+    f->dump_stream("need") << need;
+    f->dump_stream("have") << have;
+  }
+  static void generate_test_instances(list<pg_missing_item*>& o) {
+    o.push_back(new pg_missing_item);
+    o.push_back(new pg_missing_item);
+    o.back()->need = eversion_t(1, 2);
+    o.back()->have = eversion_t(1, 1);
+  }
+  bool operator==(const pg_missing_item &rhs) const {
+    return need == rhs.need && have == rhs.have;
+  }
+  bool operator!=(const pg_missing_item &rhs) const {
+    return !(*this == rhs);
+  }
+};
+WRITE_CLASS_ENCODER(pg_missing_item)
+ostream& operator<<(ostream& out, const pg_missing_item &item);
+
+class pg_missing_const_i {
 public:
-  struct item {
-    eversion_t need, have;
-    item() {}
-    explicit item(eversion_t n) : need(n) {}  // have no old version
-    item(eversion_t n, eversion_t h) : need(n), have(h) {}
+  virtual const map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault> &
+    get_items() const = 0;
+  virtual const map<version_t, hobject_t> &get_rmissing() const = 0;
+  virtual unsigned int num_missing() const = 0;
+  virtual bool have_missing() const = 0;
+  virtual bool is_missing(const hobject_t& oid) const = 0;
+  virtual bool is_missing(const hobject_t& oid, eversion_t v) const = 0;
+  virtual eversion_t have_old(const hobject_t& oid) const = 0;
+  virtual ~pg_missing_const_i() {}
+};
 
-    void encode(bufferlist& bl) const {
-      ::encode(need, bl);
-      ::encode(have, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      ::decode(need, bl);
-      ::decode(have, bl);
-    }
-    void dump(Formatter *f) const {
-      f->dump_stream("need") << need;
-      f->dump_stream("have") << have;
-    }
-    static void generate_test_instances(list<item*>& o) {
-      o.push_back(new item);
-      o.push_back(new item);
-      o.back()->need = eversion_t(1, 2);
-      o.back()->have = eversion_t(1, 1);
-    }
-  }; 
-  WRITE_CLASS_ENCODER(item)
 
-private:
+template <bool Track>
+class ChangeTracker {
+public:
+  void changed(const hobject_t &obj) {}
+  template <typename F>
+  void get_changed(F &&f) const {}
+  void flush() {}
+  void clean() {
+    return true;
+  }
+};
+template <>
+class ChangeTracker<true> {
+  set<hobject_t, hobject_t::BitwiseComparator> _changed;
+public:
+  void changed(const hobject_t &obj) {
+    _changed.insert(obj);
+  }
+  template <typename F>
+  void get_changed(F &&f) {
+    for (auto const &i: _changed) {
+      f(i);
+    }
+  }
+  void flush() {
+    _changed.clear();
+  }
+  bool clean() const {
+    return _changed.empty();
+  }
+};
+
+template <bool TrackChanges>
+class pg_missing_set : public pg_missing_const_i {
+  using item = pg_missing_item;
   map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
+  ChangeTracker<TrackChanges> tracker;
 
 public:
-  const map<hobject_t, item, hobject_t::ComparatorWithDefault> &get_items() const {
+  pg_missing_set() = default;
+
+  template <typename missing_type>
+  pg_missing_set(const missing_type &m) :
+    missing(m.get_items()), rmissing(m.get_rmissing()) {
+    static_assert(
+      !TrackChanges,
+      "Cannot copy construct into tracker pg_missing object");
+  }
+
+  const map<hobject_t, item, hobject_t::ComparatorWithDefault> &get_items() const override {
     return missing;
   }
-  const map<version_t, hobject_t> &get_rmissing() const {
+  const map<version_t, hobject_t> &get_rmissing() const override {
     return rmissing;
   }
-  unsigned int num_missing() const;
-  bool have_missing() const;
-  bool is_missing(const hobject_t& oid) const;
-  bool is_missing(const hobject_t& oid, eversion_t v) const;
-  eversion_t have_old(const hobject_t& oid) const;
+  unsigned int num_missing() const override {
+    return missing.size();
+  }
+  bool have_missing() const override {
+    return !missing.empty();
+  }
+  bool is_missing(const hobject_t& oid) const override {
+    return (missing.find(oid) != missing.end());
+  }
+  bool is_missing(const hobject_t& oid, eversion_t v) const override {
+    map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
+      missing.find(oid);
+    if (m == missing.end())
+      return false;
+    const item &item(m->second);
+    if (item.need > v)
+      return false;
+    return true;
+  }
+  eversion_t have_old(const hobject_t& oid) const override {
+    map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
+      missing.find(oid);
+    if (m == missing.end())
+      return eversion_t();
+    const item &item(m->second);
+    return item.have;
+  }
 
-  void swap(pg_missing_t& o);
-  void add_next_event(const pg_log_entry_t& e);
-  void revise_need(hobject_t oid, eversion_t need);
-  void revise_have(hobject_t oid, eversion_t have);
-  void add(const hobject_t& oid, eversion_t need, eversion_t have);
-  void rm(const hobject_t& oid, eversion_t v);
-  void rm(std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m);
-  void got(const hobject_t& oid, eversion_t v);
-  void got(std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m);
-  void split_into(pg_t child_pgid, unsigned split_bits, pg_missing_t *omissing);
+  void swap(pg_missing_set& o) {
+    for (auto &&i: missing)
+      tracker.changed(i.first);
+    missing.swap(o.missing);
+    rmissing.swap(o.rmissing);
+    for (auto &&i: missing)
+      tracker.changed(i.first);
+  }
+
+  /*
+   * this needs to be called in log order as we extend the log.  it
+   * assumes missing is accurate up through the previous log entry.
+   */
+  void add_next_event(const pg_log_entry_t& e) {
+    if (e.is_update()) {
+      map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
+      missing_it = missing.find(e.soid);
+      bool is_missing_divergent_item = missing_it != missing.end();
+      if (e.prior_version == eversion_t() || e.is_clone()) {
+	// new object.
+	if (is_missing_divergent_item) {  // use iterator
+	  rmissing.erase((missing_it->second).need.version);
+	  missing_it->second = item(e.version, eversion_t());  // .have = nil
+	} else  // create new element in missing map
+	  missing[e.soid] = item(e.version, eversion_t());     // .have = nil
+      } else if (is_missing_divergent_item) {
+	// already missing (prior).
+	rmissing.erase((missing_it->second).need.version);
+	(missing_it->second).need = e.version;  // leave .have unchanged.
+      } else if (e.is_backlog()) {
+	// May not have prior version
+	assert(0 == "these don't exist anymore");
+      } else {
+	// not missing, we must have prior_version (if any)
+	assert(!is_missing_divergent_item);
+	missing[e.soid] = item(e.version, e.prior_version);
+      }
+      rmissing[e.version.version] = e.soid;
+    } else if (e.is_delete()) {
+      rm(e.soid, e.version);
+    }
+
+    tracker.changed(e.soid);
+  }
+
+  void revise_need(hobject_t oid, eversion_t need) {
+    if (missing.count(oid)) {
+      rmissing.erase(missing[oid].need.version);
+      missing[oid].need = need;            // no not adjust .have
+    } else {
+      missing[oid] = item(need, eversion_t());
+    }
+    rmissing[need.version] = oid;
+
+    tracker.changed(oid);
+  }
+
+  void revise_have(hobject_t oid, eversion_t have) {
+    if (missing.count(oid)) {
+      tracker.changed(oid);
+      missing[oid].have = have;
+    }
+  }
+
+  void add(const hobject_t& oid, eversion_t need, eversion_t have) {
+    missing[oid] = item(need, have);
+    rmissing[need.version] = oid;
+    tracker.changed(oid);
+  }
+
+  void rm(const hobject_t& oid, eversion_t v) {
+    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    if (p != missing.end() && p->second.need <= v)
+      rm(p);
+  }
+
+  void rm(std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+    tracker.changed(m->first);
+    rmissing.erase(m->second.need.version);
+    missing.erase(m);
+  }
+
+  void got(const hobject_t& oid, eversion_t v) {
+    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    assert(p != missing.end());
+    assert(p->second.need <= v);
+    got(p);
+  }
+
+  void got(std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+    tracker.changed(m->first);
+    rmissing.erase(m->second.need.version);
+    missing.erase(m);
+  }
+
+  void split_into(
+    pg_t child_pgid,
+    unsigned split_bits,
+    pg_missing_set *omissing) {
+    unsigned mask = ~((~0)<<split_bits);
+    for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
+	 i != missing.end();
+      ) {
+      if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
+	omissing->add(i->first, i->second.need, i->second.have);
+	rm(i++);
+      } else {
+	++i;
+      }
+    }
+  }
 
   void clear() {
+    for (auto const &i: missing)
+      tracker.changed(i.first);
     missing.clear();
     rmissing.clear();
   }
 
-  void resort(bool sort_bitwise);
+  void resort(bool sort_bitwise) {
+    if (missing.key_comp().bitwise != sort_bitwise) {
+      map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
+      tmp.swap(missing);
+      missing = map<hobject_t, item, hobject_t::ComparatorWithDefault>(
+	hobject_t::ComparatorWithDefault(sort_bitwise));
+      missing.insert(tmp.begin(), tmp.end());
+    }
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl, int64_t pool = -1);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<pg_missing_t*>& o);
+  void encode(bufferlist &bl) const {
+    ENCODE_START(3, 2, bl);
+    ::encode(missing, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl, int64_t pool = -1) {
+    for (auto const &i: missing)
+      tracker.changed(i.first);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    ::decode(missing, bl);
+    DECODE_FINISH(bl);
+
+    if (struct_v < 3) {
+      // Handle hobject_t upgrade
+      map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
+      for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i =
+	     missing.begin();
+	   i != missing.end();
+	) {
+	if (!i->first.is_max() && i->first.pool == -1) {
+	  hobject_t to_insert(i->first);
+	  to_insert.pool = pool;
+	  tmp[to_insert] = i->second;
+	  missing.erase(i++);
+	} else {
+	  ++i;
+	}
+      }
+      missing.insert(tmp.begin(), tmp.end());
+    }
+
+    for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::iterator it =
+	   missing.begin();
+	 it != missing.end();
+	 ++it)
+      rmissing[it->second.need.version] = it->first;
+    for (auto const &i: missing)
+      tracker.changed(i.first);
+  }
+  void dump(Formatter *f) const {
+    f->open_array_section("missing");
+    for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::const_iterator p =
+	   missing.begin(); p != missing.end(); ++p) {
+      f->open_object_section("item");
+      f->dump_stream("object") << p->first;
+      p->second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pg_missing_set*>& o) {
+    o.push_back(new pg_missing_set);
+    o.push_back(new pg_missing_set);
+    o.back()->add(
+      hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
+      eversion_t(5, 6), eversion_t(5, 1));
+  }
+  template <typename F>
+  std::enable_if<TrackChanges, void> get_changed (F &&f) const {
+    tracker.get_changed(f);
+  }
+  template <typename F>
+  std::enable_if<TrackChanges, void> flush() {
+    tracker.flush();
+  }
+  template <typename F>
+  std::enable_if<TrackChanges, bool> clean() const {
+    return tracker.clean();
+  }
 };
-WRITE_CLASS_ENCODER(pg_missing_t::item)
-WRITE_CLASS_ENCODER(pg_missing_t)
+template <bool TrackChanges>
+void encode(
+  const pg_missing_set<TrackChanges> &c, bufferlist &bl, uint64_t features=0) {
+  ENCODE_DUMP_PRE();
+  c.encode(bl);
+  ENCODE_DUMP_POST(cl);
+}
+template <bool TrackChanges>
+void decode(pg_missing_set<TrackChanges> &c, bufferlist::iterator &p) {
+  c.decode(p);
+}
+template <bool TrackChanges>
+ostream& operator<<(ostream& out, const pg_missing_set<TrackChanges> &missing)
+{
+  out << "missing(" << missing.num_missing();
+  //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
+  out << ")";
+  return out;
+}
 
-ostream& operator<<(ostream& out, const pg_missing_t::item& i);
-ostream& operator<<(ostream& out, const pg_missing_t& missing);
+using pg_missing_t = pg_missing_set<false>;
+using pg_missing_tracker_t = pg_missing_set<true>;
+
 
 /**
  * pg list objects response format

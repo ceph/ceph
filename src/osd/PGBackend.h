@@ -131,10 +131,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards()
        const = 0;
 
-     virtual const pg_missing_t &get_local_missing() const = 0;
+     virtual const pg_missing_tracker_t &get_local_missing() const = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
-     virtual boost::optional<const pg_missing_t &> maybe_get_shard_missing(
+     virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(
        pg_shard_t peer) const {
        if (peer == primary_shard()) {
 	 return get_local_missing();
@@ -142,14 +142,14 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 	 map<pg_shard_t, pg_missing_t>::const_iterator i =
 	   get_shard_missing().find(peer);
 	 if (i == get_shard_missing().end()) {
-	   return boost::optional<const pg_missing_t &>();
+	   return boost::optional<const pg_missing_const_i &>();
 	 } else {
 	   return i->second;
 	 }
        }
      }
-     virtual const pg_missing_t &get_shard_missing(pg_shard_t peer) const {
-       boost::optional<const pg_missing_t &> m = maybe_get_shard_missing(peer);
+     virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
+       auto m = maybe_get_shard_missing(peer);
        assert(m);
        return *m;
      }

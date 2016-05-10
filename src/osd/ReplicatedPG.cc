@@ -803,9 +803,9 @@ int ReplicatedPG::do_command(
     }
     f->dump_int("num_missing", missing.num_missing());
     f->dump_int("num_unfound", get_num_unfound());
-    const map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator> &needs_recovery_map =
+    const map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator> &needs_recovery_map =
       missing_loc.get_needs_recovery();
-    map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator p =
+    map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator p =
       needs_recovery_map.upper_bound(offset);
     {
       f->open_array_section("objects");
@@ -962,7 +962,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	// ensure sort order is correct
 	pg_log.resort_missing(get_sort_bitwise());
 
-	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -1149,7 +1149,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	// ensure sort order is correct
 	pg_log.resort_missing(get_sort_bitwise());
 
-	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
+	map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator missing_iter =
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
@@ -9815,9 +9815,9 @@ void ReplicatedPG::mark_all_unfound_lost(
   list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now(cct);
-  map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m =
+  map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator m =
     missing_loc.get_needs_recovery().begin();
-  map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator mend =
+  map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator mend =
     missing_loc.get_needs_recovery().end();
 
   ObcLockManager manager;
@@ -10551,7 +10551,7 @@ uint64_t ReplicatedPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
       latest = 0;
       soid = p->second;
     }
-    const pg_missing_t::item& item = missing.get_items().find(p->second)->second;
+    const pg_missing_item& item = missing.get_items().find(p->second)->second;
     ++p;
 
     hobject_t head = soid;
@@ -10805,7 +10805,7 @@ uint64_t ReplicatedPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       }
 
       dout(10) << __func__ << ": recover_object_replicas(" << soid << ")" << dendl;
-      map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator r = m.get_items().find(soid);
+      map<hobject_t,pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator r = m.get_items().find(soid);
       started += prep_object_replica_pushes(soid, r->second.need,
 					    h);
     }

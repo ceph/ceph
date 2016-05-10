@@ -337,7 +337,7 @@ void PG::proc_replica_log(
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator i =
+  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i =
 	 omissing.get_items().begin();
        i != omissing.get_items().end();
        ++i) {
@@ -503,7 +503,7 @@ void PG::MissingLoc::add_batch_sources_info(
 {
   dout(10) << __func__ << ": adding sources in batch " << sources.size() << dendl;
   unsigned loop = 0;
-  for (map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
+  for (map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
     if (handle && ++loop >= g_conf->osd_loop_before_reset_tphandle) {
@@ -525,7 +525,7 @@ bool PG::MissingLoc::add_source_info(
   bool found_missing = false;
   unsigned loop = 0;
   // found items?
-  for (map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
+  for (map<hobject_t,pg_missing_item, hobject_t::ComparatorWithDefault>::const_iterator p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
@@ -581,7 +581,7 @@ bool PG::MissingLoc::add_source_info(
 
 void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
 {
-  const pg_missing_t &missing = pg_log.get_missing();
+  auto &missing = pg_log.get_missing();
   assert(have_unfound());
 
   dout(10) << __func__ << " "
@@ -642,7 +642,7 @@ bool PG::needs_recovery() const
 {
   assert(is_primary());
 
-  const pg_missing_t &missing = pg_log.get_missing();
+  auto &missing = pg_log.get_missing();
 
   if (missing.num_missing()) {
     dout(10) << __func__ << " primary has " << missing.num_missing()
@@ -1580,7 +1580,7 @@ void PG::activate(ObjectStore::Transaction& t,
       info.last_epoch_started = activation_epoch;
   }
 
-  const pg_missing_t &missing = pg_log.get_missing();
+  auto &missing = pg_log.get_missing();
 
   if (is_primary()) {
     last_update_ondisk = info.last_update;

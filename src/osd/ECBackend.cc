@@ -1475,8 +1475,7 @@ int ECBackend::get_min_avail_to_read_shards(
 	   i != miter->second.end();
 	   ++i) {
 	dout(10) << __func__ << ": checking missing_loc " << *i << dendl;
-	boost::optional<const pg_missing_t &> m =
-	  get_parent()->maybe_get_shard_missing(*i);
+	auto m = get_parent()->maybe_get_shard_missing(*i);
 	if (m) {
 	  assert(!(*m).is_missing(hoid));
 	}

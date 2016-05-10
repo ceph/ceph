@@ -5702,9 +5702,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       pg->lock();
 
       fout << *pg << std::endl;
-      std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mend =
+      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mend =
 	pg->pg_log.get_missing().get_items().end();
-      std::map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator mi =
+      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mi =
 	pg->pg_log.get_missing().get_items().begin();
       for (; mi != mend; ++mi) {
 	fout << mi->first << " -> " << mi->second << std::endl;
