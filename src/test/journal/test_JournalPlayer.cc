@@ -403,3 +403,52 @@ TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
   ASSERT_TRUE(metadata->get_last_allocated_entry_tid(234, &last_tid));
   ASSERT_EQ(126U, last_tid);
 }
+
+TEST_F(TestJournalPlayer, ImbalancedJournal) {
+  std::string oid = get_temp_oid();
+
+  journal::JournalPlayer::ObjectPositions positions = {
+    cls::journal::ObjectPosition(9, 300, 1),
+    cls::journal::ObjectPosition(8, 300, 0),
+    cls::journal::ObjectPosition(10, 200, 4334),
+    cls::journal::ObjectPosition(11, 200, 4331) };
+  cls::journal::ObjectSetPosition commit_position(positions);
+
+  ASSERT_EQ(0, create(oid, 14, 4));
+  ASSERT_EQ(0, client_register(oid));
+  ASSERT_EQ(0, client_commit(oid, commit_position));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+  metadata->set_active_set(2);
+  metadata->set_minimum_set(2);
+
+  journal::JournalPlayer *player = create_player(oid, metadata);
+
+  ASSERT_EQ(0, write_entry(oid, 8, 300, 0));
+  ASSERT_EQ(0, write_entry(oid, 8, 301, 0));
+  ASSERT_EQ(0, write_entry(oid, 9, 300, 1));
+  ASSERT_EQ(0, write_entry(oid, 9, 301, 1));
+  ASSERT_EQ(0, write_entry(oid, 10, 200, 4334));
+  ASSERT_EQ(0, write_entry(oid, 10, 301, 2));
+  ASSERT_EQ(0, write_entry(oid, 11, 200, 4331));
+  ASSERT_EQ(0, write_entry(oid, 11, 301, 3));
+
+  player->prefetch();
+
+  Entries entries;
+  ASSERT_TRUE(wait_for_entries(player, 4, &entries));
+  ASSERT_TRUE(wait_for_complete(player));
+
+  Entries expected_entries;
+  expected_entries = {
+    create_entry(301, 0),
+    create_entry(301, 1),
+    create_entry(301, 2),
+    create_entry(301, 3)};
+  ASSERT_EQ(expected_entries, entries);
+
+  uint64_t last_tid;
+  ASSERT_TRUE(metadata->get_last_allocated_entry_tid(301, &last_tid));
+  ASSERT_EQ(3U, last_tid);
+}

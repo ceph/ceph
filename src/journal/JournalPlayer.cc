@@ -410,7 +410,7 @@ bool JournalPlayer::verify_playback_ready() {
         entry.get_entry_tid() == 0) {
       uint8_t splay_width = m_journal_metadata->get_splay_width();
       m_active_tag_tid = entry.get_tag_tid();
-      m_splay_offset = object_player->get_object_number() / splay_width;
+      m_splay_offset = object_player->get_object_number() % splay_width;
 
       ldout(m_cct, 20) << __func__ << ": new tag " << entry.get_tag_tid() << " "
                        << "detected, adjusting offset to "
