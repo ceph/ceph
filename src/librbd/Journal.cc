@@ -1201,6 +1201,10 @@ void Journal<I>::handle_replay_ready() {
     if (!m_journaler->try_pop_front(&replay_entry)) {
       return;
     }
+
+    // only one entry should be in-flight at a time
+    assert(!m_processing_entry);
+    m_processing_entry = true;
   }
 
   bufferlist data = replay_entry.get_data();
@@ -1246,6 +1250,11 @@ void Journal<I>::handle_replay_process_ready(int r) {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   assert(r == 0);
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_processing_entry);
+    m_processing_entry = false;
+  }
   handle_replay_ready();
 }
 

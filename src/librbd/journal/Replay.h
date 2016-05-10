@@ -168,8 +168,7 @@ private:
   AioCompletion *create_aio_modify_completion(Context *on_ready,
                                               Context *on_safe,
                                               bool *flush_required);
-  AioCompletion *create_aio_flush_completion(Context *on_ready,
-                                             Context *on_safe);
+  AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(AioCompletion *aio_comp);
 
 };
