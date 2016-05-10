@@ -166,7 +166,7 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
 
     // safely commit any remaining AIO modify operations
     if ((m_in_flight_aio_flush + m_in_flight_aio_modify) != 0) {
-      flush_comp = create_aio_flush_completion(nullptr, nullptr);;
+      flush_comp = create_aio_flush_completion(nullptr);
     }
 
     for (auto &op_event_pair : m_op_events) {
@@ -214,7 +214,7 @@ void Replay<I>::flush(Context *on_finish) {
   {
     Mutex::Locker locker(m_lock);
     aio_comp = create_aio_flush_completion(
-      nullptr, util::create_async_context_callback(m_image_ctx, on_finish));
+      util::create_async_context_callback(m_image_ctx, on_finish));
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
@@ -273,7 +273,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
                                   event.length);
   if (flush_required) {
     m_lock.Lock();
-    AioCompletion *flush_comp = create_aio_flush_completion(nullptr, nullptr);
+    AioCompletion *flush_comp = create_aio_flush_completion(nullptr);
     m_lock.Unlock();
 
     AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
@@ -294,7 +294,7 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
                                 event.length, data.c_str(), 0);
   if (flush_required) {
     m_lock.Lock();
-    AioCompletion *flush_comp = create_aio_flush_completion(nullptr, nullptr);
+    AioCompletion *flush_comp = create_aio_flush_completion(nullptr);
     m_lock.Unlock();
 
     AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
@@ -310,9 +310,11 @@ void Replay<I>::handle_event(const journal::AioFlushEvent &event,
   AioCompletion *aio_comp;
   {
     Mutex::Locker locker(m_lock);
-    aio_comp = create_aio_flush_completion(on_ready, on_safe);
+    aio_comp = create_aio_flush_completion(on_safe);
   }
   AioImageRequest<I>::aio_flush(&m_image_ctx, aio_comp);
+
+  on_ready->complete(0);
 }
 
 template <typename I>
@@ -808,8 +810,7 @@ AioCompletion *Replay<I>::create_aio_modify_completion(Context *on_ready,
 }
 
 template <typename I>
-AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_ready,
-                                                      Context *on_safe) {
+AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_safe) {
   assert(m_lock.is_locked());
 
   ++m_in_flight_aio_flush;
@@ -819,10 +820,6 @@ AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_ready,
       new C_AioFlushComplete(this, on_safe,
                              std::move(m_aio_modify_unsafe_contexts)));
   m_aio_modify_unsafe_contexts.clear();
-
-  if (on_ready != nullptr) {
-    on_ready->complete(0);
-  }
   return aio_comp;
 }
 

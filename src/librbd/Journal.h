@@ -281,6 +281,7 @@ private:
   atomic_t m_op_tid;
   TidToFutures m_op_futures;
 
+  bool m_processing_entry = false;
   bool m_blocking_writes;
 
   journal::Replay<ImageCtxT> *m_journal_replay;
