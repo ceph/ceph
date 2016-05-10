@@ -125,6 +125,11 @@ public:
 
   void flush_commit_position(Context *on_finish);
 
+  uint64_t append_write_event(AioCompletion *aio_comp,
+                              uint64_t offset, size_t length,
+                              const bufferlist &bl,
+                              const AioObjectRequests &requests,
+                              bool flush_entry);
   uint64_t append_io_event(AioCompletion *aio_comp,
                            journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,
@@ -160,11 +165,13 @@ private:
   typedef typename TypeTraits::Future Future;
   typedef typename TypeTraits::ReplayEntry ReplayEntry;
 
+  typedef std::list<bufferlist> Bufferlists;
   typedef std::list<Context *> Contexts;
+  typedef std::list<Future> Futures;
   typedef interval_set<uint64_t> ExtentInterval;
 
   struct Event {
-    Future future;
+    Futures futures;
     AioCompletion *aio_comp = nullptr;
     AioObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
@@ -175,9 +182,9 @@ private:
 
     Event() {
     }
-    Event(const Future &_future, AioCompletion *_aio_comp,
+    Event(const Futures &_futures, AioCompletion *_aio_comp,
           const AioObjectRequests &_requests, uint64_t offset, size_t length)
-      : future(_future), aio_comp(_aio_comp), aio_object_requests(_requests) {
+      : futures(_futures), aio_comp(_aio_comp), aio_object_requests(_requests) {
       if (length > 0) {
         pending_extents.insert(offset, length);
       }
@@ -256,6 +263,7 @@ private:
   Journaler *m_journaler;
   mutable Mutex m_lock;
   State m_state;
+  uint64_t m_max_append_size = 0;
   uint64_t m_tag_class = 0;
   uint64_t m_tag_tid = 0;
   journal::TagData m_tag_data;
@@ -278,6 +286,11 @@ private:
 
   journal::Replay<ImageCtxT> *m_journal_replay;
 
+  uint64_t append_io_events(AioCompletion *aio_comp,
+                            journal::EventType event_type,
+                            const Bufferlists &bufferlists,
+                            const AioObjectRequests &requests,
+                            uint64_t offset, size_t length, bool flush_entry);
   Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
   void create_journaler();
