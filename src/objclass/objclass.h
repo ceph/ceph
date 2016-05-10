@@ -11,6 +11,8 @@
 #include "common/hobject.h"
 #include "common/ceph_time.h"
 
+struct obj_list_watch_response_t;
+
 extern "C" {
 #endif
 
@@ -180,6 +182,9 @@ extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
 extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key);
 extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist *inbl);
+
+extern int cls_cxx_list_watchers(cls_method_context_t hctx,
+				 obj_list_watch_response_t *watchers);
 
 /* utility functions */
 extern int cls_gen_random_bytes(char *buf, int size);
