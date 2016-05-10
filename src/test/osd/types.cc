@@ -1049,7 +1049,7 @@ TEST(pg_missing_t, rm)
     missing.rm(oid, eversion_t(epoch * 2,20));
     EXPECT_FALSE(missing.is_missing(oid));
   }
-  // void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+  // void pg_missing_t::rm(const std::map<hobject_t, pg_missing_item>::iterator &m)
   {
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
@@ -1081,7 +1081,7 @@ TEST(pg_missing_t, got)
     missing.got(oid, eversion_t(epoch * 2,20));
     EXPECT_FALSE(missing.is_missing(oid));
   }
-  // void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
+  // void pg_missing_t::got(const std::map<hobject_t, pg_missing_item>::iterator &m)
   {
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
