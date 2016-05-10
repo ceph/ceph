@@ -220,20 +220,6 @@ int execute_status(const po::variables_map &vm) {
     return r;
   }
 
-  librbd::mirror_image_info_t mirror_image;
-  r = image.mirror_image_get_info(&mirror_image, sizeof(mirror_image));
-  if (r < 0) {
-    std::cerr << "rbd: failed to get global image id for image " << image_name
-	      << ": " << cpp_strerror(r) << std::endl;
-    return r;
-  }
-
-  if (mirror_image.global_id.empty()) {
-    std::cerr << "rbd: failed to get global image id for image " << image_name
-	      << std::endl;
-    return -EINVAL;
-  }
-
   librbd::mirror_image_status_t status;
   r = image.mirror_image_get_status(&status, sizeof(status));
   if (r < 0) {
@@ -248,7 +234,7 @@ int execute_status(const po::variables_map &vm) {
   if (formatter != nullptr) {
     formatter->open_object_section("image");
     formatter->dump_string("name", image_name);
-    formatter->dump_string("global_id", mirror_image.global_id);
+    formatter->dump_string("global_id", status.info.global_id);
     formatter->dump_string("state", state);
     formatter->dump_string("description", status.description);
     formatter->dump_string("last_update", last_update);
@@ -256,7 +242,7 @@ int execute_status(const po::variables_map &vm) {
     formatter->flush(std::cout);
   } else {
     std::cout << image_name << ":\n"
-	      << "  global_id:   " << mirror_image.global_id << "\n"
+	      << "  global_id:   " << status.info.global_id << "\n"
 	      << "  state:       " << state << "\n"
 	      << "  description: " << status.description << "\n"
 	      << "  last_update: " << last_update << std::endl;

@@ -466,19 +466,18 @@ int execute_status(const po::variables_map &vm) {
     std::string last_read = "";
     int max_read = 1024;
     do {
-      map<std::string, librbd::mirror_image_info_t> mirror_images;
-      map<std::string, librbd::mirror_image_status_t> statuses;
+      map<std::string, librbd::mirror_image_status_t> mirror_images;
       r = rbd.mirror_image_status_list(io_ctx, last_read, max_read,
-				       &mirror_images, &statuses);
+				       &mirror_images);
       if (r < 0) {
 	std::cerr << "rbd: failed to list mirrored image directory: "
 		  << cpp_strerror(r) << std::endl;
 	return r;
       }
       for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
-	const std::string &image_name = it->first;
-	std::string &global_image_id = it->second.global_id;
-	librbd::mirror_image_status_t &status = statuses[image_name];
+	librbd::mirror_image_status_t &status = it->second;
+	const std::string &image_name = status.name;
+	std::string &global_image_id = status.info.global_id;
 	std::string state = utils::mirror_image_status_state(status);
 	std::string last_update = utils::timestr(status.last_update);
 
