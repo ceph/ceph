@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "journal/JournalRecorder.h"
+#include "journal/Entry.h"
 #include "journal/JournalMetadata.h"
 #include "test/journal/RadosTestFixture.h"
 #include <limits>
@@ -58,7 +59,8 @@ TEST_F(TestJournalRecorder, AppendKnownOverflow) {
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
 
-  recorder->append(123, create_payload(std::string(1 << 12, '1')));
+  recorder->append(123, create_payload(std::string(metadata->get_object_size() -
+                                                   journal::Entry::get_fixed_size(), '1')));
   journal::Future future2 = recorder->append(123, create_payload(std::string(1, '2')));
 
   C_SaferCond cond;
@@ -80,8 +82,9 @@ TEST_F(TestJournalRecorder, AppendDelayedOverflow) {
   journal::JournalRecorder *recorder1 = create_recorder(oid, metadata);
   journal::JournalRecorder *recorder2 = create_recorder(oid, metadata);
 
-  recorder1->append(123, create_payload(std::string(1, '1')));
-  recorder2->append(234, create_payload(std::string(1 << 12, '2')));
+  recorder1->append(234, create_payload(std::string(1, '1')));
+  recorder2->append(123, create_payload(std::string(metadata->get_object_size() -
+                                                    journal::Entry::get_fixed_size(), '2')));
 
   journal::Future future = recorder2->append(123, create_payload(std::string(1, '3')));
 

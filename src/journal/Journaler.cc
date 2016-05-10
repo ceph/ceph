@@ -349,6 +349,10 @@ void Journaler::stop_append(Context *on_safe) {
   m_recorder = NULL;
 }
 
+uint64_t Journaler::get_max_append_size() const {
+  return m_metadata->get_object_size() - Entry::get_fixed_size();
+}
+
 Future Journaler::append(uint64_t tag_tid, const bufferlist &payload_bl) {
   return m_recorder->append(tag_tid, payload_bl);
 }

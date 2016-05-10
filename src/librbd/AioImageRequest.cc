@@ -318,11 +318,9 @@ uint64_t AioImageWrite::append_journal_event(
   bufferlist bl;
   bl.append(m_buf, m_len);
 
-  journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
-  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
-                                                      std::move(event_entry),
-                                                      requests, m_off, m_len,
-                                                      synchronous);
+  uint64_t tid = m_image_ctx.journal->append_write_event(m_aio_comp, m_off,
+                                                         m_len, bl, requests,
+                                                         synchronous);
   if (m_image_ctx.object_cacher == NULL) {
     m_aio_comp->associate_journal_event(tid);
   }
