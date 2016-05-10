@@ -1377,7 +1377,7 @@ static int send_to_remote_or_url(const string& remote, const string& url,
 }
 
 static int commit_period(RGWRealm& realm, RGWPeriod& period,
-                         const string& remote, const string& url,
+                         string remote, const string& url,
                          const string& access, const string& secret)
 {
   const string& master_zone = period.get_master_zone();
@@ -1401,6 +1401,12 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
     return ret;
+  }
+
+  if (remote.empty() && url.empty()) {
+    // use the new master zone's connection
+    remote = master_zone;
+    cout << "Sending period to new master zone " << remote << std::endl;
   }
 
   // push period to the master with an empty period id
