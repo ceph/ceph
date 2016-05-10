@@ -337,8 +337,8 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     int64_t old_pool_id;
     try {
       bufferlist::iterator iter = existing_refbl.begin();
-      ::decode(old_cg_id, iter);
       ::decode(old_pool_id, iter);
+      ::decode(old_cg_id, iter);
     } catch (const buffer::error &err) {
       return -EINVAL;
     }
