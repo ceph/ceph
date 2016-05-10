@@ -20,6 +20,11 @@
 #include "include/atomic.h"
 #include "common/lru_map.h"
 
+static inline int64_t rgw_rounded_kb(int64_t bytes)
+{
+  return (bytes + 1023) / 1024;
+}
+
 class RGWRados;
 class JSONObj;
 
@@ -34,30 +39,41 @@ protected:
   int64_t max_objs_soft_threshold;
 
 public:
-  int64_t max_size_kb;
+  int64_t max_size;
   int64_t max_objects;
   bool enabled;
 
   RGWQuotaInfo()
     : max_size_soft_threshold(-1),
       max_objs_soft_threshold(-1),
-      max_size_kb(-1),
+      max_size(-1),
       max_objects(-1),
       enabled(false) {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(max_size_kb, bl);
+    ENCODE_START(2, 1, bl);
+    if (max_size < 0) {
+      ::encode(-rgw_rounded_kb(abs(max_size)), bl);
+    } else {
+      ::encode(rgw_rounded_kb(max_size), bl);
+    }
     ::encode(max_objects, bl);
     ::encode(enabled, bl);
+    ::encode(max_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
+    int64_t max_size_kb;
     ::decode(max_size_kb, bl);
     ::decode(max_objects, bl);
     ::decode(enabled, bl);
+    if (struct_v < 2) {
+      max_size = max_size_kb * 1024;
+    } else {
+      ::decode(max_size, bl);
+    }
     DECODE_FINISH(bl);
   }
 
