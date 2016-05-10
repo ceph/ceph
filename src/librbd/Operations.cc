@@ -9,6 +9,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
@@ -499,6 +500,12 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
     return r;
   }
 
+  if (m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP) &&
+      !ObjectMap::is_compatible(m_image_ctx.layout, size)) {
+    lderr(cct) << "New size not compatible with object map" << dendl;
+    return -EINVAL;
+  }
+
   uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("resize", false,
                            boost::bind(&Operations<I>::execute_resize, this,
@@ -525,12 +532,16 @@ void Operations<I>::execute_resize(uint64_t size, ProgressContext &prog_ctx,
   ldout(cct, 5) << this << " " << __func__ << ": "
                 << "size=" << m_image_ctx.size << ", "
                 << "new_size=" << size << dendl;
-  m_image_ctx.snap_lock.put_read();
 
-  m_image_ctx.snap_lock.get_read();
   if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
     m_image_ctx.snap_lock.put_read();
     on_finish->complete(-EROFS);
+    return;
+  } else if (m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
+                                       m_image_ctx.snap_lock) &&
+             !ObjectMap::is_compatible(m_image_ctx.layout, size)) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EINVAL);
     return;
   }
   m_image_ctx.snap_lock.put_read();

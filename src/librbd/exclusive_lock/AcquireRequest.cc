@@ -250,8 +250,15 @@ Context *AcquireRequest<I>::handle_open_object_map(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
 
-  // object map should never result in an error
-  assert(*ret_val == 0);
+  if (*ret_val < 0) {
+    lderr(cct) << "failed to open object map: " << cpp_strerror(*ret_val)
+               << dendl;
+
+    *ret_val = 0;
+    delete m_object_map;
+    m_object_map = nullptr;
+  }
+
   return send_open_journal();
 }
 
