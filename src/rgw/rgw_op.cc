@@ -3068,34 +3068,6 @@ done:
   dispose_processor(processor);
 }
 
-int RGWPutMetadataAccount::handle_temp_url_update(
-  const map<int, string>& temp_url_keys) {
-  RGWUserAdminOpState user_op;
-  user_op.set_user_id(s->user->user_id);
-
-  map<int, string>::const_iterator iter;
-  for (iter = temp_url_keys.begin(); iter != temp_url_keys.end(); ++iter) {
-    user_op.set_temp_url_key(iter->second, iter->first);
-  }
-
-  RGWUser user;
-  op_ret = user.init(store, user_op);
-  if (op_ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: could not init user ret=" << op_ret
-			   << dendl;
-    return op_ret;
-  }
-
-  string err_msg;
-  op_ret = user.modify(user_op, &err_msg);
-  if (op_ret < 0) {
-    ldout(store->ctx(), 10) << "user.modify() returned " << op_ret << ": "
-			    << err_msg << dendl;
-    return op_ret;
-  }
-  return 0;
-}
-
 int RGWPutMetadataAccount::verify_permission()
 {
   if (!rgw_user_is_authenticated(*(s->user))) {
@@ -3158,36 +3130,31 @@ void RGWPutMetadataAccount::execute()
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
-  RGWUserInfo orig_uinfo;
-  op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, orig_uinfo,
+  RGWUserInfo new_uinfo;
+  op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, new_uinfo,
                                     &acct_op_tracker);
   if (op_ret < 0) {
     return;
   }
 
   /* Handle the TempURL-related stuff. */
-  map<int, string> temp_url_keys;
+  std::map<int, std::string> temp_url_keys;
   filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
   if (!temp_url_keys.empty()) {
     if (s->perm_mask != RGW_PERM_FULL_CONTROL) {
       op_ret = -EPERM;
       return;
     }
-  }
 
-  /* XXX tenant needed? */
-  op_ret = rgw_store_user_info(store, *(s->user), &orig_uinfo,
-                               &acct_op_tracker, real_time(), false, &attrs);
-  if (op_ret < 0) {
-    return;
-  }
-
-  if (!temp_url_keys.empty()) {
-    op_ret = handle_temp_url_update(temp_url_keys);
-    if (op_ret < 0) {
-      return;
+    for (auto& pair : temp_url_keys) {
+      new_uinfo.temp_url_keys[pair.first] = std::move(pair.second);
     }
   }
+
+  /* We are passing here the current (old) user info to allow the function
+   * optimize-out some operations. */
+  op_ret = rgw_store_user_info(store, new_uinfo, s->user,
+                               &acct_op_tracker, real_time(), false, &attrs);
 }
 
 int RGWPutMetadataBucket::verify_permission()

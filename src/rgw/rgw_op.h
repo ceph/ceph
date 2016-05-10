@@ -792,7 +792,6 @@ public:
   virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                    const set<string>& rmattr_names,
                                    map<int, string>& temp_url_keys);
-  virtual int handle_temp_url_update(const map<int, string>& temp_url_keys);
   virtual const string name() { return "put_account_metadata"; }
   virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_ACCOUNT; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
