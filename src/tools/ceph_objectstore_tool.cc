@@ -351,7 +351,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
   try {
     ostringstream oss;
     assert(struct_ver > 0);
-    PGLog::read_log(fs, coll,
+    PGLog::read_log_and_missing(fs, coll,
 		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
 		    info, divergent_priors, log, missing, oss);
@@ -359,7 +359,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
       cerr << oss.str() << std::endl;
   }
   catch (const buffer::error &e) {
-    cerr << "read_log threw exception error " << e.what() << std::endl;
+    cerr << "read_log_and_missing threw exception error " << e.what() << std::endl;
     return -EFAULT;
   }
   return 0;
