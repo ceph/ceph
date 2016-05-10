@@ -168,6 +168,9 @@ class Raw(object):
             value=self.value,
             )
 
+    def __eq__(self, value):
+        return self.value == value
+
 
 def quote(args):
     """
