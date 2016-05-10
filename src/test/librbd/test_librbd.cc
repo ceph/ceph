@@ -2330,8 +2330,11 @@ void scribble(librbd::Image& image, int n, int max,
 
     } else {
       bufferlist bl;
+      char *buf = new char[len];
       bl.append(buffer::create(len));
-      bl.zero();
+      memset(buf, 1, len);
+      bl.copy_in(0, len, buf);
+      delete buf;
       ASSERT_EQ((int)len, image.write(off, len, bl));
       interval_set<uint64_t> w;
       w.insert(off, len);
