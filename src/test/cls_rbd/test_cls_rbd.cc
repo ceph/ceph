@@ -1573,3 +1573,27 @@ TEST_F(TestClsRbdCg, cg_remove_image) {
   ASSERT_EQ(1, keys.size());
   ASSERT_EQ("snap_seq", *(keys.begin()));
 }
+
+TEST_F(TestClsRbdCg, cg_dirty_image) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cg_id";
+  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  test_add_image(ioctx, cg_id, image_id, pool_id);
+
+  ASSERT_EQ(0, cg_dirty_link(&ioctx, cg_id, image_id, pool_id));
+
+  string image_key = "image_" + image_id + "_" + stringify(pool_id);
+
+  map<string, bufferlist> vals;
+  ASSERT_EQ(0, ioctx.omap_get_vals(cg_id, "", 10, &vals));
+
+  int64_t ref_state;
+  bufferlist::iterator it = vals[image_key].begin();
+  ::decode(ref_state, it);
+  ASSERT_EQ(LINK_DIRTY, ref_state);
+}
