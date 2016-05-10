@@ -104,6 +104,7 @@ librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/image_sync/ImageCopyRequest.cc \
 	tools/rbd_mirror/image_sync/ObjectCopyRequest.cc \
 	tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc \
+	tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc \
 	tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc \
 	tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc
 noinst_LTLIBRARIES += librbd_mirror_internal.la
@@ -124,6 +125,7 @@ noinst_HEADERS += \
 	tools/rbd_mirror/image_sync/ImageCopyRequest.h \
 	tools/rbd_mirror/image_sync/ObjectCopyRequest.h \
 	tools/rbd_mirror/image_sync/SnapshotCopyRequest.h \
+	tools/rbd_mirror/image_sync/SnapshotCreateRequest.h \
 	tools/rbd_mirror/image_sync/SyncPointCreateRequest.h \
 	tools/rbd_mirror/image_sync/SyncPointPruneRequest.h
 

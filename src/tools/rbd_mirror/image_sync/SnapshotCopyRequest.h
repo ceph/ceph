@@ -53,15 +53,25 @@ private:
    *
    * <start>
    *    |
-   *    |   /-------\
-   *    |   |       |
-   *    v   v       | (repeat as needed)
-   * REMOVE_SNAP <--/
+   *    |   /-----------\
+   *    |   |           |
+   *    v   v           | (repeat as needed)
+   * UNPROTECT_SNAP ----/
    *    |
-   *    |   /-------\
-   *    |   |       |
-   *    v   v       | (repeat as needed)
-   * CREATE_SNAP <--/
+   *    |   /-----------\
+   *    |   |           |
+   *    v   v           | (repeat as needed)
+   * REMOVE_SNAP -------/
+   *    |
+   *    |   /-----------\
+   *    |   |           |
+   *    v   v           | (repeat as needed)
+   * CREATE_SNAP -------/
+   *    |
+   *    |   /-----------\
+   *    |   |           |
+   *    v   v           | (repeat as needed)
+   * PROTECT_SNAP ------/
    *    |
    *    v
    * UPDATE_CLIENT
@@ -85,14 +95,21 @@ private:
   SnapIdSet m_local_snap_ids;
   SnapIdSet m_remote_snap_ids;
   SnapSeqs m_snap_seqs;
+  librados::snap_t m_prev_snap_id = CEPH_NOSNAP;
 
   std::string m_snap_name;
+
+  void send_snap_unprotect();
+  void handle_snap_unprotect(int r);
 
   void send_snap_remove();
   void handle_snap_remove(int r);
 
   void send_snap_create();
   void handle_snap_create(int r);
+
+  void send_snap_protect();
+  void handle_snap_protect(int r);
 
   void send_update_client();
   void handle_update_client(int r);

@@ -6,10 +6,9 @@
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
-#include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
+#include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
-#include "test/rbd_mirror/mock/MockJournaler.h"
 
 namespace librbd {
 
@@ -102,30 +101,6 @@ struct CloseImageRequest<librbd::MockImageReplayerImageCtx> {
 };
 
 template<>
-struct OpenLocalImageRequest<librbd::MockImageReplayerImageCtx> {
-  static OpenLocalImageRequest* s_instance;
-  Context *on_finish = nullptr;
-
-  static OpenLocalImageRequest* create(librados::IoCtx &local_io_ctx,
-                                       librbd::MockImageReplayerImageCtx **local_image_ctx,
-                                       const std::string &local_image_name,
-                                       const std::string &local_image_id,
-                                       ContextWQ *work_queue,
-                                       Context *on_finish) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  OpenLocalImageRequest() {
-    assert(s_instance == nullptr);
-    s_instance = this;
-  }
-
-  MOCK_METHOD0(send, void());
-};
-
-template<>
 struct ReplayStatusFormatter<librbd::MockImageReplayerImageCtx> {
   static ReplayStatusFormatter* s_instance;
 
@@ -145,7 +120,6 @@ struct ReplayStatusFormatter<librbd::MockImageReplayerImageCtx> {
 
 BootstrapRequest<librbd::MockImageReplayerImageCtx>* BootstrapRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
 CloseImageRequest<librbd::MockImageReplayerImageCtx>* CloseImageRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
-OpenLocalImageRequest<librbd::MockImageReplayerImageCtx>* OpenLocalImageRequest<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
 ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>* ReplayStatusFormatter<librbd::MockImageReplayerImageCtx>::s_instance = nullptr;
 
 } // namespace image_replayer
