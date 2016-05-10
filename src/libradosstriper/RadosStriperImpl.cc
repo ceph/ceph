@@ -770,33 +770,37 @@ libradosstriper::RadosStriperImpl::internal_aio_write(const std::string& soid,
 						      uint64_t off,
 						      const ceph_file_layout& layout)
 {
-  // get list of extents to be written to
-  vector<ObjectExtent> extents;
-  std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
-  file_layout_t l;
-  l.from_legacy(layout);
-  Striper::file_to_extents(cct(), format.c_str(), &l, off, len, 0, extents);
-  // go through the extents
   int r = 0;
-  for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
-    // assemble pieces of a given object into a single buffer list
-    bufferlist oid_bl;
-    for (vector<pair<uint64_t,uint64_t> >::iterator q = p->buffer_extents.begin();
-	 q != p->buffer_extents.end();
-	 ++q) {
-      bufferlist buffer_bl;
-      buffer_bl.substr_of(bl, q->first, q->second);
-      oid_bl.append(buffer_bl);
-    }    
-    // and write the object
-    c->add_request();
-    librados::AioCompletion *rados_completion =
-      m_radosCluster.aio_create_completion(c, rados_req_write_complete, rados_req_write_safe);
-    r = m_ioCtx.aio_write(p->oid.name, rados_completion, oid_bl, p->length, p->offset);
-    rados_completion->release();
-    if (r < 0) 
-      break;
-  }    
+  // Do not try anything if we are called with empty buffer,
+  // file_to_extents would raise an exception
+  if (len > 0) {
+    // get list of extents to be written to
+    vector<ObjectExtent> extents;
+    std::string format = soid + RADOS_OBJECT_EXTENSION_FORMAT;
+    file_layout_t l;
+    l.from_legacy(layout);
+    Striper::file_to_extents(cct(), format.c_str(), &l, off, len, 0, extents);
+    // go through the extents
+    for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
+      // assemble pieces of a given object into a single buffer list
+      bufferlist oid_bl;
+      for (vector<pair<uint64_t,uint64_t> >::iterator q = p->buffer_extents.begin();
+	   q != p->buffer_extents.end();
+	   ++q) {
+        bufferlist buffer_bl;
+        buffer_bl.substr_of(bl, q->first, q->second);
+        oid_bl.append(buffer_bl);
+      }
+      // and write the object
+      c->add_request();
+      librados::AioCompletion *rados_completion =
+        m_radosCluster.aio_create_completion(c, rados_req_write_complete, rados_req_write_safe);
+      r = m_ioCtx.aio_write(p->oid.name, rados_completion, oid_bl, p->length, p->offset);
+      rados_completion->release();
+      if (r < 0)
+        break;
+    }
+  }
   c->finish_adding_requests();
   return r;
 }
