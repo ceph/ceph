@@ -29,6 +29,7 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
+#include "Checksummer.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
