@@ -3344,16 +3344,15 @@ void OSD::load_pgs()
  * follow the same logic, but do all pgs at the same time so that we
  * can make a single pass across the osdmap history.
  */
-struct pistate {
-  epoch_t start, end;
-  vector<int> old_acting, old_up;
-  epoch_t same_interval_since;
-  int primary;
-  int up_primary;
-};
-
 void OSD::build_past_intervals_parallel()
 {
+  struct pistate {
+    epoch_t start, end;
+    vector<int> old_acting, old_up;
+    epoch_t same_interval_since;
+    int primary;
+    int up_primary;
+  };
   map<PG*,pistate> pis;
 
   // calculate junction of map range
