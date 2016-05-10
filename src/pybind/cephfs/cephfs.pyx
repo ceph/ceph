@@ -115,6 +115,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                          const char *inbuf, size_t inbuflen, char **outbuf, size_t *outbuflen,
                          char **outs, size_t *outslen)
     int ceph_rename(ceph_mount_info *cmount, const char *from_, const char *to)
+    int ceph_link(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_unlink(ceph_mount_info *cmount, const char *path)
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
@@ -798,6 +799,19 @@ cdef class LibCephFS(object):
             ret = ceph_symlink(self.cluster, _existing, _newname)
         if ret < 0:
             raise make_ex(ret, "error in symlink")
+    
+    def link(self, existing, newname):
+        self.require_state("mounted")
+        existing = cstr(existing, 'existing')
+        newname = cstr(newname, 'newname')
+        cdef:
+            char* _existing = existing
+            char* _newname = newname
+        
+        with nogil:
+            ret = ceph_link(self.cluster, _existing, _newname)
+        if ret < 0:
+            raise make_ex(ret, "error in link")    
 
     def unlink(self, path):
         self.require_state("mounted")
