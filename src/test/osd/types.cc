@@ -809,7 +809,7 @@ TEST(pg_missing_t, add_next_event)
   eversion_t prior_version(3,4);
   pg_log_entry_t sample_e(pg_log_entry_t::DELETE, oid, version, prior_version,
 			  0, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-			  utime_t(8,9));
+			  utime_t(8,9), 0);
 
   // new object (MODIFY)
   {
@@ -925,6 +925,20 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.is_delete());
     missing.add_next_event(e);
     EXPECT_FALSE(missing.have_missing());
+  }
+
+  // ERROR op should only be used for dup detection
+  {
+    pg_missing_t missing;
+    pg_log_entry_t e = sample_e;
+
+    e.op = pg_log_entry_t::ERROR;
+    e.return_code = -ENOENT;
+    EXPECT_FALSE(e.is_update());
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(e);
+    EXPECT_FALSE(missing.is_missing(oid));
+    EXPECT_TRUE(e.reqid_is_indexed());
   }
 }
 

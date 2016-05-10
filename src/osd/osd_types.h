@@ -2539,6 +2539,7 @@ struct pg_log_entry_t {
     LOST_MARK = 7,   // lost new version, now EIO
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
+    ERROR = 10,      // write that returned an error
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -2560,6 +2561,8 @@ struct pg_log_entry_t {
       return "l_mark  ";
     case CLEAN:
       return "clean   ";
+    case ERROR:
+      return "error   ";
     default:
       return "unknown ";
     }
@@ -2577,20 +2580,23 @@ struct pg_log_entry_t {
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
+  int32_t return_code; // only stored for ERRORs for dup detection
 
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
 
   pg_log_entry_t()
-   : user_version(0), op(0),
+   : user_version(0), return_code(0), op(0),
      invalid_hash(false), invalid_pool(false) {}
   pg_log_entry_t(int _op, const hobject_t& _soid,
                 const eversion_t& v, const eversion_t& pv,
                 version_t uv,
-                const osd_reqid_t& rid, const utime_t& mt)
+                const osd_reqid_t& rid, const utime_t& mt,
+                int return_code)
    : soid(_soid), reqid(rid), version(v), prior_version(pv), user_version(uv),
-     mtime(mt), op(_op), invalid_hash(false), invalid_pool(false)
+     mtime(mt), return_code(return_code), op(_op),
+     invalid_hash(false), invalid_pool(false)
      {}
       
   bool is_clone() const { return op == CLONE; }
@@ -2601,6 +2607,7 @@ struct pg_log_entry_t {
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
+  bool is_error() const { return op == ERROR; }
 
   bool is_update() const {
     return
@@ -2612,7 +2619,8 @@ struct pg_log_entry_t {
   }
       
   bool reqid_is_indexed() const {
-    return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
+    return reqid != osd_reqid_t() &&
+      (op == MODIFY || op == DELETE || op == ERROR);
   }
 
   string get_key_name() const;

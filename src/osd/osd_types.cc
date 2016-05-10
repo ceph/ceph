@@ -3433,7 +3433,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(10, 4, bl);
+  ENCODE_START(11, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -3458,12 +3458,14 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(user_version, bl);
   ::encode(mod_desc, bl);
   ::encode(extra_reqids, bl);
+  if (op == ERROR)
+    ::encode(return_code, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -3512,7 +3514,8 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     mod_desc.mark_unrollbackable();
   if (struct_v >= 10)
     ::decode(extra_reqids, bl);
-
+  if (struct_v >= 11 && op == ERROR)
+    ::decode(return_code, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3535,6 +3538,7 @@ void pg_log_entry_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_stream("mtime") << mtime;
+  f->dump_int("return_code", return_code);
   if (snaps.length() > 0) {
     vector<snapid_t> v;
     bufferlist c = snaps;
@@ -3562,13 +3566,17 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   o.push_back(new pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
 				 1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-				 utime_t(8,9)));
+				 utime_t(8,9), 0));
+  o.push_back(new pg_log_entry_t(ERROR, oid, eversion_t(1,2), eversion_t(3,4),
+				 1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+				 utime_t(8,9), -ENOENT));
 }
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
   out << e.version << " (" << e.prior_version << ") "
-      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime
+      << " " << e.return_code;
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
     bufferlist c = e.snaps;
