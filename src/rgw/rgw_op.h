@@ -773,7 +773,12 @@ public:
 
 class RGWPutMetadataAccount : public RGWOp {
 protected:
-  set<string> rmattr_names;
+  std::set<std::string> rmattr_names;
+  std::map<std::string, bufferlist> attrs, orig_attrs;
+  std::map<int, std::string> temp_url_keys;
+
+  RGWObjVersionTracker acct_op_tracker;
+
   RGWAccessControlPolicy policy;
 
 public:
@@ -783,6 +788,7 @@ public:
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
+  int init_processing();
   int verify_permission();
   void pre_exec() { }
   void execute();

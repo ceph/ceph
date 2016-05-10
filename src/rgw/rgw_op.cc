@@ -3068,16 +3068,6 @@ done:
   dispose_processor(processor);
 }
 
-int RGWPutMetadataAccount::verify_permission()
-{
-  if (!rgw_user_is_authenticated(*(s->user))) {
-    return -EACCES;
-  }
-  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
-  //   return -EACCES;
-  // }
-  return 0;
-}
 
 void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                                 const set<string>& rmattr_names,
@@ -3097,10 +3087,7 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
     add_attrs.erase(iter);
   }
 
-  set<string>::const_iterator riter;
-  for(riter = rmattr_names.begin(); riter != rmattr_names.end(); ++riter) {
-    const string& name = *riter;
-
+  for (const string& name : rmattr_names) {
     if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
       temp_url_keys[0] = string();
     }
@@ -3110,26 +3097,60 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
   }
 }
 
-void RGWPutMetadataAccount::execute()
+int RGWPutMetadataAccount::init_processing()
 {
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
-  RGWObjVersionTracker acct_op_tracker;
+  /* First, go to the base class. At the time of writing the method was
+   * responsible only for initializing the quota. This isn't necessary
+   * here as we are touching metadata only. I'm putting this call only
+   * for the future. */
+  op_ret = RGWOp::init_processing();
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   op_ret = get_params();
   if (op_ret < 0) {
-    return;
+    return op_ret;
   }
 
   op_ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, orig_attrs,
                                      &acct_op_tracker);
   if (op_ret < 0) {
-    return;
+    return op_ret;
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
+  /* Try extract the TempURL-related stuff now to allow verify_permission
+   * evaluate whether we need FULL_CONTROL or not. */
+  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
+
+  return 0;
+}
+
+int RGWPutMetadataAccount::verify_permission()
+{
+  if (!rgw_user_is_authenticated(*(s->user))) {
+    return -EACCES;
+  }
+
+  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
+  //   return -EACCES;
+  // }
+
+  /* Altering TempURL keys requires FULL_CONTROL. */
+  if (!temp_url_keys.empty() && s->perm_mask != RGW_PERM_FULL_CONTROL) {
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+void RGWPutMetadataAccount::execute()
+{
+  /* Params have been extracted earlier. See init_processing(). */
   RGWUserInfo new_uinfo;
   op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, new_uinfo,
                                     &acct_op_tracker);
@@ -3138,14 +3159,7 @@ void RGWPutMetadataAccount::execute()
   }
 
   /* Handle the TempURL-related stuff. */
-  std::map<int, std::string> temp_url_keys;
-  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
   if (!temp_url_keys.empty()) {
-    if (s->perm_mask != RGW_PERM_FULL_CONTROL) {
-      op_ret = -EPERM;
-      return;
-    }
-
     for (auto& pair : temp_url_keys) {
       new_uinfo.temp_url_keys[pair.first] = std::move(pair.second);
     }
