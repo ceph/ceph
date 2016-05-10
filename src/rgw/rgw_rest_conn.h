@@ -193,7 +193,6 @@ public:
 
   int wait_bl(bufferlist *pbl) {
     int ret = req.wait();
-    put();
     if (ret < 0) {
       return ret;
     }
@@ -246,7 +245,6 @@ template <class T>
 int RGWRESTReadResource::wait(T *dest)
 {
   int ret = req.wait();
-  put();
   if (ret < 0) {
     return ret;
   }
@@ -309,7 +307,6 @@ public:
 
   int wait_bl(bufferlist *pbl) {
     int ret = req.wait();
-    put();
     if (ret < 0) {
       return ret;
     }
@@ -343,7 +340,6 @@ template <class T>
 int RGWRESTPostResource::wait(T *dest)
 {
   int ret = req.wait();
-  put();
   if (ret < 0) {
     return ret;
   }
