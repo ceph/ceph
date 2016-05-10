@@ -1674,3 +1674,22 @@ TEST_F(TestClsRbdCg, image_remove_cg_ref) {
 
   ASSERT_EQ(0, vals.size());
 }
+
+TEST_F(TestClsRbdCg, cg_list_images) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cg_id";
+  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "imageid"; // Image id shouldn't contain underscores
+  test_add_image(ioctx, cg_id, image_id, pool_id);
+
+  vector<tuple<string, int64_t, int64_t>> images;
+  ASSERT_EQ(0, cg_list_images(&ioctx, cg_id, images));
+  ASSERT_EQ(1, images.size());
+  ASSERT_EQ(image_id, get<0>(images[0]));
+  ASSERT_EQ(pool_id, get<1>(images[0]));
+  ASSERT_EQ(LINK_DIRTY, get<2>(images[0]));
+}

@@ -157,7 +157,7 @@ namespace librbd {
     }
 
     int cg_list_images(librados::IoCtx *ioctx, const std::string &oid,
-		       std::vector<std::pair<std::string,int64_t>>& images)
+		       std::vector<std::tuple<std::string, int64_t, int64_t>>& images)
     {
       bufferlist bl, bl2;
 
@@ -168,12 +168,18 @@ namespace librbd {
       for (int i = 0; i < count; ++i) {
 	string image_id;
 	string pool_id;
-	int state;
+	int64_t state;
 	::decode(image_id, iter);
 	::decode(pool_id, iter);
 	::decode(state, iter);
 
-	images.push_back(std::make_pair(image_id, 0));
+	std::string err;
+	images.push_back(std::make_tuple(
+				     image_id,
+				     strict_sistrtoll(pool_id.c_str(), &err),
+				     state));
+	if (!err.empty())
+	  return -EINVAL;
       }
 
       return r;

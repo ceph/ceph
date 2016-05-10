@@ -1066,7 +1066,7 @@ err_remove_id:
 
     ldout(cct, 20) << "listing images in cg name " << cg_name << " cg id " << cg_header_oid << dendl;
 
-    std::vector<std::pair<std::string, int64_t>> image_ids;
+    std::vector<std::tuple<std::string, int64_t, int64_t>> image_ids;
     r = cls_client::cg_list_images(&cg_ioctx, cg_header_oid, image_ids);
 
     if (r < 0) {
@@ -1078,13 +1078,13 @@ err_remove_id:
     for (auto i : image_ids) {
       librados::Rados rados(cg_ioctx);
       IoCtx ioctx;
-      rados.ioctx_create2(i.second, ioctx);
+      rados.ioctx_create2(std::get<1>(i), ioctx);
       std::string image_name;
-      r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, i.first, &image_name);
+      r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, std::get<0>(i), &image_name);
       if (r < 0) {
 	return r;
       }
-      images.push_back(std::make_pair(image_name, i.second));
+      images.push_back(std::make_pair(image_name, std::get<1>(i)));
     }
 
     return 0;
