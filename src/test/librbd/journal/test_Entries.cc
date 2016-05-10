@@ -150,6 +150,9 @@ TEST_F(TestJournalEntries, AioWrite) {
   bufferlist buffer_bl;
   buffer_bl.append(buffer);
   ASSERT_TRUE(aio_write_event.data.contents_equal(buffer_bl));
+
+  ASSERT_EQ(librbd::journal::AioWriteEvent::get_fixed_size() +
+              aio_write_event.data.length(), replay_entry.get_data().length());
 }
 
 TEST_F(TestJournalEntries, AioDiscard) {

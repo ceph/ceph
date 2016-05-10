@@ -71,6 +71,7 @@ JournalRecorder::~JournalRecorder() {
 
 Future JournalRecorder::append(uint64_t tag_tid,
                                const bufferlist &payload_bl) {
+
   Mutex::Locker locker(m_lock);
 
   uint64_t entry_tid = m_journal_metadata->allocate_entry_tid(tag_tid);
@@ -87,6 +88,7 @@ Future JournalRecorder::append(uint64_t tag_tid,
   bufferlist entry_bl;
   ::encode(Entry(future->get_tag_tid(), future->get_entry_tid(), payload_bl),
            entry_bl);
+  assert(entry_bl.length() <= m_journal_metadata->get_object_size());
 
   AppendBuffers append_buffers;
   append_buffers.push_back(std::make_pair(future, entry_bl));
