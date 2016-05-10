@@ -1640,7 +1640,7 @@ TEST_F(TestClsRbdCg, image_add_cg_ref) {
   ASSERT_EQ(0, image_add_cg_ref(&ioctx, image_id, cg_id, pool_id));
 
   map<string, bufferlist> vals;
-  ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", 10, &vals));
+  ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", "cg_ref", 10, &vals));
 
   std::string val_cg_id;
   int64_t val_pool_id;
@@ -1650,4 +1650,27 @@ TEST_F(TestClsRbdCg, image_add_cg_ref) {
 
   ASSERT_EQ(cg_id, val_cg_id);
   ASSERT_EQ(pool_id, val_pool_id);
+}
+
+TEST_F(TestClsRbdCg, image_remove_cg_ref) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+
+  ASSERT_EQ(0, create_image(&ioctx, image_id, 2<<20, 0,
+			    RBD_FEATURE_LAYERING, image_id));
+
+  string cg_id = "cg_id";
+
+  ASSERT_EQ(0, image_add_cg_ref(&ioctx, image_id, cg_id, pool_id));
+  // Add reference in order to make sure that remove_cg_ref actually
+  // does something.
+  ASSERT_EQ(0, image_remove_cg_ref(&ioctx, image_id, cg_id, pool_id));
+
+  map<string, bufferlist> vals;
+  ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", "cg_ref", 10, &vals));
+
+  ASSERT_EQ(0, vals.size());
 }
