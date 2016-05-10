@@ -174,7 +174,7 @@ template <class T>
 class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  RGWObjectCtx& obj_ctx;
+  RGWObjectCtx obj_ctx;
   bufferlist bl;
 
   rgw_bucket pool;
@@ -188,11 +188,10 @@ class RGWSimpleRadosReadCR : public RGWSimpleCoroutine {
 
 public:
   RGWSimpleRadosReadCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      RGWObjectCtx& _obj_ctx,
 		      const rgw_bucket& _pool, const string& _oid,
 		      T *_result) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
-                                                obj_ctx(_obj_ctx),
+                                                obj_ctx(store),
 						pool(_pool), oid(_oid),
                                                 pattrs(NULL),
 						result(_result),
@@ -252,7 +251,7 @@ int RGWSimpleRadosReadCR<T>::request_complete()
 class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  RGWObjectCtx& obj_ctx;
+  RGWObjectCtx obj_ctx;
   bufferlist bl;
 
   rgw_bucket pool;
@@ -264,11 +263,10 @@ class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
 
 public:
   RGWSimpleRadosReadAttrsCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      RGWObjectCtx& _obj_ctx,
 		      rgw_bucket& _pool, const string& _oid,
 		      map<string, bufferlist> *_pattrs) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados), store(_store),
-                                                obj_ctx(_obj_ctx),
+                                                obj_ctx(store),
 						pool(_pool), oid(_oid),
                                                 pattrs(_pattrs),
                                                 req(NULL) { }
