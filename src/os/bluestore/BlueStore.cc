@@ -769,7 +769,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     finisher(cct),
     kv_sync_thread(this),
     kv_stop(false),
-    logger(NULL)
+    logger(NULL),
+    checksummer(new Checksummer)
 {
   _init_logger();
 }
@@ -781,6 +782,7 @@ BlueStore::~BlueStore()
   assert(db == NULL);
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
+  delete checksummer;
 }
 
 void BlueStore::_init_logger()
