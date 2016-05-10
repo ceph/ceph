@@ -1355,7 +1355,7 @@ static int send_to_url(const string& url, const string& access,
                        bufferlist& in_data, JSONParser& parser)
 {
   if (access.empty() || secret.empty()) {
-    cerr << "An --access-key and --secret must be provided with --url." << std::endl;
+    cerr << "--access-key or --secret should not be empty." << std::endl;
     return -EINVAL;
   }
   RGWAccessKey key;
