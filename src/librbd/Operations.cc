@@ -4,6 +4,7 @@
 #include "librbd/Operations.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -141,7 +142,6 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
-    RWLock::RLocker owner_locker(image_ctx.owner_lock);
     if (r < 0) {
       lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
       complete(r);
@@ -152,20 +152,23 @@ struct C_InvokeAsyncRequest : public Context {
   }
 
   void send_acquire_exclusive_lock() {
-    RWLock::RLocker owner_locker(image_ctx.owner_lock);
-    {
-      RWLock::RLocker snap_locker(image_ctx.snap_lock);
-      if (image_ctx.read_only ||
-          (!permit_snapshot && image_ctx.snap_id != CEPH_NOSNAP)) {
-        complete(-EROFS);
-        return;
-      }
+    image_ctx.owner_lock.get_read();
+    image_ctx.snap_lock.get_read();
+    if (image_ctx.read_only ||
+        (!permit_snapshot && image_ctx.snap_id != CEPH_NOSNAP)) {
+      image_ctx.snap_lock.put_read();
+      image_ctx.owner_lock.put_read();
+      complete(-EROFS);
+      return;
     }
+    image_ctx.snap_lock.put_read();
 
     if (image_ctx.exclusive_lock == nullptr) {
       send_local_request();
+      image_ctx.owner_lock.put_read();
       return;
     } else if (image_ctx.image_watcher == nullptr) {
+      image_ctx.owner_lock.put_read();
       complete(-EROFS);
       return;
     }
@@ -173,6 +176,7 @@ struct C_InvokeAsyncRequest : public Context {
     if (image_ctx.exclusive_lock->is_lock_owner() &&
         image_ctx.exclusive_lock->accept_requests()) {
       send_local_request();
+      image_ctx.owner_lock.put_read();
       return;
     }
 
@@ -184,22 +188,27 @@ struct C_InvokeAsyncRequest : public Context {
       &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
         this);
     image_ctx.exclusive_lock->try_lock(ctx);
+    image_ctx.owner_lock.put_read();
   }
 
   void handle_acquire_exclusive_lock(int r) {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
-    RWLock::RLocker owner_locker(image_ctx.owner_lock);
     if (r < 0) {
       complete(-EROFS);
       return;
-    } else if (image_ctx.exclusive_lock->is_lock_owner()) {
+    }
+
+    image_ctx.owner_lock.get_read();
+    if (image_ctx.exclusive_lock->is_lock_owner()) {
       send_local_request();
+      image_ctx.owner_lock.put_read();
       return;
     }
 
     send_remote_request();
+    image_ctx.owner_lock.put_read();
   }
 
   void send_remote_request() {
@@ -234,9 +243,10 @@ struct C_InvokeAsyncRequest : public Context {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << __func__ << dendl;
 
-    Context *ctx = util::create_context_callback<
-      C_InvokeAsyncRequest<I>, &C_InvokeAsyncRequest<I>::handle_local_request>(
-        this);
+    Context *ctx = util::create_async_context_callback(
+      image_ctx, util::create_context_callback<
+        C_InvokeAsyncRequest<I>,
+        &C_InvokeAsyncRequest<I>::handle_local_request>(this));
     local(ctx);
   }
 
@@ -313,41 +323,44 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "flatten" << dendl;
 
-  uint64_t object_size;
-  uint64_t overlap_objects;
-  ::SnapContext snapc;
-
-  {
-    uint64_t overlap;
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    RWLock::RLocker l2(m_image_ctx.parent_lock);
-
-    if (m_image_ctx.read_only) {
-      on_finish->complete(-EROFS);
-      return;
-    }
-
-    // can't flatten a non-clone
-    if (m_image_ctx.parent_md.spec.pool_id == -1) {
-      lderr(cct) << "image has no parent" << dendl;
-      on_finish->complete(-EINVAL);
-      return;
-    }
-    if (m_image_ctx.snap_id != CEPH_NOSNAP) {
-      lderr(cct) << "snapshots cannot be flattened" << dendl;
-      on_finish->complete(-EROFS);
-      return;
-    }
-
-    snapc = m_image_ctx.snapc;
-    assert(m_image_ctx.parent != NULL);
-    int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);
-    assert(r == 0);
-    assert(overlap <= m_image_ctx.size);
-
-    object_size = m_image_ctx.get_object_size();
-    overlap_objects = Striper::get_num_objects(m_image_ctx.layout, overlap);
+  if (m_image_ctx.read_only) {
+    on_finish->complete(-EROFS);
+    return;
   }
+
+  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.parent_lock.get_read();
+
+  // can't flatten a non-clone
+  if (m_image_ctx.parent_md.spec.pool_id == -1) {
+    lderr(cct) << "image has no parent" << dendl;
+    m_image_ctx.parent_lock.put_read();
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  if (m_image_ctx.snap_id != CEPH_NOSNAP) {
+    lderr(cct) << "snapshots cannot be flattened" << dendl;
+    m_image_ctx.parent_lock.put_read();
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EROFS);
+    return;
+  }
+
+  ::SnapContext snapc = m_image_ctx.snapc;
+  assert(m_image_ctx.parent != NULL);
+
+  uint64_t overlap;
+  int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);
+  assert(r == 0);
+  assert(overlap <= m_image_ctx.size);
+
+  uint64_t object_size = m_image_ctx.get_object_size();
+  uint64_t  overlap_objects = Striper::get_num_objects(m_image_ctx.layout,
+                                                       overlap);
+
+  m_image_ctx.parent_lock.put_read();
+  m_image_ctx.snap_lock.put_read();
 
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
     m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), object_size,
@@ -510,13 +523,13 @@ void Operations<I>::execute_resize(uint64_t size, ProgressContext &prog_ctx,
                 << "new_size=" << size << dendl;
   m_image_ctx.snap_lock.put_read();
 
-  {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
-      on_finish->complete(-EROFS);
-      return;
-    }
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EROFS);
+    return;
   }
+  m_image_ctx.snap_lock.put_read();
 
   operation::ResizeRequest<I> *req = new operation::ResizeRequest<I>(
     m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), size, prog_ctx,
@@ -558,13 +571,13 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
     return;
   }
 
-  {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    if (m_image_ctx.get_snap_id(snap_name) != CEPH_NOSNAP) {
-      on_finish->complete(-EEXIST);
-      return;
-    }
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.get_snap_id(snap_name) != CEPH_NOSNAP) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EEXIST);
+    return;
   }
+  m_image_ctx.snap_lock.put_read();
 
   C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
     m_image_ctx, "snap_create", true,
@@ -653,19 +666,17 @@ void Operations<I>::execute_snap_rollback(const char *snap_name,
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
-  uint64_t snap_id;
-  uint64_t new_size;
-  {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    snap_id = m_image_ctx.get_snap_id(snap_name);
-    if (snap_id == CEPH_NOSNAP) {
-      lderr(cct) << "No such snapshot found." << dendl;
-      on_finish->complete(-ENOENT);
-      return;
-    }
-
-    new_size = m_image_ctx.get_image_size(snap_id);
+  m_image_ctx.snap_lock.get_read();
+  uint64_t snap_id = m_image_ctx.get_snap_id(snap_name);
+  if (snap_id == CEPH_NOSNAP) {
+    lderr(cct) << "No such snapshot found." << dendl;
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-ENOENT);
+    return;
   }
+
+  uint64_t new_size = m_image_ctx.get_image_size(snap_id);
+  m_image_ctx.snap_lock.put_read();
 
   // async mode used for journal replay
   operation::SnapshotRollbackRequest<I> *request =
@@ -709,16 +720,16 @@ void Operations<I>::snap_remove(const char *snap_name, Context *on_finish) {
     return;
   }
 
-  bool proxy_op = false;
-  {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    if (m_image_ctx.get_snap_id(snap_name) == CEPH_NOSNAP) {
-      on_finish->complete(-ENOENT);
-      return;
-    }
-    proxy_op = ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0 ||
-                (m_image_ctx.features & RBD_FEATURE_JOURNALING) != 0);
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.get_snap_id(snap_name) == CEPH_NOSNAP) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-ENOENT);
+    return;
   }
+
+  bool proxy_op = ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0 ||
+                   (m_image_ctx.features & RBD_FEATURE_JOURNALING) != 0);
+  m_image_ctx.snap_lock.put_read();
 
   if (proxy_op) {
     C_InvokeAsyncRequest<I> *req = new C_InvokeAsyncRequest<I>(
@@ -749,27 +760,28 @@ void Operations<I>::execute_snap_remove(const char *snap_name,
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
-  uint64_t snap_id;
-  {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    snap_id = m_image_ctx.get_snap_id(snap_name);
-    if (snap_id == CEPH_NOSNAP) {
-      lderr(m_image_ctx.cct) << "No such snapshot found." << dendl;
-      on_finish->complete(-ENOENT);
-      return;
-    }
-
-    bool is_protected;
-    int r = m_image_ctx.is_snap_protected(snap_id, &is_protected);
-    if (r < 0) {
-      on_finish->complete(r);
-      return;
-    } else if (is_protected) {
-      lderr(m_image_ctx.cct) << "snapshot is protected" << dendl;
-      on_finish->complete(-EBUSY);
-      return;
-    }
+  m_image_ctx.snap_lock.get_read();
+  uint64_t snap_id = m_image_ctx.get_snap_id(snap_name);
+  if (snap_id == CEPH_NOSNAP) {
+    lderr(m_image_ctx.cct) << "No such snapshot found." << dendl;
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-ENOENT);
+    return;
   }
+
+  bool is_protected;
+  int r = m_image_ctx.is_snap_protected(snap_id, &is_protected);
+  if (r < 0) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(r);
+    return;
+  } else if (is_protected) {
+    lderr(m_image_ctx.cct) << "snapshot is protected" << dendl;
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EBUSY);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
 
   operation::SnapshotRemoveRequest<I> *req =
     new operation::SnapshotRemoveRequest<I>(
