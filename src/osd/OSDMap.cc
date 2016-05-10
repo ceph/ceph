@@ -1179,26 +1179,6 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
 					  OSDMap::Incremental *pending_inc)
 {
   ldout(cct, 10) << "remove_redundant_temporaries" << dendl;
-  if (!osdmap.primary_temp->empty()) {
-    OSDMap templess;
-    templess.deepish_copy_from(osdmap);
-    templess.primary_temp->clear();
-    for (map<pg_t,int32_t>::iterator p = osdmap.primary_temp->begin();
-        p != osdmap.primary_temp->end();
-        ++p) {
-      if (pending_inc->new_primary_temp.count(p->first) == 0) {
-        vector<int> real_up, templess_up;
-        int real_primary, templess_primary;
-        osdmap.pg_to_acting_osds(p->first, &real_up, &real_primary);
-        templess.pg_to_acting_osds(p->first, &templess_up, &templess_primary);
-        if (real_primary == templess_primary){
-          ldout(cct, 10) << " removing unnecessary primary_temp "
-                         << p->first << " -> " << p->second << dendl;
-          pending_inc->new_primary_temp[p->first] = -1;
-        }
-      }
-    }
-  }
 }
 
 void OSDMap::remove_down_temps(CephContext *cct,
@@ -1248,11 +1228,33 @@ void OSDMap::remove_down_temps(CephContext *cct,
       }
     }
   }
-  for (map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
-      p != tmpmap.primary_temp->end();
-      ++p) {
-    if (tmpmap.is_down(p->second))
+  map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
+  while (p != tmpmap.primary_temp->end()) {
+    // primary down?
+    if (tmpmap.is_down(p->second)) {
+      ldout(cct, 10) << __func__ << "  removing primary_temp " << p->first
+		     << " to down " << p->second << dendl;
       pending_inc->new_primary_temp[p->first] = -1;
+      ++p;
+      continue;
+    }
+    // redundant primary_temp?
+    if (pending_inc->new_primary_temp.count(p->first) == 0) {
+      vector<int> real_up, templess_up;
+      int real_primary, templess_primary;
+      pg_t pgid = p->first;
+      tmpmap.pg_to_acting_osds(pgid, &real_up, &real_primary);
+      tmpmap.primary_temp->erase(p++);
+      tmpmap.pg_to_acting_osds(pgid, &templess_up, &templess_primary);
+      if (real_primary == templess_primary){
+	ldout(cct, 10) << __func__ << "  removing primary_temp "
+		       << pgid << " -> " << real_primary
+		       << " (unnecessary/redundant)" << dendl;
+	pending_inc->new_primary_temp[pgid] = -1;
+      }
+      continue;  // we incremented p above
+    }
+    ++p;
   }
 }
 
