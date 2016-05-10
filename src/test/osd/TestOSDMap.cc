@@ -250,7 +250,7 @@ TEST_F(OSDMapTest, PrimaryTempRespected) {
   EXPECT_EQ(acting_primary, acting_osds[1]);
 }
 
-TEST_F(OSDMapTest, RemovesRedundantTemps) {
+TEST_F(OSDMapTest, CleanTemps) {
   set_up_map();
 
   pg_t rawpg(0, 0, -1);
@@ -268,7 +268,7 @@ TEST_F(OSDMapTest, RemovesRedundantTemps) {
   osdmap.apply_incremental(pgtemp_map);
 
   OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
+  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
 
   EXPECT_TRUE(pending_inc.new_pg_temp.count(pgid) &&
 	      pending_inc.new_pg_temp[pgid].size() == 0);
@@ -314,7 +314,7 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
 
   OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
 
-  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
+  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
   EXPECT_FALSE(pending_inc.new_pg_temp.count(pgid));
   EXPECT_FALSE(pending_inc.new_primary_temp.count(pgid));
 }

@@ -1175,14 +1175,8 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
     n->osd_uuid = o->osd_uuid;
 }
 
-void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap,
-					  OSDMap::Incremental *pending_inc)
-{
-  ldout(cct, 10) << "remove_redundant_temporaries" << dendl;
-}
-
-void OSDMap::remove_down_temps(CephContext *cct,
-                               const OSDMap& osdmap, Incremental *pending_inc)
+void OSDMap::clean_temps(CephContext *cct,
+			 const OSDMap& osdmap, Incremental *pending_inc)
 {
   ldout(cct, 10) << __func__ << dendl;
   OSDMap tmpmap;

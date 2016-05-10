@@ -1003,11 +1003,9 @@ void OSDMonitor::create_pending()
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
-  // drop any redundant pg_temp entries
-  OSDMap::remove_redundant_temporaries(g_ceph_context, osdmap, &pending_inc);
-
-  // drop any pg or primary_temp entries with no up entries
-  OSDMap::remove_down_temps(g_ceph_context, osdmap, &pending_inc);
+  // clean up pg_temp, primary_temp
+  OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
+  dout(10) << "create_pending  did clean_temps" << dendl;
 }
 
 void OSDMonitor::maybe_prime_pg_temp()
