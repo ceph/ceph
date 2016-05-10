@@ -67,6 +67,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_LOCKED, 423, "Locked" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
     { ERR_NOT_IMPLEMENTED, 501, "NotImplemented" },
+    { ERR_SERVICE_UNAVAILABLE, 503, "ServiceUnavailable"}
 };
 
 const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
