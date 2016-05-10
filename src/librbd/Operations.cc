@@ -152,12 +152,14 @@ struct C_InvokeAsyncRequest : public Context {
   }
 
   void send_acquire_exclusive_lock() {
-    image_ctx.owner_lock.get_read();
+    // context can complete before owner_lock is unlocked
+    RWLock &owner_lock(image_ctx.owner_lock);
+    owner_lock.get_read();
     image_ctx.snap_lock.get_read();
     if (image_ctx.read_only ||
         (!permit_snapshot && image_ctx.snap_id != CEPH_NOSNAP)) {
       image_ctx.snap_lock.put_read();
-      image_ctx.owner_lock.put_read();
+      owner_lock.put_read();
       complete(-EROFS);
       return;
     }
@@ -165,10 +167,10 @@ struct C_InvokeAsyncRequest : public Context {
 
     if (image_ctx.exclusive_lock == nullptr) {
       send_local_request();
-      image_ctx.owner_lock.put_read();
+      owner_lock.put_read();
       return;
     } else if (image_ctx.image_watcher == nullptr) {
-      image_ctx.owner_lock.put_read();
+      owner_lock.put_read();
       complete(-EROFS);
       return;
     }
@@ -176,7 +178,7 @@ struct C_InvokeAsyncRequest : public Context {
     if (image_ctx.exclusive_lock->is_lock_owner() &&
         image_ctx.exclusive_lock->accept_requests()) {
       send_local_request();
-      image_ctx.owner_lock.put_read();
+      owner_lock.put_read();
       return;
     }
 
@@ -188,7 +190,7 @@ struct C_InvokeAsyncRequest : public Context {
       &C_InvokeAsyncRequest<I>::handle_acquire_exclusive_lock>(
         this);
     image_ctx.exclusive_lock->try_lock(ctx);
-    image_ctx.owner_lock.put_read();
+    owner_lock.put_read();
   }
 
   void handle_acquire_exclusive_lock(int r) {
@@ -200,15 +202,17 @@ struct C_InvokeAsyncRequest : public Context {
       return;
     }
 
-    image_ctx.owner_lock.get_read();
+    // context can complete before owner_lock is unlocked
+    RWLock &owner_lock(image_ctx.owner_lock);
+    owner_lock.get_read();
     if (image_ctx.exclusive_lock->is_lock_owner()) {
       send_local_request();
-      image_ctx.owner_lock.put_read();
+      owner_lock.put_read();
       return;
     }
 
     send_remote_request();
-    image_ctx.owner_lock.put_read();
+    owner_lock.put_read();
   }
 
   void send_remote_request() {
