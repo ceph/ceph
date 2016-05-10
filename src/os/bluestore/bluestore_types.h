@@ -496,6 +496,7 @@ struct bluestore_onode_t {
       expected_write_size(0),
       alloc_hint_flags(0) {}
 
+  /// find a lextent that includes offset
   map<uint64_t,bluestore_lextent_t>::iterator find_lextent(uint64_t offset) {
     map<uint64_t,bluestore_lextent_t>::iterator fp =
       extent_map.lower_bound(offset);
@@ -510,6 +511,7 @@ struct bluestore_onode_t {
     return fp;
   }
 
+  /// seek to the first lextent including or after offset
   map<uint64_t,bluestore_lextent_t>::iterator seek_lextent(uint64_t offset) {
     map<uint64_t,bluestore_lextent_t>::iterator fp =
       extent_map.lower_bound(offset);
