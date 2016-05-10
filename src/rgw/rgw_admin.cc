@@ -183,7 +183,7 @@ void _usage()
   cout << "                               replica mdlog get/delete\n";
   cout << "                               replica datalog get/delete\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
-  cout << "   --remote=<remote>         remote to pull period\n";
+  cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
   cout << "   --period=<id>             period id\n";
   cout << "   --epoch=<number>          period epoch\n";
   cout << "   --commit                  commit the period during 'period update'\n";
@@ -1315,10 +1315,16 @@ static int send_to_remote_gateway(const string& remote, req_info& info,
     }
     conn = store->rest_master_conn;
   } else {
+    // check zonegroups
     auto iter = store->zonegroup_conn_map.find(remote);
     if (iter == store->zonegroup_conn_map.end()) {
-      cerr << "could not find connection to: " << remote << std::endl;
-      return -ENOENT;
+      // check zones
+      iter = store->zone_conn_map.find(remote);
+      if (iter == store->zone_conn_map.end()) {
+        cerr << "could not find connection for zone or zonegroup id: "
+            << remote << std::endl;
+        return -ENOENT;
+      }
     }
     conn = iter->second;
   }
