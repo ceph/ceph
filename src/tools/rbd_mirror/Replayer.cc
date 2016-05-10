@@ -50,6 +50,45 @@ private:
   Replayer *replayer;
 };
 
+class StartCommand : public ReplayerAdminSocketCommand {
+public:
+  explicit StartCommand(Replayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->start();
+    return true;
+  }
+
+private:
+  Replayer *replayer;
+};
+
+class StopCommand : public ReplayerAdminSocketCommand {
+public:
+  explicit StopCommand(Replayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->stop();
+    return true;
+  }
+
+private:
+  Replayer *replayer;
+};
+
+class RestartCommand : public ReplayerAdminSocketCommand {
+public:
+  explicit RestartCommand(Replayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) {
+    replayer->restart();
+    return true;
+  }
+
+private:
+  Replayer *replayer;
+};
+
 class FlushCommand : public ReplayerAdminSocketCommand {
 public:
   explicit FlushCommand(Replayer *replayer) : replayer(replayer) {}
@@ -78,6 +117,27 @@ public:
 				       "get status for rbd mirror " + name);
     if (r == 0) {
       commands[command] = new StatusCommand(replayer);
+    }
+
+    command = "rbd mirror start " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "start rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new StartCommand(replayer);
+    }
+
+    command = "rbd mirror stop " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "stop rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new StopCommand(replayer);
+    }
+
+    command = "rbd mirror restart " + name;
+    r = admin_socket->register_command(command, command, this,
+				       "restart rbd mirror " + name);
+    if (r == 0) {
+      commands[command] = new RestartCommand(replayer);
     }
 
     command = "rbd mirror flush " + name;
@@ -275,7 +335,9 @@ void Replayer::run()
 
   while (!m_stopping.read()) {
     Mutex::Locker l(m_lock);
-    set_sources(m_pool_watcher->get_images());
+    if (!m_manual_stop) {
+      set_sources(m_pool_watcher->get_images());
+    }
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
 
@@ -318,13 +380,76 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
   }
 }
 
-void Replayer::flush()
+void Replayer::start()
 {
   dout(20) << "enter" << dendl;
 
   Mutex::Locker l(m_lock);
 
   if (m_stopping.read()) {
+    return;
+  }
+
+  m_manual_stop = false;
+
+  for (auto it = m_images.begin(); it != m_images.end(); it++) {
+    auto &pool_images = it->second;
+    for (auto i = pool_images.begin(); i != pool_images.end(); i++) {
+      auto &image_replayer = i->second;
+      image_replayer->start(nullptr, nullptr, true);
+    }
+  }
+}
+
+void Replayer::stop()
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (m_stopping.read()) {
+    return;
+  }
+
+  m_manual_stop = true;
+
+  for (auto it = m_images.begin(); it != m_images.end(); it++) {
+    auto &pool_images = it->second;
+    for (auto i = pool_images.begin(); i != pool_images.end(); i++) {
+      auto &image_replayer = i->second;
+      image_replayer->stop(nullptr, true);
+    }
+  }
+}
+
+void Replayer::restart()
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (m_stopping.read()) {
+    return;
+  }
+
+  m_manual_stop = false;
+
+  for (auto it = m_images.begin(); it != m_images.end(); it++) {
+    auto &pool_images = it->second;
+    for (auto i = pool_images.begin(); i != pool_images.end(); i++) {
+      auto &image_replayer = i->second;
+      image_replayer->restart();
+    }
+  }
+}
+
+void Replayer::flush()
+{
+  dout(20) << "enter" << dendl;
+
+  Mutex::Locker l(m_lock);
+
+  if (m_stopping.read() || m_manual_stop) {
     return;
   }
 

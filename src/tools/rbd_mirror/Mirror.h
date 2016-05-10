@@ -40,6 +40,9 @@ public:
   void handle_signal(int signum);
 
   void print_status(Formatter *f, stringstream *ss);
+  void start();
+  void stop();
+  void restart();
   void flush();
 
 private:
@@ -57,6 +60,7 @@ private:
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
   std::map<peer_t, std::unique_ptr<Replayer> > m_replayers;
   atomic_t m_stopping;
+  bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
 };
 
