@@ -240,7 +240,7 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
   CURLcode status = curl_easy_perform(curl_handle);
   if (status) {
-    dout(0) << "curl_easy_perform returned error: " << error_buf << dendl;
+    dout(0) << "curl_easy_perform returned status " << status << " error: " << error_buf << dendl;
     ret = -EINVAL;
   }
   curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
