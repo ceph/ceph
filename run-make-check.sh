@@ -49,6 +49,11 @@ else
 	CHECK_MAKEOPTS=""
 fi
 
+TEMPDIR=`mktemp -dt XXX`
+function cleanup() {
+    [ -n ${TEMPDIR} ] && rm -rf "${TEMPDIR}"
+}
+
 function run() {
     # Same logic as install-deps.sh for finding package installer
     local install_cmd
@@ -68,8 +73,8 @@ function run() {
     $DRY_RUN ./autogen.sh || return 1
     $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
         CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
-    $DRY_RUN make $BUILD_MAKEOPTS || return 1
-    $DRY_RUN make $CHECK_MAKEOPTS check || return 1
+    $DRY_RUN make $BUILD_MAKEOPTS TMPDIR="$TEMPDIR"|| return 1
+    $DRY_RUN make $CHECK_MAKEOPTS check TMPDIR="$TEMPDIR" || return 1
     $DRY_RUN make dist || return 1
 }
 
@@ -82,4 +87,5 @@ function main() {
     fi
 }
 
+trap cleanup INT TERM EXIT
 main "$@"
