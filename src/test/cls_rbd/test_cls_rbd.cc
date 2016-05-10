@@ -1527,3 +1527,25 @@ TEST_F(TestClsRbdCg, dir_remove_cg) {
   ASSERT_EQ(0, ioctx.omap_get_keys(CG_DIRECTORY, "", 10, &keys));
   ASSERT_EQ(0, keys.size());
 }
+
+TEST_F(TestClsRbdCg, cg_add_image) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cg_id";
+  ASSERT_EQ(0, create_cg(&ioctx, cg_id));
+
+  int64_t pool_id = ioctx.get_id();
+  string image_id = "image_id";
+  ASSERT_EQ(0, cg_add_image(&ioctx, cg_id, image_id, pool_id));
+
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(cg_id, "", 10, &keys));
+
+  auto it = keys.begin();
+  ASSERT_EQ(2, keys.size());
+  string image_key = "image_" + image_id + "_" + stringify(pool_id);
+  ASSERT_EQ(image_key, *it);
+  ++it;
+  ASSERT_EQ("snap_seq", *it);
+}
