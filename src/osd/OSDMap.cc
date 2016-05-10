@@ -1235,15 +1235,20 @@ void OSDMap::remove_down_temps(CephContext *cct,
   for (map<pg_t,vector<int32_t> >::iterator p = tmpmap.pg_temp->begin();
        p != tmpmap.pg_temp->end();
        ++p) {
+    // all osds down?
     unsigned num_up = 0;
-    for (vector<int32_t>::iterator i = p->second.begin();
-	 i != p->second.end();
-	 ++i) {
-      if (!tmpmap.is_down(*i))
+    for (auto o : p->second) {
+      if (!tmpmap.is_down(o)) {
 	++num_up;
+	break;
+      }
     }
-    if (num_up == 0)
+    if (num_up == 0) {
+      ldout(cct, 10) << __func__ << "  removing pg_temp " << p->first
+		     << " with all down osds" << p->second << dendl;
       pending_inc->new_pg_temp[p->first].clear();
+      continue;
+    }
   }
   for (map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
       p != tmpmap.primary_temp->end();
