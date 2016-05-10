@@ -77,21 +77,40 @@ public:
     return "image" + stringify(_image_number);
   }
 
+  static std::string _pool_name;
+  static librados::Rados _rados;
+  static uint64_t _image_number;
+
+};
+
+class TestClsRbdCg : public ::testing::Test {
+public:
+  virtual void SetUp() {
+    _pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
+  }
+
+  virtual void TearDown() {
+    ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
+  }
+
   std::string get_temp_cg_name() {
-    ++_image_number;
+    ++_cg_number;
     return "cg" + stringify(_cg_number);
   }
 
   static std::string _pool_name;
   static librados::Rados _rados;
-  static uint64_t _image_number;
   static uint64_t _cg_number;
-
 };
 
 std::string TestClsRbd::_pool_name;
 librados::Rados TestClsRbd::_rados;
 uint64_t TestClsRbd::_image_number = 0;
+
+std::string TestClsRbdCg::_pool_name;
+librados::Rados TestClsRbdCg::_rados;
+uint64_t TestClsRbdCg::_cg_number = 0;
 
 TEST_F(TestClsRbd, copyup)
 {
@@ -1427,7 +1446,7 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(expected_image_ids, image_ids);
 }
 
-TEST_F(TestClsRbd, create_cg) {
+TEST_F(TestClsRbdCg, create_cg) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -1449,7 +1468,7 @@ void can_add_cg_to_dir(librados::IoCtx ioctx, string cg_id, string cg_name) {
   ASSERT_EQ("name_" + cg_name, *keys.rbegin());
 }
 
-TEST_F(TestClsRbd, dir_add_cg) {
+TEST_F(TestClsRbdCg, dir_add_cg) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -1458,7 +1477,18 @@ TEST_F(TestClsRbd, dir_add_cg) {
   can_add_cg_to_dir(ioctx, cg_id, cg_name);
 }
 
-TEST_F(TestClsRbd, dir_list_cgs) {
+TEST_F(TestClsRbdCg, dir_add_already_existing) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string cg_id = "cgidexisting";
+  string cg_name = "cgnameexisting";
+  can_add_cg_to_dir(ioctx, cg_id, cg_name);
+
+  ASSERT_EQ(-EEXIST, dir_add_cg(&ioctx, CG_DIRECTORY, cg_name, cg_id));
+}
+
+TEST_F(TestClsRbdCg, dir_list_cgs) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -1483,12 +1513,12 @@ TEST_F(TestClsRbd, dir_list_cgs) {
   ASSERT_EQ(cg_name2, it->first);
 }
 
-TEST_F(TestClsRbd, dir_remove_cg) {
+TEST_F(TestClsRbdCg, dir_remove_cg) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  string cg_id = "cgid";
-  string cg_name = "cgname";
+  string cg_id = "cgidtodel";
+  string cg_name = "cgnametodel";
   can_add_cg_to_dir(ioctx, cg_id, cg_name);
 
   ASSERT_EQ(0, dir_remove_cg(&ioctx, CG_DIRECTORY, cg_name, cg_id));
