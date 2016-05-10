@@ -744,7 +744,6 @@ rm -rf %{buildroot}
 %{_bindir}/ceph-detect-init
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs
-%{_unitdir}/ceph-create-keys@.service
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
@@ -971,30 +970,30 @@ fi
 %post mon
 %if 0%{?suse_version}
 if [ $1 -ge 1 ] ; then
-  /usr/bin/systemctl preset ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
+  /usr/bin/systemctl preset ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_post ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%systemd_post ceph-mon@\*.service ceph-mon.target
 %endif
 /usr/bin/systemctl start ceph-mon.target >/dev/null 2>&1 || :
 
 %preun mon
 %if 0%{?suse_version}
-%service_del_preun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%service_del_preun ceph-mon@\*.service ceph-mon.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_preun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%systemd_preun ceph-mon@\*.service ceph-mon.target
 %endif
 
 %postun mon
 test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%service_del_postun ceph-mon@\*.service ceph-mon.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_postun ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
+%systemd_postun ceph-mon@\*.service ceph-mon.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
@@ -1004,7 +1003,7 @@ if [ $FIRST_ARG -ge 1 ] ; then
     source $SYSCONF_CEPH
   fi
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-    /usr/bin/systemctl try-restart ceph-create-keys@\*.service ceph-mon@\*.service > /dev/null 2>&1 || :
+    /usr/bin/systemctl try-restart ceph-mon@\*.service > /dev/null 2>&1 || :
   fi
 fi
 

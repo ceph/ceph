@@ -7,7 +7,6 @@ unitfiles = \
 	ceph-rbd-mirror.target \
 	ceph-mds@.service \
 	ceph-mon@.service \
-	ceph-create-keys@.service \
 	ceph-osd@.service \
 	ceph-radosgw@.service \
 	ceph-rbd-mirror@.service \
