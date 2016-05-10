@@ -1225,6 +1225,7 @@ void RGWGetObj::execute()
     if (op_ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret="
 		       << op_ret << dendl;
+      goto done_err;
     }
     return;
   }
