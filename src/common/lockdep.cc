@@ -129,7 +129,7 @@ int lockdep_dump_locks()
 	 ++q) {
       lockdep_dout(0) << "  * " << lock_names[q->first] << "\n";
       if (q->second)
-	q->second->print(*_dout);
+	*_dout << *(q->second);
       *_dout << dendl;
     }
   }
