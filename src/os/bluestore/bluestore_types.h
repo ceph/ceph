@@ -524,6 +524,21 @@ struct bluestore_onode_t {
     return fp;
   }
 
+  bool has_any_lextents(uint64_t offset, uint64_t length) {
+    map<uint64_t,bluestore_lextent_t>::iterator fp =
+      extent_map.lower_bound(offset);
+    if (fp != extent_map.begin()) {
+      --fp;
+      if (fp->first + fp->second.length <= offset) {
+	++fp;
+      }
+    }
+    if (fp == extent_map.end() || fp->first >= offset + length) {
+      return false;
+    }
+    return true;
+  }
+
   bluestore_blob_t *add_blob(int64_t *id) {
     *id = blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
     return &blob_map[*id];
