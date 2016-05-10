@@ -271,6 +271,47 @@ TEST(bluestore_onode_t, seek_lextent)
   ASSERT_EQ(d, on.seek_lextent(499));
   ASSERT_EQ(on.extent_map.end(), on.seek_lextent(500));
 }
+
+TEST(bluestore_onode_t, has_any_lextents)
+{
+  bluestore_onode_t on;
+  ASSERT_FALSE(on.has_any_lextents(0, 0));
+  ASSERT_FALSE(on.has_any_lextents(0, 1000));
+  ASSERT_FALSE(on.has_any_lextents(1000, 1000));
+
+  on.extent_map[100] = bluestore_lextent_t(1, 0, 100, 0);
+  ASSERT_FALSE(on.has_any_lextents(0, 50));
+  ASSERT_FALSE(on.has_any_lextents(0, 100));
+  ASSERT_FALSE(on.has_any_lextents(50, 50));
+  ASSERT_TRUE(on.has_any_lextents(50, 51));
+  ASSERT_TRUE(on.has_any_lextents(50, 100051));
+  ASSERT_TRUE(on.has_any_lextents(100, 100));
+  ASSERT_TRUE(on.has_any_lextents(100, 1));
+  ASSERT_TRUE(on.has_any_lextents(199, 1));
+  ASSERT_TRUE(on.has_any_lextents(199, 2));
+  ASSERT_FALSE(on.has_any_lextents(200, 2));
+
+  on.extent_map[200] = bluestore_lextent_t(2, 0, 100, 0);
+  ASSERT_TRUE(on.has_any_lextents(199, 1));
+  ASSERT_TRUE(on.has_any_lextents(199, 2));
+  ASSERT_TRUE(on.has_any_lextents(200, 2));
+  ASSERT_TRUE(on.has_any_lextents(200, 200));
+  ASSERT_TRUE(on.has_any_lextents(299, 1));
+  ASSERT_FALSE(on.has_any_lextents(300, 1));
+
+  on.extent_map[400] = bluestore_lextent_t(4, 0, 100, 0);
+  ASSERT_TRUE(on.has_any_lextents(0, 10000));
+  ASSERT_TRUE(on.has_any_lextents(199, 1));
+  ASSERT_FALSE(on.has_any_lextents(300, 1));
+  ASSERT_FALSE(on.has_any_lextents(300, 100));
+  ASSERT_FALSE(on.has_any_lextents(399, 1));
+  ASSERT_TRUE(on.has_any_lextents(400, 1));
+  ASSERT_TRUE(on.has_any_lextents(400, 100));
+  ASSERT_TRUE(on.has_any_lextents(400, 1000));
+  ASSERT_TRUE(on.has_any_lextents(499, 1000));
+  ASSERT_FALSE(on.has_any_lextents(500, 1000));
+}
+
 TEST(bluestore_onode_t, punch_hole)
 {
   bluestore_onode_t on;
