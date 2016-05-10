@@ -2195,13 +2195,14 @@ void
 usage(void)
 {
 	fprintf(stdout, "usage: %s",
-		"fsx [-dfjnqxyACFHKLORUWZ] [-b opnum] [-c Prob] [-h holebdy] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
+		"fsx [-dfjknqxyACFHKLORUWZ] [-b opnum] [-c Prob] [-h holebdy] [-l flen] [-m start:end] [-o oplen] [-p progressinterval] [-r readbdy] [-s style] [-t truncbdy] [-w writebdy] [-D startingop] [-N numops] [-P dirpath] [-S seed] pname iname\n\
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
 	-f: flush and invalidate cache after I/O\n\
 	-h holebdy: 4096 would make discards page aligned (default 1)\n\
 	-j: journal replay stress test\n\
+	-k: keep data on success (default 0)\n\
 	-l flen: the upper bound on file size (default 262144)\n\
 	-m startop:endop: monitor (print debug output) specified byte range (default 0:infinity)\n\
 	-n: no verifications of file size\n\
