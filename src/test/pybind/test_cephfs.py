@@ -125,6 +125,23 @@ def test_open():
     cephfs.unlink('file-1')
 
 @with_setup(setup_test)
+def test_link():
+    fd = cephfs.open('file-1', 'w', 0755)
+    cephfs.write(fd, "1111", 0)
+    cephfs.close(fd)
+    cephfs.link('file-1', 'file-2')
+    fd = cephfs.open('file-2', 'r', 0755)
+    assert_equal(cephfs.read(fd, 0, 4), "1111")
+    cephfs.close(fd)
+    fd = cephfs.open('file-2', 'r+', 0755)
+    cephfs.write(fd, "2222", 4)
+    cephfs.close(fd)
+    fd = cephfs.open('file-1', 'r', 0755)
+    assert_equal(cephfs.read(fd, 0, 8), "11112222")
+    cephfs.close(fd)
+    cephfs.unlink('file-2')
+
+@with_setup(setup_test)
 def test_symlink():
     fd = cephfs.open('file-1', 'w', 0755)
     cephfs.write(fd, "1111", 0)
