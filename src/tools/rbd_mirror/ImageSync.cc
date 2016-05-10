@@ -82,7 +82,7 @@ void ImageSync<I>::handle_prune_catch_up_sync_point(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to prune catch-up sync point: "
+    lderr(cct) << ": failed to prune catch-up sync point: "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -118,7 +118,7 @@ void ImageSync<I>::handle_create_sync_point(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to create sync point: " << cpp_strerror(r)
+    lderr(cct) << ": failed to create sync point: " << cpp_strerror(r)
                << dendl;
     finish(r);
     return;
@@ -148,7 +148,7 @@ void ImageSync<I>::handle_copy_snapshots(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to copy snapshot metadata: "
+    lderr(cct) << ": failed to copy snapshot metadata: "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -196,11 +196,11 @@ void ImageSync<I>::handle_copy_image(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r == -ECANCELED) {
-    ldout(cct, 10) << "image copy canceled" << dendl;
+    ldout(cct, 10) << ": image copy canceled" << dendl;
     finish(r);
     return;
   } else if (r < 0) {
-    lderr(cct) << "failed to copy image: " << cpp_strerror(r) << dendl;
+    lderr(cct) << ": failed to copy image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -298,7 +298,7 @@ void ImageSync<I>::handle_prune_sync_points(int r) {
   ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to prune sync point: "
+    lderr(cct) << ": failed to prune sync point: "
                << cpp_strerror(r) << dendl;
     finish(r);
     return;

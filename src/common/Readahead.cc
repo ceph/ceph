@@ -29,7 +29,7 @@ Readahead::extent_t Readahead::update(const vector<extent_t>& extents, uint64_t 
   for (vector<extent_t>::const_iterator p = extents.begin(); p != extents.end(); ++p) {
     _observe_read(p->first, p->second);
   }
-  if (m_readahead_pos >= limit) {
+  if (m_readahead_pos >= limit|| m_last_pos >= limit) {
     m_lock.Unlock();
     return extent_t(0, 0);
   }
@@ -41,7 +41,7 @@ Readahead::extent_t Readahead::update(const vector<extent_t>& extents, uint64_t 
 Readahead::extent_t Readahead::update(uint64_t offset, uint64_t length, uint64_t limit) {
   m_lock.Lock();
   _observe_read(offset, length);
-  if (m_readahead_pos >= limit) {
+  if (m_readahead_pos >= limit || m_last_pos >= limit) {
     m_lock.Unlock();
     return extent_t(0, 0);
   }

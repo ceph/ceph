@@ -537,8 +537,6 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Remove) {
   expect_remove(mock_local_io_ctx, 0);
   expect_update_object_map(mock_local_image_ctx, mock_object_map,
                            m_local_snap_ids[0], OBJECT_EXISTS, 0);
-  expect_update_object_map(mock_local_image_ctx, mock_object_map,
-                           m_local_snap_ids[1], OBJECT_NONEXISTENT, 0);
 
   request->send();
   ASSERT_EQ(0, ctx.wait());
