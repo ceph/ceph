@@ -1914,8 +1914,11 @@ static void populate_with_generic_attrs(const req_state * const s,
 
 static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
                                  const std::set<std::string>& rmattr_names,
-                                 RGWQuotaInfo& quota)
+                                 RGWQuotaInfo& quota,
+                                 bool * quota_extracted = nullptr)
 {
+  bool extracted = false;
+
   /* Put new limit on max objects. */
   auto iter = add_attrs.find(RGW_ATTR_QUOTA_NOBJS);
   std::string err;
@@ -1926,6 +1929,7 @@ static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
       return -EINVAL;
     }
     add_attrs.erase(iter);
+    extracted = true;
   }
 
   /* Put new limit on bucket (container) size. */
@@ -1937,23 +1941,31 @@ static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
       return -EINVAL;
     }
     add_attrs.erase(iter);
+    extracted = true;
   }
 
   for (const auto& name : rmattr_names) {
     /* Remove limit on max objects. */
     if (name.compare(RGW_ATTR_QUOTA_NOBJS) == 0) {
       quota.max_objects = -1;
+      extracted = true;
     }
 
     /* Remove limit on max bucket size. */
     if (name.compare(RGW_ATTR_QUOTA_MSIZE) == 0) {
       quota.max_size = -1;
+      extracted = true;
     }
   }
 
   /* Swift requries checking on raw usage instead of the 4 KiB rounded one. */
   quota.check_on_raw = true;
   quota.enabled = quota.max_size > 0 || quota.max_objects > 0;
+
+  if (quota_extracted) {
+    *quota_extracted = extracted;
+  }
+
   return 0;
 }
 
@@ -2856,6 +2868,13 @@ int RGWPutMetadataAccount::init_processing()
    * evaluate whether we need FULL_CONTROL or not. */
   filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
 
+  /* The same with quota except a client needs to be reseller admin. */
+  op_ret = filter_out_quota_info(attrs, rmattr_names, new_quota,
+                                 &new_quota_extracted);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   return 0;
 }
 
@@ -2871,6 +2890,13 @@ int RGWPutMetadataAccount::verify_permission()
 
   /* Altering TempURL keys requires FULL_CONTROL. */
   if (!temp_url_keys.empty() && s->perm_mask != RGW_PERM_FULL_CONTROL) {
+    return -EPERM;
+  }
+
+  /* We are failing this intensionally to allow system user/reseller admin
+   * override in rgw_process.cc. This is the way to specify a given RGWOp
+   * expect extra privileges.  */
+  if (new_quota_extracted) {
     return -EPERM;
   }
 
@@ -2892,6 +2918,11 @@ void RGWPutMetadataAccount::execute()
     for (auto& pair : temp_url_keys) {
       new_uinfo.temp_url_keys[pair.first] = std::move(pair.second);
     }
+  }
+
+  /* Handle the quota extracted at the verify_permission step. */
+  if (new_quota_extracted) {
+    new_uinfo.user_quota = std::move(new_quota);
   }
 
   /* We are passing here the current (old) user info to allow the function
