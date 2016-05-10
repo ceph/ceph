@@ -776,13 +776,17 @@ protected:
   std::set<std::string> rmattr_names;
   std::map<std::string, bufferlist> attrs, orig_attrs;
   std::map<int, std::string> temp_url_keys;
+  RGWQuotaInfo new_quota;
+  bool new_quota_extracted;
 
   RGWObjVersionTracker acct_op_tracker;
 
   RGWAccessControlPolicy policy;
 
 public:
-  RGWPutMetadataAccount() {}
+  RGWPutMetadataAccount()
+    : new_quota_extracted(false) {
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
