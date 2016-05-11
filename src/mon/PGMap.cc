@@ -883,23 +883,46 @@ void PGMap::dump_pg_stats(ostream& ss, bool brief) const
 
 void PGMap::dump_pool_stats(ostream& ss, bool header) const
 {
-  if (header)
-    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog" << std::endl;
+  TextTable tab;
+
+  if (header) {
+    tab.define_column("POOLID", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
+  } else {
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+  }
+
   for (ceph::unordered_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
        p != pg_pool_sum.end();
        ++p) {
-    ss << "pool " << p->first
-       << "\t" << p->second.stats.sum.num_objects
-    //<< "\t" << p->second.num_object_copies
-       << "\t" << p->second.stats.sum.num_objects_missing_on_primary
-       << "\t" << p->second.stats.sum.num_objects_degraded
-       << "\t" << p->second.stats.sum.num_objects_misplaced
-       << "\t" << p->second.stats.sum.num_objects_unfound
-       << "\t" << p->second.stats.sum.num_bytes
-       << "\t" << p->second.log_size
-       << "\t" << p->second.ondisk_log_size
-       << std::endl;
+    tab << p->first
+        << p->second.stats.sum.num_objects
+        << p->second.stats.sum.num_objects_missing_on_primary
+        << p->second.stats.sum.num_objects_degraded
+        << p->second.stats.sum.num_objects_misplaced
+        << p->second.stats.sum.num_objects_unfound
+        << p->second.stats.sum.num_bytes
+        << p->second.log_size
+        << p->second.ondisk_log_size
+        << TextTable::endrow;
   }
+
+  ss << tab;
 }
 
 void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
