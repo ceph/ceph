@@ -60,13 +60,13 @@ namespace crimson {
 
       void start() {
 	assert(!is_timing);
-	start_time = clock::now;
+	start_time = clock::now();
 	is_timing = true;
       }
 
       void stop() {
 	assert(is_timing);
-	T duration = std::chrono::duration_cast<T>(clock::now - start_time);
+	T duration = std::chrono::duration_cast<T>(clock::now() - start_time);
 	typename T::rep count = duration.count();
 	sum += count;
 	sum_squares += count * count;

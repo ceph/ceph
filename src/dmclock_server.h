@@ -7,7 +7,7 @@
 
 
 #define DEBUGGER
-#define PROFILE
+// #define PROFILE
 
 
 /*
@@ -458,7 +458,9 @@ namespace crimson {
       std::deque<MarkPoint>     clean_mark_points;
 
 #ifdef PROFILE
+    public:
       ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+    protected:
 #endif
 
       // NB: All threads declared at end, so they're destructed first!
@@ -830,6 +832,11 @@ namespace crimson {
       };
 
 
+#ifdef PROFILE
+      ProfileTimer<std::chrono::nanoseconds> pull_request_timer;
+      ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+#endif
+
       template<typename Rep, typename Per>
       PriorityQueue(typename super::ClientInfoFunc _client_info_f,
 		    std::chrono::duration<Rep,Per> _idle_age,
@@ -890,8 +897,14 @@ namespace crimson {
 		       const ReqParams& req_params,
 		       const Time       time) {
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	add_request_timer.start();
+#endif
 	super::do_add_request(std::move(request), client_id, req_params, time);
 	// no call to schedule_request for pull version
+#ifdef PROFILE
+	add_request_timer.stop();
+#endif
       }
 
 
@@ -903,6 +916,9 @@ namespace crimson {
       PullReq pull_request(Time now) {
 	PullReq result;
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	pull_request_timer.start();
+#endif
 
 	typename super::NextReq next = super::do_next_request(now);
 	result.type = next.type;
@@ -964,6 +980,9 @@ namespace crimson {
 	  assert(false);
 	}
 
+#ifdef PROFILE
+	pull_request_timer.stop();
+#endif
 	return result;
       } // pull_request
 
@@ -1006,6 +1025,13 @@ namespace crimson {
       std::mutex  sched_ahead_mtx;
       std::condition_variable sched_ahead_cv;
       Time sched_ahead_when = TimeZero;
+
+#ifdef PROFILE
+    public:
+      ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+      ProfileTimer<std::chrono::nanoseconds> request_complete_timer;
+    protected:
+#endif
 
       // NB: threads declared last, so constructed last and destructed first
 
@@ -1090,14 +1116,26 @@ namespace crimson {
 		       const ReqParams& req_params,
 		       const Time       time) {
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	add_request_timer.start();
+#endif
 	super::do_add_request(std::move(request), client_id, req_params, time);
 	schedule_request();
+#ifdef PROFILE
+	add_request_timer.stop();
+#endif
       }
 
 
       void request_completed() {
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	request_complete_timer.start();
+#endif
 	schedule_request();
+#ifdef PROFILE
+	request_complete_timer.stop();
+#endif
       }
 
     protected:
