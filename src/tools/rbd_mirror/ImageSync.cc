@@ -166,8 +166,6 @@ void ImageSync<I>::send_copy_image() {
     return;
   }
 
-  update_progress("COPY_IMAGE");
-
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -178,6 +176,8 @@ void ImageSync<I>::send_copy_image() {
     m_journaler, m_client_meta, &m_client_meta->sync_points.front(),
     ctx, m_progress_ctx);
   m_lock.Unlock();
+
+  update_progress("COPY_IMAGE");
 
   m_image_copy_request->send();
 }
