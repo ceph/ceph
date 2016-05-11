@@ -18,7 +18,5 @@
 #include "msg/msg_types.h"
 
 int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url);
-int entity_addr_from_sockaddr(entity_addr_t *addr /* out */,
-			      const struct sockaddr *sa);
 
 #endif /* ADDRESS_HELPER_H_ */
