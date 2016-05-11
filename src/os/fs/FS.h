@@ -65,12 +65,10 @@ public:
       memset(&iocb, 0, sizeof(iocb));
     }
 
-    void pwritev(uint64_t _offset) {
+    void pwritev(uint64_t _offset, uint64_t len) {
       offset = _offset;
+      length = len;
       io_prep_pwritev(&iocb, fd, &iov[0], iov.size(), offset);
-      length = 0;
-      for (unsigned u=0; u<iov.size(); ++u)
-	length += iov[u].iov_len;
     }
     void pread(uint64_t _offset, uint64_t len) {
       offset = _offset;
