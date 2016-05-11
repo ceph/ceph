@@ -543,6 +543,14 @@ void dump_access_control(struct req_state *s, const char *origin,
 			 uint32_t max_age) {
   if (origin && (origin[0] != '\0')) {
     STREAM_IO(s)->print("Access-Control-Allow-Origin: %s\r\n", origin);
+    /* If the server specifies an origin host rather than "*",
+     * then it must also include Origin in the Vary response header
+     * to indicate to clients that server responses will differ
+     * based on the value of the Origin request header.
+     */
+    if (strcmp(origin, "*") != 0)
+      STREAM_IO(s)->print("Vary: Origin\r\n");
+
     if (meth && (meth[0] != '\0'))
       STREAM_IO(s)->print("Access-Control-Allow-Methods: %s\r\n", meth);
     if (hdr && (hdr[0] != '\0'))
