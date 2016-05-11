@@ -3317,8 +3317,8 @@ int image_status_list(cls_method_context_t hctx,
       (*mirror_images)[image_id] = mirror_image;
 
       cls::rbd::MirrorImageStatus status;
-      r = image_status_get(hctx, mirror_image.global_image_id, &status);
-      if (r < 0) {
+      int r1 = image_status_get(hctx, mirror_image.global_image_id, &status);
+      if (r1 < 0) {
 	continue;
       }
 
