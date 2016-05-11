@@ -55,35 +55,13 @@ configure how this migration takes place. There are two main scenarios:
   data becomes inactive. This is ideal for mutable data (e.g., photo/video 
   editing, transactional data, etc.).
 
-- **Read-only Mode:** When admins configure tiers with ``readonly`` mode, Ceph
-  clients write data to the backing tier. On read, Ceph copies the requested
-  object(s) from the backing tier to the cache tier. Stale objects get removed
-  from the cache tier based on the defined policy. This approach is ideal 
-  for immutable data (e.g., presenting pictures/videos on a social network, 
-  DNA data, X-Ray imaging, etc.), because reading data from a cache pool that 
-  might contain out-of-date data provides weak consistency. Do not use 
-  ``readonly`` mode for mutable data.
+- **Read-proxy Mode:** This mode will use any objects that already exist
+  in the cache tier, but if an object is not present in the cache the request
+  will be proxied to the base tier.  This is useful for transitioning from
+  ``writeback`` mode to a disabled cache as it allows the workload to function
+  properly while the cache is drained, without adding any new objects to the
+  cache.
 
-And the modes above are accomodated to adapt different configurations:
-
-- **Read-forward Mode:** this mode is the same as the ``writeback`` mode
-  when serving write requests. But when Ceph clients is trying to read objects
-  not yet copied to the cache tier, Ceph **forward** them to the backing tier by
-  replying with a "redirect" message. And the clients will instead turn to the
-  backing tier for the data. If the read performance of the backing tier is on
-  a par with that of its cache tier, while its write performance or endurance
-  falls far behind, this mode might be a better choice.
-
-- **Read-proxy Mode:** this mode is similar to ``readforward`` mode: both
-  of them do not promote/copy the data when the requested object does not
-  exist in the cache tier. But instead of redirecting the Ceph clients to the
-  backing tier when cache misses, the cache tier reads from the backing tier
-  on behalf of the clients. Under some circumstances, this mode can help to
-  reduce the latency.
-
-Since all Ceph clients can use cache tiering, it has the potential to 
-improve I/O performance for Ceph Block Devices, Ceph Object Storage, 
-the Ceph Filesystem and native bindings.
 
 
 Setting Up Pools
