@@ -6649,8 +6649,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	    "--yes-i-really-mean-it if you really do.";
       err = -EPERM;
       goto reply;
-    } else if (!osdmap.exists(id) || !osdmap.is_down(id)) {
-      ss << "osd." << id << " is not down or doesn't exist";
+    } else if (!osdmap.exists(id)) {
+      ss << "osd." << id << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    } else if (!osdmap.is_down(id)) {
+      ss << "osd." << id << " is not down";
+      err = -EBUSY;
+      goto reply;
     } else {
       epoch_t e = osdmap.get_info(id).down_at;
       pending_inc.new_lost[id] = e;
