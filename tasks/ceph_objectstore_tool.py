@@ -218,7 +218,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     osds = ctx.cluster.only(teuthology.is_type('osd'))
 
     TEUTHDIR = teuthology.get_testdir(ctx)
-    DATADIR = os.path.join(TEUTHDIR, "data")
+    DATADIR = os.path.join(TEUTHDIR, "ceph.data")
     DATALINECOUNT = 10000
     ERRORS = 0
     NUM_OBJECTS = config.get('objects', 10)
