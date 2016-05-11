@@ -1179,20 +1179,6 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
 					  OSDMap::Incremental *pending_inc)
 {
   ldout(cct, 10) << "remove_redundant_temporaries" << dendl;
-
-  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
-       p != osdmap.pg_temp->end();
-       ++p) {
-    if (pending_inc->new_pg_temp.count(p->first) == 0) {
-      vector<int> raw_up;
-      int primary;
-      osdmap.pg_to_raw_up(p->first, &raw_up, &primary);
-      if (raw_up == p->second) {
-        ldout(cct, 10) << " removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
-        pending_inc->new_pg_temp[p->first].clear();
-      }
-    }
-  }
   if (!osdmap.primary_temp->empty()) {
     OSDMap templess;
     templess.deepish_copy_from(osdmap);
@@ -1248,6 +1234,18 @@ void OSDMap::remove_down_temps(CephContext *cct,
 		     << " with all down osds" << p->second << dendl;
       pending_inc->new_pg_temp[p->first].clear();
       continue;
+    }
+    // redundant pg_temp?
+    if (pending_inc->new_pg_temp.count(p->first) == 0) {
+      vector<int> raw_up;
+      int primary;
+      tmpmap.pg_to_raw_up(p->first, &raw_up, &primary);
+      if (raw_up == p->second) {
+        ldout(cct, 10) << __func__ << "  removing pg_temp " << p->first << " "
+		       << p->second << " that matches raw_up mapping" << dendl;
+        pending_inc->new_pg_temp[p->first].clear();
+	continue;
+      }
     }
   }
   for (map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
