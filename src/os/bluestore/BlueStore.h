@@ -647,7 +647,7 @@ private:
 		    uint64_t offset, uint64_t length,
 		    bool shared);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
-  void _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
   void _txc_update_fm(TransContext *txc);
