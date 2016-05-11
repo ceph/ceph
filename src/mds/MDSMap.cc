@@ -469,6 +469,13 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
 
 void MDSMap::encode(bufferlist& bl, uint64_t features) const
 {
+  std::map<mds_rank_t,int32_t> inc;  // Legacy field, fake it so that
+                                     // old-mon peers have something sane
+                                     // during upgrade
+  for (const auto rank : in) {
+    inc.insert(std::make_pair(rank, epoch));
+  }
+
   if ((features & CEPH_FEATURE_PGID64) == 0) {
     __u16 v = 2;
     ::encode(v, bl);
@@ -573,6 +580,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
 
 void MDSMap::decode(bufferlist::iterator& p)
 {
+  std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
+
   cached_up_features = 0;
   DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
   ::decode(epoch, p);

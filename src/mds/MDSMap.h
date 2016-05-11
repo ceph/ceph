@@ -195,7 +195,7 @@ protected:
   mds_rank_t max_mds; /* The maximum number of active MDSes. Also, the maximum rank. */
 
   std::set<mds_rank_t> in;              // currently defined cluster
-  std::map<mds_rank_t,int32_t> inc;     // most recent incarnation.
+
   // which ranks are failed, stopped, damaged (i.e. not held by a daemon)
   std::set<mds_rank_t> failed, stopped, damaged;
   std::map<mds_rank_t, mds_gid_t> up;        // who is in those roles

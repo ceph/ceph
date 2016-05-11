@@ -867,9 +867,6 @@ bool MDSRank::is_daemon_stopping() const
   return stopping;
 }
 
-// FIXME>> this fns are state-machiney, not dispatchy
-// >>>>>
-
 void MDSRank::request_state(MDSMap::DaemonState s)
 {
   dout(3) << "request_state " << ceph_mds_state_name(s) << dendl;
@@ -1369,8 +1366,6 @@ void MDSRank::stopping_done()
   // tell monitor we shut down cleanly.
   request_state(MDSMap::STATE_STOPPED);
 }
-
-// <<<<<<<<
 
 void MDSRankDispatcher::handle_mds_map(
     MMDSMap *m,

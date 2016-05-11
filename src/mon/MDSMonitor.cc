@@ -1680,7 +1680,6 @@ int MDSMonitor::management_command(
 
     // Carry forward what makes sense
     new_fs->fscid = fs->fscid;
-    new_fs->mds_map.inc = fs->mds_map.inc;
     new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
     new_fs->mds_map.max_mds = g_conf->max_mds;
     new_fs->mds_map.data_pools = fs->mds_map.data_pools;

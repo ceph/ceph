@@ -348,7 +348,8 @@ void FSMap::decode(bufferlist::iterator& p)
     ::decode(legacy_mds_map.modified, p);
     ::decode(legacy_mds_map.tableserver, p);
     ::decode(legacy_mds_map.in, p);
-    ::decode(legacy_mds_map.inc, p);
+    std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
+    ::decode(inc, p);
     ::decode(legacy_mds_map.up, p);
     ::decode(legacy_mds_map.failed, p);
     ::decode(legacy_mds_map.stopped, p);
@@ -682,7 +683,7 @@ void FSMap::promote(
     mds_map.failed.erase(assigned_rank);
   }
   info.rank = assigned_rank;
-  info.inc = ++mds_map.inc[assigned_rank];
+  info.inc = epoch;
   mds_roles[standby_gid] = filesystem->fscid;
 
   // Update the rank state in Filesystem
