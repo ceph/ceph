@@ -1031,8 +1031,8 @@ namespace crimson {
 
 #ifdef PROFILE
     public:
-      ProfileTimer<std::chrono::nanoseconds> add_request_timer;
-      ProfileTimer<std::chrono::nanoseconds> request_complete_timer;
+      crimson::ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+      crimson::ProfileTimer<std::chrono::nanoseconds> request_complete_timer;
     protected:
 #endif
 

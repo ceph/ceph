@@ -205,6 +205,7 @@ void test::server_data(std::ostream& out,
         std::fixed << total_p << std::endl;
 
 #ifdef PROFILE
+    crimson::ProfileCombiner<std::chrono::nanoseconds> cmbr;
     for (uint i = 0; i < sim->get_server_count(); ++i) {
       const auto& q = sim->get_server(i).get_priority_queue();
       const auto& art = q.add_request_timer;
