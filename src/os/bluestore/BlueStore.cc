@@ -5031,7 +5031,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     pos = p.first + p.second.length;
   }
   for (auto& b : o->onode.blob_map) {
-    dout(log_level) << __func__ << "  blob " << b.first << " " << b.second
+    dout(log_level) << __func__ << "  " << b.first << ": " << b.second
 		    << dendl;
   }
   pos = 0;
@@ -5045,6 +5045,20 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
   if (!o->onode.overlay_refs.empty()) {
     dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs
 		    << dendl;
+  }
+  if (o->bnode) {
+    _dump_bnode(o->bnode, log_level);
+  }
+}
+
+void BlueStore::_dump_bnode(BnodeRef b, int log_level)
+{
+  if (!g_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
+    return;
+  dout(log_level) << __func__ << " " << std::hex << b->hash << std::dec << dendl;
+  dout(log_level) << __func__ << "  " << b->ref_map << dendl;
+  for (auto &p : b->blob_map) {
+    dout(log_level) << __func__ << "  " << p.first << ": " << p.second << dendl;
   }
 }
 
