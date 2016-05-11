@@ -147,12 +147,9 @@ ostream& PGLog::IndexedLog::print(ostream& out) const
 void PGLog::reset_backfill()
 {
   missing.clear();
-  divergent_priors.clear();
-  dirty_divergent_priors = true;
 }
 
 void PGLog::clear() {
-  divergent_priors.clear();
   missing.clear();
   log.clear();
   log_keys_debug.clear();
@@ -173,10 +170,6 @@ void PGLog::trim(
 {
   // trim?
   if (trim_to > log.tail) {
-    /* If we are trimming, we must be complete up to trim_to, time
-     * to throw out any divergent_priors
-     */
-    divergent_priors.clear();
     // We shouldn't be trimming the log past last_complete
     assert(trim_to <= info.last_complete);
 
@@ -283,7 +276,6 @@ void PGLog::proc_replica_log(
     olog.can_rollback_to,
     omissing,
     0,
-    0,
     this);
 
   if (lu < oinfo.last_update) {
@@ -354,23 +346,14 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
 
   log.index();
 
-  map<eversion_t, hobject_t> new_priors;
   _merge_divergent_entries(
     log,
     divergent,
     info,
     log.can_rollback_to,
     missing,
-    &new_priors,
     rollbacker,
     this);
-  for (map<eversion_t, hobject_t>::iterator i = new_priors.begin();
-       i != new_priors.end();
-       ++i) {
-    add_divergent_prior(
-      i->first,
-      i->second);
-  }
 
   if (info.last_update < log.can_rollback_to)
     log.can_rollback_to = info.last_update;
@@ -503,23 +486,14 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     info.last_user_version = oinfo.last_user_version;
     info.purged_snaps = oinfo.purged_snaps;
 
-    map<eversion_t, hobject_t> new_priors;
     _merge_divergent_entries(
       log,
       divergent,
       info,
       log.can_rollback_to,
       missing,
-      &new_priors,
       rollbacker,
       this);
-    for (map<eversion_t, hobject_t>::iterator i = new_priors.begin();
-	 i != new_priors.end();
-	 ++i) {
-      add_divergent_prior(
-	i->first,
-	i->second);
-    }
 
     // We cannot rollback into the new log entries
     log.can_rollback_to = log.head;
@@ -571,21 +545,20 @@ void PGLog::write_log_and_missing(
     dout(5) << "write_log_and_missing with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
-	     << ", dirty_divergent_priors: "
-	     << (dirty_divergent_priors ? "true" : "false")
-	     << ", divergent_priors: " << divergent_priors.size()
 	     << ", writeout_from: " << writeout_from
 	     << ", trimmed: " << trimmed
+	     << ", clear_divergent_priors: " << clear_divergent_priors
 	     << dendl;
     _write_log_and_missing(
-      t, km, log, coll, log_oid, divergent_priors,
+      t, km, log, coll, log_oid,
       dirty_to,
       dirty_from,
       writeout_from,
       trimmed,
-      dirty_divergent_priors,
+      missing,
       !touched_log,
       require_rollback,
+      clear_divergent_priors,
       (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
@@ -593,7 +566,7 @@ void PGLog::write_log_and_missing(
   }
 }
 
-void PGLog::write_log_and_missing(
+void PGLog::write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
     map<string,bufferlist> *km,
     pg_log_t &log,
@@ -601,14 +574,33 @@ void PGLog::write_log_and_missing(
     map<eversion_t, hobject_t> &divergent_priors,
     bool require_rollback)
 {
-  _write_log_and_missing(
+  _write_log_and_missing_wo_missing(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
     true, true, require_rollback, 0);
 }
 
-void PGLog::_write_log_and_missing(
+void PGLog::write_log_and_missing(
+    ObjectStore::Transaction& t,
+    map<string,bufferlist> *km,
+    pg_log_t &log,
+    const coll_t& coll,
+    const ghobject_t &log_oid,
+    const pg_missing_tracker_t &missing,
+    bool require_rollback)
+{
+  _write_log_and_missing(
+    t, km, log, coll, log_oid,
+    eversion_t::max(),
+    eversion_t(),
+    eversion_t(),
+    set<eversion_t>(),
+    missing,
+    true, require_rollback, false, 0);
+}
+
+void PGLog::_write_log_and_missing_wo_missing(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
   pg_log_t &log,
@@ -688,6 +680,100 @@ void PGLog::_write_log_and_missing(
   if (require_rollback) {
   ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
   ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  }
+
+  if (!to_remove.empty())
+    t.omap_rmkeys(coll, log_oid, to_remove);
+}
+
+void PGLog::_write_log_and_missing(
+  ObjectStore::Transaction& t,
+  map<string,bufferlist>* km,
+  pg_log_t &log,
+  const coll_t& coll, const ghobject_t &log_oid,
+  eversion_t dirty_to,
+  eversion_t dirty_from,
+  eversion_t writeout_from,
+  const set<eversion_t> &trimmed,
+  const pg_missing_tracker_t &missing,
+  bool touch_log,
+  bool require_rollback,
+  bool clear_divergent_priors,
+  set<string> *log_keys_debug
+  ) {
+  set<string> to_remove;
+  for (set<eversion_t>::const_iterator i = trimmed.begin();
+       i != trimmed.end();
+       ++i) {
+    to_remove.insert(i->get_key_name());
+    if (log_keys_debug) {
+      assert(log_keys_debug->count(i->get_key_name()));
+      log_keys_debug->erase(i->get_key_name());
+    }
+  }
+
+  if (touch_log)
+    t.touch(coll, log_oid);
+  if (dirty_to != eversion_t()) {
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      eversion_t().get_key_name(), dirty_to.get_key_name());
+    clear_up_to(log_keys_debug, dirty_to.get_key_name());
+  }
+  if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
+    //   dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      dirty_from.get_key_name(), eversion_t::max().get_key_name());
+    clear_after(log_keys_debug, dirty_from.get_key_name());
+  }
+
+  for (list<pg_log_entry_t>::iterator p = log.log.begin();
+       p != log.log.end() && p->version <= dirty_to;
+       ++p) {
+    bufferlist bl(sizeof(*p) * 2);
+    p->encode_with_checksum(bl);
+    (*km)[p->get_key_name()].claim(bl);
+  }
+
+  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+       p != log.log.rend() &&
+	 (p->version >= dirty_from || p->version >= writeout_from) &&
+	 p->version >= dirty_to;
+       ++p) {
+    bufferlist bl(sizeof(*p) * 2);
+    p->encode_with_checksum(bl);
+    (*km)[p->get_key_name()].claim(bl);
+  }
+
+  if (log_keys_debug) {
+    for (map<string, bufferlist>::iterator i = (*km).begin();
+	 i != (*km).end();
+	 ++i) {
+      if (i->first[0] == '_')
+	continue;
+      assert(!log_keys_debug->count(i->first));
+      log_keys_debug->insert(i->first);
+    }
+  }
+
+  if (clear_divergent_priors) {
+    //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
+    to_remove.insert("divergent_priors");
+  }
+  missing.get_changed(
+    [&](const hobject_t &obj) {
+      string key = string("missing/") + obj.to_str();
+      pg_missing_item item;
+      if (!missing.is_missing(obj, &item)) {
+	to_remove.insert(key);
+      } else {
+	::encode(make_pair(obj, item), (*km)[key]);
+      }
+    });
+  if (require_rollback) {
+    ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+    ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
   }
 
   if (!to_remove.empty())

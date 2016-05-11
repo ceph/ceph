@@ -719,7 +719,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
   // there is no new entry (from the logs) and
@@ -757,7 +756,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
 

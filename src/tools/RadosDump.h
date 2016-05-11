@@ -288,22 +288,27 @@ struct metadata_section {
   OSDMap osdmap;
   bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
   map<eversion_t, hobject_t> divergent_priors;
+  pg_missing_t missing;
 
-  metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
-		   const pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
-		   map<eversion_t, hobject_t> &divergent_priors)
+  metadata_section(
+    __u8 struct_ver,
+    epoch_t map_epoch,
+    const pg_info_t &info,
+    const pg_log_t &log,
+    const map<epoch_t,pg_interval_t> &past_intervals,
+    const pg_missing_t &missing)
     : struct_ver(struct_ver),
       map_epoch(map_epoch),
       info(info),
       log(log),
       past_intervals(past_intervals),
-      divergent_priors(divergent_priors) { }
+      missing(missing) {}
   metadata_section()
     : struct_ver(0),
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     ::encode(struct_ver, bl);
     ::encode(map_epoch, bl);
     ::encode(info, bl);
@@ -313,10 +318,11 @@ struct metadata_section {
     // preserving exact layout for CRC checking.
     bl.append(osdmap_bl);
     ::encode(divergent_priors, bl);
+    ::encode(missing, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(4, bl);
+    DECODE_START(5, bl);
     ::decode(struct_ver, bl);
     ::decode(map_epoch, bl);
     ::decode(info, bl);
@@ -333,6 +339,9 @@ struct metadata_section {
     }
     if (struct_v > 3) {
       ::decode(divergent_priors, bl);
+    }
+    if (struct_v > 4) {
+      ::decode(missing, bl);
     }
     DECODE_FINISH(bl);
   }
