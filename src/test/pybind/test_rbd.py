@@ -14,7 +14,10 @@ from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
-                 RBD_FEATURE_EXCLUSIVE_LOCK)
+                 RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
+                 RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
+                 RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
+                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN)
 
 rados = None
 ioctx = None
@@ -1123,3 +1126,132 @@ class TestExclusiveLock(object):
             for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)
+
+class TestMirroring(object):
+
+    @staticmethod
+    def check_info(info, global_id, state, primary=None):
+        eq(global_id, info['global_id'])
+        eq(state, info['state'])
+        if primary is not None:
+            eq(primary, info['primary'])
+
+    def setUp(self):
+        self.rbd = RBD()
+        self.initial_mirror_mode = self.rbd.mirror_mode_get(ioctx)
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        create_image()
+        self.image = Image(ioctx, image_name)
+
+    def tearDown(self):
+        self.image.close()
+        remove_image()
+        self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
+
+
+    def test_mirror_peer(self):
+        eq([], list(self.rbd.mirror_peer_list(ioctx)))
+        cluster_name = "test_cluster"
+        client_name = "test_client"
+        uuid = self.rbd.mirror_peer_add(ioctx, cluster_name, client_name)
+        assert(uuid)
+        peer = {
+            'uuid' : uuid,
+            'cluster_name' : cluster_name,
+            'client_name' : client_name,
+            }
+        eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
+        cluster_name = "test_cluster1"
+        self.rbd.mirror_peer_set_cluster(ioctx, uuid, cluster_name)
+        client_name = "test_client1"
+        self.rbd.mirror_peer_set_client(ioctx, uuid, client_name)
+        peer = {
+            'uuid' : uuid,
+            'cluster_name' : cluster_name,
+            'client_name' : client_name,
+            }
+        eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
+        self.rbd.mirror_peer_remove(ioctx, uuid)
+        eq([], list(self.rbd.mirror_peer_list(ioctx)))
+
+    @require_features([RBD_FEATURE_EXCLUSIVE_LOCK,
+                       RBD_FEATURE_JOURNALING])
+    def test_mirror_image(self):
+
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE)
+        self.image.mirror_image_disable(True)
+        info = self.image.mirror_image_get_info()
+        self.check_info(info, '', RBD_MIRROR_IMAGE_DISABLED, False)
+
+        self.image.mirror_image_enable()
+        info = self.image.mirror_image_get_info()
+        global_id = info['global_id']
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        self.rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL)
+        fail = False
+        try:
+            self.image.mirror_image_disable(True)
+        except InvalidArgument:
+            fail = True
+        eq(True, fail) # Fails because of mirror mode pool
+
+        self.image.mirror_image_demote()
+        info = self.image.mirror_image_get_info()
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, False)
+
+        self.image.mirror_image_resync()
+
+        self.image.mirror_image_promote(True)
+        info = self.image.mirror_image_get_info()
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        fail = False
+        try:
+            self.image.mirror_image_resync()
+        except InvalidArgument:
+            fail = True
+        eq(True, fail) # Fails because it is primary
+
+        status = self.image.mirror_image_get_status()
+        eq(image_name, status['name'])
+        eq(False, status['up'])
+        eq(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status['state'])
+        info = status['info']
+        self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+    @require_features([RBD_FEATURE_EXCLUSIVE_LOCK,
+                       RBD_FEATURE_JOURNALING])
+    def test_mirror_image_status(self):
+        info = self.image.mirror_image_get_info()
+        global_id = info['global_id']
+        state = info['state']
+        primary = info['primary']
+
+        status = self.image.mirror_image_get_status()
+        eq(image_name, status['name'])
+        eq(False, status['up'])
+        eq(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status['state'])
+        info = status['info']
+        self.check_info(info, global_id, state, primary)
+
+        images = list(self.rbd.mirror_image_status_list(ioctx))
+        eq(1, len(images))
+        status = images[0]
+        eq(image_name, status['name'])
+        eq(False, status['up'])
+        eq(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status['state'])
+        info = status['info']
+        self.check_info(info, global_id, state)
+
+        states = self.rbd.mirror_image_status_summary(ioctx)
+        eq([(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, 1)], states)
+
+        N = 65
+        for i in range(N):
+            self.rbd.create(ioctx, image_name + str(i), IMG_SIZE, IMG_ORDER,
+                            old_format=False, features=int(features))
+        images = list(self.rbd.mirror_image_status_list(ioctx))
+        eq(N + 1, len(images))
+        for i in range(N):
+            self.rbd.remove(ioctx, image_name + str(i))
