@@ -14,20 +14,24 @@ class TestVolumeClient(CephFSTestCase):
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
 
-    def _volume_client_python(self, client, script):
+    def _volume_client_python(self, client, script, vol_prefix=None, ns_prefix=None):
         # Can't dedent this *and* the script we pass in, because they might have different
         # levels of indentation to begin with, so leave this string zero-indented
+        if vol_prefix:
+            vol_prefix = "\"" + vol_prefix + "\""
+        if ns_prefix:
+            ns_prefix = "\"" + ns_prefix + "\""
         return client.run_python("""
 from ceph_volume_client import CephFSVolumeClient, VolumePath
 import logging
 log = logging.getLogger("ceph_volume_client")
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.DEBUG)
-vc = CephFSVolumeClient("manila", "{conf_path}", "ceph")
+vc = CephFSVolumeClient("manila", "{conf_path}", "ceph", {vol_prefix}, {ns_prefix})
 vc.connect()
 {payload}
 vc.disconnect()
-        """.format(payload=script, conf_path=client.config_path))
+        """.format(payload=script, conf_path=client.config_path, vol_prefix=vol_prefix, ns_prefix=ns_prefix))
 
     def _sudo_write_file(self, remote, path, data):
         """
@@ -64,6 +68,34 @@ vc.disconnect()
         self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
+    def test_default_prefix(self):
+        group_id = "grpid"
+        volume_id = "volid"
+        guest_entity = "guest"
+        DEFAULT_VOL_PREFIX = "volumes"
+        DEFAULT_NS_PREFIX = "fsvolumens_"
+
+        self.mount_b.umount_wait()
+        self._configure_vc_auth(self.mount_b, "manila")
+
+        #create a volume with default prefix
+        self._volume_client_python(self.mount_b, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.create_volume(vp, 10, data_isolated=True)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            guest_entity=guest_entity
+        )))
+
+        # The dir should be created
+        self.mount_a.stat(os.path.join(DEFAULT_VOL_PREFIX, group_id, volume_id))
+
+        #namespace should be set
+        ns_in_attr = self.mount_a.getfattr(os.path.join(DEFAULT_VOL_PREFIX, group_id, volume_id), "ceph.dir.layout.pool_namespace")
+        namespace = "{0}{1}".format(DEFAULT_NS_PREFIX, volume_id)
+        self.assertEqual(namespace, ns_in_attr)
+
     def test_lifecycle(self):
         """
         General smoke test for create, extend, destroy
@@ -84,6 +116,9 @@ vc.disconnect()
         group_id = "grpid"
         volume_id = "volid"
 
+        volume_prefix = "/myprefix"
+        namespace_prefix = "mynsprefix_"
+
         # Create
         mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
@@ -93,7 +128,7 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
         # Authorize
         key = self._volume_client_python(self.mount_b, dedent("""
@@ -104,10 +139,10 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
         # The dir should be created
-        self.mount_a.stat(os.path.join("volumes", group_id, volume_id))
+        self.mount_a.stat(os.path.join("myprefix", group_id, volume_id))
 
         # The auth identity should exist
         existing_ids = [a['entity'] for a in self.auth_list()]
@@ -135,10 +170,9 @@ vc.disconnect()
         self.mounts[2].run_shell(["sync"])
 
         # Our data should stay in particular rados namespace
-        pool_name = self.mount_a.getfattr(os.path.join("volumes", group_id, volume_id), "ceph.dir.layout.pool")
-        NS_PREFIX = "fsvolumens_"
-        namespace = "{0}{1}".format(NS_PREFIX, volume_id)
-        ns_in_attr = self.mount_a.getfattr(os.path.join("volumes", group_id, volume_id), "ceph.dir.layout.pool_namespace")
+        pool_name = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool")
+        namespace = "{0}{1}".format(namespace_prefix, volume_id)
+        ns_in_attr = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool_namespace")
         self.assertEqual(namespace, ns_in_attr)
 
         objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace).split("\n"))
@@ -153,7 +187,7 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
         # Once deauthorized, the client should be unable to do any more metadata ops
         # The way that the client currently behaves here is to block (it acts like
@@ -184,7 +218,7 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
     def test_idempotency(self):
         """
