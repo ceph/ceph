@@ -12,7 +12,7 @@ else()
   set(my_compile_flags "-g -O0 -Wno-write-strings")
 endif()
 
-if(DEFINED PROFILE)
+if(PROFILE MATCHES yes)
   set(my_compile_flags "${my_compile_flags} -DPROFILE")
 endif()
 

@@ -8,4 +8,4 @@ When running cmake, set the build type with either:
     -DCMAKE_BUILD_TYPE=RELEASE
 
 To turn on profiling, run cmake with:
-    -DPROFILE=1
+    -DPROFILE=yes
