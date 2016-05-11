@@ -6,10 +6,6 @@
  */
 
 
-#define DEBUGGER
-// #define PROFILE
-
-
 /*
  * The prop_heap does not seem to be necessary. The only thing it
  * would help with is quickly finding the mininum proportion/prioity
@@ -460,12 +456,6 @@ namespace crimson {
       Duration                  check_time;
       std::deque<MarkPoint>     clean_mark_points;
 
-#ifdef PROFILE
-    public:
-      ProfileTimer<std::chrono::nanoseconds> add_request_timer;
-    protected:
-#endif
-
       // NB: All threads declared at end, so they're destructed first!
 
       std::unique_ptr<RunEvery> cleaning_job;
@@ -825,9 +815,9 @@ namespace crimson {
       // When a request is pulled, this is the return type.
       struct PullReq {
 	struct Retn {
-	  C           client;
+	  C                           client;
 	  typename super::RequestRef  request;
-	  PhaseType   phase;
+	  PhaseType                   phase;
 	};
 
 	typename super::NextReqType        type;
@@ -877,13 +867,6 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
-	add_request(request, req_params, client_id, get_time());
-      }
-
-
       void add_request(const R& request,
 		       const C& client_id,
 		       const ReqParams& req_params,
@@ -895,10 +878,18 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&&     request,
-		       const C&         client_id,
-		       const ReqParams& req_params,
-		       const Time       time) {
+      void add_request(typename super::RequestRef&& request,
+		       const C& client_id,
+		       const ReqParams& req_params) {
+	add_request(request, req_params, client_id, get_time());
+      }
+
+
+      // this does the work; the versions above provide alternate interfaces
+      void add_request(typename super::RequestRef&& request,
+		       const C&                     client_id,
+		       const ReqParams&             req_params,
+		       const Time                   time) {
 	typename super::DataGuard g(this->data_mtx);
 #ifdef PROFILE
 	add_request_timer.start();
@@ -1114,7 +1105,7 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&&     request,
+      void add_request(typename super::RequestRef&& request,
 		       const C&         client_id,
 		       const ReqParams& req_params,
 		       const Time       time) {
