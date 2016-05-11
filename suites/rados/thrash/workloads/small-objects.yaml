@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    crush_tunables: legacy
+    crush_tunables: jewel
 tasks:
 - rados:
     clients: [client.0]
