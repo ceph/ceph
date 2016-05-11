@@ -60,11 +60,12 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 }
 
 static void dump_account_metadata(struct req_state * const s,
-				  const uint32_t buckets_count,
-				  const uint64_t buckets_object_count,
-				  const uint64_t buckets_size,
-				  const uint64_t buckets_size_rounded,
-				  map<string, bufferlist>& attrs)
+                                  const uint32_t buckets_count,
+                                  const uint64_t buckets_object_count,
+                                  const uint64_t buckets_size,
+                                  const uint64_t buckets_size_rounded,
+                                  /* const */map<string, bufferlist>& attrs,
+                                  const RGWQuotaInfo& quota)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -82,17 +83,31 @@ static void dump_account_metadata(struct req_state * const s,
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
-    map<int, string>::iterator iter;
-    iter = s->user->temp_url_keys.find(0);
-    if (iter != s->user->temp_url_keys.end() && !iter->second.empty()) {
+    auto iter = s->user->temp_url_keys.find(0);
+    if (iter != std::end(s->user->temp_url_keys) && !iter->second.empty()) {
       STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key: %s\r\n",
 			  iter->second.c_str());
     }
 
     iter = s->user->temp_url_keys.find(1);
-    if (iter != s->user->temp_url_keys.end() && !iter->second.empty()) {
+    if (iter != std::end(s->user->temp_url_keys) && !iter->second.empty()) {
       STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n",
 			  iter->second.c_str());
+    }
+  }
+
+  /* Dump quota headers. */
+  if (quota.enabled) {
+    if (quota.max_size >= 0) {
+      STREAM_IO(s)->print("X-Account-Meta-Quota-Bytes: %lld\r\n",
+			  (long long)quota.max_size);
+    }
+
+    /* Limit on the number of objects in a given account is a RadosGW's
+     * extension. Swift's account quota WSGI filter doesn't support it. */
+    if (quota.max_objects >= 0) {
+      STREAM_IO(s)->print("X-Account-Meta-Quota-Count: %lld\r\n",
+			  (long long)quota.max_objects);
     }
   }
 
@@ -130,7 +145,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            user_quota);
     dump_errno(s);
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
   }
@@ -186,7 +202,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             buckets_objcount,
             buckets_size,
             buckets_size_rounded,
-            attrs);
+            attrs,
+            user_quota);
     dump_errno(s);
     end_header(s, NULL, NULL, s->formatter->get_len(), true);
   }
@@ -236,7 +253,9 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   return 0;
 }
 
-static void dump_container_metadata(struct req_state *, RGWBucketEnt&);
+static void dump_container_metadata(struct req_state *,
+                                    const RGWBucketEnt&,
+                                    const RGWQuotaInfo&);
 
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
@@ -244,7 +263,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, bucket);
+  dump_container_metadata(s, bucket, bucket_quota);
 
   s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
@@ -339,7 +358,9 @@ next:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
+static void dump_container_metadata(struct req_state *s,
+                                    const RGWBucketEnt& bucket,
+                                    const RGWQuotaInfo& quota)
 {
   char buf[32];
   /* Adding X-Timestamp to keep align with Swift API */
@@ -397,6 +418,18 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     STREAM_IO(s)->print("X-Versions-Location: %s\r\n", encoded_loc.c_str());
   }
 
+  /* Dump quota headers. */
+  if (quota.enabled) {
+    if (quota.max_size >= 0) {
+      STREAM_IO(s)->print("X-Container-Meta-Quota-Bytes: %lld\r\n",
+			  (long long)quota.max_size);
+    }
+
+    if (quota.max_objects >= 0) {
+      STREAM_IO(s)->print("X-Container-Meta-Quota-Count: %lld\r\n",
+			  (long long)quota.max_objects);
+    }
+  }
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
@@ -410,7 +443,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
     dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size,
-			  buckets_size_rounded, attrs);
+			  buckets_size_rounded, attrs, user_quota);
   }
 
   set_req_state_err(s, op_ret);
@@ -425,7 +458,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket);
+    dump_container_metadata(s, bucket, bucket_quota);
   }
 
   set_req_state_err(s, op_ret);
