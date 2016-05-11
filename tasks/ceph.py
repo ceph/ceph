@@ -1086,6 +1086,7 @@ def healthy(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
+    config = config if isinstance(config, dict) else dict()
     cluster_name = config.get('cluster', 'ceph')
     log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
