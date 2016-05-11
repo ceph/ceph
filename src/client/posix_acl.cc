@@ -7,19 +7,22 @@ int posix_acl_check(const void *xattr, size_t size)
 {
   const acl_ea_header *header;
   if (size < sizeof(*header))
-    return 0;
+    return -1;
   header = reinterpret_cast<const acl_ea_header*>(xattr);
   ceph_le32 expected_version;
   expected_version = ACL_EA_VERSION;
   if (header->a_version != expected_version)
-    return 0;
+    return -1;
 
   const acl_ea_entry *entry = header->a_entries;
   size -= sizeof(*header);
   if (size % sizeof(*entry))
-    return 0;
+    return -1;
 
   int count = size / sizeof(*entry);
+  if (count == 0)
+    return 0;
+
   int state = ACL_USER_OBJ;
   int needs_mask = 0;
   for (int i = 0; i < count; ++i) {
@@ -30,10 +33,10 @@ int posix_acl_check(const void *xattr, size_t size)
         state = ACL_USER;
         break;
       }
-      return 0;
+      return -1;
     case ACL_USER:
       if (state != ACL_USER)
-        return 0;
+        return -1;
       needs_mask = 1;
       break;
     case ACL_GROUP_OBJ:
@@ -41,15 +44,15 @@ int posix_acl_check(const void *xattr, size_t size)
         state = ACL_GROUP;
         break;
       }
-      return 0;
+      return -1;
     case ACL_GROUP:
       if (state != ACL_GROUP)
-        return 0;
+        return -1;
       needs_mask = 1;
       break;
     case ACL_MASK:
       if (state != ACL_GROUP)
-        return 0;
+        return -1;
       state = ACL_OTHER;
       break;
     case ACL_OTHER:
@@ -60,17 +63,17 @@ int posix_acl_check(const void *xattr, size_t size)
       }
       // fall-thru
     default:
-      return 0;
+      return -1;
     }
     ++entry;
   }
 
-  return state == 0;
+  return state == 0 ? count : -1;
 }
 
 int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 {
-  if (!posix_acl_check(xattr, size))
+  if (posix_acl_check(xattr, size) < 0)
     return -EINVAL;
 
   int not_equiv = 0;
@@ -111,7 +114,7 @@ int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
 
 int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 {
-  if (!posix_acl_check(acl.c_str(), acl.length()))
+  if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
     return -EIO;
 
   acl_ea_entry *group_entry = NULL, *mask_entry = NULL;
@@ -173,7 +176,7 @@ int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
 
 int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
 {
-  if (!posix_acl_check(acl.c_str(), acl.length()))
+  if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
     return -EIO;
 
   acl_ea_entry *group_entry = NULL, *mask_entry = NULL;
@@ -215,7 +218,7 @@ int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
 int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
 			 uid_t uid, UserGroups& groups, unsigned want)
 {
-  if (!posix_acl_check(acl.c_str(), acl.length()))
+  if (posix_acl_check(acl.c_str(), acl.length()) < 0)
     return -EIO;
 
   const acl_ea_header *header = reinterpret_cast<const acl_ea_header*>(acl.c_str());

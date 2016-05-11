@@ -9887,8 +9887,13 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
       if (value) {
 	if (!S_ISDIR(in->mode))
 	  return -EACCES;
-	if (!posix_acl_check(value, size))
+	int ret = posix_acl_check(value, size);
+	if (ret < 0)
 	  return -EINVAL;
+	if (ret == 0) {
+	  value = NULL;
+	  size = 0;
+	}
       }
     } else {
       return -EOPNOTSUPP;
