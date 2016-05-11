@@ -46,7 +46,7 @@ class KernelMount(CephFSMount):
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
         keyring = self.get_keyring_path()
-        secret = '{tdir}/data/client.{id}.secret'.format(tdir=self.test_dir, id=self.client_id)
+        secret = '{tdir}/ceph.data/client.{id}.secret'.format(tdir=self.test_dir, id=self.client_id)
         self.write_secret_file(self.client_remote, 'client.{id}'.format(id=self.client_id),
                                keyring, secret)
 
