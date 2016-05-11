@@ -20,11 +20,13 @@ def task(ctx, config):
 	assert isinstance(config, dict), \
 	       'Resolve stuck peering only accepts a dict for config'
 
-	while len(ctx.manager.get_osd_status()['up']) < 3:
+        manager = ctx.managers['ceph']
+
+	while len(manager.get_osd_status()['up']) < 3:
 		time.sleep(10)
 
 
-	ctx.manager.wait_for_clean()
+	manager.wait_for_clean()
 
 	dummyfile = '/etc/fstab'
 	dummyfile1 = '/etc/resolv.conf'
@@ -32,16 +34,16 @@ def task(ctx, config):
 	#create 1 PG pool
 	pool='foo'
 	log.info('creating pool foo')
-	ctx.manager.raw_cluster_cmd('osd', 'pool', 'create', '%s' % pool, '1')
+	manager.raw_cluster_cmd('osd', 'pool', 'create', '%s' % pool, '1')
 
 	#set min_size of the pool to 1
 	#so that we can continue with I/O
 	#when 2 osds are down
-	ctx.manager.set_pool_property(pool, "min_size", 1)
+	manager.set_pool_property(pool, "min_size", 1)
 
 	osds = [0, 1, 2]
 
-	primary = ctx.manager.get_pg_primary('foo', 0)
+	primary = manager.get_pg_primary('foo', 0)
 	log.info("primary osd is %d", primary)
 
 	others = list(osds)
@@ -54,32 +56,32 @@ def task(ctx, config):
 	for i in range(100):
 		rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
 
-	ctx.manager.wait_for_clean()
+	manager.wait_for_clean()
 
 	#kill other osds except primary
 	log.info('killing other osds except primary')
 	for i in others:
-		ctx.manager.kill_osd(i)
+		manager.kill_osd(i)
 	for i in others:
-		ctx.manager.mark_down_osd(i)
+		manager.mark_down_osd(i)
 
 
 	for i in range(100):
 		rados(ctx, mon, ['-p', 'foo', 'put', 'new_%d' % i, dummyfile1])
 
 	#kill primary osd
-	ctx.manager.kill_osd(primary)
-	ctx.manager.mark_down_osd(primary)
+	manager.kill_osd(primary)
+	manager.mark_down_osd(primary)
 
 	#revive other 2 osds
 	for i in others:
-		ctx.manager.revive_osd(i)
+		manager.revive_osd(i)
 
 	#make sure that pg is down
 	#Assuming pg number for single pg pool will start from 0
 	pgnum=0
-	pgstr = ctx.manager.get_pgid(pool, pgnum)
-	stats = ctx.manager.get_single_pg_stats(pgstr)
+	pgstr = manager.get_pgid(pool, pgnum)
+	stats = manager.get_single_pg_stats(pgstr)
 	print stats['state']
 
 	timeout=60
@@ -90,19 +92,19 @@ def task(ctx, config):
 			'failed to reach down state before timeout expired'
 
 	#mark primary as lost
-	ctx.manager.raw_cluster_cmd('osd', 'lost', '%d' % primary,\
+	manager.raw_cluster_cmd('osd', 'lost', '%d' % primary,\
 					 '--yes-i-really-mean-it')
 
 
 	#expect the pg status to be active+undersized+degraded
 	#pg should recover and become active+clean within timeout
-	stats = ctx.manager.get_single_pg_stats(pgstr)
+	stats = manager.get_single_pg_stats(pgstr)
 	print stats['state']
 
 	timeout=10
 	start=time.time()
 
-	while ctx.manager.get_num_down():
+	while manager.get_num_down():
 		assert time.time() - start < timeout, \
                         'failed to recover before timeout expired'
 
