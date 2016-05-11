@@ -3904,10 +3904,12 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 	   p->state == TransContext::STATE_IO_DONE);
 }
 
-void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
-  dout(20) << __func__ << " osr " << osr << " txc " << txc
-	   << " onodes " << txc->onodes << dendl;
+  dout(20) << __func__ << " txc " << txc
+	   << " onodes " << txc->onodes
+	   << " bnodes " << txc->bnodes
+	   << dendl;
 
   // finalize onodes
   for (set<OnodeRef>::iterator p = txc->onodes.begin();
@@ -3916,7 +3918,7 @@ void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     bufferlist bl;
     ::encode((*p)->onode, bl);
     dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
-    txc->t->set(PREFIX_OBJ, (*p)->key, bl);
+    t->set(PREFIX_OBJ, (*p)->key, bl);
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
@@ -3929,27 +3931,14 @@ void BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     if ((*p)->ref_map.empty()) {
       dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
 	       << " ref_map is empty" << dendl;
-      txc->t->rmkey(PREFIX_OBJ, (*p)->key);
+      t->rmkey(PREFIX_OBJ, (*p)->key);
     } else {
       bufferlist bl;
       ::encode((*p)->ref_map, bl);
       dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
 	       << " ref_map is " << bl.length() << dendl;
-      txc->t->set(PREFIX_OBJ, (*p)->key, bl);
+      t->set(PREFIX_OBJ, (*p)->key, bl);
     }
-  }
-
-  // journal wal items
-  if (txc->wal_txn) {
-    txc->wal_txn->released.swap(txc->released);
-    assert(txc->released.empty());
-
-    txc->wal_txn->seq = wal_seq.inc();
-    bufferlist bl;
-    ::encode(*txc->wal_txn, bl);
-    string key;
-    get_wal_key(txc->wal_txn->seq, &key);
-    txc->t->set(PREFIX_WAL, key, bl);
   }
 }
 
@@ -4475,7 +4464,20 @@ int BlueStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  _txc_finalize(osr, txc);
+  _txc_write_nodes(txc, txc->t);
+
+  // journal wal items
+  if (txc->wal_txn) {
+    txc->wal_txn->released.swap(txc->released);
+    assert(txc->released.empty());
+
+    txc->wal_txn->seq = wal_seq.inc();
+    bufferlist bl;
+    ::encode(*txc->wal_txn, bl);
+    string key;
+    get_wal_key(txc->wal_txn->seq, &key);
+    txc->t->set(PREFIX_WAL, key, bl);
+  }
 
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
