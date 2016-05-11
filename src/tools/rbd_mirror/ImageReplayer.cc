@@ -561,9 +561,6 @@ void ImageReplayer<I>::on_start_fail_finish(int r)
   m_local_ioctx.close();
   m_remote_ioctx.close();
 
-  delete m_asok_hook;
-  m_asok_hook = nullptr;
-
   if (on_start_finish != nullptr) {
     dout(20) << "on start finish complete, r=" << r << dendl;
     on_start_finish->complete(r);
