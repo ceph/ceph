@@ -927,18 +927,42 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
 
 void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
 {
-  if (header)
-    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog" << std::endl;
-  ss << " sum\t" << pg_sum.stats.sum.num_objects
-  //<< "\t" << pg_sum.num_object_copies
-     << "\t" << pg_sum.stats.sum.num_objects_missing_on_primary
-     << "\t" << pg_sum.stats.sum.num_objects_degraded
-     << "\t" << pg_sum.stats.sum.num_objects_misplaced
-     << "\t" << pg_sum.stats.sum.num_objects_unfound
-     << "\t" << pg_sum.stats.sum.num_bytes
-     << "\t" << pg_sum.log_size
-     << "\t" << pg_sum.ondisk_log_size
-     << std::endl;
+  TextTable tab;
+
+  if (header) {
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
+  } else {
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+  };
+
+  tab << "sum"
+      << pg_sum.stats.sum.num_objects
+      << pg_sum.stats.sum.num_objects_missing_on_primary
+      << pg_sum.stats.sum.num_objects_degraded
+      << pg_sum.stats.sum.num_objects_misplaced
+      << pg_sum.stats.sum.num_objects_unfound
+      << pg_sum.stats.sum.num_bytes
+      << pg_sum.log_size
+      << pg_sum.ondisk_log_size
+      << TextTable::endrow;
+
+  ss << tab;
 }
 
 void PGMap::dump_osd_stats(ostream& ss) const
