@@ -209,9 +209,10 @@ void test::server_data(std::ostream& out,
     for (uint i = 0; i < sim->get_server_count(); ++i) {
       const auto& q = sim->get_server(i).get_priority_queue();
       const auto& art = q.add_request_timer;
-      out << i << ": " << art.get_count() << ", " << art.get_mean() <<
-	", " << art.get_std_dev() << ", " << art.get_low() << ", " <<
-	art.get_high() << std::endl;
+      cmbr.combine(art);
     }
+    out << "Server add_request_timer: " << cmbr.get_count() << ", " <<
+      cmbr.get_mean() << ", " << cmbr.get_std_dev() << ", " <<
+      cmbr.get_low() << ", " << cmbr.get_high() << std::endl;
 #endif
 }
