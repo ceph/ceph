@@ -33,12 +33,14 @@ namespace crimson {
     typename T::rep get_sum() const { return sum; }
     typename T::rep get_low() const { return low; }
     typename T::rep get_high() const { return high; }
-    double get_mean() const { return sum / count; }
+    double get_mean() const {
+      if (0 == count) return nan("");
+      return sum / double(count); }
     double get_std_dev() const {
-      if (count < 2) return 0;
-      typename T::rep variance =
-	(count * sum_squares - sum * sum) / (count * (count - 1));
-      return sqrt(double(variance));
+      if (0 == count) return nan("");
+      double variance =
+	(count * sum_squares - sum * sum) / double(count * count);
+      return sqrt(variance);
     }
   }; // class ProfileBase
 
