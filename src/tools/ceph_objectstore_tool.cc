@@ -344,9 +344,8 @@ void myexit(int ret)
 }
 
 int get_log(ObjectStore *fs, __u8 struct_ver,
-   coll_t coll, spg_t pgid, const pg_info_t &info,
-   PGLog::IndexedLog &log, pg_missing_t &missing,
-   map<eversion_t, hobject_t> &divergent_priors)
+	    coll_t coll, spg_t pgid, const pg_info_t &info,
+	    PGLog::IndexedLog &log, pg_missing_t &missing)
 {
   try {
     ostringstream oss;
@@ -354,7 +353,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     PGLog::read_log_and_missing(fs, coll,
 		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
-		    info, divergent_priors, log, missing, oss);
+		    info, log, missing, oss);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -366,7 +365,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
 }
 
 void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
-      pg_missing_t &missing, map<eversion_t, hobject_t> &divergent_priors)
+	      pg_missing_t &missing)
 {
   formatter->open_object_section("op_log");
   formatter->open_object_section("pg_log_t");
@@ -378,15 +377,6 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
   formatter->close_section();
   formatter->flush(out);
   formatter->open_object_section("map");
-  formatter->open_array_section("divergent_priors");
-  for (map<eversion_t, hobject_t>::iterator it = divergent_priors.begin();
-       it != divergent_priors.end(); ++ it) {
-      formatter->open_object_section("item");
-      formatter->dump_stream("eversion") << it->first;
-      formatter->dump_stream("hobject") << it->second;
-      formatter->close_section();
-  }
-  formatter->close_section();
   formatter->close_section();
   formatter->close_section();
   formatter->flush(out);
@@ -493,16 +483,28 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   return ret;
 }
 
+typedef map<eversion_t, hobject_t> divergent_priors_t;
+
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
-    map<eversion_t, hobject_t> &divergent_priors)
+	     pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals,
+	     divergent_priors_t &divergent,
+	     pg_missing_t &missing)
 {
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
   coll_t coll(info.pgid);
   map<string,bufferlist> km;
-  PGLog::write_log_and_missing(t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors, true);
+
+  if (!divergent.empty()) {
+    assert(missing.get_items().empty());
+    PGLog::write_log_and_missing_wo_missing(
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), divergent, true);
+  } else {
+    pg_missing_tracker_t tmissing(missing);
+    PGLog::write_log_and_missing(
+      t, &km, log, coll, info.pgid.make_pgmeta_oid(), tmissing, true);
+  }
   t.omap_setkeys(coll, info.pgid.make_pgmeta_oid(), km);
   return 0;
 }
@@ -771,19 +773,17 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
-  map<eversion_t, hobject_t> divergent_priors;
 
   cerr << "Exporting " << pgid << std::endl;
 
-  int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing,
-                    divergent_priors);
+  int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
   if (ret > 0)
       return ret;
 
   if (debug) {
     Formatter *formatter = Formatter::create("json-pretty");
     assert(formatter);
-    dump_log(formatter, cerr, log, missing, divergent_priors);
+    dump_log(formatter, cerr, log, missing);
     delete formatter;
   }
   write_super();
@@ -799,7 +799,13 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 
   // The metadata_section is now before files, so import can detect
   // errors and abort without wasting time.
-  metadata_section ms(struct_ver, map_epoch, info, log, past_intervals, divergent_priors);
+  metadata_section ms(
+    struct_ver,
+    map_epoch,
+    info,
+    log,
+    past_intervals,
+    missing);
   ret = add_osdmap(fs, ms);
   if (ret)
     return ret;
@@ -1031,15 +1037,6 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   formatter->flush(cout);
   cout << std::endl;
 
-  formatter->open_array_section("divergent_priors");
-  for (map<eversion_t, hobject_t>::iterator it = ms.divergent_priors.begin();
-       it != ms.divergent_priors.end(); ++ it) {
-      formatter->open_object_section("item");
-      formatter->dump_stream("eversion") << it->first;
-      formatter->dump_stream("hobject") << it->second;
-      formatter->close_section();
-  }
-  formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
 #endif
@@ -1123,8 +1120,6 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
 
   return 0;
 }
-
-typedef map<eversion_t, hobject_t> divergent_priors_t;
 
 // out: pg_log_t that only has entries that apply to import_pgid using curmap
 // reject: Entries rejected from "in" are in the reject.log.  Other fields not set.
@@ -1367,10 +1362,23 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
         cerr << "Skipping divergent_prior " << *i << std::endl;
     }
 
+    ms.missing.filter_objects([&](const hobject_t &obj) {
+	if (obj.nspace == g_ceph_context->_conf->osd_hit_set_namespace)
+	  return false;
+	assert(!obj.is_temp());
+	object_t oid = obj.oid;
+	object_locator_t loc(obj);
+	pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
+	pg_t _pgid = curmap.raw_pg_to_pg(raw_pgid);
+
+	return pgid.pgid != _pgid;
+      });
+
+
     if (debug) {
       pg_missing_t missing;
       Formatter *formatter = Formatter::create("json-pretty");
-      dump_log(formatter, cerr, newlog, missing, ms.divergent_priors);
+      dump_log(formatter, cerr, newlog, ms.missing);
       delete formatter;
     }
 
@@ -1378,7 +1386,14 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     if (skipped_objects)
       ms.info.stats.stats_invalid = true;
 
-    ret = write_pg(t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
+    ret = write_pg(
+      t,
+      ms.map_epoch,
+      ms.info,
+      newlog,
+      ms.past_intervals,
+      ms.divergent_priors,
+      ms.missing);
     if (ret) return ret;
   }
 
@@ -3097,13 +3112,11 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      map<eversion_t, hobject_t> divergent_priors;
-      ret = get_log(fs, struct_ver, coll, pgid, info, log, missing,
-                    divergent_priors);
+      ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
       if (ret < 0)
           goto out;
 
-      dump_log(formatter, cout, log, missing, divergent_priors);
+      dump_log(formatter, cout, log, missing);
     } else if (op == "rm-past-intervals") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;

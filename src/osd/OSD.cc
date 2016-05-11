@@ -3324,6 +3324,11 @@ void OSD::load_pgs()
     pg->handle_loaded(&rctx);
 
     dout(10) << "load_pgs loaded " << *pg << " " << pg->pg_log.get_log() << dendl;
+    if (pg->pg_log.is_dirty()) {
+      ObjectStore::Transaction t;
+      pg->write_if_dirty(t);
+      store->apply_transaction(pg->osr.get(), std::move(t));
+    }
     pg->unlock();
   }
   {
