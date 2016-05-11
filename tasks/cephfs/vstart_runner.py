@@ -678,7 +678,7 @@ def exec_test():
     test_dir = tempfile.mkdtemp()
 
     # Create as many of these as the biggest test requires
-    clients = ["0", "1", "2"]
+    clients = ["0", "1", "2", "3"]
 
     remote = LocalRemote()
 
