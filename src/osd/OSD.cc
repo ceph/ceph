@@ -4052,6 +4052,25 @@ void OSD::handle_osd_ping(MOSDPing *m)
 		   << dendl;
 	  i->second.last_rx_front = m->stamp;
 	}
+
+        utime_t cutoff = ceph_clock_now(cct);
+        cutoff -= cct->_conf->osd_heartbeat_grace;
+        if (i->second.is_healthy(cutoff)) {
+          // Cancel false reports
+          if (failure_queue.count(from)) {
+            dout(10) << "handle_osd_ping canceling queued "
+                     << "failure report for osd." << from << dendl;
+            failure_queue.erase(from);
+          }
+
+          if (failure_pending.count(from)) {
+            dout(10) << "handle_osd_ping canceling in-flight "
+                     << "failure report for osd." << from << dendl;
+            send_still_alive(curmap->get_epoch(),
+              failure_pending[from].second);
+            failure_pending.erase(from);
+          }
+        }
       }
 
       if (m->map_epoch &&
@@ -4062,21 +4081,6 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	  if (con) {
 	    service.share_map_peer(from, con.get());
 	  }
-	}
-      }
-
-      utime_t cutoff = ceph_clock_now(cct);
-      cutoff -= cct->_conf->osd_heartbeat_grace;
-      if (i->second.is_healthy(cutoff)) {
-	// Cancel false reports
-	if (failure_queue.count(from)) {
-	  dout(10) << "handle_osd_ping canceling queued failure report for osd." << from<< dendl;
-	  failure_queue.erase(from);
-	}
-	if (failure_pending.count(from)) {
-	  dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << from<< dendl;
-	  send_still_alive(curmap->get_epoch(), failure_pending[from].second);
-	  failure_pending.erase(from);
 	}
       }
     }
