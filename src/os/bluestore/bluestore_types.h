@@ -238,7 +238,6 @@ struct bluestore_blob_t {
   uint8_t csum_type;               ///< CSUM_*
   uint8_t csum_block_order;        ///< csum block size is 1<<block_order bytes
 
-  uint32_t num_refs;               ///< num lextents that point to me
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   vector<char> csum_data;          ///< opaque vector of csum data
 
@@ -246,16 +245,14 @@ struct bluestore_blob_t {
     : length(l),
       flags(f),
       csum_type(CSUM_NONE),
-      csum_block_order(12),
-      num_refs(1) {
+      csum_block_order(12) {
   }
 
   bluestore_blob_t(uint32_t l, const bluestore_pextent_t& ext, uint32_t f = 0)
     : length(l),
       flags(f),
       csum_type(CSUM_NONE),
-      csum_block_order(12),
-      num_refs(1) {
+      csum_block_order(12) {
     extents.push_back(ext);
   }
 
