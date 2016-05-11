@@ -108,6 +108,7 @@ public:
                       IoCtx& image_io_ctx, const char *image_name);
   int cg_list_images(IoCtx& cg_io_ctx, const char *cg_name, std::vector<std::pair<std::string, int64_t>>& images);
   int create_cg(IoCtx& io_ctx, const char *cg_name);
+  int remove_cg(IoCtx& io_ctx, const char *cg_name);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
   int create3(IoCtx& io_ctx, const char *name, uint64_t size,

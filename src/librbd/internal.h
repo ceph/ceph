@@ -94,6 +94,7 @@ namespace librbd {
                    librados::IoCtx& image_ioctx, const char *image_name);
   int cg_remove_image(librados::IoCtx& cg_ioctx, const char *cg_name,
                       librados::IoCtx& image_ioctx, const char *image_name);
+  int remove_cg(librados::IoCtx& io_ctx, const char *cgname);
   int create_cg(librados::IoCtx& io_ctx, const char *imgname);
   int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
                     std::vector<std::pair<std::string, int64_t>>& images);

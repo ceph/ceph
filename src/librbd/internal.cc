@@ -1197,6 +1197,44 @@ err_remove_id:
     return 0;
   }
 
+  int remove_cg(librados::IoCtx& io_ctx, const char *cg_name)
+  {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << "remove_cg " << &io_ctx << " " << cg_name << dendl;
+
+    std::vector<std::pair<std::string, int64_t>> images;
+    int r = cg_list_images(io_ctx, cg_name, images);
+    if (r < 0)
+      return r;
+
+    for (auto i : images) {
+      librados::Rados rados(io_ctx);
+      IoCtx image_ioctx;
+      rados.ioctx_create2(std::get<1>(i), image_ioctx);
+      std::string image_name = std::get<0>(i);
+      r = cg_remove_image(io_ctx, cg_name, image_ioctx, image_name.c_str());
+      if (r < 0) {
+	return r;
+      }
+    }
+
+    std::string cg_id;
+    r = cls_client::dir_get_id(&io_ctx, CG_DIRECTORY, std::string(cg_name), &cg_id);
+    if (r < 0)
+      return r;
+
+    r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
+					 cg_name, cg_id);
+    if (r < 0)
+      return r;
+
+    r = io_ctx.remove(cg_id);
+    if (r < 0)
+      return r;
+
+    return 0;
+  }
+
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {
