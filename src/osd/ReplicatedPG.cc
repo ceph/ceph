@@ -1787,13 +1787,14 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // purposes here it doesn't matter which one we get.
     eversion_t replay_version;
     version_t user_version;
+    int return_code = 0;
     bool got = pg_log.get_log().get_request(
-      m->get_reqid(), &replay_version, &user_version);
+      m->get_reqid(), &replay_version, &user_version, &return_code);
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " was " << replay_version << dendl;
-      if (already_complete(replay_version)) {
-	osd->reply_op_error(op, 0, replay_version, user_version);
+      if (return_code < 0 || already_complete(replay_version)) {
+	osd->reply_op_error(op, return_code, replay_version, user_version);
       } else {
 	if (m->wants_ack()) {
 	  if (already_ack(replay_version)) {
