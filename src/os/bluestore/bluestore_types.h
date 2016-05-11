@@ -208,8 +208,8 @@ ostream& operator<<(ostream& out, const bluestore_overlay_t& o);
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
   enum {
-    FLAG_IMMUTABLE = 1,     ///< blob cannot be overwritten or split
-    FLAG_COMPRESSED = 2,    ///< blob is compressed
+    FLAG_MUTABLE = 1,     ///< blob can be overwritten or split
+    FLAG_COMPRESSED = 2,  ///< blob is compressed
   };
   static string get_flags_string(unsigned flags);
 
