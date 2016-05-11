@@ -166,9 +166,11 @@ struct PGLog : DoutPrefixProvider {
     bool get_request(
       const osd_reqid_t &r,
       eversion_t *replay_version,
-      version_t *user_version) const {
+      version_t *user_version,
+      int *return_code) const {
       assert(replay_version);
       assert(user_version);
+      assert(return_code);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
       if (!(indexed_data & PGLOG_INDEXED_CALLER_OPS)) {
         index_caller_ops();
@@ -177,6 +179,7 @@ struct PGLog : DoutPrefixProvider {
       if (p != caller_ops.end()) {
 	*replay_version = p->second->version;
 	*user_version = p->second->user_version;
+	*return_code = p->second->return_code;
 	return true;
       }
 
@@ -194,6 +197,7 @@ struct PGLog : DoutPrefixProvider {
 	  if (i->first == r) {
 	    *replay_version = p->second->version;
 	    *user_version = i->second;
+	    *return_code = p->second->return_code;
 	    return true;
 	  }
 	}
