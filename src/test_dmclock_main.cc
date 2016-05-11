@@ -8,6 +8,10 @@
 
 #include "test_dmclock.h"
 
+#ifdef PROFILE
+#include "profile.h"
+#endif
+
 
 namespace dmc = crimson::dmclock;
 namespace test = crimson::test_dmc;
@@ -199,4 +203,14 @@ void test::server_data(std::ostream& out,
     }
     out << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_p << std::endl;
+
+#ifdef PROFILE
+    for (uint i = 0; i < sim->get_server_count(); ++i) {
+      const auto& q = sim->get_server(i).get_priority_queue();
+      const auto& art = q.add_request_timer;
+      out << i << ": " << art.get_count() << ", " << art.get_mean() <<
+	", " << art.get_std_dev() << ", " << art.get_low() << ", " <<
+	art.get_high() << std::endl;
+    }
+#endif
 }

@@ -41,6 +41,9 @@
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
 
+#ifdef PROFILE
+#include "profile.h"
+#endif
 
 #include "gtest/gtest_prod.h"
 
