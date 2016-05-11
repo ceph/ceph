@@ -300,6 +300,10 @@ struct bluestore_blob_t {
     return p->offset + x_off;
   }
 
+  bool is_unreferenced(uint64_t offset, uint64_t length) const {
+    return !ref_map.intersects(offset, length);
+  }
+
   void map(uint64_t x_off, uint64_t x_len,
 	   std::function<void(uint64_t,uint64_t)> f) {
     auto p = extents.begin();
