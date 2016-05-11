@@ -167,6 +167,7 @@ namespace librbd {
     enum write_state_d {
       LIBRBD_AIO_WRITE_GUARD,
       LIBRBD_AIO_WRITE_COPYUP,
+      LIBRBD_AIO_WRITE_OBJECT_MAP,
       LIBRBD_AIO_WRITE_FLAT,
       LIBRBD_AIO_WRITE_PRE,
       LIBRBD_AIO_WRITE_POST,
@@ -178,6 +179,7 @@ namespace librbd {
     uint64_t m_snap_seq;
     std::vector<librados::snap_t> m_snaps;
     bool m_object_exist;
+    bool m_guard;
 
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
     virtual const char* get_write_type() const = 0;
@@ -187,8 +189,9 @@ namespace librbd {
       return false;
     }
     virtual void send_write();
-    virtual void send_write_op(bool write_guard);
+    virtual void send_write_op();
     virtual void handle_write_guard();
+    void send_object_map_update();
 
   private:
     void send_pre();
@@ -209,6 +212,11 @@ namespace librbd {
     void set_op_flags(int op_flags) {
       m_op_flags = op_flags;
     }
+
+    bool all_zero() const {
+      return m_write_data.is_zero();
+    }
+
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr);
 
