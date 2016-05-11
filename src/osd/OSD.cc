@@ -2078,7 +2078,7 @@ int OSD::init()
   assert_warn(whoami == superblock.whoami);
   if (whoami != superblock.whoami) {
     derr << "OSD::init: superblock says osd"
-	 << superblock.whoami << " but i am osd." << whoami << dendl;
+	 << superblock.whoami << " but I am osd." << whoami << dendl;
     r = -EINVAL;
     goto out;
   }
@@ -2137,7 +2137,7 @@ int OSD::init()
   // load up pgs (as they previously existed)
   load_pgs();
 
-  dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
+  dout(2) << "superblock: I am osd." << superblock.whoami << dendl;
   dout(0) << "using " << op_queue << " op queue with priority op cut off at " <<
     op_prio_cutoff << "." << dendl;
 
