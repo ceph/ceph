@@ -2785,7 +2785,7 @@ public:
   virtual const map<version_t, hobject_t> &get_rmissing() const = 0;
   virtual unsigned int num_missing() const = 0;
   virtual bool have_missing() const = 0;
-  virtual bool is_missing(const hobject_t& oid) const = 0;
+  virtual bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const = 0;
   virtual bool is_missing(const hobject_t& oid, eversion_t v) const = 0;
   virtual eversion_t have_old(const hobject_t& oid) const = 0;
   virtual ~pg_missing_const_i() {}
@@ -2811,7 +2811,7 @@ public:
     _changed.insert(obj);
   }
   template <typename F>
-  void get_changed(F &&f) {
+  void get_changed(F &&f) const {
     for (auto const &i: _changed) {
       f(i);
     }
@@ -2819,7 +2819,7 @@ public:
   void flush() {
     _changed.clear();
   }
-  bool clean() const {
+  bool is_clean() const {
     return _changed.empty();
   }
 };
@@ -2835,11 +2835,13 @@ public:
   pg_missing_set() = default;
 
   template <typename missing_type>
-  pg_missing_set(const missing_type &m) :
-    missing(m.get_items()), rmissing(m.get_rmissing()) {
-    static_assert(
-      !TrackChanges,
-      "Cannot copy construct into tracker pg_missing object");
+  pg_missing_set(const missing_type &m) {
+    for (auto &&i: missing)
+      tracker.changed(i.first);
+    missing = m.get_items();
+    rmissing = m.get_rmissing();
+    for (auto &&i: missing)
+      tracker.changed(i.first);
   }
 
   const map<hobject_t, item, hobject_t::ComparatorWithDefault> &get_items() const override {
@@ -2854,8 +2856,13 @@ public:
   bool have_missing() const override {
     return !missing.empty();
   }
-  bool is_missing(const hobject_t& oid) const override {
-    return (missing.find(oid) != missing.end());
+  bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const override {
+    auto iter = missing.find(oid);
+    if (iter == missing.end())
+      return false;
+    if (out)
+      *out = iter->second;
+    return true;
   }
   bool is_missing(const hobject_t& oid, eversion_t v) const override {
     map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
@@ -3055,6 +3062,16 @@ public:
     }
     f->close_section();
   }
+  template <typename F>
+  void filter_objects(F &&f) {
+    for (auto i = missing.begin(); i != missing.end();) {
+      if (f(i->first)) {
+	rm(i++);
+      } else {
+        ++i;
+      }
+    }
+  }
   static void generate_test_instances(list<pg_missing_set*>& o) {
     o.push_back(new pg_missing_set);
     o.push_back(new pg_missing_set);
@@ -3063,16 +3080,14 @@ public:
       eversion_t(5, 6), eversion_t(5, 1));
   }
   template <typename F>
-  std::enable_if<TrackChanges, void> get_changed (F &&f) const {
+  void get_changed(F &&f) const {
     tracker.get_changed(f);
   }
-  template <typename F>
-  std::enable_if<TrackChanges, void> flush() {
+  void flush() {
     tracker.flush();
   }
-  template <typename F>
-  std::enable_if<TrackChanges, bool> clean() const {
-    return tracker.clean();
+  bool is_clean() const {
+    return tracker.is_clean();
   }
 };
 template <bool TrackChanges>
