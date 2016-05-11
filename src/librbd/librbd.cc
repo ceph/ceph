@@ -300,9 +300,7 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), cg_name);
-    ldout(get_cct(io_ctx), 10) << "Creating consistency group" << dendl;
     int r = librbd::create_cg(io_ctx, cg_name);
-
     tracepoint(librbd, create_cg_exit, r);
     return 0;
   }
