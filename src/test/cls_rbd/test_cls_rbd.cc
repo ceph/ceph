@@ -1631,4 +1631,67 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
+
+  // Remove images
+
+  image1.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
+  image2.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
+  image3.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
+
+  ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
+  ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
+  ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id3", image3));
+
+  ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id1"));
+  ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id2"));
+  ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id3"));
+
+  states.clear();
+  ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
+  ASSERT_EQ(0U, states.size());
+
+  // Test status list with large number of images
+
+  size_t N = 1024;
+  ASSERT_EQ(0U, N % 2);
+
+  for (size_t i = 0; i < N; i++) {
+    std::string id = "id" + stringify(i);
+    std::string uuid = "uuid" + stringify(i);
+    cls::rbd::MirrorImage image(uuid, cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
+    cls::rbd::MirrorImageStatus status(cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
+    ASSERT_EQ(0, mirror_image_set(&ioctx, id, image));
+    ASSERT_EQ(0, mirror_image_status_set(&ioctx, uuid, status));
+  }
+
+  std::string last_read = "";
+  images.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_image_status_list(&ioctx, last_read, N * 2, &images,
+	  &statuses));
+  ASSERT_EQ(N, images.size());
+  ASSERT_EQ(N, statuses.size());
+
+  images.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_image_status_list(&ioctx, last_read, N / 2, &images,
+	  &statuses));
+  ASSERT_EQ(N / 2, images.size());
+  ASSERT_EQ(N / 2, statuses.size());
+
+  last_read = images.rbegin()->first;
+  images.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_image_status_list(&ioctx, last_read, N / 2, &images,
+	  &statuses));
+  ASSERT_EQ(N / 2, images.size());
+  ASSERT_EQ(N / 2, statuses.size());
+
+  last_read = images.rbegin()->first;
+  images.clear();
+  statuses.clear();
+  ASSERT_EQ(0, mirror_image_status_list(&ioctx, last_read, N / 2, &images,
+	  &statuses));
+  ASSERT_EQ(0U, images.size());
+  ASSERT_EQ(0U, statuses.size());
 }
