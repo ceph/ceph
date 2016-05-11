@@ -58,10 +58,16 @@ enum {
   l_bluestore_last
 };
 
-class BlueStore : public ObjectStore {
+class BlueStore : public ObjectStore,
+		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
 public:
+
+  // config observer
+  virtual const char** get_tracked_conf_keys() const override;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+                                  const std::set<std::string> &changed) override;
 
   class TransContext;
 
@@ -586,6 +592,7 @@ private:
   list<CollectionRef> removed_collections;
 
   Checksummer *checksummer;
+  int csum_type;
 
   // --------------------------------------------------------
   // private methods
