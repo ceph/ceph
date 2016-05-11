@@ -999,11 +999,20 @@ void PGMap::dump_osd_stats(ostream& ss) const
 
 void PGMap::dump_osd_sum_stats(ostream& ss) const
 {
-  ss << "osdstat\tused\tavail\ttotal" << std::endl;
-  ss << " sum\t" << prettybyte_t(osd_sum.kb_used)
-     << "\t" << prettybyte_t(osd_sum.kb_avail)
-     << "\t" << prettybyte_t(osd_sum.kb)
-     << std::endl;
+  TextTable tab;
+
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
+
+  tab << "sum"
+      << prettybyte_t(osd_sum.kb_used)
+      << prettybyte_t(osd_sum.kb_avail)
+      << prettybyte_t(osd_sum.kb)
+      << TextTable::endrow;
+
+  ss << tab;
 }
 
 void PGMap::get_stuck_stats(int types, const utime_t cutoff,
