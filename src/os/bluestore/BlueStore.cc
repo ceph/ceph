@@ -770,7 +770,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
-    checksummer(new Checksummer)
+    checksummer(new Checksummer),
+    csum_type(bluestore_blob_t::CSUM_CRC32C)
 {
   _init_logger();
 }
@@ -783,6 +784,32 @@ BlueStore::~BlueStore()
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
   delete checksummer;
+}
+
+const char **BlueStore::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "bluestore_csum",
+    "bluestore_csum_type",
+    NULL
+  };
+  return KEYS;
+}
+
+void BlueStore::handle_conf_change(const struct md_config_t *conf,
+				   const std::set<std::string> &changed)
+{
+  if (changed.count("bluestore_csum_type") ||
+      changed.count("bluestore_csum")) {
+    csum_type = bluestore_blob_t::get_csum_string_type(
+      conf->bluestore_csum_type);
+    if (csum_type < 0 || !conf->bluestore_csum) {
+      csum_type = bluestore_blob_t::CSUM_NONE;
+    }
+    dout(10) << __func__ << " csum_type "
+	     << bluestore_blob_t::get_csum_type_string(csum_type)
+	     << dendl;
+  }
 }
 
 void BlueStore::_init_logger()
