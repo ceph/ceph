@@ -28,8 +28,11 @@ public:
   spg_t pgid;
   epoch_t map_epoch;
   vector<PushOp> pushes;
+
+private:
   uint64_t cost;
 
+public:
   void compute_cost(CephContext *cct) {
     cost = 0;
     for (vector<PushOp>::iterator i = pushes.begin();
@@ -41,6 +44,10 @@ public:
 
   int get_cost() const {
     return cost;
+  }
+
+  void set_cost(uint64_t c) {
+    cost = c;
   }
 
   MOSDPGPush() :
