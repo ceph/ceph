@@ -39,6 +39,8 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRemoveRequest.cc 
   operation/test_mock_SnapshotRollbackRequest.cc 
   operation/test_mock_SnapshotUnprotectRequest.cc
+  mock/MockImageCtx.cc
+  mock/MockJournal.cc
   )
 add_executable(unittest_librbd EXCLUDE_FROM_ALL
   ${unittest_librbd_srcs}
@@ -55,6 +57,8 @@ target_link_libraries(unittest_librbd
   cls_lock
   cls_lock_client
   journal
+  journal_test
+  cls_journal
   cls_journal_client
   rados_test_stub
   librados
