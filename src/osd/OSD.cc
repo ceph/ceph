@@ -1938,8 +1938,8 @@ public:
     out.append(ss);
     return true;
   }
-  void test_ops(OSDService *service, ObjectStore *store, std::string command,
-     cmdmap_t& cmdmap, ostream &ss);
+  void test_ops(OSDService *service, ObjectStore *store,
+		const std::string &command, cmdmap_t& cmdmap, ostream &ss);
 
 };
 
@@ -4423,7 +4423,7 @@ void OSD::check_ops_in_flight()
 //
 //   set_recovery_delay [utime]
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
-     std::string command, cmdmap_t& cmdmap, ostream &ss)
+     const std::string &command, cmdmap_t& cmdmap, ostream &ss)
 {
   //Test support
   //Support changing the omap on a single osd by using the Admin Socket to
