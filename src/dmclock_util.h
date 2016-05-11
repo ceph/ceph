@@ -1,7 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
- * Copyright (C) 2015 Red Hat Inc.
+ * Copyright (C) 2016 Red Hat Inc.
  */
 
 
@@ -13,6 +14,7 @@
 #include <sys/time.h>
 
 #include <limits>
+#include <cmath>
 
 
 namespace crimson {
@@ -23,11 +25,14 @@ namespace crimson {
     using Time = double;
     static const Time TimeZero = 0.0;
     static const Time TimeMax = std::numeric_limits<Time>::max();
+    static const double NaN = nan("");
 
 
     inline Time get_time() {
       struct timeval now;
-      assert(0 == gettimeofday(&now, NULL));
+      auto result = gettimeofday(&now, NULL);
+      (void) result;
+      assert(0 == result);
       return now.tv_sec + (now.tv_usec / 1000000.0);
     }
 

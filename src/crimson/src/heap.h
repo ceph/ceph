@@ -1,7 +1,8 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
- * Copyright (C) 2015 Red Hat Inc.
+ * Copyright (C) 2016 Red Hat Inc.
  */
 
 
@@ -15,10 +16,10 @@
 
 
 namespace crimson {
-  
+
   /*
    * T : type of data held in the heap.
-   * 
+   *
    * C : class that implements operator() with two arguments and
    * returns a boolean when the first argument is greater than (higher
    * in priority than) the second.
@@ -27,7 +28,7 @@ namespace crimson {
   class Heap {
 
   public:
-    
+
     class iterator {
 
       friend Heap<T,C>;
@@ -68,7 +69,7 @@ namespace crimson {
 	return heap.data[index];
       }
 
-      // the item this iterator refers to 
+      // the item this iterator refers to
       void increase() {
 	heap.siftUp(index);
       }
@@ -95,7 +96,7 @@ namespace crimson {
 
       while (i > 0) {
 	int pi = parent(i);
-	if (comparator(data[pi], data[i])) {
+	if (!comparator(data[i], data[pi])) {
 	  break;
 	}
 
@@ -223,7 +224,7 @@ namespace crimson {
     friend std::ostream& operator<<(std::ostream&, const Heap<T1,T2>&);
   }; // class Heap
 
-  
+
   template<typename T1, typename T2>
   std::ostream& operator<<(std::ostream& out, const Heap<T1,T2>& h) {
     out << "[ ";

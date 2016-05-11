@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
+include_directories(../src/crimson/src)
+include_directories(${BOOST_INCLUDE_DIR})
 
 # set(local_flags "-g -O0")
 
-set(core_srcs ../src/test_client.cc ../src/crimson/run_every.cc)
-set(test_srcs test_test_client.cc test_dmclock_server.cc test_dmclock_client.cc)
+set(core_srcs ../src/crimson/src/run_every.cc ../src/test_dmclock.cc)
+set(test_srcs
+  test_test_client.cc
+  test_dmclock_server.cc test_dmclock_client.cc)
 
 set_source_files_properties(${core_srcs} ${test_srcs}
   PROPERTIES
@@ -24,6 +28,6 @@ function(make_tests)
   endforeach()
 endfunction()
 
-make_tests(dmclock_server dmclock_client test_client)
+make_tests(dmclock_server dmclock_server_pull dmclock_client test_client)
 
 add_dependencies(check tests)
