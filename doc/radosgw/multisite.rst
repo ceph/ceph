@@ -5,11 +5,11 @@ RGW Multisite
 .. versionadded:: Jewel
 
 From Ceph release Jewel and beyond, you may configure each :term:`Ceph Object
-Gateway` to work in an active active zone configuration, allowing for writes to
+Gateway` to work in an active active zone configuration, allowing for writing to
 non-master zones. Following are the basic terminologies that would be used:
 
 - **Zone**: A zone is *logical* grouping of one or more Ceph Object Gateway
-  instances. There will be one Zone that should be designated as the master zone
+  instances. There will be one zone that should be designated as the master zone
   in a zonegroup, which will handle all bucket and user creation.
 
 - **Zonegroup**: A zonegroup consists of multiple zones, this approximately
@@ -30,7 +30,7 @@ non-master zones. Following are the basic terminologies that would be used:
   of the realm. Every period contains a unique id and an epoch. A period's epoch
   is incremented on every commit operation. Every realm has an associated
   current period, holding the current state of configuration of the zonegroups
-  and storage policies. Any configuration change for a non master zone will
+  and storage policies. Any configuration change for a non-master zone will
   increment the period's epoch. Changing the master zone to a different zone
   will trigger the following changes:
   - A new period is generated with a new period id and epoch of 1
@@ -40,25 +40,28 @@ non-master zones. Following are the basic terminologies that would be used:
 About this guide
 ================
 
-In this guide we create a single zone group, with three separate zones, which
-actively sync data between them. For the purpose of the guide, we create 2 zones
-in the same cluster, and the third zone in a different cluster. There is no sync
-agent involved for mirroring data changes between the RadosGWs and this allows
-for a much simpler configuration scheme and active-active configurations. Please
-note that metadata operations such as creating a user would still need to go
-through the master zone, however data operations such as creation of buckets
-objects etc. can be handled by any of the zones.
+In this guide we use 2 Ceph clusters, and create a single zonegroup,
+with three zones, which sync data between them actively. For the
+purpose of the guide, we'll create 2 zones in the same cluster, and 1
+zone in a different cluster. There is no sync agent involved for
+mirroring data changes between the Ceph Object Gateway instances and
+this allows for a much simpler configuration scheme and active-active
+configurations. Please note that metadata operations such as creating
+a user would still need to go through the master zone, however data
+operations such as creation of buckets objects can be handled by any
+of the zones.
 
 System Keys
 -----------
 
-While configuring zones, RadosGW, expects creation of zone a system user, with
-an S3-like access and secret keys. This allows another radosgw instance to pull
-the configuration remotely, with the access and secret keys. For making
-scripting and use of configuration management tools easier, it would be easier
-to generate the access-key and secret-key before hand and use these. For the
-purpose of the guide we assume an access key and secret key are set in the
-environment. For eg., something like::
+While configuring zones, Ceph Object Gateway instance, expects
+creation of zone a system user, with a S3-like access and secret keys.
+This allows another Ceph Object Gateway instance to pull the
+configuration remotely, with the access and secret keys. For making
+scripting and using of configuration management tools easier, it would
+be easier to generate the access key and secret key before hand and
+use these. For the purpose of the guide we assume an access key and
+secret key are set in the environment. For eg.::
 
   $ SYSTEM_ACCESS_KEY=1555b35654ad1656d805
   $ SYSTEM_SECRET_KEY=h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q12
@@ -69,6 +72,12 @@ keys can be generated in shell for eg::
 
   $ SYSTEM_ACCESS_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 20 | head -n 1)
   $ SYSTEM_SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 40 | head -n 1)
+
+Then we can create a system user by following command::
+
+  $ radosgw_admin user create --uid=zone.user --display-name="Zone User" \
+                 --access-key=$SYSTEM_ACCESS_KEY --secret=$SYSTEM_SECRET_KEY --system
+
 
 Naming conventions
 ------------------
@@ -81,20 +90,21 @@ to choose a format you prefer to set these names. So in summary:
 
 - Master Zonegroup: United States ``us``
 - Master zone: United States, East Region 1: ``us-east-1``
-- Secondary zone: United States, East Region 2: ``us-east-2``
-- Secondary zone: United States, West Region: ``us-west``
+- Second zone: United States, East Region 2: ``us-east-2``
+- Second zone: United States, West Region: ``us-west``
 
 This will be a part of a larger realm, say ``gold``. The zones ``us-east-1`` and
-``us-east-2`` are part of the same ceph cluster, of which we'll make
-``us-east-1`` as the primary. ``us-west`` will be in a different ceph cluster.
+``us-east-2`` are part of the same Ceph cluster, of which we'll make
+``us-east-1`` as the primary. ``us-west`` will be in a different Ceph cluster.
 
 Create Pools
 ------------
 
-Radosgw will create pools on its own, when it is configured with the appropriate
-permissions, this will be done with the value of ``pg_num`` and ``pgp_num`` from
-the ``ceph.conf``. See `Ceph Object Gateway - Create Pools`_ for more detailed
-explanation. Pools particular to a zone by default follows the convention of
+Ceph Object Gateway instance will create pools on its own, when it is
+configured with the appropriate permissions, this will be done with
+the value of ``pg_num`` and ``pgp_num`` from the ``ceph.conf``. See
+`Ceph Object Gateway - Create Pools`_ for more detailed explanation.
+Pools particular to a zone by default follows the convention of
 ``{zone-name}.pool-name``. In the default configuration, for eg. in
 ``us-east-1`` zone following will be the pools:
 
@@ -113,21 +123,21 @@ explanation. Pools particular to a zone by default follows the convention of
 - ``us-east-1.rgw.buckets.data``
 - ``us-east-1.rgw.meta``
 
-These pools can be created in other zones as well replacing ``us-east-1`` with
-the appropriate zone name.
+These pools can be created in the other zones as well by replacing
+``us-east-1`` with the appropriate zone name.
 
 Configuring the master zone in the primary cluster
 ==================================================
 
-First, we'll be configuring the master zone ``us-east-1``, in the master
+First, we'll configure the master zone ``us-east-1``, in the master
 zonegroup ``us``, this will serve as the master zone for all metadata
-operations, so all operations like creation of users need to be done on this
-zone.
+operations, so all operations like creation of users need to be done
+on this zone.
 
 Creating a realm
 ----------------
 
-Configure a realm called ``gold``, and also make this the default ::
+Configure a realm called ``gold``, and also make this as default ::
 
   # radosgw-admin realm create --rgw-realm=gold --default
   {
@@ -147,9 +157,9 @@ period.
 Deleting the default zonegroup
 ------------------------------
 
-A simple installation of radosgw would assume the default zonegroup called
-"default", since we no longer need this we begin by removing the default
-zonegroup::
+A simple installation of Ceph Object Gateway would assume the default
+zonegroup called "default", since we no longer need this we begin by
+removing the default zonegroup::
 
   # radosgw-admin zonegroup delete --rgw-zonegroup=default
 
@@ -157,9 +167,11 @@ zonegroup::
 Creating a master zonegroup
 ---------------------------
 
-We'll be creating a zonegroup called ``us`` as a master zonegroup. A master
-zonegroup will be in control of the zonegroup map and propagate changes to the
-rest of the system. We will also set this zonegroup as the default, which allows later commands to use this zonegroup without explicitly mentioning it with the rgw-zonegroup switch.
+We'll create a zonegroup called ``us`` as master zonegroup. A master
+zonegroup will be in control of the zonegroup map and propagate
+changes to the rest of the system. We will also set this zonegroup as
+the default, which allows later commands to use this zonegroup without
+explicitly mentioning it with the ``--rgw-zonegroup`` option.
 
 ::
 
@@ -181,8 +193,8 @@ rest of the system. We will also set this zonegroup as the default, which allows
     "realm_id": "4a367026-bd8f-40ee-b486-8212482ddcd7"
     }
 
-Alternatively, we make this zonegroup as the default zonegroup via the following
-command ::
+Alternatively, we can make this zonegroup as the default zonegroup via
+the following command ::
 
   # radosgw-admin zonegroup default --rgw-zonegroup=us
 
@@ -230,19 +242,19 @@ the zonegroup
     }
 
 
-  Note that the above ``--rgw-zonegroup`` and ``--default`` switches add the
-  zone to a zonegroup and makes it the default zone as well. This can also be
-  accomplished alternatively by the following commands::
+Note that the above ``--rgw-zonegroup`` and ``--default`` options add the
+zone to a zonegroup and makes it the default zone as well. This can also be
+accomplished by the following commands::
 
-    # radosgw-admin zone default --rgw-zone=us-east
-    # radosgw-admin zonegroup add --rgw-zonegroup=us --rgw-zone=us-east
+    # radosgw-admin zone default --rgw-zone=us-east-1
+    # radosgw-admin zonegroup add --rgw-zonegroup=us --rgw-zone=us-east-1
 
 
 Creating system users
 ---------------------
 
 Next we create the system users for accessing the zone pools, note that these
-keys would be used when configuring the secondary zone::
+keys would be used when configuring the second zone::
 
   # radosgw-admin user create --uid=zone.user --display-name="Zone
   User" --access-key=$SYSTEM_ACCESS_KEY --secret=$SYSTEM_SECRET_KEY --system
@@ -281,10 +293,10 @@ keys would be used when configuring the secondary zone::
   }
 
 
-
 Update the period
 -----------------
-Since we have now made a change in the master zone configuration, we need to
+
+Since we have made a change in the master zone configuration, we need to
 commit these zone changes to reflect in the realm configuration structure. This
 is what the period would look like initially::
 
@@ -391,34 +403,37 @@ Now we update the period and commit the changes::
     }
 
 
-Starting the radosgw
---------------------
+Starting the Ceph Object Gateway instance
+-----------------------------------------
 
-Before starting the radosgw, the rgw zone and port options need to be mentioned
-in the configuration file. For more details refer to the `Install Ceph Gateway`_
-section of the guide. The configuration section for radosgw should resemble::
+Before starting the Ceph Object Gateway instance, the ``rgw_zone`` and
+``rgw_frontends`` options need to be mentioned in the configuration
+file. For more details refer to the `Install Ceph Gateway`_ section of
+the guide. The configuration section for Ceph Object Gateway instance
+should resemble::
 
   [client.rgw.us-east-1]
   rgw_frontends="civetweb port=80"
-  rgw_zone=us-east
+  rgw_zone=us-east-1
 
-And start the Ceph Object gateway (according to the OS installation) ::
+And start the Ceph Object Gateway instance(according to the OS
+installation) ::
 
-  sudo systemctl start ceph-radosgw.service
+  $ sudo systemctl start ceph-radosgw@rgw.us-east-1
 
 
-Configuring the Secondary zone in Same Cluster
-==============================================
+Configuring the second zone in same cluster
+===========================================
 
-Now we configure the secondary zone, ``us-east-2``, in the same cluster. For the
+Now we configure the second zone, ``us-east-2``, in the same cluster. For the
 same cluster, all the following commands can be executed in the node hosting the
 primary zone itself.
 
-Secondary Zone Creation
------------------------
+Creating the second zone
+------------------------
 
 We follow a similar step to creation of master zone, except dropping the
-``master`` flag this time ::
+``--master`` flag this time ::
 
   # radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-east-2 --access-key=$SYSTEM_ACCESS_KEY --secret=$SYSTEM_SECRET_KEY --endpoints=http://rgw2:80
   {
@@ -453,11 +468,12 @@ We follow a similar step to creation of master zone, except dropping the
     "realm_id": "815d74c2-80d6-4e63-8cfc-232037f7ff5c"
     }
 
-Updating the Period
+Updating the period
 -------------------
 
-Next we inform all the gateways of the new change in the system map by doing a
-period update and committing the changes::
+Next we inform all the Ceph Object Gateway instances of the new change
+in the system map by doing a period update and committing the
+changes::
 
   # radosgw-admin period update --commit
   {
@@ -547,27 +563,34 @@ period update and committing the changes::
     }
 
 
-Starting the radosgw
---------------------
+Starting the Ceph Object Gateway instance
+-----------------------------------------
 
-On the node that is hosting the radosgw of the secondary zone, you would start
-it, similar to the `Starting the radosgw`_, changing the ``rgw zone=us-east-2``
-in the configuration file this time. For eg::
+On the node that is hosting the Ceph Object Gateway instance of the
+second zone, you would start it, similar to the Ceph Object Gateway
+instance ``client.rgw.us-east-1`` , changing the ``rgw
+zone=us-east-2`` in the configuration file this time. For eg::
 
   [client.rgw.us-east-2]
   rgw_frontends="civetweb port=80"
   rgw_zone=us-east-2
 
+And start the Ceph Object Gateway instance depending on your Operating
+system's init system, for eg::
 
-Configuring the Gateway in the second Ceph Cluster
-==================================================
+  $ sudo systemctl start ceph-radosgw@rgw.us-east-2
 
-Now we go on to configuring radosgw in the second ceph cluster, which may be
-geographically apart, that is a part of the same zonegroup.
 
-Since a realm was already configured from the first gateway, we pull and make
-that realm the default here, We also get the configuration from the master zone
-by pulling the period::
+Configuring the Ceph Object Gateway in the second Ceph cluster
+==============================================================
+
+Now we go on to configure Ceph Object Gateway in the second Ceph
+cluster, which may be geographically apart, that is a part of the same
+zonegroup.
+
+Since a realm was already configured from the first cluster, we pull
+and make that realm as the default here, We also get the configuration
+from the master zone by pulling the period::
 
   # radosgw-admin realm pull --url=http://rgw1:80
   --access-key=$SYSTEM_ACCESS_KEY --secret=$SYSTEM_SECRET_KEY
@@ -585,8 +608,8 @@ We also set the default zonegroup to the created ``us`` zonegroup::
 
   # radosgw-admin zonegroup default --rgw-zonegroup=us
 
-Secondary Zone Configuration
-----------------------------
+Configuring the second zone
+---------------------------
 
 We create the new zone, ``us-west``, with the same system keys::
 
@@ -627,7 +650,9 @@ We create the new zone, ``us-west``, with the same system keys::
 
 Updating the period
 -------------------
-Now to propagate the zonegroup-map changes, we update and commit the period::
+
+In order to propagate the zonegroup-map changes, we need to update and
+commit the period::
 
   # radosgw-admin period update --commit --rgw-zone=us-west
   {
@@ -654,7 +679,7 @@ Now to propagate the zonegroup-map changes, we update and commit the period::
                 "zones": [
                     {
                         "id": "83859a9a-9901-4f00-aa6d-285c777e10f0",
-                        "name": "us-east",
+                        "name": "us-east-1",
                         "endpoints": [
                             "http:\/\/rgw1:80"
                         ],
@@ -731,23 +756,24 @@ Now to propagate the zonegroup-map changes, we update and commit the period::
     }
 
 You can observe that the period epoch number has incremented, indicating a
-change in the configuration
+change in the configuration.
 
-Starting the Ceph Object Gateway
---------------------------------
+Starting the Ceph Object Gateway instance
+-----------------------------------------
 
-This is similar to starting the object gateway in the first zone, only
-difference being in the ``rgw zone`` configurable, which should reflect ``us-west``::
+This is similar to starting the Ceph Object Gateway instance in the
+first zone, the only difference is the ``rgw zone`` option, which
+should reflect ``us-west``::
 
-  [client.rgw.us-east-1]
+  [client.rgw.us-west]
   rgw_frontends="civetweb port=80"
   rgw_zone=us-west
 
-And start the radosgw depending on your Operating system's init system, for eg::
+And start the Ceph Object Gateway instance depending on your Operating
+system's init system, for eg::
 
-  $ sudo systemctl start ceph-radosgw.service
+  $ sudo systemctl start ceph-radosgw@rgw.us-west
 
 
 .. _`Ceph Object Gateway - Create Pools`: ../config#create-pools
 .. _`Install Ceph Gateway`: ../../install/install-ceph-gateway
-.. _`Starting the radosgw`: #starting-the-radosgw
