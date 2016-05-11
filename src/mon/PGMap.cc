@@ -909,22 +909,34 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
 
 void PGMap::dump_osd_stats(ostream& ss) const
 {
-  ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
+  TextTable tab;
+
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("HB_IN", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PG_SUM", TextTable::LEFT, TextTable::RIGHT);
+
   for (ceph::unordered_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p) {
-    ss << p->first
-       << "\t" << p->second.kb_used
-       << "\t" << p->second.kb_avail
-       << "\t" << p->second.kb
-       << "\t" << p->second.hb_in
-       << "\t" << p->second.hb_out
-       << std::endl;
+    tab << p->first
+        << prettybyte_t(p->second.kb_used)
+        << prettybyte_t(p->second.kb_avail)
+        << prettybyte_t(p->second.kb)
+        << p->second.hb_in
+        << get_num_pg_by_osd(p->first)
+        << TextTable::endrow;
   }
-  ss << " sum\t" << osd_sum.kb_used
-     << "\t" << osd_sum.kb_avail
-     << "\t" << osd_sum.kb
-     << std::endl;
+
+  tab << "sum"
+      << prettybyte_t(osd_sum.kb_used)
+      << prettybyte_t(osd_sum.kb_avail)
+      << prettybyte_t(osd_sum.kb)
+      << TextTable::endrow;
+
+  ss << tab;
 }
 
 void PGMap::dump_osd_sum_stats(ostream& ss) const
