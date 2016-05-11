@@ -7040,14 +7040,14 @@ int ReplicatedPG::fill_in_copy_get(
   bufferlist& bl = reply_obj.data;
   if (left > 0 && !cursor.data_complete) {
     if (cursor.data_offset < oi.size) {
-      left = MIN(oi.size - cursor.data_offset, (uint64_t)left);
+      uint64_t max_read = MIN(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
 	async_read_started = true;
 	ctx->pending_async_reads.push_back(
 	  make_pair(
-	    boost::make_tuple(cursor.data_offset, left, osd_op.op.flags),
+	    boost::make_tuple(cursor.data_offset, max_read, osd_op.op.flags),
 	    make_pair(&bl, cb)));
-        result = left;
+        result = max_read;
 	cb->len = result;
       } else {
 	result = pgbackend->objects_read_sync(
