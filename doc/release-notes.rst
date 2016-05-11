@@ -5181,6 +5181,67 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
+v0.94.7 Hammer
+==============
+
+This Hammer point release fixes several minor bugs.  It also includes
+a backport of an improved 'ceph osd reweight-by-utilization' command
+for handling OSDs with higher-than-average utilizations.
+
+We recommend that all hammer v0.94.x users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.7.txt>`.
+
+Notable Changes
+---------------
+
+* auth: keyring permisions for mon deamon (`issue#14950 <http://tracker.ceph.com/issues/14950>`_, `pr#8049 <http://github.com/ceph/ceph/pull/8049>`_, Owen Synge)
+* auth: PK11_DestroyContext() is called twice if PK11_DigestFinal() fails (`issue#14958 <http://tracker.ceph.com/issues/14958>`_, `pr#7922 <http://github.com/ceph/ceph/pull/7922>`_, Brad Hubbard, Dunrong Huang)
+* auth: use libnss more safely (`issue#14620 <http://tracker.ceph.com/issues/14620>`_, `pr#7488 <http://github.com/ceph/ceph/pull/7488>`_, Sage Weil)
+* ceph-disk: use blkid instead of sgdisk -i (`issue#14080 <http://tracker.ceph.com/issues/14080>`_, `issue#14094 <http://tracker.ceph.com/issues/14094>`_, `pr#7475 <http://github.com/ceph/ceph/pull/7475>`_, Ilya Dryomov, Loic Dachary)
+* ceph-fuse: fix ceph-fuse writing to stale log file after log rotation (`issue#12350 <http://tracker.ceph.com/issues/12350>`_, `pr#7110 <http://github.com/ceph/ceph/pull/7110>`_, Zhi Zhang)
+* ceph init script unconditionally sources /lib/lsb/init-functions (`issue#14402 <http://tracker.ceph.com/issues/14402>`_, `pr#7797 <http://github.com/ceph/ceph/pull/7797>`_, Yan, Zheng)
+* ceph.in: Notify user that 'tell' can't be used in interactive mode (`issue#14773 <http://tracker.ceph.com/issues/14773>`_, `pr#7656 <http://github.com/ceph/ceph/pull/7656>`_, David Zafman)
+* ceph-objectstore-tool, osd: Fix import handling (`issue#10794 <http://tracker.ceph.com/issues/10794>`_, `issue#13382 <http://tracker.ceph.com/issues/13382>`_, `pr#7917 <http://github.com/ceph/ceph/pull/7917>`_, Sage Weil, David Zafman)
+* client: added permission check based on getgrouplist (`issue#13268 <http://tracker.ceph.com/issues/13268>`_, `pr#6604 <http://github.com/ceph/ceph/pull/6604>`_, Yan, Zheng, Danny Al-Gaaf)
+* client: inoderef (`issue#13729 <http://tracker.ceph.com/issues/13729>`_, `pr#6551 <http://github.com/ceph/ceph/pull/6551>`_, Yan, Zheng)
+* common: clock skew report is incorrect by ceph health detail command (`issue#14175 <http://tracker.ceph.com/issues/14175>`_, `pr#8051 <http://github.com/ceph/ceph/pull/8051>`_, Joao Eduardo Luis)
+* global/pidfile: do not start two daemons with a single pid-file (`issue#13422 <http://tracker.ceph.com/issues/13422>`_, `pr#7671 <http://github.com/ceph/ceph/pull/7671>`_, Loic Dachary, shun song)
+* librados: segfault in Objecter::handle_watch_notify (`issue#13805 <http://tracker.ceph.com/issues/13805>`_, `pr#7992 <http://github.com/ceph/ceph/pull/7992>`_, Sage Weil)
+* librbd: flattening an rbd image with active IO can lead to hang (`issue#14092 <http://tracker.ceph.com/issues/14092>`_, `issue#14483 <http://tracker.ceph.com/issues/14483>`_, `pr#7485 <http://github.com/ceph/ceph/pull/7485>`_, Jason Dillaman)
+* librbd: possible QEMU deadlock after creating image snapshots (`issue#14988 <http://tracker.ceph.com/issues/14988>`_, `pr#8011 <http://github.com/ceph/ceph/pull/8011>`_, Jason Dillaman)
+* mon: Bucket owner isn't changed after unlink/link (`issue#11076 <http://tracker.ceph.com/issues/11076>`_, `pr#8583 <http://github.com/ceph/ceph/pull/8583>`_, Zengran Zhang)
+* monclient: avoid key renew storm on clock skew (`issue#12065 <http://tracker.ceph.com/issues/12065>`_, `pr#8398 <http://github.com/ceph/ceph/pull/8398>`_, Alexey Sheplyakov)
+* mon: implement reweight-by-utilization feature (`issue#15054 <http://tracker.ceph.com/issues/15054>`_, `pr#8026 <http://github.com/ceph/ceph/pull/8026>`_, Kefu Chai, Dan van der Ster, Sage Weil)
+* mon/LogMonitor: use the configured facility if log to syslog (`issue#13748 <http://tracker.ceph.com/issues/13748>`_, `pr#7648 <http://github.com/ceph/ceph/pull/7648>`_, Kefu Chai)
+* mon: mon sync does not copy config-key (`issue#14577 <http://tracker.ceph.com/issues/14577>`_, `pr#7576 <http://github.com/ceph/ceph/pull/7576>`_, Xiaowei Chen)
+* mon/OSDMonitor: avoid underflow in reweight-by-utilization if max_change=1 (`issue#15655 <http://tracker.ceph.com/issues/15655>`_, `pr#8979 <http://github.com/ceph/ceph/pull/8979>`_, Samuel Just)
+* osd: consume_maps clearing of waiting_for_pg needs to check the spg_t shard for acting set membership (`issue#14278 <http://tracker.ceph.com/issues/14278>`_, `pr#7577 <http://github.com/ceph/ceph/pull/7577>`_, Samuel Just)
+* osd: log inconsistent shard sizes (`issue#14009 <http://tracker.ceph.com/issues/14009>`_, `pr#6946 <http://github.com/ceph/ceph/pull/6946>`_, Loic Dachary)
+* osd: OSD coredumps with leveldb compact on mount = true (`issue#14748 <http://tracker.ceph.com/issues/14748>`_, `pr#7645 <http://github.com/ceph/ceph/pull/7645>`_, Xiaoxi Chen)
+* osd/OSDMap: reset osd_primary_affinity shared_ptr when deepish_copy_from (`issue#14686 <http://tracker.ceph.com/issues/14686>`_, `pr#7590 <http://github.com/ceph/ceph/pull/7590>`_, Xinze Chi)
+* osd: Protect against excessively large object map sizes (`issue#15121 <http://tracker.ceph.com/issues/15121>`_, `pr#8401 <http://github.com/ceph/ceph/pull/8401>`_, Jason Dillaman)
+* osd/ReplicatedPG: do not proxy read *and* process op locally (`issue#15171 <http://tracker.ceph.com/issues/15171>`_, `pr#8187 <http://github.com/ceph/ceph/pull/8187>`_, Sage Weil)
+* osd: scrub bogus results when missing a clone (`issue#14875 <http://tracker.ceph.com/issues/14875>`_, `issue#14874 <http://tracker.ceph.com/issues/14874>`_, `issue#14877 <http://tracker.ceph.com/issues/14877>`_, `issue#10098 <http://tracker.ceph.com/issues/10098>`_, `issue#14878 <http://tracker.ceph.com/issues/14878>`_, `issue#14881 <http://tracker.ceph.com/issues/14881>`_, `issue#14882 <http://tracker.ceph.com/issues/14882>`_, `issue#14883 <http://tracker.ceph.com/issues/14883>`_, `issue#14879 <http://tracker.ceph.com/issues/14879>`_, `issue#10290 <http://tracker.ceph.com/issues/10290>`_, `issue#12740 <http://tracker.ceph.com/issues/12740>`_, `issue#12738 <http://tracker.ceph.com/issues/12738>`_, `issue#14880 <http://tracker.ceph.com/issues/14880>`_, `issue#11135 <http://tracker.ceph.com/issues/11135>`_, `issue#14876 <http://tracker.ceph.com/issues/14876>`_, `issue#10809 <http://tracker.ceph.com/issues/10809>`_, `issue#12193 <http://tracker.ceph.com/issues/12193>`_, `issue#11237 <http://tracker.ceph.com/issues/11237>`_, `pr#7702 <http://github.com/ceph/ceph/pull/7702>`_, Xinze Chi, Sage Weil, John Spray, Kefu Chai, Mykola Golub, David Zafman)
+* osd: Unable to bring up OSD's after dealing with FULL cluster (OSD assert with /include/interval_set.h: 386: FAILED assert(_size >= 0)) (`issue#14428 <http://tracker.ceph.com/issues/14428>`_, `pr#7415 <http://github.com/ceph/ceph/pull/7415>`_, Alexey Sheplyakov)
+* osd: use GMT time for the object name of hitsets (`issue#13192 <http://tracker.ceph.com/issues/13192>`_, `issue#9732 <http://tracker.ceph.com/issues/9732>`_, `issue#12968 <http://tracker.ceph.com/issues/12968>`_, `pr#7883 <http://github.com/ceph/ceph/pull/7883>`_, Kefu Chai, David Zafman)
+* qa/workunits/post-file.sh: sudo (`issue#14586 <http://tracker.ceph.com/issues/14586>`_, `pr#7456 <http://github.com/ceph/ceph/pull/7456>`_, Sage Weil)
+* qa/workunits: remove 'mds setmap' from workunits (`pr#8123 <http://github.com/ceph/ceph/pull/8123>`_, Sage Weil)
+* rgw: default quota params (`issue#12997 <http://tracker.ceph.com/issues/12997>`_, `pr#7188 <http://github.com/ceph/ceph/pull/7188>`_, Daniel Gryniewicz)
+* rgw: make rgw_fronends more forgiving of whitespace (`issue#12038 <http://tracker.ceph.com/issues/12038>`_, `pr#7414 <http://github.com/ceph/ceph/pull/7414>`_, Matt Benjamin)
+* rgw: radosgw-admin bucket check --fix not work (`issue#14215 <http://tracker.ceph.com/issues/14215>`_, `pr#7185 <http://github.com/ceph/ceph/pull/7185>`_, Weijun Duan)
+* rpm package building fails if the build machine has lttng and babeltrace development packages installed locally (`issue#14844 <http://tracker.ceph.com/issues/14844>`_, `pr#8440 <http://github.com/ceph/ceph/pull/8440>`_, Kefu Chai)
+* rpm: redhat-lsb-core dependency was dropped, but is still needed (`issue#14906 <http://tracker.ceph.com/issues/14906>`_, `pr#7876 <http://github.com/ceph/ceph/pull/7876>`_, Nathan Cutler)
+* test_bit_vector.cc uses magic numbers against #defines that vary (`issue#14747 <http://tracker.ceph.com/issues/14747>`_, `pr#7672 <http://github.com/ceph/ceph/pull/7672>`_, Jason Dillaman)
+* test/librados/tier.cc doesn't completely clean up EC pools (`issue#13878 <http://tracker.ceph.com/issues/13878>`_, `pr#8052 <http://github.com/ceph/ceph/pull/8052>`_, Loic Dachary, Dan Mick)
+* tests: bufferlist: do not expect !is_page_aligned() after unaligned rebuild (`issue#15305 <http://tracker.ceph.com/issues/15305>`_, `pr#8272 <http://github.com/ceph/ceph/pull/8272>`_, Kefu Chai)
+* tools: fix race condition in seq/rand bench (part 1) (`issue#14968 <http://tracker.ceph.com/issues/14968>`_, `issue#14873 <http://tracker.ceph.com/issues/14873>`_, `pr#7896 <http://github.com/ceph/ceph/pull/7896>`_, Alexey Sheplyakov, Piotr Dałek)
+* tools: fix race condition in seq/rand bench (part 2) (`issue#14873 <http://tracker.ceph.com/issues/14873>`_, `pr#7817 <http://github.com/ceph/ceph/pull/7817>`_, Alexey Sheplyakov)
+* tools/rados: add bench smoke tests (`issue#14971 <http://tracker.ceph.com/issues/14971>`_, `pr#7903 <http://github.com/ceph/ceph/pull/7903>`_, Piotr Dałek)
+* tools, test: Add ceph-objectstore-tool to operate on the meta collection (`issue#14977 <http://tracker.ceph.com/issues/14977>`_, `pr#7911 <http://github.com/ceph/ceph/pull/7911>`_, David Zafman)
+* unittest_crypto: benchmark 100,000 CryptoKey::encrypt() calls (`issue#14863 <http://tracker.ceph.com/issues/14863>`_, `pr#7801 <http://github.com/ceph/ceph/pull/7801>`_, Sage Weil)
+
+  
 v0.94.6 Hammer
 ======================
 
