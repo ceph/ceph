@@ -149,7 +149,7 @@ void BootstrapRequest<I>::handle_get_local_image_id(int r) {
   if (r == -ENOENT) {
     dout(10) << ": image not registered locally" << dendl;
   } else if (r < 0) {
-    derr << ": failed to retreive local image id: " << cpp_strerror(r) << dendl;
+    derr << ": failed to retrieve local image id: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -174,7 +174,7 @@ void BootstrapRequest<I>::handle_get_remote_tag_class(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << ": failed to retreive remote client: " << cpp_strerror(r) << dendl;
+    derr << ": failed to retrieve remote client: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -223,7 +223,7 @@ void BootstrapRequest<I>::handle_get_client(int r) {
   if (r == -ENOENT) {
     dout(10) << ": client not registered" << dendl;
   } else if (r < 0) {
-    derr << ": failed to retreive client: " << cpp_strerror(r) << dendl;
+    derr << ": failed to retrieve client: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   } else if (decode_client_meta()) {
@@ -486,7 +486,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << ": failed to retreive remote tags: " << cpp_strerror(r) << dendl;
+    derr << ": failed to retrieve remote tags: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_local_image();
     return;
