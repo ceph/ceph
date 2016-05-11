@@ -4119,40 +4119,18 @@ void BlueStore::_kv_sync_thread()
 	}
       }
 
-      // allocations and deallocations
-      for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
-	  it != wal_cleaning.end();
-	  ++it) {
-	TransContext *txc = *it;
-	if (!txc->wal_txn->released.empty()) {
-	  dout(20) << __func__ << " txc " << txc
-	    << " (post-wal) released " << txc->wal_txn->released
-	    << dendl;
-	  for (interval_set<uint64_t>::iterator p =
-	      txc->wal_txn->released.begin();
-	      p != txc->wal_txn->released.end();
-	      ++p) {
-	    dout(20) << __func__ << " release 0x" << std::hex << p.get_start()
-		     << "~0x" << std::dec << p.get_len() << dendl;
-	    fm->release(p.get_start(), p.get_len(), t);
-	    if (!g_conf->bluestore_debug_no_reuse_blocks)
-	      alloc->release(p.get_start(), p.get_len());
-	  }
-	}
-      }
-
       // cleanup sync wal keys
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
 	    it != wal_cleaning.end();
 	    ++it) {
 	bluestore_wal_transaction_t& wt =*(*it)->wal_txn;
+	// kv metadata updates
+	_txc_finalize_kv(*it, t);
 	// cleanup the data in overlays
-	for (list<bluestore_wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
-	  for (vector<uint64_t>::iterator q = p->removed_overlays.begin();
-	       q != p->removed_overlays.end();
-	       ++q) {
+	for (auto& p : wt.ops) {
+	  for (auto q : p.removed_overlays) {
             string key;
-            get_overlay_key(p->nid, *q, &key);
+            get_overlay_key(p.nid, q, &key);
 	    t->rm_single_key(PREFIX_OVERLAY, key);
 	  }
 	}
@@ -4241,6 +4219,10 @@ int BlueStore::_wal_finish(TransContext *txc)
 {
   bluestore_wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << " seq " << wt.seq << txc << dendl;
+
+  // move released back to txc
+  txc->wal_txn->released.swap(txc->released);
+  assert(txc->wal_txn->released.empty());
 
   std::lock_guard<std::mutex> l2(txc->osr->qlock);
   std::lock_guard<std::mutex> l(kv_lock);
@@ -4464,6 +4446,7 @@ int BlueStore::queue_transactions(
 
   // journal wal items
   if (txc->wal_txn) {
+    // move releases to after wal
     txc->wal_txn->released.swap(txc->released);
     assert(txc->released.empty());
 
