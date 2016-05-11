@@ -182,7 +182,12 @@ void FSMap::print_summary(Formatter *f, ostream *out)
         }
         *out << " " << pretty;
       } else {
-        *out << " " << by_rank;
+        // Omit FSCID in output when only one filesystem exists
+        std::map<mds_rank_t, std::string> shortened;
+        for (auto i : by_rank) {
+          shortened[i.first.rank] = i.second;
+        }
+        *out << " " << shortened;
       }
     }
   }
@@ -271,6 +276,15 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
       for (const auto p : standby_daemons) {
         full_mdsmap.mds_info[p.first] = p.second;
       }
+
+      // Old MDSMaps don't set rank on standby replay daemons
+      for (auto &i : full_mdsmap.mds_info) {
+        auto &info = i.second;
+        if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
+          info.rank = MDS_RANK_NONE;
+        }
+      }
+
       full_mdsmap.encode(bl, features);
     }
   }
@@ -407,7 +421,12 @@ void FSMap::decode(bufferlist::iterator& p)
 
       // Construct mds_roles, standby_daemons, and remove
       // standbys from the MDSMap in the Filesystem.
-      for (const auto &p : migrate_fs->mds_map.mds_info) {
+      for (auto &p : migrate_fs->mds_map.mds_info) {
+        if (p.second.state == MDSMap::STATE_STANDBY_REPLAY) {
+          // In legacy MDSMap, standby replay daemons don't have
+          // rank set, but since FSMap they do.
+          p.second.rank = p.second.standby_for_rank;
+        }
         if (p.second.rank == MDS_RANK_NONE) {
           standby_daemons[p.first] = p.second;
           standby_epochs[p.first] = epoch;
@@ -553,10 +572,10 @@ mds_gid_t FSMap::find_unused(fs_cluster_id_t fscid,
         info.standby_for_fscid != fscid)
       continue;
 
-    if ((info.standby_for_rank == MDSMap::MDS_NO_STANDBY_PREF ||
-         info.standby_for_rank == MDSMap::MDS_MATCHED_ACTIVE ||
-         (info.standby_for_rank == MDSMap::MDS_STANDBY_ANY
-          && force_standby_active))) {
+    // To be considered 'unused' a daemon must either not
+    // be selected for standby-replay or the force_standby_active
+    // setting must be enabled to use replay daemons anyway.
+    if (!info.standby_replay || force_standby_active) {
       return gid;
     }
   }

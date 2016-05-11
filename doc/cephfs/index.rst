@@ -49,7 +49,8 @@ least one :term:`Ceph Metadata Server` running.
 	:maxdepth: 1
 
 	Add/Remove MDS <../../rados/deployment/ceph-deploy-mds>
-	MDS Configuration <mds-config-ref>
+	MDS failover and standby configuration <standby>
+	MDS Configuration Settings <mds-config-ref>
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
