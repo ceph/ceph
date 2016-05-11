@@ -36,7 +36,7 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
 
-    dir = '%s/data/test.%s' % (testdir, client)
+    dir = '%s/ceph.data/test.%s' % (testdir, client)
 
     seed = str(int(random.uniform(1,100)))
 
