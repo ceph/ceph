@@ -122,7 +122,7 @@ void ClusterWatcher::read_configs(map<peer_t, set<int64_t> > *peer_configs,
       (*peer_configs)[peer].insert(pool_id);
     }
 
-    pool_names->insert(ioctx.get_pool_name());
+    pool_names->insert(pool_name);
   }
 }
 
