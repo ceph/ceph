@@ -1041,6 +1041,7 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/ImageCopyRequest.cc
     tools/rbd_mirror/image_sync/ObjectCopyRequest.cc
     tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc
+    tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
   add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})

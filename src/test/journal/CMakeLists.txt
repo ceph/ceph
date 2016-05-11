@@ -1,3 +1,10 @@
+set(journal_test
+  mock/MockJournaler.cc
+  )
+add_library(journal_test STATIC ${journal_test})
+set_target_properties(journal_test PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_journal
 set(unittest_journal_srcs
   test_main.cc
