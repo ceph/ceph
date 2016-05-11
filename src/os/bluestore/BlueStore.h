@@ -640,6 +640,7 @@ private:
   void _assign_nid(TransContext *txc, OnodeRef o);
 
   void _dump_onode(OnodeRef o, int log_level=30);
+  void _dump_bnode(BnodeRef b, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
