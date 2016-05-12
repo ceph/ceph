@@ -374,6 +374,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
   ghobject_t test_obj = generate_long_name(319);
   ghobject_t test_obj_2 = test_obj;
   test_obj_2.generation = 0;
+  test_obj_2.shard_id = shard_id_t(0);
   {
     ObjectStore::Transaction t;
     // should cause a split
@@ -741,6 +742,7 @@ public:
     available_objects.erase(old_obj);
     ghobject_t new_obj = old_obj;
     new_obj.generation++;
+    new_obj.shard_id = shard_id_t(0);
     available_objects.erase(new_obj);
 
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
