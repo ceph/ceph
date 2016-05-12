@@ -228,6 +228,34 @@ For example::
    local cluster's ``rbd-mirror`` daemon process is responsible for performing
    the resync asynchronously.
 
+Mirror Status
+=============
+
+The peer cluster replication status is stored for every primary mirrored image.
+This status can be retrieved using the ``mirror image status`` and
+``mirror pool status`` commands.
+
+To request the mirror image status with ``rbd``, specify the
+``mirror image status`` command along with the pool and image name::
+
+        rbd mirror image status {pool-name}/{image-name}
+
+For example::
+
+        rbd mirror image status image-pool/image-1
+
+To request the mirror pool summary status with ``rbd``, specify the
+``mirror pool status`` command along with the pool name::
+
+        rbd mirror pool status {pool-name}
+
+For example::
+
+        rbd mirror image status image-pool
+
+.. note:: Adding ``--verbose`` option to the ``mirror pool status`` command will
+   additionally output status details for every mirroring image in the pool.
+
 rbd-mirror Daemon
 =================
 
