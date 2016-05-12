@@ -888,8 +888,13 @@ fi
 if ! getent passwd ceph >/dev/null ; then
     CEPH_USER_ID_OPTION=""
     getent passwd $CEPH_USER_ID >/dev/null || CEPH_USER_ID_OPTION="-u $CEPH_USER_ID"
-    useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
+    useradd ceph $CEPH_USER_ID_OPTION -r -g ceph -s /sbin/nologin 2>/dev/null || :
 fi
+usermod -c "Ceph storage service" \
+        -d %{_localstatedir}/lib/ceph \
+        -g ceph \
+        -s /sbin/nologin \
+        ceph
 # fix ownership of log files
 [ -d /var/log/ceph ] || exit 0
 [ "$(stat -c %U /var/log/ceph)" = "ceph" ] && exit 0
