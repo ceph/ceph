@@ -1943,6 +1943,24 @@ public:
 
 };
 
+class OSD::C_Tick : public Context {
+  OSD *osd;
+  public:
+  explicit C_Tick(OSD *o) : osd(o) {}
+  void finish(int r) {
+    osd->tick();
+  }
+};
+
+class OSD::C_Tick_WithoutOSDLock : public Context {
+  OSD *osd;
+  public:
+  explicit C_Tick_WithoutOSDLock(OSD *o) : osd(o) {}
+  void finish(int r) {
+    osd->tick_without_osd_lock();
+  }
+};
+
 int OSD::enable_disable_fuse(bool stop)
 {
 #ifdef HAVE_LIBFUSE
@@ -2833,6 +2851,7 @@ int OSD::update_crush_location()
 
   return 0;
 }
+
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
 {
