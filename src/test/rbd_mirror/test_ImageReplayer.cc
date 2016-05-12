@@ -31,6 +31,7 @@
 #include "tools/rbd_mirror/types.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
 
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
@@ -71,14 +72,15 @@ public:
     }
   };
 
-  TestImageReplayer() : m_watch_handle(0)
+  TestImageReplayer()
+    : m_local_cluster(new librados::Rados()), m_watch_handle(0)
   {
-    EXPECT_EQ("", connect_cluster_pp(m_local_cluster));
-    EXPECT_EQ(0, m_local_cluster.conf_set("rbd_cache", "false"));
+    EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
 
     m_local_pool_name = get_temp_pool_name();
-    EXPECT_EQ(0, m_local_cluster.pool_create(m_local_pool_name.c_str()));
-    EXPECT_EQ(0, m_local_cluster.ioctx_create(m_local_pool_name.c_str(),
+    EXPECT_EQ(0, m_local_cluster->pool_create(m_local_pool_name.c_str()));
+    EXPECT_EQ(0, m_local_cluster->ioctx_create(m_local_pool_name.c_str(),
 					      m_local_ioctx));
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
@@ -102,6 +104,9 @@ public:
 
     m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
+    m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_local_cluster,
+                                                      m_threads->timer,
+                                                      &m_threads->timer_lock));
   }
 
   ~TestImageReplayer()
@@ -117,12 +122,12 @@ public:
     delete m_threads;
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
-    EXPECT_EQ(0, m_local_cluster.pool_delete(m_local_pool_name.c_str()));
+    EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
   }
 
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
-    m_replayer = new ImageReplayerT(m_threads,
+    m_replayer = new ImageReplayerT(m_threads, m_image_deleter,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
       m_local_mirror_uuid, m_remote_mirror_uuid, m_local_ioctx.get_id(),
@@ -332,7 +337,9 @@ public:
   static int _image_number;
 
   rbd::mirror::Threads *m_threads = nullptr;
-  librados::Rados m_local_cluster, m_remote_cluster;
+  std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
+  std::shared_ptr<librados::Rados> m_local_cluster;
+  librados::Rados m_remote_cluster;
   std::string m_local_mirror_uuid = "local mirror uuid";
   std::string m_remote_mirror_uuid = "remote mirror uuid";
   std::string m_local_pool_name, m_remote_pool_name;
