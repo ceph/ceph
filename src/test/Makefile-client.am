@@ -363,6 +363,7 @@ librbd_test_la_SOURCES = \
 	test/librbd/test_internal.cc \
 	test/librbd/test_mirroring.cc \
 	test/librbd/test_ObjectMap.cc \
+	test/librbd/test_ConsistencyGroups.cc \
 	test/librbd/journal/test_Entries.cc \
 	test/librbd/journal/test_Replay.cc
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)

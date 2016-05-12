@@ -9,6 +9,7 @@
 #include <string>
 
 extern void register_test_librbd();
+extern void register_test_consistency_groups();
 #ifdef TEST_LIBRBD_INTERNALS
 extern void register_test_image_watcher();
 extern void register_test_internal();
@@ -21,6 +22,7 @@ extern void register_test_mirroring();
 int main(int argc, char **argv)
 {
   register_test_librbd();
+  register_test_consistency_groups();
 #ifdef TEST_LIBRBD_INTERNALS
   register_test_image_watcher();
   register_test_internal();
