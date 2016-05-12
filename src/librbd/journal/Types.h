@@ -483,6 +483,18 @@ std::ostream &operator<<(std::ostream &out, const MirrorPeerState &meta);
 std::ostream &operator<<(std::ostream &out, const MirrorPeerClientMeta &meta);
 std::ostream &operator<<(std::ostream &out, const TagData &tag_data);
 
+enum class ListenerType : int8_t {
+  RESYNC
+};
+
+struct ResyncListener {
+  virtual ~ResyncListener() {}
+  virtual void handle_resync() = 0;
+};
+
+typedef boost::variant<ResyncListener *> JournalListenerPtr;
+
+
 } // namespace journal
 } // namespace librbd
 
