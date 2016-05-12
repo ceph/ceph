@@ -197,16 +197,6 @@ Upgrading from Infernalis or Hammer
 
 * The 'ceph mds setmap' command has been removed.
 
-* The default RBD image features for new images have been updated to
-  enable the following: exclusive lock, object map, fast-diff, and
-  deep-flatten. These features are not currently supported by the RBD
-  kernel driver nor older RBD clients. They can be disabled on a per-image
-  basis via the RBD CLI, or the default features can be updated to the
-  pre-Jewel setting by adding the following to the client section of the Ceph
-  configuration file::
-
-    rbd default features = 1
-
 * The rbd legacy image format (version 1) is deprecated with the Jewel
   release.
 

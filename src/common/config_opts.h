@@ -1190,11 +1190,9 @@ OPTION(rbd_default_format, OPT_INT, 2)
 OPTION(rbd_default_order, OPT_INT, 22)
 OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 feature
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
-OPTION(rbd_default_features, OPT_INT, 61)   // only applies to format 2 images
-					    // +1 for layering, +2 for stripingv2,
-					    // +4 for exclusive lock, +8 for object map
-					    // +16 for fast-diff, +32 for deep-flatten,
-					    // +64 for journaling
+OPTION(rbd_default_features, OPT_INT, 3) // only applies to format 2 images
+					 // +1 for layering, +2 for stripingv2,
+					 // +4 for exclusive lock, +8 for object map
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
 
