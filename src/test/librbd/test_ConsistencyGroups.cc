@@ -140,4 +140,10 @@ TEST_F(TestLibCG, create_cg)
   ASSERT_EQ(0, rbd.list_cgs(ioctx, cgs));
   ASSERT_EQ(1, cgs.size());
   ASSERT_EQ("mycg", cgs[0]);
+
+  ASSERT_EQ(0, rbd.remove_cg(ioctx, "mycg"));
+
+  cgs.clear();
+  ASSERT_EQ(0, rbd.list_cgs(ioctx, cgs));
+  ASSERT_EQ(0, cgs.size());
 }
