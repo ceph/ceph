@@ -1916,7 +1916,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     do_health_to_clog_interval();
     scrub_event_start();
   }
-  collect_sys_info(&metadata[rank], g_ceph_context);
+
+  Metadata my_meta;
+  collect_sys_info(&my_meta, g_ceph_context);
+  update_mon_metadata(rank, my_meta);
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -4410,7 +4413,7 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
 
 void Monitor::update_mon_metadata(int from, const Metadata& m)
 {
-  metadata[from] = m;
+  pending_metadata[from] = m;
 
   bufferlist bl;
   int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
@@ -4418,12 +4421,12 @@ void Monitor::update_mon_metadata(int from, const Metadata& m)
   if (!err) {
     bufferlist::iterator iter = bl.begin();
     ::decode(last_metadata, iter);
-    metadata.insert(last_metadata.begin(), last_metadata.end());
+    pending_metadata.insert(last_metadata.begin(), last_metadata.end());
   }
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   bl.clear();
-  ::encode(metadata, bl);
+  ::encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
