@@ -30,7 +30,7 @@ class TestSessionMap(CephFSTestCase):
         remote = self.fs.mds_daemons[mds_id].remote
 
         ps_txt = remote.run(
-            args=["ps", "axo", "cmd,nlwp"],
+            args=["ps", "-ww", "axo", "nlwp,cmd"],
             stdout=StringIO()
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
@@ -39,7 +39,7 @@ class TestSessionMap(CephFSTestCase):
             if line.find("ceph-mds") != -1:
                 if line.find("-i {0}".format(mds_id)) != -1:
                     log.info("Found ps line for daemon: {0}".format(line))
-                    return int(line.split()[-1])
+                    return int(line.split()[0])
 
         raise RuntimeError("No process found in ps output for MDS {0}: {1}".format(
             mds_id, ps_txt
