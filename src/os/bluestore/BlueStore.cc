@@ -791,6 +791,7 @@ const char **BlueStore::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "bluestore_csum",
     "bluestore_csum_type",
+    "bluestore_min_alloc_size",
     NULL
   };
   return KEYS;
@@ -809,6 +810,9 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
     dout(10) << __func__ << " csum_type "
 	     << bluestore_blob_t::get_csum_type_string(csum_type)
 	     << dendl;
+  }
+  if (changed.count("bluestore_min_alloc_size")) {
+    min_alloc_size = g_conf->bluestore_min_alloc_size;
   }
 }
 
@@ -984,7 +988,7 @@ int BlueStore::_open_bdev(bool create)
   block_size = bdev->get_block_size();
   block_mask = ~(block_size - 1);
   block_size_order = 0;
-  for (uint64_t t = 1; t < block_size; ++t) {
+  for (uint64_t t = 1; t < block_size; t <<= 1) {
     ++block_size_order;
   }
   return 0;

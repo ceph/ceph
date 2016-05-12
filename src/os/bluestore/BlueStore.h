@@ -598,6 +598,8 @@ private:
   uint64_t block_mask;     ///< mask to get just the block offset
   size_t block_size_order; ///< bits to shift to get block size
 
+  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
+
   // --------------------------------------------------------
   // private methods
 
