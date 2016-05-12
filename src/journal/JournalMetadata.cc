@@ -587,7 +587,7 @@ void JournalMetadata::get_tags(const boost::optional<uint64_t> &tag_class,
   ctx->send();
 }
 
-void JournalMetadata::add_listener(Listener *listener) {
+void JournalMetadata::add_listener(JournalMetadataListener *listener) {
   Mutex::Locker locker(m_lock);
   while (m_update_notifications > 0) {
     m_update_cond.Wait(m_lock);
@@ -595,7 +595,7 @@ void JournalMetadata::add_listener(Listener *listener) {
   m_listeners.push_back(listener);
 }
 
-void JournalMetadata::remove_listener(Listener *listener) {
+void JournalMetadata::remove_listener(JournalMetadataListener *listener) {
   Mutex::Locker locker(m_lock);
   while (m_update_notifications > 0) {
     m_update_cond.Wait(m_lock);
