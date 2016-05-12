@@ -979,6 +979,14 @@ int BlueStore::_open_bdev(bool create)
     if (r < 0)
       goto fail_close;
   }
+
+  // initialize global block parameters
+  block_size = bdev->get_block_size();
+  block_mask = ~(block_size - 1);
+  block_size_order = 0;
+  for (uint64_t t = 1; t < block_size; ++t) {
+    ++block_size_order;
+  }
   return 0;
 
  fail_close:
@@ -2561,7 +2569,6 @@ void BlueStore::_sync()
 int BlueStore::statfs(struct statfs *buf)
 {
   memset(buf, 0, sizeof(*buf));
-  uint64_t block_size  = bdev->get_block_size();
   uint64_t bluefs_len = 0;
   for (interval_set<uint64_t>::iterator p = bluefs_extents.begin();
       p != bluefs_extents.end(); p++)

@@ -594,6 +594,10 @@ private:
   Checksummer *checksummer;
   int csum_type;
 
+  uint64_t block_size;     ///< block size of block device (power of 2)
+  uint64_t block_mask;     ///< mask to get just the block offset
+  size_t block_size_order; ///< bits to shift to get block size
+
   // --------------------------------------------------------
   // private methods
 
