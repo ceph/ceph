@@ -289,6 +289,37 @@ int RGWRadosGetOmapKeysCR::send_request() {
   return ioctx.aio_operate(oid, cn->completion(), &op, NULL);
 }
 
+RGWRadosRemoveOmapKeysCR::RGWRadosRemoveOmapKeysCR(RGWRados *_store,
+                      const rgw_bucket& _pool, const string& _oid,
+                      const set<string>& _keys) : RGWSimpleCoroutine(_store->ctx()),
+                                                store(_store),
+                                                keys(_keys),
+                                                pool(_pool), oid(_oid), cn(NULL)
+{
+  set_description() << "remove omap keys dest=" << pool.name << "/" << oid << " keys=" << keys;
+}
+
+RGWRadosRemoveOmapKeysCR::~RGWRadosRemoveOmapKeysCR()
+{
+}
+
+int RGWRadosRemoveOmapKeysCR::send_request() {
+  librados::Rados *rados = store->get_rados_handle();
+  int r = rados->ioctx_create(pool.name.c_str(), ioctx); /* system object only! */
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to open pool (" << pool.name << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "send request";
+
+  librados::ObjectWriteOperation op;
+  op.omap_rm_keys(keys);
+
+  cn = stack->create_completion_notifier();
+  return ioctx.aio_operate(oid, cn->completion(), &op);
+}
+
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                       const rgw_bucket& _pool, const string& _oid, const string& _lock_name,
                       const string& _cookie,
