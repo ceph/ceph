@@ -102,7 +102,7 @@ activate-all
 ------------
 
 Activate all tagged OSD partitions. ``activate-all`` relies on
-``/dev/disk/by-parttype-uuid/$typeuuid.$uuid`` to find all partitions. Special
+``/dev/disk/by-parttypeuuid/$typeuuid.$uuid`` to find all partitions. Special
 ``udev`` rules are installed to create these links. It is triggered on ceph
 service start or run directly.
 
