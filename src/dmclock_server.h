@@ -867,10 +867,10 @@ namespace crimson {
       }
 
 
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params,
+			      const Time time) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
@@ -878,9 +878,9 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
+      inline void add_request(typename super::RequestRef&& request,
+			      const C& client_id,
+			      const ReqParams& req_params) {
 	add_request(request, req_params, client_id, get_time());
       }
 
@@ -902,7 +902,7 @@ namespace crimson {
       }
 
 
-      PullReq pull_request() {
+      inline PullReq pull_request() {
 	return pull_request(get_time());
       }
 
@@ -1077,9 +1077,9 @@ namespace crimson {
 
     public:
 
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
@@ -1087,17 +1087,17 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
+      inline void add_request(typename super::RequestRef&& request,
+			      const C& client_id,
+			      const ReqParams& req_params) {
 	add_request(request, req_params, client_id, get_time());
       }
 
 
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params,
+			      const Time time) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
