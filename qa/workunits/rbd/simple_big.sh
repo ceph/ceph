@@ -1,7 +1,5 @@
 #!/bin/sh -ex
 
-[ -d /sys/bus/rbd ] || sudo modprobe rbd
-
 mb=100000
 
 rbd create foo --size $mb
