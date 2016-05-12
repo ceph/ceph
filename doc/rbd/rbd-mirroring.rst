@@ -212,10 +212,10 @@ For example::
 Force Image Resync
 ------------------
 
-If a split-brain event is detected by the ``rbd-daemon``, it will not attempt
-to mirror the affected image until corrected. To resume mirroring for an image,
-first `demote the image`_ determined to be out-of-date and then request a resync
-to the primary image. To request an image resync with ``rbd``, specify the
+If a split-brain event is detected by the ``rbd-mirror`` daemon, it will not
+attempt to mirror the affected image until corrected. To resume mirroring for an
+image, first `demote the image`_ determined to be out-of-date and then request a
+resync to the primary image. To request an image resync with ``rbd``, specify the
 ``mirror image resync`` command along with the pool and image name::
 
         rbd mirror image resync {pool-name}/{image-name}
