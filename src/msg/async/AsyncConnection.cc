@@ -1046,9 +1046,12 @@ ssize_t AsyncConnection::_process_connection()
           ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
           goto fail;
         } else if (r > 0) {
+          ldout(async_msgr->cct, 10) << __func__ << " nonblock connect inprogress" << dendl;
+          center->create_file_event(sd, EVENT_WRITABLE, read_handler);
           break;
         }
 
+        center->delete_file_event(sd, EVENT_WRITABLE);
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
