@@ -524,7 +524,7 @@ Execute the following steps:
 
     bucket = conn.create_bucket('my-new-bucket')
         for bucket in conn.get_all_buckets():
-                print "{name}".format(
+                print "{name} {created}".format(
                         name = bucket.name,
                         created = bucket.creation_date,
      )
