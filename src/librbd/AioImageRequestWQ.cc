@@ -399,7 +399,7 @@ int AioImageRequestWQ::start_in_flight_op(AioCompletion *c) {
     lderr(cct) << "IO received on closed image" << dendl;
 
     c->get();
-    c->fail(cct, -ESHUTDOWN);
+    c->fail(-ESHUTDOWN);
     return false;
   }
 
