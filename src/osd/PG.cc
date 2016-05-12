@@ -7877,19 +7877,20 @@ PG::PriorSet::PriorSet(bool ec_pool,
       int o = interval.acting[i];
       if (o == CRUSH_ITEM_NONE)
 	continue;
-      pg_shard_t so(o, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
 
-      const osd_info_t *pinfo = 0;
-      if (osdmap.exists(o))
-	pinfo = &osdmap.get_info(o);
+      if (!osdmap.exists(o)) {
+        dout(10) << "build_prior  prior osd." << o
+                 << " no longer exists" << dendl;
+        continue;
+      }
+
+      pg_shard_t so(o, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
+      const osd_info_t *pinfo = &osdmap.get_info(o);
 
       if (osdmap.is_up(o)) {
 	// include past acting osds if they are up.
 	probe.insert(so);
 	up_now.insert(so);
-      } else if (!pinfo) {
-	dout(10) << "build_prior  prior osd." << o << " no longer exists" << dendl;
-	down.insert(o);
       } else if (pinfo->lost_at > interval.first) {
 	dout(10) << "build_prior  prior osd." << o << " is down, but lost_at " << pinfo->lost_at << dendl;
 	up_now.insert(so);
