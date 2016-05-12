@@ -1204,8 +1204,10 @@ err_remove_id:
 
     std::vector<std::pair<std::string, int64_t>> images;
     int r = cg_list_images(io_ctx, cg_name, images);
-    if (r < 0)
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error listing cg images" << dendl;
       return r;
+    }
 
     for (auto i : images) {
       librados::Rados rados(io_ctx);
@@ -1213,24 +1215,39 @@ err_remove_id:
       rados.ioctx_create2(std::get<1>(i), image_ioctx);
       std::string image_name = std::get<0>(i);
       r = cg_remove_image(io_ctx, cg_name, image_ioctx, image_name.c_str());
-      if (r < 0) {
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "error removing cg image" << dendl;
 	return r;
       }
     }
 
+    r = io_ctx.remove(util::id_cg_name(cg_name));
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing cg id object" << dendl;
+      return r;
+    }
+
     std::string cg_id;
     r = cls_client::dir_get_id(&io_ctx, CG_DIRECTORY, std::string(cg_name), &cg_id);
-    if (r < 0)
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error getting id of cg" << dendl;
       return r;
+    }
 
     r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
 					 cg_name, cg_id);
-    if (r < 0)
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing cg from directory" << dendl;
       return r;
+    }
 
-    r = io_ctx.remove(cg_id);
-    if (r < 0)
+    string header_oid = util::cg_header_name(cg_id);
+
+    r = io_ctx.remove(header_oid);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
       return r;
+    }
 
     return 0;
   }

@@ -99,7 +99,11 @@ int execute_remove(const po::variables_map &vm) {
   }
   librbd::RBD rbd;
 
-  //TODO implement removal of the group
+  r = rbd.remove_cg(io_ctx, cg_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: remove error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
 
   return 0;
 }
