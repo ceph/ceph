@@ -1210,45 +1210,43 @@ void OSDMap::clean_temps(CephContext *cct,
       continue;
     }
     // redundant pg_temp?
-    if (pending_inc->new_pg_temp.count(p->first) == 0) {
-      vector<int> raw_up;
-      int primary;
-      tmpmap.pg_to_raw_up(p->first, &raw_up, &primary);
-      if (raw_up == p->second) {
-        ldout(cct, 10) << __func__ << "  removing pg_temp " << p->first << " "
-		       << p->second << " that matches raw_up mapping" << dendl;
-        pending_inc->new_pg_temp[p->first].clear();
-	continue;
-      }
+    vector<int> raw_up;
+    int primary;
+    tmpmap.pg_to_raw_up(p->first, &raw_up, &primary);
+    if (raw_up == p->second) {
+      ldout(cct, 10) << __func__ << "  removing pg_temp " << p->first << " "
+		     << p->second << " that matches raw_up mapping" << dendl;
+      if (osdmap.pg_temp->count(p->first))
+	pending_inc->new_pg_temp[p->first].clear();
+      else
+	pending_inc->new_pg_temp.erase(p->first);
     }
   }
-  map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
-  while (p != tmpmap.primary_temp->end()) {
+  for (map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
+       p != tmpmap.primary_temp->end();
+       ++p) {
     // primary down?
     if (tmpmap.is_down(p->second)) {
       ldout(cct, 10) << __func__ << "  removing primary_temp " << p->first
 		     << " to down " << p->second << dendl;
       pending_inc->new_primary_temp[p->first] = -1;
-      ++p;
       continue;
     }
     // redundant primary_temp?
-    if (pending_inc->new_primary_temp.count(p->first) == 0) {
-      vector<int> real_up, templess_up;
-      int real_primary, templess_primary;
-      pg_t pgid = p->first;
-      tmpmap.pg_to_acting_osds(pgid, &real_up, &real_primary);
-      tmpmap.primary_temp->erase(p++);
-      tmpmap.pg_to_acting_osds(pgid, &templess_up, &templess_primary);
-      if (real_primary == templess_primary){
-	ldout(cct, 10) << __func__ << "  removing primary_temp "
-		       << pgid << " -> " << real_primary
-		       << " (unnecessary/redundant)" << dendl;
+    vector<int> real_up, templess_up;
+    int real_primary, templess_primary;
+    pg_t pgid = p->first;
+    tmpmap.pg_to_acting_osds(pgid, &real_up, &real_primary);
+    tmpmap.pg_to_raw_up(pgid, &templess_up, &templess_primary);
+    if (real_primary == templess_primary){
+      ldout(cct, 10) << __func__ << "  removing primary_temp "
+		     << pgid << " -> " << real_primary
+		     << " (unnecessary/redundant)" << dendl;
+      if (osdmap.primary_temp->count(pgid))
 	pending_inc->new_primary_temp[pgid] = -1;
-      }
-      continue;  // we incremented p above
+      else
+	pending_inc->new_primary_temp.erase(pgid);
     }
-    ++p;
   }
 }
 

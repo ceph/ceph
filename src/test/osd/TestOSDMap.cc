@@ -253,26 +253,37 @@ TEST_F(OSDMapTest, PrimaryTempRespected) {
 TEST_F(OSDMapTest, CleanTemps) {
   set_up_map();
 
-  pg_t rawpg(0, 0, -1);
-  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
-  vector<int> up_osds, acting_osds;
-  int up_primary, acting_primary;
-
-  osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
-                              &acting_osds, &acting_primary);
-
-  // stick calculated values in to temps
   OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
-  pgtemp_map.new_pg_temp[pgid] = up_osds;
-  pgtemp_map.new_primary_temp[pgid] = up_primary;
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 2);
+  pg_t pga = osdmap.raw_pg_to_pg(pg_t(0, 0));
+  {
+    vector<int> up_osds, acting_osds;
+    int up_primary, acting_primary;
+    osdmap.pg_to_up_acting_osds(pga, &up_osds, &up_primary,
+				&acting_osds, &acting_primary);
+    pgtemp_map.new_pg_temp[pga] = up_osds;
+    pgtemp_map.new_primary_temp[pga] = up_primary;
+  }
+  pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, 0));
+  {
+    vector<int> up_osds, acting_osds;
+    int up_primary, acting_primary;
+    osdmap.pg_to_up_acting_osds(pgb, &up_osds, &up_primary,
+				&acting_osds, &acting_primary);
+    pending_inc.new_pg_temp[pgb] = up_osds;
+    pending_inc.new_primary_temp[pgb] = up_primary;
+  }
+
   osdmap.apply_incremental(pgtemp_map);
 
-  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
   OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
 
-  EXPECT_TRUE(pending_inc.new_pg_temp.count(pgid) &&
-	      pending_inc.new_pg_temp[pgid].size() == 0);
-  EXPECT_EQ(-1, pending_inc.new_primary_temp[pgid]);
+  EXPECT_TRUE(pending_inc.new_pg_temp.count(pga) &&
+	      pending_inc.new_pg_temp[pga].size() == 0);
+  EXPECT_EQ(-1, pending_inc.new_primary_temp[pga]);
+
+  EXPECT_TRUE(!pending_inc.new_pg_temp.count(pgb) &&
+	      !pending_inc.new_primary_temp.count(pgb));
 }
 
 TEST_F(OSDMapTest, KeepsNecessaryTemps) {
