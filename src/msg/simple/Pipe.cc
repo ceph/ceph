@@ -472,13 +472,21 @@ int Pipe::accept()
 	 *  held by somebody trying to make use of the SimpleMessenger lock.
 	 *  So drop locks, wait, and retry. It just looks like a slow network
 	 *  to everybody else.
+	 *
+	 *  We take a ref to existing here since it might get reaped before we
+	 *  wake up (see bug #15870).  We can be confident that it lived until
+	 *  locked it since we held the msgr lock from _lookup_pipe through to
+	 *  locking existing->lock and checking reader_dispatching.
 	 */
+	existing->get();
 	pipe_lock.Unlock();
 	msgr->lock.Unlock();
 	existing->notify_on_dispatch_done = true;
 	while (existing->reader_dispatching)
 	  existing->cond.Wait(existing->pipe_lock);
 	existing->pipe_lock.Unlock();
+	existing->put();
+	existing = nullptr;
 	goto retry_existing_lookup;
       }
 
