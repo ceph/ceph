@@ -21,4 +21,5 @@ packages:
  - wget
  - git
  - ntp
+ - rsyslog
 final_message: "{up}, after $UPTIME seconds"
