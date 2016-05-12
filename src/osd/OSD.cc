@@ -1947,7 +1947,7 @@ class OSD::C_Tick : public Context {
   OSD *osd;
   public:
   explicit C_Tick(OSD *o) : osd(o) {}
-  void finish(int r) {
+  void finish(int r) override {
     osd->tick();
   }
 };
@@ -1956,7 +1956,7 @@ class OSD::C_Tick_WithoutOSDLock : public Context {
   OSD *osd;
   public:
   explicit C_Tick_WithoutOSDLock(OSD *o) : osd(o) {}
-  void finish(int r) {
+  void finish(int r) override {
     osd->tick_without_osd_lock();
   }
 };
