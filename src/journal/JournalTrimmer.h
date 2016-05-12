@@ -33,7 +33,7 @@ public:
 private:
   typedef std::function<Context*()> CreateContext;
 
-  struct MetadataListener : public JournalMetadata::Listener {
+  struct MetadataListener : public JournalMetadataListener {
     JournalTrimmer *journal_trimmmer;
 
     MetadataListener(JournalTrimmer *journal_trimmmer)

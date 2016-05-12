@@ -244,6 +244,14 @@ void Journaler::flush_commit_position(Context *on_safe) {
   m_metadata->flush_commit_position(on_safe);
 }
 
+void Journaler::add_listener(JournalMetadataListener *listener) {
+  m_metadata->add_listener(listener);
+}
+
+void Journaler::remove_listener(JournalMetadataListener *listener) {
+  m_metadata->remove_listener(listener);
+}
+
 int Journaler::register_client(const bufferlist &data) {
   C_SaferCond cond;
   register_client(data, &cond);
