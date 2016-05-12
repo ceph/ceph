@@ -892,6 +892,50 @@ public:
 
 private:
   // --------------------------------------------------------
+  // intermediate data structures used while reading
+  struct region_t {
+    uint64_t logical_offset;
+    uint64_t blob_xoffset;   //region offset within the blob
+    uint64_t ext_xoffset;    //region offset within the pextent
+    uint64_t length;
+
+    region_t(uint64_t offset, uint64_t b_offs, uint64_t x_offs, uint32_t len)
+      : logical_offset(offset),
+      blob_xoffset(b_offs),
+      ext_xoffset(x_offs),
+      length(len) {}
+    region_t(const region_t& from)
+      : logical_offset(from.logical_offset),
+      blob_xoffset(from.blob_xoffset),
+      ext_xoffset(from.ext_xoffset),
+      length(from.length) {}
+  };
+  typedef list<region_t> regions2read_t;
+  typedef map<const bluestore_blob_t*, regions2read_t> blobs2read_t;
+  typedef map<const bluestore_pextent_t*, regions2read_t> extents2read_t;
+  typedef map<uint64_t, bufferlist> ready_regions_t;
+
+  int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool buffered, bufferlist* result);
+  int _read_extent_sparse(
+    const bluestore_blob_t* blob,
+    const bluestore_pextent_t* extent,
+    regions2read_t::const_iterator cur,
+    regions2read_t::const_iterator end,
+    OnodeRef o,
+    bool buffered,
+    ready_regions_t* result);
+
+  int _blob2read_to_extents2read(
+    const bluestore_blob_t* blob,
+    regions2read_t::const_iterator cur,
+    regions2read_t::const_iterator end,
+    extents2read_t* result);
+
+  int _verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const;
+  int _decompress(const bufferlist& source, bufferlist* result);
+
+
+  // --------------------------------------------------------
   // write ops
 
   int _do_transaction(Transaction *t,

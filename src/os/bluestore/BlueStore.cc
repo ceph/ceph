@@ -2763,12 +2763,11 @@ int BlueStore::_do_read(
   bufferlist& bl,
   uint32_t op_flags)
 {
-  map<uint64_t,bluestore_lextent_t>::iterator bp, bend;
-  map<uint64_t,bluestore_overlay_t>::iterator op, oend;
+  map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
   uint64_t block_size = bdev->get_block_size();
   int r = 0;
-  IOContext ioc(NULL);   // FIXME?
-  BnodeRef bnode;
+//  IOContext ioc(NULL);   // FIXME?
+//  BnodeRef bnode;
 
   // generally, don't buffer anything, unless the client explicitly requests
   // it.
@@ -2789,8 +2788,10 @@ int BlueStore::_do_read(
   bl.clear();
   _dump_onode(o);
 
-  if (offset > o->onode.size) {
-    goto out;
+  auto& lextents = o->onode.extent_map;
+
+  if (offset >= o->onode.size) {
+    return r;
   }
 
   if (offset + length > o->onode.size) {
@@ -2799,126 +2800,298 @@ int BlueStore::_do_read(
 
   o->flush();
 
-  // loop over overlays and data fragments.  overlays take precedence.
-  bend = o->onode.extent_map.end();
-  bp = o->onode.extent_map.lower_bound(offset);
-  if (bp != o->onode.extent_map.begin()) {
-    --bp;
+  auto lext = lextents.upper_bound(offset);
+  uint32_t l = length;
+  uint64_t off = offset;
+  if (lext == lextents.begin() && offset + length <= lext->first) {
+    bl.append_zero(length);
+    return length;
+  } else if (lext == lextents.begin()) {
+    off = lext->first;
+    l -= lext->first - offset;
+  } else {
+    --lext;
   }
-  oend = o->onode.overlay_map.end();
-  op = o->onode.overlay_map.lower_bound(offset);
-  if (op != o->onode.overlay_map.begin()) {
-    --op;
+
+  //build blob list to read
+  blobs2read_t blobs2read;
+  while (l > 0 && lext != lextents.end()) {
+    //bluestore_blob_t* bptr = get_blob(lext->second.blob);
+    const bluestore_blob_t *bptr = c->get_blob_ptr(o, lext->second.blob);
+    assert(bptr != nullptr);
+    uint32_t l2read;
+    if (off >= lext->first && off < lext->first + lext->second.length) {
+      uint32_t r_off = off - lext->first;
+      l2read = MIN(l, lext->second.length - r_off);
+      regions2read_t& regions = blobs2read[bptr];
+      regions.push_back(region_t(off, r_off + lext->second.offset, 0, l2read));
+      ++lext;
+    } else if (off >= lext->first + lext->second.length) {
+      //handling the case when the first lookup get into the previous block due to the hole
+      l2read = 0;
+      ++lext;
+    } else {
+      //hole found
+      l2read = MIN(l, lext->first - off);
+    }
+    off += l2read;
+    l -= l2read;
   }
-  while (length > 0) {
-    if (op != oend && op->first + op->second.length < offset) {
-      dout(20) << __func__ << " skip overlay " << op->first << " " << op->second
-	       << dendl;
-      ++op;
-      continue;
-    }
-    if (bp != bend && bp->first + bp->second.length <= offset) {
-      dout(30) << __func__ << " skip lextent " << bp->first << " " << bp->second
-	       << dendl;
-      ++bp;
-      continue;
-    }
 
-    // overlay?
-    if (op != oend && op->first <= offset) {
-      uint64_t x_off = offset - op->first + op->second.value_offset;
-      uint64_t x_len = MIN(op->first + op->second.length - offset, length);
-      dout(20) << __func__ << "  overlay 0x" << std::hex << op->first << std::dec
-	       << " " << op->second << std::hex
-	       << " use 0x" << x_off << "~0x" << x_len << std::dec << dendl;
-      bufferlist v;
-      string key;
-      get_overlay_key(o->onode.nid, op->second.key, &key);
-      r = db->get(PREFIX_OVERLAY, key, &v);
-      if (r < 0) {
-        derr << " failed to fetch overlay(nid = " << o->onode.nid
-             << ", key = " << key 
-             << "): " << cpp_strerror(r) << dendl;
-        goto out;
-      }
-      bufferlist frag;
-      frag.substr_of(v, x_off, x_len);
-      bl.claim_append(frag);
-      ++op;
-      length -= x_len;
-      offset += x_len;
-      continue;
-    }
-    unsigned x_len = length;
-    if (op != oend &&
-	op->first > offset &&
-	op->first - offset < x_len) {
-      x_len = op->first - offset;
-    }
+  ready_regions_t ready_regions;
 
-    // extent?
-    if (bp != bend && bp->first <= offset) {
-      uint64_t x_off = offset - bp->first;
-      x_len = MIN(x_len, bp->second.length - x_off);
-      uint64_t p_off = x_off + bp->second.offset;
-      bluestore_blob_t *b = c->get_blob_ptr(o, bp->second.blob);
-      dout(30) << __func__ << " lextent 0x" << std::hex << bp->first << std::dec
-	       << ": " << bp->second
-	       << " use 0x" << std::hex << p_off << "~0x" << x_len << std::dec
-	       << " blob " << bp->second.blob << " " << *b
-	       << dendl;
-      vector<bluestore_pextent_t>::iterator p = b->extents.begin();
-      while (x_len > 0) {
-	assert(p != b->extents.end());
-	if (p_off >= p->length) {
-	  p_off -= p->length;
-	  ++p;
-	  continue;
-	}
-	uint64_t p_len = MIN(p->length - p_off, x_len);
-	uint64_t front_extra = p_off % block_size;
-	uint64_t r_off = p_off - front_extra;
-	uint64_t r_len = ROUND_UP_TO(p_len + front_extra, block_size);
-	dout(30) << __func__ << "  reading 0x" << std::hex << r_off << "~0x"
-		 << r_len << std::dec
-		 << " from " << *p << dendl;
-	bufferlist t;
-	r = bdev->read(r_off + p->offset, r_len, &t, &ioc, buffered);
+  //enumerate and read/decompress desired blobs
+  blobs2read_t::iterator b2r_it = blobs2read.begin();
+  while (b2r_it != blobs2read.end()) {
+    const bluestore_blob_t* bptr = b2r_it->first;
+    regions2read_t r2r = b2r_it->second;
+    regions2read_t::const_iterator r2r_it = r2r.cbegin();
+    if (bptr->has_flag(bluestore_blob_t::FLAG_COMPRESSED)) {
+      bufferlist compressed_bl, raw_bl;
+
+      int r = _read_whole_blob(bptr, o, buffered, &compressed_bl);
+      if (r < 0)
+	return r;
+      if (bptr->csum_type != bluestore_blob_t::CSUM_NONE) {
+	r = _verify_csum(bptr, 0, compressed_bl);
 	if (r < 0) {
-	  goto out;
+	  dout(20) << __func__ << "  blob reading " << r2r_it->logical_offset << "~" << bptr->length << " csum verification failed." << dendl;
+	  return r;
 	}
-	r = r_len;
-	bufferlist u;
-	u.substr_of(t, front_extra, p_len);
-	bl.claim_append(u);
-	offset += p_len;
-	length -= p_len;
-	p_off = 0;
-	x_off += p_len;
-	x_len -= p_len;
-	++p;
       }
-      if (x_off == bp->second.length) {
-	++bp;
-      }
-      continue;
-    }
-    if (bp != bend &&
-	bp->first > offset &&
-	bp->first - offset < x_len) {
-      x_len = bp->first - offset;
-    }
 
-    // zero.
-    dout(30) << __func__ << " zero 0x" << std::hex << offset << "~0x" << x_len
-	     << std::dec << dendl;
-    bl.append_zero(x_len);
-    offset += x_len;
-    length -= x_len;
+      r = _decompress(compressed_bl, &raw_bl);
+      if (r < 0)
+	return r;
+
+      while (r2r_it != r2r.end()) {
+	ready_regions[r2r_it->logical_offset].substr_of(raw_bl, r2r_it->blob_xoffset, r2r_it->length);
+	++r2r_it;
+      }
+    } else {
+      extents2read_t e2r;
+      int r = _blob2read_to_extents2read(bptr, r2r_it, r2r.cend(), &e2r);
+      if (r < 0)
+	return r;
+
+      extents2read_t::const_iterator it = e2r.cbegin();
+      while (it != e2r.cend()) {
+	int r = _read_extent_sparse(bptr, it->first, it->second.cbegin(), it->second.cend(), o, buffered, &ready_regions);
+	if (r < 0)
+	  return r;
+	++it;
+      }
+    }
+    ++b2r_it;
   }
+
+  //generate a resulting buffer
+  ready_regions_t::iterator rr_it = ready_regions.begin();
+  off = offset;
+
+  while (rr_it != ready_regions.end()) {
+    if (off < rr_it->first)
+      bl.append_zero(rr_it->first - off);
+    off = rr_it->first + rr_it->second.length();
+    assert(off <= offset + length);
+    bl.claim_append(rr_it->second);
+    ++rr_it;
+  }
+  bl.append_zero(offset + length - off);
   r = bl.length();
 
- out:
+  return r;
+}
+
+int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool buffered, bufferlist* result)
+{
+  IOContext ioc(NULL);   // FIXME?
+
+  result->clear();
+
+  uint64_t block_size = bdev->get_block_size();
+
+  uint32_t l = blob->length;
+  uint64_t ext_pos = 0;
+  auto it = blob->extents.cbegin();
+  while (it != blob->extents.cend() && l > 0) {
+    uint32_t r_len = MIN(l, it->length);
+    uint32_t x_len = ROUND_UP_TO(r_len, block_size);
+
+    bufferlist bl;
+    //  dout(30) << __func__ << "  reading " << it->offset << "~" << x_len << dendl;
+    int r = bdev->read(it->offset, x_len, &bl, &ioc, buffered);
+    if (r < 0) {
+      return r;
+    }
+
+    if (x_len == r_len) {
+      result->claim_append(bl);
+    } else {
+      bufferlist u;
+      u.substr_of(bl, 0, r_len);
+      result->claim_append(u);
+    }
+    l -= r_len;
+    ext_pos += it->length;
+    ++it;
+  }
+
+  return 0;
+}
+
+int BlueStore::_read_extent_sparse(
+  const bluestore_blob_t* blob,
+  const bluestore_pextent_t* extent,
+  BlueStore::regions2read_t::const_iterator cur,
+  BlueStore::regions2read_t::const_iterator end,
+  OnodeRef o,
+  bool buffered,
+  BlueStore::ready_regions_t* result)
+{
+  //FIXME: this is a trivial implementation that reads each region independently - can be improved to read neighboring and/or close enough regions together.
+
+  IOContext ioc(NULL);   // FIXME?
+  //uint64_t block_size = get_read_block_size(blob);
+  uint64_t block_size = bdev->get_block_size();
+  if (blob->csum_type != bluestore_blob_t::CSUM_NONE)
+    block_size = MAX(blob->get_csum_block_size(), block_size);
+
+  assert((extent->length % block_size) == 0);   // all physical extents has to be aligned with read block size
+
+  while (cur != end) {
+    assert(cur->ext_xoffset + cur->length <= extent->length);
+
+    uint64_t r_off = cur->ext_xoffset;
+    uint64_t front_extra = r_off % block_size;
+    r_off -= front_extra;
+
+    uint64_t x_len = cur->length;
+    uint64_t r_len = ROUND_UP_TO(x_len + front_extra, block_size);
+
+    //    dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
+    bufferlist bl;
+    int r = bdev->read(r_off + extent->offset, r_len, &bl, &ioc, buffered);
+    if (r < 0) {
+      return r;
+    }
+    r = _verify_csum(blob, cur->blob_xoffset, bl);
+    if (r < 0) {
+      dout(20) << __func__ << "  blob reading " << cur->logical_offset << "~" << blob->length << " csum verification failed." << dendl;
+      return r;
+    }
+
+    bufferlist u;
+    u.substr_of(bl, front_extra, x_len);
+    (*result)[cur->logical_offset].claim_append(u);
+
+    ++cur;
+  }
+  return 0;
+}
+
+int BlueStore::_blob2read_to_extents2read(
+  const bluestore_blob_t* blob,
+  BlueStore::regions2read_t::const_iterator cur,
+  BlueStore::regions2read_t::const_iterator end,
+  BlueStore::extents2read_t* result)
+{
+  result->clear();
+
+  auto ext_it = blob->extents.cbegin();
+  auto ext_end = blob->extents.cend();
+
+  uint64_t ext_pos = 0;
+  uint64_t l = 0;
+  while (cur != end && ext_it != ext_end) {
+
+    assert(cur->ext_xoffset == 0);
+
+    //bypass preceeding extents
+    while (cur->blob_xoffset >= ext_pos + ext_it->length && ext_it != ext_end) {
+      ext_pos += ext_it->length;
+      ++ext_it;
+    }
+    l = cur->length;
+    uint64_t r_offs = cur->blob_xoffset - ext_pos;
+    uint64_t l_offs = cur->logical_offset;
+    while (l > 0 && ext_it != ext_end) {
+
+      assert(blob->length >= ext_pos + r_offs);
+
+      uint64_t r_len = MIN(blob->length - ext_pos - r_offs, ext_it->length - r_offs);
+      if (r_len > 0) {
+	r_len = MIN(r_len, l);
+	const bluestore_pextent_t* eptr = &(*ext_it);
+	regions2read_t& regions = (*result)[eptr];
+	regions.push_back(region_t(l_offs, ext_pos, r_offs, r_len));
+	l -= r_len;
+	l_offs += r_len;
+      }
+
+      //leave extent pointer as-is if current region's been fully processed - lookup will start from it for the next region
+      if (l != 0) {
+	ext_pos += ext_it->length;
+	r_offs = 0;
+	++ext_it;
+      }
+    }
+
+    ++cur;
+    assert(cur == end || l_offs <= cur->logical_offset); //region offsets to be ordered ascending and with no overlaps. Overwise ext_it(ext_pos) to be enumerated from the beginning on each region
+  }
+
+  if (cur != end || l > 0) {
+    assert(l == 0);
+    assert(cur == end);
+    return -EFAULT;
+  }
+  return 0;
+}
+
+int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const
+{
+  uint64_t block_size = blob->get_csum_block_size();
+  size_t csum_len = blob->get_csum_value_size();
+
+  assert((blob_xoffset % block_size) == 0);
+  assert((bl.length() % block_size) == 0);
+
+  uint64_t block0 = blob_xoffset / block_size;
+  uint64_t blocks = bl.length() / block_size;
+
+  assert(blob->csum_data.size() >= (block0 + blocks) * csum_len);
+
+  vector<char> csum_data;
+  csum_data.resize(blob->get_csum_value_size() * blocks);
+
+  vector<char>::const_iterator start = blob->csum_data.cbegin();
+  vector<char>::const_iterator end = blob->csum_data.cbegin();
+  start += block0 * csum_len;
+  end += (block0 + blocks) * csum_len;
+
+//  std::copy(start, end, csum_data.begin());
+
+  checksummer->calculate(
+    blob->csum_type,
+    blob->get_csum_block_size(),
+    0,
+    bl.length(),
+    bl,
+    &csum_data);
+
+  int r = 0; //m_csum_verifier.verify((bluestore_blob_t::CSumType)blob->csum_type, blob->get_csum_value_size(), blob->get_csum_block_size(), bl, opaque, csum_data);
+  if(std::equal(start, end, csum_data.begin())) {
+    r = -1;
+  }
+  return r;
+}
+
+int BlueStore::_decompress(const bufferlist& source, bufferlist* result)
+{
+  int r = 0;
+  //FIXME: just a stub, need to be implemented!
+  result->append(source);
   return r;
 }
 
