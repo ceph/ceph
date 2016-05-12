@@ -125,15 +125,17 @@ class MonMap {
   }
 
   int get_rank(const string& n) {
-    for (unsigned i=0; i<rank_name.size(); i++)
-      if (rank_name[i] == n)
-	return i;
+    vector<string>::iterator iter = std::find(rank_name.begin(), rank_name.end(), n);
+    if(iter != rank_name.end()) {
+      return std::distance(rank_name.begin(), iter);
+    }
     return -1;
   }
   int get_rank(const entity_addr_t& a) {
-    for (unsigned i=0; i<rank_addr.size(); i++)
-      if (rank_addr[i] == a)
-	return i;
+    vector<entity_addr_t>::iterator iter = std::find(rank_addr.begin(), rank_addr.end(), a);
+    if(iter != rank_addr.end()) {
+      return std::distance(rank_addr.begin(), iter);
+    }
     return -1;
   }
   bool get_addr_name(const entity_addr_t& a, string& name) {
