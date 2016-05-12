@@ -2766,8 +2766,6 @@ int BlueStore::_do_read(
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
   uint64_t block_size = bdev->get_block_size();
   int r = 0;
-//  IOContext ioc(NULL);   // FIXME?
-//  BnodeRef bnode;
 
   // generally, don't buffer anything, unless the client explicitly requests
   // it.
@@ -2952,7 +2950,6 @@ int BlueStore::_read_extent_sparse(
   //FIXME: this is a trivial implementation that reads each region independently - can be improved to read neighboring and/or close enough regions together.
 
   IOContext ioc(NULL);   // FIXME?
-  //uint64_t block_size = get_read_block_size(blob);
   uint64_t block_size = bdev->get_block_size();
   if (blob->csum_type != bluestore_blob_t::CSUM_NONE)
     block_size = MAX(blob->get_csum_block_size(), block_size);
@@ -3069,8 +3066,6 @@ int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
   vector<char>::const_iterator end = blob->csum_data.cbegin();
   start += block0 * csum_len;
   end += (block0 + blocks) * csum_len;
-
-//  std::copy(start, end, csum_data.begin());
 
   checksummer->calculate(
     blob->csum_type,
