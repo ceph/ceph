@@ -34,6 +34,15 @@ if(WITH_CCACHE)
   endif(CCACHE_FOUND)
 endif(WITH_CCACHE)
 
+option(WITH_MANPAGE "Build man pages." ON)
+if(WITH_MANPAGE)
+  find_program(SPHINX_BUILD
+    sphinx-build)
+  if(NOT SPHINX_BUILD)
+    message(FATAL_ERROR "Can't find sphinx-build.")
+  endif(NOT SPHINX_BUILD)
+endif(WITH_MANPAGE)
+
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${OFED_PREFIX}/include
@@ -363,5 +372,7 @@ add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 add_subdirectory(src)
 
-# man pages must be preprocessed, not supported yet
-#add_subdirectory(man)
+add_subdirectory(doc)
+if(WITH_MANPAGE)
+  add_subdirectory(man)
+endif(WITH_MANPAGE)
