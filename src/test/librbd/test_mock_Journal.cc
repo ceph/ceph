@@ -293,7 +293,7 @@ public:
     bl.append_zero(length);
 
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
-    return mock_journal.append_write_event(nullptr, 0, length, bl, {}, false);
+    return mock_journal.append_write_event(0, length, bl, {}, false);
   }
 
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
