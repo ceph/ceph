@@ -59,7 +59,7 @@ We rely on /dev/disk/by-partuuid to find partitions by their UUID;
 this is what the journal symlink inside the osd data volume normally
 points to.
 
-activate-all relies on /dev/disk/by-parttype-uuid/$typeuuid.$uuid to
+activate-all relies on /dev/disk/by-parttypeuuid/$typeuuid.$uuid to
 find all partitions.  We install special udev rules to create these
 links.
 
