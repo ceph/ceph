@@ -173,7 +173,7 @@ namespace librbd {
           // release reference to the parent read completion.  this request
           // might be completed after unblock is invoked.
           AioCompletion *parent_completion = m_parent_completion;
-          parent_completion->unblock(m_ictx->cct);
+          parent_completion->unblock();
           parent_completion->put();
         }
       }

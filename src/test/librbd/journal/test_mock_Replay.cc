@@ -77,11 +77,11 @@ ACTION_P2(NotifyInvoke, lock, cond) {
 }
 
 ACTION_P2(CompleteAioCompletion, r, image_ctx) {
-  CephContext *cct = image_ctx->cct;
-  image_ctx->op_work_queue->queue(new FunctionContext([cct, arg0](int r) {
+  image_ctx->op_work_queue->queue(new FunctionContext([this, arg0](int r) {
       arg0->get();
-      arg0->set_request_count(cct, 1);
-      arg0->complete_request(cct, r);
+      arg0->init_time(image_ctx, librbd::AIO_TYPE_NONE);
+      arg0->set_request_count(1);
+      arg0->complete_request(r);
     }), r);
 }
 
@@ -217,8 +217,9 @@ public:
   void when_complete(MockReplayImageCtx &mock_image_ctx, AioCompletion *aio_comp,
                      int r) {
     aio_comp->get();
-    aio_comp->set_request_count(mock_image_ctx.cct, 1);
-    aio_comp->complete_request(mock_image_ctx.cct, r);
+    aio_comp->init_time(mock_image_ctx.image_ctx, librbd::AIO_TYPE_NONE);
+    aio_comp->set_request_count(1);
+    aio_comp->complete_request(r);
   }
 
   int when_flush(MockJournalReplay &mock_journal_replay) {
@@ -460,7 +461,7 @@ TEST_F(TestMockJournalReplay, Flush) {
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
-  AioCompletion *aio_comp;
+  AioCompletion *aio_comp = nullptr;
   C_SaferCond on_ready;
   C_SaferCond on_safe;
   expect_aio_discard(mock_aio_image_request, &aio_comp, 123, 456);
