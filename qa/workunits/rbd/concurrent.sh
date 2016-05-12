@@ -47,8 +47,8 @@
 
 ################################################################
 
-# set -x
-#
+set -x
+
 # Default flag values; RBD_CONCURRENT_ITER names are intended
 # to be used in yaml scripts to pass in alternate values, e.g.:
 #    env:
@@ -74,16 +74,12 @@ function setup() {
 	NAMES_DIR=$(mktemp -d /tmp/image_names.XXXXXX)
 	SOURCE_DATA=$(mktemp /tmp/source_data.XXXXXX)
 
-	[ -d /sys/bus/rbd ] || sudo modprobe rbd
-
 	# Use urandom to generate SOURCE_DATA
         dd if=/dev/urandom of=${SOURCE_DATA} bs=2048 count=66 \
                >/dev/null 2>&1
 
 	# List of rbd id's *not* created by this script
 	export INITIAL_RBD_IDS=$(ls /sys/bus/rbd/devices)
-
-	sudo chown ubuntu /sys/bus/rbd/add /sys/bus/rbd/remove
 
 	# Set up some environment for normal teuthology test setup.
 	# This really should not be necessary but I found it was.
@@ -110,7 +106,6 @@ function cleanup() {
 	sync
 	rm -f "${SOURCE_DATA}"
 	[ -d "${NAMES_DIR}" ] && rmdir "${NAMES_DIR}"
-	sudo chown root /sys/bus/rbd/add /sys/bus/rbd/remove
 	echo "Max concurrent rbd image count was $(get_max "${ID_COUNT_DIR}")"
 	rm -rf "${ID_COUNT_DIR}"
 	echo "Max rbd image id was $(get_max "${ID_MAX_DIR}")"
@@ -262,9 +257,8 @@ function rbd_map_image() {
 	local image="$1"
 	local id
 
-	rbd map "${image}" --user "${CEPH_ID}" ${SECRET_ARGS}
+	sudo rbd map "${image}" --user "${CEPH_ID}" ${SECRET_ARGS}
 
-	udevadm settle
 	id=$(rbd_image_id "${image}")
 	echo "${id}"
 }
@@ -323,8 +317,7 @@ function rbd_unmap_image() {
 	[ $# -eq 1 ] || exit 99
 	local id="$1"
 
-	rbd unmap "/dev/rbd${id}" > /dev/null 2>&1
-	udevadm settle
+	sudo rbd unmap "/dev/rbd${id}" > /dev/null 2>&1
 }
 
 function rbd_destroy_image() {
