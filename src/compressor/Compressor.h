@@ -27,6 +27,7 @@ class Compressor {
   virtual ~Compressor() {}
   virtual int compress(const bufferlist &in, bufferlist &out) = 0;
   virtual int decompress(const bufferlist &in, bufferlist &out) = 0;
+  virtual int decompress(bufferlist::iterator &p, bufferlist &out) = 0; //that's a bit weird but we need non-const iterator to be in alignment with decode methods
 
   static CompressorRef create(CephContext *cct, const string &type);
 };

@@ -37,6 +37,7 @@ public:
 
   virtual int compress(const bufferlist &in, bufferlist &out);
   virtual int decompress(const bufferlist &in, bufferlist &out);
+  virtual int decompress(bufferlist::iterator &p, bufferlist &out);
   virtual const char* get_method_name();
 
  };

@@ -3,6 +3,7 @@ noinst_HEADERS += \
   compressor/snappy/SnappyCompressor.h
 
 snappy_sources = \
+  common/buffer.cc \
   compressor/Compressor.cc \
   compressor/snappy/CompressionPluginSnappy.cc
 

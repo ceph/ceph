@@ -3,6 +3,7 @@ noinst_HEADERS += \
   compressor/zlib/CompressionZlib.h
 
 zlib_sources = \
+  common/buffer.cc \
   compressor/Compressor.cc \
   compressor/zlib/CompressionPluginZlib.cc \
   compressor/zlib/CompressionZlib.cc

@@ -42,7 +42,11 @@ public:
     out = in;
     return 0;
   }
-
+  virtual int decompress(bufferlist::iterator &p, bufferlist &out)
+  {
+    p.copy(p.get_remaining(), out);
+    return 0;
+  }
   virtual const char* get_method_name()
   {
     return "example";

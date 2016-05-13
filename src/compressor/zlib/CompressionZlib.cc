@@ -99,12 +99,12 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
   return 0;
 }
 
-int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
+int CompressionZlib::decompress(bufferlist::iterator &p, bufferlist &out)
 {
   int ret;
   unsigned have;
   z_stream strm;
-  unsigned char* c_in;
+  const char* c_in;
 
   /* allocate inflate state */
   strm.zalloc = Z_NULL;
@@ -121,14 +121,12 @@ int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
 
   unsigned char c_out[max_len];
 
-  for (std::list<buffer::ptr>::const_iterator i = in.buffers().begin();
-      i != in.buffers().end(); ++i) {
+  while(!p.end()) {
 
-    c_in = (unsigned char*) (*i).c_str();
-    long unsigned int len = (*i).length();
+    long unsigned int len = p.get_ptr_and_advance(p.get_remaining(), &c_in);
 
     strm.avail_in = len;
-    strm.next_in = c_in;
+    strm.next_in = (unsigned char*)c_in;
 
     do {
       strm.avail_out = max_len;
@@ -149,4 +147,10 @@ int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
   /* clean up and return */
   (void)inflateEnd(&strm);
   return 0;
+}
+
+int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
+{
+  bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
+  return decompress(i, out);
 }
