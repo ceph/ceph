@@ -1066,6 +1066,7 @@ Message * ReplicatedBackend::generate_subop(
     ::encode(t, wr->get_data());
   } else {
     ::encode(op_t, wr->get_data());
+    wr->get_header().data_off = op_t.get_data_alignment();
   }
 
   ::encode(log_entries, wr->logbl);
