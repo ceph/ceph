@@ -909,6 +909,13 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   string error_marker;
   int max_error_entries;
 
+  ceph::real_time error_retry_time;
+
+#define RETRY_BACKOFF_SECS_MIN 60
+#define RETRY_BACKOFF_SECS_DEFAULT 60
+#define RETRY_BACKOFF_SECS_MAX 600
+  uint32_t retry_backoff_secs;
+
 public:
   RGWDataSyncShardCR(RGWDataSyncEnv *_sync_env,
                      rgw_bucket& _pool,
@@ -919,7 +926,8 @@ public:
 						      sync_marker(_marker),
                                                       marker_tracker(NULL), truncated(false), inc_lock("RGWDataSyncShardCR::inc_lock"),
                                                       total_entries(0), spawn_window(BUCKET_SHARD_SYNC_SPAWN_WINDOW), reset_backoff(NULL),
-                                                      lease_cr(NULL), error_repo(nullptr), max_error_entries(DATA_SYNC_MAX_ERR_ENTRIES) {
+                                                      lease_cr(NULL), error_repo(nullptr), max_error_entries(DATA_SYNC_MAX_ERR_ENTRIES),
+                                                      retry_backoff_secs(RETRY_BACKOFF_SECS_DEFAULT) {
     set_description() << "data sync shard source_zone=" << sync_env->source_zone << " shard_id=" << shard_id;
     status_oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id);
     error_oid = status_oid + ".retry";
@@ -1092,6 +1100,16 @@ public:
           error_marker = iter->first;
         }
         if ((int)error_entries.size() != max_error_entries) {
+          if (error_marker.empty() && error_entries.empty()) {
+            /* the retry repo is empty, we back off a bit before calling it again */
+            retry_backoff_secs *= 2;
+            if (retry_backoff_secs > RETRY_BACKOFF_SECS_MAX) {
+              retry_backoff_secs = RETRY_BACKOFF_SECS_MAX;
+            }
+          } else {
+            retry_backoff_secs = RETRY_BACKOFF_SECS_DEFAULT;
+          }
+          error_retry_time = ceph::real_clock::now() + make_timespan(retry_backoff_secs);
           error_marker.clear();
         }
 
