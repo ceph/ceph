@@ -55,13 +55,80 @@ configure how this migration takes place. There are two main scenarios:
   data becomes inactive. This is ideal for mutable data (e.g., photo/video 
   editing, transactional data, etc.).
 
-- **Read-proxy Mode:** This mode will use any objects that already exist
-  in the cache tier, but if an object is not present in the cache the request
-  will be proxied to the base tier.  This is useful for transitioning from
-  ``writeback`` mode to a disabled cache as it allows the workload to function
-  properly while the cache is drained, without adding any new objects to the
-  cache.
+- **Read-proxy Mode:** This mode will use any objects that already
+  exist in the cache tier, but if an object is not present in the
+  cache the request will be proxied to the base tier.  This is useful
+  for transitioning from ``writeback`` mode to a disabled cache as it
+  allows the workload to function properly while the cache is drained,
+  without adding any new objects to the cache.
 
+A word of caution
+=================
+
+Cache tiering will *degrade* performance for most workloads.  Users should use
+extreme caution before using this feature.
+
+* *Workload dependent*: Whether a cache will improve performance is
+  highly dependent on the workload.  Because there is a cost
+  associated with moving objects into or out of the cache, it can only
+  be effective when there is a *large skew* in the access pattern in
+  the data set, such that most of the requests touch a small number of
+  objects.  The cache pool should be large enough to capture the
+  working set for your workload to avoid thrashing.
+
+* *Difficult to benchmark*: Most benchmarks that users run to measure
+  performance will show terrible performance with cache tiering, in
+  part because very few of them skew requests toward a small set of
+  objects, it can take a long time for the cache to "warm up," and
+  because the warm-up cost can be high.
+
+* *Usually slower*: For workloads that are not cache tiering-friendly,
+  performance is often slower than a normal RADOS pool without cache
+  tiering enabled.
+
+* *librados object enumeration*: The librados-level object enumeration
+  API is not meant to be coherent in the presence of the case.  If
+  your applicatoin is using librados directly and relies on object
+  enumeration, cache tiering will probably not work as expected.
+  (This is not a problem for RGW, RBD, or CephFS.)
+
+* *Complexity*: Enabling cache tiering means that a lot of additional
+  machinery and complexity within the RADOS cluster is being used.
+  This increases the probability that you will encounter a bug in the system
+  that other users have not yet encountered and will put your deployment at a
+  higher level of risk.
+
+Known Good Workloads
+--------------------
+
+* *RGW time-skewed*: If the RGW workload is such that almost all read
+  operations are directed at recently written objects, a simple cache
+  tiering configuration that destages recently written objects from
+  the cache to the base tier after a configurable period can work
+  well.
+
+Known Bad Workloads
+-------------------
+
+The following configurations are *known to work poorly* with cache
+tiering.
+
+* *RBD with replicated cache and erasure-coded base*: This is a common
+  request, but usually does not perform well.  Even reasonably skewed
+  workloads still send some small writes to cold objects, and because
+  small writes are not yet supported by the erasure-coded pool, entire
+  (usually 4 MB) objects must be migrated into the cache in order to
+  satisfy a small (often 4 KB) write.  Only a handful of users have
+  successfully deployed this configuration, and it only works for them
+  because their data is extremely cold (backups) and they are not in
+  any way sensitive to performance.
+
+* *RBD with replicated cache and base*: RBD with a replicated base
+  tier does better than when the base is erasure coded, but it is
+  still highly dependent on the amount of skew in the workload, and
+  very difficult to validate.  The user will need to have a good
+  understanding of their workload and will need to tune the cache
+  tiering parameters carefully.
 
 
 Setting Up Pools
