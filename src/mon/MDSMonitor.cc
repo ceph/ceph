@@ -1017,13 +1017,43 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 	delete p;
     }
   } else if (prefix == "mds metadata") {
-    string who;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
     if (!f)
       f.reset(Formatter::create("json-pretty"));
-    f->open_object_section("mds_metadata");
-    r = dump_metadata(who, f.get(), ss);
-    f->close_section();
+
+    string who;
+    bool all = !cmd_getval(g_ceph_context, cmdmap, "who", who);
+    dout(1) << "all = " << all << dendl;
+    if (all) {
+      // Dump all MDSs' metadata
+      const auto all_info = fsmap.get_mds_info();
+
+      f->open_array_section("mds_metadata");
+      for(const auto &i : all_info) {
+        const auto &info = i.second;
+
+        f->open_object_section("mds");
+        f->dump_string("name", info.name);
+        std::ostringstream get_err;
+        r = dump_metadata(info.name, f.get(), get_err);
+        if (r == -EINVAL || r == -ENOENT) {
+          // Drop error, list what metadata we do have
+          dout(1) << get_err.str() << dendl;
+          r = 0;
+        } else if (r != 0) {
+          derr << "Unexpected error reading metadata: " << cpp_strerror(r)
+               << dendl;
+          ss << get_err.str();
+          break;
+        }
+        f->close_section();
+      }
+      f->close_section();
+    } else {
+      // Dump a single daemon's metadata
+      f->open_object_section("mds_metadata");
+      r = dump_metadata(who, f.get(), ss);
+      f->close_section();
+    }
     f->flush(ds);
   } else if (prefix == "mds getmap") {
     epoch_t e;
