@@ -110,7 +110,7 @@ TEST_F(TestJournalMetadata, UpdateActiveObject) {
 
   ASSERT_EQ(0U, metadata1->get_active_set());
 
-  metadata1->set_active_set(123);
+  ASSERT_EQ(0, metadata1->set_active_set(123));
   ASSERT_TRUE(wait_for_update(metadata1));
 
   ASSERT_EQ(123U, metadata1->get_active_set());

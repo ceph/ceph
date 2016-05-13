@@ -374,7 +374,7 @@ TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
-  metadata->set_active_set(2);
+  ASSERT_EQ(0, metadata->set_active_set(2));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
 
@@ -420,7 +420,7 @@ TEST_F(TestJournalPlayer, ImbalancedJournal) {
 
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
-  metadata->set_active_set(2);
+  ASSERT_EQ(0, metadata->set_active_set(2));
   metadata->set_minimum_set(2);
 
   journal::JournalPlayer *player = create_player(oid, metadata);
@@ -472,7 +472,7 @@ TEST_F(TestJournalPlayer, LiveReplayLaggyAppend) {
   ASSERT_EQ(0, write_entry(oid, 0, 0, 2));
   ASSERT_EQ(0, write_entry(oid, 0, 0, 4));
   ASSERT_EQ(0, write_entry(oid, 3, 0, 5)); // laggy entry 0/3 in object 1
-  metadata->set_active_set(1);
+  ASSERT_EQ(0, metadata->set_active_set(1));
   player->prefetch_and_watch(0.25);
 
   Entries entries;

@@ -534,19 +534,26 @@ void JournalMetadata::set_minimum_set(uint64_t object_set) {
   m_minimum_set = object_set;
 }
 
-void JournalMetadata::set_active_set(uint64_t object_set) {
+int JournalMetadata::set_active_set(uint64_t object_set) {
+  C_SaferCond ctx;
+  set_active_set(object_set, &ctx);
+  return ctx.wait();
+}
+
+void JournalMetadata::set_active_set(uint64_t object_set, Context *on_finish) {
   Mutex::Locker locker(m_lock);
 
   ldout(m_cct, 20) << __func__ << ": current=" << m_active_set
                    << ", new=" << object_set << dendl;
   if (m_active_set >= object_set) {
+    m_work_queue->queue(on_finish, 0);
     return;
   }
 
   librados::ObjectWriteOperation op;
   client::set_active_set(&op, object_set);
 
-  C_NotifyUpdate *ctx = new C_NotifyUpdate(this);
+  C_NotifyUpdate *ctx = new C_NotifyUpdate(this, on_finish);
   librados::AioCompletion *comp =
     librados::Rados::aio_create_completion(ctx, NULL,
                                            utils::rados_ctx_callback);
