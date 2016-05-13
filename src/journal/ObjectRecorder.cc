@@ -69,7 +69,8 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
   } else {
     cancel_append_task();
   }
-  return (m_size + m_pending_bytes >= m_soft_max_size);
+  return (!m_object_closed && !m_overflowed &&
+          m_size + m_pending_bytes >= m_soft_max_size);
 }
 
 void ObjectRecorder::flush(Context *on_safe) {
