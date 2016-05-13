@@ -446,10 +446,10 @@ public:
     return get_source_inst();
   }
   entity_name_t get_orig_source() const {
-    return get_orig_source_inst().name;
+    return get_source();
   }
   entity_addr_t get_orig_source_addr() const {
-    return get_orig_source_inst().addr;
+    return get_source_addr();
   }
 
   // virtual bits
