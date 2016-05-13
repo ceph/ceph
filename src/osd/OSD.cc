@@ -4308,10 +4308,6 @@ void OSD::tick()
 
   if (is_active() || is_waiting_for_healthy()) {
     maybe_update_heartbeat_peers();
-
-    heartbeat_lock.Lock();
-    heartbeat_check();
-    heartbeat_lock.Unlock();
   }
 
   if (is_waiting_for_healthy()) {
@@ -4345,6 +4341,10 @@ void OSD::tick_without_osd_lock()
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
   if (is_active() || is_waiting_for_healthy()) {
+    heartbeat_lock.Lock();
+    heartbeat_check();
+    heartbeat_lock.Unlock();
+
     map_lock.get_read();
     Mutex::Locker l(mon_report_lock);
 
