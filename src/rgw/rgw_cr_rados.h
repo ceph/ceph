@@ -510,6 +510,8 @@ public:
   int request_complete();
 };
 
+#define OMAP_APPEND_MAX_ENTRIES_DEFAULT 100
+
 class RGWOmapAppend : public RGWConsumerCR<string> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -524,9 +526,11 @@ class RGWOmapAppend : public RGWConsumerCR<string> {
 
   map<string, bufferlist> entries;
 
+  uint64_t window_size;
   uint64_t total_entries;
 public:
-  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid);
+  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+                uint64_t _window_size = OMAP_APPEND_MAX_ENTRIES_DEFAULT);
   int operate();
   void flush_pending();
   bool append(const string& s);
@@ -534,6 +538,14 @@ public:
 
   uint64_t get_total_entries() {
     return total_entries;
+  }
+
+  const rgw_bucket& get_pool() {
+    return pool;
+  }
+
+  const string& get_oid() {
+    return oid;
   }
 };
 

@@ -141,9 +141,10 @@ RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAi
 }
 
 
-RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid)
+RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+                             uint64_t _window_size)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
-                        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0), total_entries(0)
+                        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0), window_size(_window_size), total_entries(0)
 {
 }
 
@@ -399,7 +400,6 @@ int RGWSimpleRadosUnlockCR::request_complete()
 }
 
 
-#define OMAP_APPEND_MAX_ENTRIES 100
 int RGWOmapAppend::operate() {
   reenter(this) {
     for (;;) {
@@ -414,11 +414,11 @@ int RGWOmapAppend::operate() {
         while (consume(&entry)) {
           set_status() << "adding entry: " << entry;
           entries[entry] = bufferlist();
-          if (entries.size() >= OMAP_APPEND_MAX_ENTRIES) {
+          if (entries.size() >= window_size) {
             break;
           }
         }
-        if (entries.size() >= OMAP_APPEND_MAX_ENTRIES || going_down) {
+        if (entries.size() >= window_size || going_down) {
           set_status() << "flushing to omap";
           call(new RGWRadosSetOmapKeysCR(store, pool, oid, entries));
           entries.clear();
@@ -446,7 +446,7 @@ bool RGWOmapAppend::append(const string& s) {
   }
   ++total_entries;
   pending_entries.push_back(s);
-  if (++num_pending_entries >= OMAP_APPEND_MAX_ENTRIES) {
+  if (++num_pending_entries >= (int)window_size) {
     flush_pending();
   }
   return true;
