@@ -1,0 +1,201 @@
+meta:
+- desc: |
+   Run ceph on two nodes, using one of them as a client,
+   with a separate client-only node. 
+   Use xfs beneath the osds.
+   install ceph/jewel v10.2.0 point version
+   run workload and upgrade-sequence in parallel
+   install ceph/jewel latest version
+   run workload and upgrade-sequence in parallel
+   install ceph/-x version (jewel or kraken)
+   run workload and upgrade-sequence in parallel
+overrides:
+  ceph:
+    log-whitelist:
+    - reached quota
+    - scrub
+    - osd_map_max_advance
+    - failed to encode
+    - wrongly marked
+    fs: xfs
+    conf:
+      mon:
+        mon debug unsafe allow tier with nonempty snaps: true
+      osd:
+        osd map max advance: 1000
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+- - client.1
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 30 # GB
+tasks:
+- print: "****  v10.2.0 about to install"
+- install:
+    tag: v10.2.0
+- print: "**** done v10.2.0 install"
+- ceph:
+   fs: xfs
+- print: "**** done ceph xfs"
+- sequential:
+   - workload
+- print: "**** done workload v10.2.0"
+- install.upgrade:
+    mon.a:
+      branch: jewel
+    mon.b:
+      branch: jewel
+    # Note that client.a IS NOT upgraded at this point
+    #client.1:
+      #branch: jewel
+- parallel:
+   - workload_jewel
+   - upgrade-sequence_jewel
+- print: "**** done parallel jewel branch"
+- install.upgrade:
+   client.1:
+     branch: jewel
+- print: "**** done branch: jewel install.upgrade on client.1"
+- install.upgrade:
+   mon.a:
+     #branch: jewel
+   mon.b:
+     #branch: jewel
+- print: "**** done branch: -x install.upgrade on mon.a and mon.b"
+- parallel:
+   - workload_x
+   - upgrade-sequence_x
+- print: "**** done parallel -x branch"
+# Run test.sh on the -x upgraded cluster
+- install.upgrade:
+    client.1:
+- workunit:
+    clients:
+      client.1:
+      - rados/test.sh
+      - cls
+- print: "**** done final test on -x cluster"
+#######################
+workload:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - suites/blogbench.sh
+workload_jewel:
+   full_sequential:
+   - workunit:
+       branch: jewel
+       clients:
+         client.1:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload_jewel"
+   - sequential:
+     - rgw: [client.0]
+     - print: "**** done rgw workload_jewel"
+     - s3tests:
+         client.0:
+           force-branch: ceph-jewel
+           rgw_server: client.0
+     - print: "**** done s3tests workload_jewel"
+upgrade-sequence_jewel:
+   sequential:
+   - print: "**** done branch: jewel install.upgrade"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all jewel branch mds/osd/mon"
+workload_x:
+   sequential:
+   - workunit:
+       branch: jewel
+       clients:
+         client.1:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload_x NOT upgraded  client"
+   - workunit:
+       clients:
+         client.0:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls workload_x upgraded client"
+   - rgw: [client.1]
+   - print: "**** done rgw workload_x"
+   - s3tests:
+       client.1:
+         force-branch: ceph-jewel
+         rgw_server: client.1
+   - print: "**** done s3tests workload_x"
+upgrade-sequence_x:
+   sequential:
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all -x branch mds/osd/mon"
