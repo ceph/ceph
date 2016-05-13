@@ -978,7 +978,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     }
   }
   log.head = info.last_update;
-  log.reset_riter();
+  log.reset_rollback_info_trimmed_to_riter();
 
   // build missing
   if (info.last_complete < info.last_update) {
