@@ -1,9 +1,9 @@
 # Try to find Keyutils
 # Once done, this will define
 #
-# KEYUTILS_FOUND - system has Profiler
-# KEYUTILS_INCLUDE_DIR - the Profiler include directories
-# KEYUTILS_LIBRARIES - link these to use Profiler
+# KEYUTILS_FOUND - system has keyutils
+# KEYUTILS_INCLUDE_DIR - the keyutils include directories
+# KEYUTILS_LIBRARIES - link these to use keyutils
 
 if(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
 	set(KEYUTILS_FIND_QUIETLY TRUE)
