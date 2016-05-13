@@ -827,7 +827,8 @@ public:
 	return data.largest_data_off_in_data_bl +
 	  sizeof(__u8) +      // encode struct_v
 	  sizeof(__u8) +      // encode compat_v
-	  sizeof(__u32);      // encode len
+	  sizeof(__u32) +     // encode len
+	  sizeof(__u32);      // data_bl len
       }
       return 0;  // none
     }
@@ -1044,6 +1045,7 @@ public:
      */
     void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
 	       const bufferlist& write_data, uint32_t flags = 0) {
+      uint32_t orig_len = data_bl.length();
       Op* _op = _get_next_op();
       _op->op = OP_WRITE;
       _op->cid = _get_coll_id(cid);
@@ -1057,7 +1059,7 @@ public:
       if (write_data.length() > data.largest_data_len) {
 	data.largest_data_len = write_data.length();
 	data.largest_data_off = off;
-	data.largest_data_off_in_data_bl = data_bl.length() + sizeof(__u32);  // we are about to
+	data.largest_data_off_in_data_bl = orig_len + sizeof(__u32);  // we are about to
       }
       data.ops++;
     }
