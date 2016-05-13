@@ -694,16 +694,16 @@ int RGWHTTPManager::complete_requests()
 
 int RGWHTTPManager::set_threaded()
 {
-  is_threaded = true;
-  reqs_thread = new ReqsThread(this);
-  reqs_thread->create("http_manager");
-
   int r = pipe(thread_pipe);
   if (r < 0) {
     r = -errno;
     ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
     return r;
   }
+
+  is_threaded = true;
+  reqs_thread = new ReqsThread(this);
+  reqs_thread->create("http_manager");
   return 0;
 }
 
