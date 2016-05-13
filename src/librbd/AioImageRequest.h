@@ -66,6 +66,7 @@ protected:
       m_image_extents(image_extents) {
   }
 
+  virtual int clip_request();
   virtual void send_request() = 0;
   virtual void send_image_cache_request() = 0;
 
@@ -250,6 +251,9 @@ public:
 protected:
   using typename AioImageRequest<ImageCtxT>::AioObjectRequests;
 
+  virtual int clip_request() {
+    return 0;
+  }
   virtual void send_request();
   virtual void send_image_cache_request() override;
 

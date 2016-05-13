@@ -197,11 +197,32 @@ void AioImageRequest<I>::send() {
                  << "completion=" << aio_comp <<  dendl;
 
   aio_comp->get();
+  int r = clip_request();
+  if (r < 0) {
+    m_aio_comp->fail(r);
+    return;
+  }
+
   if (m_bypass_image_cache || true) { // TODO
     send_request();
   } else {
     send_image_cache_request();
   }
+}
+
+template <typename I>
+int AioImageRequest<I>::clip_request() {
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  for (auto &image_extent : m_image_extents) {
+    size_t clip_len = image_extent.second;
+    int r = clip_io(get_image_ctx(&m_image_ctx), image_extent.first, &clip_len);
+    if (r < 0) {
+      return r;
+    }
+
+    image_extent.second = clip_len;
+  }
+  return 0;
 }
 
 template <typename I>
@@ -232,22 +253,16 @@ void AioImageRead<I>::send_request() {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     snap_id = image_ctx.snap_id;
 
-    // map
+    // map image extents to object extents
     for (auto &extent : image_extents) {
-      uint64_t len = extent.second;
-      int r = clip_io(get_image_ctx(&image_ctx), extent.first, &len);
-      if (r < 0) {
-        aio_comp->fail(r);
-        return;
-      }
-      if (len == 0) {
+      if (extent.second == 0) {
         continue;
       }
 
-      Striper::file_to_extents(cct, image_ctx.format_string,
-                               &image_ctx.layout, extent.first, len, 0,
-                               object_extents, buffer_ofs);
-      buffer_ofs += len;
+      Striper::file_to_extents(cct, image_ctx.format_string, &image_ctx.layout,
+                               extent.first, extent.second, 0, object_extents,
+                               buffer_ofs);
+      buffer_ofs += extent.second;
     }
   }
 
@@ -321,21 +336,14 @@ void AbstractAioImageWrite<I>::send_request() {
     }
 
     for (auto &extent : this->m_image_extents) {
-      uint64_t len = extent.second;
-      int r = clip_io(get_image_ctx(&image_ctx), extent.first, &len);
-      if (r < 0) {
-        aio_comp->fail(r);
-        return;
-      }
-      if (len == 0) {
+      if (extent.second == 0) {
         continue;
       }
 
       // map to object extents
-      Striper::file_to_extents(cct, image_ctx.format_string,
-                               &image_ctx.layout, extent.first, len, 0,
-                               object_extents);
-      clip_len += len;
+      Striper::file_to_extents(cct, image_ctx.format_string, &image_ctx.layout,
+                               extent.first, extent.second, 0, object_extents);
+      clip_len += extent.second;
     }
 
     snapc = image_ctx.snapc;
