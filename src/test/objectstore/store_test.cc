@@ -920,6 +920,52 @@ TEST_P(StoreTest, ManyBigWrite) {
   }
 }
 
+TEST_P(StoreTest, BigWriteBigZero) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  bufferptr bp(1048576);
+  memset(bp.c_str(), 'b', bp.length());
+  bl.append(bp);
+  bufferlist s;
+  bufferptr sp(4096);
+  memset(sp.c_str(), 's', sp.length());
+  s.append(sp);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, 0, bl.length(), bl);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.zero(cid, a, bl.length() / 4, bl.length() / 2);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, bl.length() / 2, s.length(), s);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, MiscFragmentTests) {
   ObjectStore::Sequencer osr("test");
   int r;
