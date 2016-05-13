@@ -1,0 +1,39 @@
+#!/bin/bash
+# /nightlies/cron_wrapper.sh
+
+# check for no argument case and stop
+if [ -z $1 ]; then
+  echo "need argument"
+  exit 1
+fi
+
+# set permanent $LOG file var
+LOG="/var/log/crontab-nightlies-log/crontab.log"
+
+# temp files to store sdtout and stderr
+# named with the PID of this script in their name so they'll be unique
+STDERR="/var/tmp/stderr.$$"
+STDOUT="/var/tmp/stdout.$$"
+
+# $STDOUT and $STDERR are removed when the script exits for any reason
+trap  "rm -f $STDOUT $STDERR" 0
+
+# run a command from this script's argument
+# redirect stdout to $STDOUT file and redirect stderr to $STDERR file
+"$@" > $STDOUT 2> $STDERR
+
+# get return code from the command run
+code=$?
+
+if [ $code != 0 ] ; then
+        # echoing to stdout/stderr makes cron send email
+        echo "stdout:"
+        cat $STDOUT
+        echo "stderr:"
+        cat $STDERR
+else
+        # normal exit: just log stdout
+        DATE=$(date)
+        echo -n "$DATE: " >> $LOG
+        cat $STDOUT  >> $LOG
+fi
