@@ -596,7 +596,7 @@ public:
 
   //////////////////// get or set log & missing ////////////////////
 
-  void claim_log_and_clear_rollback_info(const pg_log_t &o, LogEntryHandler *h) {
+  void reset_backfill_claim_log(const pg_log_t &o, LogEntryHandler *h) {
     log.can_rollback_to = log.head;
     log.advance_rollback_info_trimmed_to(log.head, h);
     log.claim_log_and_clear_rollback_info(o);
