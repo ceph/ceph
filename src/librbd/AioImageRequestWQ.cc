@@ -341,6 +341,8 @@ void *AioImageRequestWQ::_void_dequeue() {
     get_pool_lock().Lock();
     return nullptr;
   }
+
+  item->start_op();
   return item;
 }
 
