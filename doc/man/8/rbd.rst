@@ -369,6 +369,13 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
+:command:`bench` --io-type <read | write> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *total-size-for-IO-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
+  Generate a series of IOs to the image and measure the IO throughput and
+  latency.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
+  --io-pattern seq.
+
+  NOTE: --io-type must be specified.
+
 Image and snap specs
 ====================
 
