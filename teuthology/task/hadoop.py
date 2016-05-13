@@ -20,10 +20,13 @@ def dict_to_hadoop_conf(items):
     out += "</configuration>\n"
     return out
 
+def is_hadoop_type(type_):
+    return lambda role: role.startswith('hadoop.' + type_)
+
 def get_slaves_data(ctx):
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/slaves".format(tdir=tempdir)
-    nodes = ctx.cluster.only(teuthology.is_type('hadoop.slave'))
+    nodes = ctx.cluster.only(is_hadoop_type('slave'))
     hosts = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes]
     data = '\n'.join(hosts)
     return path, data
@@ -31,7 +34,7 @@ def get_slaves_data(ctx):
 def get_masters_data(ctx):
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/masters".format(tdir=tempdir)
-    nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+    nodes = ctx.cluster.only(is_hadoop_type('master'))
     hosts = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes]
     data = '\n'.join(hosts)
     return path, data
@@ -39,7 +42,7 @@ def get_masters_data(ctx):
 def get_core_site_data(ctx, config):
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/core-site.xml".format(tdir=tempdir)
-    nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+    nodes = ctx.cluster.only(is_hadoop_type('master'))
     host = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes][0]
 
     conf = {}
@@ -78,7 +81,7 @@ def get_mapred_site_data(ctx):
 """
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/mapred-site.xml".format(tdir=tempdir)
-    nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+    nodes = ctx.cluster.only(is_hadoop_type('master'))
     hosts = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes]
     assert len(hosts) == 1
     host = hosts[0]
@@ -99,7 +102,7 @@ def get_yarn_site_data(ctx):
 
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/yarn-site.xml".format(tdir=tempdir)
-    nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+    nodes = ctx.cluster.only(is_hadoop_type('master'))
     hosts = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes]
     assert len(hosts) == 1
     host = hosts[0]
@@ -166,7 +169,7 @@ def configure(ctx, config, hadoops):
         log.info("Formatting HDFS...")
         testdir = teuthology.get_testdir(ctx)
         hadoop_dir = "{tdir}/hadoop/".format(tdir=testdir)
-        masters = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+        masters = ctx.cluster.only(is_hadoop_type('master'))
         assert len(masters.remotes) == 1
         master = masters.remotes.keys()[0]
         master.run(
@@ -184,7 +187,7 @@ def install_hadoop(ctx, config):
 
     log.info("Downloading Hadoop...")
     hadoop_tarball = "{tdir}/hadoop.tar.gz".format(tdir=testdir)
-    hadoops = ctx.cluster.only(teuthology.is_type('hadoop'))
+    hadoops = ctx.cluster.only(is_hadoop_type(''))
     run.wait(
         hadoops.run(
             args = [
@@ -335,7 +338,7 @@ def install_hadoop(ctx, config):
 def start_hadoop(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     hadoop_dir = "{tdir}/hadoop/".format(tdir=testdir)
-    masters = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+    masters = ctx.cluster.only(is_hadoop_type('master'))
     assert len(masters.remotes) == 1
     master = masters.remotes.keys()[0]
 
