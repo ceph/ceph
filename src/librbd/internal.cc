@@ -335,10 +335,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return r;
   }
 
-  if (!is_primary) {
-    goto remove_mirroring_image;
-  }
-
   r = MirroringWatcher<>::notify_image_updated(
     ictx->md_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
     ictx->id, mirror_image_internal.global_image_id);
@@ -397,7 +393,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     }
   }
 
-remove_mirroring_image:
   if (remove) {
     r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
     if (r < 0) {
