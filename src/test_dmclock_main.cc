@@ -8,6 +8,10 @@
 
 #include "test_dmclock.h"
 
+#ifdef PROFILE
+#include "profile.h"
+#endif
+
 
 namespace dmc = crimson::dmclock;
 namespace test = crimson::test_dmc;
@@ -199,4 +203,29 @@ void test::server_data(std::ostream& out,
     }
     out << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_p << std::endl;
+
+#ifdef PROFILE
+    crimson::ProfileCombiner<std::chrono::nanoseconds> art_combiner;
+    crimson::ProfileCombiner<std::chrono::nanoseconds> rct_combiner;
+    for (uint i = 0; i < sim->get_server_count(); ++i) {
+      const auto& q = sim->get_server(i).get_priority_queue();
+      const auto& art = q.add_request_timer;
+      art_combiner.combine(art);
+      const auto& rct = q.request_complete_timer;
+      rct_combiner.combine(rct);
+    }
+    out << "Server add_request_timer: count:" << art_combiner.get_count() <<
+      ", mean:" << art_combiner.get_mean() <<
+      ", std_dev:" << art_combiner.get_std_dev() <<
+      ", low:" << art_combiner.get_low() <<
+      ", high:" << art_combiner.get_high() << std::endl;
+    out << "Server request_complete_timer: count:" << rct_combiner.get_count() <<
+      ", mean:" << rct_combiner.get_mean() <<
+      ", std_dev:" << rct_combiner.get_std_dev() <<
+      ", low:" << rct_combiner.get_low() <<
+      ", high:" << rct_combiner.get_high() << std::endl;
+    out << "Server combined mean: " <<
+      (art_combiner.get_mean() + rct_combiner.get_mean()) <<
+      std::endl;
+#endif
 }

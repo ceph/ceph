@@ -15,6 +15,7 @@
 
 #include <limits>
 #include <cmath>
+#include <chrono>
 
 
 namespace crimson {
@@ -39,5 +40,6 @@ namespace crimson {
     std::string format_time(const Time& time, uint modulo = 1000);
 
     void debugger();
-  }
-}
+
+  } // namespace dmclock
+} // namespace crimson

@@ -6,8 +6,6 @@
  */
 
 
-#define DEBUGGER
-
 /*
  * The prop_heap does not seem to be necessary. The only thing it
  * would help with is quickly finding the mininum proportion/prioity
@@ -38,6 +36,10 @@
 #include "run_every.h"
 #include "dmclock_util.h"
 #include "dmclock_recs.h"
+
+#ifdef PROFILE
+#include "profile.h"
+#endif
 
 #include "gtest/gtest_prod.h"
 
@@ -196,7 +198,6 @@ namespace crimson {
       // forward decl for friend decls
       template<double RequestTag::*, ReadyOption, bool>
       struct ClientCompare;
-
 
       class ClientReq {
 	friend PriorityQueueBase;
@@ -814,15 +815,20 @@ namespace crimson {
       // When a request is pulled, this is the return type.
       struct PullReq {
 	struct Retn {
-	  C           client;
+	  C                           client;
 	  typename super::RequestRef  request;
-	  PhaseType   phase;
+	  PhaseType                   phase;
 	};
 
 	typename super::NextReqType        type;
 	boost::variant<Retn,Time> data;
       };
 
+
+#ifdef PROFILE
+      ProfileTimer<std::chrono::nanoseconds> pull_request_timer;
+      ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+#endif
 
       template<typename Rep, typename Per>
       PriorityQueue(typename super::ClientInfoFunc _client_info_f,
@@ -861,17 +867,10 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
-	add_request(request, req_params, client_id, get_time());
-      }
-
-
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params,
+			      const Time time) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
@@ -879,17 +878,31 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&&     request,
-		       const C&         client_id,
-		       const ReqParams& req_params,
-		       const Time       time) {
-	typename super::DataGuard g(this->data_mtx);
-	super::do_add_request(std::move(request), client_id, req_params, time);
-	// no call to schedule_request for pull version
+      inline void add_request(typename super::RequestRef&& request,
+			      const C& client_id,
+			      const ReqParams& req_params) {
+	add_request(request, req_params, client_id, get_time());
       }
 
 
-      PullReq pull_request() {
+      // this does the work; the versions above provide alternate interfaces
+      void add_request(typename super::RequestRef&& request,
+		       const C&                     client_id,
+		       const ReqParams&             req_params,
+		       const Time                   time) {
+	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	add_request_timer.start();
+#endif
+	super::do_add_request(std::move(request), client_id, req_params, time);
+	// no call to schedule_request for pull version
+#ifdef PROFILE
+	add_request_timer.stop();
+#endif
+      }
+
+
+      inline PullReq pull_request() {
 	return pull_request(get_time());
       }
 
@@ -897,6 +910,9 @@ namespace crimson {
       PullReq pull_request(Time now) {
 	PullReq result;
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	pull_request_timer.start();
+#endif
 
 	typename super::NextReq next = super::do_next_request(now);
 	result.type = next.type;
@@ -958,6 +974,9 @@ namespace crimson {
 	  assert(false);
 	}
 
+#ifdef PROFILE
+	pull_request_timer.stop();
+#endif
 	return result;
       } // pull_request
 
@@ -1000,6 +1019,13 @@ namespace crimson {
       std::mutex  sched_ahead_mtx;
       std::condition_variable sched_ahead_cv;
       Time sched_ahead_when = TimeZero;
+
+#ifdef PROFILE
+    public:
+      crimson::ProfileTimer<std::chrono::nanoseconds> add_request_timer;
+      crimson::ProfileTimer<std::chrono::nanoseconds> request_complete_timer;
+    protected:
+#endif
 
       // NB: threads declared last, so constructed last and destructed first
 
@@ -1051,9 +1077,9 @@ namespace crimson {
 
     public:
 
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
@@ -1061,17 +1087,17 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params) {
+      inline void add_request(typename super::RequestRef&& request,
+			      const C& client_id,
+			      const ReqParams& req_params) {
 	add_request(request, req_params, client_id, get_time());
       }
 
 
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params,
+			      const Time time) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
@@ -1079,19 +1105,31 @@ namespace crimson {
       }
 
 
-      void add_request(typename super::RequestRef&&     request,
+      void add_request(typename super::RequestRef&& request,
 		       const C&         client_id,
 		       const ReqParams& req_params,
 		       const Time       time) {
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	add_request_timer.start();
+#endif
 	super::do_add_request(std::move(request), client_id, req_params, time);
 	schedule_request();
+#ifdef PROFILE
+	add_request_timer.stop();
+#endif
       }
 
 
       void request_completed() {
 	typename super::DataGuard g(this->data_mtx);
+#ifdef PROFILE
+	request_complete_timer.start();
+#endif
 	schedule_request();
+#ifdef PROFILE
+	request_complete_timer.stop();
+#endif
       }
 
     protected:
