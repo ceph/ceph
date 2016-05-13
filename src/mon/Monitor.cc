@@ -2954,19 +2954,45 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon metadata") {
-    string name;
-    cmd_getval(g_ceph_context, cmdmap, "id", name);
-    int mon = monmap->get_rank(name);
-    if (mon < 0) {
-      rs = "requested mon not found";
-      r = -ENOENT;
-      goto out;
-    }
     if (!f)
       f.reset(Formatter::create("json-pretty"));
-    f->open_object_section("mon_metadata");
-    r = get_mon_metadata(mon, f.get(), ds);
-    f->close_section();
+
+    string name;
+    bool all = !cmd_getval(g_ceph_context, cmdmap, "id", name);
+    if (!all) {
+      // Dump a single mon's metadata
+      int mon = monmap->get_rank(name);
+      if (mon < 0) {
+        rs = "requested mon not found";
+        r = -ENOENT;
+        goto out;
+      }
+      f->open_object_section("mon_metadata");
+      r = get_mon_metadata(mon, f.get(), ds);
+      f->close_section();
+    } else {
+      // Dump all mons' metadata
+      f->open_array_section("mon_metadata");
+      for (unsigned int rank = 0; rank < monmap->size(); ++rank) {
+        std::ostringstream get_err;
+        f->open_object_section("mon");
+        f->dump_string("name", monmap->get_name(rank));
+        r = get_mon_metadata(rank, f.get(), get_err);
+        f->close_section();
+        if (r == -ENOENT || r == -EINVAL) {
+          dout(1) << get_err.str() << dendl;
+          // Drop error, list what metadata we do have
+          r = 0;
+        } else if (r != 0) {
+          derr << "Unexpected error from get_mon_metadata: "
+               << cpp_strerror(r) << dendl;
+          ds << get_err.str();
+          break;
+        }
+      }
+      f->close_section();
+    }
+
     f->flush(ds);
     rdata.append(ds);
     rs = "";
