@@ -147,3 +147,28 @@ TEST_F(TestLibCG, create_cg)
   ASSERT_EQ(0, rbd.list_cgs(ioctx, cgs));
   ASSERT_EQ(0, cgs.size());
 }
+
+TEST_F(TestLibCG, add_image)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.create_cg(ioctx, "mycg"));
+  int order = 14;
+  ASSERT_EQ(0, rbd.create(ioctx, "myimage", 65535, &order));
+
+  ASSERT_EQ(0, rbd.cg_add_image(ioctx, "mycg", ioctx, "myimage"));
+
+  vector<pair<string, int64_t>> images;
+  ASSERT_EQ(0, rbd.cg_list_images(ioctx, "mycg", images));
+  ASSERT_EQ(1, images.size());
+  ASSERT_EQ("myimage", images[0].first);
+  ASSERT_EQ(ioctx.get_id(), images[0].second);
+
+  ASSERT_EQ(0, rbd.cg_remove_image(ioctx, "mycg", ioctx, "myimage"));
+
+  images.clear();
+  ASSERT_EQ(0, rbd.cg_list_images(ioctx, "mycg", images));
+  ASSERT_EQ(0, images.size());
+}
