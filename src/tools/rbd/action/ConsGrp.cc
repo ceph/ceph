@@ -224,7 +224,7 @@ int execute_list_images(const po::variables_map &vm) {
   std::cerr << "Received cg name: " << cg_name << std::endl;
 
   librbd::RBD rbd;
-  std::vector<std::pair<std::string, int64_t>> images;
+  std::vector<std::tuple<std::string, int64_t, int>> images;
 
   r = rbd.cg_list_images(io_ctx, cg_name.c_str(), images);
 
@@ -239,10 +239,10 @@ int execute_list_images(const po::variables_map &vm) {
     if (r < 0)
       return r;
     if (f) {
-      f->dump_string("image name", i.first);
-      f->dump_int("pool id", i.second);
+      f->dump_string("image name", std::get<0>(i));
+      f->dump_int("pool id", std::get<1>(i));
     } else
-      std::cout << i.first << " " << i.second << std::endl;
+      std::cout << std::get<0>(i) << " " << std::get<1>(i) << std::endl;
   }
   if (f) {
     f->close_section();

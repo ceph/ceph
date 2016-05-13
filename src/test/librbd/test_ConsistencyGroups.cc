@@ -160,11 +160,11 @@ TEST_F(TestLibCG, add_image)
 
   ASSERT_EQ(0, rbd.cg_add_image(ioctx, "mycg", ioctx, "myimage"));
 
-  vector<pair<string, int64_t>> images;
+  vector<tuple<string, int64_t, int>> images;
   ASSERT_EQ(0, rbd.cg_list_images(ioctx, "mycg", images));
   ASSERT_EQ(1, images.size());
-  ASSERT_EQ("myimage", images[0].first);
-  ASSERT_EQ(ioctx.get_id(), images[0].second);
+  ASSERT_EQ("myimage", get<0>(images[0]));
+  ASSERT_EQ(ioctx.get_id(), get<1>(images[0]));
 
   ASSERT_EQ(0, rbd.cg_remove_image(ioctx, "mycg", ioctx, "myimage"));
 

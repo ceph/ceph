@@ -269,7 +269,7 @@ namespace librbd {
     return r;
   }
 
-  int RBD::cg_list_images(IoCtx& cg_ioctx, const char *cg_name, std::vector<std::pair<std::string, int64_t>>& images)
+  int RBD::cg_list_images(IoCtx& cg_ioctx, const char *cg_name, std::vector<std::tuple<std::string, int64_t, int>>& images)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
     tracepoint(librbd, cg_list_images_enter, cg_ioctx.get_pool_name().c_str(), cg_ioctx.get_id(), cg_name);

@@ -1048,7 +1048,7 @@ err_remove_id:
   }
 
   int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
-		     std::vector<std::pair<std::string, int64_t>>& images)
+		     std::vector<std::tuple<std::string, int64_t, int>>& images)
   {
     CephContext *cct = (CephContext *)cg_ioctx.cct();
     ldout(cct, 20) << "cg_list_images " << &cg_ioctx << " cg name " << cg_name << dendl;
@@ -1084,7 +1084,7 @@ err_remove_id:
       if (r < 0) {
 	return r;
       }
-      images.push_back(std::make_pair(image_name, std::get<1>(i)));
+      images.push_back(std::make_tuple(image_name, std::get<1>(i), std::get<2>(i)));
     }
 
     return 0;
@@ -1202,7 +1202,7 @@ err_remove_id:
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "remove_cg " << &io_ctx << " " << cg_name << dendl;
 
-    std::vector<std::pair<std::string, int64_t>> images;
+    std::vector<std::tuple<std::string, int64_t, int>> images;
     int r = cg_list_images(io_ctx, cg_name, images);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error listing cg images" << dendl;
