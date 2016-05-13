@@ -720,6 +720,8 @@ void RGWHTTPManager::stop()
     signal_thread();
     reqs_thread->join();
     delete reqs_thread;
+    TEMP_FAILURE_RETRY(::close(thread_pipe[1]));
+    TEMP_FAILURE_RETRY(::close(thread_pipe[0]));
   }
 }
 
