@@ -10129,6 +10129,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   requeue_ops(waiting_for_peered);
 
   clear_scrub_reserved();
+  scrub_unreserve_replicas(); // in case there is any
 
   // requeues waiting_for_active
   scrub_clear_state();
