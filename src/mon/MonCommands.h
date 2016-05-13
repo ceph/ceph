@@ -312,7 +312,7 @@ COMMAND("fs dump "
 COMMAND("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
-COMMAND("mds metadata name=who,type=CephString",
+COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
 	"mds", "r", "cli,rest")
 COMMAND("mds tell " \
