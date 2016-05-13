@@ -394,13 +394,6 @@ bool JournalPlayer::verify_playback_ready() {
     }
   }
 
-  // if we just advanced to this object, make sure we have the latest
-  // set of data before advancing to a new tag
-  if (m_watch_enabled && m_watch_required) {
-    m_watch_required = false;
-    return false;
-  }
-
   // NOTE: replay currently does not check tag class to playback multiple tags
   // from different classes (issue #14909).  When a new tag is discovered, it
   // is assumed that the previous tag was closed at the last replayable entry.
@@ -452,7 +445,6 @@ void JournalPlayer::advance_splay_object() {
   assert(m_lock.is_locked());
   ++m_splay_offset;
   m_splay_offset %= m_journal_metadata->get_splay_width();
-  m_watch_required = true;
   ldout(m_cct, 20) << __func__ << ": new offset "
                    << static_cast<uint32_t>(m_splay_offset) << dendl;
 }
@@ -466,9 +458,16 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
   uint64_t active_set = m_journal_metadata->get_active_set();
   if (!player->empty() || object_set == active_set) {
     return false;
+  } else if (m_watch_enabled && object_set < active_set &&
+             player->refetch_required()) {
+    ldout(m_cct, 20) << __func__ << ": refetching " << player->get_oid()
+                     << dendl;
+    player->clear_refetch_required();
+    return false;
   }
 
-  ldout(m_cct, 15) << player->get_oid() << " empty" << dendl;
+  ldout(m_cct, 15) << __func__ << ": " << player->get_oid() << " empty"
+                   << dendl;
   ObjectPlayers &object_players = m_object_players[
     player->get_object_number() % splay_width];
   assert(!object_players.empty());
