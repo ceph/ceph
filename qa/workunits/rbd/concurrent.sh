@@ -257,7 +257,8 @@ function rbd_map_image() {
 	local image="$1"
 	local id
 
-	sudo rbd map "${image}" --user "${CEPH_ID}" ${SECRET_ARGS}
+	sudo rbd map "${image}" --user "${CEPH_ID}" ${SECRET_ARGS} \
+		> /dev/null 2>&1
 
 	id=$(rbd_image_id "${image}")
 	echo "${id}"
@@ -317,7 +318,7 @@ function rbd_unmap_image() {
 	[ $# -eq 1 ] || exit 99
 	local id="$1"
 
-	sudo rbd unmap "/dev/rbd${id}" > /dev/null 2>&1
+	sudo rbd unmap "/dev/rbd${id}"
 }
 
 function rbd_destroy_image() {
