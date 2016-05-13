@@ -301,7 +301,9 @@ int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
       ++tok_iter;
       string pool_id = *tok_iter;
-      CLS_LOG(20, "Discovered image %s %s %d", image_id.c_str(), pool_id.c_str(), (int)state);
+      CLS_LOG(20, "Discovered image %s %s %d", image_id.c_str(),
+	                                       pool_id.c_str(),
+					       (int)state);
       ::encode(image_id.c_str(), *out);
       ::encode(pool_id.c_str(), *out);
       ::encode(state, *out);
@@ -362,7 +364,9 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-int image_remove_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+int image_remove_cg_ref(cls_method_context_t hctx,
+                        bufferlist *in,
+			bufferlist *out)
 {
   CLS_LOG(20, "image_remove_cg_ref");
   std::string cg_id;
@@ -413,7 +417,7 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
 
   bufferlist image_val_bl;
   int64_t link_state = LINK_DIRTY;
@@ -440,7 +444,7 @@ int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
 
   bufferlist statebl;
   int64_t new_state = LINK_DIRTY;
@@ -466,7 +470,7 @@ int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
 
   int64_t link_state;
 
@@ -499,7 +503,7 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + boost::lexical_cast<std::string>(pool_id);
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
 
   int r = cls_cxx_map_remove_key(hctx, image_key);
   if (r < 0) {
@@ -2137,12 +2141,15 @@ static const string dir_name_from_key(const string &key)
   return key.substr(strlen(RBD_DIR_NAME_KEY_PREFIX));
 }
 
-static int dir_add_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int dir_add_cg(cls_method_context_t hctx,
+                      bufferlist *in,
+		      bufferlist *out)
 {
   int r = cls_cxx_create(hctx, false);
 
   if (r < 0) {
-    CLS_ERR("could not create consistency group directory: %s", cpp_strerror(r).c_str());
+    CLS_ERR("could not create consistency group directory: %s",
+	    cpp_strerror(r).c_str());
     return r;
   }
 
@@ -2156,7 +2163,8 @@ static int dir_add_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   }
 
   if (!name.size() || !is_valid_id(id)) {
-    CLS_ERR("invalid consistency group name '%s' or id '%s'", name.c_str(), id.c_str());
+    CLS_ERR("invalid consistency group name '%s' or id '%s'",
+	    name.c_str(), id.c_str());
     return -EINVAL;
   }
 

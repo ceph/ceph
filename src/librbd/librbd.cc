@@ -269,28 +269,38 @@ namespace librbd {
     return r;
   }
 
-  int RBD::cg_list_images(IoCtx& cg_ioctx, const char *cg_name, std::vector<std::tuple<std::string, int64_t, int>>& images)
+  int RBD::cg_list_images(IoCtx& cg_ioctx, const char *cg_name,
+                          std::vector<std::tuple<std::string,
+			                         int64_t,
+						 int>>& images)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
-    tracepoint(librbd, cg_list_images_enter, cg_ioctx.get_pool_name().c_str(), cg_ioctx.get_id(), cg_name);
+    tracepoint(librbd, cg_list_images_enter, cg_ioctx.get_pool_name().c_str(),
+	       cg_ioctx.get_id(), cg_name);
     int r = librbd::cg_list_images(cg_ioctx, cg_name, images);
     tracepoint(librbd, cg_list_images_exit, r);
     return r;
   }
 
-  int RBD::cg_add_image(IoCtx& cg_ioctx, const char *cg_name, IoCtx& image_ioctx, const char *image_name)
+  int RBD::cg_add_image(IoCtx& cg_ioctx, const char *cg_name,
+                        IoCtx& image_ioctx, const char *image_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
-    tracepoint(librbd, cg_add_image_enter, cg_ioctx.get_pool_name().c_str(), cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(), image_ioctx.get_id(), image_name);
+    tracepoint(librbd, cg_add_image_enter, cg_ioctx.get_pool_name().c_str(),
+	       cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(),
+	       image_ioctx.get_id(), image_name);
     int r = librbd::cg_add_image(cg_ioctx, cg_name, image_ioctx, image_name);
     tracepoint(librbd, cg_add_image_exit, r);
     return r;
   }
 
-  int RBD::cg_remove_image(IoCtx& cg_ioctx, const char *cg_name, IoCtx& image_ioctx, const char *image_name)
+  int RBD::cg_remove_image(IoCtx& cg_ioctx, const char *cg_name,
+                           IoCtx& image_ioctx, const char *image_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
-    tracepoint(librbd, cg_remove_image_enter, cg_ioctx.get_pool_name().c_str(), cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(), image_ioctx.get_id(), image_name);
+    tracepoint(librbd, cg_remove_image_enter, cg_ioctx.get_pool_name().c_str(),
+	       cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(),
+	       image_ioctx.get_id(), image_name);
     int r = librbd::cg_remove_image(cg_ioctx, cg_name, image_ioctx, image_name);
     tracepoint(librbd, cg_remove_image_exit, r);
     return r;
@@ -299,7 +309,8 @@ namespace librbd {
   int RBD::create_cg(IoCtx& io_ctx, const char *cg_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-    tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), cg_name);
+    tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(),
+	       io_ctx.get_id(), cg_name);
     int r = librbd::create_cg(io_ctx, cg_name);
     tracepoint(librbd, create_cg_exit, r);
     return 0;
@@ -308,7 +319,8 @@ namespace librbd {
   int RBD::remove_cg(IoCtx& io_ctx, const char *cg_name)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-    tracepoint(librbd, remove_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), cg_name);
+    tracepoint(librbd, remove_cg_enter, io_ctx.get_pool_name().c_str(),
+	       io_ctx.get_id(), cg_name);
     int r = librbd::remove_cg(io_ctx, cg_name);
     tracepoint(librbd, remove_cg_exit, r);
     return r;
@@ -418,7 +430,8 @@ namespace librbd {
   int RBD::list_cgs(IoCtx& io_ctx, vector<string>& names)
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-    tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id());
+    tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(),
+	       io_ctx.get_id());
 
     int r = librbd::list_cgs(io_ctx, names);
     if (r >= 0) {

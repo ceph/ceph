@@ -125,7 +125,8 @@ int execute_add(const po::variables_map &vm) {
   }
 
   std::string image_spec = utils::get_positional_argument(vm, 0);
-  int r = utils::extract_spec(image_spec, &image_pool_name, &image_name, nullptr);
+  int r = utils::extract_spec(image_spec, &image_pool_name,
+                              &image_name, nullptr);
   if (r < 0) {
     std::cerr << "rbd: image add error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -146,7 +147,8 @@ int execute_add(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = rbd.cg_add_image(cg_io_ctx, cg_name.c_str(), image_io_ctx, image_name.c_str());
+  r = rbd.cg_add_image(cg_io_ctx, cg_name.c_str(),
+                       image_io_ctx, image_name.c_str());
   if (r < 0) {
     std::cerr << "rbd: add image error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -171,7 +173,8 @@ int execute_remove_image(const po::variables_map &vm) {
   }
 
   std::string image_spec = utils::get_positional_argument(vm, 0);
-  int r = utils::extract_spec(image_spec, &image_pool_name, &image_name, nullptr);
+  int r = utils::extract_spec(image_spec, &image_pool_name,
+                              &image_name, nullptr);
   if (r < 0) {
     std::cerr << "rbd: image remove error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -192,7 +195,8 @@ int execute_remove_image(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = rbd.cg_remove_image(cg_io_ctx, cg_name.c_str(), image_io_ctx, image_name.c_str());
+  r = rbd.cg_remove_image(cg_io_ctx, cg_name.c_str(),
+                          image_io_ctx, image_name.c_str());
   if (r < 0) {
     std::cerr << "rbd: add image error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -301,11 +305,11 @@ Shell::Action action_add(
   {"cg", "add", "image"}, {}, "Add an image to a consistency group.", "",
   &get_add_arguments, &execute_add);
 Shell::Action action_remove_image(
-  {"cg", "remove", "image"}, {}, "Remove an image from a consistency group.", "",
-  &get_remove_image_arguments, &execute_remove_image);
+  {"cg", "remove", "image"}, {}, "Remove an image from a consistency group.",
+  "", &get_remove_image_arguments, &execute_remove_image);
 Shell::Action action_list_images(
-  {"cg", "list", "images"}, {}, "Dump list of images in a consistency group.", "",
-  &get_list_images_arguments, &execute_list_images);
+  {"cg", "list", "images"}, {}, "Dump list of images in a consistency group.",
+  "", &get_list_images_arguments, &execute_list_images);
 Shell::Action action_list(
   {"cg", "list"}, {"cg", "ls"}, "Dump list of consistency groups.", "",
   &get_list_arguments, &execute_list);
