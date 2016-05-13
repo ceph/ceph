@@ -11,6 +11,8 @@
 #include "common/RefCountedObj.h"
 #include "journal/FutureImpl.h"
 #include <list>
+#include <map>
+#include <set>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include "include/assert.h"
@@ -63,6 +65,7 @@ public:
   }
 
 private:
+  typedef std::set<uint64_t> InFlightTids;
   typedef std::map<uint64_t, AppendBuffers> InFlightAppends;
 
   struct FlushHandler : public FutureImpl::FlushHandler {
@@ -125,6 +128,7 @@ private:
   uint64_t m_append_tid;
   uint32_t m_pending_bytes;
 
+  InFlightTids m_in_flight_tids;
   InFlightAppends m_in_flight_appends;
   uint64_t m_size;
   bool m_overflowed;
