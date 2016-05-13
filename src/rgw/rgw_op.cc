@@ -1992,6 +1992,9 @@ void RGWStatBucket::execute()
       op_ret = -EINVAL;
     }
   }
+  if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end()) {
+    ::decode(bucket.size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
+  }
 }
 
 int RGWListBucket::verify_permission()
@@ -2909,13 +2912,14 @@ void RGWPutObj::execute()
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  bufferlist bl, aclbl;
+  bufferlist bl, aclbl, bs;
   int len;
   map<string, string>::iterator iter;
   bool multipart;
   
   off_t fst;
   off_t lst;
+  uint64_t bucket_size = 0;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
@@ -3139,6 +3143,17 @@ void RGWPutObj::execute()
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
+  // add attr to bucket to know original size of data
+  if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end())
+    ::decode(bucket_size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
+  bucket_size += s->obj_size;
+  ::encode(bucket_size, bs);
+  s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
+  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+        &s->bucket_attrs);
+  if (op_ret < 0)
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
+         << " returned err=" << op_ret << dendl;
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
@@ -3735,6 +3750,23 @@ void RGWDeleteObj::execute()
       if (op_ret >= 0) {
         delete_marker = del_op.result.delete_marker;
         version_id = del_op.result.version_id;
+        if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end()) {
+          uint64_t bucket_size, deleted_size;
+          ::decode(bucket_size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
+          if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
+            bool tmp;
+            RGWCompressionInfo cs_info;
+            rgw_compression_info_from_attrset(attrs, tmp, cs_info);
+            deleted_size = cs_info.orig_size;
+          } else
+            deleted_size = s->obj_size;
+          bucket_size -= deleted_size;
+          bufferlist bs;
+          ::encode(bucket_size, bs);
+          s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
+          op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+            &s->bucket_attrs);
+        }
       }
 
       /* Check whether the object has expired. Swift API documentation
@@ -5038,6 +5070,7 @@ void RGWAbortMultipart::execute()
 
   cls_rgw_obj_chain chain;
   list<rgw_obj_key> remove_objs;
+  uint64_t deleted_size = 0;
 
   do {
     op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
@@ -5048,10 +5081,10 @@ void RGWAbortMultipart::execute()
     for (obj_iter = obj_parts.begin();
 	 obj_iter != obj_parts.end(); ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
+      rgw_obj obj;
 
       if (obj_part.manifest.empty()) {
         string oid = mp.get_part(obj_iter->second.num);
-        rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
         obj.index_hash_source = s->object.name;
         op_ret = store->delete_obj(*obj_ctx, s->bucket_info, obj, 0);
@@ -5061,12 +5094,28 @@ void RGWAbortMultipart::execute()
         store->update_gc_chain(meta_obj, obj_part.manifest, &chain);
         RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
         if (oiter != obj_part.manifest.obj_end()) {
-          rgw_obj head = oiter.get_location();
+          obj = oiter.get_location();
           rgw_obj_key key;
-          head.get_index_key(&key);
+          obj.get_index_key(&key);
           remove_objs.push_back(key);
         }
       }
+        map<string, bufferlist> attrset;
+        int y = get_obj_attrs(store, s, obj, attrset);
+        if (!y && attrset.find(RGW_ATTR_COMPRESSION) != attrset.end()) {
+          RGWCompressionInfo cs_info;
+          bufferlist::iterator bliter = attrset[RGW_ATTR_COMPRESSION].begin();
+          try {
+            ::decode(cs_info, bliter);
+          } catch (buffer::error& err) {
+            ldout(s->cct, 5) << "Failed to get decompressed obj size" << dendl;
+          }
+          if (cs_info.compression_type != "none")
+            deleted_size += cs_info.orig_size;
+          else
+            deleted_size += obj_part.size;
+        } else
+          deleted_size += obj_part.size;
     }
   } while (truncated);
 
@@ -5091,6 +5140,20 @@ void RGWAbortMultipart::execute()
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_BUCKET;
   }
+
+  if (!op_ret) {
+    if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end()) {
+      uint64_t bucket_size;
+      ::decode(bucket_size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
+      bucket_size -= deleted_size;
+      bufferlist bs;
+      ::encode(bucket_size, bs);
+      s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+        &s->bucket_attrs);
+    }
+  }
+
 }
 
 int RGWListMultipart::verify_permission()

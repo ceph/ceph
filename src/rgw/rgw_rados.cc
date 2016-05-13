@@ -5263,6 +5263,21 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       RGWObjEnt ent = eiter->second;
       ent.key = obj;
       ent.ns = ns;
+      rgw_obj cs_obj(bucket, obj);
+      bufferlist attr;
+      map<string, bufferlist> attrset;
+      int y = store->raw_obj_stat(cs_obj, NULL, NULL, NULL, &attrset, NULL, NULL);
+      if (!y && attrset.find(RGW_ATTR_COMPRESSION) != attrset.end()) {
+        RGWCompressionInfo cs_info;
+        bufferlist::iterator bliter = attrset[RGW_ATTR_COMPRESSION].begin();
+        try {
+          ::decode(cs_info, bliter);
+        } catch (buffer::error& err) {
+          ldout(cct, 20) << "Failed to get decompressed obj size" << dendl;
+        }
+        if (cs_info.compression_type != "none")
+          ent.size = cs_info.orig_size;
+      }
       result->push_back(ent);
       count++;
     }
