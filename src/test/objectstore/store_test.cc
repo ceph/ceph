@@ -423,6 +423,115 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
   }
 }
 
+TEST_P(StoreTest, SmallBlockWrites) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist a;
+  bufferptr ap(0x1000);
+  memset(ap.c_str(), 'a', 0x1000);
+  a.append(ap);
+  bufferlist b;
+  bufferptr bp(0x1000);
+  memset(bp.c_str(), 'b', 0x1000);
+  b.append(bp);
+  bufferlist c;
+  bufferptr cp(0x1000);
+  memset(cp.c_str(), 'c', 0x1000);
+  c.append(cp);
+  bufferptr zp(0x1000);
+  zp.zero();
+  bufferlist z;
+  z.append(zp);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, 0x1000, a);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0, 0x4000, in);
+    ASSERT_EQ(0x1000, r);
+    exp.append(a);
+    ASSERT_TRUE(in.contents_equal(exp));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0x1000, 0x1000, b);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0, 0x4000, in);
+    ASSERT_EQ(0x2000, r);
+    exp.append(a);
+    exp.append(b);
+    ASSERT_TRUE(in.contents_equal(exp));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0x3000, 0x1000, c);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0, 0x4000, in);
+    ASSERT_EQ(0x4000, r);
+    exp.append(a);
+    exp.append(b);
+    exp.append(z);
+    exp.append(c);
+    ASSERT_TRUE(in.contents_equal(exp));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0x2000, 0x1000, a);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0, 0x4000, in);
+    ASSERT_EQ(0x4000, r);
+    exp.append(a);
+    exp.append(b);
+    exp.append(a);
+    exp.append(c);
+    ASSERT_TRUE(in.contents_equal(exp));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, 0x1000, c);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist in, exp;
+    r = store->read(cid, hoid, 0, 0x4000, in);
+    ASSERT_EQ(0x4000, r);
+    exp.append(c);
+    exp.append(b);
+    exp.append(a);
+    exp.append(c);
+    ASSERT_TRUE(in.contents_equal(exp));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleObjectTest) {
   ObjectStore::Sequencer osr("test");
   int r;
