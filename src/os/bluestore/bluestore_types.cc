@@ -652,6 +652,29 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   // FIXME
 }
 
+int bluestore_onode_t::compress_extent_map()
+{
+  if (extent_map.empty())
+    return 0;
+  int removed = 0;
+  auto p = extent_map.begin();
+  auto n = p;
+  for (++n; n != extent_map.end(); p = n++) {
+    while (n != extent_map.end() &&
+	   p->first + p->second.length == n->first &&
+	   p->second.blob == n->second.blob &&
+	   p->second.offset + p->second.length == n->second.offset) {
+      p->second.length += n->second.length;
+      extent_map.erase(n++);
+      ++removed;
+    }
+    if (n == extent_map.end()) {
+      break;
+    }
+  }
+  return removed;
+}
+
 void bluestore_onode_t::punch_hole(
   uint64_t offset,
   uint64_t length,

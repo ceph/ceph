@@ -557,6 +557,9 @@ struct bluestore_onode_t {
     return true;
   }
 
+  /// consolidate adjacent lextents in extent_map
+  int compress_extent_map();
+
   bluestore_blob_t *add_blob(int64_t *id) {
     *id = blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
     return &blob_map[*id];

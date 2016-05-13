@@ -312,6 +312,38 @@ TEST(bluestore_onode_t, has_any_lextents)
   ASSERT_FALSE(on.has_any_lextents(500, 1000));
 }
 
+TEST(bluestore_onode_t, compress_extent_map)
+{
+  bluestore_onode_t on;
+  vector<bluestore_lextent_t> r;
+  on.extent_map[0] = bluestore_lextent_t(1, 0, 100, 0);
+  on.extent_map[100] = bluestore_lextent_t(2, 0, 100, 0);
+  ASSERT_EQ(0, on.compress_extent_map());
+  ASSERT_EQ(2u, on.extent_map.size());
+
+  on.extent_map[200] = bluestore_lextent_t(2, 100, 100, 0);
+  on.extent_map[300] = bluestore_lextent_t(2, 200, 100, 0);
+  ASSERT_EQ(2, on.compress_extent_map());
+  ASSERT_EQ(2u, on.extent_map.size());
+
+  on.extent_map[200] = bluestore_lextent_t(3, 100, 100, 0);
+  on.extent_map[300] = bluestore_lextent_t(2, 200, 100, 0);
+  ASSERT_EQ(0, on.compress_extent_map());
+  ASSERT_EQ(4u, on.extent_map.size());
+
+  on.extent_map[400] = bluestore_lextent_t(2, 300, 100, 0);
+  on.extent_map[500] = bluestore_lextent_t(2, 500, 100, 0);
+  on.extent_map[600] = bluestore_lextent_t(2, 600, 100, 0);
+  ASSERT_EQ(2, on.compress_extent_map());
+  ASSERT_EQ(5u, on.extent_map.size());
+
+  on.extent_map[400] = bluestore_lextent_t(2, 300, 100, 0);
+  on.extent_map[500] = bluestore_lextent_t(2, 400, 100, 0);
+  on.extent_map[700] = bluestore_lextent_t(2, 500, 100, 0);
+  ASSERT_EQ(1, on.compress_extent_map());
+  ASSERT_EQ(6u, on.extent_map.size());
+}
+
 TEST(bluestore_onode_t, punch_hole)
 {
   bluestore_onode_t on;
