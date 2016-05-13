@@ -173,9 +173,10 @@ public:
       const pg_log_entry_t &entry) {}
   };
 
+  template <typename missing_t>
   void verify_missing(
     const TestCase &tcase,
-    const pg_missing_t &missing) {
+    const missing_t &missing) {
     ASSERT_EQ(tcase.final.get_items().size(), missing.get_items().size());
     for (auto i = missing.get_items().begin();
 	 i != missing.get_items().end();
@@ -184,6 +185,8 @@ public:
       EXPECT_EQ(tcase.final.get_items().find(i->first)->second.need, i->second.need);
       EXPECT_EQ(tcase.final.get_items().find(i->first)->second.have, i->second.have);
     }
+    bool correct = missing.debug_verify_from_init(tcase.init, &(std::cout));
+    ASSERT_TRUE(correct);
   }
 
   void verify_sideeffects(
@@ -216,6 +219,7 @@ public:
     pg_info_t info = tcase.get_divinfo();
 
     missing = tcase.init;
+    missing.flush();
 
     IndexedLog olog;
     olog = tcase.get_fullauth();
@@ -566,6 +570,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       missing.rm(ne.soid, ne.version);
     }
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -635,6 +640,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     missing.add_next_event(oe);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -644,6 +650,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     TestHandler h(remove_snap);
     merge_old_entry(t, oe, info, &h);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.size() > 0);
     EXPECT_TRUE(t.empty());
@@ -669,6 +676,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.prior_version = eversion_t(2,1);
     missing_add(oe.soid, oe.prior_version, eversion_t());
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -677,6 +685,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     TestHandler h(remove_snap);
     merge_old_entry(t, oe, info, &h);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -782,6 +791,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     missing.add(oe.soid, eversion_t(1,1), eversion_t());
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
@@ -791,6 +801,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     TestHandler h(remove_snap);
     merge_old_entry(t, oe, info, &h);
 
+    missing.flush();
     EXPECT_FALSE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());

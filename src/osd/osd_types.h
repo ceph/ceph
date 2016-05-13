@@ -3089,6 +3089,48 @@ public:
   bool is_clean() const {
     return tracker.is_clean();
   }
+  template <typename missing_t>
+  bool debug_verify_from_init(
+    const missing_t &init_missing,
+    ostream *oss) const {
+    if (!TrackChanges)
+      return true;
+    auto check_missing(init_missing.get_items());
+    tracker.get_changed([&](const hobject_t &hoid) {
+	check_missing.erase(hoid);
+	if (missing.count(hoid)) {
+	  check_missing.insert(*(missing.find(hoid)));
+	}
+      });
+    bool ok = true;
+    if (check_missing.size() != missing.size()) {
+      if (oss) {
+	*oss << "Size mismatch, check: " << check_missing.size()
+	     << ", actual: " << missing.size() << "\n";
+      }
+      ok = false;
+    }
+    for (auto &i: missing) {
+      if (!check_missing.count(i.first)) {
+	if (oss)
+	  *oss << "check_missing missing " << i.first << "\n";
+	ok = false;
+      } else if (check_missing[i.first] != i.second) {
+	if (oss)
+	  *oss << "check_missing missing item mismatch on " << i.first
+	       << ", check: " << check_missing[i.first]
+	       << ", actual: " << i.second << "\n";
+	ok = false;
+      }
+    }
+    if (oss && !ok) {
+      *oss << "check_missing: " << check_missing << "\n";
+      set<hobject_t, hobject_t::BitwiseComparator> changed;
+      tracker.get_changed([&](const hobject_t &hoid) { changed.insert(hoid); });
+      *oss << "changed: " << changed << "\n";
+    }
+    return ok;
+  }
 };
 template <bool TrackChanges>
 void encode(
