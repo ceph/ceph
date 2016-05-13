@@ -149,27 +149,32 @@ private:
 } // anonymous namespace
 
 template <typename I>
-void AioImageRequest<I>::aio_read(
-    I *ictx, AioCompletion *c,
-    const std::vector<std::pair<uint64_t,uint64_t> > &extents,
-    char *buf, bufferlist *pbl, int op_flags) {
+void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
+                                  const Extents &extents, char *buf,
+                                  bufferlist *pbl, int op_flags) {
   AioImageRead<I> req(*ictx, c, extents, buf, pbl, op_flags);
   req.send();
 }
 
 template <typename I>
-void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
-                                  uint64_t off, size_t len, char *buf,
-                                  bufferlist *pbl, int op_flags) {
+void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c, uint64_t off,
+                                 size_t len, char *buf, bufferlist *pbl,
+                                 int op_flags) {
   AioImageRead<I> req(*ictx, c, off, len, buf, pbl, op_flags);
   req.send();
 }
 
 template <typename I>
-void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
-                                   uint64_t off, size_t len, const char *buf,
-                                   int op_flags) {
+void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c, uint64_t off,
+                                   size_t len, const char *buf, int op_flags) {
   AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags);
+  req.send();
+}
+
+template <typename I>
+void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c, uint64_t off,
+                                   bufferlist &&bl, int op_flags) {
+  AioImageWrite<I> req(*ictx, c, off, std::move(bl), op_flags);
   req.send();
 }
 
@@ -393,19 +398,18 @@ void AioImageWrite<I>::assemble_extent(const ObjectExtent &object_extent,
                                     bufferlist *bl) {
   for (auto q = object_extent.buffer_extents.begin();
        q != object_extent.buffer_extents.end(); ++q) {
-    bl->append(m_buf + q->first, q->second);;
+    bufferlist sub_bl;
+    sub_bl.substr_of(m_bl, q->first, q->second);
+    bl->claim_append(sub_bl);
   }
 }
 
 template <typename I>
 uint64_t AioImageWrite<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
-  bufferlist bl;
-  bl.append(m_buf, this->m_len);
-
   I &image_ctx = this->m_image_ctx;
   uint64_t tid = image_ctx.journal->append_write_event(this->m_off, this->m_len,
-                                                       bl, requests,
+                                                       m_bl, requests,
                                                        synchronous);
   if (image_ctx.object_cacher == NULL) {
     AioCompletion *aio_comp = this->m_aio_comp;
