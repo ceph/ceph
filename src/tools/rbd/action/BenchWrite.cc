@@ -303,7 +303,7 @@ int execute(const po::variables_map &vm) {
 }
 
 Shell::Action action(
-  {"bench-write"}, {}, "Simple write benchmark.", "", &get_arguments, &execute);
+  {"bench-write"}, {}, "Simple write benchmark.", "", &get_arguments, &execute, false);
 
 } // namespace bench_write
 } // namespace action
