@@ -238,9 +238,12 @@ For example::
 The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
 should cover, and how many such HitSets to store. ::
 
-	ceph osd pool set {cachepool} hit_set_count 1
-	ceph osd pool set {cachepool} hit_set_period 3600
+	ceph osd pool set {cachepool} hit_set_count 12
+	ceph osd pool set {cachepool} hit_set_period 14400
 	ceph osd pool set {cachepool} target_max_bytes 1000000000000
+
+.. note:: A larger ``hit_set_count`` results in more RAM consumed by
+          the ``ceph-osd`` process.
 
 Binning accesses over time allows Ceph to determine whether a Ceph client
 accessed an object at least once, or more than once over a time period 
@@ -258,13 +261,14 @@ found in any of the most recent ``min_read_recency_for_promote`` HitSets.
 A similar parameter can be set for the write operation, which is
 ``min_write_recency_for_promote``. ::
 
-	ceph osd pool set {cachepool} min_read_recency_for_promote 1
-	ceph osd pool set {cachepool} min_write_recency_for_promote 1
+	ceph osd pool set {cachepool} min_read_recency_for_promote 2
+	ceph osd pool set {cachepool} min_write_recency_for_promote 2
 
 .. note:: The longer the period and the higher the
-   ``min_read_recency_for_promote``/``min_write_recency_for_promote``, the more
-   RAM the ``ceph-osd`` daemon consumes. In particular, when the agent is active
-   to flush or evict cache objects, all ``hit_set_count`` HitSets are loaded
+   ``min_read_recency_for_promote`` and
+   ``min_write_recency_for_promote``values, the more RAM the ``ceph-osd``
+   daemon consumes. In particular, when the agent is active to flush
+   or evict cache objects, all ``hit_set_count`` HitSets are loaded
    into RAM.
 
 
