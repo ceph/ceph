@@ -30,6 +30,7 @@
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "Checksummer.h"
+#include "compressor/Compressor.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -3060,11 +3061,24 @@ int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
   return 0;
 }
 
-int BlueStore::_decompress(const bufferlist& source, bufferlist* result)
+int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
-  //FIXME: just a stub, need to be implemented!
-  result->append(source);
+  bufferlist::iterator i = source.begin();
+  bluestore_compression_header_t chdr;
+  ::decode(chdr, i);
+  CompressorRef compressor = Compressor::create(cct, chdr.type);
+  if (!compressor.get()) {
+    // if compressor isn't available - error, because cannot return decompressed data?
+    derr << __func__ << " can't load decompressor " << chdr.type << dendl;
+    r = -EIO;
+  } else {
+    r = compressor->decompress(i, *result);
+    if (r < 0) {
+      derr << __func__ << " decompression failed with exit code " << r << dendl;
+      r = -EIO;
+    }
+  }
   return r;
 }
 
@@ -5346,6 +5360,8 @@ void BlueStore::_do_write_small(
 			       b_off, padded.length(), padded, &b->csum_data);
       }
       o->onode.punch_hole(offset, length, &wctx->lex_old);
+      dout(20) << __func__ << "  lexold 0x" << std::hex << offset << std::dec
+	       << ": " << ep->second << dendl;
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
 	bluestore_lextent_t(blob, b_off + head_pad, length, 0);
       b->ref_map.get(lex.offset, lex.length);
