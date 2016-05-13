@@ -452,3 +452,48 @@ TEST_F(TestJournalPlayer, ImbalancedJournal) {
   ASSERT_TRUE(metadata->get_last_allocated_entry_tid(301, &last_tid));
   ASSERT_EQ(3U, last_tid);
 }
+
+TEST_F(TestJournalPlayer, LiveReplayLaggyAppend) {
+  std::string oid = get_temp_oid();
+
+  cls::journal::ObjectSetPosition commit_position;
+
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  ASSERT_EQ(0, client_commit(oid, commit_position));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+
+  journal::JournalPlayer *player = create_player(oid, metadata);
+
+  ASSERT_EQ(0, write_entry(oid, 0, 0, 0));
+  ASSERT_EQ(0, write_entry(oid, 1, 0, 1));
+  ASSERT_EQ(0, write_entry(oid, 0, 0, 2));
+  ASSERT_EQ(0, write_entry(oid, 0, 0, 4));
+  ASSERT_EQ(0, write_entry(oid, 3, 0, 5)); // laggy entry 0/3 in object 1
+  metadata->set_active_set(1);
+  player->prefetch_and_watch(0.25);
+
+  Entries entries;
+  ASSERT_TRUE(wait_for_entries(player, 3, &entries));
+
+  Entries expected_entries = {
+    create_entry(0, 0),
+    create_entry(0, 1),
+    create_entry(0, 2)};
+  ASSERT_EQ(expected_entries, entries);
+
+  journal::Entry entry;
+  uint64_t commit_tid;
+  ASSERT_FALSE(player->try_pop_front(&entry, &commit_tid));
+
+  ASSERT_EQ(0, write_entry(oid, 1, 0, 3));
+  ASSERT_TRUE(wait_for_entries(player, 3, &entries));
+
+  expected_entries = {
+    create_entry(0, 3),
+    create_entry(0, 4),
+    create_entry(0, 5)};
+  ASSERT_EQ(expected_entries, entries);
+}

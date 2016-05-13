@@ -221,6 +221,8 @@ void ObjectPlayer::handle_watch_fetched(int r) {
     assert(m_watch_in_progress);
     if (r == -ENOENT) {
       r = 0;
+    } else {
+      m_refetch_required = true;
     }
     std::swap(on_finish, m_watch_ctx);
   }
