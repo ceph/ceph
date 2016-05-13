@@ -83,7 +83,9 @@ void AioImageRequest<I>::aio_read(
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
     char *buf, bufferlist *pbl, int op_flags) {
   c->init_time(ictx, librbd::AIO_TYPE_READ);
+
   AioImageRead req(*ictx, c, extents, buf, pbl, op_flags);
+  req.start_op();
   req.send();
 }
 
@@ -92,7 +94,9 @@ void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
                                   uint64_t off, size_t len, char *buf,
                                   bufferlist *pbl, int op_flags) {
   c->init_time(ictx, librbd::AIO_TYPE_READ);
+
   AioImageRead req(*ictx, c, off, len, buf, pbl, op_flags);
+  req.start_op();
   req.send();
 }
 
@@ -101,7 +105,9 @@ void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                    uint64_t off, size_t len, const char *buf,
                                    int op_flags) {
   c->init_time(ictx, librbd::AIO_TYPE_WRITE);
+
   AioImageWrite req(*ictx, c, off, len, buf, op_flags);
+  req.start_op();
   req.send();
 }
 
@@ -109,14 +115,18 @@ template <typename I>
 void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                      uint64_t off, uint64_t len) {
   c->init_time(ictx, librbd::AIO_TYPE_DISCARD);
+
   AioImageDiscard req(*ictx, c, off, len);
+  req.start_op();
   req.send();
 }
 
 template <typename I>
 void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
   c->init_time(ictx, librbd::AIO_TYPE_FLUSH);
+
   AioImageFlush req(*ictx, c);
+  req.start_op();
   req.send();
 }
 
@@ -174,8 +184,6 @@ void AioImageRead::send_request() {
                                object_extents, buffer_ofs);
       buffer_ofs += len;
     }
-
-    m_aio_comp->start_op();
   }
 
   m_aio_comp->read_buf = m_buf;
@@ -247,7 +255,6 @@ void AbstractAioImageWrite::send_request() {
     }
 
     snapc = m_image_ctx.snapc;
-    m_aio_comp->start_op();
 
     // map to object extents
     if (clip_len > 0) {
@@ -465,7 +472,6 @@ void AioImageFlush::send_request() {
   C_AioRequest *req_comp = new C_AioRequest(m_aio_comp);
   m_image_ctx.flush(req_comp);
 
-  m_aio_comp->start_op();
   m_aio_comp->put();
 
   m_image_ctx.perfcounter->inc(l_librbd_aio_flush);

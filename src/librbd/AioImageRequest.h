@@ -40,6 +40,10 @@ public:
     return false;
   }
 
+  void start_op() {
+    m_aio_comp->start_op();
+  }
+
   void send();
   void fail(int r);
 
