@@ -1104,24 +1104,6 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
-  class C_Tick : public Context {
-    OSD *osd;
-  public:
-    explicit C_Tick(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->tick();
-    }
-  };
-
-  class C_Tick_WithoutOSDLock : public Context {
-    OSD *osd;
-  public:
-    explicit C_Tick_WithoutOSDLock(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->tick_without_osd_lock();
-    }
-  };
-
   Cond dispatch_cond;
   bool dispatch_running;
 
@@ -1206,6 +1188,9 @@ public:
   
 
 private:
+  class C_Tick;
+  class C_Tick_WithoutOSDLock;
+
   // -- superblock --
   OSDSuperblock superblock;
 
