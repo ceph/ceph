@@ -829,10 +829,6 @@ int NVMEDevice::open(string p)
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
-  if (!driver->zero_command_support) {
-    zeros = buffer::create_page_aligned(1048576);
-    zeros.zero();
-  }
 
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
@@ -944,16 +940,8 @@ int NVMEDevice::aio_zero(
     ioc->nvme_task_last = t;
     ++ioc->num_pending;
   } else {
-    assert(zeros.length());
     bufferlist bl;
-    while (len > 0) {
-      bufferlist t;
-      t.append(zeros, 0, MIN(zeros.length(), len));
-      len -= t.length();
-      bl.claim_append(t);
-    }
-    // note: this works with aio only becaues the actual buffer is
-    // this->zeros, which is page-aligned and never freed.
+    bl.append_zero(len, true);
     return aio_write(off, bl, ioc, false);
   }
 
