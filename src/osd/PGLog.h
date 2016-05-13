@@ -50,7 +50,7 @@ struct PGLog : DoutPrefixProvider {
     virtual void remove(
       const hobject_t &hoid) = 0;
     virtual void try_stash(
-      const hobject_t &entry,
+      const hobject_t &hoid,
       version_t v) = 0;
     virtual void trim(
       const pg_log_entry_t &entry) = 0;
