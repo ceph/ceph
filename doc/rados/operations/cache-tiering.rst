@@ -55,35 +55,80 @@ configure how this migration takes place. There are two main scenarios:
   data becomes inactive. This is ideal for mutable data (e.g., photo/video 
   editing, transactional data, etc.).
 
-- **Read-only Mode:** When admins configure tiers with ``readonly`` mode, Ceph
-  clients write data to the backing tier. On read, Ceph copies the requested
-  object(s) from the backing tier to the cache tier. Stale objects get removed
-  from the cache tier based on the defined policy. This approach is ideal 
-  for immutable data (e.g., presenting pictures/videos on a social network, 
-  DNA data, X-Ray imaging, etc.), because reading data from a cache pool that 
-  might contain out-of-date data provides weak consistency. Do not use 
-  ``readonly`` mode for mutable data.
+- **Read-proxy Mode:** This mode will use any objects that already
+  exist in the cache tier, but if an object is not present in the
+  cache the request will be proxied to the base tier.  This is useful
+  for transitioning from ``writeback`` mode to a disabled cache as it
+  allows the workload to function properly while the cache is drained,
+  without adding any new objects to the cache.
 
-And the modes above are accomodated to adapt different configurations:
+A word of caution
+=================
 
-- **Read-forward Mode:** this mode is the same as the ``writeback`` mode
-  when serving write requests. But when Ceph clients is trying to read objects
-  not yet copied to the cache tier, Ceph **forward** them to the backing tier by
-  replying with a "redirect" message. And the clients will instead turn to the
-  backing tier for the data. If the read performance of the backing tier is on
-  a par with that of its cache tier, while its write performance or endurance
-  falls far behind, this mode might be a better choice.
+Cache tiering will *degrade* performance for most workloads.  Users should use
+extreme caution before using this feature.
 
-- **Read-proxy Mode:** this mode is similar to ``readforward`` mode: both
-  of them do not promote/copy the data when the requested object does not
-  exist in the cache tier. But instead of redirecting the Ceph clients to the
-  backing tier when cache misses, the cache tier reads from the backing tier
-  on behalf of the clients. Under some circumstances, this mode can help to
-  reduce the latency.
+* *Workload dependent*: Whether a cache will improve performance is
+  highly dependent on the workload.  Because there is a cost
+  associated with moving objects into or out of the cache, it can only
+  be effective when there is a *large skew* in the access pattern in
+  the data set, such that most of the requests touch a small number of
+  objects.  The cache pool should be large enough to capture the
+  working set for your workload to avoid thrashing.
 
-Since all Ceph clients can use cache tiering, it has the potential to 
-improve I/O performance for Ceph Block Devices, Ceph Object Storage, 
-the Ceph Filesystem and native bindings.
+* *Difficult to benchmark*: Most benchmarks that users run to measure
+  performance will show terrible performance with cache tiering, in
+  part because very few of them skew requests toward a small set of
+  objects, it can take a long time for the cache to "warm up," and
+  because the warm-up cost can be high.
+
+* *Usually slower*: For workloads that are not cache tiering-friendly,
+  performance is often slower than a normal RADOS pool without cache
+  tiering enabled.
+
+* *librados object enumeration*: The librados-level object enumeration
+  API is not meant to be coherent in the presence of the case.  If
+  your applicatoin is using librados directly and relies on object
+  enumeration, cache tiering will probably not work as expected.
+  (This is not a problem for RGW, RBD, or CephFS.)
+
+* *Complexity*: Enabling cache tiering means that a lot of additional
+  machinery and complexity within the RADOS cluster is being used.
+  This increases the probability that you will encounter a bug in the system
+  that other users have not yet encountered and will put your deployment at a
+  higher level of risk.
+
+Known Good Workloads
+--------------------
+
+* *RGW time-skewed*: If the RGW workload is such that almost all read
+  operations are directed at recently written objects, a simple cache
+  tiering configuration that destages recently written objects from
+  the cache to the base tier after a configurable period can work
+  well.
+
+Known Bad Workloads
+-------------------
+
+The following configurations are *known to work poorly* with cache
+tiering.
+
+* *RBD with replicated cache and erasure-coded base*: This is a common
+  request, but usually does not perform well.  Even reasonably skewed
+  workloads still send some small writes to cold objects, and because
+  small writes are not yet supported by the erasure-coded pool, entire
+  (usually 4 MB) objects must be migrated into the cache in order to
+  satisfy a small (often 4 KB) write.  Only a handful of users have
+  successfully deployed this configuration, and it only works for them
+  because their data is extremely cold (backups) and they are not in
+  any way sensitive to performance.
+
+* *RBD with replicated cache and base*: RBD with a replicated base
+  tier does better than when the base is erasure coded, but it is
+  still highly dependent on the amount of skew in the workload, and
+  very difficult to validate.  The user will need to have a good
+  understanding of their workload and will need to tune the cache
+  tiering parameters carefully.
 
 
 Setting Up Pools
@@ -193,9 +238,12 @@ For example::
 The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
 should cover, and how many such HitSets to store. ::
 
-	ceph osd pool set {cachepool} hit_set_count 1
-	ceph osd pool set {cachepool} hit_set_period 3600
+	ceph osd pool set {cachepool} hit_set_count 12
+	ceph osd pool set {cachepool} hit_set_period 14400
 	ceph osd pool set {cachepool} target_max_bytes 1000000000000
+
+.. note:: A larger ``hit_set_count`` results in more RAM consumed by
+          the ``ceph-osd`` process.
 
 Binning accesses over time allows Ceph to determine whether a Ceph client
 accessed an object at least once, or more than once over a time period 
@@ -213,13 +261,14 @@ found in any of the most recent ``min_read_recency_for_promote`` HitSets.
 A similar parameter can be set for the write operation, which is
 ``min_write_recency_for_promote``. ::
 
-	ceph osd pool set {cachepool} min_read_recency_for_promote 1
-	ceph osd pool set {cachepool} min_write_recency_for_promote 1
+	ceph osd pool set {cachepool} min_read_recency_for_promote 2
+	ceph osd pool set {cachepool} min_write_recency_for_promote 2
 
 .. note:: The longer the period and the higher the
-   ``min_read_recency_for_promote``/``min_write_recency_for_promote``, the more
-   RAM the ``ceph-osd`` daemon consumes. In particular, when the agent is active
-   to flush or evict cache objects, all ``hit_set_count`` HitSets are loaded
+   ``min_read_recency_for_promote`` and
+   ``min_write_recency_for_promote``values, the more RAM the ``ceph-osd``
+   daemon consumes. In particular, when the agent is active to flush
+   or evict cache objects, all ``hit_set_count`` HitSets are loaded
    into RAM.
 
 
