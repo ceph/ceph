@@ -483,7 +483,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     rewind_divergent_log(t, eversion_t(1, 5), info, &h,
 			 dirty_info, dirty_big_info);
     pg_log_t log;
-    claim_log_and_clear_rollback_info(log, &h);
+    reset_backfill_claim_log(log, &h);
   }
 }
 
