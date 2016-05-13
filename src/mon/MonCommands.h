@@ -292,7 +292,7 @@ COMMAND_WITH_FLAG("mon sync force " \
     "force sync of and clear monitor store", \
     "mon", "rw", "cli,rest", \
     FLAG(NOFORWARD))
-COMMAND("mon metadata name=id,type=CephString",
+COMMAND("mon metadata name=id,type=CephString,req=false",
 	"fetch metadata for mon <id>",
 	"mon", "r", "cli,rest")
 
