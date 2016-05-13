@@ -525,6 +525,34 @@ TEST_P(StoreTest, SimpleObjectTest) {
     ASSERT_TRUE(in.contents_equal(exp));
   }
   {
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append("fghij");
+      t.truncate(cid, hoid, 0);
+      t.write(cid, hoid, 5, 5, bl);
+      cerr << "Truncate + hole" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append("abcde");
+      t.write(cid, hoid, 0, 5, bl);
+      cerr << "Reverse fill-in" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+
+    bufferlist in, exp;
+    exp.append("abcdefghij");
+    r = store->read(cid, hoid, 0, 10, in);
+    ASSERT_EQ(10, r);
+    in.hexdump(cout);
+    ASSERT_TRUE(in.contents_equal(exp));
+  }
+  {
     ObjectStore::Transaction t;
     bufferlist bl;
     bl.append("abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234abcde01234012340123401234");
