@@ -932,7 +932,7 @@ private:
     extents2read_t* result);
 
   int _verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const;
-  int _decompress(const bufferlist& source, bufferlist* result);
+  int _decompress(bufferlist& source, bufferlist* result);
 
 
   // --------------------------------------------------------
