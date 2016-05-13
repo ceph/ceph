@@ -7015,7 +7015,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->dirty_big_info = true;  // maybe.
 
     PGLogEntryHandler rollbacker;
-    pg->pg_log.claim_log_and_clear_rollback_info(msg->log, &rollbacker);
+    pg->pg_log.reset_backfill_claim_log(msg->log, &rollbacker);
     rollbacker.apply(pg, t);
 
     pg->pg_log.reset_backfill();
