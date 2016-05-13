@@ -175,9 +175,6 @@ namespace crimson {
 			     const crimson::dmclock::RequestTag& tag);
 
 
-    enum class QMechanism { push, pull };
-
-
     // C is client identifier type, R is request type
     template<typename C, typename R>
     class PriorityQueueBase {
@@ -806,8 +803,8 @@ namespace crimson {
 
 
     // PULL version
-    template<typename C, typename R, QMechanism M>
-    class PriorityQueue : public PriorityQueueBase<C,R> {
+    template<typename C, typename R>
+    class PullPriorityQueue : public PriorityQueueBase<C,R> {
       using super = PriorityQueueBase<C,R>;
 
     public:
@@ -831,7 +828,7 @@ namespace crimson {
 #endif
 
       template<typename Rep, typename Per>
-      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+      PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 		    std::chrono::duration<Rep,Per> _idle_age,
 		    std::chrono::duration<Rep,Per> _erase_age,
 		    std::chrono::duration<Rep,Per> _check_time,
@@ -845,9 +842,9 @@ namespace crimson {
 
 
       // pull convenience constructor
-      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+      PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
+	PullPriorityQueue(_client_info_f,
 		      std::chrono::minutes(10),
 		      std::chrono::minutes(15),
 		      std::chrono::minutes(6),
@@ -990,12 +987,12 @@ namespace crimson {
       typename super::NextReq next_request() {
 	return next_request(get_time());
       }
-    };
+    }; // class PullPriorityQueue
 
 
     // PUSH version
     template<typename C, typename R>
-    class PriorityQueue<C,R,QMechanism::push> : public PriorityQueueBase<C,R> {
+    class PushPriorityQueue : public PriorityQueueBase<C,R> {
 
     protected:
 
@@ -1035,7 +1032,7 @@ namespace crimson {
 
       // push full constructor
       template<typename Rep, typename Per>
-      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+      PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
 		    std::chrono::duration<Rep,Per> _idle_age,
@@ -1048,16 +1045,16 @@ namespace crimson {
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
-	sched_ahead_thd = std::thread(&PriorityQueue::run_sched_ahead, this);
+	sched_ahead_thd = std::thread(&PushPriorityQueue::run_sched_ahead, this);
       }
 
 
       // push convenience constructor
-      PriorityQueue(typename super::ClientInfoFunc _client_info_f,
+      PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 		    CanHandleRequestFunc _can_handle_f,
 		    HandleRequestFunc _handle_f,
 		    bool _allow_limit_break = false) :
-	PriorityQueue(_client_info_f,
+	PushPriorityQueue(_client_info_f,
 		      _can_handle_f,
 		      _handle_f,
 		      std::chrono::minutes(10),
@@ -1069,7 +1066,7 @@ namespace crimson {
       }
 
 
-      ~PriorityQueue() {
+      ~PushPriorityQueue() {
 	this->finishing = true;
 	sched_ahead_cv.notify_one();
 	sched_ahead_thd.join();
@@ -1257,7 +1254,7 @@ namespace crimson {
 	  sched_ahead_cv.notify_one();
 	}
       }
-    };
+    }; // class PushPriorityQueue
 
   } // namespace dmclock
 } // namespace crimson

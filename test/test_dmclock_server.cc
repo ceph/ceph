@@ -37,7 +37,7 @@ namespace crimson {
 
     TEST(dmclock_server, bad_tag_deathtest) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 17;
@@ -79,7 +79,7 @@ namespace crimson {
     
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::push>;
+      using Queue = dmc::PushPriorityQueue<ClientId,Request>;
       int client = 17;
       double reservation = 100.0;
 
@@ -163,6 +163,7 @@ namespace crimson {
 #if 0
     TEST(dmclock_server, reservation_timing) {
       using ClientId = int;
+      // NB? PUSH OR PULL
       using Queue = std::unique_ptr<dmc::PriorityQueue<ClientId,Request>>;
       using std::chrono::steady_clock;
 
@@ -189,6 +190,7 @@ namespace crimson {
 	complete.detach();
       };
 
+      // NB? PUSH OR PULL
       pq = Queue(new dmc::PriorityQueue<ClientId,Request>(client_info_f,
 							  server_ready_f,
 							  submit_req_f,
@@ -213,7 +215,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, pull_weight) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 17;
@@ -269,7 +271,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, pull_reservation) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
@@ -325,7 +327,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, pull_none) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       dmc::ClientInfo info(1.0, 1.0, 1.0);
@@ -349,7 +351,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, pull_future) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
@@ -381,7 +383,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, pull_future_limit_break_weight) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
@@ -412,7 +414,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, pull_future_limit_break_reservation) {
       using ClientId = int;
-      using Queue = dmc::PriorityQueue<ClientId,Request,dmc::QMechanism::pull>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
