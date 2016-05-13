@@ -119,7 +119,10 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
     return;
   }
 
-  assert(!m_object_closed);
+  if (m_object_closed || m_overflowed) {
+    return;
+  }
+
   AppendBuffers::iterator it;
   for (it = m_append_buffers.begin(); it != m_append_buffers.end(); ++it) {
     if (it->first == future) {
@@ -184,7 +187,11 @@ bool ObjectRecorder::append(const AppendBuffer &append_buffer,
                             bool *schedule_append) {
   assert(m_lock.is_locked());
 
-  bool flush_requested = append_buffer.first->attach(&m_flush_handler);
+  bool flush_requested = false;
+  if (!m_object_closed && !m_overflowed) {
+    flush_requested = append_buffer.first->attach(&m_flush_handler);
+  }
+
   m_append_buffers.push_back(append_buffer);
   m_pending_bytes += append_buffer.second.length();
 
