@@ -511,8 +511,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
     out << " " << o.get_flags_string();
   }
   if (o.csum_type) {
-    out << " csum " << o.get_csum_type_string(o.csum_type)
-	<< " order " << (int)o.csum_block_order;
+    out << " " << o.get_csum_type_string(o.csum_type)
+	<< "/0x" << std::hex << (1ull << o.csum_block_order) << std::dec;
   }
   if (!o.ref_map.empty()) {
     out << " " << o.ref_map;
