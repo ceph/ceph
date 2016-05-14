@@ -748,15 +748,10 @@ void bluestore_wal_op_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(op, bl);
-  ::encode(extent, bl);
-  ::encode(src_extent, bl);
-  ::encode(src_rmw_head, bl);
-  ::encode(src_rmw_tail, bl);
+  ::encode(extents, bl);
+  ::encode(data, bl);
   ::encode(nid, bl);
   ::encode(overlays, bl);
-  if (!overlays.size()) {
-    ::encode(data, bl);
-  }
   ::encode(removed_overlays, bl);
   ENCODE_FINISH(bl);
 }
@@ -765,15 +760,10 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(op, p);
-  ::decode(extent, p);
-  ::decode(src_extent, p);
-  ::decode(src_rmw_head, p);
-  ::decode(src_rmw_tail, p);
+  ::decode(extents, p);
+  ::decode(data, p);
   ::decode(nid, p);
   ::decode(overlays, p);
-  if (!overlays.size()) {
-    ::decode(data, p);
-  }
   ::decode(removed_overlays, p);
   DECODE_FINISH(p);
 }
@@ -781,21 +771,21 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
 void bluestore_wal_op_t::dump(Formatter *f) const
 {
   f->dump_unsigned("op", (int)op);
-  f->dump_object("extent", extent);
-  f->dump_object("src_extent", src_extent);
-  f->dump_unsigned("src_rmw_head", src_rmw_head);
-  f->dump_unsigned("src_rmw_tail", src_rmw_tail);
+  f->dump_unsigned("data_len", data.length());
+  f->open_array_section("extents");
+  for (auto& e : extents) {
+    f->dump_object("extent", e);
+  }
+  f->close_section();
   f->dump_unsigned("nid", nid);
   f->open_array_section("overlays");
-  for (vector<bluestore_overlay_t>::const_iterator p = overlays.begin();
-       p != overlays.end(); ++p) {
-    f->dump_object("overlay", *p);
+  for (auto& o : overlays) {
+    f->dump_object("overlay", o);
   }
   f->close_section();
   f->open_array_section("removed_overlays");
-  for (vector<uint64_t>::const_iterator p = removed_overlays.begin();
-       p != removed_overlays.end(); ++p) {
-    f->dump_unsigned("key", *p);
+  for (auto key : removed_overlays) {
+    f->dump_unsigned("key", key);
   }
   f->close_section();
 }
@@ -805,19 +795,9 @@ void bluestore_wal_op_t::generate_test_instances(list<bluestore_wal_op_t*>& o)
   o.push_back(new bluestore_wal_op_t);
   o.push_back(new bluestore_wal_op_t);
   o.back()->op = OP_WRITE;
-  o.back()->extent.offset = 1;
-  o.back()->extent.length = 2;
-  o.back()->src_extent.offset = 10000;
-  o.back()->src_extent.length = 2;
-  o.back()->src_rmw_head = 22;
-  o.back()->src_rmw_tail = 88;
+  o.back()->extents.push_back(bluestore_pextent_t(1, 2));
+  o.back()->extents.push_back(bluestore_pextent_t(100, 5));
   o.back()->data.append("my data");
-  o.back()->nid = 3;
-  o.back()->overlays.push_back(bluestore_overlay_t());
-  o.back()->overlays.push_back(bluestore_overlay_t());
-  o.back()->overlays.back().key = 4;
-  o.back()->overlays.back().value_offset = 5;
-  o.back()->overlays.back().length = 6;
 }
 
 void bluestore_wal_transaction_t::encode(bufferlist& bl) const
@@ -865,8 +845,6 @@ void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_tra
   o.back()->ops.push_back(bluestore_wal_op_t());
   o.back()->ops.push_back(bluestore_wal_op_t());
   o.back()->ops.back().op = bluestore_wal_op_t::OP_WRITE;
-  o.back()->ops.back().extent.offset = 2;
-  o.back()->ops.back().extent.length = 3;
+  o.back()->ops.back().extents.push_back(bluestore_pextent_t(1,7));
   o.back()->ops.back().data.append("foodata");
-  o.back()->ops.back().nid = 4;
 }

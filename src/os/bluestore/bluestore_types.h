@@ -415,11 +415,10 @@ struct bluestore_blob_t {
     return &csum_data[cs * i];
   }
 
-  void init_csum(unsigned type, unsigned order) {
+  void init_csum(unsigned type, unsigned order, unsigned len) {
     csum_type = type;
     csum_block_order = order;
-    csum_data.resize(get_csum_value_size() * get_ondisk_length() /
-		     get_csum_block_size());
+    csum_data.resize(get_csum_value_size() * len / get_csum_block_size());
   }
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)
@@ -606,19 +605,15 @@ WRITE_CLASS_ENCODER(bluestore_onode_t)
 struct bluestore_wal_op_t {
   typedef enum {
     OP_WRITE = 1,
-    OP_COPY = 2,
-    OP_ZERO = 4,
   } type_t;
   __u8 op = 0;
-  bluestore_pextent_t extent;
-  bluestore_pextent_t src_extent;
-  uint64_t src_rmw_head, src_rmw_tail;
+
+  vector<bluestore_pextent_t> extents;
   bufferlist data;
+
   uint64_t nid;
   vector<bluestore_overlay_t> overlays;
   vector<uint64_t> removed_overlays;
-
-  bluestore_wal_op_t() : src_rmw_head(0), src_rmw_tail(0), nid(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -637,21 +632,6 @@ struct bluestore_wal_transaction_t {
   int64_t _bytes;  ///< cached byte count
 
   bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
-
-#if 0
-  no users for htis
-  uint64_t get_bytes() {
-    if (_bytes < 0) {
-      _bytes = 0;
-      for (list<bluestore_wal_op_t>::iterator p = ops.begin();
-	   p != ops.end();
-	   ++p) {
-	_bytes += p->extent.length;
-      }
-    }
-    return _bytes;
-  }
-#endif
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
