@@ -30,7 +30,14 @@ sha1=$4
 flavor=$5
 arch=$6
 
-sudo yum install -y git
+suse=false
+[[ $codename =~ suse ]] && suse=true
+
+if [ "$suse" = true ] ; then
+    sudo zypper -n install git
+else
+    sudo yum install -y git
+fi
 
 source $(dirname $0)/common.sh
 
@@ -39,7 +46,7 @@ init_ceph $git_ceph_url $sha1
 #id=$(lsb_release -s -i | tr A-Z a-z)
 #major=$(lsb_release -s -r | sed -s "s;\..*;;g")
 #codename="${id}${major}"
-releasedir=$base/$(lsb_release -si)/WORKDIR
+releasedir=$base/$(lsb_release -si | tr ' ' '_')/WORKDIR
 #
 # git describe provides a version that is
 # a) human readable
@@ -79,7 +86,11 @@ function build_package() {
     # creating the distribution tarbal requires some configure
     # options (otherwise parts of the source tree will be left out).
     #
-    sudo yum install -y bzip2
+    if [ "$suse" = true ] ; then
+        sudo zypper -n install bzip2 
+    else
+        sudo yum install -y bzip2
+    fi
     ./autogen.sh
     ./configure $(flavor2configure $flavor) --with-debug --with-radosgw --with-fuse --with-libatomic-ops --with-gtk2 --with-nss
     #
@@ -89,7 +100,11 @@ function build_package() {
     make dist-bzip2
     # Set up build area
     setup_rpmmacros
-    sudo yum install -y rpm-build
+    if [ "$suse" = true ] ; then
+        sudo zypper -n install rpm-build
+    else
+        sudo yum install -y rpm-build
+    fi
     local buildarea=$releasedir
     mkdir -p ${buildarea}/SOURCES
     mkdir -p ${buildarea}/SRPMS
@@ -212,7 +227,11 @@ function build_rpm_repo() {
     local gitbuilder_host=$2
     local base=$3
 
-    sudo yum install -y createrepo
+    if [ "$suse" = true ] ; then
+        sudo zypper -n install createrepo
+    else
+        sudo yum install -y createrepo
+    fi
 
     for dir in ${buildarea}/SRPMS ${buildarea}/RPMS/*
     do
