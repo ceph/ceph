@@ -287,6 +287,13 @@ struct bluestore_blob_t {
     return get_flags_string(flags);
   }
 
+  bool is_mutable() const {
+    return has_flag(FLAG_MUTABLE);
+  }
+  bool is_compressed() const {
+    return has_flag(FLAG_COMPRESSED);
+  }
+
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
     assert(p != extents.end());
@@ -344,6 +351,13 @@ struct bluestore_blob_t {
     }
   }
 
+  uint64_t get_max_length() const {
+    if (has_flag(FLAG_COMPRESSED)) {
+      return length;
+    } else {
+      return get_ondisk_length();
+    }
+  }
   uint32_t get_ondisk_length() const {
     uint32_t len = 0;
     for (auto &p : extents) {
