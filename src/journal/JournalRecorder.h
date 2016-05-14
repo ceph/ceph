@@ -62,6 +62,17 @@ private:
     }
   };
 
+  struct C_AdvanceObjectSet : public Context {
+    JournalRecorder *journal_recorder;
+
+    C_AdvanceObjectSet(JournalRecorder *_journal_recorder)
+      : journal_recorder(_journal_recorder) {
+    }
+    virtual void finish(int r) {
+      journal_recorder->handle_advance_object_set(r);
+    }
+  };
+
   librados::IoCtx m_ioctx;
   CephContext *m_cct;
   std::string m_object_oid_prefix;
@@ -77,12 +88,21 @@ private:
 
   Mutex m_lock;
 
+  uint32_t m_in_flight_advance_sets = 0;
+  uint32_t m_in_flight_object_closes = 0;
   uint64_t m_current_set;
   ObjectRecorderPtrs m_object_ptrs;
 
   FutureImplPtr m_prev_future;
 
-  void close_object_set(uint64_t object_set);
+  void open_object_set();
+  bool close_object_set(uint64_t active_set);
+
+  void advance_object_set();
+  void handle_advance_object_set(int r);
+
+  void close_and_advance_object_set(uint64_t object_set);
+
   ObjectRecorderPtr create_object_recorder(uint64_t object_number);
   void create_next_object_recorder(ObjectRecorderPtr object_recorder);
 
