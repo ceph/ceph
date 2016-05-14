@@ -3053,38 +3053,18 @@ int BlueStore::_blob2read_to_extents2read(
 
 int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const
 {
-  uint64_t block_size = blob->get_csum_block_size();
-  size_t csum_len = blob->get_csum_value_size();
-
-  assert((blob_xoffset % block_size) == 0);
-  assert((bl.length() % block_size) == 0);
-
-  uint64_t block0 = blob_xoffset / block_size;
-  uint64_t blocks = bl.length() / block_size;
-
-  assert(blob->csum_data.size() >= (block0 + blocks) * csum_len);
-
-  vector<char> csum_data;
-  csum_data.resize(blob->get_csum_value_size() * blocks);
-
-  vector<char>::const_iterator start = blob->csum_data.cbegin();
-  vector<char>::const_iterator end = blob->csum_data.cbegin();
-  start += block0 * csum_len;
-  end += (block0 + blocks) * csum_len;
-
-  checksummer->calculate(
+  int bad = checksummer->verify(
     blob->csum_type,
     blob->get_csum_block_size(),
-    0,
+    blob_xoffset,
     bl.length(),
     bl,
-    &csum_data);
-
-  int r = 0; //m_csum_verifier.verify((bluestore_blob_t::CSumType)blob->csum_type, blob->get_csum_value_size(), blob->get_csum_block_size(), bl, opaque, csum_data);
-  if(std::equal(start, end, csum_data.begin())) {
-    r = -1;
+    blob->csum_data);
+  if (bad >= 0) {
+    dout(20) << __func__ << " at blob offset 0x" << bad << dendl;
+    return -1;
   }
-  return r;
+  return 0;
 }
 
 int BlueStore::_decompress(const bufferlist& source, bufferlist* result)
