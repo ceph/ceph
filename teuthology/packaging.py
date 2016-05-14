@@ -599,6 +599,8 @@ class GitbuilderProject(object):
             distro = "centos"
         elif distro == "fedora":
             distro = "fc"
+        elif distro == "opensuse":
+            distro = "opensuse"
         else:
             # deb based systems use codename instead of a distro/version combo
             if not codename:
