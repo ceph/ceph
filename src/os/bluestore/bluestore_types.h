@@ -640,4 +640,16 @@ struct bluestore_wal_transaction_t {
 };
 WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
+struct bluestore_compression_header_t {
+  std::string type;
+  bluestore_compression_header_t() {}
+  bluestore_compression_header_t(const std::string& _type)
+    : type(_type) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+};
+WRITE_CLASS_ENCODER(bluestore_compression_header_t)
+
+
 #endif
