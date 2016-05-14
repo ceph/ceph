@@ -2764,7 +2764,6 @@ int BlueStore::_do_read(
   uint32_t op_flags)
 {
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
-  uint64_t block_size = bdev->get_block_size();
   int r = 0;
 
   // generally, don't buffer anything, unless the client explicitly requests
@@ -2947,24 +2946,25 @@ int BlueStore::_read_extent_sparse(
   bool buffered,
   BlueStore::ready_regions_t* result)
 {
-  //FIXME: this is a trivial implementation that reads each region independently - can be improved to read neighboring and/or close enough regions together.
-
+  // FIXME: this is a trivial implementation that reads each region
+  // independently - can be improved to read neighboring and/or close
+  // enough regions together.
+  dout(20) << __func__ << " " << *blob << " " << *extent << dendl;
   IOContext ioc(NULL);   // FIXME?
-  uint64_t block_size = bdev->get_block_size();
-  if (blob->csum_type != bluestore_blob_t::CSUM_NONE)
-    block_size = MAX(blob->get_csum_block_size(), block_size);
+  uint64_t chunk_size = MAX(blob->get_csum_block_size(), block_size);
 
-  assert((extent->length % block_size) == 0);   // all physical extents has to be aligned with read block size
+  // all physical extents has to be aligned with read chunk size
+  assert((extent->length % chunk_size) == 0);
 
   while (cur != end) {
     assert(cur->ext_xoffset + cur->length <= extent->length);
 
     uint64_t r_off = cur->ext_xoffset;
-    uint64_t front_extra = r_off % block_size;
+    uint64_t front_extra = r_off % chunk_size;
     r_off -= front_extra;
 
     uint64_t x_len = cur->length;
-    uint64_t r_len = ROUND_UP_TO(x_len + front_extra, block_size);
+    uint64_t r_len = ROUND_UP_TO(x_len + front_extra, chunk_size);
 
     //    dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
     bufferlist bl;
@@ -2972,15 +2972,18 @@ int BlueStore::_read_extent_sparse(
     if (r < 0) {
       return r;
     }
-    r = _verify_csum(blob, cur->blob_xoffset, bl);
-    if (r < 0) {
-      dout(20) << __func__ << "  blob reading " << cur->logical_offset << "~" << blob->length << " csum verification failed." << dendl;
-      return r;
+    if (blob->csum_type) {
+      r = _verify_csum(blob, cur->blob_xoffset, bl);
+      if (r < 0) {
+	dout(20) << __func__ << "  blob reading 0x" << std::hex
+		 << cur->logical_offset << " 0x"
+		 << cur->blob_xoffset << "~0x" << bl.length()
+		 << " csum verification failed" << dendl;
+	return r;
+      }
     }
 
-    bufferlist u;
-    u.substr_of(bl, front_extra, x_len);
-    (*result)[cur->logical_offset].claim_append(u);
+    (*result)[cur->logical_offset].substr_of(bl, front_extra, x_len);
 
     ++cur;
   }
