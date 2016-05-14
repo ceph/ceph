@@ -47,12 +47,16 @@ private:
     }
   };
 
-  struct OverflowHandler : public ObjectRecorder::OverflowHandler {
+  struct ObjectHandler : public ObjectRecorder::Handler {
     JournalRecorder *journal_recorder;
 
-    OverflowHandler(JournalRecorder *_journal_recorder)
-      : journal_recorder(_journal_recorder) {}
+    ObjectHandler(JournalRecorder *_journal_recorder)
+      : journal_recorder(_journal_recorder) {
+    }
 
+    virtual void closed(ObjectRecorder *object_recorder) {
+      journal_recorder->handle_closed(object_recorder);
+    }
     virtual void overflow(ObjectRecorder *object_recorder) {
       journal_recorder->handle_overflow(object_recorder);
     }
@@ -69,7 +73,7 @@ private:
   double m_flush_age;
 
   Listener m_listener;
-  OverflowHandler m_overflow_handler;
+  ObjectHandler m_object_handler;
 
   Mutex m_lock;
 
@@ -83,6 +87,8 @@ private:
   void create_next_object_recorder(ObjectRecorderPtr object_recorder);
 
   void handle_update();
+
+  void handle_closed(ObjectRecorder *object_recorder);
   void handle_overflow(ObjectRecorder *object_recorder);
 };
 

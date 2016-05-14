@@ -29,16 +29,17 @@ typedef std::list<AppendBuffer> AppendBuffers;
 
 class ObjectRecorder : public RefCountedObject, boost::noncopyable {
 public:
-  struct OverflowHandler {
-    virtual ~OverflowHandler() {}
+  struct Handler {
+    virtual ~Handler() {
+    }
+    virtual void closed(ObjectRecorder *object_recorder) = 0;
     virtual void overflow(ObjectRecorder *object_recorder) = 0;
   };
 
   ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
                  uint64_t object_number, SafeTimer &timer, Mutex &timer_lock,
-                 OverflowHandler *overflow_handler, uint8_t order,
-                 uint32_t flush_interval, uint64_t flush_bytes,
-                 double flush_age);
+                 Handler *handler, uint8_t order, uint32_t flush_interval,
+                 uint64_t flush_bytes, double flush_age);
   ~ObjectRecorder();
 
   inline uint64_t get_object_number() const {
@@ -53,7 +54,12 @@ public:
   void flush(const FutureImplPtr &future);
 
   void claim_append_buffers(AppendBuffers *append_buffers);
-  bool close_object();
+
+  bool is_closed() const {
+    Mutex::Locker locker(m_lock);
+    return (m_object_closed && m_in_flight_appends.empty());
+  }
+  bool close();
 
   inline CephContext *cct() const {
     return m_cct;
@@ -110,7 +116,7 @@ private:
   SafeTimer &m_timer;
   Mutex &m_timer_lock;
 
-  OverflowHandler *m_overflow_handler;
+  Handler *m_handler;
 
   uint8_t m_order;
   uint64_t m_soft_max_size;
@@ -149,7 +155,7 @@ private:
   void append_overflowed(uint64_t tid);
   void send_appends(AppendBuffers *append_buffers);
 
-  void notify_overflow();
+  void notify_handler();
 };
 
 } // namespace journal
