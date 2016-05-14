@@ -938,6 +938,41 @@ private:
   // --------------------------------------------------------
   // write ops
 
+  struct WriteContext {
+    unsigned fadvise_flags;                    ///< write flags
+    bool buffered;                             ///< buffered write
+
+    //map<uint64_t,bluestore_lextent_t> lex_new; ///< new lextents
+    vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
+    vector<bluestore_blob_t*> blob_new;        ///< new blobs
+    vector<bufferlist> bl_new;                 ///< new data, for above blobs
+
+    WriteContext() : fadvise_flags(0), buffered(false) {}
+  };
+
+  void _do_write_small(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef o,
+    uint64_t offset, uint64_t length,
+    bufferlist::iterator& blp,
+    WriteContext *wctx);
+  void _do_write_big(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef o,
+    uint64_t offset, uint64_t length,
+    bufferlist::iterator& blp,
+    WriteContext *wctx);
+  int _do_alloc_write(
+    TransContext *txc,
+    WriteContext *wctx);
+  void _wctx_finish(
+    TransContext *txc,
+    CollectionRef& c,
+    OnodeRef o,
+    WriteContext *wctx);
+
   int _do_transaction(Transaction *t,
 		      TransContext *txc,
 		      ThreadPool::TPHandle *handle);
@@ -971,18 +1006,6 @@ private:
 		       OnodeRef o, bufferlist *bl,
 		       uint64_t offset, uint64_t *length,
 		       uint64_t chunk_size);
-  int _do_allocate(TransContext *txc,
-		   CollectionRef& c,
-		   OnodeRef o,
-		   uint64_t offset, uint64_t length,
-		   uint32_t fadvise_flags,
-		   bool allow_overlay,
-		   uint64_t *alloc_offset,
-		   uint64_t *alloc_length,
-		   uint64_t *cow_head_extent,
-		   uint64_t *cow_tail_extent,
-		   uint64_t *rmw_cow_head,
-		   uint64_t *rmw_cow_tail);
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
@@ -992,15 +1015,6 @@ private:
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o);
-  int _do_write_zero(TransContext *txc,
-		     CollectionRef &c,
-		     OnodeRef o,
-		     uint64_t offset, uint64_t length);
-  void _do_zero_tail_extent(
-    TransContext *txc,
-    CollectionRef& c,
-    OnodeRef& o,
-    uint64_t offset);
   int _do_zero(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
