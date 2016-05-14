@@ -86,18 +86,9 @@ namespace librbd {
   bool image_options_is_empty(rbd_image_options_t opts);
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
-  int list_cgs(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
-  int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
-                   librados::IoCtx& image_ioctx, const char *image_name);
-  int cg_remove_image(librados::IoCtx& cg_ioctx, const char *cg_name,
-                      librados::IoCtx& image_ioctx, const char *image_name);
-  int remove_cg(librados::IoCtx& io_ctx, const char *cgname);
-  int create_cg(librados::IoCtx& io_ctx, const char *imgname);
-  int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
-                    std::vector<std::tuple<std::string, int64_t, int>>& images);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -199,6 +190,17 @@ namespace librbd {
   int mirror_image_resync(ImageCtx *ictx);
   int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
                             size_t info_size);
+
+  // Consistency groups functions
+  int create_cg(librados::IoCtx& io_ctx, const char *imgname);
+  int remove_cg(librados::IoCtx& io_ctx, const char *cgname);
+  int list_cgs(librados::IoCtx& io_ctx, std::vector<std::string>& names);
+  int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                   librados::IoCtx& image_ioctx, const char *image_name);
+  int cg_remove_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                      librados::IoCtx& image_ioctx, const char *image_name);
+  int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
+                    std::vector<std::tuple<std::string, int64_t, int>>& images);
 }
 
 #endif

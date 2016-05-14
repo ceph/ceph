@@ -99,19 +99,8 @@ public:
 		     const char *snapname);
   int aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 			 const char *snapname, RBD::AioCompletion *c);
-  int list_cgs(IoCtx& io_ctx, std::vector<std::string>& names);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
-  int cg_add_image(IoCtx& cg_io_ctx, const char *cg_name,
-                   IoCtx& image_io_ctx, const char *image_name);
-  int cg_remove_image(IoCtx& cg_io_ctx, const char *cg_name,
-                      IoCtx& image_io_ctx, const char *image_name);
-  int cg_list_images(IoCtx& cg_io_ctx, const char *cg_name,
-                     std::vector<std::tuple<std::string,
-		                            int64_t,
-					    int>>& images);
-  int create_cg(IoCtx& io_ctx, const char *cg_name);
-  int remove_cg(IoCtx& io_ctx, const char *cg_name);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
   int create3(IoCtx& io_ctx, const char *name, uint64_t size,
@@ -143,6 +132,20 @@ public:
                              const std::string &client_name);
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
+
+  // RBD consistency groups support functions
+  int create_cg(IoCtx& io_ctx, const char *cg_name);
+  int remove_cg(IoCtx& io_ctx, const char *cg_name);
+  int list_cgs(IoCtx& io_ctx, std::vector<std::string>& names);
+
+  int cg_add_image(IoCtx& cg_io_ctx, const char *cg_name,
+                   IoCtx& image_io_ctx, const char *image_name);
+  int cg_remove_image(IoCtx& cg_io_ctx, const char *cg_name,
+                      IoCtx& image_io_ctx, const char *image_name);
+  int cg_list_images(IoCtx& cg_io_ctx, const char *cg_name,
+                     std::vector<std::tuple<std::string,
+		                            int64_t,
+					    int>>& images);
 
 private:
   /* We don't allow assignment or copying */

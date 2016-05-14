@@ -149,105 +149,6 @@ namespace librbd {
                                          parent);
     }
 
-    int create_cg(librados::IoCtx *ioctx, const std::string &oid)
-    {
-      bufferlist bl, bl2;
-
-      return ioctx->exec(oid, "rbd", "create_cg", bl, bl2);
-    }
-
-    int cg_list_images(librados::IoCtx *ioctx,
-		       const std::string &oid,
-		       std::vector<std::tuple<std::string,
-		                              int64_t,
-					      int64_t>>& images)
-    {
-      bufferlist bl, bl2;
-
-      int r = ioctx->exec(oid, "rbd", "cg_list_images", bl, bl2);
-      bufferlist::iterator iter = bl2.begin();
-      int64_t count;
-      ::decode(count, iter);
-      for (int i = 0; i < count; ++i) {
-	string image_id;
-	string pool_id;
-	int64_t state;
-	::decode(image_id, iter);
-	::decode(pool_id, iter);
-	::decode(state, iter);
-
-	std::string err;
-	images.push_back(std::make_tuple(
-				     image_id,
-				     strict_sistrtoll(pool_id.c_str(), &err),
-				     state));
-	if (!err.empty())
-	  return -EINVAL;
-      }
-
-      return r;
-    }
-
-    int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
-	                 std::string &cg_id, int64_t pool_id)
-    {
-      bufferlist bl, bl2;
-      ::encode(cg_id, bl);
-      ::encode(pool_id, bl);
-
-      return ioctx->exec(oid, "rbd", "image_add_cg_ref", bl, bl2);
-    }
-
-    int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
-	                    std::string &cg_id, int64_t pool_id)
-    {
-      bufferlist bl, bl2;
-      ::encode(cg_id, bl);
-      ::encode(pool_id, bl);
-
-      return ioctx->exec(oid, "rbd", "image_remove_cg_ref", bl, bl2);
-    }
-
-    int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
-	             const std::string &image_id, int64_t pool_id)
-    {
-      bufferlist bl, bl2;
-      ::encode(image_id, bl);
-      ::encode(pool_id, bl);
-
-      return ioctx->exec(oid, "rbd", "cg_add_image", bl, bl2);
-    }
-
-    int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
-		        std::string &image_id, int64_t pool_id)
-    {
-      bufferlist bl, bl2;
-      ::encode(image_id, bl);
-      ::encode(pool_id, bl);
-
-      return ioctx->exec(oid, "rbd", "cg_remove_image", bl, bl2);
-    }
-
-    int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid,
-                      std::string &image_id, int64_t pool_id)
-    {
-      bufferlist bl, bl2;
-      ::encode(image_id, bl);
-      ::encode(pool_id, bl);
-
-      return ioctx->exec(oid, "rbd", "cg_dirty_link", bl, bl2);
-    }
-
-    int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
-		      std::string &image_id, int64_t pool_id)
-    {
-      bufferlist bl, bl2;
-      ::encode(image_id, bl);
-      ::encode(pool_id, bl);
-
-      return ioctx->exec(oid, "rbd", "cg_to_default", bl, bl2);
-    }
-
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix)
@@ -909,36 +810,6 @@ namespace librbd {
       return 0;
     }
 
-    int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
-	             const std::string &start, uint64_t max_return,
-		     map<string, string> *cgs)
-    {
-      bufferlist in, out;
-      ::encode(start, in);
-      ::encode(max_return, in);
-      int r = ioctx->exec(oid, "rbd", "dir_list_cgs", in, out);
-      if (r < 0)
-	return r;
-
-      bufferlist::iterator iter = out.begin();
-      try {
-	::decode(*cgs, iter);
-      } catch (const buffer::error &err) {
-	return -EBADMSG;
-      }
-
-      return 0;
-    }
-
-    int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
-		   const std::string &name, const std::string &id)
-    {
-      bufferlist in, out;
-      ::encode(name, in);
-      ::encode(id, in);
-      return ioctx->exec(oid, "rbd", "dir_add_cg", in, out);
-    }
-
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::string &name, const std::string &id)
     {
@@ -946,15 +817,6 @@ namespace librbd {
       ::encode(name, in);
       ::encode(id, in);
       return ioctx->exec(oid, "rbd", "dir_add_image", in, out);
-    }
-
-    int dir_remove_cg(librados::IoCtx *ioctx, const std::string &oid,
-		      const std::string &name, const std::string &id)
-    {
-      bufferlist in, out;
-      ::encode(name, in);
-      ::encode(id, in);
-      return ioctx->exec(oid, "rbd", "dir_remove_cg", in, out);
     }
 
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -1336,6 +1198,145 @@ namespace librbd {
         return r;
       }
       return 0;
+    }
+
+    // Consistency groups functions
+    int create_cg(librados::IoCtx *ioctx, const std::string &oid)
+    {
+      bufferlist bl, bl2;
+
+      return ioctx->exec(oid, "rbd", "create_cg", bl, bl2);
+    }
+
+    int cg_list_images(librados::IoCtx *ioctx,
+		       const std::string &oid,
+		       std::vector<std::tuple<std::string,
+		                              int64_t,
+					      int64_t>>& images)
+    {
+      bufferlist bl, bl2;
+
+      int r = ioctx->exec(oid, "rbd", "cg_list_images", bl, bl2);
+      bufferlist::iterator iter = bl2.begin();
+      int64_t count;
+      ::decode(count, iter);
+      for (int i = 0; i < count; ++i) {
+	string image_id;
+	string pool_id;
+	int64_t state;
+	::decode(image_id, iter);
+	::decode(pool_id, iter);
+	::decode(state, iter);
+
+	std::string err;
+	images.push_back(std::make_tuple(
+				     image_id,
+				     strict_sistrtoll(pool_id.c_str(), &err),
+				     state));
+	if (!err.empty())
+	  return -EINVAL;
+      }
+
+      return r;
+    }
+
+    int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
+	             const std::string &image_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(image_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "cg_add_image", bl, bl2);
+    }
+
+    int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid,
+                      std::string &image_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(image_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "cg_dirty_link", bl, bl2);
+    }
+
+    int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
+		      std::string &image_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(image_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "cg_to_default", bl, bl2);
+    }
+
+    int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
+		        std::string &image_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(image_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "cg_remove_image", bl, bl2);
+    }
+
+    int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+	                 std::string &cg_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(cg_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "image_add_cg_ref", bl, bl2);
+    }
+
+    int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+	                    std::string &cg_id, int64_t pool_id)
+    {
+      bufferlist bl, bl2;
+      ::encode(cg_id, bl);
+      ::encode(pool_id, bl);
+
+      return ioctx->exec(oid, "rbd", "image_remove_cg_ref", bl, bl2);
+    }
+
+    int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
+	             const std::string &start, uint64_t max_return,
+		     map<string, string> *cgs)
+    {
+      bufferlist in, out;
+      ::encode(start, in);
+      ::encode(max_return, in);
+      int r = ioctx->exec(oid, "rbd", "dir_list_cgs", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*cgs, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
+		   const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_add_cg", in, out);
+    }
+
+    int dir_remove_cg(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "dir_remove_cg", in, out);
     }
 
   } // namespace cls_client

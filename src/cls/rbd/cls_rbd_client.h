@@ -47,24 +47,6 @@ namespace librbd {
 			     parent_info *parent);
 
     // low-level interface (mainly for testing)
-    int create_cg(librados::IoCtx *ioctx, const std::string &oid);
-    int cg_list_images(librados::IoCtx *ioctx, const std::string &oid,
-		       std::vector<std::tuple<std::string,
-		                              int64_t,
-					      int64_t>>& images);
-    int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
-		     const std::string &image_id, int64_t pool_id);
-    int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid,
-	              std::string &image_id, int64_t pool_id);
-    int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
-	              std::string &image_id, int64_t pool_id);
-
-    int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
-		        std::string &image_id, int64_t pool_id);
-    int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
-		         std::string &cg_id, int64_t pool_id);
-    int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
-		            std::string &cg_id, int64_t pool_id);
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix);
@@ -178,14 +160,7 @@ namespace librbd {
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		 const std::string &start, uint64_t max_return,
 		 map<string, string> *images);
-    int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
-		     const std::string &start, uint64_t max_return,
-		     map<string, string> *cgs);
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
-		      const std::string &name, const std::string &id);
-    int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
-	           const std::string &name, const std::string &id);
-    int dir_remove_cg(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::string &name, const std::string &id);
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
@@ -260,6 +235,34 @@ namespace librbd {
 			 const cls::rbd::MirrorImage &mirror_image);
     int mirror_image_remove(librados::IoCtx *ioctx,
 			    const std::string &image_id);
+
+    // Consistency groups functions
+    int create_cg(librados::IoCtx *ioctx, const std::string &oid);
+    int cg_list_images(librados::IoCtx *ioctx, const std::string &oid,
+		       std::vector<std::tuple<std::string,
+		                              int64_t,
+					      int64_t>>& images);
+    int cg_add_image(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &image_id, int64_t pool_id);
+    int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid,
+	              std::string &image_id, int64_t pool_id);
+    int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
+	              std::string &image_id, int64_t pool_id);
+
+    int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
+		        std::string &image_id, int64_t pool_id);
+    int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+		         std::string &cg_id, int64_t pool_id);
+    int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+		            std::string &cg_id, int64_t pool_id);
+
+    int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
+		     const std::string &start, uint64_t max_return,
+		     map<string, string> *cgs);
+    int dir_add_cg(librados::IoCtx *ioctx, const std::string &oid,
+	           const std::string &name, const std::string &id);
+    int dir_remove_cg(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id);
 
   } // namespace cls_client
 } // namespace librbd

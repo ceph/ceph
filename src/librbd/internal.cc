@@ -581,36 +581,6 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     return (*opts_)->empty();
   }
 
-  int list_cgs(IoCtx& io_ctx, vector<string>& names)
-  {
-    CephContext *cct = (CephContext *)io_ctx.cct();
-    ldout(cct, 20) << "list_cgs " << &io_ctx << dendl;
-
-    int max_read = 1024;
-    string last_read = "";
-    int r;
-    do {
-      map<string, string> cgs;
-      r = cls_client::dir_list_cgs(&io_ctx, CG_DIRECTORY,
-			   last_read, max_read, &cgs);
-      if (r < 0) {
-        lderr(cct) << "error listing cg in directory: " 
-                   << cpp_strerror(r) << dendl;   
-        return r;
-      }
-      for (map<string, string>::const_iterator it = cgs.begin();
-	   it != cgs.end(); ++it) {
-	names.push_back(it->first);
-      }
-      if (!cgs.empty()) {
-	last_read = cgs.rbegin()->first;
-      }
-      r = cgs.size();
-    } while (r == max_read);
-
-    return 0;
-  }
-
   int list(IoCtx& io_ctx, vector<string>& names)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
@@ -974,308 +944,6 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     }
 
     return r;
-  }
-
-  int create_cg(librados::IoCtx& io_ctx, const char *cg_name)
-  {
-    ostringstream bid_ss;
-    uint32_t extra;
-    int remove_r;
-    string id, id_cg, header_oid;
-
-    CephContext *cct = (CephContext *)io_ctx.cct();
-
-    Rados rados(io_ctx);
-    uint64_t bid = rados.get_instance_id();
-
-    int r = validate_pool(io_ctx, cct); // TODO Not sure if it's necessary at all. Consider removing
-    if (r < 0) {
-      return r;
-    }
-
-    id_cg = util::id_cg_name(cg_name);
-
-    r = io_ctx.create(id_cg, true);
-    if (r < 0) {
-      lderr(cct) << "error creating consistency group id object: "
-	         << cpp_strerror(r)
-		 << dendl;
-      return r;
-    }
-
-    extra = rand() % 0xFFFFFFFF;
-    bid_ss << std::hex << bid << std::hex << extra;
-    id = bid_ss.str();
-    r = cls_client::set_id(&io_ctx, id_cg, id);
-    if (r < 0) {
-      lderr(cct) << "error setting consistency group id: "
-	         << cpp_strerror(r)
-		 << dendl;
-      goto err_remove_id;
-    }
-
-    ldout(cct, 2) << "adding consistency group to directory..." << dendl;
-
-    r = cls_client::dir_add_cg(&io_ctx, CG_DIRECTORY, cg_name, id);
-    if (r < 0) {
-      lderr(cct) << "error adding consistency group to directory: "
-	         << cpp_strerror(r)
-		 << dendl;
-      goto err_remove_id;
-    }
-    header_oid = util::cg_header_name(id);
-
-    r = cls_client::create_cg(&io_ctx, header_oid);
-    if (r < 0) {
-      lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
-      goto err_remove_from_dir;
-    }
-
-    return 0;
-
-err_remove_from_dir:
-    remove_r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
-					 cg_name, id);
-    if (remove_r < 0) {
-      lderr(cct) << "error cleaning up consistency group from rbd_directory object "
-		 << "after creation failed: " << cpp_strerror(remove_r)
-		 << dendl;
-    }
-err_remove_id:
-    remove_r = io_ctx.remove(id_cg);
-    if (remove_r < 0) {
-      lderr(cct) << "error cleaning up id object after creation failed: "
-		 << cpp_strerror(remove_r) << dendl;
-    }
-
-    return r;
-  }
-
-  int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
-		     std::vector<std::tuple<std::string, int64_t, int>>& images)
-  {
-    CephContext *cct = (CephContext *)cg_ioctx.cct();
-    ldout(cct, 20) << "cg_list_images " << &cg_ioctx
-                   << " cg name " << cg_name << dendl;
-
-    string cg_id_obj = util::id_cg_name(cg_name);
-    string cg_id;
-
-    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
-    if (r < 0) {
-      lderr(cct) << "error reading consistency group id object: "
-	         << cpp_strerror(r)
-		 << dendl;
-      return r;
-    }
-    string cg_header_oid = util::cg_header_name(cg_id);
-
-    ldout(cct, 20) << "listing images in cg name "
-                   << cg_name << " cg id " << cg_header_oid << dendl;
-
-    std::vector<std::tuple<std::string, int64_t, int64_t>> image_ids;
-    r = cls_client::cg_list_images(&cg_ioctx, cg_header_oid, image_ids);
-
-    if (r < 0) {
-      lderr(cct) << "error adding image reference to consistency group: "
-		 << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    for (auto i : image_ids) {
-      librados::Rados rados(cg_ioctx);
-      IoCtx ioctx;
-      rados.ioctx_create2(std::get<1>(i), ioctx);
-      std::string image_name;
-      r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
-	                           std::get<0>(i), &image_name);
-      if (r < 0) {
-	return r;
-      }
-      images.push_back(std::make_tuple(image_name,
-	                               std::get<1>(i),
-	                               std::get<2>(i)));
-    }
-
-    return 0;
-  }
-
-  int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
-                   librados::IoCtx& image_ioctx, const char *image_name)
-  {
-    CephContext *cct = (CephContext *)cg_ioctx.cct();
-    ldout(cct, 20) << "cg_add_image " << &cg_ioctx
-                   << " cg name " << cg_name << " image "
-		   << &image_ioctx << " name " << image_name << dendl;
-
-    string cg_id_obj = util::id_cg_name(cg_name);
-    string cg_id;
-
-    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
-    if (r < 0) {
-      lderr(cct) << "error reading consistency group id object: "
-	         << cpp_strerror(r)
-		 << dendl;
-      return r;
-    }
-    string cg_header_oid = util::cg_header_name(cg_id);
-
-    ldout(cct, 20) << "adding image to cg name " << cg_name
-                   << " cg id " << cg_header_oid << dendl;
-
-    ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
-    r = imctx->state->open();
-    if (r < 0) {
-      lderr(cct) << "error opening image: "
-		 << cpp_strerror(-r) << dendl;
-      delete imctx;
-      return r;
-    }
-
-    ldout(cct, 20) << "adding image " << image_name
-                   << " image id " << imctx->header_oid << dendl;
-
-    r = cls_client::cg_add_image(&cg_ioctx, cg_header_oid,
-	                         imctx->id, image_ioctx.get_id());
-
-    if (r < 0) {
-      lderr(cct) << "error adding image reference to consistency group: "
-		 << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    r = cls_client::image_add_cg_ref(&image_ioctx, imctx->header_oid,
-	                             cg_id, cg_ioctx.get_id());
-    if (r < 0) {
-      lderr(cct) << "error adding cg reference to image: "
-		 << cpp_strerror(-r) << dendl;
-      cls_client::cg_remove_image(&cg_ioctx, cg_header_oid,
-	                          imctx->id, image_ioctx.get_id());
-      // Ignore errors in the clean up procedure.
-      return r;
-    }
-    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid, imctx->id,
-	                          image_ioctx.get_id());
-    return r;
-  }
-
-  int cg_remove_image(librados::IoCtx& cg_ioctx, const char *cg_name,
-                      librados::IoCtx& image_ioctx, const char *image_name)
-  {
-    CephContext *cct = (CephContext *)cg_ioctx.cct();
-    ldout(cct, 20) << "cg_remove_image " << &cg_ioctx
-                   << " cg name " << cg_name << " image "
-		   << &image_ioctx << " name " << image_name << dendl;
-
-    string cg_id_obj = util::id_cg_name(cg_name);
-    string cg_id;
-
-    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
-    if (r < 0) {
-      lderr(cct) << "error reading consistency group id object: "
-	         << cpp_strerror(r)
-		 << dendl;
-      return r;
-    }
-    string cg_header_oid = util::cg_header_name(cg_id);
-
-    ldout(cct, 20) << "adding image to cg name " << cg_name
-                   << " cg id " << cg_header_oid << dendl;
-
-    ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
-    r = imctx->state->open();
-    if (r < 0) {
-      lderr(cct) << "error opening image: "
-		 << cpp_strerror(-r) << dendl;
-      delete imctx;
-      return r;
-    }
-
-    ldout(cct, 20) << "removing image " << image_name
-                   << " image id " << imctx->header_oid << dendl;
-
-    r = cls_client::cg_dirty_link(&cg_ioctx, cg_header_oid,
-	                          imctx->id, image_ioctx.get_id());
-
-    if (r < 0) {
-      lderr(cct) << "couldn't put image into removing state: "
-		 << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    r = cls_client::image_remove_cg_ref(&image_ioctx, imctx->header_oid,
-	                                cg_id, cg_ioctx.get_id());
-    if ((r < 0) && (r != -ENOENT)) {
-      lderr(cct) << "couldn't remove cg ref from image"
-		 << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    r = cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id,
-	                            image_ioctx.get_id());
-    if (r < 0) {
-      lderr(cct) << "couldn't remove image from cg"
-		 << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    return 0;
-  }
-
-  int remove_cg(librados::IoCtx& io_ctx, const char *cg_name)
-  {
-    CephContext *cct((CephContext *)io_ctx.cct());
-    ldout(cct, 20) << "remove_cg " << &io_ctx << " " << cg_name << dendl;
-
-    std::vector<std::tuple<std::string, int64_t, int>> images;
-    int r = cg_list_images(io_ctx, cg_name, images);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error listing cg images" << dendl;
-      return r;
-    }
-
-    for (auto i : images) {
-      librados::Rados rados(io_ctx);
-      IoCtx image_ioctx;
-      rados.ioctx_create2(std::get<1>(i), image_ioctx);
-      std::string image_name = std::get<0>(i);
-      r = cg_remove_image(io_ctx, cg_name, image_ioctx, image_name.c_str());
-      if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "error removing cg image" << dendl;
-	return r;
-      }
-    }
-
-    r = io_ctx.remove(util::id_cg_name(cg_name));
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error removing cg id object" << dendl;
-      return r;
-    }
-
-    std::string cg_id;
-    r = cls_client::dir_get_id(&io_ctx, CG_DIRECTORY,
-	                       std::string(cg_name), &cg_id);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error getting id of cg" << dendl;
-      return r;
-    }
-
-    r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
-					 cg_name, cg_id);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error removing cg from directory" << dendl;
-      return r;
-    }
-
-    string header_oid = util::cg_header_name(cg_id);
-
-    r = io_ctx.remove(header_oid);
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
-    return 0;
   }
 
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -3303,4 +2971,339 @@ err_remove_id:
       ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
     }
   }
+
+  // Consistency groups functions
+
+  int create_cg(librados::IoCtx& io_ctx, const char *cg_name)
+  {
+    ostringstream bid_ss;
+    uint32_t extra;
+    int remove_r;
+    string id, id_cg, header_oid;
+
+    CephContext *cct = (CephContext *)io_ctx.cct();
+
+    Rados rados(io_ctx);
+    uint64_t bid = rados.get_instance_id();
+
+    int r = validate_pool(io_ctx, cct); // TODO Not sure if it's necessary at all. Consider removing
+    if (r < 0) {
+      return r;
+    }
+
+    id_cg = util::id_cg_name(cg_name);
+
+    r = io_ctx.create(id_cg, true);
+    if (r < 0) {
+      lderr(cct) << "error creating consistency group id object: "
+	         << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+
+    extra = rand() % 0xFFFFFFFF;
+    bid_ss << std::hex << bid << std::hex << extra;
+    id = bid_ss.str();
+    r = cls_client::set_id(&io_ctx, id_cg, id);
+    if (r < 0) {
+      lderr(cct) << "error setting consistency group id: "
+	         << cpp_strerror(r)
+		 << dendl;
+      goto err_remove_id;
+    }
+
+    ldout(cct, 2) << "adding consistency group to directory..." << dendl;
+
+    r = cls_client::dir_add_cg(&io_ctx, CG_DIRECTORY, cg_name, id);
+    if (r < 0) {
+      lderr(cct) << "error adding consistency group to directory: "
+	         << cpp_strerror(r)
+		 << dendl;
+      goto err_remove_id;
+    }
+    header_oid = util::cg_header_name(id);
+
+    r = cls_client::create_cg(&io_ctx, header_oid);
+    if (r < 0) {
+      lderr(cct) << "error writing header: " << cpp_strerror(r) << dendl;
+      goto err_remove_from_dir;
+    }
+
+    return 0;
+
+err_remove_from_dir:
+    remove_r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
+					 cg_name, id);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up consistency group from rbd_directory object "
+		 << "after creation failed: " << cpp_strerror(remove_r)
+		 << dendl;
+    }
+err_remove_id:
+    remove_r = io_ctx.remove(id_cg);
+    if (remove_r < 0) {
+      lderr(cct) << "error cleaning up id object after creation failed: "
+		 << cpp_strerror(remove_r) << dendl;
+    }
+
+    return r;
+  }
+
+  int remove_cg(librados::IoCtx& io_ctx, const char *cg_name)
+  {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << "remove_cg " << &io_ctx << " " << cg_name << dendl;
+
+    std::vector<std::tuple<std::string, int64_t, int>> images;
+    int r = cg_list_images(io_ctx, cg_name, images);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error listing cg images" << dendl;
+      return r;
+    }
+
+    for (auto i : images) {
+      librados::Rados rados(io_ctx);
+      IoCtx image_ioctx;
+      rados.ioctx_create2(std::get<1>(i), image_ioctx);
+      std::string image_name = std::get<0>(i);
+      r = cg_remove_image(io_ctx, cg_name, image_ioctx, image_name.c_str());
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "error removing cg image" << dendl;
+	return r;
+      }
+    }
+
+    r = io_ctx.remove(util::id_cg_name(cg_name));
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing cg id object" << dendl;
+      return r;
+    }
+
+    std::string cg_id;
+    r = cls_client::dir_get_id(&io_ctx, CG_DIRECTORY,
+	                       std::string(cg_name), &cg_id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error getting id of cg" << dendl;
+      return r;
+    }
+
+    r = cls_client::dir_remove_cg(&io_ctx, CG_DIRECTORY,
+					 cg_name, cg_id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing cg from directory" << dendl;
+      return r;
+    }
+
+    string header_oid = util::cg_header_name(cg_id);
+
+    r = io_ctx.remove(header_oid);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing header: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    return 0;
+  }
+
+  int list_cgs(IoCtx& io_ctx, vector<string>& names)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "list_cgs " << &io_ctx << dendl;
+
+    int max_read = 1024;
+    string last_read = "";
+    int r;
+    do {
+      map<string, string> cgs;
+      r = cls_client::dir_list_cgs(&io_ctx, CG_DIRECTORY,
+			   last_read, max_read, &cgs);
+      if (r < 0) {
+        lderr(cct) << "error listing cg in directory: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+      for (map<string, string>::const_iterator it = cgs.begin();
+	   it != cgs.end(); ++it) {
+	names.push_back(it->first);
+      }
+      if (!cgs.empty()) {
+	last_read = cgs.rbegin()->first;
+      }
+      r = cgs.size();
+    } while (r == max_read);
+
+    return 0;
+  }
+
+  int cg_add_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                   librados::IoCtx& image_ioctx, const char *image_name)
+  {
+    CephContext *cct = (CephContext *)cg_ioctx.cct();
+    ldout(cct, 20) << "cg_add_image " << &cg_ioctx
+                   << " cg name " << cg_name << " image "
+		   << &image_ioctx << " name " << image_name << dendl;
+
+    string cg_id_obj = util::id_cg_name(cg_name);
+    string cg_id;
+
+    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
+    if (r < 0) {
+      lderr(cct) << "error reading consistency group id object: "
+	         << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    string cg_header_oid = util::cg_header_name(cg_id);
+
+    ldout(cct, 20) << "adding image to cg name " << cg_name
+                   << " cg id " << cg_header_oid << dendl;
+
+    ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
+    r = imctx->state->open();
+    if (r < 0) {
+      lderr(cct) << "error opening image: "
+		 << cpp_strerror(-r) << dendl;
+      delete imctx;
+      return r;
+    }
+
+    ldout(cct, 20) << "adding image " << image_name
+                   << " image id " << imctx->header_oid << dendl;
+
+    r = cls_client::cg_add_image(&cg_ioctx, cg_header_oid,
+	                         imctx->id, image_ioctx.get_id());
+
+    if (r < 0) {
+      lderr(cct) << "error adding image reference to consistency group: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = cls_client::image_add_cg_ref(&image_ioctx, imctx->header_oid,
+	                             cg_id, cg_ioctx.get_id());
+    if (r < 0) {
+      lderr(cct) << "error adding cg reference to image: "
+		 << cpp_strerror(-r) << dendl;
+      cls_client::cg_remove_image(&cg_ioctx, cg_header_oid,
+	                          imctx->id, image_ioctx.get_id());
+      // Ignore errors in the clean up procedure.
+      return r;
+    }
+    r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid, imctx->id,
+	                          image_ioctx.get_id());
+    return r;
+  }
+
+  int cg_remove_image(librados::IoCtx& cg_ioctx, const char *cg_name,
+                      librados::IoCtx& image_ioctx, const char *image_name)
+  {
+    CephContext *cct = (CephContext *)cg_ioctx.cct();
+    ldout(cct, 20) << "cg_remove_image " << &cg_ioctx
+                   << " cg name " << cg_name << " image "
+		   << &image_ioctx << " name " << image_name << dendl;
+
+    string cg_id_obj = util::id_cg_name(cg_name);
+    string cg_id;
+
+    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
+    if (r < 0) {
+      lderr(cct) << "error reading consistency group id object: "
+	         << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    string cg_header_oid = util::cg_header_name(cg_id);
+
+    ldout(cct, 20) << "adding image to cg name " << cg_name
+                   << " cg id " << cg_header_oid << dendl;
+
+    ImageCtx *imctx = new ImageCtx(image_name, "", "", image_ioctx, true);
+    r = imctx->state->open();
+    if (r < 0) {
+      lderr(cct) << "error opening image: "
+		 << cpp_strerror(-r) << dendl;
+      delete imctx;
+      return r;
+    }
+
+    ldout(cct, 20) << "removing image " << image_name
+                   << " image id " << imctx->header_oid << dendl;
+
+    r = cls_client::cg_dirty_link(&cg_ioctx, cg_header_oid,
+	                          imctx->id, image_ioctx.get_id());
+
+    if (r < 0) {
+      lderr(cct) << "couldn't put image into removing state: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = cls_client::image_remove_cg_ref(&image_ioctx, imctx->header_oid,
+	                                cg_id, cg_ioctx.get_id());
+    if ((r < 0) && (r != -ENOENT)) {
+      lderr(cct) << "couldn't remove cg ref from image"
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id,
+	                            image_ioctx.get_id());
+    if (r < 0) {
+      lderr(cct) << "couldn't remove image from cg"
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    return 0;
+  }
+
+  int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
+		     std::vector<std::tuple<std::string, int64_t, int>>& images)
+  {
+    CephContext *cct = (CephContext *)cg_ioctx.cct();
+    ldout(cct, 20) << "cg_list_images " << &cg_ioctx
+                   << " cg name " << cg_name << dendl;
+
+    string cg_id_obj = util::id_cg_name(cg_name);
+    string cg_id;
+
+    int r = cls_client::get_id(&cg_ioctx, cg_id_obj, &cg_id);
+    if (r < 0) {
+      lderr(cct) << "error reading consistency group id object: "
+	         << cpp_strerror(r)
+		 << dendl;
+      return r;
+    }
+    string cg_header_oid = util::cg_header_name(cg_id);
+
+    ldout(cct, 20) << "listing images in cg name "
+                   << cg_name << " cg id " << cg_header_oid << dendl;
+
+    std::vector<std::tuple<std::string, int64_t, int64_t>> image_ids;
+    r = cls_client::cg_list_images(&cg_ioctx, cg_header_oid, image_ids);
+
+    if (r < 0) {
+      lderr(cct) << "error adding image reference to consistency group: "
+		 << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    for (auto i : image_ids) {
+      librados::Rados rados(cg_ioctx);
+      IoCtx ioctx;
+      rados.ioctx_create2(std::get<1>(i), ioctx);
+      std::string image_name;
+      r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
+	                           std::get<0>(i), &image_name);
+      if (r < 0) {
+	return r;
+      }
+      images.push_back(std::make_tuple(image_name,
+	                               std::get<1>(i),
+	                               std::get<2>(i)));
+    }
+
+    return 0;
+  }
+
 }

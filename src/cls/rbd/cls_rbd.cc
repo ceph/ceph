@@ -36,15 +36,15 @@
 #include <map>
 #include <sstream>
 #include <vector>
-#include <boost/lexical_cast.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "common/bit_vector.hpp"
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
-#include "include/rbd/object_map_types.h"
 #include "include/rbd/cg_types.h"
+#include "include/rbd/object_map_types.h"
+#include "include/stringify.h"
 
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -67,14 +67,6 @@ CLS_NAME(rbd)
 
 cls_handle_t h_class;
 cls_method_handle_t h_create;
-cls_method_handle_t h_create_cg;
-cls_method_handle_t h_cg_list_images;
-cls_method_handle_t h_cg_add_image;
-cls_method_handle_t h_cg_remove_image;
-cls_method_handle_t h_cg_dirty_link;
-cls_method_handle_t h_cg_to_default;
-cls_method_handle_t h_image_add_cg_ref;
-cls_method_handle_t h_image_remove_cg_ref;
 cls_method_handle_t h_get_features;
 cls_method_handle_t h_set_features;
 cls_method_handle_t h_get_size;
@@ -104,11 +96,8 @@ cls_method_handle_t h_set_id;
 cls_method_handle_t h_dir_get_id;
 cls_method_handle_t h_dir_get_name;
 cls_method_handle_t h_dir_list;
-cls_method_handle_t h_dir_list_cgs;
 cls_method_handle_t h_dir_add_image;
-cls_method_handle_t h_dir_add_cg;
 cls_method_handle_t h_dir_remove_image;
-cls_method_handle_t h_dir_remove_cg;
 cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
 cls_method_handle_t h_object_map_save;
@@ -137,6 +126,17 @@ cls_method_handle_t h_mirror_image_list;
 cls_method_handle_t h_mirror_image_get;
 cls_method_handle_t h_mirror_image_set;
 cls_method_handle_t h_mirror_image_remove;
+cls_method_handle_t h_create_cg;
+cls_method_handle_t h_cg_list_images;
+cls_method_handle_t h_cg_add_image;
+cls_method_handle_t h_cg_dirty_link;
+cls_method_handle_t h_cg_to_default;
+cls_method_handle_t h_cg_remove_image;
+cls_method_handle_t h_image_add_cg_ref;
+cls_method_handle_t h_image_remove_cg_ref;
+cls_method_handle_t h_dir_list_cgs;
+cls_method_handle_t h_dir_add_cg;
+cls_method_handle_t h_dir_remove_cg;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -240,278 +240,6 @@ static bool is_valid_id(const string &id) {
     }
   }
   return true;
-}
-
-/**
- * Initialize the header with basic metadata.
- * Everything is stored as key/value pairs as omaps in the header object.
- *
- * If features the OSD does not understand are requested, -ENOSYS is
- * returned.
- *
- * Output:
- * @return 0 on success, negative error code on failure
- */
-int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  bufferlist snap_seqbl;
-  uint64_t snap_seq = 0;
-  ::encode(snap_seq, snap_seqbl);
-  int r = cls_cxx_map_set_val(hctx, CG_SNAP_SEQ, &snap_seqbl);
-  if (r < 0)
-    return r;
-
-  return 0;
-}
-
-int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "cg_list_images");
-
-  int max_read = RBD_MAX_KEYS_READ;
-  std::map<string, bufferlist> vals;
-  string last_read = RBD_SNAP_KEY_PREFIX;
-  int r;
-  do {
-    r = cls_cxx_map_get_vals(hctx, RBD_IMAGE_KEY_PREFIX, RBD_IMAGE_KEY_PREFIX,
-			     max_read, &vals);
-    if (r < 0)
-      return r;
-
-    int64_t length = vals.size();
-    ::encode(length, *out);
-    CLS_LOG(20, "Discovered %ld images", length);
-
-    for (map<string, bufferlist>::iterator it = vals.begin();
-	 it != vals.end(); ++it) {
-      bufferlist::iterator iter = it->second.begin();
-      int64_t state;
-      try {
-	::decode(state, iter);
-      } catch (const buffer::error &err) {
-	CLS_ERR("error decoding state for image: %s", it->first.c_str());
-	return -EIO;
-      }
-      typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
-      boost::char_separator<char> sep("_");
-      tokenizer tokens(it->first, sep);
-      tokenizer::iterator tok_iter = tokens.begin();
-      ++tok_iter;
-      string image_id = *tok_iter;
-
-      ++tok_iter;
-      string pool_id = *tok_iter;
-      CLS_LOG(20, "Discovered image %s %s %d", image_id.c_str(),
-	                                       pool_id.c_str(),
-					       (int)state);
-      ::encode(image_id.c_str(), *out);
-      ::encode(pool_id.c_str(), *out);
-      ::encode(state, *out);
-    }
-
-  } while (r == RBD_MAX_KEYS_READ);
-
-  return 0;
-}
-
-int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "image_add_cg_ref");
-  std::string cg_id;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(cg_id, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  bufferlist existing_refbl;
-
-  int r = read_key(hctx, RBD_CG_REF_KEY, &existing_refbl);
-  if (r != -ENOENT) { // No entry means this image is not a member of any cg. So, we can use it.
-    if (r < 0) {
-      return r;
-    }
-
-    std::string old_cg_id;
-    int64_t old_pool_id;
-    try {
-      bufferlist::iterator iter = existing_refbl.begin();
-      ::decode(old_pool_id, iter);
-      ::decode(old_cg_id, iter);
-    } catch (const buffer::error &err) {
-      return -EINVAL;
-    }
-
-    if ((old_cg_id != cg_id) || (old_pool_id != pool_id)) {
-      return -EEXIST;
-    } else {
-      return 0; // In this case the values are already correct
-    }
-  }
-
-  bufferlist refbl;
-  ::encode(pool_id, refbl);
-  ::encode(cg_id, refbl);
-  r = cls_cxx_map_set_val(hctx, RBD_CG_REF_KEY, &refbl);
-
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int image_remove_cg_ref(cls_method_context_t hctx,
-                        bufferlist *in,
-			bufferlist *out)
-{
-  CLS_LOG(20, "image_remove_cg_ref");
-  std::string cg_id;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(cg_id, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  bufferlist refbl;
-  int r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
-  if (r < 0) {
-    return r;
-  }
-
-  std::string ref_cg_id;
-  int64_t ref_pool_id;
-  bufferlist::iterator iter = refbl.begin();
-  ::decode(ref_pool_id, iter);
-  ::decode(ref_cg_id, iter);
-
-  if (ref_pool_id != pool_id || ref_cg_id != cg_id) {
-    return -EBADF;
-  }
-
-  r = cls_cxx_map_remove_key(hctx, RBD_CG_REF_KEY);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "cg_add_image");
-
-  std::string image_id;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(image_id, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
-
-  bufferlist image_val_bl;
-  int64_t link_state = LINK_DIRTY;
-  ::encode(link_state, image_val_bl);
-  int r = cls_cxx_map_set_val(hctx, image_key, &image_val_bl);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "cg_dirty_link");
-
-  std::string image_id;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(image_id, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
-
-  bufferlist statebl;
-  int64_t new_state = LINK_DIRTY;
-  ::encode(new_state, statebl);
-  int r = cls_cxx_map_set_val(hctx, image_key, &statebl);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "cg_to_default");
-
-  std::string image_id;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(image_id, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
-
-  int64_t link_state;
-
-  int r = read_key(hctx, image_key, &link_state);
-  if (r < 0) {
-    return r;
-  }
-
-  bufferlist statebl;
-  int64_t new_state = LINK_NORMAL;
-  ::encode(new_state, statebl);
-  r = cls_cxx_map_set_val(hctx, image_key, &statebl);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "cg_remove_image");
-  std::string image_id;
-  int64_t pool_id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(image_id, iter);
-    ::decode(pool_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
-
-  int r = cls_cxx_map_remove_key(hctx, image_key);
-  if (r < 0) {
-    CLS_ERR("error removing image from cg: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  return 0;
 }
 
 /**
@@ -2141,57 +1869,6 @@ static const string dir_name_from_key(const string &key)
   return key.substr(strlen(RBD_DIR_NAME_KEY_PREFIX));
 }
 
-static int dir_add_cg(cls_method_context_t hctx,
-                      bufferlist *in,
-		      bufferlist *out)
-{
-  int r = cls_cxx_create(hctx, false);
-
-  if (r < 0) {
-    CLS_ERR("could not create consistency group directory: %s",
-	    cpp_strerror(r).c_str());
-    return r;
-  }
-
-  string name, id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(name, iter);
-    ::decode(id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  if (!name.size() || !is_valid_id(id)) {
-    CLS_ERR("invalid consistency group name '%s' or id '%s'",
-	    name.c_str(), id.c_str());
-    return -EINVAL;
-  }
-
-  CLS_LOG(20, "dir_add_cg name=%s id=%s", name.c_str(), id.c_str());
-
-  string tmp;
-  string name_key = dir_key_for_name(name);
-  string id_key = dir_key_for_id(id);
-  r = read_key(hctx, name_key, &tmp);
-  if (r != -ENOENT) {
-    CLS_LOG(10, "name already exists");
-    return -EEXIST;
-  }
-  r = read_key(hctx, id_key, &tmp);
-  if (r != -ENOENT) {
-    CLS_LOG(10, "id already exists");
-    return -EBADF;
-  }
-  bufferlist id_bl, name_bl;
-  ::encode(id, id_bl);
-  ::encode(name, name_bl);
-  map<string, bufferlist> omap_vals;
-  omap_vals[name_key] = id_bl;
-  omap_vals[id_key] = name_bl;
-  return cls_cxx_map_set_vals(hctx, &omap_vals);
-}
-
 static int dir_add_image_helper(cls_method_context_t hctx,
 				const string &name, const string &id,
 				bool check_for_unique_id)
@@ -2373,59 +2050,6 @@ int dir_get_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-int dir_list_cgs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  string start_after;
-  uint64_t max_return;
-
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(start_after, iter);
-    ::decode(max_return, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  int max_read = RBD_MAX_KEYS_READ;
-  int r = max_read;
-  map<string, string> cgs;
-  string last_read = dir_key_for_name(start_after);
-
-  while (r == max_read && cgs.size() < max_return) {
-    map<string, bufferlist> vals;
-    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
-    r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
-			     max_read, &vals);
-    if (r < 0) {
-      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
-      return r;
-    }
-
-    for (map<string, bufferlist>::iterator it = vals.begin();
-	 it != vals.end(); ++it) {
-      string id;
-      bufferlist::iterator iter = it->second.begin();
-      try {
-	::decode(id, iter);
-      } catch (const buffer::error &err) {
-	CLS_ERR("could not decode id of consistency group '%s'", it->first.c_str());
-	return -EIO;
-      }
-      CLS_LOG(20, "adding '%s' -> '%s'", dir_name_from_key(it->first).c_str(), id.c_str());
-      cgs[dir_name_from_key(it->first)] = id;
-      if (cgs.size() >= max_return)
-	break;
-    }
-    if (!vals.empty()) {
-      last_read = dir_key_for_name(cgs.rbegin()->first);
-    }
-  }
-
-  ::encode(cgs, *out);
-
-  return 0;
-}
-
 /**
  * List the names and ids of the images in the directory, sorted by
  * name.
@@ -2523,57 +2147,6 @@ int dir_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   return dir_add_image_helper(hctx, name, id, true);
-}
-
-int dir_remove_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  string name, id;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(name, iter);
-    ::decode(id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-
-  CLS_LOG(20, "dir_remove_cg name=%s id=%s", name.c_str(), id.c_str());
-
-  string stored_name, stored_id;
-  string name_key = dir_key_for_name(name);
-  string id_key = dir_key_for_id(id);
-
-  int r = read_key(hctx, name_key, &stored_id);
-  if (r < 0) {
-    if (r != -ENOENT)
-      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-  r = read_key(hctx, id_key, &stored_name);
-  if (r < 0) {
-    CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  // check if this op raced with a rename
-  if (stored_name != name || stored_id != id) {
-    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
-	    stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
-    return -ESTALE;
-  }
-
-  r = cls_cxx_map_remove_key(hctx, name_key);
-  if (r < 0) {
-    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  r = cls_cxx_map_remove_key(hctx, id_key);
-  if (r < 0) {
-    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  return 0;
 }
 
 /**
@@ -4026,6 +3599,433 @@ int mirror_image_remove(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+/**
+ * Initialize the header with basic metadata.
+ * Everything is stored as key/value pairs as omaps in the header object.
+ *
+ * If features the OSD does not understand are requested, -ENOSYS is
+ * returned.
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist snap_seqbl;
+  uint64_t snap_seq = 0;
+  ::encode(snap_seq, snap_seqbl);
+  int r = cls_cxx_map_set_val(hctx, CG_SNAP_SEQ, &snap_seqbl);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_list_images");
+
+  int max_read = RBD_MAX_KEYS_READ;
+  std::map<string, bufferlist> vals;
+  string last_read = RBD_SNAP_KEY_PREFIX;
+  int r;
+  do {
+    r = cls_cxx_map_get_vals(hctx, RBD_IMAGE_KEY_PREFIX, RBD_IMAGE_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0)
+      return r;
+
+    int64_t length = vals.size();
+    ::encode(length, *out);
+    CLS_LOG(20, "Discovered %ld images", length);
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end(); ++it) {
+      bufferlist::iterator iter = it->second.begin();
+      int64_t state;
+      try {
+	::decode(state, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding state for image: %s", it->first.c_str());
+	return -EIO;
+      }
+      typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
+      boost::char_separator<char> sep("_");
+      tokenizer tokens(it->first, sep);
+      tokenizer::iterator tok_iter = tokens.begin();
+      ++tok_iter;
+      string image_id = *tok_iter;
+
+      ++tok_iter;
+      string pool_id = *tok_iter;
+      CLS_LOG(20, "Discovered image %s %s %d", image_id.c_str(),
+	                                       pool_id.c_str(),
+					       (int)state);
+      ::encode(image_id.c_str(), *out);
+      ::encode(pool_id.c_str(), *out);
+      ::encode(state, *out);
+    }
+
+  } while (r == RBD_MAX_KEYS_READ);
+
+  return 0;
+}
+
+int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_add_image");
+
+  std::string image_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
+
+  bufferlist image_val_bl;
+  int64_t link_state = LINK_DIRTY;
+  ::encode(link_state, image_val_bl);
+  int r = cls_cxx_map_set_val(hctx, image_key, &image_val_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_dirty_link");
+
+  std::string image_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
+
+  bufferlist statebl;
+  int64_t new_state = LINK_DIRTY;
+  ::encode(new_state, statebl);
+  int r = cls_cxx_map_set_val(hctx, image_key, &statebl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_to_default");
+
+  std::string image_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
+
+  int64_t link_state;
+
+  int r = read_key(hctx, image_key, &link_state);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist statebl;
+  int64_t new_state = LINK_NORMAL;
+  ::encode(new_state, statebl);
+  r = cls_cxx_map_set_val(hctx, image_key, &statebl);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "cg_remove_image");
+  std::string image_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(image_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  string image_key = RBD_IMAGE_KEY_PREFIX + image_id + "_" + stringify(pool_id);
+
+  int r = cls_cxx_map_remove_key(hctx, image_key);
+  if (r < 0) {
+    CLS_ERR("error removing image from cg: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "image_add_cg_ref");
+  std::string cg_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(cg_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bufferlist existing_refbl;
+
+  int r = read_key(hctx, RBD_CG_REF_KEY, &existing_refbl);
+  if (r != -ENOENT) { // No entry means this image is not a member of any cg. So, we can use it.
+    if (r < 0) {
+      return r;
+    }
+
+    std::string old_cg_id;
+    int64_t old_pool_id;
+    try {
+      bufferlist::iterator iter = existing_refbl.begin();
+      ::decode(old_pool_id, iter);
+      ::decode(old_cg_id, iter);
+    } catch (const buffer::error &err) {
+      return -EINVAL;
+    }
+
+    if ((old_cg_id != cg_id) || (old_pool_id != pool_id)) {
+      return -EEXIST;
+    } else {
+      return 0; // In this case the values are already correct
+    }
+  }
+
+  bufferlist refbl;
+  ::encode(pool_id, refbl);
+  ::encode(cg_id, refbl);
+  r = cls_cxx_map_set_val(hctx, RBD_CG_REF_KEY, &refbl);
+
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int image_remove_cg_ref(cls_method_context_t hctx,
+                        bufferlist *in,
+			bufferlist *out)
+{
+  CLS_LOG(20, "image_remove_cg_ref");
+  std::string cg_id;
+  int64_t pool_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(cg_id, iter);
+    ::decode(pool_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bufferlist refbl;
+  int r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string ref_cg_id;
+  int64_t ref_pool_id;
+  bufferlist::iterator iter = refbl.begin();
+  ::decode(ref_pool_id, iter);
+  ::decode(ref_cg_id, iter);
+
+  if (ref_pool_id != pool_id || ref_cg_id != cg_id) {
+    return -EBADF;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, RBD_CG_REF_KEY);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int dir_list_cgs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  map<string, string> cgs;
+  string last_read = dir_key_for_name(start_after);
+
+  while (r == max_read && cgs.size() < max_return) {
+    map<string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end(); ++it) {
+      string id;
+      bufferlist::iterator iter = it->second.begin();
+      try {
+	::decode(id, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode id of consistency group '%s'", it->first.c_str());
+	return -EIO;
+      }
+      CLS_LOG(20, "adding '%s' -> '%s'", dir_name_from_key(it->first).c_str(), id.c_str());
+      cgs[dir_name_from_key(it->first)] = id;
+      if (cgs.size() >= max_return)
+	break;
+    }
+    if (!vals.empty()) {
+      last_read = dir_key_for_name(cgs.rbegin()->first);
+    }
+  }
+
+  ::encode(cgs, *out);
+
+  return 0;
+}
+
+int dir_add_cg(cls_method_context_t hctx,
+                      bufferlist *in,
+		      bufferlist *out)
+{
+  int r = cls_cxx_create(hctx, false);
+
+  if (r < 0) {
+    CLS_ERR("could not create consistency group directory: %s",
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (!name.size() || !is_valid_id(id)) {
+    CLS_ERR("invalid consistency group name '%s' or id '%s'",
+	    name.c_str(), id.c_str());
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_add_cg name=%s id=%s", name.c_str(), id.c_str());
+
+  string tmp;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  r = read_key(hctx, name_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "name already exists");
+    return -EEXIST;
+  }
+  r = read_key(hctx, id_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "id already exists");
+    return -EBADF;
+  }
+  bufferlist id_bl, name_bl;
+  ::encode(id, id_bl);
+  ::encode(name, name_bl);
+  map<string, bufferlist> omap_vals;
+  omap_vals[name_key] = id_bl;
+  omap_vals[id_key] = name_bl;
+  return cls_cxx_map_set_vals(hctx, &omap_vals);
+}
+
+int dir_remove_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_remove_cg name=%s id=%s", name.c_str(), id.c_str());
+
+  string stored_name, stored_id;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+
+  int r = read_key(hctx, name_key, &stored_id);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  r = read_key(hctx, id_key, &stored_name);
+  if (r < 0) {
+    CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  // check if this op raced with a rename
+  if (stored_name != name || stored_id != id) {
+    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
+	    stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
+    return -ESTALE;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, name_key);
+  if (r < 0) {
+    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, id_key);
+  if (r < 0) {
+    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -4034,30 +4034,6 @@ void __cls_init()
   cls_register_cxx_method(h_class, "create",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  create, &h_create);
-  cls_register_cxx_method(h_class, "create_cg",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  create_cg, &h_create_cg);
-  cls_register_cxx_method(h_class, "cg_list_images",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_list_images, &h_cg_list_images);
-  cls_register_cxx_method(h_class, "cg_add_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_add_image, &h_cg_add_image);
-  cls_register_cxx_method(h_class, "cg_remove_image",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_remove_image, &h_cg_remove_image);
-  cls_register_cxx_method(h_class, "cg_dirty_link",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_dirty_link, &h_cg_dirty_link);
-  cls_register_cxx_method(h_class, "cg_to_default",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  cg_to_default, &h_cg_to_default);
-  cls_register_cxx_method(h_class, "image_add_cg_ref",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  image_add_cg_ref, &h_image_add_cg_ref);
-  cls_register_cxx_method(h_class, "image_remove_cg_ref",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  image_remove_cg_ref, &h_image_remove_cg_ref);
   cls_register_cxx_method(h_class, "get_features",
 			  CLS_METHOD_RD,
 			  get_features, &h_get_features);
@@ -4160,24 +4136,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "dir_get_name",
 			  CLS_METHOD_RD,
 			  dir_get_name, &h_dir_get_name);
-  cls_register_cxx_method(h_class, "dir_list_cgs",
-			  CLS_METHOD_RD,
-			  dir_list_cgs, &h_dir_list_cgs);
   cls_register_cxx_method(h_class, "dir_list",
 			  CLS_METHOD_RD,
 			  dir_list, &h_dir_list);
   cls_register_cxx_method(h_class, "dir_add_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_add_image, &h_dir_add_image);
-  cls_register_cxx_method(h_class, "dir_add_cg",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  dir_add_cg, &h_dir_add_cg);
   cls_register_cxx_method(h_class, "dir_remove_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_remove_image, &h_dir_remove_image);
-  cls_register_cxx_method(h_class, "dir_remove_cg",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  dir_remove_cg, &h_dir_remove_cg);
   cls_register_cxx_method(h_class, "dir_rename_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_rename_image, &h_dir_rename_image);
@@ -4251,5 +4218,39 @@ void __cls_init()
   cls_register_cxx_method(h_class, "mirror_image_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_image_remove, &h_mirror_image_remove);
+  /* methods for the consistency groups feature */
+  cls_register_cxx_method(h_class, "create_cg",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  create_cg, &h_create_cg);
+  cls_register_cxx_method(h_class, "cg_list_images",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_list_images, &h_cg_list_images);
+  cls_register_cxx_method(h_class, "cg_add_image",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_add_image, &h_cg_add_image);
+  cls_register_cxx_method(h_class, "cg_dirty_link",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_dirty_link, &h_cg_dirty_link);
+  cls_register_cxx_method(h_class, "cg_to_default",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_to_default, &h_cg_to_default);
+  cls_register_cxx_method(h_class, "cg_remove_image",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  cg_remove_image, &h_cg_remove_image);
+  cls_register_cxx_method(h_class, "image_add_cg_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  image_add_cg_ref, &h_image_add_cg_ref);
+  cls_register_cxx_method(h_class, "image_remove_cg_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  image_remove_cg_ref, &h_image_remove_cg_ref);
+  cls_register_cxx_method(h_class, "dir_list_cgs",
+			  CLS_METHOD_RD,
+			  dir_list_cgs, &h_dir_list_cgs);
+  cls_register_cxx_method(h_class, "dir_add_cg",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  dir_add_cg, &h_dir_add_cg);
+  cls_register_cxx_method(h_class, "dir_remove_cg",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  dir_remove_cg, &h_dir_remove_cg);
   return;
 }
