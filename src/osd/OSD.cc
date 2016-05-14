@@ -159,15 +159,15 @@ static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
 }
 
-void PGQueueable::RunVis::operator()(OpRequestRef &op) {
+void PGQueueable::RunVis::operator()(const OpRequestRef &op) {
   return osd->dequeue_op(pg, op, handle);
 }
 
-void PGQueueable::RunVis::operator()(PGSnapTrim &op) {
+void PGQueueable::RunVis::operator()(const PGSnapTrim &op) {
   return pg->snap_trimmer(op.epoch_queued);
 }
 
-void PGQueueable::RunVis::operator()(PGScrub &op) {
+void PGQueueable::RunVis::operator()(const PGScrub &op) {
   return pg->scrub(op.epoch_queued, handle);
 }
 
