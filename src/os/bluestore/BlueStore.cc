@@ -2852,8 +2852,11 @@ int BlueStore::_do_read(
       if (bptr->csum_type != bluestore_blob_t::CSUM_NONE) {
 	r = _verify_csum(bptr, 0, compressed_bl);
 	if (r < 0) {
-	  dout(20) << __func__ << "  blob reading " << r2r_it->logical_offset << "~" << bptr->length << " csum verification failed." << dendl;
-	  return r;
+	  dout(20) << __func__ << "  blob reading 0x" << std::hex
+		   << r2r_it->logical_offset
+		   << " 0~" << compressed_bl.length()
+		   << std::dec << " csum verification failed." << dendl;
+	  return -EIO;
 	}
       }
 
@@ -2979,7 +2982,7 @@ int BlueStore::_read_extent_sparse(
 		 << cur->logical_offset << " 0x"
 		 << cur->blob_xoffset << "~0x" << bl.length()
 		 << " csum verification failed" << dendl;
-	return r;
+	return -EIO;
       }
     }
 
