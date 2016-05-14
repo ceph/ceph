@@ -357,9 +357,9 @@ class PGQueueable {
     ThreadPool::TPHandle &handle;
     RunVis(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle)
       : osd(osd), pg(pg), handle(handle) {}
-    void operator()(OpRequestRef &op);
-    void operator()(PGSnapTrim &op);
-    void operator()(PGScrub &op);
+    void operator()(const OpRequestRef &op);
+    void operator()(const PGSnapTrim &op);
+    void operator()(const PGScrub &op);
   };
 public:
   // cppcheck-suppress noExplicitConstructor
