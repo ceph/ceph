@@ -2784,7 +2784,6 @@ int BlueStore::_do_read(
 	   << " size 0x" << o->onode.size << " (" << std::dec
 	   << o->onode.size << ")" << dendl;
   bl.clear();
-  _dump_onode(o);
 
   auto& lextents = o->onode.extent_map;
 
@@ -2797,6 +2796,7 @@ int BlueStore::_do_read(
   }
 
   o->flush();
+  _dump_onode(o);
 
   auto lext = lextents.upper_bound(offset);
   uint32_t l = length;
@@ -3012,6 +3012,7 @@ int BlueStore::_blob2read_to_extents2read(
     l = cur->length;
     uint64_t r_offs = cur->blob_xoffset - ext_pos;
     uint64_t l_offs = cur->logical_offset;
+    uint64_t x_offs = cur->blob_xoffset;
     while (l > 0 && ext_it != ext_end) {
 
       assert(blob->length >= ext_pos + r_offs);
@@ -3021,9 +3022,10 @@ int BlueStore::_blob2read_to_extents2read(
 	r_len = MIN(r_len, l);
 	const bluestore_pextent_t* eptr = &(*ext_it);
 	regions2read_t& regions = (*result)[eptr];
-	regions.push_back(region_t(l_offs, ext_pos, r_offs, r_len));
+	regions.push_back(region_t(l_offs, x_offs, r_offs, r_len));
 	l -= r_len;
 	l_offs += r_len;
+	x_offs += r_len;
       }
 
       //leave extent pointer as-is if current region's been fully processed - lookup will start from it for the next region
