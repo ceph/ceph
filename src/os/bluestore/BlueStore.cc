@@ -5033,6 +5033,13 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
   for (auto& b : o->onode.blob_map) {
     dout(log_level) << __func__ << "  " << b.first << ": " << b.second
 		    << dendl;
+    if (b.second.csum_data.size()) {
+      vector<uint64_t> v;
+      unsigned n = b.second.get_csum_count();
+      for (unsigned i = 0; i < n; ++i)
+	v.push_back(b.second.get_csum_item(i));
+      dout(log_level) << __func__ << "       csum: " << v << dendl;
+    }
   }
   pos = 0;
   for (auto& v : o->onode.overlay_map) {
@@ -5059,6 +5066,13 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
   dout(log_level) << __func__ << "  " << b->ref_map << dendl;
   for (auto &p : b->blob_map) {
     dout(log_level) << __func__ << "  " << p.first << ": " << p.second << dendl;
+    if (p.second.csum_data.size()) {
+      vector<uint64_t> v;
+      unsigned n = p.second.get_csum_count();
+      for (unsigned i = 0; i < n; ++i)
+	v.push_back(p.second.get_csum_item(i));
+      dout(log_level) << __func__ << "       csum: " << v << dendl;
+    }
   }
 }
 
