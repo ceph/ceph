@@ -49,7 +49,7 @@ JournalRecorder::JournalRecorder(librados::IoCtx &ioctx,
   : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
     m_journal_metadata(journal_metadata), m_flush_interval(flush_interval),
     m_flush_bytes(flush_bytes), m_flush_age(flush_age), m_listener(this),
-    m_overflow_handler(this), m_lock("JournalerRecorder::m_lock"),
+    m_object_handler(this), m_lock("JournalerRecorder::m_lock"),
     m_current_set(m_journal_metadata->get_active_set()) {
 
   Mutex::Locker locker(m_lock);
@@ -151,7 +151,7 @@ void JournalRecorder::close_object_set(uint64_t object_set) {
     ObjectRecorderPtr object_recorder = it->second;
     if (object_recorder != NULL &&
         object_recorder->get_object_number() / splay_width == m_current_set) {
-      if (object_recorder->close_object()) {
+      if (object_recorder->close()) {
         // no in-flight ops, immediately create new recorder
         create_next_object_recorder(object_recorder);
       }
@@ -164,7 +164,7 @@ ObjectRecorderPtr JournalRecorder::create_object_recorder(
   ObjectRecorderPtr object_recorder(new ObjectRecorder(
     m_ioctx, utils::get_object_name(m_object_oid_prefix, object_number),
     object_number, m_journal_metadata->get_timer(),
-    m_journal_metadata->get_timer_lock(), &m_overflow_handler,
+    m_journal_metadata->get_timer_lock(), &m_object_handler,
     m_journal_metadata->get_order(), m_flush_interval, m_flush_bytes,
     m_flush_age));
   return object_recorder;
@@ -195,6 +195,10 @@ void JournalRecorder::handle_update() {
   if (active_set > m_current_set) {
     close_object_set(m_current_set);
   }
+}
+
+void JournalRecorder::handle_closed(ObjectRecorder *object_recorder) {
+  // TODO
 }
 
 void JournalRecorder::handle_overflow(ObjectRecorder *object_recorder) {
