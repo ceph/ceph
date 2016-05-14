@@ -848,3 +848,17 @@ void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_tra
   o.back()->ops.back().extents.push_back(bluestore_pextent_t(1,7));
   o.back()->ops.back().data.append("foodata");
 }
+
+void bluestore_compression_header_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(type, bl);
+  ENCODE_FINISH(bl);
+}
+
+void bluestore_compression_header_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(type, p);
+  DECODE_FINISH(p);
+}
