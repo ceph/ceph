@@ -126,6 +126,7 @@ class AsyncConnection : public Connection {
     assert(write_lock.is_locked());
     return !out_q.empty();
   }
+  void reset_recv_state();
 
    /**
    * The DelayedDelivery is for injecting delays into Message delivery off
