@@ -12,7 +12,6 @@ running Ceph daemons of a specific type on a host configured for that type
 of daemon. We recommend using other hosts for processes that utilize your 
 data cluster (e.g., OpenStack, CloudStack, etc).
 
-
 .. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
    `Ceph Write Throughput 2`_, `Argonaut v. Bobtail Performance Preview`_, 
    `Bobtail Performance - I/O Scheduler Comparison`_ and others are an
