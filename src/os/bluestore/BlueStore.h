@@ -687,7 +687,7 @@ private:
 
   // for fsck
   int _verify_bnode_shared(BnodeRef bnode,
-			   map<int64_t,vector<bluestore_pextent_t>>& v,
+			   map<int64_t,bluestore_extent_ref_map_t>& v,
 			   interval_set<uint64_t> &used_blocks);
 
 public:

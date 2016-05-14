@@ -2075,11 +2075,11 @@ int BlueStore::umount()
 
 int BlueStore::_verify_bnode_shared(
   BnodeRef bnode,
-  map<int64_t,vector<bluestore_pextent_t>>& v,
+  map<int64_t,bluestore_extent_ref_map_t>& v,
   interval_set<uint64_t> &used_blocks)
 {
   int errors = 0;
-  dout(10) << __func__ << " hash " << bnode->hash << " v " << v << dendl;
+  dout(10) << __func__ << " hash " << bnode->hash << " " << v << dendl;
   for (auto& b : bnode->blob_map) {
     auto pv = v.find(b.first);
     if (pv == v.end()) {
@@ -2087,29 +2087,14 @@ int BlueStore::_verify_bnode_shared(
 	   << " exists in bnode but has no refs" << dendl;
       ++errors;
     }
-    bluestore_extent_ref_map_t ref_map;
-    interval_set<uint64_t> span;
-    for (auto& p : pv->second) {
-      interval_set<uint64_t> t, i;
-      t.insert(p.offset, p.length);
-      i.intersection_of(t, span);
-      t.subtract(i);
-      dout(20) << __func__ << "  extent " << p << " t " << t << " i " << i
-	       << dendl;
-      for (interval_set<uint64_t>::iterator q = t.begin(); q != t.end(); ++q) {
-	ref_map.get(q.get_start(), q.get_len());
-      }
-      for (interval_set<uint64_t>::iterator q = i.begin(); q != i.end(); ++q) {
-	ref_map.get(q.get_start(), q.get_len());
-      }
-      span.insert(t);
-    }
-    if (b.second.ref_map != ref_map) {
+    if (pv->second != b.second.ref_map) {
       derr << " hash " << bnode->hash << " blob " << b.first
 	   << " ref_map " << b.second.ref_map
-	   << " != expected " << ref_map << dendl;
+	   << " != expected " << pv->second << dendl;
       ++errors;
     }
+    v.erase(pv);
+    interval_set<uint64_t> span;
     for (auto& p : b.second.extents) {
       interval_set<uint64_t> e, i;
       e.insert(p.offset, p.length);
@@ -2122,12 +2107,10 @@ int BlueStore::_verify_bnode_shared(
 	used_blocks.insert(p.offset, p.length);
       }
     }
-    v.erase(b.first);
   }
   for (auto& p : v) {
     derr << " hash " << bnode->hash << " blob " << p.first
-	 << " dne, has extent refs "
-	 << p.second << dendl;
+	 << " dne, has extent refs " << p.second << dendl;
     ++errors;
   }
   return errors;
@@ -2142,7 +2125,7 @@ int BlueStore::fsck()
   interval_set<uint64_t> used_blocks;
   KeyValueDB::Iterator it;
   BnodeRef bnode;
-  map<int64_t,vector<bluestore_pextent_t>> hash_shared;
+  map<int64_t,bluestore_extent_ref_map_t> hash_shared;
 
   int r = _open_path();
   if (r < 0)
@@ -2215,9 +2198,9 @@ int BlueStore::fsck()
 	break;
       }
       for (auto& oid : ols) {
-	dout(10) << __func__ << "  " << oid << dendl;
 	OnodeRef o = c->get_onode(oid, false);
 	if (!o || !o->exists) {
+	  derr << __func__ << "  " << oid << " missing" << dendl;
 	  ++errors;
 	  continue; // go for next object
 	}
@@ -2227,6 +2210,8 @@ int BlueStore::fsck()
 	  bnode = c->get_bnode(o->oid.hobj.get_hash());
 	  hash_shared.clear();
 	}
+	dout(10) << __func__ << "  " << oid << dendl;
+	_dump_onode(o, 30);
 	if (o->onode.nid) {
 	  if (used_nids.count(o->onode.nid)) {
 	    derr << " " << oid << " nid " << o->onode.nid << " already in use"
@@ -2237,14 +2222,12 @@ int BlueStore::fsck()
 	  used_nids.insert(o->onode.nid);
 	}
 	// lextents
-	set<uint64_t> local_blobs;
+	map<uint64_t,bluestore_extent_ref_map_t> local_blobs;
 	for (auto& l : o->onode.extent_map) {
 	  if (l.second.blob >= 0) {
-	    local_blobs.insert(l.second.blob);
-	    // fixme: make sure offset,length are valid
+	    local_blobs[l.second.blob].get(l.second.offset, l.second.length);
 	  } else {
-	    hash_shared[-l.second.blob].push_back(
-	      bluestore_pextent_t(l.second.offset, l.second.length));
+	    hash_shared[-l.second.blob].get(l.second.offset, l.second.length);
 	  }
 	}
 	// blobs
@@ -2263,7 +2246,14 @@ int BlueStore::fsck()
 	      ++errors;
 	    }
 	  }
-	  if (local_blobs.count(b.first)) {
+	  auto bp = local_blobs.find(b.first);
+	  if (bp != local_blobs.end()) {
+	    if (bp->second != b.second.ref_map) {
+	      derr << " " << oid << " blob " << b.first << " ref_map should be "
+		   << bp->second << " but is " << b.second.ref_map
+		   << dendl;
+	      ++errors;
+	    }
 	    local_blobs.erase(b.first);
 	  } else {
 	    derr << " " << oid << " blob " << b.first << " has no lextent refs"
