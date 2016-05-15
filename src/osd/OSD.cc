@@ -4976,8 +4976,6 @@ void OSD::_send_boot()
 
 void OSD::_collect_metadata(map<string,string> *pm)
 {
-  (*pm)["ceph_version"] = pretty_version_to_str();
-
   // config info
   (*pm)["osd_data"] = dev_path;
   (*pm)["osd_journal"] = journal_path;
