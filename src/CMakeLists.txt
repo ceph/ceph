@@ -1010,7 +1010,7 @@ target_link_libraries(crushtool global)
 install(TARGETS crushtool DESTINATION bin)
 
 # Support/Tools
-add_subdirectory(gmock)
+add_subdirectory(googletest/googlemock)
 
 add_subdirectory(test)
 set(cephfs_srcs cephfs.cc)
