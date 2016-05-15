@@ -972,11 +972,10 @@ The legacy CRUSH behavior used by argonaut and older releases works
 fine for most clusters, provided there are not too many OSDs that have
 been marked out.
 
-bobtail
--------
+bobtail (CRUSH_TUNABLES2)
+-------------------------
 
-The bobtail tunable profile (CRUSH_TUNABLES feature) fixes a few key
-misbehaviors:
+The bobtail tunable profile fixes a few key misbehaviors:
 
  * For hierarchies with a small number of devices in the leaf buckets,
    some PGs map to fewer than the desired number of replicas.  This
@@ -1013,10 +1012,10 @@ Migration impact:
    of data movement.  Use caution on a cluster that is already
    populated with data.
 
-firefly
--------
+firefly (CRUSH_TUNABLES3)
+-------------------------
 
-The firefly tunable profile (CRUSH_TUNABLES2 feature) fixes a problem
+The firefly tunable profile fixes a problem
 with the ``chooseleaf`` CRUSH rule behavior that tends to result in PG
 mappings with too few results when too many OSDs have been marked out.
 
@@ -1035,8 +1034,8 @@ Migration impact:
    will allow CRUSH to find a valid mapping but will make less data
    move.
 
-straw_calc_version tunable
---------------------------
+straw_calc_version tunable (introduced with Firefly too)
+--------------------------------------------------------
 
 There were some problems with the internal weights calculated and
 stored in the CRUSH map for ``straw`` buckets.  Specifically, when
@@ -1057,10 +1056,13 @@ Migration impact:
    data movement *if* the cluster has hit one of the problematic
    conditions.
 
-hammer
-------
+This tunable option is special because it has absolutely no impact
+concerning the required kernel version in the client side.
 
-The hammer tunable profile (CRUSH_V4 feature) does not affect the
+hammer (CRUSH_V4)
+-----------------
+
+The hammer tunable profile does not affect the
 mapping of existing CRUSH maps simply by changing the profile.  However:
 
  * There is a new bucket type (``straw2``) supported.  The new
@@ -1081,10 +1083,10 @@ Migration impact:
    all the same no data will move, and when item weights vary
    significantly there will be more movement.
 
-jewel
------
+jewel (CRUSH_TUNABLES5)
+-----------------------
 
-The jewel tunable profile (CRUSH_TUNABLES5 feature) improves the
+The jewel tunable profile improves the
 overall behavior of CRUSH such that significantly fewer mappings
 change when an OSD is marked out of the cluster.
 
@@ -1139,8 +1141,9 @@ Warning when tunables are non-optimal
 -------------------------------------
 
 Starting with version v0.74, Ceph will issue a health warning if the
-CRUSH tunables are not set to their optimal values (the optimal values are
-the default as of v0.73).  To make this warning go away, you have two options:
+current CRUSH tunables don't include all the optimal values from the
+``default`` profile (see below for the meaning of the ``default`` profile).
+To make this warning go away, you have two options:
 
 1. Adjust the tunables on the existing cluster.  Note that this will
    result in some data movement (possibly as much as 10%).  This is the
@@ -1198,8 +1201,13 @@ profile.  Those are:
  * ``argonaut``: the legacy values supported by the original argonaut release
  * ``bobtail``: the values supported by the bobtail release
  * ``firefly``: the values supported by the firefly release
- * ``optimal``: the current best values
- * ``default``: the current default values for a new cluster
+ * ``optimal``: the best (ie optimal) values of the current version of Ceph
+ * ``default``: the default values of a new cluster installed from
+   scratch. These values, which depend on the current version of Ceph,
+   are hard coded and are generally a mix of optimal and legacy values.
+   These values generally match the ``optimal`` profile of the previous
+   LTS release, or the most recent release for which we generally except
+   more users to have up to date clients for.
 
 You can select a profile on a running cluster with the command::
 
