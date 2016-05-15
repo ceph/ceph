@@ -25,7 +25,6 @@ struct CompatSet {
     uint64_t id;
     string name;
 
-    Feature(uint64_t _id, const char *_name) : id(_id), name(_name) {}
     Feature(uint64_t _id, const string& _name) : id(_id), name(_name) {}
   };
 
