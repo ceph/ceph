@@ -1919,7 +1919,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
   Metadata my_meta;
   collect_sys_info(&my_meta, g_ceph_context);
-  update_mon_metadata(rank, my_meta);
+  update_mon_metadata(rank, std::move(my_meta));
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -4433,13 +4433,13 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
   MMonMetadata *m = static_cast<MMonMetadata*>(op->get_req());
   if (is_leader()) {
     dout(10) << __func__ << dendl;
-    update_mon_metadata(m->get_source().num(), m->data);
+    update_mon_metadata(m->get_source().num(), std::move(m->data));
   }
 }
 
-void Monitor::update_mon_metadata(int from, const Metadata& m)
+void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
-  pending_metadata[from] = m;
+  pending_metadata.insert(make_pair(from, std::move(m)));
 
   bufferlist bl;
   int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
