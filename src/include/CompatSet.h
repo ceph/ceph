@@ -57,7 +57,7 @@ struct CompatSet {
     /**
      * Getter instead of using name[] to be const safe
      */
-    inline std::string get_name(uint64_t const f) const {
+    std::string get_name(uint64_t const f) const {
       std::map<uint64_t, std::string>::const_iterator i = names.find(f);
       assert(i != names.end());
       return i->second;
