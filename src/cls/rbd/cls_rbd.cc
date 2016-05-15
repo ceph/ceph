@@ -16,7 +16,7 @@
  * own argument and payload serialization/deserialization, so for ease
  * of implementation we use the existing ceph encoding/decoding
  * methods. Something like json might be preferable, but the rbd
- * kernel module has to be able understand format as well. The
+ * kernel module has to be able to understand format as well. The
  * datatypes exposed to the clients are strings, unsigned integers,
  * and vectors of those types. The on-wire format can be found in
  * src/include/encoding.h.
