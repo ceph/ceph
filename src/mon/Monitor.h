@@ -919,7 +919,7 @@ public:
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
 
-  void update_mon_metadata(int from, const Metadata& m);
+  void update_mon_metadata(int from, Metadata&& m);
   int load_metadata(map<int, Metadata>& m);
 
   // features
