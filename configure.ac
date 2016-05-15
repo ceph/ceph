@@ -36,7 +36,7 @@ AM_CONDITIONAL(WITH_MAN_PAGES, test -n "$SPHINX_BUILD")
 
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_CONFIG_SUBDIRS([src/gmock])
+AC_CONFIG_SUBDIRS([src/googletest/googlemock])
 
 # Environment
 AC_CANONICAL_HOST
