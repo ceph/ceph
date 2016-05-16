@@ -7459,7 +7459,7 @@ void PG::RecoveryState::GetLog::exit()
 /*------WaitActingChange--------*/
 PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering/WaitActingChange")
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/WaitActingChange")
 {
   context< RecoveryMachine >().log_enter(state_name);
 }
