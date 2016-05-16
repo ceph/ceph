@@ -2490,10 +2490,17 @@ void BlueStore::_sync()
 int BlueStore::statfs(struct statfs *buf)
 {
   memset(buf, 0, sizeof(*buf));
-  buf->f_blocks = bdev->get_size() / bdev->get_block_size();
-  buf->f_bsize = bdev->get_block_size();
-  buf->f_bfree = alloc->get_free() / bdev->get_block_size();
+  uint64_t block_size  = bdev->get_block_size();
+  uint64_t bluefs_len = 0;
+  for (interval_set<uint64_t>::iterator p = bluefs_extents.begin();
+      p != bluefs_extents.end(); p++)
+    bluefs_len += p.get_len();
+
+  buf->f_blocks = bdev->get_size() / block_size;
+  buf->f_bsize = block_size;
+  buf->f_bfree = (alloc->get_free() - bluefs_len) / block_size;
   buf->f_bavail = buf->f_bfree;
+
   dout(20) << __func__ << " free " << pretty_si_t(buf->f_bfree * buf->f_bsize)
 	   << " / " << pretty_si_t(buf->f_blocks * buf->f_bsize) << dendl;
   return 0;
