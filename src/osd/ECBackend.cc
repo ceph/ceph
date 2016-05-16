@@ -990,7 +990,8 @@ void ECBackend::handle_sub_read(
 	// the state of our chunk in case other chunks could substitute.
 	assert(hinfo->has_chunk_hash());
 	if ((bl.length() == hinfo->get_total_chunk_size()) &&
-	    (j->get<0>() == 0)) {
+	    (j->get<0>() == 0) &&
+	    !(j->get<2>() & CEPH_OSD_OP_FLAG_FAILOK)) {
 	  dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
 	  bufferhash h(-1);
 	  h << bl;
@@ -1453,8 +1454,9 @@ int ECBackend::get_min_avail_to_read_shards(
        i != get_parent()->get_acting_shards().end();
        ++i) {
     dout(10) << __func__ << ": checking acting " << *i << dendl;
-    const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
-    if (!missing.is_missing(hoid)) {
+
+    if (!get_parent()->is_shard_missing(*i, hoid)) {
+      dout(10) << __func__ << ": adding acting " << *i << dendl;
       assert(!have.count(i->shard));
       have.insert(i->shard);
       assert(!shards.count(i->shard));

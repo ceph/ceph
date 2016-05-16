@@ -262,6 +262,8 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	f(ASSERT_INTERVAL, __CEPH_OSD_OP(RD, DATA, 39),     "assert-interval")    \
 									    \
+	f(REPAIR_COPY, __CEPH_OSD_OP(WR, DATA, 40),     "repair-copy")    \
+                                                                      \
 	/** attrs **/							    \
 	/* read */							    \
 	f(GETXATTR,	__CEPH_OSD_OP(RD, ATTR, 1),	"getxattr")	    \
@@ -404,6 +406,7 @@ enum {
 	CEPH_OSD_FLAG_FULL_TRY =    0x800000,  /* try op despite full flag */
 	CEPH_OSD_FLAG_FULL_FORCE = 0x1000000,  /* force op despite full flag */
 	CEPH_OSD_FLAG_REPAIR_READS = 0x2000000,  /* read from a specific shard/replica */
+	CEPH_OSD_FLAG_REPAIR_WRITES = 0x4000000,  /* write despite degraded/missing */
 };
 
 enum {
@@ -441,6 +444,7 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE = 8, /* map snap direct to
 						     * cloneid */
 	CEPH_OSD_COPY_FROM_FLAG_RWORDERED = 16, /* order with write */
+	CEPH_OSD_COPY_FROM_FLAG_REPAIR = 32, /* read from specified osd */
 };
 
 enum {

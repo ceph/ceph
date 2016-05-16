@@ -166,6 +166,17 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        return *m;
      }
 
+     bool is_shard_missing(pg_shard_t peer, const hobject_t& oid) const {
+       if (peer == primary_shard() && get_local_missing().is_missing(oid)) {
+	 return true;
+       }
+       auto missing = get_shard_missing().find(peer);
+       if (missing == get_shard_missing().end()) {
+	 return false;
+       }
+       return missing->second.is_missing(oid);
+     }
+
      virtual const map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
      virtual const pg_info_t &get_shard_info(pg_shard_t peer) const {
        if (peer == primary_shard()) {

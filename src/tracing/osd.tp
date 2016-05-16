@@ -802,3 +802,15 @@ TRACEPOINT_EVENT(osd, do_osd_op_pre_assert_interval,
         ctf_integer(uint32_t, epoch, epoch)
     )
 )
+
+TRACEPOINT_EVENT(osd, do_osd_op_pre_repair_copy,
+    TP_ARGS(
+        const char*, oid,
+        uint64_t, snap,
+        uint32_t, what),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, snap, snap)
+        ctf_integer(uint32_t, what, what)
+    )
+)
