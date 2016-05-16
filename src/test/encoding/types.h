@@ -25,9 +25,9 @@ TYPE(SnapRealmInfo)
 TYPE(DecayCounter)
 
 #include "common/LogEntry.h"
-TYPE(LogEntryKey)
-TYPE(LogEntry)
-TYPE(LogSummary)
+TYPE_FEATUREFUL(LogEntryKey)
+TYPE_FEATUREFUL(LogEntry)
+TYPE_FEATUREFUL(LogSummary)
 
 #include "common/SloppyCRCMap.h"
 TYPE(SloppyCRCMap)

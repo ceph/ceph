@@ -216,7 +216,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ::encode(v, bl);
   multimap<utime_t,LogEntry>::iterator p;
   for (p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl);
+    p->second.encode(bl, mon->quorum_features);
 
   put_version(t, version, bl);
   put_last_committed(t, version);
@@ -228,7 +228,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  ::encode(summary, summary_bl);
+  ::encode(summary, summary_bl, mon->quorum_features);
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
