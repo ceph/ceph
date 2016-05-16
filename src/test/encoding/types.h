@@ -370,14 +370,14 @@ TYPE(cls::rbd::MirrorImage)
 
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
-TYPE(rados::cls::lock::locker_info_t)
+TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
 TYPE(cls_lock_unlock_op)
 TYPE(cls_lock_break_op)
 TYPE(cls_lock_get_info_op)
-TYPE(cls_lock_get_info_reply)
+TYPE_FEATUREFUL(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
 TYPE(cls_lock_assert_op)
 
