@@ -532,6 +532,68 @@ TEST_P(StoreTest, SmallBlockWrites) {
   }
 }
 
+TEST_P(StoreTest, BufferCacheReadTest) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 5, in);
+    ASSERT_EQ(-ENOENT, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(cid, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(cid, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, newdata;
+    bl.append("abcde");
+    t.write(cid, hoid, 0, 5, bl);
+    t.write(cid, hoid, 10, 5, bl);
+    cerr << "TwinWrite" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    newdata.clear();
+    r = store->read(cid, hoid, 0, 5, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(newdata.contents_equal(bl));
+
+    newdata.clear();
+    r = store->read(cid, hoid, 10, 15, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(newdata.contents_equal(bl));
+    newdata.clear();
+    r = store->read(cid, hoid, 0, 15, newdata);
+    ASSERT_EQ(r, 15);
+    {
+      bufferlist expected;
+      expected.append(bl);
+      expected.append_zero(5);
+      expected.append(bl);
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+  }
+}
+
 TEST_P(StoreTest, SimpleObjectTest) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -1379,6 +1441,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP),
 			     "key", 123, -1, ""));
   {
