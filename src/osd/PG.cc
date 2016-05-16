@@ -1405,11 +1405,15 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
   dout(10) << ss.str() << dendl;
 
   unsigned num_want_acting = 0;
-  for (vector<int>::iterator i = want.begin();
-       i != want.end();
-       ++i) {
-    if (*i != CRUSH_ITEM_NONE)
+  set<pg_shard_t> have;
+  for (int i = 0; i < (int)want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
       ++num_want_acting;
+      have.insert(
+        pg_shard_t(
+          want[i],
+          pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
   }
 
   // We go incomplete if below min_size for ec_pools since backfill
@@ -1426,14 +1430,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
   /* Check whether we have enough acting shards to later perform recovery */
   boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
     get_pgbackend()->get_is_recoverable_predicate());
-  set<pg_shard_t> have;
-  for (int i = 0; i < (int)want.size(); ++i) {
-    if (want[i] != CRUSH_ITEM_NONE)
-      have.insert(
-	pg_shard_t(
-	  want[i],
-	  pool.info.ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
-  }
   if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
     dout(10) << "choose_acting failed, not recoverable" << dendl;
