@@ -54,10 +54,10 @@ docker run -v $toplevel:$toplevel -w $(pwd) --user $(id -u) {name} bash -x {name
 class TestCephDetectInit(testtools.TestCase):
 
     def test_centos_6(self):
-        self.assertEqual('sysvinit', run('centos-6'))
+        self.assertEqual('upstart', run('centos-6'))
 
     def test_centos_7(self):
-        self.assertEqual('sysvinit', run('centos-7'))
+        self.assertEqual('systemd', run('centos-7'))
 
     def test_ubuntu_12_04(self):
         self.assertEqual('upstart', run('ubuntu-12.04'))
@@ -66,7 +66,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('upstart', run('ubuntu-14.04'))
 
     def test_ubuntu_15_04(self):
-        self.assertEqual('upstart', run('ubuntu-15.04'))
+        self.assertEqual('systemd', run('ubuntu-15.04'))
 
     def test_debian_squeeze(self):
         self.assertEqual('sysvinit', run('debian-squeeze'))
@@ -75,13 +75,13 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('sysvinit', run('debian-wheezy'))
 
     def test_debian_jessie(self):
-        self.assertEqual('sysvinit', run('debian-jessie'))
+        self.assertEqual('systemd', run('debian-jessie'))
 
     def test_debian_sid(self):
         self.assertEqual('sysvinit', run('debian-sid'))
 
     def test_fedora_21(self):
-        self.assertEqual('sysvinit', run('fedora-21'))
+        self.assertEqual('systemd', run('fedora-21'))
 
     def test_opensuse_13_1(self):
         self.assertEqual('systemd', run('opensuse-13.1'))
