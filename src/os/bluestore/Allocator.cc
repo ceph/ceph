@@ -7,7 +7,7 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
-Allocator *Allocator::create(string type)
+Allocator *Allocator::create(string type, int64_t size)
 {
   if (type == "stupid")
     return new StupidAllocator;
