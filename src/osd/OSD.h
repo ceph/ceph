@@ -1609,20 +1609,26 @@ private:
     utime_t last_rx_front;  ///< last time we got a ping reply on the front side
     utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
+    // number of connections we send and receive heartbeat messages
+    const static int HEARTBEAT_MAX_CONN = 2;
+    // pending pings which we haven't collected all replies yet
+    // map<"tx_time", pair<"deadline", "rx_refs_remaining"> >
+    map<utime_t, pair<utime_t, int> > pending_pings;
 
-    bool is_unhealthy(utime_t cutoff) {
-      return
-	! ((last_rx_front > cutoff ||
-	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
-					    first_tx > cutoff))) &&
-	   (last_rx_back > cutoff ||
-	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
-					   first_tx > cutoff))));
-    }
-    bool is_healthy(utime_t cutoff) {
-      return last_rx_front > cutoff && last_rx_back > cutoff;
+    bool is_unhealthy(utime_t now) {
+      if (pending_pings.empty()) {
+        // we haven't sent a ping yet or we have got all replies,
+        // in either way we are safe and healthy for now
+        return false;
+      }
+
+      utime_t oldest_deadline = pending_pings.begin()->second.first;
+      return now > oldest_deadline;
     }
 
+    bool is_healthy(utime_t now) {
+      return !is_unhealthy(now);
+    }
   };
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
