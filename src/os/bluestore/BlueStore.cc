@@ -5065,6 +5065,11 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs
 		    << dendl;
   }
+  if (o->tail_bl.length()) {
+    dout(log_level) << __func__ << "  tail offset 0x" << std::hex << o->tail_offset
+		    << " len 0x" << o->tail_bl.length() << std::dec
+		    << " txc_seq " << o->tail_txc_seq << dendl;
+  }
   if (o->bnode) {
     _dump_bnode(o->bnode, log_level);
   }
