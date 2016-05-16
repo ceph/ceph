@@ -3185,14 +3185,14 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
     cls::rbd::MirrorImageStatus(status) {
   }
 
-  void encode_meta(bufferlist &bl) const {
+  void encode_meta(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(origin, bl);
+    ::encode(origin, bl, features);
     ENCODE_FINISH(bl);
   }
 
-  void encode(bufferlist &bl) const {
-    encode_meta(bl);
+  void encode(bufferlist &bl, uint64_t features) const {
+    encode_meta(bl, features);
     cls::rbd::MirrorImageStatus::encode(bl);
   }
 
@@ -3207,7 +3207,7 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
     cls::rbd::MirrorImageStatus::decode(it);
   }
 };
-WRITE_CLASS_ENCODER(MirrorImageStatusOnDisk)
+WRITE_CLASS_ENCODER_FEATURES(MirrorImageStatusOnDisk)
 
 int image_status_set(cls_method_context_t hctx, const string &global_image_id,
 		     const cls::rbd::MirrorImageStatus &status) {
