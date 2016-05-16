@@ -3171,12 +3171,12 @@ struct watch_info_t {
   watch_info_t() : cookie(0), timeout_seconds(0) { }
   watch_info_t(uint64_t c, uint32_t t, const entity_addr_t& a) : cookie(c), timeout_seconds(t), addr(a) {}
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<watch_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(watch_info_t)
+WRITE_CLASS_ENCODER_FEATURES(watch_info_t)
 
 static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
   return l.cookie == r.cookie && l.timeout_seconds == r.timeout_seconds
@@ -4077,12 +4077,12 @@ struct watch_item_t {
     : name(name), cookie(cookie), timeout_seconds(timeout),
     addr(addr) { }
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(cookie, bl);
     ::encode(timeout_seconds, bl);
-    ::encode(addr, bl);
+    ::encode(addr, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -4096,7 +4096,7 @@ struct watch_item_t {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(watch_item_t)
+WRITE_CLASS_ENCODER_FEATURES(watch_item_t)
 
 struct obj_watch_item_t {
   hobject_t obj;
@@ -4110,9 +4110,9 @@ struct obj_watch_item_t {
 struct obj_list_watch_response_t {
   list<watch_item_t> entries;
 
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl);
+    ::encode(entries, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -4152,8 +4152,7 @@ struct obj_list_watch_response_t {
     o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
   }
 };
-
-WRITE_CLASS_ENCODER(obj_list_watch_response_t)
+WRITE_CLASS_ENCODER_FEATURES(obj_list_watch_response_t)
 
 struct clone_info {
   snapid_t cloneid;

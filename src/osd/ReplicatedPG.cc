@@ -4780,7 +4780,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           resp.entries.push_back(wi);
         }
 
-        resp.encode(osd_op.outdata);
+        resp.encode(osd_op.outdata, ctx->get_features());
         result = 0;
 
         ctx->delta_stats.num_rd++;
