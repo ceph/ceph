@@ -3936,14 +3936,14 @@ struct PullOp {
   ObjectRecoveryProgress recovery_progress;
 
   static void generate_test_instances(list<PullOp*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
 };
-WRITE_CLASS_ENCODER(PullOp)
+WRITE_CLASS_ENCODER_FEATURES(PullOp)
 ostream& operator<<(ostream& out, const PullOp &op);
 
 struct PushOp {
@@ -3960,14 +3960,14 @@ struct PushOp {
   ObjectRecoveryProgress after_progress;
 
   static void generate_test_instances(list<PushOp*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
 };
-WRITE_CLASS_ENCODER(PushOp)
+WRITE_CLASS_ENCODER_FEATURES(PushOp)
 ostream& operator<<(ostream& out, const PushOp &op);
 
 
