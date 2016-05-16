@@ -1776,7 +1776,7 @@ void ESession::generate_test_instances(list<ESession*>& ls)
 void ESessions::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(client_map, bl);
+  ::encode(client_map, bl, features);
   ::encode(cmapv, bl);
   ::encode(stamp, bl);
   ENCODE_FINISH(bl);
