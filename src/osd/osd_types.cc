@@ -4610,12 +4610,12 @@ SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
 
 // -- watch_info_t --
 
-void watch_info_t::encode(bufferlist& bl) const
+void watch_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
-  ::encode(addr, bl);
+  ::encode(addr, bl, features);
   ENCODE_FINISH(bl);
 }
 
@@ -4717,13 +4717,13 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
   ::encode(is_lost(), bl);
-  ::encode(old_watchers, bl);
+  ::encode(old_watchers, bl, features);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
   ::encode(test_flag(FLAG_USES_TMAP), bl);
-  ::encode(watchers, bl);
+  ::encode(watchers, bl, features);
   __u32 _flags = flags;
   ::encode(_flags, bl);
   ::encode(local_mtime, bl);
