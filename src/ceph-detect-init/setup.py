@@ -20,8 +20,10 @@
 #
 import os
 import sys
-from setuptools import setup
+
 from setuptools import find_packages
+from setuptools import setup
+
 
 def read(fname):
     path = os.path.join(os.path.dirname(__file__), fname)
@@ -33,7 +35,7 @@ def filter_included_modules(*m):
     modules = sum(m, [])
     if sys.version_info[0] == 2 and sys.version_info[1] <= 6:
         return modules
-    included_modules = set(['argparse', 'importlib', 'sysconfig'])
+    included_modules = {'argparse', 'importlib', 'sysconfig'}
     return list(set(modules) - included_modules)
 
 
@@ -73,7 +75,7 @@ setup(
 
         'console_scripts': [
             'ceph-detect-init = ceph_detect_init.main:run',
-            ],
+        ],
 
-        },
-    )
+    },
+)

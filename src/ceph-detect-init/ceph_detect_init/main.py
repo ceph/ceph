@@ -21,29 +21,33 @@ import argparse
 import logging
 
 import ceph_detect_init
-from ceph_detect_init import exc
+from ceph_detect_init.Exceptions import UnsupportedPlatform
 
 
 def parser():
-    parser = argparse.ArgumentParser(
+    options = argparse.ArgumentParser(
         'ceph-detect-init',
     )
-    parser.add_argument(
+
+    options.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        default=None,
+        default=False,
     )
-    parser.add_argument(
+
+    options.add_argument(
         "--use-rhceph",
         action="store_true",
         default=False,
     )
-    parser.add_argument(
+
+    options.add_argument(
         "--default",
         default=None,
     )
-    return parser
+
+    return options
 
 
 def run(argv=None, namespace=None):
@@ -54,7 +58,7 @@ def run(argv=None, namespace=None):
                             level=logging.DEBUG)
     try:
         print(ceph_detect_init.get(args.use_rhceph).init)
-    except exc.UnsupportedPlatform:
+    except UnsupportedPlatform:
         if args.default:
             print(args.default)
         else:

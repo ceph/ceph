@@ -20,7 +20,10 @@
 
 
 class UnsupportedPlatform(Exception):
-    """Platform is not supported."""
+    """
+    Unsupported platform
+    """
+
     def __init__(self, distro, codename, release):
         self.distro = distro
         self.codename = codename
