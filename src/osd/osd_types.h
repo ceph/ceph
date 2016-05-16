@@ -3879,12 +3879,12 @@ struct ObjectRecoveryInfo {
   ObjectRecoveryInfo() : size(0) { }
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl, int64_t pool = -1);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+WRITE_CLASS_ENCODER_FEATURES(ObjectRecoveryInfo)
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 struct ObjectRecoveryProgress {

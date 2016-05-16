@@ -4936,7 +4936,7 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
   f->dump_string("omap_recovered_to", omap_recovered_to);
 }
 
-void ObjectRecoveryInfo::encode(bufferlist &bl) const
+void ObjectRecoveryInfo::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(2, 1, bl);
   ::encode(soid, bl);
@@ -5086,7 +5086,7 @@ void PullOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
-  ::encode(recovery_info, bl);
+  ::encode(recovery_info, bl, features);
   ::encode(recovery_progress, bl);
   ENCODE_FINISH(bl);
 }
@@ -5157,7 +5157,7 @@ void PushOp::encode(bufferlist &bl, uint64_t features) const
   ::encode(omap_header, bl);
   ::encode(omap_entries, bl);
   ::encode(attrset, bl);
-  ::encode(recovery_info, bl);
+  ::encode(recovery_info, bl, features);
   ::encode(after_progress, bl);
   ::encode(before_progress, bl);
   ENCODE_FINISH(bl);
