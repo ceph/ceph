@@ -4691,7 +4691,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
   return ps;
 }
 
-void object_info_t::encode(bufferlist& bl) const
+void object_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   object_locator_t myoloc(soid);
   map<entity_name_t, watch_info_t> old_watchers;
@@ -4942,7 +4942,7 @@ void ObjectRecoveryInfo::encode(bufferlist &bl, uint64_t features) const
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
-  ::encode(oi, bl);
+  ::encode(oi, bl, features);
   ::encode(ss, bl);
   ::encode(copy_subset, bl);
   ::encode(clone_subset, bl);
