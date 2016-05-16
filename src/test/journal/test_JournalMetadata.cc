@@ -115,3 +115,32 @@ TEST_F(TestJournalMetadata, UpdateActiveObject) {
 
   ASSERT_EQ(123U, metadata1->get_active_set());
 }
+
+TEST_F(TestJournalMetadata, AssertActiveTag) {
+  std::string oid = get_temp_oid();
+
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid, "client1", ""));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid, "client1");
+  ASSERT_EQ(0, init_metadata(metadata));
+  ASSERT_TRUE(wait_for_update(metadata));
+
+  C_SaferCond ctx1;
+  cls::journal::Tag tag1;
+  metadata->allocate_tag(cls::journal::Tag::TAG_CLASS_NEW, {}, &tag1, &ctx1);
+  ASSERT_EQ(0, ctx1.wait());
+
+  C_SaferCond ctx2;
+  metadata->assert_active_tag(tag1.tid, &ctx2);
+  ASSERT_EQ(0, ctx2.wait());
+
+  C_SaferCond ctx3;
+  cls::journal::Tag tag2;
+  metadata->allocate_tag(tag1.tag_class, {}, &tag2, &ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+
+  C_SaferCond ctx4;
+  metadata->assert_active_tag(tag1.tid, &ctx4);
+  ASSERT_EQ(-ESTALE, ctx4.wait());
+}
