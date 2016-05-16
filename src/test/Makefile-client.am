@@ -4,6 +4,7 @@ ceph_dencoder_SOURCES = \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
 	$(LIBRGW) \
+	$(LIBRGW_DEPS) \
 	$(LIBRADOS) \
 	$(LIBRBD_TYPES) \
 	$(LIBOSD_TYPES) \
@@ -680,7 +681,7 @@ endif # WITH_BUILD_TESTS
 
 ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = \
-	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) \
 	-lcurl -lexpat
 ceph_test_cors_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -713,7 +714,7 @@ bin_DEBUGPROGRAMS += ceph_test_rgw_obj
 
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
 ceph_test_cls_rgw_meta_LDADD = \
-	$(LIBRGW) $(LIBRADOS) $(CEPH_GLOBAL) \
+	$(LIBRGW) $(LIBRGW_DEPS) $(LIBRADOS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
 	libcls_timeindex_client.la \
@@ -736,7 +737,7 @@ bin_DEBUGPROGRAMS += ceph_test_cls_rgw_log
 
 ceph_test_cls_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
 ceph_test_cls_rgw_opstate_LDADD = \
-	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
 	libcls_version_client.la libcls_log_client.la \
@@ -758,31 +759,31 @@ bin_DEBUGPROGRAMS += ceph_test_cls_rgw
 librgw_file_SOURCES = test/librgw_file.cc
 librgw_file_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_LDADD = $(UNITTEST_LDADD)  \
-	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS) 
+	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS) 
 bin_DEBUGPROGRAMS += librgw_file
 
 librgw_file_cd_SOURCES = test/librgw_file_cd.cc
 librgw_file_cd_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_cd_LDADD = $(UNITTEST_LDADD) \
-	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_cd
 
 librgw_file_gp_SOURCES = test/librgw_file_gp.cc
 librgw_file_gp_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_gp_LDADD = $(UNITTEST_LDADD) \
-	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_gp
 
 librgw_file_aw_SOURCES = test/librgw_file_aw.cc
 librgw_file_aw_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_aw_LDADD = $(UNITTEST_LDADD) \
-	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_aw
 
 librgw_file_nfsns_SOURCES = test/librgw_file_nfsns.cc
 librgw_file_nfsns_CXXFLAGS = -I$(srcdir)/xxHash $(UNITTEST_CXXFLAGS)
 librgw_file_nfsns_LDADD = $(UNITTEST_LDADD) \
-	librgw.la librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
+	$(LIBRGW) $(LIBRGW_DEPS) librados.la $(PTHREAD_LIBS) $(CEPH_GLOBAL) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += librgw_file_nfsns
 
 # 

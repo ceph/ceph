@@ -93,6 +93,7 @@ librgw_la_SOURCES = \
 
 if WITH_OPENLDAP
 librgw_la_SOURCES += rgw/rgw_ldap.cc
+
 endif
 
 librgw_la_CXXFLAGS = -Woverloaded-virtual -fPIC -I$(srcdir)/xxHash \
@@ -113,8 +114,17 @@ LIBRGW_DEPS += \
 	-lcurl \
 	-lexpat \
 	-lm \
-	-lfcgi \
-	-ldl
+	-lfcgi 
+
+if LINUX
+LIBRGW_DEPS += \
+        -ldl
+endif
+
+if FREEBSD
+LIBRGW_DEPS += \
+      -lldap
+endif
 
 librgw_la_LIBADD = $(LIBRGW_DEPS) \
 	$(PTHREAD_LIBS) $(RESOLV_LIBS) libglobal.la \
