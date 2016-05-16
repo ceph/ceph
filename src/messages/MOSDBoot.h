@@ -65,10 +65,10 @@ public:
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(sb, payload);
-    ::encode(hb_back_addr, payload);
-    ::encode(cluster_addr, payload);
+    ::encode(hb_back_addr, payload, features);
+    ::encode(cluster_addr, payload, features);
     ::encode(boot_epoch, payload);
-    ::encode(hb_front_addr, payload);
+    ::encode(hb_front_addr, payload, features);
     ::encode(metadata, payload);
     ::encode(osd_features, payload);
   }
