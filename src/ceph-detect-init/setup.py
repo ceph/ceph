@@ -33,10 +33,18 @@ def read(fname):
 
 def filter_included_modules(*m):
     modules = sum(m, [])
-    if sys.version_info[0] == 2 and sys.version_info[1] <= 6:
+    if sys.version_info[0:2] <= (2, 6):
         return modules
-    included_modules = {'argparse', 'importlib', 'sysconfig'}
-    return list(set(modules) - included_modules)
+
+    elif sys.version_info[0:2] == (3, 0):
+        return modules
+
+    elif sys.version_info[0:2] == (3, 1):
+        return list(set(modules) - {'importlib'})
+
+    else:
+        # Python 2.7+ and Python 3.2+
+        return list(set(modules) - {'argparse', 'importlib', 'sysconfig'})
 
 
 install_requires = read('requirements.txt').split()
