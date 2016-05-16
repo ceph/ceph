@@ -1183,6 +1183,10 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
   return 0;
 }
 
+uint64_t cls_get_features(cls_method_context_t hctx) {
+  return CEPH_FEATURES_DEFAULT_SUPPORTED;
+}
+
 int cls_log(int level, const char *format, ...) {
   int size = 256;
   va_list ap;
