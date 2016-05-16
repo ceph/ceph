@@ -66,6 +66,11 @@ unittest_bluefs_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_bluefs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_bluefs
 
+unittest_bit_alloc_SOURCES = test/objectstore/BitAllocator_test.cc
+unittest_bit_alloc_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_bluefs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_bit_alloc
+
 unittest_bluestore_types_SOURCES = test/objectstore/test_bluestore_types.cc
 unittest_bluestore_types_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_bluestore_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
