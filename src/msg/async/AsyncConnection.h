@@ -371,10 +371,11 @@ class AsyncConnection : public Connection {
   void local_deliver();
   void stop() {
     lock.Lock();
-    if (state != STATE_CLOSED)
-      dispatch_queue->queue_reset(this);
+    bool need_queue_reset = (state != STATE_CLOSED);
     lock.Unlock();
     mark_down();
+    if (need_queue_reset)
+      dispatch_queue->queue_reset(this);
   }
   void cleanup_handler() {
     delete read_handler;
