@@ -172,7 +172,7 @@ struct object_begin {
     ::encode(hoid.hobj, bl);
     ::encode(hoid.generation, bl);
     ::encode(hoid.shard_id, bl);
-    ::encode(oi, bl);
+    ::encode(oi, bl, -1);  /* FIXME: we always encode with full features */
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {

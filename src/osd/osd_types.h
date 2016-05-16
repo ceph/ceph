@@ -3321,7 +3321,7 @@ struct object_info_t {
     set_omap_digest(-1);
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -3351,7 +3351,7 @@ struct object_info_t {
     return *this;
   }
 };
-WRITE_CLASS_ENCODER(object_info_t)
+WRITE_CLASS_ENCODER_FEATURES(object_info_t)
 
 struct ObjectState {
   object_info_t oi;
