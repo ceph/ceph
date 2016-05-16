@@ -27,9 +27,6 @@
 #include "common/config.h"
 #include "include/types.h"
 #include "osd_types.h"
-#include "msg/Message.h"
-#include "common/Mutex.h"
-#include "common/Clock.h"
 
 #include "include/ceph_features.h"
 
@@ -44,7 +41,6 @@
 #include "include/memory.h"
 using namespace std;
 
-#include "include/unordered_set.h"
 
 /*
  * we track up to two intervals during which the osd was alive and
