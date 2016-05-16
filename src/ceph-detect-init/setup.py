@@ -40,11 +40,11 @@ def filter_included_modules(*m):
         return modules
 
     elif sys.version_info[0:2] == (3, 1):
-        return list(set(modules) - {'importlib'})
+        return list(set(modules) - set(['importlib']))
 
     else:
         # Python 2.7+ and Python 3.2+
-        return list(set(modules) - {'argparse', 'importlib', 'sysconfig'})
+        return list(set(modules) - set(['argparse', 'importlib', 'sysconfig']))
 
 
 install_requires = read('requirements.txt').split()
