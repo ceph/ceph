@@ -98,7 +98,7 @@ target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 add_executable(unittest_bit_alloc EXCLUDE_FROM_ALL
   BitAllocator_test.cc
   )
-add_ceph_unittest(unittes_bit_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bit_alloc)
+add_ceph_unittest(unittest_bit_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bit_alloc)
 target_link_libraries(unittest_bit_alloc os global)
 
 # unittest_bluefs
