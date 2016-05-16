@@ -25,7 +25,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
-#define dout_prefix (*_dout << "rgw meta sync: ")
+#define dout_prefix (*_dout << "meta sync: ")
 
 static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
