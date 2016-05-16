@@ -27,7 +27,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
     vector<entity_inst_t> mon_inst(mon_addr.size());
     for (unsigned n = 0; n < mon_addr.size(); n++)
       mon_inst[n] = get_inst(n);
-    ::encode(mon_inst, blist);
+    ::encode(mon_inst, blist, features);
     ::encode(last_changed, blist);
     ::encode(created, blist);
     return;
@@ -38,7 +38,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
     ::encode(v, blist);
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
-    ::encode(mon_addr, blist);
+    ::encode(mon_addr, blist, features);
     ::encode(last_changed, blist);
     ::encode(created, blist);
   }
@@ -46,7 +46,7 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
   ENCODE_START(3, 3, blist);
   ::encode_raw(fsid, blist);
   ::encode(epoch, blist);
-  ::encode(mon_addr, blist);
+  ::encode(mon_addr, blist, features);
   ::encode(last_changed, blist);
   ::encode(created, blist);
   ENCODE_FINISH(blist);
