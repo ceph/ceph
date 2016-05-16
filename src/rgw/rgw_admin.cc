@@ -3819,7 +3819,8 @@ int main(int argc, char **argv)
       jf.flush(bl);
 
       JSONParser p;
-      ret = send_to_remote_gateway(url, info, bl, p);
+      ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+                                  info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
