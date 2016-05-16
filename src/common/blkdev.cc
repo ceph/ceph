@@ -185,6 +185,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return ioctl(fd, BLKDISCARD, range);
 }
 
+bool block_device_is_rotational(const char *devname)
+{
+  return get_block_device_int_property(devname, "rotational") > 0;
+}
+
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
@@ -251,6 +256,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
+bool block_device_is_rotational(const char *devname)
+{
+  return false;
+}
+
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
@@ -277,6 +287,11 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
   return -EOPNOTSUPP;
 }
 
+bool block_device_is_rotational(const char *devname)
+{
+  return false;
+}
+
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
@@ -296,6 +311,11 @@ bool block_device_support_discard(const char *devname)
 int block_device_discard(int fd, int64_t offset, int64_t len)
 {
   return -EOPNOTSUPP;
+}
+
+bool block_device_is_rotational(const char *devname)
+{
+  return false;
 }
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
