@@ -4613,46 +4613,71 @@ void OSD::handle_osd_ping(MOSDPing *m)
     {
       map<int,HeartbeatInfo>::iterator i = heartbeat_peers.find(from);
       if (i != heartbeat_peers.end()) {
-	if (m->get_connection() == i->second.con_back) {
-	  dout(25) << "handle_osd_ping got reply from osd." << from
-		   << " first_tx " << i->second.first_tx
-		   << " last_tx " << i->second.last_tx
-		   << " last_rx_back " << i->second.last_rx_back << " -> " << m->stamp
-		   << " last_rx_front " << i->second.last_rx_front
-		   << dendl;
-	  i->second.last_rx_back = m->stamp;
-	  // if there is no front con, set both stamps.
-	  if (i->second.con_front == NULL)
-	    i->second.last_rx_front = m->stamp;
-	} else if (m->get_connection() == i->second.con_front) {
-	  dout(25) << "handle_osd_ping got reply from osd." << from
-		   << " first_tx " << i->second.first_tx
-		   << " last_tx " << i->second.last_tx
-		   << " last_rx_back " << i->second.last_rx_back
-		   << " last_rx_front " << i->second.last_rx_front << " -> " << m->stamp
-		   << dendl;
-	  i->second.last_rx_front = m->stamp;
-	}
-
-        utime_t cutoff = ceph_clock_now();
-        cutoff -= cct->_conf->osd_heartbeat_grace;
-        if (i->second.is_healthy(cutoff)) {
-          // Cancel false reports
-	  auto failure_queue_entry = failure_queue.find(from);
-	  if (failure_queue_entry != failure_queue.end()) {
-            dout(10) << "handle_osd_ping canceling queued "
-                     << "failure report for osd." << from << dendl;
-            failure_queue.erase(failure_queue_entry);
+        auto acked = i->second.ping_history.find(m->stamp);
+        if (acked != i->second.ping_history.end()) {
+          utime_t now = ceph_clock_now();
+          int &unacknowledged = acked->second.second;
+          if (m->get_connection() == i->second.con_back) {
+            dout(25) << "handle_osd_ping got reply from osd." << from
+                     << " first_tx " << i->second.first_tx
+                     << " last_tx " << i->second.last_tx
+                     << " last_rx_back " << i->second.last_rx_back << " -> " << now
+                     << " last_rx_front " << i->second.last_rx_front
+                     << dendl;
+            i->second.last_rx_back = now;
+            assert(unacknowledged > 0);
+            --unacknowledged;
+            // if there is no front con, set both stamps.
+            if (i->second.con_front == NULL) {
+              i->second.last_rx_front = now;
+              assert(unacknowledged > 0);
+              --unacknowledged;
+            }
+          } else if (m->get_connection() == i->second.con_front) {
+            dout(25) << "handle_osd_ping got reply from osd." << from
+                     << " first_tx " << i->second.first_tx
+                     << " last_tx " << i->second.last_tx
+                     << " last_rx_back " << i->second.last_rx_back
+                     << " last_rx_front " << i->second.last_rx_front << " -> " << now
+                     << dendl;
+            i->second.last_rx_front = now;
+            assert(unacknowledged > 0);
+            --unacknowledged;
           }
 
-	  auto failure_pending_entry = failure_pending.find(from);
-	  if (failure_pending_entry != failure_pending.end()) {
-            dout(10) << "handle_osd_ping canceling in-flight "
-                     << "failure report for osd." << from << dendl;
-            send_still_alive(curmap->get_epoch(),
-			     failure_pending_entry->second.second);
-            failure_pending.erase(failure_pending_entry);
+          if (unacknowledged == 0) {
+            // succeeded in getting all replies
+            dout(25) << "handle_osd_ping got all replies from osd." << from
+                     << " , erase pending ping(sent at " << m->stamp << ")"
+                     << " and older pending ping(s)"
+                     << dendl;
+            i->second.ping_history.erase(i->second.ping_history.begin(), ++acked);
           }
+
+          if (i->second.is_healthy(now)) {
+            // Cancel false reports
+            auto failure_queue_entry = failure_queue.find(from);
+            if (failure_queue_entry != failure_queue.end()) {
+              dout(10) << "handle_osd_ping canceling queued "
+                       << "failure report for osd." << from << dendl;
+              failure_queue.erase(failure_queue_entry);
+            }
+
+            auto failure_pending_entry = failure_pending.find(from);
+            if (failure_pending_entry != failure_pending.end()) {
+              dout(10) << "handle_osd_ping canceling in-flight "
+                       << "failure report for osd." << from << dendl;
+              send_still_alive(curmap->get_epoch(),
+                               failure_pending_entry->second.second);
+              failure_pending.erase(failure_pending_entry);
+            }
+          }
+        } else {
+          // old replies, deprecated by newly sent pings.
+          dout(10) << "handle_osd_ping no pending ping(sent at " << m->stamp
+                   << ") is found, treat as covered by newly sent pings "
+                   << "and ignore"
+                   << dendl;
         }
       }
 
@@ -4704,9 +4729,7 @@ void OSD::heartbeat_check()
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now();
 
-  // check for heartbeat replies (move me elsewhere?)
-  utime_t cutoff = now;
-  cutoff -= cct->_conf->osd_heartbeat_grace;
+  // check for incoming heartbeats (move me elsewhere?)
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
        ++p) {
@@ -4723,19 +4746,26 @@ void OSD::heartbeat_check()
 	     << " last_rx_back " << p->second.last_rx_back
 	     << " last_rx_front " << p->second.last_rx_front
 	     << dendl;
-    if (p->second.is_unhealthy(cutoff)) {
+    if (p->second.is_unhealthy(now)) {
+      utime_t oldest_deadline = p->second.ping_history.begin()->second.first;
       if (p->second.last_rx_back == utime_t() ||
 	  p->second.last_rx_front == utime_t()) {
-	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
-	     << " osd." << p->first << " ever on either front or back, first ping sent "
-	     << p->second.first_tx << " (cutoff " << cutoff << ")" << dendl;
+        derr << "heartbeat_check: no reply from "
+             << p->second.con_front->get_peer_addr().get_sockaddr()
+             << " osd." << p->first
+             << " ever on either front or back, first ping sent "
+             << p->second.first_tx
+             << " (oldest deadline " << oldest_deadline << ")"
+             << dendl;
 	// fail
 	failure_queue[p->first] = p->second.last_tx;
       } else {
-	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+	derr << "heartbeat_check: no reply from "
+             << p->second.con_front->get_peer_addr().get_sockaddr()
 	     << " osd." << p->first << " since back " << p->second.last_rx_back
 	     << " front " << p->second.last_rx_front
-	     << " (cutoff " << cutoff << ")" << dendl;
+	     << " (oldest deadline " << oldest_deadline << ")"
+             << dendl;
 	// fail
 	failure_queue[p->first] = std::min(p->second.last_rx_back, p->second.last_rx_front);
       }
@@ -4781,6 +4811,8 @@ void OSD::heartbeat()
   service.check_full_status(ratio);
 
   utime_t now = ceph_clock_now();
+  utime_t deadline = now;
+  deadline += cct->_conf->osd_heartbeat_grace;
 
   // send heartbeats
   for (map<int,HeartbeatInfo>::iterator i = heartbeat_peers.begin();
@@ -4790,6 +4822,8 @@ void OSD::heartbeat()
     i->second.last_tx = now;
     if (i->second.first_tx == utime_t())
       i->second.first_tx = now;
+    i->second.ping_history[now] = make_pair(deadline,
+      HeartbeatInfo::HEARTBEAT_MAX_CONN);
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
     i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
 					  service.get_osdmap_epoch(),
@@ -5451,13 +5485,12 @@ bool OSD::_is_healthy()
 
   if (is_waiting_for_healthy()) {
     Mutex::Locker l(heartbeat_lock);
-    utime_t cutoff = ceph_clock_now();
-    cutoff -= cct->_conf->osd_heartbeat_grace;
+    utime_t now = ceph_clock_now();
     int num = 0, up = 0;
     for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
 	 p != heartbeat_peers.end();
 	 ++p) {
-      if (p->second.is_healthy(cutoff))
+      if (p->second.is_healthy(now))
 	++up;
       ++num;
     }
