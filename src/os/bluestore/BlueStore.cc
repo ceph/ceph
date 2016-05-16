@@ -5267,22 +5267,35 @@ void BlueStore::_do_write_small(
   bufferlist bl;
   blp.copy(length, bl);
 
-  // use tail cache?  only worry about a perfect append for now.
-  // (fixme: we could also handle near-appends that fall within the
-  // same block or read_block or whatever.)
-  if (offset == o->onode.size &&
+  // use tail cache?
+  if (offset >= o->onode.size &&
       o->tail_bl.length() &&
-      offset == o->tail_offset + o->tail_bl.length()) {
-    // use tail?
-    bufferlist t = o->tail_bl;
-    t.claim_append(bl);
-    bl.swap(t);
-    offset -= o->tail_bl.length();
-    length += o->tail_bl.length();
-    dout(10) << __func__ << "  using tail_bl 0x" << std::hex
-	     << o->tail_offset << "~0x" << o->tail_bl.length()
-	     << ", write is now 0x" << offset << "~0x" << length
-	     << std::dec << dendl;
+      offset > o->tail_offset) {
+    uint64_t tend = o->tail_offset + o->tail_bl.length();
+    uint64_t tlen = 0, zlen = 0;
+    if (offset <= tend) {
+      tlen = offset - o->tail_offset;
+      zlen = 0;
+    } else if (offset < ROUND_UP_TO(tend, min_alloc_size)) {
+      tlen = o->tail_bl.length();
+      zlen = offset - tend;
+    }
+    if (tlen || zlen) {
+      bufferlist t;
+      t.substr_of(o->tail_bl, 0, tlen);
+      if (zlen) {
+	t.append_zero(zlen);
+      }
+      t.claim_append(bl);
+      bl.swap(t);
+      offset -= tlen + zlen;
+      length += tlen + zlen;
+      dout(10) << __func__ << "  using tail_bl 0x" << std::hex
+	       << o->tail_offset << "~0x" << tlen
+	       << ", 0x" << zlen
+	       << " zeros, write is now 0x" << offset << "~0x" << length
+	       << std::dec << dendl;
+    }
   }
 
   // look for an existing mutable blob we can use
