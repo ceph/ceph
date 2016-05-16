@@ -2986,14 +2986,9 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
     Rados rados(io_ctx);
     uint64_t bid = rados.get_instance_id();
 
-    int r = validate_pool(io_ctx, cct); // TODO Not sure if it's necessary at all. Consider removing
-    if (r < 0) {
-      return r;
-    }
-
     id_cg = util::id_cg_name(cg_name);
 
-    r = io_ctx.create(id_cg, true);
+    int r = io_ctx.create(id_cg, true);
     if (r < 0) {
       lderr(cct) << "error creating consistency group id object: "
 	         << cpp_strerror(r)
