@@ -648,6 +648,8 @@ struct bluestore_compression_header_t {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<bluestore_compression_header_t*>& o);
 };
 WRITE_CLASS_ENCODER(bluestore_compression_header_t)
 
