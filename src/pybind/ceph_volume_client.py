@@ -526,7 +526,10 @@ class CephFSVolumeClient(object):
             d = self.fs.readdir(dir_handle)
             while d:
                 if d.d_name not in [".", ".."]:
-                    d_full = os.path.join(root_path, d.d_name)
+                    # Do not use os.path.join because it is sensitive
+                    # to string encoding, we just pass through dnames
+                    # as byte arrays
+                    d_full = "{0}/{1}".format(root_path, d.d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:
