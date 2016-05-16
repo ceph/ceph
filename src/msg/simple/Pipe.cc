@@ -305,12 +305,14 @@ int Pipe::accept()
   port = msgr->my_inst.addr.get_port();
 
   // and peer's socket addr (they might not know their ip)
-  len = sizeof(socket_addr.ss_addr());
-  r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
+  sockaddr_storage ss;
+  len = sizeof(ss);
+  r = ::getpeername(sd, (sockaddr*)&ss, &len);
   if (r < 0) {
     ldout(msgr->cct,0) << "accept failed to getpeername " << cpp_strerror(errno) << dendl;
     goto fail_unlocked;
   }
+  socket_addr.set_sockaddr((sockaddr*)&ss);
   ::encode(socket_addr, addrs);
 
   r = tcp_write(addrs.c_str(), addrs.length());
@@ -332,7 +334,7 @@ int Pipe::accept()
     goto fail_unlocked;
   }
   {
-    bufferptr tp(sizeof(peer_addr));
+    bufferptr tp(sizeof(ceph_entity_addr));
     addrbl.push_back(std::move(tp));
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
@@ -348,7 +350,7 @@ int Pipe::accept()
   if (peer_addr.is_blank_ip()) {
     // peer apparently doesn't know what ip they have; figure it out for them.
     int port = peer_addr.get_port();
-    peer_addr.addr = socket_addr.addr;
+    peer_addr.u = socket_addr.u;
     peer_addr.set_port(port);
     ldout(msgr->cct,0) << "accept peer addr is really " << peer_addr
 	    << " (socket is " << socket_addr << ")" << dendl;
@@ -912,7 +914,7 @@ int Pipe::connect()
 
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
-  rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
+  rc = ::connect(sd, peer_addr.get_sockaddr(), peer_addr.get_sockaddr_len());
   if (rc < 0) {
     rc = -errno;
     ldout(msgr->cct,2) << "connect error " << peer_addr
@@ -947,7 +949,7 @@ int Pipe::connect()
   // identify peer
   {
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    bufferptr p(sizeof(paddr) * 2);
+    bufferptr p(sizeof(ceph_entity_addr) * 2);
 #else
     int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
     bufferptr p(wirelen * 2);

@@ -480,8 +480,8 @@ int XioMessenger::session_event(struct xio_session *session,
     (void) xio_query_connection(conn, &xcona,
 				XIO_CONNECTION_ATTR_LOCAL_ADDR|
 				XIO_CONNECTION_ATTR_PEER_ADDR);
-    (void) entity_addr_from_sockaddr(&peer_addr_for_me, (struct sockaddr *) &xcona.local_addr);
-    (void) entity_addr_from_sockaddr(&paddr, (struct sockaddr *) &xcona.peer_addr);
+    peer_addr_for_me.set_sockaddr((struct sockaddr *)&xcona.local_addr);
+    paddr.set_sockaddr((struct sockaddr *)&xcona.peer_addr);
     //set_myaddr(peer_addr_for_me);
     learned_addr(peer_addr_for_me);
     ldout(cct,2) << "client: connected from " << peer_addr_for_me << " to " << paddr << dendl;
@@ -504,9 +504,8 @@ int XioMessenger::session_event(struct xio_session *session,
 				XIO_CONNECTION_ATTR_PEER_ADDR|
 				XIO_CONNECTION_ATTR_LOCAL_ADDR);
     /* XXX assumes RDMA */
-    (void) entity_addr_from_sockaddr(&s_inst.addr,
-				     (struct sockaddr *) &xcona.peer_addr);
-    (void) entity_addr_from_sockaddr(&peer_addr_for_me, (struct sockaddr *) &xcona.local_addr);
+    s_inst.addr.set_sockaddr((struct sockaddr *)&xcona.peer_addr);
+    peer_addr_for_me.set_sockaddr((struct sockaddr *)&xcona.local_addr);
 
     xcon = new XioConnection(this, XioConnection::PASSIVE, s_inst);
     xcon->session = session;
