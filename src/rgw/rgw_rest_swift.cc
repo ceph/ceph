@@ -102,8 +102,9 @@ static void dump_account_metadata(struct req_state * const s,
       STREAM_IO(s)->print("%s: %s\r\n", geniter->second.c_str(),
 			  iter->second.c_str());
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-      STREAM_IO(s)->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN,
-			  iter->second.c_str());
+      STREAM_IO(s)->print("X-Account-Meta-%s: %s\r\n",
+                          camelcase_dash_http_attr(name + PREFIX_LEN).c_str(),
+                          iter->second.c_str());
     }
   }
 }
@@ -366,8 +367,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
         STREAM_IO(s)->print("%s: %s\r\n", geniter->second.c_str(),
 			    iter->second.c_str());
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-        STREAM_IO(s)->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN,
-			    iter->second.c_str());
+        STREAM_IO(s)->print("X-Container-Meta-%s: %s\r\n",
+                            camelcase_dash_http_attr(name + PREFIX_LEN).c_str(),
+                            iter->second.c_str());
       }
     }
   }
@@ -919,7 +921,8 @@ static void dump_object_metadata(struct req_state * const s,
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n", name,
+      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n",
+                          camelcase_dash_http_attr(name).c_str(),
                           kv.second.c_str());
     }
   }
