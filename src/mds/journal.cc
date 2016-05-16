@@ -1725,7 +1725,7 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
-  ::encode(client_inst, bl);
+  ::encode(client_inst, bl, features);
   ::encode(open, bl);
   ::encode(cmapv, bl);
   ::encode(inos, bl);
