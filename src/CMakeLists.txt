@@ -683,6 +683,8 @@ set(libos_srcs
   os/bluestore/FreelistManager.cc
   os/bluestore/KernelDevice.cc
   os/bluestore/StupidAllocator.cc
+  os/bluestore/BitMapAllocator.cc
+  os/bluestore/BitAllocator.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
 if(${HAVE_LIBFUSE})
