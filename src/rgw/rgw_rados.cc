@@ -253,13 +253,15 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
     }
   }
 
-  if (is_master && *is_master) {
-    if (!master_zone.empty() && master_zone != zone_params.get_id()) {
-      ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone  << dendl;
+  if (is_master) {
+    if (*is_master) {
+      if (!master_zone.empty() && master_zone != zone_params.get_id()) {
+        ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone << dendl;
+      }
+      master_zone = zone_params.get_id();
+    } else if (master_zone == zone_params.get_id()) {
+      master_zone.clear();
     }
-    master_zone = zone_params.get_id();
-  } else if (master_zone == zone_params.get_id()) {
-    master_zone ="";
   }
 
   RGWZone& zone = zones[zone_params.get_id()];
