@@ -947,6 +947,7 @@ OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
+OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap")
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")

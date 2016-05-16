@@ -1044,7 +1044,7 @@ void BlueStore::_close_fm()
 int BlueStore::_open_alloc()
 {
   assert(alloc == NULL);
-  alloc = Allocator::create("stupid");
+  alloc = Allocator::create(g_conf->bluestore_allocator);
   uint64_t num = 0, bytes = 0;
   fm->enumerate_reset();
   uint64_t offset, length;
