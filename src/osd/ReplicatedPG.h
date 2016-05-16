@@ -674,6 +674,12 @@ public:
 	delete i->second.second;
       }
     }
+    uint64_t get_features() {
+      if (op && op->get_req()) {
+        return op->get_req()->get_connection()->get_features();
+      }
+      return -1ll;
+    }
   };
   using OpContextUPtr = std::unique_ptr<OpContext>;
   friend struct OpContext;
