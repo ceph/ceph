@@ -1684,12 +1684,13 @@ static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data
 
   do {
     void *handle;
+    rgw_obj obj;
 
-    int ret = processor->handle_data(data, ofs, hash, &handle, &again);
+    int ret = processor->handle_data(data, ofs, hash, &handle, &obj, &again);
     if (ret < 0)
       return ret;
 
-    ret = processor->throttle_data(handle, need_to_wait);
+    ret = processor->throttle_data(handle, obj, need_to_wait);
     if (ret < 0)
       return ret;
 
