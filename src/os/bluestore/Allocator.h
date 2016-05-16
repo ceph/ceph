@@ -43,8 +43,7 @@ public:
   virtual uint64_t get_free() = 0;
 
   virtual void shutdown() = 0;
-
-  static Allocator *create(string type);
+  static Allocator *create(string type, int64_t size);
 };
 
 #endif
