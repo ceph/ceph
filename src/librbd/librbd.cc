@@ -1498,50 +1498,6 @@ extern "C" int rbd_mirror_peer_set_cluster(rados_ioctx_t p, const char *uuid,
   return librbd::mirror_peer_set_cluster(io_ctx, uuid, cluster_name);
 }
 
-extern "C" int rbd_list_cgs(rados_ioctx_t p, char *names, size_t *size)
-{
-  librados::IoCtx io_ctx;
-  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-  tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id());
-
-  vector<string> cpp_names;
-  int r = librbd::list(io_ctx, cpp_names);
-
-  if (r == -ENOENT) {
-    tracepoint(librbd, list_cgs_exit, 0, *size);
-    return 0;
-  }
-
-  if (r < 0) {
-    tracepoint(librbd, list_cgs_exit, r, *size);
-    return r;
-  }
-
-  size_t expected_size = 0;
-
-  for (size_t i = 0; i < cpp_names.size(); i++) {
-    expected_size += cpp_names[i].size() + 1;
-  }
-  if (*size < expected_size) {
-    *size = expected_size;
-    tracepoint(librbd, list_exit, -ERANGE, *size);
-    return -ERANGE;
-  }
-
-  if (!names) 
-    return -EINVAL;
-
-  for (int i = 0; i < (int)cpp_names.size(); i++) {
-    const char* name = cpp_names[i].c_str();
-    tracepoint(librbd, list_entry, name);
-    strcpy(names, name);
-    names += strlen(names) + 1;
-  }
-  tracepoint(librbd, list_exit, (int)expected_size, *size);
-  return (int)expected_size;
-}
-
 /* images */
 extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
 {
@@ -1583,17 +1539,6 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
   }
   tracepoint(librbd, list_exit, (int)expected_size, *size);
   return (int)expected_size;
-}
-
-extern "C" int rbd_create_cg(rados_ioctx_t p, const char *name)
-{
-  librados::IoCtx io_ctx;
-  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
-  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-  tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
-  int r = librbd::create_cg(io_ctx, name);
-  tracepoint(librbd, create_cg_exit, r);
-  return r;
 }
 
 extern "C" int rbd_create(rados_ioctx_t p, const char *name, uint64_t size, int *order)
@@ -2790,4 +2735,70 @@ extern "C" void rbd_aio_release(rbd_completion_t c)
 {
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   comp->release();
+}
+
+extern "C" int rbd_create_cg(rados_ioctx_t p, const char *name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
+  int r = librbd::create_cg(io_ctx, name);
+  tracepoint(librbd, create_cg_exit, r);
+  return r;
+}
+
+extern "C" int rbd_remove_cg(rados_ioctx_t p, const char *name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, remove_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
+  int r = librbd::remove_cg(io_ctx, name);
+  tracepoint(librbd, remove_cg_exit, r);
+  return r;
+}
+
+extern "C" int rbd_list_cgs(rados_ioctx_t p, char *names, size_t *size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id());
+
+  vector<string> cpp_names;
+  int r = librbd::list(io_ctx, cpp_names);
+
+  if (r == -ENOENT) {
+    tracepoint(librbd, list_cgs_exit, 0, *size);
+    return 0;
+  }
+
+  if (r < 0) {
+    tracepoint(librbd, list_cgs_exit, r, *size);
+    return r;
+  }
+
+  size_t expected_size = 0;
+
+  for (size_t i = 0; i < cpp_names.size(); i++) {
+    expected_size += cpp_names[i].size() + 1;
+  }
+  if (*size < expected_size) {
+    *size = expected_size;
+    tracepoint(librbd, list_exit, -ERANGE, *size);
+    return -ERANGE;
+  }
+
+  if (!names)
+    return -EINVAL;
+
+  for (int i = 0; i < (int)cpp_names.size(); i++) {
+    const char* name = cpp_names[i].c_str();
+    tracepoint(librbd, list_entry, name);
+    strcpy(names, name);
+    names += strlen(names) + 1;
+  }
+  tracepoint(librbd, list_exit, (int)expected_size, *size);
+  return (int)expected_size;
 }
