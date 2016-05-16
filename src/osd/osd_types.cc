@@ -5082,7 +5082,7 @@ void PullOp::generate_test_instances(list<PullOp*> &o)
   o.back()->recovery_info.version = eversion_t(0, 0);
 }
 
-void PullOp::encode(bufferlist &bl) const
+void PullOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
@@ -5147,7 +5147,7 @@ void PushOp::generate_test_instances(list<PushOp*> &o)
   o.back()->version = eversion_t(0, 0);
 }
 
-void PushOp::encode(bufferlist &bl) const
+void PushOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
