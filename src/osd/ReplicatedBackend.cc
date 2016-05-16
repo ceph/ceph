@@ -1911,7 +1911,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
 	pushes += 1;
 	msg->pushes.push_back(*j);
       }
-      msg->compute_cost(cct);
+      msg->set_cost(cost);
       get_parent()->send_message_osd_cluster(msg, con);
     }
   }
