@@ -35,6 +35,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if defined(__FreeBSD__)
+/* FreeBSD/Clang requires basename() whereas Linux preffers the version in <string.h> */
+#include <libgen.h>
+#endif
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
