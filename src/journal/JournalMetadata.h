@@ -117,6 +117,8 @@ public:
     return m_active_set;
   }
 
+  void assert_active_tag(uint64_t tag_tid, Context *on_finish);
+
   void flush_commit_position();
   void flush_commit_position(Context *on_safe);
   void get_commit_position(ObjectSetPosition *commit_position) const {
