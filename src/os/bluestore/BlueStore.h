@@ -71,6 +71,31 @@ public:
 
   class TransContext;
 
+
+  // --------------------------------------------------------
+  // intermediate data structures used while reading
+  struct region_t {
+    uint64_t logical_offset;
+    uint64_t blob_xoffset;   //region offset within the blob
+    uint64_t ext_xoffset;    //region offset within the pextent
+    uint64_t length;
+
+    region_t(uint64_t offset, uint64_t b_offs, uint64_t x_offs, uint32_t len)
+      : logical_offset(offset),
+      blob_xoffset(b_offs),
+      ext_xoffset(x_offs),
+      length(len) {}
+    region_t(const region_t& from)
+      : logical_offset(from.logical_offset),
+      blob_xoffset(from.blob_xoffset),
+      ext_xoffset(from.ext_xoffset),
+      length(from.length) {}
+  };
+  typedef list<region_t> regions2read_t;
+  typedef map<const bluestore_blob_t*, regions2read_t> blobs2read_t;
+  typedef map<const bluestore_pextent_t*, regions2read_t> extents2read_t;
+  typedef map<uint64_t, bufferlist> ready_regions_t;
+
   /// cached buffer
   struct Buffer {
     enum {
@@ -242,6 +267,43 @@ public:
 	    i->second->seq <= seq) {
 	  i->second->state = Buffer::STATE_CLEAN;
 	}
+      }
+    }
+
+    void read(uint64_t offset, uint64_t length, BlueStore::ready_regions_t& res, interval_set<uint64_t> res_intervals) {
+      res.clear();
+      auto i = _data_lower_bound(offset);
+      uint64_t end = offset + length;
+      while (i != buffer_map.end() && offset < end && i->first < end) {
+	Buffer *b = i->second.get();
+
+	if (b->offset < offset) {
+	  uint64_t head = offset - b->offset;
+	  uint64_t l = MIN(length, b->length - head);
+	  if (b->is_writing()) {//?? should we use in is_cleaning state too?
+	    res[offset].substr_of(b->data, head, l);
+	    res_intervals.insert( offset, l);
+	  }
+	  offset += l;
+	  length -= l;
+	} else if (b->offset > offset) {
+	  uint64_t head = b->offset - offset;
+	  uint64_t l = MIN(length - head, b->length);
+	  if (b->is_writing()) {
+	    res[b->offset].substr_of(b->data, 0, l);
+	    res_intervals.insert(b->offset, l);
+	  }
+	  offset += l + head;
+	  length -= l + head;
+	} else {
+	  if (b->is_writing()) {
+	    res[b->offset].append(b->data);
+	    res_intervals.insert(b->offset, b->length);
+	  }
+	  offset += b->length;
+	  length -= b->length;
+	}
+	++i;
       }
     }
 
@@ -1104,30 +1166,9 @@ public:
     ThreadPool::TPHandle *handle = NULL) override;
 
 private:
+
   // --------------------------------------------------------
-  // intermediate data structures used while reading
-  struct region_t {
-    uint64_t logical_offset;
-    uint64_t blob_xoffset;   //region offset within the blob
-    uint64_t ext_xoffset;    //region offset within the pextent
-    uint64_t length;
-
-    region_t(uint64_t offset, uint64_t b_offs, uint64_t x_offs, uint32_t len)
-      : logical_offset(offset),
-      blob_xoffset(b_offs),
-      ext_xoffset(x_offs),
-      length(len) {}
-    region_t(const region_t& from)
-      : logical_offset(from.logical_offset),
-      blob_xoffset(from.blob_xoffset),
-      ext_xoffset(from.ext_xoffset),
-      length(from.length) {}
-  };
-  typedef list<region_t> regions2read_t;
-  typedef map<const bluestore_blob_t*, regions2read_t> blobs2read_t;
-  typedef map<const bluestore_pextent_t*, regions2read_t> extents2read_t;
-  typedef map<uint64_t, bufferlist> ready_regions_t;
-
+  // read processing internal methods
   int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool buffered, bufferlist* result);
   int _read_extent_sparse(
     const bluestore_blob_t* blob,
@@ -1142,6 +1183,7 @@ private:
     const bluestore_blob_t* blob,
     regions2read_t::const_iterator cur,
     regions2read_t::const_iterator end,
+    const interval_set<uint64_t>& ready_intervals_in_cache,
     extents2read_t* result);
 
   int _verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const;

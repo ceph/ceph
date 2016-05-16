@@ -2801,6 +2801,10 @@ int BlueStore::_do_read(
     --lext;
   }
 
+  ready_regions_t ready_regions_in_cache, ready_regions;
+  interval_set<uint64_t> ready_intervals_in_cache;
+  o->bc.read(off, length, ready_regions_in_cache, ready_intervals_in_cache);
+
   //build blob list to read
   blobs2read_t blobs2read;
   while (l > 0 && lext != lextents.end()) {
@@ -2811,8 +2815,10 @@ int BlueStore::_do_read(
     if (off >= lext->first && off < lext->first + lext->second.length) {
       uint32_t r_off = off - lext->first;
       l2read = MIN(l, lext->second.length - r_off);
-      regions2read_t& regions = blobs2read[bptr];
-      regions.push_back(region_t(off, r_off + lext->second.offset, 0, l2read));
+      if (!ready_intervals_in_cache.contains( off, l2read)) {
+	regions2read_t& regions = blobs2read[bptr];
+	regions.push_back(region_t(off, r_off + lext->second.offset, 0, l2read));
+      }
       ++lext;
     } else if (off >= lext->first + lext->second.length) {
       //handling the case when the first lookup get into the previous block due to the hole
@@ -2825,8 +2831,6 @@ int BlueStore::_do_read(
     off += l2read;
     l -= l2read;
   }
-
-  ready_regions_t ready_regions;
 
   //enumerate and read/decompress desired blobs
   blobs2read_t::iterator b2r_it = blobs2read.begin();
@@ -2861,7 +2865,7 @@ int BlueStore::_do_read(
       }
     } else {
       extents2read_t e2r;
-      int r = _blob2read_to_extents2read(bptr, r2r_it, r2r.cend(), &e2r);
+      int r = _blob2read_to_extents2read(bptr, r2r_it, r2r.cend(), ready_intervals_in_cache, &e2r);
       if (r < 0)
 	return r;
 
@@ -2877,20 +2881,59 @@ int BlueStore::_do_read(
   }
 
   //generate a resulting buffer
-  ready_regions_t::iterator rr_it = ready_regions.begin();
+  auto rr_it = ready_regions.begin();
+  auto rr_end = ready_regions.end();
+  auto rr0_it = ready_regions_in_cache.begin();
+  auto rr0_end = ready_regions_in_cache.end();
+
   off = offset;
+  while (rr_it != rr_end || rr0_it != rr0_end) {
+    ready_regions_t::iterator it;
+    if (rr_it != rr_end && (rr0_it == rr0_end || rr_it->first < rr0_it->first)) {
 
-  while (rr_it != ready_regions.end()) {
-    if (off < rr_it->first)
-      bl.append_zero(rr_it->first - off);
-    off = rr_it->first + rr_it->second.length();
-    assert(off <= offset + length);
-    bl.claim_append(rr_it->second);
-    ++rr_it;
+      uint64_t r_off = 0;
+      uint64_t r_len = rr_it->second.length();
+      if (off > rr_it->first + r_len) {
+	++rr_it;
+	continue;
+      }
+      if (rr0_it!=rr0_end && (rr0_it->first < rr_it->first + r_len)) {
+	r_len = rr_it->first - rr0_it->first;
+      }
+
+      if (off > rr_it->first && r_len) {
+	r_off = off - rr_it->first;
+	assert(r_len >= r_off);
+	r_len -= r_off;
+      }
+      if (r_len == 0) {
+	++rr_it;
+	continue;
+      }
+
+      if (off < rr_it->first + r_off)
+	bl.append_zero(rr_it->first + r_off - off);
+      if(r_off == 0 && r_len == rr_it->second.length()) {
+	bl.claim_append(rr_it->second);
+      } else {
+	bufferlist tmp;
+	tmp.substr_of(rr_it->second, r_off, r_len);
+	bl.claim_append(tmp);
+      }
+      off = rr_it->first + r_off + r_len;
+      ++rr_it;
+    } else if(rr0_it != rr0_end) {
+      if (off < rr0_it->first)
+	bl.append_zero(rr0_it->first + off);
+      bl.claim_append(rr0_it->second);
+      off = rr0_it->first + rr0_it->second.length();
+      ++rr0_it;
+    }
   }
+  assert(offset + length >= off);
   bl.append_zero(offset + length - off);
-  r = bl.length();
 
+  r = bl.length();
   return r;
 }
 
@@ -2952,7 +2995,6 @@ int BlueStore::_read_extent_sparse(
 
   while (cur != end) {
     assert(cur->ext_xoffset + cur->length <= extent->length);
-
     uint64_t r_off = cur->ext_xoffset;
     uint64_t front_extra = r_off % chunk_size;
     r_off -= front_extra;
@@ -2970,9 +3012,9 @@ int BlueStore::_read_extent_sparse(
       r = _verify_csum(blob, cur->blob_xoffset, bl);
       if (r < 0) {
 	dout(20) << __func__ << "  blob reading 0x" << std::hex
-		 << cur->logical_offset << " 0x"
-		 << cur->blob_xoffset << "~0x" << bl.length()
-		 << " csum verification failed" << dendl;
+	  << cur->logical_offset << " 0x"
+	  << cur->blob_xoffset << "~0x" << bl.length()
+	  << " csum verification failed" << dendl;
 	return -EIO;
       }
     }
@@ -2988,6 +3030,7 @@ int BlueStore::_blob2read_to_extents2read(
   const bluestore_blob_t* blob,
   BlueStore::regions2read_t::const_iterator cur,
   BlueStore::regions2read_t::const_iterator end,
+  const interval_set<uint64_t>& ready_intervals_in_cache,
   BlueStore::extents2read_t* result)
 {
   result->clear();
@@ -3018,8 +3061,10 @@ int BlueStore::_blob2read_to_extents2read(
       if (r_len > 0) {
 	r_len = MIN(r_len, l);
 	const bluestore_pextent_t* eptr = &(*ext_it);
-	regions2read_t& regions = (*result)[eptr];
-	regions.push_back(region_t(l_offs, x_offs, r_offs, r_len));
+	if (!ready_intervals_in_cache.contains(l_offs, r_len)) {
+	  regions2read_t& regions = (*result)[eptr];
+	  regions.push_back(region_t(l_offs, x_offs, r_offs, r_len));
+	}
 	l -= r_len;
 	l_offs += r_len;
 	x_offs += r_len;
