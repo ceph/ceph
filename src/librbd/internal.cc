@@ -413,6 +413,48 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     rados_completion->release();
   }
 
+  int rollback_parent(ImageCtx *ictx, uint64_t snap_id)
+  {
+    assert(ictx);
+    assert(ictx->parent_lock.is_locked());
+    assert(ictx->snap_lock.is_locked());
+
+    CephContext *cct = ictx->cct;
+    int r = 0;
+    std::map<librados::snap_t, SnapInfo>::const_iterator it = ictx->snap_info.find(snap_id);
+    if (it == ictx->snap_info.end()) {
+      ldout(cct, 10) << __func__ << ": no such snapshot: " << snap_id << dendl;
+      return -ENOENT;
+    }
+    const SnapInfo& snap_info(it->second);
+    if (ictx->parent_md == snap_info.parent) {
+      ldout(cct, 20) << __func__ << ": nop: head and snapshot have the same parent" << dendl;
+      return 0;
+    }
+    if (ictx->parent_md.spec.pool_id != -1) {
+       // remove the old parent link first, otherwise cls_client::set_parent
+       // will fail with -EEXISTS
+       ldout(cct, 20) << __func__ << ": removing the old parent link" << dendl;
+       r = cls_client::remove_parent(&ictx->md_ctx, ictx->header_oid);
+       if (r < 0) {
+         ldout(cct, 10) << __func__ << ": failed to remove parent link: "
+                        << cpp_strerror(r) << dendl;
+         return r;
+       }
+    }
+    if (snap_info.parent.spec.pool_id != -1) {
+      ldout(cct, 20) << __func__ << ": updating the parent link" << dendl;
+      r = cls_client::set_parent(&ictx->md_ctx, ictx->header_oid,
+                                 snap_info.parent.spec, snap_info.parent.overlap);
+      if (r < 0) {
+        ldout(cct, 10) << __func__ << ": failed to set parent link: "
+                       << cpp_strerror(r) << dendl;
+        return r;
+      }
+    }
+    return 0;
+  }
+
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx)
   {
@@ -443,6 +485,17 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     {
       RWLock::WLocker l(ictx->snap_lock);
       ictx->object_map.rollback(snap_id);
+    }
+
+    {
+      RWLock::WLocker snap_locker(ictx->snap_lock);
+      RWLock::WLocker parent_locker(ictx->parent_lock);
+      r = rollback_parent(ictx, snap_id);
+      if (r < 0) {
+          ldout(cct, 10) << __func__ << ": failed to rollback the parent link: "
+                         << cpp_strerror(r) << dendl;
+          return r;
+      }
     }
     return 0;
   }
