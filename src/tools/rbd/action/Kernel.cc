@@ -49,7 +49,7 @@ static std::string map_option_ip_cb(const char *value_char)
     return "";
   }
 
-  return stringify(a.addr);
+  return stringify(a.get_sockaddr());
 }
 
 static std::string map_option_int_cb(const char *value_char)

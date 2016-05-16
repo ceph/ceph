@@ -1218,7 +1218,7 @@ extern "C" int ceph_get_osd_addr(struct ceph_mount_info *cmount, int osd,
   if (ret < 0)
     return ret;
 
-  memcpy(addr, &address.ss_addr(), sizeof(*addr));
+  *addr = address.get_sockaddr_storage();
 
   return 0;
 }
@@ -1241,7 +1241,7 @@ extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int 
     return r;
 
   for (i = 0; i < (unsigned)naddr && i < address.size(); i++)
-    memcpy(&addr[i], &address[i].ss_addr(), sizeof(*addr));
+    addr[i] = address[i].get_sockaddr_storage();
 
   /* naddr == 0: drop through and return actual size */
   if (naddr && (address.size() > (unsigned)naddr))

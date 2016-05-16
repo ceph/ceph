@@ -1124,7 +1124,7 @@ ssize_t AsyncConnection::_process_connection()
         entity_addr_t paddr, peer_addr_for_me;
         bufferlist myaddrbl;
 
-        r = read_until(sizeof(paddr)*2, state_buffer);
+        r = read_until(sizeof(ceph_entity_addr)*2, state_buffer);
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " read identify peeraddr failed" << dendl;
           goto fail;
@@ -1133,7 +1133,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         bufferlist bl;
-        bl.append(state_buffer, sizeof(paddr)*2);
+        bl.append(state_buffer, sizeof(ceph_entity_addr)*2);
         bufferlist::iterator p = bl.begin();
         try {
           ::decode(paddr, p);
@@ -1395,13 +1395,15 @@ ssize_t AsyncConnection::_process_connection()
         ::encode(async_msgr->get_myaddr(), bl);
         port = async_msgr->get_myaddr().get_port();
         // and peer's socket addr (they might not know their ip)
-        socklen_t len = sizeof(socket_addr.ss_addr());
-        r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
+	sockaddr_storage ss;
+        socklen_t len = sizeof(ss);
+        r = ::getpeername(sd, (sockaddr*)&ss, &len);
         if (r < 0) {
           ldout(async_msgr->cct, 0) << __func__ << " failed to getpeername "
                               << cpp_strerror(errno) << dendl;
           goto fail;
         }
+	socket_addr.set_sockaddr((sockaddr*)&ss);
         ::encode(socket_addr, bl);
         ldout(async_msgr->cct, 1) << __func__ << " sd=" << sd << " " << socket_addr << dendl;
 
@@ -1426,7 +1428,7 @@ ssize_t AsyncConnection::_process_connection()
         bufferlist addr_bl;
         entity_addr_t peer_addr;
 
-        r = read_until(strlen(CEPH_BANNER) + sizeof(peer_addr), state_buffer);
+        r = read_until(strlen(CEPH_BANNER) + sizeof(ceph_entity_addr), state_buffer);
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " read peer banner and addr failed" << dendl;
           goto fail;
@@ -1440,7 +1442,7 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
         }
 
-        addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(peer_addr));
+        addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(ceph_entity_addr));
         {
           bufferlist::iterator ti = addr_bl.begin();
           ::decode(peer_addr, ti);
@@ -1450,7 +1452,7 @@ ssize_t AsyncConnection::_process_connection()
         if (peer_addr.is_blank_ip()) {
           // peer apparently doesn't know what ip they have; figure it out for them.
           int port = peer_addr.get_port();
-          peer_addr.addr = socket_addr.addr;
+          peer_addr.u = socket_addr.u;
           peer_addr.set_port(port);
           ldout(async_msgr->cct, 0) << __func__ << " accept peer addr is really " << peer_addr
                              << " (socket is " << socket_addr << ")" << dendl;
