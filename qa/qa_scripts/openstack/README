@@ -1,0 +1,18 @@
+This directory contains scripts to quickly bring up an OpenStack instance,
+attach a ceph cluster, create a nova compute node, and store the associated glance images, cinder volumes, nova vm, and cinder backup on ceph via rbd.
+
+execs is a directory that contains executables that are copied and remotely
+run on the OpenStack instance
+
+files is a directory that contains templates used to initialize OpenStack
+conf files.  These templates reflect the current state of these conf files.
+If further development is necessary in the future, these templates should
+probably be removed and direct editing of the OpenStack conf files should
+probably be performed.
+
+These scripts also assume that there is a  rhel iso file named
+rhel-server-7.2-x86_64-boot.iso and a ceph iso file named
+rhceph-1.3.1-rhel-7-x86_64-dvd.iso in the files directory.  These iso files
+can be obtained from the rhel site and are not stored with these scripts.
+
+
