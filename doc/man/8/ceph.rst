@@ -1412,6 +1412,13 @@ Options
 
 	Set a timeout for connecting to the cluster.
 
+.. option:: --no-increasing
+
+	 ``--no-increasing`` is off by default. So increasing the osd weight is allowed
+         using the ``reweight-by-utilization`` or ``test-reweight-by-utilization`` commands.
+         If this option is used with these commands, it will help not to increase osd weight
+         even the osd is under utilized.
+
 
 Availability
 ============
