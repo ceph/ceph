@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <boost/algorithm/string.hpp>
 
 #include "common/ceph_json.h"
 #include "common/utf8.h"
@@ -9888,7 +9889,7 @@ static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const st
   map<string, bufferlist>::iterator iter;
   for (iter = unfiltered_attrset.lower_bound(check_prefix);
        iter != unfiltered_attrset.end(); ++iter) {
-    if (!str_startswith(iter->first, check_prefix))
+    if (!boost::algorithm::starts_with(iter->first, check_prefix))
       break;
     (*attrset)[iter->first] = iter->second;
   }
