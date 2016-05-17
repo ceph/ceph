@@ -5019,14 +5019,6 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     uint32_t nop = 0;
     ::encode(nop, bl);
 
-    const string& pool = get_zone_params().domain_root.name;
-    const char *pool_str = pool.c_str();
-    librados::IoCtx id_io_ctx;
-    librados::Rados *rad = get_rados_handle();
-    int r = rad->ioctx_create(pool_str, id_io_ctx);
-    if (r < 0)
-      return r;
-
     if (!pmaster_bucket) {
       uint64_t iid = instance_id();
       uint64_t bid = next_bucket_id();
@@ -5039,7 +5031,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       bucket.bucket_id = pmaster_bucket->bucket_id;
     }
 
-    r = init_bucket_index(bucket, bucket_index_max_shards);
+    int r = init_bucket_index(bucket, bucket_index_max_shards);
     if (r < 0)
       return r;
 
