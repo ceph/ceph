@@ -3281,12 +3281,6 @@ int main(int argc, char **argv)
 	}
 
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
-	  RGWRealm realm(realm_id, realm_name);
-	  ret = realm.init(g_ceph_context, store);
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
-	    return ret;
-	  }
 	  ret = zonegroup.add_zone(zone,
                                    (is_master_set ? &is_master : NULL),
                                    (is_read_only_set ? &read_only : NULL),
