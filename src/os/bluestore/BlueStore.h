@@ -141,7 +141,7 @@ public:
     }
 
     void truncate(uint64_t newlen) {
-      assert(newlen > length);
+      assert(newlen < length);
       if (data.length()) {
 	bufferlist t;
 	t.substr_of(data, 0, newlen);
