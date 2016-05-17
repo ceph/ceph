@@ -74,7 +74,7 @@ IndexManager::~IndexManager() {
 
 
 int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
   int r = set_version(path, version);
   if (r < 0)
     return r;
@@ -117,9 +117,19 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
   }
 }
 
-int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
+bool IndexManager::get_index_optimistic(coll_t c, Index *index) {
+  RWLock::RLocker l(lock);
+  ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
+  if (it == col_indices.end()) 
+    return false;
+  index->index = it->second;
+  return true;
+}
 
-  Mutex::Locker l(lock);
+int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
+  if (get_index_optimistic(c, index))
+    return 0;
+  RWLock::WLocker l(lock);
   ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
   if (it == col_indices.end()) {
     char path[PATH_MAX];
