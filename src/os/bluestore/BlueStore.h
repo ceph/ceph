@@ -270,7 +270,7 @@ public:
       }
     }
 
-    void read(uint64_t offset, uint64_t length, BlueStore::ready_regions_t& res, interval_set<uint64_t> res_intervals) {
+    void read(uint64_t offset, uint64_t length, BlueStore::ready_regions_t& res, interval_set<uint64_t>& res_intervals) {
       res.clear();
       auto i = _data_lower_bound(offset);
       uint64_t end = offset + length;
