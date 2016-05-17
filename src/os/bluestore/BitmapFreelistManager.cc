@@ -276,6 +276,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 		 << " offset " << end
 		 << dendl;
 	*length = end - *offset;
+       assert((*offset  + *length) <= size);
 	dout(10) << __func__ << " " << *offset << "~" << *length << dendl;
 	return true;
       }
@@ -295,9 +296,10 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 
   end = size;
   if (enumerate_offset < end) {
-    *length = end - enumerate_offset;
+    *length = end - *offset;
     dout(10) << __func__ << " " << *offset << "~" << *length << dendl;
     enumerate_offset = end;
+    assert((*offset  + *length) <= size);
     return true;
   }
 
