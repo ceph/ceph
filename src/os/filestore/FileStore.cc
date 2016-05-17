@@ -12,6 +12,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/compat.h"
 #include "include/int_types.h"
 
 #include <unistd.h>
@@ -31,7 +32,6 @@
 #include <iostream>
 #include <map>
 
-#include "include/compat.h"
 #include "include/linux_fiemap.h"
 
 #include "common/xattr.h"
