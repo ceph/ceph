@@ -64,7 +64,7 @@ int BitMapAllocator::reserve(uint64_t need)
     " total " << m_bit_alloc->size() << dendl;
 
   if (m_bit_alloc->reserve_blocks(nblks)) {
-    return ENOSPC;
+    return -ENOSPC;
   }
   return 0;
 }
@@ -107,7 +107,7 @@ int BitMapAllocator::allocate(
 
   count = m_bit_alloc->alloc_blocks_res(nblks, &start_blk);
   if (count == 0) {
-    return ENOSPC;
+    return -ENOSPC;
   }
   *offset = start_blk * m_block_size;
   *length = count * m_block_size;
