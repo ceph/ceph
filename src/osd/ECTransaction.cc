@@ -12,13 +12,11 @@
  *
  */
 
-#include <boost/variant.hpp>
-#include <boost/optional/optional_io.hpp>
 #include <iostream>
 #include <vector>
 #include <sstream>
 
-#include "ECBackend.h"
+#include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 

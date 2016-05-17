@@ -24,6 +24,9 @@
 #include "PGBackend.h"
 #include "OSD.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "OSDMap.h"
+#include "PGLog.h"
+#include "common/LogClient.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
