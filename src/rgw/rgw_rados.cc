@@ -238,6 +238,20 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints)
 {
+  auto& zone_id = zone_params.get_id();
+  auto& zone_name = zone_params.get_name();
+
+  // check for duplicate zone name on insert
+  if (!zones.count(zone_id)) {
+    for (const auto& zone : zones) {
+      if (zone.second.name == zone_name) {
+        ldout(cct, 0) << "ERROR: found existing zone name " << zone_name
+            << " (" << zone.first << ") in zonegroup " << get_name() << dendl;
+        return -EEXIST;
+      }
+    }
+  }
+
   if (is_master && *is_master) {
     if (!master_zone.empty() && master_zone != zone_params.get_id()) {
       ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone  << dendl;
