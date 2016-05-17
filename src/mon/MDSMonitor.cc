@@ -1024,6 +1024,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     bool all = !cmd_getval(g_ceph_context, cmdmap, "who", who);
     dout(1) << "all = " << all << dendl;
     if (all) {
+      r = 0;
       // Dump all MDSs' metadata
       const auto all_info = fsmap.get_mds_info();
 

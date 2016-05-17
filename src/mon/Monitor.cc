@@ -2972,6 +2972,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     } else {
       // Dump all mons' metadata
+      r = 0;
       f->open_array_section("mon_metadata");
       for (unsigned int rank = 0; rank < monmap->size(); ++rank) {
         std::ostringstream get_err;
