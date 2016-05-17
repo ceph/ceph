@@ -31,22 +31,13 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "osd_types.h"
-#include "include/buffer_fwd.h"
 #include "include/xlist.h"
 #include "include/atomic.h"
 #include "SnapMapper.h"
 
 #include "PGLog.h"
-#include "OpRequest.h"
 #include "OSDMap.h"
-#include "os/ObjectStore.h"
-#include "msg/Messenger.h"
-#include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
-#include "common/cmdparse.h"
-#include "common/tracked_int_ptr.hpp"
-#include "common/WorkQueue.h"
-#include "common/ceph_context.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
 
@@ -55,8 +46,8 @@
 #include <string>
 using namespace std;
 
-#include "include/unordered_map.h"
-#include "include/unordered_set.h"
+// #include "include/unordered_map.h"
+// #include "include/unordered_set.h"
 
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
@@ -71,6 +62,10 @@ class MOSDPGBackfill;
 class MOSDPGInfo;
 
 class PG;
+struct OpRequest;
+typedef OpRequest::Ref OpRequestRef;
+class MOSDPGLog;
+class CephContext;
 
 namespace Scrub {
   class Store;
@@ -80,6 +75,7 @@ void intrusive_ptr_add_ref(PG *pg);
 void intrusive_ptr_release(PG *pg);
 
 #ifdef PG_DEBUG_REFS
+#include "common/tracked_int_ptr.hpp"
   uint64_t get_with_id(PG *pg);
   void put_with_id(PG *pg, uint64_t id);
   typedef TrackedIntPtr<PG> PGRef;
