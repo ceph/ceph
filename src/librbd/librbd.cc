@@ -2742,7 +2742,8 @@ extern "C" int rbd_create_cg(rados_ioctx_t p, const char *name)
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-  tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
+  tracepoint(librbd, create_cg_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), name);
   int r = librbd::create_cg(io_ctx, name);
   tracepoint(librbd, create_cg_exit, r);
   return r;
@@ -2753,7 +2754,8 @@ extern "C" int rbd_remove_cg(rados_ioctx_t p, const char *name)
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-  tracepoint(librbd, remove_cg_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
+  tracepoint(librbd, remove_cg_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), name);
   int r = librbd::remove_cg(io_ctx, name);
   tracepoint(librbd, remove_cg_exit, r);
   return r;
@@ -2764,7 +2766,8 @@ extern "C" int rbd_list_cgs(rados_ioctx_t p, char *names, size_t *size)
   librados::IoCtx io_ctx;
   librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
-  tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id());
+  tracepoint(librbd, list_cgs_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id());
 
   vector<string> cpp_names;
   int r = librbd::list(io_ctx, cpp_names);
@@ -2795,10 +2798,139 @@ extern "C" int rbd_list_cgs(rados_ioctx_t p, char *names, size_t *size)
 
   for (int i = 0; i < (int)cpp_names.size(); i++) {
     const char* name = cpp_names[i].c_str();
-    tracepoint(librbd, list_entry, name);
+    tracepoint(librbd, list_cgs_entry, name);
     strcpy(names, name);
     names += strlen(names) + 1;
   }
-  tracepoint(librbd, list_exit, (int)expected_size, *size);
+  tracepoint(librbd, list_cgs_exit, (int)expected_size, *size);
   return (int)expected_size;
+}
+
+extern "C" int rbd_cg_add_image(rados_ioctx_t cg_p, const char *cg_name,
+                                rados_ioctx_t image_p, const char *image_name)
+{
+  librados::IoCtx cg_ioctx;
+  librados::IoCtx image_ioctx;
+
+  librados::IoCtx::from_rados_ioctx_t(cg_p, cg_ioctx);
+  librados::IoCtx::from_rados_ioctx_t(image_p, image_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
+  tracepoint(librbd, cg_add_image_enter, cg_ioctx.get_pool_name().c_str(),
+	     cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(),
+	     image_ioctx.get_id(), image_name);
+
+  int r = librbd::cg_add_image(cg_ioctx, cg_name, image_ioctx, image_name);
+
+  tracepoint(librbd, cg_add_image_exit, r);
+  return r;
+}
+
+extern "C" int rbd_cg_remove_image(
+                                rados_ioctx_t cg_p, const char *cg_name,
+                                rados_ioctx_t image_p, const char *image_name)
+{
+  librados::IoCtx cg_ioctx;
+  librados::IoCtx image_ioctx;
+
+  librados::IoCtx::from_rados_ioctx_t(cg_p, cg_ioctx);
+  librados::IoCtx::from_rados_ioctx_t(image_p, image_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
+  tracepoint(librbd, cg_remove_image_enter, cg_ioctx.get_pool_name().c_str(),
+	     cg_ioctx.get_id(), cg_name, image_ioctx.get_pool_name().c_str(),
+	     image_ioctx.get_id(), image_name);
+
+  int r = librbd::cg_remove_image(cg_ioctx, cg_name, image_ioctx, image_name);
+
+  tracepoint(librbd, cg_remove_image_exit, r);
+  return r;
+}
+
+extern "C" int rbd_cg_list_images(
+                                rados_ioctx_t cg_p, const char *cg_name,
+				char *names, size_t *names_size,
+				int64_t *pools, size_t *pools_size,
+				int *states, size_t *states_size)
+{
+  librados::IoCtx cg_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(cg_p, cg_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(cg_ioctx));
+  tracepoint(librbd, cg_list_images_enter, cg_ioctx.get_pool_name().c_str(),
+	     cg_ioctx.get_id(), cg_name);
+
+  std::vector<std::tuple<std::string, int64_t, int>> cpp_images;
+  int r = librbd::cg_list_images(cg_ioctx, cg_name, cpp_images);
+
+  if (r == -ENOENT) {
+    tracepoint(librbd, list_cgs_exit, 0, *names_size);
+    return 0;
+  }
+
+  if (r < 0) {
+    tracepoint(librbd, list_cgs_exit, r, *names_size);
+    return r;
+  }
+
+  // Populate names
+  size_t expected_names_size = 0;
+
+  for (size_t i = 0; i < cpp_images.size(); i++) {
+    expected_names_size += std::get<0>(cpp_images[i]).size() + 1;
+  }
+  if (*names_size < expected_names_size) {
+    *names_size = expected_names_size;
+    tracepoint(librbd, cg_list_images_exit, -ERANGE);
+    return -ERANGE;
+  }
+
+  if (!names)
+    return -EINVAL;
+
+  for (int i = 0; i < (int)cpp_images.size(); i++) {
+    const char* name = std::get<0>(cpp_images[i]).c_str();
+    tracepoint(librbd, cg_list_images_entry, name);
+    strcpy(names, name);
+    names += strlen(names) + 1;
+  }
+
+  // Populate pools
+  size_t expected_pools_size = sizeof(int64_t) * cpp_images.size();
+
+  if (*pools_size < expected_pools_size) {
+    *pools_size = expected_pools_size;
+    tracepoint(librbd, cg_list_images_exit, -ERANGE);
+    return -ERANGE;
+  }
+
+  if (!pools)
+    return -EINVAL;
+
+  for (int i = 0; i < (int)cpp_images.size(); i++) {
+    const char* name = std::get<0>(cpp_images[i]).c_str();
+    tracepoint(librbd, cg_list_images_entry, name);
+    pools[i] = std::get<1>(cpp_images[i]);
+  }
+
+  // Populate states
+  size_t expected_states_size = sizeof(int) * cpp_images.size();
+
+  if (*states_size < expected_states_size) {
+    *states_size = expected_states_size;
+    tracepoint(librbd, cg_list_images_exit, -ERANGE);
+    return -ERANGE;
+  }
+
+  if (!states)
+    return -EINVAL;
+
+  for (int i = 0; i < (int)cpp_images.size(); i++) {
+    const char* name = std::get<0>(cpp_images[i]).c_str();
+    tracepoint(librbd, cg_list_images_entry, name);
+    states[i] = std::get<2>(cpp_images[i]);
+  }
+
+  tracepoint(librbd, cg_list_images_exit, r);
+  return r;
 }

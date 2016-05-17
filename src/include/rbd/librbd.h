@@ -611,6 +611,17 @@ CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
 CEPH_RBD_API int rbd_create_cg(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_remove_cg(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_list(rados_ioctx_t p, char *names, size_t *size);
+CEPH_RBD_API int rbd_cg_add_image(
+                              rados_ioctx_t cg_p, const char *cg_name,
+                              rados_ioctx_t image_p, const char *image_name);
+CEPH_RBD_API int rbd_cg_remove_image(
+                              rados_ioctx_t cg_p, const char *cg_name,
+                              rados_ioctx_t image_p, const char *image_name);
+CEPH_RBD_API int rbd_cg_list_images(
+                                rados_ioctx_t cg_p, const char *cg_name,
+				char *names, size_t *names_size,
+				int64_t *pools, size_t *pools_size,
+				int *states, size_t *states_size);
 
 #ifdef __cplusplus
 }
