@@ -380,7 +380,7 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # enables testing and creates Make check command
 enable_testing()
-set(CMAKE_CTEST_COMMAND ctest -V)
+set(CMAKE_CTEST_COMMAND ctest)
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 add_subdirectory(src)
