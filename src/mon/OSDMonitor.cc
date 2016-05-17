@@ -3238,6 +3238,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
         goto reply;
       f->close_section();
     } else {
+      r = 0;
       f->open_array_section("osd_metadata");
       for (int i=0; i<osdmap.get_max_osd(); ++i) {
         if (osdmap.exists(i)) {
