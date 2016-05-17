@@ -2847,11 +2847,10 @@ extern "C" int rbd_cg_remove_image(
   return r;
 }
 
-extern "C" int rbd_cg_list_images(
-                                rados_ioctx_t cg_p, const char *cg_name,
-				char *names, size_t *names_size,
-				int64_t *pools, size_t *pools_size,
-				int *states, size_t *states_size)
+extern "C" int rbd_cg_list_images(rados_ioctx_t cg_p, const char *cg_name,
+      				  char *names, size_t *names_size,
+				  int64_t *pools, size_t *pools_size,
+				  int *states, size_t *states_size)
 {
   librados::IoCtx cg_ioctx;
   librados::IoCtx::from_rados_ioctx_t(cg_p, cg_ioctx);
