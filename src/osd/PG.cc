@@ -2756,7 +2756,6 @@ void PG::upgrade(ObjectStore *store)
   ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
   t.remove(coll_t::meta(), log_oid);
   t.remove(coll_t::meta(), biginfo_oid);
-  t.collection_rmattr(coll, "info");
 
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> v;
@@ -2879,10 +2878,6 @@ bool PG::_has_removal_flag(ObjectStore *store,
       values.size() == 1)
     return true;
 
-  // try old way.  tolerate EOPNOTSUPP.
-  char val;
-  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
-    return true;
   return false;
 }
 
@@ -2920,37 +2915,9 @@ int PG::peek_map_epoch(ObjectStore *store,
     // get epoch
     bp = values[epoch_key].begin();
     ::decode(cur_epoch, bp);
-  } else if (r == -ENOENT) {
-    // legacy: try v7 or older
-    r = store->collection_getattr(coll, "info", *bl);
-    if (r <= 0) {
-      // probably bug 10617; see OSD::load_pgs()
-      return -1;
-    }
-    bufferlist::iterator bp = bl->begin();
-    __u8 struct_v = 0;
-    ::decode(struct_v, bp);
-    assert(struct_v >= 5);
-    if (struct_v < 6) {
-      ::decode(cur_epoch, bp);
-      *pepoch = cur_epoch;
-      return cur_epoch;
-    }
-
-    // get epoch out of leveldb
-    string ek = get_epoch_key(pgid);
-    keys.clear();
-    values.clear();
-    keys.insert(ek);
-    store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
-    if (values.size() < 1) {
-      // probably bug 10617; see OSD::load_pgs()
-      return -1;
-    }
-    bufferlist::iterator p = values[ek].begin();
-    ::decode(cur_epoch, p);
   } else {
-    assert(0 == "unable to open pg metadata");
+    // probably bug 10617; see OSD::load_pgs()
+    return -1;
   }
 
   *pepoch = cur_epoch;
