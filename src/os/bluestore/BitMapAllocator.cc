@@ -105,7 +105,7 @@ int BitMapAllocator::allocate(
   *offset = 0;
   *length = 0;
 
-  count = m_bit_alloc->alloc_blocks_res(nblks, &start_blk);
+  count = m_bit_alloc->alloc_blocks_res(nblks, &start_blk, true);
   if (count == 0) {
     return -ENOSPC;
   }
