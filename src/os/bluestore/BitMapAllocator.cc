@@ -172,7 +172,7 @@ void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
     " offset " << offset << " length " << length << dendl;
 
   assert(!(offset % m_block_size));
-  assert(!(offset % m_block_size));
+  assert(!(length % m_block_size));
 
   int64_t first_blk = offset / m_block_size;
   int64_t count = length / m_block_size;
