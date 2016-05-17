@@ -3603,9 +3603,6 @@ int mirror_image_remove(cls_method_context_t hctx, bufferlist *in,
  * Initialize the header with basic metadata.
  * Everything is stored as key/value pairs as omaps in the header object.
  *
- * If features the OSD does not understand are requested, -ENOSYS is
- * returned.
- *
  * Output:
  * @return 0 on success, negative error code on failure
  */
@@ -3621,6 +3618,12 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * List images pertaining to the consistency group.
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_list_images");
@@ -3671,6 +3674,16 @@ int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Add an image to the consistency group.
+ *
+ * Input:
+ * @param image_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_add_image");
@@ -3698,6 +3711,19 @@ int cg_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Mark an image from the consistency group as dirty.
+ * This is necessary for deleting the image.
+ * If an image entry is dirty then it means the image may not reference the
+ * consistency group.
+ *
+ * Input:
+ * @param image_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_dirty_link");
@@ -3725,6 +3751,16 @@ int cg_dirty_link(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Put an image into normal state.
+ *
+ * Input:
+ * @param image_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_to_default");
@@ -3758,6 +3794,16 @@ int cg_to_default(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Remove reference to an image from the consistency group.
+ *
+ * Input:
+ * @param image_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "cg_remove_image");
@@ -3782,6 +3828,16 @@ int cg_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Reference the consistency group this image belongs to.
+ *
+ * Input:
+ * @param cg_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "image_add_cg_ref");
@@ -3832,6 +3888,16 @@ int image_add_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Remove image's pointer to the consistency group.
+ *
+ * Input:
+ * @param cg_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int image_remove_cg_ref(cls_method_context_t hctx,
                         bufferlist *in,
 			bufferlist *out)
@@ -3871,6 +3937,16 @@ int image_remove_cg_ref(cls_method_context_t hctx,
   return 0;
 }
 
+/**
+ * List consistency groups from the directory.
+ *
+ * Input:
+ * @param start_after (std::string)
+ * @param max_return (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int dir_list_cgs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string start_after;
@@ -3924,6 +4000,16 @@ int dir_list_cgs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Add a consistency group to the directory.
+ *
+ * Input:
+ * @param name (std::string)
+ * @param id (std::string)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int dir_add_cg(cls_method_context_t hctx,
                       bufferlist *in,
 		      bufferlist *out)
@@ -3975,6 +4061,16 @@ int dir_add_cg(cls_method_context_t hctx,
   return cls_cxx_map_set_vals(hctx, &omap_vals);
 }
 
+/**
+ * Remove a consistency group from the directory.
+ *
+ * Input:
+ * @param name (std::string)
+ * @param id (std::string)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
 int dir_remove_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string name, id;
