@@ -572,16 +572,6 @@ TEST_P(StoreTest, BufferCacheReadTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
 
-    newdata.clear();
-    r = store->read(cid, hoid, 0, 5, newdata);
-    ASSERT_EQ(r, 5);
-    ASSERT_TRUE(newdata.contents_equal(bl));
-
-    newdata.clear();
-    r = store->read(cid, hoid, 10, 15, newdata);
-    ASSERT_EQ(r, 5);
-    ASSERT_TRUE(newdata.contents_equal(bl));
-    newdata.clear();
     r = store->read(cid, hoid, 0, 15, newdata);
     ASSERT_EQ(r, 15);
     {
@@ -589,6 +579,56 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl);
       expected.append_zero(5);
       expected.append(bl);
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+  }
+  //overwrite over the same extents
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, newdata;
+    bl.append("edbca");
+    t.write(cid, hoid, 0, 5, bl);
+    t.write(cid, hoid, 10, 5, bl);
+    cerr << "TwinWrite" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    r = store->read(cid, hoid, 0, 15, newdata);
+    ASSERT_EQ(r, 15);
+    {
+      bufferlist expected;
+      expected.append(bl);
+      expected.append_zero(5);
+      expected.append(bl);
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+  }
+
+  //additional write to an unused region of some blob and partial owerite over existing extents
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, bl2, bl3, newdata;
+    bl.append("DCB");
+    bl2.append("1234567890");
+    bl3.append("CB");
+
+    t.write(cid, hoid, 20, bl2.length(), bl2);
+    t.write(cid, hoid, 1, bl.length(), bl);
+    t.write(cid, hoid, 13, bl3.length(), bl3);
+    cerr << "TripleWrite" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    r = store->read(cid, hoid, 0, 30, newdata);
+    ASSERT_EQ(r, 15);
+    {
+      bufferlist expected;
+      expected.append("eDCBa");
+      expected.append_zero(5);
+      expected.append("edCBa");
+      expected.append_zero(5);
+      expected.append(bl2);
+
       ASSERT_TRUE(newdata.contents_equal(expected));
     }
   }

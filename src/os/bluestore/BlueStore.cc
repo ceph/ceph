@@ -2804,6 +2804,7 @@ int BlueStore::_do_read(
   ready_regions_t ready_regions_in_cache, ready_regions;
   interval_set<uint64_t> ready_intervals_in_cache;
   o->bc.read(off, length, ready_regions_in_cache, ready_intervals_in_cache);
+  dout(20) << __func__ << " regions in cache " << ready_regions_in_cache.size() << " " << ready_intervals_in_cache << dendl;
 
   //build blob list to read
   blobs2read_t blobs2read;
@@ -2887,12 +2888,13 @@ int BlueStore::_do_read(
   auto rr0_end = ready_regions_in_cache.end();
 
   off = offset;
-  while (rr_it != rr_end || rr0_it != rr0_end) {
+  while ((rr_it != rr_end || rr0_it != rr0_end) && off < offset + length) {
     ready_regions_t::iterator it;
     if (rr_it != rr_end && (rr0_it == rr0_end || rr_it->first < rr0_it->first)) {
-
       uint64_t r_off = 0;
       uint64_t r_len = rr_it->second.length();
+      dout(30) << __func__ << " read region " << rr_it->first << "~" << rr_it->second.length() <<
+        " off " << off << " " << dendl;
       if (off > rr_it->first + r_len) {
 	++rr_it;
 	continue;
@@ -2921,17 +2923,22 @@ int BlueStore::_do_read(
 	bl.claim_append(tmp);
       }
       off = rr_it->first + r_off + r_len;
+      dout(30) << __func__ << " used read region " << rr_it->first + r_off <<
+        "~" << r_len << " new off " << off << dendl;
       ++rr_it;
     } else if(rr0_it != rr0_end) {
       if (off < rr0_it->first)
 	bl.append_zero(rr0_it->first + off);
-      bl.claim_append(rr0_it->second);
+      dout(30) << __func__ << " used from cached buffer " <<
+        rr0_it->first << "~" << rr0_it->second.length() << dendl;
       off = rr0_it->first + rr0_it->second.length();
+      bl.claim_append(rr0_it->second);
       ++rr0_it;
     }
   }
   assert(offset + length >= off);
   bl.append_zero(offset + length - off);
+  assert(bl.length() == length);
 
   r = bl.length();
   return r;
