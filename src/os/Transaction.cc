@@ -338,41 +338,9 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
       break;
 
     case Transaction::OP_COLL_SETATTR:
-      {
-	coll_t cid;
-	string name;
-	bufferlist bl;
-
-	::decode(cid, p);
-	::decode(name, p);
-	::decode(bl, p);
-
-	collection_setattr(cid, name, bl);
-      }
-      break;
-
     case Transaction::OP_COLL_SETATTRS:
-      {
-	coll_t cid;
-	map<string,bufferptr> aset;
-
-	::decode(cid, p);
-	::decode(aset, p);
-
-	collection_setattrs(cid, aset);
-      }
-      break;
-
     case Transaction::OP_COLL_RMATTR:
-      {
-	coll_t cid;
-	string name;
-
-	::decode(cid, p);
-	::decode(name, p);
-
-	collection_rmattr(cid, name);
-      }
+      assert(0 == "collection attr methods have been removed");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -1002,9 +970,6 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->create_collection(c, 12);
   t->collection_move_rename(c, o2, c2, o3);
   t->remove_collection(c);
-  t->collection_setattr(c, string("this"), bl);
-  t->collection_rmattr(c, string("foo"));
-  t->collection_setattrs(c, m);
   o.push_back(t);  
 }
 
