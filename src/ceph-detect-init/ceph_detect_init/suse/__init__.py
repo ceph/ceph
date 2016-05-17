@@ -4,9 +4,11 @@ codename = None
 
 
 def choose_init():
-    """Select a init system
+    """
+    Select a init system on SUSE
 
-    Returns the name of a init system (upstart, sysvinit ...).
+    :rtype: str
+    :return: name of the init system
     """
     if release and int(release.split('.')[0]) >= 12:
         return 'systemd'

@@ -4,11 +4,13 @@ codename = None
 
 
 def choose_init():
-    """Select a init system
-
-    Returns the name of a init system (upstart, sysvinit ...).
     """
-    assert(distro and codename)
+    Select a init system on Debian based operating systems
+
+    :rtype: str
+    :return: name of the init system
+    """
+    assert (distro and codename)
 
     if distro.lower() == 'ubuntu':
         if codename.lower() >= 'vivid':

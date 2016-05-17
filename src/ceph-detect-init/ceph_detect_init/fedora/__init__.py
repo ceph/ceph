@@ -4,9 +4,11 @@ codename = None
 
 
 def choose_init():
-    """Select a init system
+    """
+    Select a init system on Fedora
 
-    Returns the name of a init system (upstart, sysvinit ...).
+    :rtype: str
+    :return: name of the init system
     """
     if release:
         version = int(release.split('.')[0])
