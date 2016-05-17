@@ -1065,8 +1065,8 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
      */
     allocated = alloc_blocks_int(num_blocks, start_block, true);
   }
-
-  unreserve(num_blocks, allocated);
+  if (allocated != num_blocks)
+    unreserve(num_blocks, allocated);
   debug_assert((m_allocated_blocks <= m_total_blocks));
   debug_assert(is_allocated(*start_block, allocated));
 
