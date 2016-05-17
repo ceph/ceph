@@ -106,9 +106,16 @@ int FileJournal::_open(bool forwrite, bool create)
     aio_ctx = 0;
     ret = io_setup(128, &aio_ctx);
     if (ret < 0) {
-      ret = errno;
-      derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
-      ret = -ret;
+      switch (ret) {
+	// Contrary to naive expectations -EAGIAN means ...
+	case -EAGAIN:
+	  derr << "FileJournal::_open: user's limit of aio events exceeded. "
+	       << "Try increasing /proc/sys/fs/aio-max-nr" << dendl;
+	  break;
+	default:
+	  derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(-ret) << dendl;
+	  break;
+      }
       goto out_fd;
     }
   }
