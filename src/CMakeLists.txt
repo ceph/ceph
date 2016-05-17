@@ -1022,7 +1022,11 @@ install(TARGETS crushtool DESTINATION bin)
 # Support/Tools
 add_subdirectory(googletest/googlemock)
 
-add_subdirectory(test)
+option(WITH_TESTS "Unit tests and 'make check' target enabled" ON)
+if(WITH_TESTS)
+  add_subdirectory(test)
+endif(WITH_TESTS)
+
 set(cephfs_srcs cephfs.cc)
 add_executable(cephfstool ${cephfs_srcs})
 target_link_libraries(cephfstool common ${EXTRALIBS})
