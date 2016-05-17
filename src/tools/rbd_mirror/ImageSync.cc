@@ -210,6 +210,8 @@ void ImageSync<I>::handle_copy_image(int r) {
 
 template <typename I>
 void ImageSync<I>::send_copy_object_map() {
+  update_progress("COPY_OBJECT_MAP");
+
   m_local_image_ctx->snap_lock.get_read();
   if (!m_local_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP,
                                         m_local_image_ctx->snap_lock)) {
@@ -217,8 +219,6 @@ void ImageSync<I>::send_copy_object_map() {
     send_prune_sync_points();
     return;
   }
-
-  update_progress("COPY_OBJECT_MAP");
 
   assert(m_local_image_ctx->object_map != nullptr);
 
