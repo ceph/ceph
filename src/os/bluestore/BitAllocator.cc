@@ -967,9 +967,6 @@ int64_t BitAllocator::alloc_blocks_int(int64_t num_blocks,
     if (allocated == num_blocks) {
       break;
     }
-
-    zone->free_blocks(*start_block, allocated);
-    allocated = 0;
   }
 
   return allocated;
