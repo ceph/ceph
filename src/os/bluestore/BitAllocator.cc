@@ -1029,7 +1029,6 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
   }
 
   debug_assert(is_allocated(*start_block, allocated));
-  unreserve(num_blocks, allocated);
 
   serial_unlock();
   alloc_unlock();
