@@ -1348,6 +1348,8 @@ public:
       }
     }
   };
+
+private:
   void update_waiting_for_pg(Session *session, OSDMapRef osdmap);
   void session_notify_pg_create(Session *session, OSDMapRef osdmap, spg_t pgid);
   void session_notify_pg_cleared(Session *session, OSDMapRef osdmap, spg_t pgid);
