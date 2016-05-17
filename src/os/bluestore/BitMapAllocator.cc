@@ -88,8 +88,7 @@ int BitMapAllocator::allocate(
 {
 
   assert(!(alloc_unit % m_block_size));
-  int64_t len = NEXT_MULTIPLE(want_size, m_block_size);
-  int64_t nblks = len / m_block_size;
+  int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
 
   assert(alloc_unit);
 
