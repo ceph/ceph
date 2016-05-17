@@ -935,7 +935,8 @@ bool BitAllocator::is_allocated(int64_t start_block, int64_t num_blocks)
 bool BitAllocator::is_allocated(int64_t *alloc_blocks, int64_t num_blocks)
 {
   for (int64_t i = 0; i < num_blocks; i++) {
-    return is_allocated(alloc_blocks[i], 1);
+    if (!is_allocated(alloc_blocks[i], 1))
+      return false;
   }
 
   return true;
