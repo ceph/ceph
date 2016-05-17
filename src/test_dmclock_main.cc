@@ -47,6 +47,7 @@ int main(int argc, char* argv[]) {
 
     const uint client_total_ops = 1000;
     const uint client_count = 100;
+    const uint client_server_select_range = 10;
     const uint client_wait_count = 1;
     const uint client_iops_goal = 50;
     const uint client_outstanding_ops = 100;
@@ -97,7 +98,7 @@ int main(int argc, char* argv[]) {
     simulation = new test::MySim();
 
     test::MySim::ClientBasedServerSelectFunc server_select_f =
-        simulation->make_server_select_alt_range(8);
+      simulation->make_server_select_alt_range(client_server_select_range);
 
     test::DmcServer::ClientRespFunc client_response_f =
         [&simulation](ClientId client_id,

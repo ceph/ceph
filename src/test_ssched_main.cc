@@ -9,6 +9,11 @@
 #include "test_ssched.h"
 
 
+#ifdef PROFILE
+#include "profile.h"
+#endif
+
+
 namespace test = crimson::test_simple_scheduler;
 namespace ssched = crimson::simple_scheduler;
 namespace sim = crimson::qos_simulation;
@@ -42,6 +47,7 @@ int main(int argc, char* argv[]) {
 
   const uint client_total_ops = 1000;
   const uint client_count = 100;
+  const uint client_server_select_range = 10;
   const uint client_wait_count = 1;
   const uint client_iops_goal = 50;
   const uint client_outstanding_ops = 100;
@@ -78,7 +84,7 @@ int main(int argc, char* argv[]) {
 
 #if 1
   test::MySim::ClientBasedServerSelectFunc server_select_f =
-    simulation->make_server_select_alt_range(8);
+    simulation->make_server_select_alt_range(client_server_select_range);
 #elif 0
   test::MySim::ClientBasedServerSelectFunc server_select_f =
     std::bind(&test::MySim::server_select_random, simulation, _1, _2);
@@ -153,4 +159,29 @@ void test::server_data(std::ostream& out,
   }
   out << std::setw(data_w) << std::setprecision(data_prec) <<
     std::fixed << total_req << std::endl;
+
+#ifdef PROFILE
+    crimson::ProfileCombiner<std::chrono::nanoseconds> art_combiner;
+    crimson::ProfileCombiner<std::chrono::nanoseconds> rct_combiner;
+    for (uint i = 0; i < sim->get_server_count(); ++i) {
+      const auto& q = sim->get_server(i).get_priority_queue();
+      const auto& art = q.add_request_timer;
+      art_combiner.combine(art);
+      const auto& rct = q.request_complete_timer;
+      rct_combiner.combine(rct);
+    }
+    out << "Server add_request_timer: count:" << art_combiner.get_count() <<
+      ", mean:" << art_combiner.get_mean() <<
+      ", std_dev:" << art_combiner.get_std_dev() <<
+      ", low:" << art_combiner.get_low() <<
+      ", high:" << art_combiner.get_high() << std::endl;
+    out << "Server request_complete_timer: count:" << rct_combiner.get_count() <<
+      ", mean:" << rct_combiner.get_mean() <<
+      ", std_dev:" << rct_combiner.get_std_dev() <<
+      ", low:" << rct_combiner.get_low() <<
+      ", high:" << rct_combiner.get_high() << std::endl;
+    out << "Server combined mean: " <<
+      (art_combiner.get_mean() + rct_combiner.get_mean()) <<
+      std::endl;
+#endif
 }

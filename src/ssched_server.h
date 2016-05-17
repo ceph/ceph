@@ -112,6 +112,7 @@ namespace crimson {
 		       const C& client_id,
 		       const ReqParams& req_params) {
 	DataGuard g(queue_mtx);
+
 #ifdef PROFILE
 	add_request_timer.start();
 #endif
@@ -129,16 +130,16 @@ namespace crimson {
       void request_completed() {
 	assert(Mechanism::push == mechanism);
 	DataGuard g(queue_mtx);
+
 #ifdef PROFILE
 	request_complete_timer.start();
 #endif
-	  schedule_request();
+	schedule_request();
 
 #ifdef PROFILE
 	request_complete_timer.stop();
 #endif
-	}
-      }
+      } // request_completed
 
       PullReq pull_request() {
 	assert(Mechanism::pull == mechanism);
@@ -168,7 +169,8 @@ namespace crimson {
 
     protected:
 
-      // queue_mtx should be held when called
+      // queue_mtx should be held when called; should only be called
+      // when mechanism is push
       void schedule_request() {
 	if (!queue.empty() && can_handle_f()) {
 	  auto& front = queue.front();
