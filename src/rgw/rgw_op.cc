@@ -1194,7 +1194,7 @@ void RGWGetObj::execute()
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
   RGWGetObj_CB cb(this);
-
+  RGWGetDataCB* decrypt = nullptr;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
@@ -1273,7 +1273,21 @@ void RGWGetObj::execute()
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  op_ret = read_op.iterate(ofs, end, &cb);
+  op_ret = this->get_decrypt_filter(&decrypt, cb);
+  if (op_ret < 0) {
+    goto done_err;
+  }
+  if (decrypt != nullptr) {
+    off_t tmp_ofs = ofs;
+    off_t tmp_end = end;
+    decrypt->fixup_range(tmp_ofs, tmp_end);
+    op_ret = read_op.iterate(tmp_ofs, tmp_end, decrypt);
+    if (op_ret >= 0)
+      op_ret = decrypt->flush();
+    delete decrypt;
+  }
+  else
+    op_ret = read_op.iterate(ofs, end, &cb);
 
   perfcounter->tinc(l_rgw_get_lat,
                    (ceph_clock_now(s->cct) - start_time));
@@ -2300,7 +2314,6 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, re
   return r;
 }
 
-
 RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart)
 {
   RGWPutObjProcessor *processor;
@@ -2337,6 +2350,7 @@ void RGWPutObj::pre_exec()
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
+  RGWPutObjDataProcessor *encrypt = nullptr;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -2405,11 +2419,15 @@ void RGWPutObj::execute()
   }
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
-
   op_ret = processor->prepare(store, NULL);
   if (op_ret < 0) {
     ldout(s->cct, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
+    goto done;
+  }
+
+  op_ret = get_encrypt_filter(&encrypt, processor);
+  if (op_ret < 0) {
     goto done;
   }
 
@@ -2422,6 +2440,9 @@ void RGWPutObj::execute()
     }
     if (!len)
       break;
+    if (need_calc_md5) {
+      hash.Update((const byte *)data.c_str(), data.length());
+    }
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object
@@ -2433,16 +2454,14 @@ void RGWPutObj::execute()
     if (need_to_wait) {
       orig_data = data;
     }
-
-    op_ret = put_data_and_throttle(processor, data, ofs,
-				  (need_calc_md5 ? &hash : NULL), need_to_wait);
+    op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="
 			  << op_ret << dendl;
         goto done;
       }
-
+      /* need_to_wait == true and op_ret == -EEXIST */
       ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
 
       /* restore original data */
@@ -2451,7 +2470,14 @@ void RGWPutObj::execute()
       /* restart processing with different oid suffix */
 
       dispose_processor(processor);
+      if (encrypt) {
+        delete encrypt;
+      }
       processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+      op_ret = get_encrypt_filter(&encrypt, processor);
+      if (op_ret < 0) {
+        goto done;
+      }
 
       string oid_rand;
       char buf[33];
@@ -2465,7 +2491,7 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+      op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, data, ofs, false);
       if (op_ret < 0) {
         goto done;
       }
@@ -2473,7 +2499,13 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
-
+  {
+    bufferlist flush;
+    op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, flush, ofs, false);
+    if (op_ret < 0) {
+      goto done;
+    }
+  }
   if (!chunked_upload && ofs != s->content_length) {
     op_ret = -ERR_REQUEST_TIMEOUT;
     goto done;
@@ -2514,9 +2546,6 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  if (need_calc_md5) {
-    processor->complete_hash(&hash);
-  }
   hash.Final(m);
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -2581,6 +2610,9 @@ void RGWPutObj::execute()
 
 done:
   dispose_processor(processor);
+  if (encrypt) {
+    delete encrypt;
+  }
   perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
 }
@@ -2614,6 +2646,7 @@ void RGWPostObj::pre_exec()
 void RGWPostObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
+  RGWPutObjDataProcessor *encrypt = nullptr;
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
@@ -2646,6 +2679,11 @@ void RGWPostObj::execute()
   if (op_ret < 0)
     goto done;
 
+  op_ret = get_encrypt_filter(&encrypt, processor);
+  if (op_ret < 0) {
+    goto done;
+  }
+
   while (data_pending) {
      bufferlist data;
      len = get_data(data);
@@ -2657,8 +2695,8 @@ void RGWPostObj::execute()
 
      if (!len)
        break;
-
-     op_ret = put_data_and_throttle(processor, data, ofs, &hash, false);
+     hash.Update((const byte *)data.c_str(), data.length());
+     op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, data, ofs, false);
 
      ofs += len;
 
@@ -2667,7 +2705,10 @@ void RGWPostObj::execute()
        goto done;
      }
    }
-
+  {
+    bufferlist flush;
+    op_ret = put_data_and_throttle(encrypt!=nullptr?encrypt:processor, flush, ofs, false);
+  }
   if (len < min_len) {
     op_ret = -ERR_TOO_SMALL;
     goto done;
@@ -2681,7 +2722,6 @@ void RGWPostObj::execute()
     goto done;
   }
 
-  processor->complete_hash(&hash);
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
@@ -2701,6 +2741,9 @@ void RGWPostObj::execute()
   op_ret = processor->complete(etag, NULL, real_time(), attrs, delete_at);
 
 done:
+  if (encrypt) {
+    delete encrypt;
+  }
   dispose_processor(processor);
 }
 

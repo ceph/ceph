@@ -28,6 +28,7 @@ public:
 
   int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb) override;
 };
 
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
@@ -157,6 +158,7 @@ public:
   int get_params();
   int get_data(bufferlist& bl);
   void send_response();
+  int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) override;
 };
 
 struct post_part_field {
@@ -204,6 +206,7 @@ public:
   int complete_get_params();
   void send_response();
   int get_data(bufferlist& bl);
+  int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) override;
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
