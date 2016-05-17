@@ -1,0 +1,10 @@
+meta:
+- desc: |
+   librbd C and C++ api tests
+tasks:
+- workunit:
+     branch: jewel
+     clients:
+        client.0:
+           - rbd/test_librbd.sh
+- print: "**** done rbd/test_librbd.sh 7-workload"

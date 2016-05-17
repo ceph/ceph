@@ -1,0 +1,8 @@
+meta:
+- desc: install ceph/jewel latest
+tasks:
+- install:
+    branch: jewel
+- print: "**** done install jewel"
+- ceph:
+- print: "**** done ceph"

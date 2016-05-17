@@ -1,0 +1,10 @@
+meta:
+- desc: |
+   run basic cls tests for rbd
+tasks:
+- workunit:
+    branch: jewel
+    clients:
+      client.0:
+        - cls/test_cls_rbd.sh
+- print: "**** done cls/test_cls_rbd.sh 5-workload"
