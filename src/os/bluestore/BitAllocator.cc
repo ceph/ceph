@@ -957,8 +957,7 @@ int64_t BitAllocator::alloc_blocks_int(int64_t num_blocks,
 
   while ((zone = (BitMapZone *) iter.next())) {
 
-    if (!zone_free_to_alloc(zone,
-      num_blocks - allocated, wait)) {
+    if (!zone_free_to_alloc(zone, num_blocks, wait)) {
       continue;
     }
 
