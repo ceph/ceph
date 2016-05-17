@@ -24,7 +24,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <sys/xattr.h>
 #include <sys/uio.h>
 #include <iostream>
 #include <vector>
@@ -34,6 +33,13 @@
 #include <limits.h>
 #endif
 
+#if defined(__FreeBSD__)
+#include <sys/extattr.h>
+#define XATTR_CREATE    0x1
+#define XATTR_REPLACE   0x2
+#else
+#include <sys/xattr.h>
+#endif
 
 rados_t cluster;
 
