@@ -92,8 +92,10 @@ static void handle_fatal_signal(int signum)
   // presumably dump core-- will handle it.
   char buf[1024];
   char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
+#if !defined(__FreeBSD__)
   int r = pthread_getname_np(pthread_self(), pthread_name, sizeof(pthread_name));
   (void)r;
+#endif
 #if defined(__sun)
   char message[SIG2STR_MAX];
   sig2str(signum,message);
