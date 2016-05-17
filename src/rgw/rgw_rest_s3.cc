@@ -3630,7 +3630,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       int ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
       if (ret < 0) {
         ldout(s->cct, 0) << "User lookup failed!" << dendl;
-        return -ENOENT;
+        return -EACCES;
       }
       *(s->user) = effective_user;
     }
@@ -3838,7 +3838,7 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
         ret = rgw_get_user_info_by_uid(store, euid, effective_user);
         if (ret < 0) {
           ldout(s->cct, 0) << "User lookup failed!" << dendl;
-          return -ENOENT;
+          return -EACCES;
         }
         *(s->user) = effective_user;
       }
