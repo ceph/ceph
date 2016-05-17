@@ -6406,7 +6406,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
-    vector<string> id_vec;
+    vector<int64_t> id_vec;
     vector<int32_t> new_pg_temp;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
       ss << "unable to parse 'id' value(s) '"
@@ -6414,18 +6414,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    for (unsigned i = 0; i < id_vec.size(); i++) {
-      int32_t osd = parse_osd_id(id_vec[i].c_str(), &ss);
-      if (osd < 0) {
-        err = -EINVAL;
-        goto reply;
-      }
+    for (auto osd : id_vec) {
       if (!osdmap.exists(osd)) {
         ss << "osd." << osd << " does not exist";
         err = -ENOENT;
         goto reply;
       }
-
       new_pg_temp.push_back(osd);
     }
 
@@ -6453,27 +6447,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    string id;
-    int32_t osd;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    int64_t osd;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
       ss << "unable to parse 'id' value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       err = -EINVAL;
       goto reply;
     }
-    if (strcmp(id.c_str(), "-1")) {
-      osd = parse_osd_id(id.c_str(), &ss);
-      if (osd < 0) {
-        err = -EINVAL;
-        goto reply;
-      }
-      if (!osdmap.exists(osd)) {
-        ss << "osd." << osd << " does not exist";
-        err = -ENOENT;
-        goto reply;
-      }
-    } else {
-      osd = -1;
+    if (osd != -1 && !osdmap.exists(osd)) {
+      ss << "osd." << osd << " does not exist";
+      err = -ENOENT;
+      goto reply;
     }
 
     if (!g_conf->mon_osd_allow_primary_temp) {

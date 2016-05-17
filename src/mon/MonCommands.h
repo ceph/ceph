@@ -468,11 +468,11 @@ COMMAND("osd blocked-by", \
 	"osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
-	"name=id,type=CephInt,range=0", \
+	"name=id,type=CephOsdName", \
 	"find osd <id> in the CRUSH map and show its location", \
 	"osd", "r", "cli,rest")
 COMMAND("osd metadata " \
-	"name=id,type=CephInt,range=0,req=false", \
+	"name=id,type=CephOsdName,req=false", \
 	"fetch metadata for osd {id} (default all)", \
 	"osd", "r", "cli,rest")
 COMMAND("osd map " \
@@ -648,17 +648,17 @@ COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
 	"remove osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
 COMMAND("osd reweight " \
-	"name=id,type=CephInt,range=0 " \
+	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
 COMMAND("osd pg-temp " \
 	"name=pgid,type=CephPgid " \
-	"name=id,type=CephString,n=N,req=false", \
+	"name=id,type=CephOsdName,n=N,req=false", \
 	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-temp " \
 	"name=pgid,type=CephPgid " \
-	"name=id,type=CephString", \
+	"name=id,type=CephOsdName", \
         "set primary_temp mapping pgid:<id>|-1 (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-affinity " \
@@ -667,13 +667,13 @@ COMMAND("osd primary-affinity " \
 	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd lost " \
-	"name=id,type=CephInt,range=0 " \
+	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
-	"name=id,type=CephInt,range=0,req=false", \
+	"name=id,type=CephOsdName,req=false", \
 	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
