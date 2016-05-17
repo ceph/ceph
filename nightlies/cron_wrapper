@@ -18,6 +18,9 @@ STDOUT="/var/tmp/stdout.$$"
 # $STDOUT and $STDERR are removed when the script exits for any reason
 trap  "rm -f $STDOUT $STDERR" 0
 
+# log a name of the command about to be run
+echo "Running command: $@" >> $LOG
+
 # run a command from this script's argument
 # redirect stdout to $STDOUT file and redirect stderr to $STDERR file
 "$@" > $STDOUT 2> $STDERR
