@@ -802,7 +802,10 @@ namespace rgw {
 			     const uint32_t flags = RGWFileHandle::FLAG_NONE) {
       using std::get;
 
-      LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
+      // cast int32_t(RGWFileHandle::FLAG_NONE) due to strictness of Clang 
+      // the cast transfers a lvalue into a rvalue  in the ctor
+      // check the commit message for the full details
+      LookupFHResult fhr { nullptr, uint32_t(RGWFileHandle::FLAG_NONE) };
 
       /* mount is stale? */
       if (state.flags & FLAG_CLOSED)
