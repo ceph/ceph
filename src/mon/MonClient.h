@@ -371,6 +371,7 @@ public:
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
+  entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
 
   void send_auth_message(Message *m) {
     _send_mon_message(m, true);
