@@ -520,8 +520,7 @@ To invoke a cluster other than the default ``ceph`` cluster, use the
 	ceph -c openstack.conf health
 
 
-.. _Hardware Recommendations: ../../../install/hardware-recommendations
-.. _hardware recommendations: ../../../install/hardware-recommendations
+.. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
