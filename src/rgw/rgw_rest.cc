@@ -698,9 +698,9 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
 
   // If the error handler(s) above dealt with it completely, they should have
   // returned 0. If non-zero, we need to continue here.
-  if(err_no) {
+  if (err_no) {
     // Watch out, we might have a custom error state already set!
-    if(s->err.http_ret && s->err.http_ret != 200) {
+    if (s->err.http_ret && s->err.http_ret != 200) {
       dump_errno(s);
     } else {
       set_req_state_err(s, err_no);
