@@ -1683,7 +1683,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	     << *m << dendl;
     return;
   }
-  if (!m->get_source().is_mds() && osd->check_failsafe_full()) {
+  if (!(m->get_source().is_mds() || m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) && osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
     return;
