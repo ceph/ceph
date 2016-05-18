@@ -543,33 +543,17 @@ void ImageReplayer<I>::on_start_fail_finish(int r)
   Context *on_stop_finish(nullptr);
   {
     Mutex::Locker locker(m_lock);
-    if (m_stop_requested) {
-      assert(r == -EINTR);
-      dout(20) << "start interrupted" << dendl;
-      m_state = STATE_STOPPED;
-      m_stop_requested = false;
+    if (r < 0) {
+      derr << "start failed: " << cpp_strerror(r) << dendl;
     } else {
-      assert(m_state == STATE_STARTING);
-      dout(20) << "start failed" << dendl;
-      m_state = (r < 0) ? STATE_UNINITIALIZED : STATE_STOPPED;
+      dout(20) << "start interrupted" << dendl;
     }
+
     std::swap(m_on_start_finish, on_start_finish);
     std::swap(m_on_stop_finish, on_stop_finish);
   }
 
-  update_mirror_image_status(true);
-
-  m_local_ioctx.close();
-  m_remote_ioctx.close();
-
-  if (on_start_finish != nullptr) {
-    dout(20) << "on start finish complete, r=" << r << dendl;
-    on_start_finish->complete(r);
-  }
-  if (on_stop_finish != nullptr) {
-    dout(20) << "on stop finish complete, r=" << r << dendl;
-    on_stop_finish->complete(0);
-  }
+  handle_stop(r, on_start_finish, on_stop_finish);
 }
 
 template <typename I>
@@ -689,14 +673,9 @@ template <typename I>
 void ImageReplayer<I>::on_stop_local_image_close_finish(int r)
 {
   dout(20) << "r=" << r << dendl;
-
   if (r < 0) {
     derr << "error closing local image: " << cpp_strerror(r) << dendl;
   }
-
-  update_mirror_image_status(true);
-
-  m_local_ioctx.close();
 
   delete m_replay_status_formatter;
   m_replay_status_formatter = nullptr;
@@ -709,26 +688,14 @@ void ImageReplayer<I>::on_stop_local_image_close_finish(int r)
   delete m_replay_handler;
   m_replay_handler = nullptr;
 
-  m_remote_ioctx.close();
-
   Context *on_finish(nullptr);
-
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_STOPPING);
-
-    m_state = STATE_STOPPED;
-    m_state_desc.clear();
-    m_stop_requested = false;
     std::swap(m_on_stop_finish, on_finish);
   }
 
-  dout(20) << "stop complete" << dendl;
-
-  if (on_finish != nullptr) {
-    dout(20) << "on finish complete, r=" << r << dendl;
-    on_finish->complete(r);
-  }
+  handle_stop(r, nullptr, on_finish);
 }
 
 template <typename I>
@@ -1100,16 +1067,6 @@ void ImageReplayer<I>::update_mirror_image_status(bool final,
     }
 
     switch (m_state) {
-    case STATE_UNINITIALIZED:
-      if (m_last_r < 0) {
-	status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_ERROR;
-	status.description = m_state_desc;
-      } else {
-	status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
-	status.description = m_state_desc.empty() ? "not started yet" :
-	  m_state_desc;
-      }
-      break;
     case STATE_STARTING:
       // TODO: a better way to detect syncing state.
       if (!m_asok_hook) {
@@ -1238,10 +1195,36 @@ void ImageReplayer<I>::start_update_status_task()
 }
 
 template <typename I>
+void ImageReplayer<I>::handle_stop(int r, Context *on_start, Context *on_stop) {
+  {
+    Mutex::Locker locker(m_lock);
+    m_stop_requested = false;
+    m_state = STATE_STOPPED;
+    m_last_r = r;
+    if (r >= 0) {
+      m_state_desc.clear();
+    }
+  }
+  dout(20) << "stop complete" << dendl;
+
+  update_mirror_image_status(true);
+
+  m_local_ioctx.close();
+  m_remote_ioctx.close();
+
+  if (on_start != nullptr) {
+    dout(20) << "on start finish complete, r=" << r << dendl;
+    on_start->complete(r);
+  }
+  if (on_stop != nullptr) {
+    dout(20) << "on stop finish complete, r=" << r << dendl;
+    on_stop->complete(0);
+  }
+}
+
+template <typename I>
 std::string ImageReplayer<I>::to_string(const State state) {
   switch (state) {
-  case ImageReplayer<I>::STATE_UNINITIALIZED:
-    return "Uninitialized";
   case ImageReplayer<I>::STATE_STARTING:
     return "Starting";
   case ImageReplayer<I>::STATE_REPLAYING:

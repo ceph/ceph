@@ -52,7 +52,6 @@ public:
 
   enum State {
     STATE_UNKNOWN,
-    STATE_UNINITIALIZED,
     STATE_STARTING,
     STATE_REPLAYING,
     STATE_STOPPING,
@@ -209,7 +208,7 @@ private:
   std::string m_local_image_name;
   std::string m_name;
   Mutex m_lock;
-  State m_state = STATE_UNINITIALIZED;
+  State m_state = STATE_STOPPED;
   int m_last_r = 0;
   std::string m_state_desc;
   BootstrapProgressContext m_progress_cxt;
@@ -255,10 +254,15 @@ private:
 
   static std::string to_string(const State state);
 
-  State get_state_() const { return m_state; }
-  bool is_stopped_() const { return m_state == STATE_UNINITIALIZED ||
-                                    m_state == STATE_STOPPED; }
-  bool is_running_() const { return !is_stopped_() && m_state != STATE_STOPPING; }
+  State get_state_() const {
+    return m_state;
+  }
+  bool is_stopped_() const {
+    return m_state == STATE_STOPPED;
+  }
+  bool is_running_() const {
+    return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
+  }
 
   void shut_down_journal_replay(bool cancel_ops);
 
@@ -266,6 +270,8 @@ private:
 				  State expected_state = STATE_UNKNOWN);
   void reschedule_update_status_task(int new_interval = 0);
   void start_update_status_task();
+
+  void handle_stop(int r, Context *on_start, Context *on_stop);
 
   void bootstrap();
   void handle_bootstrap(int r);
