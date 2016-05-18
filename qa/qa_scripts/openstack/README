@@ -5,7 +5,7 @@ execs is a directory that contains executables that are copied and remotely
 run on the OpenStack instance
 
 files is a directory that contains templates used to initialize OpenStack
-conf files.  These templates reflect the current state of these conf files.
+conf files.  These templates reflect the state of these conf files on 5/17/2016.
 If further development is necessary in the future, these templates should
 probably be removed and direct editing of the OpenStack conf files should
 probably be performed.
