@@ -40,6 +40,7 @@ namespace mirror {
 
 struct Threads;
 
+namespace image_replayer { template <typename> class BootstrapRequest; }
 namespace image_replayer { template <typename> class ReplayStatusFormatter; }
 
 /**
@@ -230,6 +231,8 @@ private:
   bool m_manual_stop = false;
 
   AdminSocketHook *m_asok_hook = nullptr;
+
+  image_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
