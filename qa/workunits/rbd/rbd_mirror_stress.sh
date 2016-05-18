@@ -71,10 +71,9 @@ TEMPDIR=
 # by default.
 #
 # RBD_MIRROR_USE_EXISTING_CLUSTER - if set, do not start and stop ceph clusters
-# RBD_MIRROR_USE_EXISTING_DAEMON - if set, use an existing instance of rbd-mirror
-#                                  running as ceph client $CEPH_ID. If empty,
-#                                  this script will start and stop rbd-mirror
-
+# RBD_MIRROR_USE_RBD_MIRROR - if set, use an existing instance of rbd-mirror
+#                             running as ceph client $CEPH_ID. If empty,
+#                             this script will start and stop rbd-mirror
 #
 # Functions
 #
