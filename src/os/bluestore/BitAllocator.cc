@@ -163,10 +163,12 @@ void BmapEntry::clear_bits(int offset, int num_bits)
 
 void BmapEntry::set_bits(int offset, int num_bits)
 {
-  for (int i = 0; i < num_bits; i++) {
-    bmap_t bmask = bit_mask(i + offset);
-    (void) std::atomic_fetch_or(&m_bits, bmask);
+  if (num_bits == 0) {
+    return;
   }
+
+  bmap_t bmask = BmapEntry::align_mask(num_bits) >> offset;
+  (void) std::atomic_fetch_or(&m_bits, bmask);
 }
 
 /*
