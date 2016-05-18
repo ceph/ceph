@@ -825,7 +825,7 @@ public:
   }
   void promote_throttle_recalibrate();
 
-  // -- Objecter, for teiring reads/writes from/to other OSDs --
+  // -- Objecter, for tiering reads/writes from/to other OSDs --
   Objecter *objecter;
   Finisher objecter_finisher;
 
