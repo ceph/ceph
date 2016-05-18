@@ -212,10 +212,10 @@ For example::
 Force Image Resync
 ------------------
 
-If a split-brain event is detected by the ``rbd-daemon``, it will not attempt
-to mirror the affected image until corrected. To resume mirroring for an image,
-first `demote the image`_ determined to be out-of-date and then request a resync
-to the primary image. To request an image resync with ``rbd``, specify the
+If a split-brain event is detected by the ``rbd-mirror`` daemon, it will not
+attempt to mirror the affected image until corrected. To resume mirroring for an
+image, first `demote the image`_ determined to be out-of-date and then request a
+resync to the primary image. To request an image resync with ``rbd``, specify the
 ``mirror image resync`` command along with the pool and image name::
 
         rbd mirror image resync {pool-name}/{image-name}
@@ -227,6 +227,34 @@ For example::
 .. note:: The ``rbd`` command only flags the image as requiring a resync. The
    local cluster's ``rbd-mirror`` daemon process is responsible for performing
    the resync asynchronously.
+
+Mirror Status
+=============
+
+The peer cluster replication status is stored for every primary mirrored image.
+This status can be retrieved using the ``mirror image status`` and
+``mirror pool status`` commands.
+
+To request the mirror image status with ``rbd``, specify the
+``mirror image status`` command along with the pool and image name::
+
+        rbd mirror image status {pool-name}/{image-name}
+
+For example::
+
+        rbd mirror image status image-pool/image-1
+
+To request the mirror pool summary status with ``rbd``, specify the
+``mirror pool status`` command along with the pool name::
+
+        rbd mirror pool status {pool-name}
+
+For example::
+
+        rbd mirror image status image-pool
+
+.. note:: Adding ``--verbose`` option to the ``mirror pool status`` command will
+   additionally output status details for every mirroring image in the pool.
 
 rbd-mirror Daemon
 =================
