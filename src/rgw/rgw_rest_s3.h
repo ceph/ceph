@@ -22,12 +22,17 @@ void rgw_get_errno_s3(struct rgw_http_errors *e, int err_no);
 
 class RGWGetObj_ObjStore_S3 : public RGWGetObj_ObjStore
 {
+protected:
+  // Serving a custom error page from an object is really a 200 response with
+  // just the status line altered.
+  int custom_http_ret = 0;
 public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() {}
 
   int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+  void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
 };
 
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
@@ -460,8 +465,6 @@ public:
 
   RGWHandler_REST_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_REST_S3() {}
-
-  int get_errordoc(const string& errordoc_key, string* error_content);  
 
   virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
