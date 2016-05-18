@@ -54,6 +54,12 @@ private:
     STATE_ERROR
   };
 
+  enum WatchStep {
+    WATCH_STEP_FETCH_CURRENT,
+    WATCH_STEP_FETCH_FIRST,
+    WATCH_STEP_ASSERT_ACTIVE
+  };
+
   struct C_Fetch : public Context {
     JournalPlayer *player;
     uint64_t object_num;
@@ -70,31 +76,13 @@ private:
 
   struct C_Watch : public Context {
     JournalPlayer *player;
-    Mutex lock;
-    uint8_t pending_fetches = 1;
-    int ret_val = 0;
-
-    C_Watch(JournalPlayer *player)
-      : player(player), lock("JournalPlayer::C_Watch::lock") {
-    }
-
-    virtual void complete(int r) override {
-      lock.Lock();
-      if (ret_val == 0 && r < 0) {
-        ret_val = r;
-      }
-
-      assert(pending_fetches > 0);
-      if (--pending_fetches == 0) {
-        lock.Unlock();
-        Context::complete(ret_val);
-      } else {
-        lock.Unlock();
-      }
+    uint64_t object_num;
+    C_Watch(JournalPlayer *player, uint64_t object_num)
+      : player(player), object_num(object_num) {
     }
 
     virtual void finish(int r) override {
-      player->handle_watch(r);
+      player->handle_watch(object_num, r);
     }
   };
 
@@ -114,7 +102,8 @@ private:
   bool m_watch_enabled;
   bool m_watch_scheduled;
   double m_watch_interval;
-  bool m_watch_required = false;
+  WatchStep m_watch_step = WATCH_STEP_FETCH_CURRENT;
+  bool m_watch_prune_active_tag = false;
 
   bool m_handler_notified = false;
 
@@ -130,8 +119,12 @@ private:
 
   bool is_object_set_ready() const;
   bool verify_playback_ready();
+  bool prune_tag(uint64_t tag_tid);
+  bool prune_active_tag();
+
   const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;
+  ObjectPlayerPtr get_object_player(uint64_t object_number) const;
   ObjectPlayerPtr get_next_set_object_player() const;
   bool remove_empty_object_player(const ObjectPlayerPtr &object_player);
 
@@ -143,7 +136,8 @@ private:
   void handle_fetched(uint64_t object_num, int r);
 
   void schedule_watch();
-  void handle_watch(int r);
+  void handle_watch(uint64_t object_num, int r);
+  void handle_watch_assert_active(int r);
 
   void notify_entries_available();
   void notify_complete(int r);
