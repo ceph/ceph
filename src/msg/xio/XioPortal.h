@@ -155,22 +155,22 @@ public:
   int bind(struct xio_session_ops *ops, const string &base_uri,
 	   uint16_t port, uint16_t *assigned_port);
 
-  inline void release_xio_msg(XioRsp* xrsp) {
-    struct xio_msg *msg = xrsp->dequeue();
+  inline void release_xio_msg(XioCompletion* xcmp) {
+    struct xio_msg *msg = xcmp->dequeue();
     struct xio_msg *next_msg = NULL;
     int code;
-    if (unlikely(!xrsp->xcon->conn)) {
+    if (unlikely(!xcmp->xcon->conn)) {
       // NOTE: msg is not safe to dereference if the connection was torn down
-      xrsp->xcon->msg_release_fail(msg, ENOTCONN);
+      xcmp->xcon->msg_release_fail(msg, ENOTCONN);
     }
     else while (msg) {
       next_msg = static_cast<struct xio_msg *>(msg->user_context);
       code = xio_release_msg(msg);
       if (unlikely(code)) /* very unlikely, so log it */
-	xrsp->xcon->msg_release_fail(msg, code);
+	xcmp->xcon->msg_release_fail(msg, code);
       msg = next_msg;
     }
-    xrsp->finalize(); /* unconditional finalize */
+    xcmp->finalize(); /* unconditional finalize */
   }
 
   void enqueue_for_send(XioConnection *xcon, XioSubmit *xs)
@@ -191,7 +191,7 @@ public:
 	break;
       default:
 	/* INCOMING_MSG_RELEASE */
-	release_xio_msg(static_cast<XioRsp*>(xs));
+	release_xio_msg(static_cast<XioCompletion*>(xs));
       break;
       };
     }
@@ -319,7 +319,7 @@ public:
 	    default:
 	      /* INCOMING_MSG_RELEASE */
 	      q_iter = send_q.erase(q_iter);
-	      release_xio_msg(static_cast<XioRsp*>(xs));
+	      release_xio_msg(static_cast<XioCompletion*>(xs));
 	      continue;
 	    } /* switch (xs->type) */
 	    q_iter = send_q.erase(q_iter);
