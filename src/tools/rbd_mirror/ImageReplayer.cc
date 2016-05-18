@@ -372,8 +372,6 @@ void ImageReplayer<I>::bootstrap() {
   dout(20) << "bootstrap params: "
 	   << "local_image_name=" << m_local_image_name << dendl;
 
-  update_mirror_image_status();
-
   // TODO: add a new bootstrap state and support canceling
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
@@ -384,12 +382,24 @@ void ImageReplayer<I>::bootstrap() {
     m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
     m_local_mirror_uuid, m_remote_mirror_uuid, m_remote_journaler,
     &m_client_meta, ctx, &m_progress_cxt);
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_bootstrap_request = request;
+  }
+
   request->send();
+  update_mirror_image_status();
 }
 
 template <typename I>
 void ImageReplayer<I>::handle_bootstrap(int r) {
   dout(20) << "r=" << r << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_bootstrap_request = nullptr;
+  }
 
   if (r == -EREMOTEIO) {
     dout(5) << "remote image is non-primary or local image is primary" << dendl;
@@ -1068,8 +1078,7 @@ void ImageReplayer<I>::update_mirror_image_status(bool final,
 
     switch (m_state) {
     case STATE_STARTING:
-      // TODO: a better way to detect syncing state.
-      if (!m_asok_hook) {
+      if (m_bootstrap_request != nullptr) {
 	status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_SYNCING;
 	status.description = m_state_desc.empty() ? "syncing" : m_state_desc;
       } else {
