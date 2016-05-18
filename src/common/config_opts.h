@@ -382,6 +382,7 @@ OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
 OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
 OPTION(client_quota, OPT_BOOL, false)
+OPTION(client_quota_df, OPT_BOOL, true) // use quota for df on subdir mounts
 OPTION(client_oc, OPT_BOOL, true)
 OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
 OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
