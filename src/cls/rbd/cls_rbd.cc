@@ -145,7 +145,6 @@ cls_method_handle_t h_dir_remove_cg;
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 #define RBD_METADATA_KEY_PREFIX "metadata_"
 #define RBD_MAX_OBJECT_MAP_OBJECT_COUNT 256000000
-#define RBD_CG_REF_KEY "cg_ref"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {

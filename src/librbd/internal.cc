@@ -1718,6 +1718,15 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         return -EBUSY;
       }
 
+      std::map<std::string, bufferlist> out_vals;
+      r = io_ctx.omap_get_vals(header_oid, "", RBD_CG_REF_KEY, 1, &out_vals);
+      if (out_vals.size() > 0) {
+        lderr(cct) << "image is in a consistency group - not removing" << dendl;
+	ictx->owner_lock.put_read();
+        ictx->state->close();
+        return -EBUSY;
+      }
+
       trim_image(ictx, 0, prog_ctx);
 
       ictx->parent_lock.get_read();

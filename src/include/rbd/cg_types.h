@@ -24,9 +24,10 @@ enum image_link_state {
 #define CG_STATE "state"
 #define CG_IMAGE_TO_BE_ADDED "image_to_be_added"
 
-#define CG_ID_PREFIX           "cg_id."
-#define CG_HEADER_PREFIX       "cg_header."
+#define CG_ID_PREFIX "cg_id."
+#define CG_HEADER_PREFIX "cg_header."
 
-#define CG_DIRECTORY           "cg_directory"
+#define CG_DIRECTORY "cg_directory"
+#define RBD_CG_REF_KEY "cg_ref"
 
 #endif
