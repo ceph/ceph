@@ -264,6 +264,10 @@ class Remote(object):
         """
         Use the paramiko.SFTPClient to get a file. Returns the local filename.
         """
+        file_size = self._format_size(
+            self._sftp_get_size(remote_path)
+        ).strip()
+        log.debug("{}:{} is {}".format(self.shortname, remote_path, file_size))
         sftp = self.ssh.open_sftp()
         sftp.get(remote_path, local_path)
         return local_path
