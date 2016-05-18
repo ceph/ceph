@@ -1724,7 +1724,7 @@ int validate_mirroring_enabled(ImageCtx *ictx) {
         lderr(cct) << "image is in a consistency group - not removing" << dendl;
 	ictx->owner_lock.put_read();
         ictx->state->close();
-        return -EBUSY;
+        return -EMLINK;
       }
 
       trim_image(ictx, 0, prog_ctx);

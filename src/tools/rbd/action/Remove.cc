@@ -68,6 +68,11 @@ int execute(const po::variables_map &vm) {
                 << "it crashed. Try again after closing/unmapping it or "
                 << "waiting 30s for the crashed client to timeout."
                 << std::endl;
+    } else if (r == -EMLINK) {
+      std::cerr << "rbd: error: image pertains to a consistency group"
+                << std::endl
+                << "Remove the image from the consistency group and try again."
+                << std::endl;
     } else {
       std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
     }
