@@ -3960,8 +3960,8 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
-  RGWGetObj_ObjStore_S3Website* getop = (RGWGetObj_ObjStore_S3Website*) op_get();
-  if(!getop) {
+  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( (RGWGetObj_ObjStore_S3Website*) op_get() );
+  if (getop.get() == NULL) {
     return -1; // Trigger double error handler
   }
   getop->init(store, s, this);
@@ -3972,13 +3972,13 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   getop->if_nomatch = NULL;
   s->object = errordoc_key;
 
-  ret = init_permissions(getop);
+  ret = init_permissions(getop.get());
   if (ret < 0) {
     ldout(s->cct, 20) << "serve_errordoc failed, init_permissions ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
-  ret = read_permissions(getop);
+  ret = read_permissions(getop.get());
   if (ret < 0) {
     ldout(s->cct, 20) << "serve_errordoc failed, read_permissions ret=" << ret << dendl;
     return -1; // Trigger double error handler
