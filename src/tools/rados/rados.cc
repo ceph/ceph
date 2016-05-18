@@ -2616,6 +2616,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
 
+    cerr << "WARNING: pool copy does not preserve user_version, which some "
+	 << "    apps may rely on." << std::endl;
     ret = do_copy_pool(rados, src_pool, target_pool);
     if (ret < 0) {
       cerr << "error copying pool " << src_pool << " => " << target_pool << ": "
