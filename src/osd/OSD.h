@@ -1724,16 +1724,6 @@ private:
     finished.splice(finished.end(), ls);
     finished_lock.Unlock();
   }
-  void take_waiters_front(list<OpRequestRef>& ls) {
-    finished_lock.Lock();
-    finished.splice(finished.begin(), ls);
-    finished_lock.Unlock();
-  }
-  void take_waiter(OpRequestRef op) {
-    finished_lock.Lock();
-    finished.push_back(op);
-    finished_lock.Unlock();
-  }
   void do_waiters();
   
   // -- op tracking --
