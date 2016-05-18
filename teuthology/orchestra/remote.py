@@ -283,6 +283,17 @@ class Remote(object):
         with self._sftp_open_file(remote_path) as f:
             return f.stat().st_size
 
+    @staticmethod
+    def _format_size(file_size):
+        """
+        Given a file_size in bytes, returns a human-readable representation.
+        """
+        for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+            if abs(file_size) < 1024.0:
+                break
+            file_size = file_size / 1024.0
+        return "{:3.0f}{}".format(file_size, unit)
+
     def remove(self, path):
         self.run(args=['rm', '-fr', path])
 

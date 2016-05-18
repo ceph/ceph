@@ -176,3 +176,10 @@ class TestRemote(object):
             rem = remote.Remote(name='jdoe@xyzzy.example.com', ssh=self.m_ssh)
             assert rem._sftp_get_size('/fake/file') == 42
 
+    def test_format_size(self):
+        assert remote.Remote._format_size(1023).strip() == '1023B'
+        assert remote.Remote._format_size(1024).strip() == '1KB'
+        assert remote.Remote._format_size(1024**2).strip() == '1MB'
+        assert remote.Remote._format_size(1024**5).strip() == '1TB'
+        assert remote.Remote._format_size(1021112).strip() == '997KB'
+        assert remote.Remote._format_size(1021112**2).strip() == '971GB'
