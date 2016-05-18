@@ -17,8 +17,7 @@
 
 #include "OSD.h"
 #include "PGBackend.h"
-#include "osd_types.h"
-#include "../include/memory.h"
+#include "include/memory.h"
 
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {

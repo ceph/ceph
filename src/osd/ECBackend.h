@@ -17,8 +17,6 @@
 
 #include "OSD.h"
 #include "PGBackend.h"
-#include "osd_types.h"
-#include <boost/optional/optional_io.hpp>
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECTransaction.h"
 #include "ECMsgTypes.h"
