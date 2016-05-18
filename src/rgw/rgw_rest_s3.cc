@@ -246,7 +246,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   }
 
 done:
-  if(custom_http_ret) {
+  if (custom_http_ret) {
     set_req_state_err(s, 0);
     dump_errno(s, custom_http_ret);
   } else {
@@ -3984,30 +3984,30 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
     return -1; // Trigger double error handler
   }
 
-  if(http_ret) {
+  if (http_ret) {
      getop->set_custom_http_response(http_ret);
   }
 
   ret = getop->init_processing();
-  if(ret < 0) {
+  if (ret < 0) {
     ldout(s->cct, 20) << "serve_errordoc failed, init_processing ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = getop->verify_op_mask();
-  if(ret < 0) {
+  if (ret < 0) {
     ldout(s->cct, 20) << "serve_errordoc failed, verify_op_mask ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = getop->verify_permission();
-  if(ret < 0) {
+  if (ret < 0) {
     ldout(s->cct, 20) << "serve_errordoc failed, verify_permission ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = getop->verify_params();
-  if(ret < 0) {
+  if (ret < 0) {
     ldout(s->cct, 20) << "serve_errordoc failed, verify_params ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
@@ -4066,7 +4066,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On failure, we need the double-error handler
      */
     new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket_info.website_conf.error_doc);
-    if(new_err_no && new_err_no != -1) {
+    if (new_err_no && new_err_no != -1) {
       err_no = new_err_no;
     }
   } else {
