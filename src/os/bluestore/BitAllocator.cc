@@ -128,7 +128,7 @@ bmap_t BmapEntry::bit_mask(int bit)
 }
 bool BmapEntry::check_bit(int bit)
 {
-  return (m_bits & bit_mask(bit));
+  return (atomic_fetch() & bit_mask(bit));
 }
 
 bmap_t BmapEntry::atomic_fetch()
