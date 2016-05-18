@@ -19,26 +19,26 @@ namespace journal {
 ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
                                uint64_t object_number,
                                SafeTimer &timer, Mutex &timer_lock,
-                               OverflowHandler *overflow_handler, uint8_t order,
+                               Handler *handler, uint8_t order,
                                uint32_t flush_interval, uint64_t flush_bytes,
                                double flush_age)
   : RefCountedObject(NULL, 0), m_oid(oid), m_object_number(object_number),
     m_cct(NULL), m_timer(timer), m_timer_lock(timer_lock),
-    m_overflow_handler(overflow_handler), m_order(order),
-    m_soft_max_size(1 << m_order), m_flush_interval(flush_interval),
-    m_flush_bytes(flush_bytes), m_flush_age(flush_age), m_flush_handler(this),
-    m_append_task(NULL),
+    m_handler(handler), m_order(order), m_soft_max_size(1 << m_order),
+    m_flush_interval(flush_interval), m_flush_bytes(flush_bytes),
+    m_flush_age(flush_age), m_flush_handler(this), m_append_task(NULL),
     m_lock(utils::unique_lock_name("ObjectRecorder::m_lock", this)),
     m_append_tid(0), m_pending_bytes(0), m_size(0), m_overflowed(false),
     m_object_closed(false), m_in_flight_flushes(false) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
-  assert(m_overflow_handler != NULL);
+  assert(m_handler != NULL);
 }
 
 ObjectRecorder::~ObjectRecorder() {
   assert(m_append_task == NULL);
   assert(m_append_buffers.empty());
+  assert(m_in_flight_tids.empty());
   assert(m_in_flight_appends.empty());
 }
 
@@ -68,7 +68,8 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
   } else {
     cancel_append_task();
   }
-  return (m_size + m_pending_bytes >= m_soft_max_size);
+  return (!m_object_closed && !m_overflowed &&
+          m_size + m_pending_bytes >= m_soft_max_size);
 }
 
 void ObjectRecorder::flush(Context *on_safe) {
@@ -119,7 +120,10 @@ void ObjectRecorder::flush(const FutureImplPtr &future) {
     return;
   }
 
-  assert(!m_object_closed);
+  if (m_object_closed || m_overflowed) {
+    return;
+  }
+
   AppendBuffers::iterator it;
   for (it = m_append_buffers.begin(); it != m_append_buffers.end(); ++it) {
     if (it->first == future) {
@@ -139,21 +143,24 @@ void ObjectRecorder::claim_append_buffers(AppendBuffers *append_buffers) {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << dendl;
 
   Mutex::Locker locker(m_lock);
+  assert(m_in_flight_tids.empty());
   assert(m_in_flight_appends.empty());
   assert(m_object_closed || m_overflowed);
   append_buffers->splice(append_buffers->end(), m_append_buffers,
                          m_append_buffers.begin(), m_append_buffers.end());
 }
 
-bool ObjectRecorder::close_object() {
+bool ObjectRecorder::close() {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << dendl;
 
   cancel_append_task();
 
   Mutex::Locker locker(m_lock);
-  m_object_closed = true;
   flush_appends(true);
-  return m_in_flight_appends.empty();
+
+  assert(!m_object_closed);
+  m_object_closed = true;
+  return m_in_flight_tids.empty();
 }
 
 void ObjectRecorder::handle_append_task() {
@@ -184,7 +191,11 @@ bool ObjectRecorder::append(const AppendBuffer &append_buffer,
                             bool *schedule_append) {
   assert(m_lock.is_locked());
 
-  bool flush_requested = append_buffer.first->attach(&m_flush_handler);
+  bool flush_requested = false;
+  if (!m_object_closed && !m_overflowed) {
+    flush_requested = append_buffer.first->attach(&m_flush_handler);
+  }
+
   m_append_buffers.push_back(append_buffer);
   m_pending_bytes += append_buffer.second.length();
 
@@ -222,25 +233,35 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   AppendBuffers append_buffers;
   {
     Mutex::Locker locker(m_lock);
+    auto tid_iter = m_in_flight_tids.find(tid);
+    assert(tid_iter != m_in_flight_tids.end());
+    m_in_flight_tids.erase(tid_iter);
+
     InFlightAppends::iterator iter = m_in_flight_appends.find(tid);
-    if (iter == m_in_flight_appends.end()) {
-      // must have seen an overflow on a previous append op
-      assert(m_overflowed);
-      return;
-    } else if (r == -EOVERFLOW) {
-      m_overflowed = true;
-      append_overflowed(tid);
+    if (r == -EOVERFLOW || m_overflowed) {
+      if (iter != m_in_flight_appends.end()) {
+        m_overflowed = true;
+        append_overflowed(tid);
+      } else {
+        // must have seen an overflow on a previous append op
+        assert(r == -EOVERFLOW && m_overflowed);
+      }
+
+      // notify of overflow once all in-flight ops are complete
+      if (m_in_flight_tids.empty()) {
+        notify_handler();
+      }
       return;
     }
 
-    assert(!m_overflowed || r != 0);
+    assert(iter != m_in_flight_appends.end());
     append_buffers.swap(iter->second);
     assert(!append_buffers.empty());
 
     m_in_flight_appends.erase(iter);
     if (m_in_flight_appends.empty() && m_object_closed) {
       // all remaining unsent appends should be redirected to new object
-      notify_overflow();
+      notify_handler();
     }
     m_in_flight_flushes = true;
   }
@@ -284,7 +305,6 @@ void ObjectRecorder::append_overflowed(uint64_t tid) {
                                 m_append_buffers.begin(),
                                 m_append_buffers.end());
   restart_append_buffers.swap(m_append_buffers);
-  notify_overflow();
 }
 
 void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
@@ -308,6 +328,7 @@ void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
     op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     m_size += it->second.length();
   }
+  m_in_flight_tids.insert(append_tid);
   m_in_flight_appends[append_tid].swap(*append_buffers);
 
   librados::AioCompletion *rados_completion =
@@ -318,7 +339,7 @@ void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
   rados_completion->release();
 }
 
-void ObjectRecorder::notify_overflow() {
+void ObjectRecorder::notify_handler() {
   assert(m_lock.is_locked());
 
   for (AppendBuffers::const_iterator it = m_append_buffers.begin();
@@ -328,10 +349,16 @@ void ObjectRecorder::notify_overflow() {
     it->first->detach();
   }
 
-  // TODO need to delay completion until after aio_notify completes
-  m_lock.Unlock();
-  m_overflow_handler->overflow(this);
-  m_lock.Lock();
+  if (m_object_closed) {
+    m_lock.Unlock();
+    m_handler->closed(this);
+    m_lock.Lock();
+  } else {
+    // TODO need to delay completion until after aio_notify completes
+    m_lock.Unlock();
+    m_handler->overflow(this);
+    m_lock.Lock();
+  }
 }
 
 } // namespace journal

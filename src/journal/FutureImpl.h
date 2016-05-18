@@ -56,13 +56,14 @@ public:
   }
   inline void set_flush_in_progress() {
     Mutex::Locker locker(m_lock);
+    assert(m_flush_handler);
+    m_flush_handler.reset();
     m_flush_state = FLUSH_STATE_IN_PROGRESS;
   }
 
   bool attach(const FlushHandlerPtr &flush_handler);
   inline void detach() {
     Mutex::Locker locker(m_lock);
-    assert(m_flush_handler);
     m_flush_handler.reset();
   }
   inline FlushHandlerPtr get_flush_handler() const {
