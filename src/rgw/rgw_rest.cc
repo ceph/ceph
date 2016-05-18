@@ -330,11 +330,7 @@ void set_req_state_err(struct rgw_err& err,     /* out */
 
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
-    if (prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && err.is_clear()) {
-      // http_ret was custom set, so don't change it!
-    } else {
-      err.http_ret = r->http_ret;
-    }
+    err.http_ret = r->http_ret;
     err.s3_code = r->s3_code;
     return;
   }
@@ -707,49 +703,56 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
-  set_req_state_err(s, err_no);
-  dump_errno(s);
-  dump_bucket_from_state(s);
-  if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
-    string dest_uri;
-    if (!s->redirect.empty()) {
-      dest_uri = s->redirect;
-    } else if (!s->zonegroup_endpoint.empty()) {
-      string dest_uri = s->zonegroup_endpoint;
-      /*
-       * reqest_uri is always start with slash, so we need to remove
-       * the unnecessary slash at the end of dest_uri.
-       */
-      if (dest_uri[dest_uri.size() - 1] == '/') {
-        dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+
+  // If the error handler(s) above dealt with it completely, they should have
+  // returned 0. If non-zero, we need to continue here.
+  if (err_no) {
+    // Watch out, we might have a custom error state already set!
+    if (s->err.http_ret && s->err.http_ret != 200) {
+      dump_errno(s);
+    } else {
+      set_req_state_err(s, err_no);
+      dump_errno(s);
+    }
+    dump_bucket_from_state(s);
+    if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
+      string dest_uri;
+      if (!s->redirect.empty()) {
+        dest_uri = s->redirect;
+      } else if (!s->zonegroup_endpoint.empty()) {
+        string dest_uri = s->zonegroup_endpoint;
+        /*
+         * reqest_uri is always start with slash, so we need to remove
+         * the unnecessary slash at the end of dest_uri.
+         */
+        if (dest_uri[dest_uri.size() - 1] == '/') {
+          dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+        }
+        dest_uri += s->info.request_uri;
+        dest_uri += "?";
+        dest_uri += s->info.request_params;
       }
-      dest_uri += s->info.request_uri;
-      dest_uri += "?";
-      dest_uri += s->info.request_params;
+
+      if (!dest_uri.empty()) {
+        dump_redirect(s, dest_uri);
+      }
     }
 
-    if (!dest_uri.empty()) {
-      dump_redirect(s, dest_uri);
+    if (!error_content.empty()) {
+      /*
+       * TODO we must add all error entries as headers here:
+       * when having a working errordoc, then the s3 error fields are
+       * rendered as HTTP headers, e.g.:
+       *   x-amz-error-code: NoSuchKey
+       *   x-amz-error-message: The specified key does not exist.
+       *   x-amz-error-detail-Key: foo
+       */
+      end_header(s, op, NULL, error_content.size(), false, true);
+      STREAM_IO(s)->write(error_content.c_str(), error_content.size());
+    } else {
+      end_header(s, op);
     }
-  }
-  if (!error_content.empty()) {
-    ldout(s->cct, 20) << "error_content is set, we need to serve it INSTEAD"
-      " of firing the formatter" << dendl;
-    /*
-     * FIXME we must add all error entries as headers here:
-     * when having a working errordoc, then the s3 error fields are
-     * rendered as HTTP headers, e.g.:
-     *
-     *   x-amz-error-code: NoSuchKey
-     *   x-amz-error-message: The specified key does not exist.
-     *   x-amz-error-detail-Key: foo
-     */
-    end_header(s, op, NULL, NO_CONTENT_LENGTH, false, true);
-    STREAM_IO(s)->write(error_content.c_str(), error_content.size());
-    s->formatter->reset();
-  } else {
-    end_header(s, op);
-    rgw_flush_formatter_and_reset(s, s->formatter);
+    rgw_flush_formatter(s, s->formatter);
   }
   perfcounter->inc(l_rgw_failed_req);
 }
