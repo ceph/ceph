@@ -163,3 +163,16 @@ class TestRemote(object):
             assert rem._sftp_open_file('x').stat().st_size == 42
             with rem._sftp_open_file('x') as f:
                 assert f == m_file_obj
+
+    def test_sftp_get_size(self):
+        m_file_obj = MagicMock()
+        m_stat = Mock()
+        m_stat.st_size = 42
+        m_file_obj.stat.return_value = m_stat
+        m_open = MagicMock()
+        m_open.return_value = m_file_obj
+        m_open.return_value.__enter__.return_value = m_file_obj
+        with patch.object(remote.Remote, '_sftp_open_file', new=m_open):
+            rem = remote.Remote(name='jdoe@xyzzy.example.com', ssh=self.m_ssh)
+            assert rem._sftp_get_size('/fake/file') == 42
+

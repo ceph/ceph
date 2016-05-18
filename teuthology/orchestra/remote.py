@@ -276,6 +276,13 @@ class Remote(object):
         sftp = self.ssh.open_sftp()
         return sftp.open(remote_path)
 
+    def _sftp_get_size(self, remote_path):
+        """
+        Via _sftp_open_file, return the filesize in bytes
+        """
+        with self._sftp_open_file(remote_path) as f:
+            return f.stat().st_size
+
     def remove(self, path):
         self.run(args=['rm', '-fr', path])
 
