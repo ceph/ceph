@@ -176,7 +176,7 @@ void BmapEntry::set_bits(int offset, int num_bits)
 bool BmapEntry::check_n_set_bit(int bit)
 {
   bmap_t bmask = bit_mask(bit);
-  return !(atomic_fetch_or(&m_bits, bmask) & bmask);
+  return !(std::atomic_fetch_or(&m_bits, bmask) & bmask);
 }
 
 /*
@@ -339,7 +339,7 @@ int64_t BmapList::incr_marker(int64_t add)
 
 void BmapList::set_marker(int64_t val)
 {
- atomic_store(&m_marker, val);
+  std::atomic_store(&m_marker, val);
 }
 
 int64_t BmapList::get_marker()
