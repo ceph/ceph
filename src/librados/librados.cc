@@ -1423,6 +1423,8 @@ static int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
   if (flags & librados::OPERATION_FULL_TRY)
     op_flags |= CEPH_OSD_FLAG_FULL_TRY;
+  if (flags & librados::OPERATION_FULL_FORCE)
+    op_flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   return op_flags;
 }
