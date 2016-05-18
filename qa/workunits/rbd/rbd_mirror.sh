@@ -71,9 +71,9 @@ TEMPDIR=
 # by default.
 #
 # RBD_MIRROR_USE_EXISTING_CLUSTER - if set, do not start and stop ceph clusters
-# RBD_MIRROR_USE_EXISTING_DAEMON - if set, use an existing instance of rbd-mirror
-#                                  running as ceph client $CEPH_ID. If empty,
-#                                  this script will start and stop rbd-mirror
+# RBD_MIRROR_USE_RBD_MIRROR - if set, use an existing instance of rbd-mirror
+#                             running as ceph client $CEPH_ID. If empty,
+#                             this script will start and stop rbd-mirror
 
 #
 # Functions
@@ -492,7 +492,9 @@ wait_for_image_replay_started ${CLUSTER1} ${image}
 write_image ${CLUSTER2} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
-test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
+fi
 compare_images ${image}
 
 testlog "TEST: stop mirror, add image, start mirror and test replay"
@@ -504,7 +506,9 @@ start_mirror ${CLUSTER1}
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image1}
 test_status_in_pool_dir ${CLUSTER1} ${image1} 'up+replaying' 'master_position'
-test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
+fi
 compare_images ${image1}
 
 testlog "TEST: test the first image is replaying after restart"
