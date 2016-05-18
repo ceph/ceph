@@ -357,7 +357,7 @@ bool Paxos::store_state(MMonPaxos *m)
     // ignore everything if values start in the future.
     dout(10) << "store_state ignoring all values, they start at " << start->first
 	     << " > last_committed+1" << dendl;
-    start = m->values.end();
+    return false;
   }
 
   // push forward the start position on the message's values iterator, up until
