@@ -14,13 +14,11 @@
 #ifndef CEPH_WATCH_H
 #define CEPH_WATCH_H
 
-#include <boost/intrusive_ptr.hpp>
 #include "include/memory.h"
 #include <set>
 
 #include "msg/Messenger.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
 
 enum WatcherState {
   WATCHER_PENDING,

@@ -21,7 +21,6 @@
 #include "include/assert.h" 
 #include "osd_types.h"
 #include "os/ObjectStore.h"
-#include "common/ceph_context.h"
 #include <list>
 using namespace std;
 
@@ -29,6 +28,8 @@ using namespace std;
 #define PGLOG_INDEXED_CALLER_OPS       (1 << 1)
 #define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
 #define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | PGLOG_INDEXED_CALLER_OPS | PGLOG_INDEXED_EXTRA_CALLER_OPS)
+
+class CephContext;
 
 struct PGLog : DoutPrefixProvider {
   DoutPrefixProvider *prefix_provider;
