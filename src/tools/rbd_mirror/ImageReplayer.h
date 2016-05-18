@@ -101,6 +101,9 @@ public:
   virtual void handle_replay_ready();
   virtual void handle_replay_complete(int r, const std::string &error_desc);
 
+  inline const std::string get_global_image_id() const {
+    return m_global_image_id;
+  }
   inline int64_t get_remote_pool_id() const {
     return m_remote_pool_id;
   }
