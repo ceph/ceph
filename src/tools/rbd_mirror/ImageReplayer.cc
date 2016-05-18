@@ -325,6 +325,7 @@ void ImageReplayer<I>::start(Context *on_finish,
       m_state_desc.clear();
       m_on_start_finish = on_finish;
       m_manual_stop = false;
+      m_update_status_enabled = true;
     }
   }
 
@@ -1061,9 +1062,16 @@ void ImageReplayer<I>::update_mirror_image_status(bool final,
   {
     Mutex::Locker locker(m_lock);
 
+    if (!m_update_status_enabled) {
+      dout(10) << "update status disabled" << dendl;
+      return;
+    }
+
     assert(!final || !is_running_());
 
-    if (!final) {
+    if (final) {
+      m_update_status_enabled = false;
+    } else {
       if (expected_state != STATE_UNKNOWN && expected_state != m_state) {
 	dout(20) << "state changed" << dendl;
 	return;

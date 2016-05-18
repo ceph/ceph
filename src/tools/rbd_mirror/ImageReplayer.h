@@ -227,6 +227,7 @@ private:
   int m_update_status_interval = 0;
   librados::AioCompletion *m_update_status_comp = nullptr;
   bool m_update_status_pending = false;
+  bool m_update_status_enabled = false;
   bool m_stop_requested = false;
   bool m_manual_stop = false;
 
