@@ -21,7 +21,6 @@
 #include "include/unordered_set.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
-#include "common/Formatter.h"
 
 /**
  * generic container for a HitSet
@@ -234,13 +233,7 @@ public:
     ::decode(hits, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const {
-    f->dump_unsigned("insert_count", count);
-    f->open_array_section("hash_set");
-    for (ceph::unordered_set<uint32_t>::const_iterator p = hits.begin(); p != hits.end(); ++p)
-      f->dump_unsigned("hash", *p);
-    f->close_section();
-  }
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<ExplicitHashHitSet*>& o) {
     o.push_back(new ExplicitHashHitSet);
     o.push_back(new ExplicitHashHitSet);
@@ -311,16 +304,7 @@ public:
     ::decode(hits, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const {
-    f->dump_unsigned("insert_count", count);
-    f->open_array_section("set");
-    for (ceph::unordered_set<hobject_t>::const_iterator p = hits.begin(); p != hits.end(); ++p) {
-      f->open_object_section("object");
-      p->dump(f);
-      f->close_section();
-    }
-    f->close_section();
-  }
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<ExplicitObjectHitSet*>& o) {
     o.push_back(new ExplicitObjectHitSet);
     o.push_back(new ExplicitObjectHitSet);
@@ -386,11 +370,7 @@ public:
       ::decode(seed, bl);
       DECODE_FINISH(bl);
     }
-    void dump(Formatter *f) const {
-      f->dump_float("false_positive_probability", get_fpp());
-      f->dump_int("target_size", target_size);
-      f->dump_int("seed", seed);
-    }
+    void dump(Formatter *f) const;
     void dump_stream(ostream& o) const {
       o << "false_positive_probability: "
 	<< get_fpp() << ", target_size: " << target_size
@@ -459,11 +439,7 @@ public:
     ::decode(bloom, bl);
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const {
-    f->open_object_section("bloom_filter");
-    bloom.dump(f);
-    f->close_section();
-  }
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<BloomHitSet*>& o) {
     o.push_back(new BloomHitSet);
     o.push_back(new BloomHitSet(10, .1, 1));
