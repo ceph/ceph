@@ -755,10 +755,11 @@ bool RGWQuotaInfoDefApplier::is_size_exceeded(const char * const entity,
   }
 
   const uint64_t cur_size = stats.size_rounded;
+  const uint64_t new_size = rgw_rounded_objsize(size);
 
-  if (cur_size + size > static_cast<uint64_t>(qinfo.max_size)) {
+  if (cur_size + new_size > static_cast<uint64_t>(qinfo.max_size)) {
     dout(10) << "quota exceeded: stats.size_rounded=" << stats.size_rounded
-             << " size=" << size << " "
+             << " size=" << new_size << " "
              << entity << "_quota.max_size=" << qinfo.max_size << dendl;
     return true;
   }
