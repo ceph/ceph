@@ -376,10 +376,15 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
 
   auto start = std::chrono::system_clock::now();
   delay = _get_delay(c);
-  while ((delay > std::chrono::duration<double>(0)) ||
-	 !((max == 0) || (current == 0) || ((current + c) <= max))) {
+  while (true) {
+    if (!((max == 0) || (current == 0) || (current + c) <= max)) {
+      (*ticket)->wait(l);
+    } else if (delay > std::chrono::duration<double>(0)) {
+      (*ticket)->wait_for(l, delay);
+    } else {
+      break;
+    }
     assert(ticket == waiters.begin());
-    (*ticket)->wait_for(l, delay);
     delay = _get_delay(c) - (std::chrono::system_clock::now() - start);
   }
   waiters.pop_front();
