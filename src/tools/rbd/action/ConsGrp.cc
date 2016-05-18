@@ -6,6 +6,7 @@
 #include "tools/rbd/Utils.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "include/rbd/cg_types.h"
 
 namespace rbd {
 namespace action {
@@ -305,13 +306,21 @@ int execute_list_images(const po::variables_map &vm) {
   if (f)
     f->open_array_section("consistency_groups");
   for (auto i : images) {
+    std::string image_name = std::get<0>(i);
+    int64_t pool_id = std::get<1>(i);
+    int state = std::get<2>(i);
+    std::string state_string;
+    if (LINK_DIRTY == state) {
+      state_string = "dirty";
+    }
     if (r < 0)
       return r;
     if (f) {
-      f->dump_string("image name", std::get<0>(i));
-      f->dump_int("pool id", std::get<1>(i));
+      f->dump_string("image name", image_name);
+      f->dump_int("pool id", pool_id);
+      f->dump_int("state", state);
     } else
-      std::cout << std::get<0>(i) << " " << std::get<1>(i) << std::endl;
+      std::cout << pool_id << "." << image_name << " " << state_string << std::endl;
   }
   if (f) {
     f->close_section();
