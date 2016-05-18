@@ -234,10 +234,6 @@ struct C_InvalidateCache : public Context {
   void ImageCtx::init() {
     assert(!header_oid.empty());
     assert(old_format || !id.empty());
-    if (!old_format) {
-      init_layout();
-    }
-    apply_metadata_confs();
 
     asok_hook = new LibrbdAdminSocketHook(this);
 
@@ -888,31 +884,32 @@ struct C_InvalidateCache : public Context {
     completed_reqs.clear();
   }
 
-  bool ImageCtx::_filter_metadata_confs(const string &prefix, map<string, bool> &configs,
-                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
+  bool ImageCtx::_filter_metadata_confs(const string &prefix,
+                                        map<string, bool> &configs,
+                                        const map<string, bufferlist> &pairs,
+                                        map<string, bufferlist> *res) {
     size_t conf_prefix_len = prefix.size();
 
     string start = prefix;
-    for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      if (it->first.compare(0, MIN(conf_prefix_len, it->first.size()), prefix) > 0)
+    for (auto it : pairs) {
+      if (it.first.compare(0, MIN(conf_prefix_len, it.first.size()), prefix) > 0)
         return false;
 
-      if (it->first.size() <= conf_prefix_len)
+      if (it.first.size() <= conf_prefix_len)
         continue;
 
-      string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
-      map<string, bool>::iterator cit = configs.find(key);
-      if ( cit != configs.end()) {
+      string key = it.first.substr(conf_prefix_len, it.first.size() - conf_prefix_len);
+      auto cit = configs.find(key);
+      if (cit != configs.end()) {
         cit->second = true;
-        res->insert(make_pair(key, it->second));
+        res->insert(make_pair(key, it.second));
       }
     }
     return true;
   }
 
-  void ImageCtx::apply_metadata_confs() {
+  void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta) {
     ldout(cct, 20) << __func__ << dendl;
-    static uint64_t max_conf_items = 128;
     std::map<string, bool> configs = boost::assign::map_list_of(
         "rbd_non_blocking_aio", false)(
         "rbd_cache", false)(
@@ -943,39 +940,18 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_object_flush_age", false)(
         "rbd_journal_pool", false);
 
-    string start = METADATA_CONF_PREFIX;
     md_config_t local_config_t;
+    std::map<std::string, bufferlist> res;
 
-    bool retrieve_metadata = !old_format;
-    while (retrieve_metadata) {
-      map<string, bufferlist> pairs, res;
-      int r = cls_client::metadata_list(&md_ctx, header_oid, start, max_conf_items,
-                                    &pairs);
-      if (r == -EOPNOTSUPP || r == -EIO) {
-        ldout(cct, 10) << "config metadata not supported by OSD" << dendl;
-        break;
-      } else if (r < 0) {
-        lderr(cct) << __func__ << " couldn't list config metadata: " << r
+    _filter_metadata_confs(METADATA_CONF_PREFIX, configs, meta, &res);
+    for (auto it : res) {
+      std::string val(it.second.c_str(), it.second.length());
+      int j = local_config_t.set_val(it.first.c_str(), val);
+      if (j < 0) {
+        lderr(cct) << __func__ << " failed to set config " << it.first
+                   << " with value " << it.second.c_str() << ": " << j
                    << dendl;
-        break;
       }
-      if (pairs.empty()) {
-        break;
-      }
-
-      retrieve_metadata = _filter_metadata_confs(METADATA_CONF_PREFIX, configs,
-                                                 pairs, &res);
-      for (map<string, bufferlist>::iterator it = res.begin();
-           it != res.end(); ++it) {
-        string val(it->second.c_str(), it->second.length());
-        int j = local_config_t.set_val(it->first.c_str(), val);
-        if (j < 0) {
-          lderr(cct) << __func__ << " failed to set config " << it->first
-                     << " with value " << it->second.c_str() << ": " << j
-                     << dendl;
-        }
-      }
-      start = pairs.rbegin()->first;
     }
 
 #define ASSIGN_OPTION(config)                                                  \
