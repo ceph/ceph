@@ -74,6 +74,7 @@ public:
   static const int STATE_PURGING =      (1<<2);
   static const int STATE_BADREMOTEINO = (1<<3);
   static const int STATE_EVALUATINGSTRAY = (1<<4);
+  static const int STATE_PURGINGPINNED =  (1<<5);
   // stray dentry needs notification of releasing reference
   static const int STATE_STRAY =	STATE_NOTIFYREF;
 
