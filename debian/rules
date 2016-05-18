@@ -117,8 +117,7 @@ binary-arch: build install
 	dh_install -a --sourcedir=$(DESTDIR) --list-missing
 	install -d -m0755 debian/ceph-base/etc/logrotate.d
 	install -m0644 debian/ceph.logrotate debian/ceph-base/etc/logrotate.d
-	dh_installinit -p ceph-base --name ceph --no-start
-	dh_installinit -p radosgw --no-start
+
 	# dh_installinit is only set up to handle one upstart script
 	# per package, so do this ourselves
 	install -d -m0755 debian/ceph-base/etc/init
@@ -156,18 +155,28 @@ binary-arch: build install
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-base/lib/systemd/system/ceph-create-keys@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
+	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
+	install -m0644 systemd/ceph-osd.target debian/ceph-osd/lib/systemd/system
 
 	install -d -m0755 debian/ceph-mds/lib/systemd/system
 	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
+	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
 
 	install -d -m0755 debian/radosgw/lib/systemd/system
 	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
+	install -m0644 systemd/ceph-radosgw.target debian/radosgw/lib/systemd/system
 
 	install -d -m0755 debian/rbd-mirror/lib/systemd/system
 	install -m0644 systemd/ceph-rbd-mirror@.service debian/rbd-mirror/lib/systemd/system
 	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
+	install -m0644 systemd/ceph-rbd-mirror.target debian/rbd-mirror/lib/systemd/system
+
+	dh_systemd_enable
+	dh_installinit -p ceph-base --name ceph --no-start
+	dh_installinit -p radosgw --no-start
+	dh_systemd_start --no-restart-on-upgrade
 
 	dh_installman -a
 	dh_lintian -a
