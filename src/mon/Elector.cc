@@ -430,10 +430,10 @@ void Elector::dispatch(MonOpRequestRef op)
 	return;
       }
 
-      MonMap *peermap = new MonMap;
-      peermap->decode(em->monmap_bl);
-      if (peermap->epoch > mon->monmap->epoch) {
-	dout(0) << em->get_source_inst() << " has newer monmap epoch " << peermap->epoch
+      MonMap peermap;
+      peermap.decode(em->monmap_bl);
+      if (peermap.epoch > mon->monmap->epoch) {
+	dout(0) << em->get_source_inst() << " has newer monmap epoch " << peermap.epoch
 		<< " > my epoch " << mon->monmap->epoch 
 		<< ", taking it"
 		<< dendl;
@@ -445,15 +445,13 @@ void Elector::dispatch(MonOpRequestRef op)
 	//mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	cancel_timer();
 	mon->bootstrap();
-	delete peermap;
 	return;
       }
-      if (peermap->epoch < mon->monmap->epoch) {
-	dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap->epoch
+      if (peermap.epoch < mon->monmap->epoch) {
+	dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap.epoch
 		<< " < my epoch " << mon->monmap->epoch 
 		<< dendl;
       } 
-      delete peermap;
 
       switch (em->op) {
       case MMonElection::OP_PROPOSE:
