@@ -1251,7 +1251,7 @@ namespace librbd {
     }
 
     int cg_dirty_link(librados::IoCtx *ioctx, const std::string &oid,
-                      std::string &image_id, int64_t pool_id)
+                      const std::string &image_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(image_id, bl);
@@ -1261,7 +1261,7 @@ namespace librbd {
     }
 
     int cg_to_default(librados::IoCtx *ioctx, const std::string &oid,
-		      std::string &image_id, int64_t pool_id)
+		      const std::string &image_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(image_id, bl);
@@ -1271,7 +1271,7 @@ namespace librbd {
     }
 
     int cg_remove_image(librados::IoCtx *ioctx, const std::string &oid,
-		        std::string &image_id, int64_t pool_id)
+		        const std::string &image_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(image_id, bl);
@@ -1281,7 +1281,7 @@ namespace librbd {
     }
 
     int image_add_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
-	                 std::string &cg_id, int64_t pool_id)
+	                 const std::string &cg_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(cg_id, bl);
@@ -1291,7 +1291,7 @@ namespace librbd {
     }
 
     int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
-	                    std::string &cg_id, int64_t pool_id)
+	                    const std::string &cg_id, int64_t pool_id)
     {
       bufferlist bl, bl2;
       ::encode(cg_id, bl);
