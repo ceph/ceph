@@ -103,7 +103,8 @@ bool ReplayStatusFormatter<I>::calculate_behind_master_or_send_update() {
 
   m_entries_behind_master = 0;
 
-  if (m_master_position == cls::journal::ObjectPosition()) {
+  if (m_master_position == cls::journal::ObjectPosition() ||
+      m_master_position.tag_tid < m_mirror_position.tag_tid) {
     return true;
   }
 
