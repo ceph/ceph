@@ -1416,6 +1416,48 @@ int librados::IoCtxImpl::read(const object_t& oid,
   return bl.length();
 }
 
+int librados::IoCtxImpl::repair_copy(const object_t& oid,
+				     uint64_t ver, uint32_t what,
+				     const std::vector<pg_shard_t>& bad_shards,
+				     epoch_t epoch)
+{
+  ::ObjectOperation op;
+  op.assert_interval(epoch);
+  op.assert_version(ver);
+  op.repair_copy(what, bad_shards);
+  return operate(oid, &op, nullptr, CEPH_OSD_FLAG_REPAIR_WRITES);
+}
+
+int librados::IoCtxImpl::aio_repair_copy(const object_t& oid, AioCompletionImpl *comp,
+					 uint64_t ver, uint32_t what,
+					 const std::vector<pg_shard_t>& bad_shards,
+					 epoch_t epoch)
+{
+  ::ObjectOperation op;
+  op.assert_interval(epoch);
+  op.assert_version(ver);
+  op.repair_copy(what, bad_shards);
+
+  auto onack = new C_aio_Complete(comp);
+
+  comp->io = this;
+  queue_aio_write(comp);
+
+  auto objecter_op = objecter->prepare_mutate_op(oid, oloc, op, snapc,
+						 ceph::real_clock::now(),
+						 CEPH_OSD_FLAG_REPAIR_WRITES,
+						 onack, &comp->objver);
+
+  int src_osd = objecter->pick_random_osd(objecter_op->target, bad_shards);
+  if (src_osd == -1) {
+    onack->complete(-EINVAL);
+    return -EINVAL;
+  }
+  objecter_op->target.forced_osd = src_osd;
+  objecter->op_submit(objecter_op, &comp->tid);
+  return 0;
+}
+
 int librados::IoCtxImpl::mapext(const object_t& oid,
 				uint64_t off, size_t len,
 				std::map<uint64_t,uint64_t>& m)

@@ -758,6 +758,20 @@ namespace librados
 		  size_t write_len, uint64_t off);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int repair_read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off, int flags, int32_t osdid, uint32_t epoch);
+    /**
+     * Rewrite the object with the replica hosted by specified osd
+     *
+     * @param bad_shards a list of <osd_id, shard_id> pairs. it is a black list
+     *                   of if the object shards/replicas, we will avoid using
+     *                   shards/replicas from them. if the object specified by @c
+     *                   oid is located in a replicated pool, the shard_id will
+     *                   be ignored.
+     * @param version the version of rewritten object
+     * @param what the flags indicating what we will copy
+     */
+    int repair_copy(const std::string& oid, uint64_t version, uint32_t what,
+                    const std::vector<osd_shard_t>& bad_shards,
+                    uint32_t epoch);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
@@ -992,6 +1006,9 @@ namespace librados
     int aio_repair_read(const std::string& oid, AioCompletion *c,
                         bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid, int flags,
                         int32_t osdid, uint32_t interval);
+    int aio_repair_copy(const std::string& oid, AioCompletion *c,
+         uint64_t version, uint32_t what,
+         const std::vector<osd_shard_t>& bad_osd_shards, uint32_t epoch);
     /**
      * Asynchronously read existing extents from an object at a
      * particular snapshot

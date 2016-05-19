@@ -2236,6 +2236,30 @@ void librados::IoCtx::set_assert_version(uint64_t ver)
   io_ctx_impl->set_assert_version(ver);
 }
 
+int librados::IoCtx::repair_copy(const string& oid, uint64_t version, uint32_t what,
+				 const vector<osd_shard_t>& bad_shards,
+				 uint32_t epoch)
+{
+  vector<pg_shard_t> shards;
+  for (const auto& bad_shard : bad_shards) {
+    shards.emplace_back(bad_shard.osd, shard_id_t(bad_shard.shard));
+  }
+  return io_ctx_impl->repair_copy(object_t(oid), version, what, shards, epoch);
+}
+
+int librados::IoCtx::aio_repair_copy(const std::string& oid, AioCompletion *c,
+				     uint64_t version, uint32_t what,
+				     const vector<osd_shard_t>& bad_shards,
+				     uint32_t epoch)
+{
+  vector<pg_shard_t> shards;
+  for (const auto& bad_shard : bad_shards) {
+    shards.emplace_back(bad_shard.osd, shard_id_t(bad_shard.shard));
+  }
+  return io_ctx_impl->aio_repair_copy(object_t(oid), c->pc, version, what,
+				      shards, epoch);
+}
+
 void librados::IoCtx::locator_set_key(const string& key)
 {
   io_ctx_impl->oloc.key = key;
