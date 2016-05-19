@@ -255,10 +255,8 @@ struct entity_addr_t {
     switch (u.sa.sa_family) {
     case AF_INET:
       return sizeof(u.sin);
-      break;
     case AF_INET6:
       return sizeof(u.sin6);
-      break;
     }
     return sizeof(u);
   }
