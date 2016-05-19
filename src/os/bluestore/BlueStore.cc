@@ -5427,14 +5427,14 @@ void BlueStore::_do_write_small(
     uint64_t b_off = offset - head_pad - bstart;
     uint64_t b_len = length + head_pad + tail_pad;
     if (b->get_ondisk_length() >= b_off + b_len &&
-	b->is_unreferenced(b_off, b_len) &&
+	b->is_unused(b_off, b_len) &&
 	(!b->has_csum_data() || (b_off % b->get_csum_block_size() == 0 &&
 				 b_len % b->get_csum_block_size() == 0))) {
-#warning this is currently racy; we may be pipelined with an op that derefs this range.  once we have a buffer cache the problem will go away.
-      dout(20) << __func__ << "  write to unreferenced 0x" << std::hex
+      dout(20) << __func__ << "  write to unused 0x" << std::hex
 	       << b_off << "~0x" << b_len
 	       << " pad 0x" << head_pad << " + 0x" << tail_pad
 	       << std::dec << " of mutable " << blob << ": " << b << dendl;
+      assert(b->is_unreferenced(b_off, b_len));
       b->map_bl(b_off, padded,
 		[&](uint64_t offset, uint64_t length, bufferlist& t) {
 		  bdev->aio_write(offset, t,
