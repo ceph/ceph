@@ -1582,7 +1582,7 @@ int FileStore::mount()
         ret = -errno;
         derr << "FileStore::mount: error opening '" << omap_fsid_buf << "': "
         << cpp_strerror(ret) << dendl;
-        goto done;
+        goto close_current_fd;
     }
     ret = read_fsid(omap_fsid_fd, &omap_fsid);
     if (ret < 0) {
