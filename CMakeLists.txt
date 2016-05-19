@@ -353,6 +353,16 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)
 
+option(WITH_SELINUX "build SELinux policy" OFF)
+if(WITH_SELINUX)
+  find_file(SELINUX_MAKEFILE selinux/devel/include/Makefile
+    PATH /usr/share)
+  if(NOT SELINUX_MAKEFILE)
+    message(FATAL_ERROR "Can't find selinux's Makefile")
+  endif()
+  add_subdirectory(selinux)
+endif(WITH_SELINUX)
+
 # find out which platform we are building on
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
   set(LINUX ON)
