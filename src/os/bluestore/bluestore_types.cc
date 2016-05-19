@@ -14,6 +14,7 @@
 
 #include "bluestore_types.h"
 #include "common/Formatter.h"
+#include "common/Checksummer.h"
 #include "include/stringify.h"
 
 // bluestore_bdev_label_t
@@ -519,6 +520,36 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   }
   out << ")";
   return out;
+}
+
+void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
+{
+  switch (csum_type) {
+  case CSUM_XXHASH32:
+    Checksummer::calculate<Checksummer::xxhash32>(
+      get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
+    break;
+  case CSUM_CRC32C:
+    Checksummer::calculate<Checksummer::crc32c>(
+      get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
+    break;
+  }
+}
+
+int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl) const
+{
+  switch (csum_type) {
+  case CSUM_NONE:
+    return -1;
+  case CSUM_XXHASH32:
+    return Checksummer::verify<Checksummer::xxhash32>(
+      get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+  case CSUM_CRC32C:
+    return Checksummer::verify<Checksummer::crc32c>(
+      get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+  default:
+    return -EOPNOTSUPP;
+  }
 }
 
 // bluestore_lextent_t
