@@ -391,7 +391,6 @@ void ReplicatedPG::maybe_kick_recovery(
   } else {
     dout(7) << "object " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-    h->cache_dont_need = false;
     if (is_missing_object(soid)) {
       recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
     } else {
