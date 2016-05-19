@@ -21,12 +21,10 @@
 %else
 %bcond_without tcmalloc
 %endif
-%bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %bcond_without ceph_test_package
 %bcond_without cephfs_java
-%bcond_with lowmem_builder
 %bcond_without lttng
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
@@ -34,7 +32,6 @@
 %bcond_with selinux
 %bcond_with ceph_test_package
 %bcond_with cephfs_java
-%bcond_without lowmem_builder
 #Compat macro for new _fillupdir macro introduced in Nov 2017
 %if ! %{defined _fillupdir}
 %global _fillupdir /var/adm/fillup-templates
@@ -152,6 +149,7 @@ BuildRequires:	make
 BuildRequires:	parted
 BuildRequires:	perl
 BuildRequires:	pkgconfig
+BuildRequires:  procps
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
@@ -813,7 +811,8 @@ for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
 done
 %endif
 
-%if %{with lowmem_builder}
+%if 0%{?suse_version}
+# the following setting fixed an OOM condition we once encountered in the OBS
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
@@ -822,18 +821,29 @@ export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
 
+# Parallel build settings ...
+CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
+CEPH_SMP_NCPUS=$(echo "$CEPH_MFLAGS_JOBS" | sed 's/-j//')
+%if 0%{?__isa_bits} == 32
+# 32-bit builds can use 3G memory max, which is not enough even for -j2
+CEPH_SMP_NCPUS="1"
+%endif
+# do not eat all memory
+echo "Available memory:"
+free -h
+echo "System limits:"
+ulimit -a
+if test -n "$CEPH_SMP_NCPUS" -a "$CEPH_SMP_NCPUS" -gt 1 ; then
+    mem_per_process=1800
+    max_mem=$(LANG=C free -m | sed -n "s|^Mem: *\([0-9]*\).*$|\1|p")
+    max_jobs="$(($max_mem / $mem_per_process))"
+    test "$CEPH_SMP_NCPUS" -gt "$max_jobs" && CEPH_SMP_NCPUS="$max_jobs" && echo "Warning: Reducing build parallelism to -j$max_jobs because of memory limits"
+    test "$CEPH_SMP_NCPUS" -le 0 && CEPH_SMP_NCPUS="1" && echo "Warning: Not using parallel build at all because of memory limits"
+fi
+export CEPH_SMP_NCPUS
+export CEPH_MFLAGS_JOBS="-j$CEPH_SMP_NCPUS"
+
 env | sort
-
-%if %{with lowmem_builder}
-%if 0%{?jobs} > 8
-%define _smp_mflags -j8
-%endif
-%endif
-
-# unlimit _smp_mflags in system macro if not set above
-%define _smp_ncpus_max 0
-# extract the number of processors for use with cmake
-%define _smp_ncpus %(echo %{_smp_mflags} | sed 's/-j//')
 
 mkdir build
 cd build
@@ -878,9 +888,9 @@ cmake .. \
 %else
     -DWITH_BOOST_CONTEXT=OFF \
 %endif
-    -DBOOST_J=%{_smp_ncpus}
+    -DBOOST_J=$CEPH_SMP_NCPUS
 
-make %{?_smp_mflags}
+make "$CEPH_MFLAGS_JOBS"
 
 
 %if 0%{with make_check}
