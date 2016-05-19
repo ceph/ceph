@@ -5,6 +5,7 @@
 #include "os/bluestore/bluestore_types.h"
 #include "gtest/gtest.h"
 #include "include/stringify.h"
+#include "common/ceph_time.h"
 
 #include <sstream>
 
@@ -235,6 +236,32 @@ TEST(bluestore_blob_t, calc_csum)
     ASSERT_EQ(-1, b.verify_csum(8, n));
     ASSERT_EQ(-1, b.verify_csum(16, e));
     ASSERT_EQ(8, b.verify_csum(0, bl));
+  }
+}
+
+TEST(bluestore_blob_t, csum_bench)
+{
+  bufferlist bl;
+  bufferptr bp(10485760);
+  for (char *a = bp.c_str(); a < bp.c_str() + bp.length(); ++a)
+    *a = (unsigned long)a & 0xff;
+  bl.append(bp);
+  int count = 256;
+  for (unsigned csum_type = 1;
+       csum_type < bluestore_blob_t::CSUM_MAX;
+       ++csum_type) {
+    bluestore_blob_t b;
+    b.init_csum(csum_type, 12, bl.length());
+    ceph::mono_clock::time_point start = ceph::mono_clock::now();
+    for (int i = 0; i<count; ++i) {
+      b.calc_csum(0, bl);
+    }
+    ceph::mono_clock::time_point end = ceph::mono_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    double mbsec = (double)count * (double)bl.length() / 1000000.0 / (double)dur.count() * 1000000000.0;
+    cout << "csum_type " << bluestore_blob_t::get_csum_type_string(csum_type)
+	 << ", " << dur << " seconds, "
+	 << mbsec << " MB/sec" << std::endl;
   }
 }
 
