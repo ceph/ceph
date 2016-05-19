@@ -529,6 +529,10 @@ void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
     Checksummer::calculate<Checksummer::xxhash32>(
       get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
     break;
+  case CSUM_XXHASH64:
+    Checksummer::calculate<Checksummer::xxhash64>(
+      get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
+    break;;
   case CSUM_CRC32C:
     Checksummer::calculate<Checksummer::crc32c>(
       get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
@@ -543,6 +547,9 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl) const
     return -1;
   case CSUM_XXHASH32:
     return Checksummer::verify<Checksummer::xxhash32>(
+      get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+  case CSUM_XXHASH64:
+    return Checksummer::verify<Checksummer::xxhash64>(
       get_csum_block_size(), b_off, bl.length(), bl, csum_data);
   case CSUM_CRC32C:
     return Checksummer::verify<Checksummer::crc32c>(
