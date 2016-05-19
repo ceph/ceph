@@ -1,3 +1,4 @@
+import os
 import subprocess
 
 from mock import patch, Mock, MagicMock
@@ -49,10 +50,12 @@ class TestWorker(object):
     @patch("teuthology.worker.teuth_config")
     @patch("subprocess.Popen")
     @patch("os.environ")
+    @patch("os.mkdir")
     @patch("yaml.safe_dump")
     @patch("tempfile.NamedTemporaryFile")
-    def test_run_job_with_watchdog(self, m_tempfile, m_safe_dump, m_environ,
-                                   m_popen, m_t_config, m_run_watchdog):
+    def test_run_job_with_watchdog(self, m_tempfile, m_safe_dump, m_mkdir,
+                                   m_environ, m_popen, m_t_config,
+                                   m_run_watchdog):
         config = {
             "suite_path": "suite/path",
             "config": {"foo": "bar"},
@@ -60,7 +63,8 @@ class TestWorker(object):
             "owner": "the_owner",
             "archive_path": "archive/path",
             "name": "the_name",
-            "description": "the_description"
+            "description": "the_description",
+            "job_id": "1",
         }
         m_tmp = MagicMock()
         temp_file = Mock()
@@ -73,7 +77,7 @@ class TestWorker(object):
         m_p.returncode = 0
         m_popen.return_value = m_p
         m_t_config.results_server = True
-        worker.run_job(config, "teuth/bin/path", verbose=False)
+        worker.run_job(config, "teuth/bin/path", "archive/dir", verbose=False)
         m_run_watchdog.assert_called_with(m_p, config)
         expected_args = [
             'teuth/bin/path/teuthology',
@@ -95,10 +99,12 @@ class TestWorker(object):
     @patch("teuthology.worker.teuth_config")
     @patch("subprocess.Popen")
     @patch("os.environ")
+    @patch("os.mkdir")
     @patch("yaml.safe_dump")
     @patch("tempfile.NamedTemporaryFile")
-    def test_run_job_no_watchdog(self, m_tempfile, m_safe_dump, m_environ,
-                                 m_popen, m_t_config, m_symlink_log, m_sleep):
+    def test_run_job_no_watchdog(self, m_tempfile, m_safe_dump, m_mkdir,
+                                 m_environ, m_popen, m_t_config, m_symlink_log,
+                                 m_sleep):
         config = {
             "suite_path": "suite/path",
             "config": {"foo": "bar"},
@@ -107,7 +113,8 @@ class TestWorker(object):
             "archive_path": "archive/path",
             "name": "the_name",
             "description": "the_description",
-            "worker_log": "worker/log.log"
+            "worker_log": "worker/log.log",
+            "job_id": "1",
         }
         m_tmp = MagicMock()
         temp_file = Mock()
@@ -120,7 +127,7 @@ class TestWorker(object):
         m_p.returncode = 1
         m_popen.return_value = m_p
         m_t_config.results_server = False
-        worker.run_job(config, "teuth/bin/path", verbose=False)
+        worker.run_job(config, "teuth/bin/path", "archive/dir", verbose=False)
         m_symlink_log.assert_called_with(config["worker_log"], config["archive_path"])
 
     @patch("teuthology.worker.report.try_push_job_info")
@@ -168,3 +175,34 @@ class TestWorker(object):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT
         )
+
+    @patch("os.path.isdir")
+    @patch("teuthology.worker.fetch_teuthology")
+    @patch("teuthology.worker.fetch_qa_suite")
+    def test_prep_job(self, m_fetch_qa_suite,
+                      m_fetch_teuthology, m_isdir):
+        config = dict(
+            name="the_name",
+            job_id="1",
+        )
+        archive_dir = '/archive/dir'
+        log_file_path = '/worker/log'
+        m_fetch_teuthology.return_value = '/teuth/path'
+        m_fetch_qa_suite.return_value = '/suite/path'
+        m_isdir.return_value = True
+        got_config, teuth_bin_path = worker.prep_job(
+            config,
+            log_file_path,
+            archive_dir,
+        )
+        assert got_config['worker_log'] == log_file_path
+        assert got_config['archive_path'] == os.path.join(
+            archive_dir,
+            config['name'],
+            config['job_id'],
+        )
+        assert got_config['teuthology_branch'] == 'master'
+        assert m_fetch_teuthology.called_once_with_args(branch='master')
+        assert teuth_bin_path == '/teuth/path/virtualenv/bin'
+        assert m_fetch_qa_suite.called_once_with_args(branch='master')
+        assert got_config['suite_path'] == '/suite/path'
