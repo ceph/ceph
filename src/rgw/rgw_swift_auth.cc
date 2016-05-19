@@ -1,7 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <array>
+
 #include <boost/utility/string_ref.hpp>
+#include <boost/container/static_vector.hpp>
 
 #include "rgw_swift_auth.h"
 #include "rgw_rest.h"
@@ -138,7 +141,7 @@ std::string extract_swift_subuser(const std::string& swift_user_name) {
   }
 }
 
-class TempURLSig
+class RGWTempURLAuthEngine::SignatureHelper
 {
 private:
   static constexpr uint32_t output_size =
@@ -148,18 +151,18 @@ private:
   char dest_str[output_size];
 
 public:
-  TempURLSig() {}
+  SignatureHelper() = default;
 
-  const char* calc(const string& key,
-		  const string& method,
-		  const boost::string_ref& path,
-		  const string& expires) {
+  const char* calc(const std::string& key,
+                   const boost::string_ref& method,
+                   const boost::string_ref& path,
+                   const std::string& expires) {
 
     using ceph::crypto::HMACSHA1;
     using UCHARPTR = const unsigned char*;
 
     HMACSHA1 hmac((UCHARPTR) key.c_str(), key.size());
-    hmac.Update((UCHARPTR) method.c_str(), method.size());
+    hmac.Update((UCHARPTR) method.data(), method.size());
     hmac.Update((UCHARPTR) "\n", 1);
     hmac.Update((UCHARPTR) expires.c_str(), expires.size());
     hmac.Update((UCHARPTR) "\n", 1);
@@ -171,14 +174,15 @@ public:
     return dest_str;
   }
 
-  int comp(const std::string& rhs) {
+  bool is_equal_to(const std::string& rhs) const {
     /* never allow out-of-range exception */
-    if (rhs.size() < output_size)
-      return -1;
-    return rhs.compare(0 /* pos */,  output_size, dest_str);
+    if (rhs.size() < (output_size - 1)) {
+      return false;
+    }
+    return rhs.compare(0 /* pos */,  output_size, dest_str) == 0;
   }
 
-}; /* TempURLSig */
+}; /* RGWTempURLAuthEngine::SignatureHelper */
 
 RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
 {
@@ -213,24 +217,28 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
   boost::string_ref ref_uri = s->info.request_uri;
-  const vector<boost::string_ref> allowed_paths = {
+  const std::array<boost::string_ref, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  /* XXX Boost 1.6 small_vector--or maybe, could we select from a few static
-   * vectors? */
-  std::vector<std::string> allowed_methods;
+  boost::container::static_vector<boost::string_ref, 3> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
-    allowed_methods = { "HEAD", "GET", "PUT" };
+    /* TODO: after getting a newer boost (with static_vector supporting
+     * initializers lists), get back to the good notation:
+     *   allowed_methods = {"HEAD", "GET", "PUT" };
+     * Just for now let's use emplace_back to construct the vector. */
+    allowed_methods.emplace_back("HEAD");
+    allowed_methods.emplace_back("GET");
+    allowed_methods.emplace_back("PUT");
   } else if (strlen(s->info.method) > 0) {
-    allowed_methods = { s->info.method };
+    allowed_methods.emplace_back(s->info.method);
   }
 
   /* Need to try each combination of keys, allowed path and methods. */
-  TempURLSig sig_helper;
+  SignatureHelper sig_helper;
   for (const auto& kv : owner_info.temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;
@@ -241,18 +249,18 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
 
     for (const auto& path : allowed_paths) {
       for (const auto& method : allowed_methods) {
-        const char* local_sig = sig_helper.calc(temp_url_key, method, path,
-						temp_url_expires);
+        const char* const local_sig = sig_helper.calc(temp_url_key, method,
+                                                      path, temp_url_expires);
 
         ldout(s->cct, 20) << "temp url signature [" << temp_url_key_num
                           << "] (calculated): " << local_sig
                           << dendl;
 
-        if (!!sig_helper.comp(temp_url_sig)) {
+        if (sig_helper.is_equal_to(temp_url_sig)) {
+          return apl_factory->create_apl_turl(cct, owner_info);
+        } else {
           ldout(s->cct,  5) << "temp url signature mismatch: " << local_sig
                             << " != " << temp_url_sig  << dendl;
-        } else {
-          return apl_factory->create_apl_turl(cct, owner_info);
         }
       }
     }

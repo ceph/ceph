@@ -38,6 +38,8 @@ protected:
   void get_owner_info(RGWUserInfo& owner_info) const;
   bool is_expired(const std::string& expires) const;
 
+  class SignatureHelper;
+
 public:
   RGWTempURLAuthEngine(const req_state * const s,
                        /*const*/ RGWRados * const store,
