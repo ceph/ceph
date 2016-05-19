@@ -351,7 +351,7 @@ static int do_repair_get(IoCtx& io_ctx, const char *objname,
     if (force) flags |= LIBRADOS_OP_FLAG_FAILOK;
     ret = io_ctx.repair_read(oid, outdata, op_size, offset, flags, osdid, epoch);
     if (ret <= 0) {
-      if (ret == -EINVAL)
+      if (ret == -EINVAL || ret == -ERANGE)
 	cerr << "Specified epoch does not match scrub interval" << std::endl;
       break;
     }
