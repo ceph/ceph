@@ -3205,8 +3205,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   string::size_type pos;
   bool using_qs;
 
-  time_t now, now_req=0;
-  time(&now);
+  uint64_t now_req = 0;
+  uint64_t now = ceph_clock_now(s->cct);
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
@@ -3245,7 +3245,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
         return -EPERM;
       }
       /* handle expiration in epoch time */
-      now_req = mktime(&date_t);
+      now_req = (uint64_t)timegm(&date_t);
       if (now >= now_req + exp) {
         dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
         return -EPERM;
@@ -3279,7 +3279,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     s->aws4_auth->credential = s->http_auth;
 #define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
 #define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
-    ssize_t min_len = CREDENTIALS_PREFIX_LEN + 1;
+    uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
     if (s->aws4_auth->credential.length() < min_len) {
       ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
       return -EINVAL;
