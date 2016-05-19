@@ -262,21 +262,22 @@ namespace librbd {
 
   void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
 					 uint64_t len,
-					 ceph_tid_t journal_tid) {
+					 ceph_tid_t original_journal_tid,
+                                         ceph_tid_t new_journal_tid) {
     typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     // all IO operations are flushed prior to closing the journal
-    assert(journal_tid != 0 && m_ictx->journal != NULL);
+    assert(original_journal_tid != 0 && m_ictx->journal != NULL);
 
     Extents file_extents;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
 			    len, file_extents);
     for (Extents::iterator it = file_extents.begin();
 	 it != file_extents.end(); ++it) {
-      m_ictx->journal->commit_io_event_extent(journal_tid, it->first,
+      m_ictx->journal->commit_io_event_extent(original_journal_tid, it->first,
 					      it->second, 0);
     }
   }
