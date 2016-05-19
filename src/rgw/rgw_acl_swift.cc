@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#include <list>
+#include <vector>
 
 #include "common/ceph_json.h"
 #include "rgw_common.h"
@@ -22,7 +22,8 @@ using namespace std;
 
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
-static int parse_list(const string& uid_list, list<string>& uids)
+static int parse_list(const std::string& uid_list,
+                      std::vector<std::string>& uids)           /* out */
 {
   char *s = strdup(uid_list.c_str());
   if (!s) {
@@ -97,7 +98,7 @@ static bool normalize_referer_urlspec(string& url_spec, bool& is_negative)
 }
 
 void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados * const store,
-                                              const list<string>& uids,
+                                              const std::vector<std::string>& uids,
                                               const int perm)
 {
   for (const auto& uid : uids) {
@@ -159,7 +160,7 @@ bool RGWAccessControlPolicy_SWIFT::create(RGWRados * const store,
   owner.set_name(name);
 
   if (read_list.size()) {
-    list<string> uids;
+    std::vector<std::string> uids;
     int r = parse_list(read_list, uids);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: parse_list returned r=" << r << dendl;
@@ -169,7 +170,7 @@ bool RGWAccessControlPolicy_SWIFT::create(RGWRados * const store,
     add_grants(store, uids, SWIFT_PERM_READ);
   }
   if (write_list.size()) {
-    list<string> uids;
+    std::vector<std::string> uids;
     int r = parse_list(write_list, uids);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: parse_list returned r=" << r << dendl;
@@ -210,7 +211,7 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
 }
 
 void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
-                                                  const list<string>& uids,
+                                                  const std::vector<std::string>& uids,
                                                   const int perm)
 {
   for (const auto uid : uids) {
@@ -254,7 +255,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
 
   JSONObjIter iter = parser.find_first("admin");
   if (!iter.end() && (*iter)->is_array()) {
-    list<string> admin;
+    std::vector<std::string> admin;
     decode_json_obj(admin, *iter);
     ldout(cct, 0) << "admins: " << admin << dendl;
 
@@ -263,7 +264,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
 
   iter = parser.find_first("read-write");
   if (!iter.end() && (*iter)->is_array()) {
-    list<string> readwrite;
+    std::vector<std::string> readwrite;
     decode_json_obj(readwrite, *iter);
     ldout(cct, 0) << "read-write: " << readwrite << dendl;
 
@@ -272,7 +273,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
 
   iter = parser.find_first("read-only");
   if (!iter.end() && (*iter)->is_array()) {
-    list<string> readonly;
+    std::vector<std::string> readonly;
     decode_json_obj(readonly, *iter);
     ldout(cct, 0) << "read-only: " << readonly << dendl;
 
@@ -284,9 +285,9 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
 
 void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
 {
-  list<string> admin;
-  list<string> readwrite;
-  list<string> readonly;
+  std::vector<std::string> admin;
+  std::vector<std::string> readwrite;
+  std::vector<std::string> readonly;
 
   /* Parition the grant map into three not-overlapping groups. */
   for (const auto item : get_acl().get_grant_map()) {

@@ -4,8 +4,8 @@
 #ifndef CEPH_RGW_ACL_SWIFT_H
 #define CEPH_RGW_ACL_SWIFT_H
 
-#include <list>
 #include <map>
+#include <vector>
 #include <string>
 #include <include/types.h>
 
@@ -19,7 +19,9 @@ public:
   }
   ~RGWAccessControlPolicy_SWIFT() {}
 
-  void add_grants(RGWRados *store, const std::list<string>& uids, int perm);
+  void add_grants(RGWRados *store,
+                  const std::vector<std::string>& uids,
+                  int perm);
   bool create(RGWRados *store,
               const rgw_user& id,
               const std::string& name,
@@ -36,7 +38,9 @@ public:
   }
   ~RGWAccessControlPolicy_SWIFTAcct() {}
 
-  void add_grants(RGWRados *store, const std::list<string>& uids, int perm);
+  void add_grants(RGWRados *store,
+                  const std::vector<std::string>& uids,
+                  int perm);
   bool create(RGWRados *store,
               const rgw_user& id,
               const std::string& name,
