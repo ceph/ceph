@@ -552,7 +552,7 @@ add_subdirectory(ceph-detect-init)
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
   $<TARGET_OBJECTS:krbd_objs>
-  common/secret.c
+  $<TARGET_OBJECTS:parse_secret_objs>
   common/TextTable.cc
   )
 if(${WITH_RADOSGW})
