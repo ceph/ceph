@@ -5404,6 +5404,7 @@ void BlueStore::_do_write_small(
     uint64_t b_len = length + head_pad + tail_pad;
     if (b->get_ondisk_length() >= b_off + b_len &&
 	b->is_unused(b_off, b_len) &&
+	b->is_allocated(b_off, b_len) &&
 	(!b->has_csum_data() || (b_off % b->get_csum_block_size() == 0 &&
 				 b_len % b->get_csum_block_size() == 0))) {
       dout(20) << __func__ << "  write to unused 0x" << std::hex
@@ -5469,7 +5470,8 @@ void BlueStore::_do_write_small(
     // chunk-aligned wal overwrite?
     if (b->get_ondisk_length() >= b_off + b_len &&
 	b_off % chunk_size == 0 &&
-	b_len % chunk_size == 0) {
+	b_len % chunk_size == 0 &&
+	b->is_allocated(b_off, b_len)) {
       bluestore_wal_op_t *op = _get_wal_op(txc, o);
       op->op = bluestore_wal_op_t::OP_WRITE;
       b->map(b_off, b_len,
