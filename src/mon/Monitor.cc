@@ -73,6 +73,7 @@
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
+#include "MgrMonitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
@@ -206,6 +207,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, paxos, "pgmap");
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
+  paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
 
   health_monitor = new HealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
@@ -240,6 +242,8 @@ PaxosService *Monitor::get_paxos_service_by_name(const string& name)
     return paxos_service[PAXOS_LOG];
   if (name == "auth")
     return paxos_service[PAXOS_AUTH];
+  if (name == "mgr")
+    return paxos_service[PAXOS_MGR];
 
   assert(0 == "given name does not match known paxos service");
   return NULL;
@@ -3624,6 +3628,10 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       paxos_service[PAXOS_MDSMAP]->dispatch(op);
       break;
 
+    // Mgrs
+    case MSG_MGR_BEACON:
+      paxos_service[PAXOS_MGR]->dispatch(op);
+      break;
 
     // pg
     case CEPH_MSG_STATFS:
@@ -4313,6 +4321,8 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       check_sub(s->sub_map["monmap"]);
     } else if (logmon()->sub_name_to_id(p->first) >= 0) {
       logmon()->check_sub(s->sub_map[p->first]);
+    } else if (p->first == "mgrmap" || p->first == "mgrdigest") {
+      mgrmon()->check_sub(s->sub_map[p->first]);
     }
   }
 
