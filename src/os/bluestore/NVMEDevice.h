@@ -228,7 +228,7 @@ class NVMEDevice : public BlockDevice {
                 IOContext *ioc,
                 bool buffered) override;
   int flush() override;
-  int read_buffered(uint64_t off, uint64_t len, char *buf) override;
+  int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;

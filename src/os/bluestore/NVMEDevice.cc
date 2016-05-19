@@ -938,7 +938,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   return r;
 }
 
-int NVMEDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
+int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
   assert(len > 0);
   assert(off < size);
