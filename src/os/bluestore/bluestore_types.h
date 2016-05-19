@@ -420,6 +420,13 @@ struct bluestore_blob_t {
     csum_block_order = order;
     csum_data.resize(get_csum_value_size() * len / get_csum_block_size());
   }
+
+  /// calculate csum for the buffer at the given b_off
+  void calc_csum(uint64_t b_off, const bufferlist& bl);
+
+  /// verify csum: return offset of error, or -1 for no error.
+  int verify_csum(uint64_t b_off, const bufferlist& bl) const;
+
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)
 
