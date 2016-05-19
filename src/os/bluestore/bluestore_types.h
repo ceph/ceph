@@ -253,6 +253,7 @@ struct bluestore_blob_t {
   uint8_t csum_block_order;        ///< csum block size is 1<<block_order bytes
 
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
+  interval_set<uint32_t> unused;   ///< portion that has never been written to
   vector<char> csum_data;          ///< opaque vector of csum data
 
   bluestore_blob_t(uint32_t l = 0, uint32_t f = 0)
@@ -310,6 +311,27 @@ struct bluestore_blob_t {
 
   bool is_unreferenced(uint64_t offset, uint64_t length) const {
     return !ref_map.intersects(offset, length);
+  }
+
+  /// return true if the logical range has never been used
+  bool is_unused(uint64_t offset, uint64_t length) const {
+    return unused.contains(offset, length);
+  }
+
+  /// mark a range that has never been used
+  void add_unused(uint64_t offset, uint64_t length) {
+    unused.insert(offset, length);
+  }
+
+  /// indicate that a range has (now) been used.
+  void mark_used(uint64_t offset, uint64_t length) {
+    if (unused.empty())
+      return;
+    interval_set<uint32_t> t;
+    t.insert(offset, length);
+    t.intersection_of(unused);
+    if (!t.empty())
+      unused.subtract(t);
   }
 
   void map(uint64_t x_off, uint64_t x_len,
