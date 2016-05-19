@@ -198,4 +198,30 @@ set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
+testlog "TEST: simple image resync"
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: image resync while replayer is stopped"
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL}/${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
+testlog "TEST: request image resync while daemon is offline"
+stop_mirror ${CLUSTER1}
+request_resync_image ${CLUSTER1} ${POOL} ${image}
+start_mirror ${CLUSTER1}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+test_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+compare_images ${POOL} ${image}
+
 echo OK
