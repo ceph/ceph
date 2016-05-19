@@ -3938,30 +3938,6 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
   return txc;
 }
 
-void BlueStore::_txc_release(
-  TransContext *txc, CollectionRef& c, OnodeRef& o,
-  uint64_t offset, uint64_t length,
-  bool shared)
-{
-  if (shared) {
-    vector<bluestore_pextent_t> release;
-    if (!o->bnode)
-      o->bnode = c->get_bnode(o->oid.hobj.get_hash());
-    o->bnode->ref_map.put(offset, length, &release);
-    dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
-	     << std::dec << " shared: ref_map now " << o->bnode->ref_map
-	     << " releasing " << release << dendl;
-    txc->write_bnode(o->bnode);
-    for (auto& p : release) {
-      txc->released.insert(p.offset, p.length);
-    }
-  } else {
-    dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
-	     << std::dec << dendl;
-    txc->released.insert(offset, length);
-  }
-}
-
 void BlueStore::_txc_state_proc(TransContext *txc)
 {
   while (true) {
