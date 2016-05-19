@@ -2144,10 +2144,6 @@ public:
    */
   virtual int list_collections(vector<coll_t>& ls) = 0;
 
-  virtual int collection_version_current(const coll_t& c, uint32_t *version) {
-    *version = 0;
-    return 1;
-  }
   /**
    * does a collection exist?
    *
