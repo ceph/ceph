@@ -122,7 +122,7 @@ add_executable(ceph_test_librbd_fsx
   fsx.cc
   $<TARGET_OBJECTS:krbd_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
+  $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd_fsx
   librbd
