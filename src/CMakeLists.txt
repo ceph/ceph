@@ -1307,7 +1307,8 @@ add_custom_target(vstart DEPENDS
     ceph-authtool
     ceph-conf
     monmaptool
-    crushtool)
+    crushtool
+    cython_rados)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
