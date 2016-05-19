@@ -941,7 +941,7 @@ int FileStore::mkfs()
   if (omap_fsid_fd < 0) {
     ret = -errno;
     derr << "mkfs: failed to open " << omap_fsid_fn << ": " << cpp_strerror(ret) << dendl;
-    goto close_basedir_fd;
+    goto close_fsid_fd;
   }
 
   if (read_fsid(omap_fsid_fd, &old_omap_fsid) < 0 || old_omap_fsid.is_zero()) {
