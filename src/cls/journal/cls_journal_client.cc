@@ -14,8 +14,6 @@ namespace client {
 
 namespace {
 
-static const uint64_t JOURNAL_MAX_RETURN = 256;
-
 struct C_AioExec : public Context {
   librados::IoCtx ioctx;
   std::string oid;
