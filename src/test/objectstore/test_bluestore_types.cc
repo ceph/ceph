@@ -191,42 +191,51 @@ TEST(bluestore_extent_ref_map_t, intersects)
 TEST(bluestore_blob_t, calc_csum)
 {
   bufferlist bl;
-  bl.append("asdfqwerzxcv");
+  bl.append("asdfghjkqwertyuizxcvbnm,");
   bufferlist bl2;
-  bl2.append("xxxxyyyyzzzz");
-  bluestore_blob_t b;
-  ASSERT_EQ(-1, b.verify_csum(0, bl));
-
-  b.init_csum(bluestore_blob_t::CSUM_CRC32C, 2, 12);
-  b.calc_csum(0, bl);
-  ASSERT_EQ(-1, b.verify_csum(0, bl));
-  ASSERT_EQ(0, b.verify_csum(0, bl2));
-
+  bl2.append("xxxxXXXXyyyyYYYYzzzzZZZZ");
   bufferlist f;
-  f.substr_of(bl, 0, 4);
-  ASSERT_EQ(-1, b.verify_csum(0, f));
-  ASSERT_EQ(4, b.verify_csum(4, f));
-  ASSERT_EQ(8, b.verify_csum(8, f));
-
+  f.substr_of(bl, 0, 8);
   bufferlist m;
-  m.substr_of(bl, 4, 4);
-  ASSERT_EQ(0, b.verify_csum(0, m));
-  ASSERT_EQ(-1, b.verify_csum(4, m));
-  ASSERT_EQ(8, b.verify_csum(8, m));
-
+  m.substr_of(bl, 8, 8);
   bufferlist e;
-  e.substr_of(bl, 8, 4);
-  ASSERT_EQ(0, b.verify_csum(0, e));
-  ASSERT_EQ(4, b.verify_csum(4, e));
-  ASSERT_EQ(-1, b.verify_csum(8, e));
-
+  e.substr_of(bl, 16, 8);
   bufferlist n;
-  n.append("xxxx");
-  b.calc_csum(4, n);
-  ASSERT_EQ(-1, b.verify_csum(0, f));
-  ASSERT_EQ(-1, b.verify_csum(4, n));
-  ASSERT_EQ(-1, b.verify_csum(8, e));
-  ASSERT_EQ(4, b.verify_csum(0, bl));
+  n.append("12345678");
+
+  for (unsigned csum_type = 1;
+       csum_type < bluestore_blob_t::CSUM_MAX;
+       ++csum_type) {
+    cout << "csum_type " << bluestore_blob_t::get_csum_type_string(csum_type)
+	 << std::endl;
+
+    bluestore_blob_t b;
+    ASSERT_EQ(-1, b.verify_csum(0, bl));
+
+    b.init_csum(csum_type, 3, 24);
+    cout << "  value size " << b.get_csum_value_size() << std::endl;
+    b.calc_csum(0, bl);
+    ASSERT_EQ(-1, b.verify_csum(0, bl));
+    ASSERT_EQ(0, b.verify_csum(0, bl2));
+
+    ASSERT_EQ(-1, b.verify_csum(0, f));
+    ASSERT_EQ(8, b.verify_csum(8, f));
+    ASSERT_EQ(16, b.verify_csum(16, f));
+
+    ASSERT_EQ(0, b.verify_csum(0, m));
+    ASSERT_EQ(-1, b.verify_csum(8, m));
+    ASSERT_EQ(16, b.verify_csum(16, m));
+
+    ASSERT_EQ(0, b.verify_csum(0, e));
+    ASSERT_EQ(8, b.verify_csum(8, e));
+    ASSERT_EQ(-1, b.verify_csum(16, e));
+
+    b.calc_csum(8, n);
+    ASSERT_EQ(-1, b.verify_csum(0, f));
+    ASSERT_EQ(-1, b.verify_csum(8, n));
+    ASSERT_EQ(-1, b.verify_csum(16, e));
+    ASSERT_EQ(8, b.verify_csum(0, bl));
+  }
 }
 
 TEST(bluestore_onode_t, find_lextent)
