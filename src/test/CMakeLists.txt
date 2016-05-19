@@ -761,7 +761,7 @@ target_link_libraries(unittest_ipaddr mon global)
 # unittest_texttable
 add_executable(unittest_texttable EXCLUDE_FROM_ALL
   test_texttable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   )
 add_ceph_unittest(unittest_texttable ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_texttable)
 target_link_libraries(unittest_texttable mon global)

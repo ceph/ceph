@@ -222,6 +222,9 @@ if(HAVE_GOOD_YASM_ELF64)
     common/crc32c_intel_fast_zero_asm.S)
 endif(HAVE_GOOD_YASM_ELF64)
 
+add_library(common_texttable_obj OBJECT
+  common/TextTable.cc)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -268,7 +271,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
-  common/TextTable.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -552,8 +555,8 @@ add_subdirectory(ceph-detect-init)
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
   $<TARGET_OBJECTS:krbd_objs>
-  common/secret.c
-  common/TextTable.cc
+  $<TARGET_OBJECTS:parse_secret_objs>
+  $<TARGET_OBJECTS:common_texttable_obj>
   )
 if(${WITH_RADOSGW})
   list(APPEND dencoder_srcs
@@ -637,9 +640,9 @@ add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
 target_link_libraries(mon ${ALLOC_LIBS})
 
 set(ceph_mon_srcs
-  ceph_mon.cc
-  common/TextTable.cc)
-add_executable(ceph-mon ${ceph_mon_srcs})
+  ceph_mon.cc)
+add_executable(ceph-mon ${ceph_mon_srcs}
+  $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
       target_link_libraries(ceph-mon mon common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
@@ -1100,10 +1103,11 @@ if(${WITH_RBD})
     tools/rbd/action/Resize.cc
     tools/rbd/action/Snap.cc
     tools/rbd/action/Status.cc
-    tools/rbd/action/Watch.cc
-    common/TextTable.cc)
-  add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
-    $<TARGET_OBJECTS:parse_secret_objs>)
+    tools/rbd/action/Watch.cc)
+  add_executable(rbd ${rbd_srcs}
+    $<TARGET_OBJECTS:common_util_obj>
+    $<TARGET_OBJECTS:parse_secret_objs>
+    $<TARGET_OBJECTS:common_texttable_obj>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
