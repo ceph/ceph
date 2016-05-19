@@ -5078,7 +5078,8 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
       unsigned n = b.second.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
 	v.push_back(b.second.get_csum_item(i));
-      dout(log_level) << __func__ << "       csum: " << v << dendl;
+      dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
+		      << dendl;
     }
   }
   pos = 0;
@@ -5122,7 +5123,8 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
       unsigned n = p.second.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
 	v.push_back(p.second.get_csum_item(i));
-      dout(log_level) << __func__ << "       csum: " << v << dendl;
+      dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
+		      << dendl;
     }
   }
 }
