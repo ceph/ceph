@@ -2897,7 +2897,7 @@ int BlueStore::_do_read(
 	continue;
       }
       if (rr0_it!=rr0_end && (rr0_it->first < rr_it->first + r_len)) {
-	r_len = rr_it->first - rr0_it->first;
+	r_len = rr0_it->first - rr_it->first;
       }
 
       if (off > rr_it->first && r_len) {
