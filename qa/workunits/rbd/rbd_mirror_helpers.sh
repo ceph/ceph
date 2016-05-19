@@ -660,6 +660,15 @@ wait_for_image_present()
     return 1
 }
 
+request_resync_image()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster=${cluster} -p ${pool} mirror image resync ${image}
+}
+
 #
 # Main
 #
