@@ -17,6 +17,7 @@
 
 #include <netinet/in.h>
 
+#include "include/ceph_features.h"
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
@@ -200,6 +201,11 @@ struct ceph_sockaddr_storage {
 WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
 struct entity_addr_t {
+  typedef enum {
+    TYPE_NONE = 0,
+    TYPE_LEGACY = 1,
+  } type_t;
+
   __u32 type;
   __u32 nonce;
   union {
@@ -369,36 +375,67 @@ struct entity_addr_t {
   // Apparently on BSD there is also an ss_len that we need to handle; this requires
   // broader study
 
-
   void encode(bufferlist& bl, uint64_t features) const {
+    if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+      ::encode((__u32)0, bl);
+      ::encode(nonce, bl);
+      sockaddr_storage ss = get_sockaddr_storage();
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+      ::encode(ss, bl);
+#else
+      ceph_sockaddr_storage wireaddr;
+      ::memset(&wireaddr, '\0', sizeof(wireaddr));
+      unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
+      // ceph_sockaddr_storage is in host byte order
+      ::memcpy(&wireaddr, &ss, copysize);
+      ::encode(wireaddr, bl);
+#endif
+      return;
+    }
+    ::encode((__u8)1, bl);
+    ENCODE_START(1, 1, bl);
     ::encode(type, bl);
     ::encode(nonce, bl);
-    sockaddr_storage ss = get_sockaddr_storage();
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::encode(ss, bl);
-#else
-    ceph_sockaddr_storage wireaddr;
-    ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-    // ceph_sockaddr_storage is in host byte order
-    ::memcpy(&wireaddr, &ss, copysize);
-    ::encode(wireaddr, bl);
-#endif
+    __u32 elen = get_sockaddr_len();
+    ::encode(elen, bl);
+    if (elen) {
+      bl.append((char*)get_sockaddr(), elen);
+    }
+    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 marker;
+    ::decode(marker, bl);
+    if (marker == 0) {
+      ::decode(marker, bl);
+      __u16 rest;
+      ::decode(rest, bl);
+      type = TYPE_LEGACY;
+      ::decode(nonce, bl);
+      sockaddr_storage ss;
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+      ::decode(ss, bl);
+#else
+      ceph_sockaddr_storage wireaddr;
+      ::memset(&wireaddr, '\0', sizeof(wireaddr));
+      ::decode(wireaddr, bl);
+      unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
+      ::memcpy(&ss, &wireaddr, copysize);
+#endif
+      set_sockaddr((sockaddr*)&ss);
+      return;
+    }
+    if (marker != 1)
+      throw buffer::malformed_input("entity_addr_t marker != 1");
+    DECODE_START(1, bl);
     ::decode(type, bl);
     ::decode(nonce, bl);
-    sockaddr_storage ss;
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::decode(ss, bl);
-#else
-    ceph_sockaddr_storage wireaddr;
-    ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    ::decode(wireaddr, bl);
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-    ::memcpy(&ss, &wireaddr, copysize);
-#endif
-    set_sockaddr((sockaddr*)&ss);
+    __u32 elen;
+    ::decode(elen, bl);
+    if (elen) {
+      bl.copy(elen, (char*)get_sockaddr());
+    }
+    DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const;
@@ -499,9 +536,5 @@ inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
   entity_inst_t n = i;
   return out << n;
 }
-
-
-
-
 
 #endif
