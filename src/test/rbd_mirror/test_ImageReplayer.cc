@@ -540,3 +540,167 @@ TEST_F(TestImageReplayer, NextTag)
 
   stop();
 }
+
+TEST_F(TestImageReplayer, Resync)
+{
+  bootstrap();
+
+  librbd::ImageCtx *ictx;
+
+  start();
+
+  std::string image_id = m_replayer->get_local_image_id();
+
+  generate_test_data();
+
+  open_remote_image(&ictx);
+  for (int i = 0; i < TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+
+  wait_for_replay_complete();
+
+  for (int i = TEST_IO_COUNT; i < 2 * TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+  close_image(ictx);
+
+  C_SaferCond ctx;
+  m_replayer->resync_image(&ctx);
+  ASSERT_EQ(0, ctx.wait());
+
+  C_SaferCond cond;
+  m_replayer->start(&cond);
+  ASSERT_EQ(0, cond.wait());
+
+  ASSERT_NE(image_id, m_replayer->get_local_image_id());
+  ASSERT_TRUE(m_replayer->is_replaying());
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  for (int i = 0; i < 2 * TEST_IO_COUNT; ++i) {
+    read_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  close_image(ictx);
+
+  stop();
+}
+
+TEST_F(TestImageReplayer, Resync_While_Stop)
+{
+
+  bootstrap();
+
+  start();
+
+  std::string image_id = m_replayer->get_local_image_id();
+
+  generate_test_data();
+
+  librbd::ImageCtx *ictx;
+  open_remote_image(&ictx);
+  for (int i = 0; i < TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+
+  wait_for_replay_complete();
+
+  for (int i = TEST_IO_COUNT; i < 2 * TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  C_SaferCond cond;
+  m_replayer->stop(&cond);
+  ASSERT_EQ(0, cond.wait());
+
+  open_local_image(&ictx);
+  librbd::Journal<>::request_resync(ictx);
+  close_image(ictx);
+
+  C_SaferCond cond2;
+  m_replayer->start(&cond2);
+  ASSERT_EQ(0, cond2.wait());
+
+  ASSERT_TRUE(m_replayer->is_stopped());
+
+  C_SaferCond cond3;
+  m_replayer->start(&cond3);
+  ASSERT_EQ(0, cond3.wait());
+
+  ASSERT_NE(image_id, m_replayer->get_local_image_id());
+  ASSERT_TRUE(m_replayer->is_replaying());
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  for (int i = 0; i < 2 * TEST_IO_COUNT; ++i) {
+    read_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  close_image(ictx);
+
+  stop();
+}
+
+TEST_F(TestImageReplayer, Resync_StartInterrupted)
+{
+
+  bootstrap();
+
+  std::string image_id = m_replayer->get_local_image_id();
+
+  librbd::ImageCtx *ictx;
+  open_local_image(&ictx);
+  librbd::Journal<>::request_resync(ictx);
+  close_image(ictx);
+
+  C_SaferCond cond;
+  m_replayer->start(&cond);
+  ASSERT_EQ(0, cond.wait());
+
+  ASSERT_TRUE(m_replayer->is_stopped());
+
+  C_SaferCond cond2;
+  m_replayer->start(&cond2);
+  ASSERT_EQ(0, cond2.wait());
+
+  ASSERT_EQ(0U, m_watch_handle);
+  std::string oid = ::journal::Journaler::header_oid(m_remote_image_id);
+  m_watch_ctx = new C_WatchCtx(this, oid);
+  ASSERT_EQ(0, m_remote_ioctx.watch2(oid, &m_watch_handle, m_watch_ctx));
+
+  ASSERT_NE(image_id, m_replayer->get_local_image_id());
+
+  ASSERT_TRUE(m_replayer->is_replaying());
+
+  open_remote_image(&ictx);
+  for (int i = 0; i < TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+
+  wait_for_replay_complete();
+
+  for (int i = TEST_IO_COUNT; i < 2 * TEST_IO_COUNT; ++i) {
+    write_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  flush(ictx);
+  close_image(ictx);
+
+  wait_for_replay_complete();
+
+  open_local_image(&ictx);
+  for (int i = 0; i < 2 * TEST_IO_COUNT; ++i) {
+    read_test_data(ictx, m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  close_image(ictx);
+
+  stop();
+}
