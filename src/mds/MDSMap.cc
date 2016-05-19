@@ -263,7 +263,7 @@ void MDSMap::print_summary(Formatter *f, ostream *out) const
     if (p.second.laggy())
       s += "(laggy or crashed)";
 
-    if (p.second.rank >= 0) {
+    if (p.second.rank >= 0 && p.second.state != MDSMap::STATE_STANDBY_REPLAY) {
       if (f) {
 	f->open_object_section("mds");
 	f->dump_unsigned("rank", p.second.rank);
