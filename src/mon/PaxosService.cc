@@ -14,14 +14,9 @@
 
 #include "PaxosService.h"
 #include "common/Clock.h"
-#include "Monitor.h"
-#include "MonitorDBStore.h"
-
-
 #include "common/config.h"
+#include "include/stringify.h"
 #include "include/assert.h"
-#include "common/Formatter.h"
-
 #include "mon/MonOpRequest.h"
 
 #define dout_subsys ceph_subsys_paxos

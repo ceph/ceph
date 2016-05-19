@@ -26,6 +26,7 @@
 #include "PGMonitor.h"
 
 #include "MonitorDBStore.h"
+#include "Session.h"
 
 #include "crush/CrushWrapper.h"
 #include "crush/CrushTester.h"

@@ -15,10 +15,7 @@
 #ifndef CEPH_PAXOSSERVICE_H
 #define CEPH_PAXOSSERVICE_H
 
-#include "messages/PaxosServiceMessage.h"
 #include "include/Context.h"
-#include "include/stringify.h"
-#include <errno.h>
 #include "Paxos.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
