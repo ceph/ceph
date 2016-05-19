@@ -29,7 +29,6 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
-#include "Checksummer.h"
 #include "compressor/Compressor.h"
 
 #define dout_subsys ceph_subsys_bluestore
@@ -771,7 +770,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
-    checksummer(new Checksummer),
     csum_type(bluestore_blob_t::CSUM_CRC32C)
 {
   _init_logger();
@@ -784,7 +782,6 @@ BlueStore::~BlueStore()
   assert(db == NULL);
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
-  delete checksummer;
 }
 
 const char **BlueStore::get_tracked_conf_keys() const
