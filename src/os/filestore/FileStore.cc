@@ -5447,6 +5447,18 @@ out:
 const char** FileStore::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
+    "filestore_max_inline_xattr_size",
+    "filestore_max_inline_xattr_size_xfs",
+    "filestore_max_inline_xattr_size_btrfs",
+    "filestore_max_inline_xattr_size_other",
+    "filestore_max_inline_xattrs",
+    "filestore_max_inline_xattrs_xfs",
+    "filestore_max_inline_xattrs_btrfs",
+    "filestore_max_inline_xattrs_other",
+    "filestore_max_xattr_value_size",
+    "filestore_max_xattr_value_size_xfs",
+    "filestore_max_xattr_value_size_btrfs",
+    "filestore_max_xattr_value_size_other",
     "filestore_min_sync_interval",
     "filestore_max_sync_interval",
     "filestore_queue_max_ops",
