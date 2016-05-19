@@ -3282,8 +3282,15 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     using_qs = false;
     s->aws4_auth->credential = s->http_auth;
+#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
+#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
+    ssize_t min_len = CREDENTIALS_PREFIX_LEN + 1;
+    if (s->aws4_auth->credential.length() < min_len) {
+      ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
+      return -EINVAL;
+    }
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(17, s->aws4_auth->credential.length());
+    s->aws4_auth->credential = s->aws4_auth->credential.substr(min_len, s->aws4_auth->credential.length());
 
     pos = s->aws4_auth->credential.find("Credential");
     if (pos == std::string::npos) {
@@ -3302,7 +3309,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     s->aws4_auth->signedheaders = s->http_auth;
 
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(17, s->aws4_auth->signedheaders.length());
+    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(min_len, s->aws4_auth->signedheaders.length());
 
     pos = s->aws4_auth->signedheaders.find("SignedHeaders");
     if (pos == std::string::npos) {
@@ -3332,7 +3339,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     s->aws4_auth->signature = s->http_auth;
 
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(17, s->aws4_auth->signature.length());
+    if (s->aws4_auth->signature.size() < min_len) {
+      ldout(store->ctx(), 10) << "signature string is too short" << dendl;
+      return -EINVAL;
+    }
+
+    s->aws4_auth->signature = s->aws4_auth->signature.substr(min_len, s->aws4_auth->signature.length());
 
     pos = s->aws4_auth->signature.find("Signature");
     if (pos == std::string::npos) {
