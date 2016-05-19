@@ -929,10 +929,9 @@ int FileStore::mkfs()
   ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
   if (ret < 0) {
     derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
-    ret = -1;
     goto close_fsid_fd;
   }
-  //create fsid under omap
+  // create fsid under omap
   // open+lock fsid
   int omap_fsid_fd;
   char omap_fsid_fn[PATH_MAX];
@@ -963,7 +962,7 @@ int FileStore::mkfs()
     }
     dout(10) << "mkfs: write success, fsid:" << fsid_str << ", ret:" << ret << dendl;
     if (::fsync(omap_fsid_fd) < 0) {
-      ret = errno;
+      ret = -errno;
       derr << "mkfs: close failed: can't write fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_omap_fsid_fd;
@@ -971,7 +970,10 @@ int FileStore::mkfs()
     dout(10) << "mkfs omap fsid is " << fsid << dendl;
   } else {
     if (fsid != old_omap_fsid) {
-      derr << "FileStore::mkfs: " << omap_fsid_fn << " has existed omap fsid " << old_omap_fsid << " != expected osd fsid " << fsid << dendl;
+      derr << "FileStore::mkfs: " << omap_fsid_fn
+           << " has existed omap fsid " << old_omap_fsid
+           << " != expected osd fsid " << fsid
+           << dendl;
       ret = -EINVAL;
       goto close_omap_fsid_fd;
     }
