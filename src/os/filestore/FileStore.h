@@ -625,7 +625,6 @@ public:
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int list_collections(vector<coll_t>& ls);
   int list_collections(vector<coll_t>& ls, bool include_temp);
-  int collection_version_current(const coll_t& c, uint32_t *version);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c);
   bool collection_empty(const coll_t& c);

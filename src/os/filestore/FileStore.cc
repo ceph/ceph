@@ -4410,7 +4410,6 @@ int FileStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *nam
   dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
   bool spill_out = true;
-  bufferptr bp;
 
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
@@ -4554,23 +4553,6 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
 
 // --------------------------
 // collections
-
-int FileStore::collection_version_current(const coll_t& c, uint32_t *version)
-{
-  Index index;
-  int r = get_index(c, &index);
-  if (r < 0)
-    return r;
-
-  assert(NULL != index.index);
-  RWLock::RLocker l((index.index)->access_lock);
-
-  *version = index->collection_version();
-  if (*version == target_version)
-    return 1;
-  else
-    return 0;
-}
 
 int FileStore::list_collections(vector<coll_t>& ls)
 {
