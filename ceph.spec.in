@@ -665,13 +665,36 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		%{?_with_tcmalloc} \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
+# Parallel build settings ...
+PARALLEL_BUILD=%{?_smp_mflags}
 %if %{with lowmem_builder} && ! %{with lowmem_builder_override}
-%if 0%{?jobs} > 8
-%define _smp_mflags -j8
+lo_jobs="%{?jobs:%{jobs}}"
+%ifarch %arm
+    %if ! 0%{?qemu_user_space_build:1}
+        # native hardware is not that powerful
+        lo_jobs="1"
+    %endif
 %endif
+# do not eat all memory
+echo "Available memory:"
+free
+echo "System limits:"
+ulimit -a
+lo_jobs_reduced=
+if test -n "$lo_jobs" -a "$lo_jobs" -gt 1 ; then
+    mem_per_process=1600
+    max_mem=$(LANG=C free -t -m | sed -n "s|^Mem: *\([0-9]*\).*$|\1|p")
+    max_jobs="$(($max_mem / $mem_per_process))"
+    test "$lo_jobs" -gt "$max_jobs" && lo_jobs="$max_jobs" && lo_jobs_reduced="yes" && echo "Warning: Reducing build parallelism to -j$max_jobs because of memory limits"
+    test "$lo_jobs" -le 0 && lo_jobs=1 && echo "Warning: Not using parallel build at all because of memory limits"
+fi
+# run make
+if test -n "$lo_jobs" ; then
+  PARALLEL_BUILD="-j$lo_jobs"
+fi
 %endif
 
-make %{?_smp_mflags}
+make "$PARALLEL_BUILD"
 
 %if 0%{with tests}
 %check
