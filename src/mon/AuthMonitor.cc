@@ -22,18 +22,11 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonGlobalID.h"
-
-#include "common/Timer.h"
-#include "common/config.h"
-#include "common/cmdparse.h"
+#include "msg/Messenger.h"
 
 #include "auth/AuthServiceHandler.h"
 #include "auth/KeyRing.h"
-
-#include "osd/osd_types.h"
-
 #include "include/assert.h"
-#include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

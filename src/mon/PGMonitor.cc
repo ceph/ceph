@@ -17,7 +17,6 @@
 #include "common/debug.h"               // undo damage
 #include "PGMonitor.h"
 #include "Monitor.h"
-#include "MDSMonitor.h"
 #include "OSDMonitor.h"
 #include "MonitorDBStore.h"
 
@@ -32,11 +31,9 @@
 #include "messages/MMonCommand.h"
 #include "messages/MOSDScrub.h"
 
-#include "common/Timer.h"
 #include "common/Formatter.h"
-#include "common/ceph_argparse.h"
-#include "common/perf_counters.h"
 #include "common/TextTable.h"
+#include "common/config.h"
 
 #include "include/stringify.h"
 
@@ -47,8 +44,6 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include <sstream>
-#include <boost/variant.hpp>
-#include "common/cmdparse.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

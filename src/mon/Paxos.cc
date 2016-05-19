@@ -15,14 +15,13 @@
 #include <sstream>
 #include "Paxos.h"
 #include "Monitor.h"
-#include "MonitorDBStore.h"
-
 #include "messages/MMonPaxos.h"
 
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/stringify.h"
-#include "common/Formatter.h"
+#include "common/Timer.h"
+#include "messages/PaxosServiceMessage.h"
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
