@@ -102,6 +102,8 @@ ostream& operator<<(ostream& out, const bluestore_extent_t& bp);
 
 /// pextent: physical extent
 struct bluestore_pextent_t {
+  const static uint64_t INVALID_OFFSET = ~0ull;
+
   uint64_t offset, length;    ///< location on device
 
   bluestore_pextent_t() : offset(0), length(0) {}
@@ -109,6 +111,10 @@ struct bluestore_pextent_t {
 
   uint64_t end() const {
     return offset + length;
+  }
+
+  bool is_valid() const {
+    return offset != INVALID_OFFSET;
   }
 
   void encode(bufferlist& bl) const {
