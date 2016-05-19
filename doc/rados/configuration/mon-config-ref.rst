@@ -865,7 +865,7 @@ Miscellaneous
 
 
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
-.. _Monitor Keyrings: ../../operations/authentication#monitor-keyrings
+.. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
 .. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
 .. _ACID: http://en.wikipedia.org/wiki/ACID
