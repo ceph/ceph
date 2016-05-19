@@ -420,7 +420,10 @@ void bluestore_pextent_t::dump(Formatter *f) const
 }
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o) {
-  return out << "0x" << std::hex << o.offset << "~0x" << o.length << std::dec;
+  if (o.is_valid())
+    return out << "0x" << std::hex << o.offset << "~0x" << o.length << std::dec;
+  else
+    return out << "!~0x" << std::hex << o.length << std::dec;
 }
 
 void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls)
