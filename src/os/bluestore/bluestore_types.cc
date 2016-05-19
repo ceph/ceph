@@ -456,6 +456,7 @@ void bluestore_blob_t::encode(bufferlist& bl) const
   ::encode(csum_type, bl);
   ::encode(csum_block_order, bl);
   ::encode(ref_map, bl);
+  ::encode(unused, bl);
   ::encode(csum_data, bl);
   ENCODE_FINISH(bl);
 }
@@ -469,6 +470,7 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
   ::decode(csum_type, p);
   ::decode(csum_block_order, p);
   ::decode(ref_map, p);
+  ::decode(unused, p);
   ::decode(csum_data, p);
   DECODE_FINISH(p);
 }
@@ -490,6 +492,14 @@ void bluestore_blob_t::dump(Formatter *f) const
   for (unsigned i = 0; i < n; ++i)
     f->dump_unsigned("csum", get_csum_item(i));
   f->close_section();
+  f->open_array_section("unused");
+  for (auto p = unused.begin(); p != unused.end(); ++p) {
+    f->open_object_section("range");
+    f->dump_unsigned("offset", p.get_start());
+    f->dump_unsigned("length", p.get_len());
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
@@ -502,6 +512,8 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->csum_block_order = 16;
   ls.back()->csum_data = vector<char>{1, 2, 3, 4};  // one uint32_t
   ls.back()->ref_map.get(3, 5);
+  ls.back()->add_unused(0, 3);
+  ls.back()->add_unused(8, 8);
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
@@ -518,6 +530,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   if (!o.ref_map.empty()) {
     out << " " << o.ref_map;
   }
+  if (!o.unused.empty())
+    out << " unused=0x" << std::hex << o.unused << std::dec;
   out << ")";
   return out;
 }
