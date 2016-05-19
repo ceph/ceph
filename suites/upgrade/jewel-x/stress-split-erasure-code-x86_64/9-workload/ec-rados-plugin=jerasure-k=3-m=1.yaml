@@ -1,0 +1,35 @@
+#
+# k=3 implies a stripe_width of 1376*3 = 4128 which is different from
+# the default value of 4096 It is also not a multiple of 1024*1024 and
+# creates situations where rounding rules during recovery becomes 
+# necessary. 
+#
+meta:
+- desc: |
+   randomized correctness test for rados operations on an erasure coded pool 
+   using the jerasure plugin with k=3 and m=1
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 50
+    ec_pool: true
+    write_append_excl: false
+    erasure_code_profile:
+      name: jerasure31profile
+      plugin: jerasure
+      k: 3
+      m: 1
+      technique: reed_sol_van
+      ruleset-failure-domain: osd
+    op_weights:
+      read: 100
+      write: 0
+      append: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
+      copy_from: 50
+      setattr: 25
+      rmattr: 25
