@@ -627,6 +627,18 @@ public:
     uint64_t seq = 0;
     utime_t start;
 
+    struct DeferredCsum {
+      OnodeRef onode;
+      int64_t blob;
+      uint64_t b_off;
+      bufferlist data;
+
+      DeferredCsum(OnodeRef& o, int64_t b, uint64_t bo, bufferlist& bl)
+	: onode(o), blob(b), b_off(bo), data(bl) {}
+    };
+
+    list<DeferredCsum> deferred_csum;
+
     explicit TransContext(OpSequencer *o)
       : state(STATE_PREPARE),
 	osr(o),
@@ -650,6 +662,10 @@ public:
     }
     void write_bnode(BnodeRef &e) {
       bnodes.insert(e);
+    }
+
+    void add_deferred_csum(OnodeRef& o, int64_t b, uint64_t bo, bufferlist& bl) {
+      deferred_csum.emplace_back(TransContext::DeferredCsum(o, b, bo, bl));
     }
   };
 
