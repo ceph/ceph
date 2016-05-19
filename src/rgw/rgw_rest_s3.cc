@@ -3581,7 +3581,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* aws4 auth not completed... delay aws4 auth */
 
-    dout(10) << "body content detected... delaying v4 auth" << dendl;
+    dout(10) << "delaying v4 auth" << dendl;
 
     switch (s->op_type)
     {
