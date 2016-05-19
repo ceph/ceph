@@ -215,10 +215,11 @@ struct bluestore_blob_t {
 
   enum CSumType {
     CSUM_NONE = 0,
-    CSUM_XXHASH32 = 1,
-    CSUM_XXHASH64 = 2,
-    CSUM_CRC32C = 3,
-    CSUM_CRC16 = 4,
+    CSUM_CRC32C = 1,
+    CSUM_XXHASH32 = 2,
+    CSUM_XXHASH64 = 3,
+    CSUM_MAX,
+    CSUM_CRC16,  // ** not yet implemented **
   };
   static const char *get_csum_type_string(unsigned t) {
     switch (t) {
