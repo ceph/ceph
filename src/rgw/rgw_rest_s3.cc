@@ -3197,6 +3197,8 @@ static void aws4_uri_encode(const string& src, string& dst)
   }
 }
 
+static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "SignedHeaders", "Signature" };
+
 /*
  * handle v4 signatures (rados auth only)
  */
@@ -3276,84 +3278,42 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* ------------------------- handle Credential header */
 
     using_qs = false;
-    s->aws4_auth->credential = s->http_auth;
+
+    string auth_str = s->http_auth;
+
 #define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
 #define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
     uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
-    if (s->aws4_auth->credential.length() < min_len) {
+    if (auth_str.length() < min_len) {
       ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
       return -EINVAL;
     }
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(min_len, s->aws4_auth->credential.length());
+    list<string> auth_list;
+    get_str_list(auth_str.substr(min_len), ",", auth_list);
 
-    pos = s->aws4_auth->credential.find("Credential");
-    if (pos == std::string::npos) {
-      return -EINVAL;
+    map<string, string> kv;
+
+    for (string& s : auth_list) {
+      string key, val;
+      int ret = parse_key_value(s, key, val);
+      if (ret < 0) {
+        ldout(store->ctx(), 10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
+        return -EINVAL;
+      }
+      kv[key] = val;
     }
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos, s->aws4_auth->credential.find(","));
-
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
-
-    pos = s->aws4_auth->credential.find("=");
-
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
-
-    /* ------------------------- handle SignedHeaders header */
-
-    s->aws4_auth->signedheaders = s->http_auth;
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(min_len, s->aws4_auth->signedheaders.length());
-
-    pos = s->aws4_auth->signedheaders.find("SignedHeaders");
-    if (pos == std::string::npos) {
-      return -EINVAL;
+    for (string& k : aws4_presigned_required_keys) {
+      if (kv.find(k) == kv.end()) {
+        ldout(store->ctx(), 10) << "NOTICE: auth header missing key: " << k << dendl;
+        return -EINVAL;
+      }
     }
 
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos, s->aws4_auth->signedheaders.length());
-
-    pos = s->aws4_auth->signedheaders.find(",");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(0, pos);
-
-    pos = s->aws4_auth->signedheaders.find("=");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos + 1, s->aws4_auth->signedheaders.length());
-
-    /* host;user-agent;x-amz-content-sha256;x-amz-date */
-    dout(10) << "v4 signedheaders format = " << s->aws4_auth->signedheaders << dendl;
-
-    /* ------------------------- handle Signature header */
-
-    s->aws4_auth->signature = s->http_auth;
-
-    if (s->aws4_auth->signature.size() < min_len) {
-      ldout(store->ctx(), 10) << "signature string is too short" << dendl;
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(min_len, s->aws4_auth->signature.length());
-
-    pos = s->aws4_auth->signature.find("Signature");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos, s->aws4_auth->signature.length());
-
-    pos = s->aws4_auth->signature.find("=");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos + 1, s->aws4_auth->signature.length());
+    s->aws4_auth->credential = kv["Credential"];
+    s->aws4_auth->signedheaders = kv["SignedHeaders"];
+    s->aws4_auth->signature = kv["Signature"];
 
     /* sig hex str */
     dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
