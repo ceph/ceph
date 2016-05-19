@@ -94,6 +94,7 @@ BuildRequires:	make
 BuildRequires:	parted
 BuildRequires:	perl
 BuildRequires:	pkgconfig
+BuildRequires:  procps
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
