@@ -465,6 +465,18 @@ namespace std {
   };
 } // namespace std
 
+struct entity_addrvec_t {
+  vector<entity_addr_t> v;
+
+  unsigned size() const { return v.size(); }
+  bool empty() const { return v.empty(); }
+
+  void encode(bufferlist& bl, uint64_t features) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<entity_addrvec_t*>& ls);
+};
+WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 
 /*
  * a particular entity instance
