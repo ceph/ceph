@@ -101,18 +101,19 @@ def main(ctx):
 
         # bury the job so it won't be re-run if it fails
         job.bury()
-        log.info('Reserved job %d', job.jid)
+        job_id = job.jid
+        log.info('Reserved job %d', job_id)
         log.info('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
+        job_config['job_id'] = str(job_id)
 
         if job_config.get('stop_worker'):
             keep_running = False
 
-        job_config['job_id'] = str(job.jid)
         safe_archive = safepath.munge(job_config['name'])
         job_config['worker_log'] = log_file_path
         archive_path_full = os.path.join(
-            ctx.archive_dir, safe_archive, str(job.jid))
+            ctx.archive_dir, safe_archive, str(job_id))
         job_config['archive_path'] = archive_path_full
 
         # If the teuthology branch was not specified, default to master and
@@ -169,7 +170,7 @@ def main(ctx):
         else:
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
-            log.info('Running job %d', job.jid)
+            log.info('Running job %d', job_id)
             run_job(job_config, teuth_bin_path, ctx.verbose)
         job.delete()
 
