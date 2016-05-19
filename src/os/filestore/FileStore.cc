@@ -953,27 +953,27 @@ int FileStore::mkfs()
       ret = -errno;
       derr << "mkfs: failed to truncate fsid: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     ret = safe_write(omap_fsid_fd, fsid_str, strlen(fsid_str));
     if (ret < 0) {
       derr << "mkfs: failed to write fsid: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     dout(10) << "mkfs: write success, fsid:" << fsid_str << ", ret:" << ret << dendl;
     if (::fsync(omap_fsid_fd) < 0) {
       ret = errno;
       derr << "mkfs: close failed: can't write fsid: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     dout(10) << "mkfs omap fsid is " << fsid << dendl;
   } else {
     if (fsid != old_omap_fsid) {
       derr << "FileStore::mkfs: " << omap_fsid_fn << " has existed omap fsid " << old_omap_fsid << " != expected osd fsid " << fsid << dendl;
       ret = -EINVAL;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     dout(1) << "FileStore::mkfs: omap fsid is already set to " << fsid << dendl;
   }
@@ -983,15 +983,17 @@ int FileStore::mkfs()
   // journal?
   ret = mkjournal();
   if (ret)
-    goto close_fsid_fd;
+    goto close_omap_fsid_fd;
 
   ret = write_meta("type", "filestore");
   if (ret)
-    goto close_fsid_fd;
+    goto close_omap_fsid_fd;
 
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
+ close_omap_fsid_fd:
+  VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
  close_fsid_fd:
   VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
