@@ -58,6 +58,7 @@ struct EntityName
 
   uint32_t get_type() const { return type; }
   bool is_osd() const { return get_type() == CEPH_ENTITY_TYPE_OSD; }
+  bool is_mgr() const { return get_type() == CEPH_ENTITY_TYPE_MGR; }
   bool is_mds() const { return get_type() == CEPH_ENTITY_TYPE_MDS; }
   bool is_client() const { return get_type() == CEPH_ENTITY_TYPE_CLIENT; }
   bool is_mon() const { return get_type() == CEPH_ENTITY_TYPE_MON; }
