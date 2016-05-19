@@ -57,6 +57,33 @@ public:
     }
   };
 
+  struct xxhash64 {
+    typedef __le64 value_t;
+
+    typedef XXH64_state_t *state_t;
+    static void init(state_t *s) {
+      *s = XXH64_createState();
+    }
+    static void fini(state_t *s) {
+      XXH64_freeState(*s);
+    }
+
+    static value_t calc(
+      state_t state,
+      size_t len,
+      bufferlist::const_iterator& p
+      ) {
+      XXH64_reset(state, -1);
+      while (len > 0) {
+	const char *data;
+	size_t l = p.get_ptr_and_advance(len, &data);
+	XXH64_update(state, data, l);
+	len -= l;
+      }
+      return XXH64_digest(state);
+    }
+  };
+
   template<class Alg>
   static int calculate(
     size_t csum_block_size,
