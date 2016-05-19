@@ -319,6 +319,28 @@ struct bluestore_blob_t {
     return !ref_map.intersects(offset, length);
   }
 
+  /// return true if the entire range is allocated (mapped to extents on disk)
+  bool is_allocated(uint64_t b_off, uint64_t b_len) const {
+    auto p = extents.begin();
+    assert(p != extents.end());
+    while (b_off >= p->length) {
+      b_off -= p->length;
+      ++p;
+      assert(p != extents.end());
+    }
+    b_len += b_off;
+    while (b_len) {
+      if (!p->is_valid()) {
+	return false;
+      }
+      if (p->length >= b_len) {
+	return true;
+      }
+      b_len -= p->length;
+    }
+    assert(0 == "we should not get here");
+  }
+
   /// return true if the logical range has never been used
   bool is_unused(uint64_t offset, uint64_t length) const {
     return unused.contains(offset, length);
@@ -339,6 +361,10 @@ struct bluestore_blob_t {
     if (!t.empty())
       unused.subtract(t);
   }
+
+  /// put logical references, and get back any released extents
+  void put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+	       vector<bluestore_pextent_t> *r);
 
   void map(uint64_t x_off, uint64_t x_len,
 	   std::function<void(uint64_t,uint64_t)> f) {
