@@ -3890,7 +3890,8 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
   TransContext *txc = new TransContext(osr);
   txc->t = db->get_transaction();
   osr->queue_new(txc);
-  dout(20) << __func__ << " osr " << osr << " = " << txc << dendl;
+  dout(20) << __func__ << " osr " << osr << " = " << txc
+	   << " seq " << txc->seq << dendl;
   return txc;
 }
 
@@ -3942,6 +3943,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
+      for (auto& o : txc->onodes) {
+	o->bc.finish_write(txc->seq);
+      }
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
 	  _txc_finalize_kv(txc, txc->t);
@@ -5065,6 +5069,17 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs
 		    << dendl;
   }
+  if (!o->bc.empty()) {
+    dout(log_level) << __func__ << "  buffer_cache size 0x" << std::hex
+		    << o->bc.size << std::dec << dendl;
+    for (auto& i : o->bc.buffer_map) {
+      dout(log_level) << __func__ << "   0x" << std::hex << i.first << "~0x"
+		      << i.second->length << std::dec
+		      << " seq " << i.second->seq
+		      << " " << Buffer::get_state_name(i.second->state)
+		      << dendl;
+    }
+  }
   if (o->tail_bl.length()) {
     dout(log_level) << __func__ << "  tail offset 0x" << std::hex << o->tail_offset
 		    << " len 0x" << o->tail_bl.length() << std::dec
@@ -5671,6 +5686,9 @@ int BlueStore::_do_write(
     wctx.buffered = true;
   }
 
+  // write in buffer cache
+  o->bc.write(txc->seq, offset, bl);
+
   bufferlist::iterator p = bl.begin();
   if (offset / min_alloc_size == (end - 1) / min_alloc_size &&
       (length != min_alloc_size)) {
@@ -5785,6 +5803,8 @@ int BlueStore::_do_zero(TransContext *txc,
     o->clear_tail();
   }
 
+  o->bc.discard(offset, length);
+
   WriteContext wctx;
   o->onode.punch_hole(offset, length, &wctx.lex_old);
   _wctx_finish(txc, c, o, &wctx);
@@ -5812,6 +5832,8 @@ int BlueStore::_do_truncate(
     // ensure any wal IO has completed before we truncate off any extents
     // they may touch.
     o->flush();
+
+    o->bc.truncate(offset);
 
     WriteContext wctx;
     o->onode.punch_hole(offset, o->onode.size, &wctx.lex_old);
