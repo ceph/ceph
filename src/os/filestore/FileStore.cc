@@ -5480,7 +5480,11 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_max_inline_xattrs") ||
       changed.count("filestore_max_inline_xattrs_xfs") ||
       changed.count("filestore_max_inline_xattrs_btrfs") ||
-      changed.count("filestore_max_inline_xattrs_other")) {
+      changed.count("filestore_max_inline_xattrs_other") ||
+      changed.count("filestore_max_xattr_value_size") ||
+      changed.count("filestore_max_xattr_value_size_xfs") ||
+      changed.count("filestore_max_xattr_value_size_btrfs") ||
+      changed.count("filestore_max_xattr_value_size_other")) {
     Mutex::Locker l(lock);
     set_xattr_limits_via_conf();
   }
