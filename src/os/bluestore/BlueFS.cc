@@ -738,7 +738,7 @@ int BlueFS::_read_random(
     }
     dout(20) << __func__ << " read buffered " << x_off << "~" << l << " of "
 	       << *p << dendl;
-    int r = bdev[p->bdev]->read_buffered(p->offset + x_off, l, out);
+    int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out, true);
     assert(r == 0);
     off += l;
     len -= l;
