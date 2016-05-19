@@ -539,6 +539,116 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   return out;
 }
 
+void bluestore_blob_t::put_ref(
+  uint64_t offset,
+  uint64_t length,
+  uint64_t min_release_size,
+  vector<bluestore_pextent_t> *r)
+{
+  vector<bluestore_pextent_t> logical;
+  ref_map.put(offset, length, &logical);
+
+  r->clear();
+
+  // common case: all of it?
+  if (ref_map.empty()) {
+    uint64_t pos = 0;
+    for (auto& e : extents) {
+      if (e.is_valid()) {
+	r->push_back(e);
+      }
+      pos += e.length;
+    }
+    extents.resize(1);
+    extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
+    extents[0].length = this->length;
+    return;
+  }
+
+  // search from logical releases
+  for (auto le : logical) {
+    uint64_t r_off = le.offset;
+    auto p = ref_map.ref_map.lower_bound(le.offset);
+    if (p != ref_map.ref_map.begin()) {
+      --p;
+      r_off = p->first + p->second.length;
+      ++p;
+    } else {
+      r_off = 0;
+    }
+    uint64_t end;
+    if (p == ref_map.ref_map.end()) {
+      end = this->length;
+    } else {
+      end = p->first;
+    }
+    r_off = ROUND_UP_TO(r_off, min_release_size);
+    end -= end % min_release_size;
+    if (r_off >= end) {
+      continue;
+    }
+    uint64_t r_len = end - r_off;
+
+    // cut it out of extents
+    struct vecbuilder {
+      vector<bluestore_pextent_t> v;
+      uint64_t invalid = 0;
+
+      void add_invalid(uint64_t length) {
+	invalid += length;
+      }
+      void flush() {
+	if (invalid) {
+	  v.emplace_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
+					     invalid));
+	  invalid = 0;
+	}
+      }
+      void add(uint64_t offset, uint64_t length) {
+	if (offset == bluestore_pextent_t::INVALID_OFFSET) {
+	  add_invalid(length);
+	} else {
+	  flush();
+	  v.emplace_back(bluestore_pextent_t(offset, length));
+	}
+      }
+    } vb;
+
+    assert(r_len > 0);
+    auto q = extents.begin();
+    assert(q != extents.end());
+    while (r_off >= q->length) {
+      vb.add(q->offset, q->length);
+      r_off -= q->length;
+      ++q;
+      assert(q != extents.end());
+    }
+    while (r_len > 0) {
+      uint64_t l = MIN(r_len, q->length - r_off);
+      if (q->is_valid()) {
+	r->push_back(bluestore_pextent_t(q->offset + r_off, l));
+      }
+      if (r_off) {
+	vb.add(q->offset, r_off);
+      }
+      vb.add_invalid(l);
+      if (r_off + l < q->length) {
+	vb.add(q->offset + r_off + l, q->length - (r_off + l));
+      }
+      r_len -= l;
+      r_off = 0;
+      ++q;
+      assert(q != extents.end() || r_len == 0);
+    }
+    while (q != extents.end()) {
+      vb.add(q->offset, q->length);
+      ++q;
+    }
+    vb.flush();
+    extents.swap(vb.v);
+  }
+}
+
 void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
 {
   switch (csum_type) {
