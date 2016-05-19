@@ -494,6 +494,7 @@ bool JournalPlayer::prune_active_tag() {
   uint64_t tag_tid = *m_active_tag_tid;
   m_active_tag_tid = boost::none;
   m_splay_offset = 0;
+  m_watch_step = WATCH_STEP_FETCH_CURRENT;
 
   return prune_tag(tag_tid);
 }
