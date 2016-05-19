@@ -510,6 +510,12 @@ int main(int argc, const char **argv)
 							       CEPH_FEATURE_UID |
 							       CEPH_FEATURE_PGID64 |
 							       CEPH_FEATURE_OSDENC));
+  ms_public->set_policy(entity_name_t::TYPE_MGR,
+                               Messenger::Policy::lossy_client(supported,
+							       CEPH_FEATURE_UID |
+							       CEPH_FEATURE_PGID64 |
+							       CEPH_FEATURE_OSDENC));
+
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
 			Messenger::Policy::stateless_server(0,0));

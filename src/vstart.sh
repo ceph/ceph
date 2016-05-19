@@ -372,6 +372,7 @@ else
         debug osd = 25
         debug objecter = 20
         debug monc = 20
+        debug mgrc = 20
         debug journal = 20
         debug filestore = 20
         debug bluestore = 30
