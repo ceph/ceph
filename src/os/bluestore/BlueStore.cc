@@ -1048,7 +1048,6 @@ int BlueStore::_open_fm(bool create)
       dout(1) << __func__ << " pre-fragmenting freespace, using "
 	      << g_conf->bluestore_debug_prefill << " with max free extent "
 	      << g_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
       uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
       uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
       float r = g_conf->bluestore_debug_prefill;
@@ -1595,7 +1594,6 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
 
   if (gift) {
     // round up to alloc size
-    uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
     gift = ROUND_UP_TO(gift, min_alloc_size);
 
     // hard cap to fit into 32 bits
@@ -1625,7 +1623,6 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
     reclaim = ROUND_UP_TO(reclaim, min_alloc_size);
 
     // hard cap to fit into 32 bits
@@ -5307,7 +5304,6 @@ void BlueStore::_do_write_small(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
 	   << std::dec << dendl;
-  const uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   assert(length < min_alloc_size);
 
   bufferlist bl;
@@ -5596,7 +5592,6 @@ int BlueStore::_do_alloc_write(
     return r;
   }
 
-  uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   assert(wctx->blob_new.size() == wctx->bl_new.size());
   vector<bluestore_blob_t*>::iterator bp = wctx->blob_new.begin();
   vector<bufferlist>::iterator blp = wctx->bl_new.begin();
@@ -5710,7 +5705,6 @@ int BlueStore::_do_write(
   }
 
   uint64_t end = offset + length;
-  uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
 
   WriteContext wctx;
   wctx.fadvise_flags = fadvise_flags;
