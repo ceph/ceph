@@ -603,30 +603,60 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       ASSERT_TRUE(newdata.contents_equal(expected));
     }
   }
+  //additional write to an unused region of some blob
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl2, newdata;
+    bl2.append("1234567890");
 
+    t.write(cid, hoid, 20, bl2.length(), bl2);
+    cerr << "Append" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    r = store->read(cid, hoid, 0, 30, newdata);
+    ASSERT_EQ(r, 30);
+    {
+      bufferlist expected;
+      expected.append("edcba");
+      expected.append_zero(5);
+      expected.append("edcba");
+      expected.append_zero(5);
+      expected.append(bl2);
+
+      if(!newdata.contents_equal(expected)){
+        newdata.hexdump(cerr);
+        cerr<<std::endl;
+      }
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+  }
   //additional write to an unused region of some blob and partial owerite over existing extents
   {
     ObjectStore::Transaction t;
     bufferlist bl, bl2, bl3, newdata;
     bl.append("DCB");
     bl2.append("1234567890");
-    bl3.append("CB");
+    bl3.append("BA");
 
-    t.write(cid, hoid, 20, bl2.length(), bl2);
+    t.write(cid, hoid, 40, bl2.length(), bl2);
     t.write(cid, hoid, 1, bl.length(), bl);
     t.write(cid, hoid, 13, bl3.length(), bl3);
     cerr << "TripleWrite" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
 
-    r = store->read(cid, hoid, 0, 30, newdata);
-    ASSERT_EQ(r, 15);
+    r = store->read(cid, hoid, 0, 40, newdata);
+    ASSERT_EQ(r, 40);
+//newdata.hexdump(cerr);
+//cerr<<std::endl;
     {
       bufferlist expected;
       expected.append("eDCBa");
       expected.append_zero(5);
-      expected.append("edCBa");
+      expected.append("edcBA");
       expected.append_zero(5);
+      expected.append(bl2);
       expected.append(bl2);
 
       ASSERT_TRUE(newdata.contents_equal(expected));

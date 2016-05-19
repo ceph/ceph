@@ -275,32 +275,39 @@ public:
       uint64_t end = offset + length;
       while (i != buffer_map.end() && offset < end && i->first < end) {
 	Buffer *b = i->second.get();
-
-	if (b->offset < offset) {
-	  uint64_t head = offset - b->offset;
-	  uint64_t l = MIN(length, b->length - head);
-	  if (b->is_writing()) {//?? should we use in is_cleaning state too?
-	    res[offset].substr_of(b->data, head, l);
-	    res_intervals.insert( offset, l);
-	  }
-	  offset += l;
-	  length -= l;
-	} else if (b->offset > offset) {
-	  uint64_t head = b->offset - offset;
-	  uint64_t l = MIN(length - head, b->length);
-	  if (b->is_writing()) {
+        if(b->is_writing()) {
+	  if (b->offset < offset) {
+	    uint64_t head = offset - b->offset;
+	    uint64_t l = b->length > head ? b->length - head : 0;
+	    l = MIN(length, b->length - head);
+	    if(l>0){
+	      res[offset].substr_of(b->data, head, l);
+	      res_intervals.insert( offset, l);
+	      offset += l;
+	      length -= l;
+	    }
+	  } else if (b->offset > offset) {
+	    uint64_t head = b->offset - offset;
+	    uint64_t l = length > head ? length - head : 0;
+	    l = MIN(l, b->length);
+	    if(l>0){
+	      res[b->offset].substr_of(b->data, 0, l);
+	      res_intervals.insert(b->offset, l);
+	    }
+	    offset += l + head;
+	    length -= l + head;
+	  } else if(b->length != length) {
+	    uint64_t l = MIN(length, b->length);
 	    res[b->offset].substr_of(b->data, 0, l);
 	    res_intervals.insert(b->offset, l);
-	  }
-	  offset += l + head;
-	  length -= l + head;
-	} else {
-	  if (b->is_writing()) {
+	    offset += l;
+	    length -= l;
+	  } else {
 	    res[b->offset].append(b->data);
 	    res_intervals.insert(b->offset, b->length);
+	    offset += b->length;
+	    length -= b->length;
 	  }
-	  offset += b->length;
-	  length -= b->length;
 	}
 	++i;
       }
