@@ -351,13 +351,13 @@ int JournalPlayer::process_playback(uint64_t object_number) {
   ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << dendl;
   assert(m_lock.is_locked());
 
-  ObjectPlayerPtr object_player = get_object_player();
   if (verify_playback_ready()) {
     notify_entries_available();
   } else if (is_object_set_ready()) {
     if (m_watch_enabled) {
       schedule_watch();
     } else {
+      ObjectPlayerPtr object_player = get_object_player();
       uint8_t splay_width = m_journal_metadata->get_splay_width();
       uint64_t active_set = m_journal_metadata->get_active_set();
       uint64_t object_set = object_player->get_object_number() / splay_width;
