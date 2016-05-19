@@ -167,6 +167,27 @@ namespace librbd {
     }
   };
 
+  struct C_CommitIOEventExtent : public Context {
+    ImageCtx *image_ctx;
+    uint64_t journal_tid;
+    uint64_t offset;
+    uint64_t length;
+
+    C_CommitIOEventExtent(ImageCtx *image_ctx, uint64_t journal_tid,
+                          uint64_t offset, uint64_t length)
+      : image_ctx(image_ctx), journal_tid(journal_tid), offset(offset),
+        length(length) {
+    }
+
+    virtual void finish(int r) {
+      // all IO operations are flushed prior to closing the journal
+      assert(image_ctx->journal != nullptr);
+
+      image_ctx->journal->commit_io_event_extent(journal_tid, offset, length,
+                                                 r);
+    }
+  };
+
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
     : m_tid(0), m_lock(lock), m_ictx(ictx) {
   }
@@ -248,8 +269,8 @@ namespace librbd {
     assert(journal_tid == 0 || m_ictx->journal != NULL);
     if (journal_tid != 0) {
       m_ictx->journal->flush_event(
-	journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
-					      bl, snapc, req_comp,
+        journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
+                                              bl, snapc, req_comp,
 					      journal_tid));
     } else {
       AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
@@ -277,8 +298,17 @@ namespace librbd {
 			    len, file_extents);
     for (Extents::iterator it = file_extents.begin();
 	 it != file_extents.end(); ++it) {
-      m_ictx->journal->commit_io_event_extent(original_journal_tid, it->first,
-					      it->second, 0);
+      if (new_journal_tid != 0) {
+        // ensure new journal event is safely committed to disk before
+        // committing old event
+        m_ictx->journal->flush_event(
+          new_journal_tid, new C_CommitIOEventExtent(m_ictx,
+                                                     original_journal_tid,
+                                                     it->first, it->second));
+      } else {
+        m_ictx->journal->commit_io_event_extent(original_journal_tid, it->first,
+					        it->second, 0);
+      }
     }
   }
 
