@@ -139,9 +139,18 @@ class SELinuxError(Exception):
         return "SELinux denials found on {node}: {denials}".format(
             node=self.node, denials=self.denials)
 
+
 class QuotaExceededError(Exception):
     def __init__(self, message):
         self.message = message
 
     def __str__(self):
         return self.message
+
+
+class SkipJob(Exception):
+    """
+    Used by teuthology.worker when it notices that a job is broken and should
+    be skipped.
+    """
+    pass
