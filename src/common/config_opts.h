@@ -158,6 +158,8 @@ SUBSYS(leveldb, 4, 5)
 SUBSYS(memdb, 4, 5)
 SUBSYS(kinetic, 1, 5)
 SUBSYS(fuse, 1, 5)
+SUBSYS(mgr, 1, 5)
+SUBSYS(mgrc, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
