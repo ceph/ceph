@@ -87,6 +87,8 @@
 #define CEPH_FEATURE_FS_BTIME                (1ULL<<59) /* btime */
 #define CEPH_FEATURE_FS_CHANGE_ATTR          (1ULL<<59) /* change_attr */
 
+#define CEPH_FEATURE_MSG_ADDR2 (1ULL<<59)  /* ADDR2 feature */
+
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
 #define CEPH_FEATURE_RESERVED_BROKEN  (1ULL<<63)  /* DO NOT USE THIS; see below */
@@ -184,6 +186,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_SERVER_KRAKEN |	\
 	 CEPH_FEATURE_FS_BTIME |			 \
 	 CEPH_FEATURE_FS_CHANGE_ATTR |			 \
+	 CEPH_FEATURE_MSG_ADDR2 | \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
