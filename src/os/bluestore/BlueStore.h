@@ -436,10 +436,6 @@ public:
 
     BufferSpace bc;
 
-    uint64_t tail_offset = 0;
-    uint64_t tail_txc_seq = 0;
-    bufferlist tail_bl;
-
     Onode(const ghobject_t& o, const string& k)
       : nref(0),
 	oid(o),
@@ -463,11 +459,6 @@ public:
     void put() {
       if (--nref == 0)
 	delete this;
-    }
-
-    void clear_tail() {
-      tail_offset = 0;
-      tail_bl.clear();
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;

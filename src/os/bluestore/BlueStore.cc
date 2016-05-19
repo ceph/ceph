@@ -5003,10 +5003,6 @@ int BlueStore::_do_overlay_write(TransContext *txc,
 {
   _do_overlay_trim(txc, o, offset, length);
 
-  // let's avoid considering how overlay interacts with cached tail
-  // blocks for now.
-  o->clear_tail();
-
   dout(10) << __func__ << " " << o->oid << " 0x"
 	   << std::hex << offset << "~0x" << length << std::dec << dendl;
   bluestore_overlay_t& ov = o->onode.overlay_map[offset] =
@@ -5108,11 +5104,6 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 		      << dendl;
     }
   }
-  if (o->tail_bl.length()) {
-    dout(log_level) << __func__ << "  tail offset 0x" << std::hex << o->tail_offset
-		    << " len 0x" << o->tail_bl.length() << std::dec
-		    << " txc_seq " << o->tail_txc_seq << dendl;
-  }
   if (o->bnode) {
     _dump_bnode(o->bnode, log_level);
   }
@@ -5184,14 +5175,6 @@ void BlueStore::_pad_zeros(
     bl->substr_of(old, 0, *length - back_copy);
     bl->append(tail);
     *length += back_pad;
-    if (end >= o->onode.size && g_conf->bluestore_cache_tails) {
-      o->tail_bl.clear();
-      o->tail_bl.append(tail, 0, back_copy);
-      o->tail_offset = end - back_copy;
-      o->tail_txc_seq = txc->seq;
-      dout(20) << __func__ << " cached " << back_copy << " of tail block at "
-	       << o->tail_offset << dendl;
-    }
   }
   dout(20) << __func__ << " pad 0x" << std::hex << front_pad << " + 0x"
 	   << back_pad << " on front/back, now 0x" << *offset << "~0x"
@@ -5269,16 +5252,6 @@ void BlueStore::_pad_zeros_tail(
   bl->substr_of(old, 0, *length - back_copy);
   bl->append(tail);
   *length += back_pad;
-  if (tail_len == chunk_size &&
-      end >= o->onode.size && g_conf->bluestore_cache_tails) {
-    o->tail_bl.clear();
-    o->tail_bl.append(tail, 0, back_copy);
-    o->tail_offset = end - back_copy;
-    o->tail_txc_seq = txc->seq;
-    dout(20) << __func__ << " cached 0x" << std::hex << back_copy
-	     << " of tail block at 0x"
-	     << o->tail_offset << std::dec << dendl;
-  }
   dout(20) << __func__ << " pad 0x" << std::hex << back_pad
 	   << " on back, now 0x" << offset << "~0x" << *length << std::dec
 	   << dendl;
@@ -5308,37 +5281,6 @@ void BlueStore::_do_write_small(
 
   bufferlist bl;
   blp.copy(length, bl);
-
-  // use tail cache?
-  if (offset >= o->onode.size &&
-      o->tail_bl.length() &&
-      offset > o->tail_offset) {
-    uint64_t tend = o->tail_offset + o->tail_bl.length();
-    uint64_t tlen = 0, zlen = 0;
-    if (offset <= tend) {
-      tlen = offset - o->tail_offset;
-      zlen = 0;
-    } else if (offset < ROUND_UP_TO(tend, min_alloc_size)) {
-      tlen = o->tail_bl.length();
-      zlen = offset - tend;
-    }
-    if (tlen || zlen) {
-      bufferlist t;
-      t.substr_of(o->tail_bl, 0, tlen);
-      if (zlen) {
-	t.append_zero(zlen);
-      }
-      t.claim_append(bl);
-      bl.swap(t);
-      offset -= tlen + zlen;
-      length += tlen + zlen;
-      dout(10) << __func__ << "  using tail_bl 0x" << std::hex
-	       << o->tail_offset << "~0x" << tlen
-	       << ", 0x" << zlen
-	       << " zeros, write is now 0x" << offset << "~0x" << length
-	       << std::dec << dendl;
-    }
-  }
 
   // look for an existing mutable blob we can use
   bluestore_blob_t *b = 0;
@@ -5822,14 +5764,6 @@ int BlueStore::_do_zero(TransContext *txc,
   // they may touch.
   o->flush();
 
-  // trim down cached tail?
-  if (o->tail_bl.length() && offset + length > o->tail_offset) {
-    // we could adjust this if we truncate down within the same
-    // block...
-    dout(20) << __func__ << " clear cached tail" << dendl;
-    o->clear_tail();
-  }
-
   o->bc.discard(offset, length);
 
   WriteContext wctx;
@@ -5865,14 +5799,6 @@ int BlueStore::_do_truncate(
     WriteContext wctx;
     o->onode.punch_hole(offset, o->onode.size, &wctx.lex_old);
     _wctx_finish(txc, c, o, &wctx);
-  }
-
-  // trim down cached tail
-  if (o->tail_bl.length()) {
-    // we could adjust this if we truncate down within the same
-    // chunk...
-    dout(20) << __func__ << " clear cached tail" << dendl;
-    o->clear_tail();
   }
 
   o->onode.size = offset;
