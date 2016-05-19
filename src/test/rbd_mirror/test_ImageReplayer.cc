@@ -74,6 +74,7 @@ public:
   TestImageReplayer() : m_watch_handle(0)
   {
     EXPECT_EQ("", connect_cluster_pp(m_local_cluster));
+    EXPECT_EQ(0, m_local_cluster.conf_set("rbd_cache", "false"));
 
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_local_cluster.pool_create(m_local_pool_name.c_str()));
@@ -81,6 +82,7 @@ public:
 					      m_local_ioctx));
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
+    EXPECT_EQ(0, m_remote_cluster.conf_set("rbd_cache", "false"));
 
     m_remote_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_remote_cluster.pool_create(m_remote_pool_name.c_str()));
