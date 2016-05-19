@@ -938,9 +938,6 @@ private:
   void _dump_bnode(BnodeRef b, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
-  void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
-		    uint64_t offset, uint64_t length,
-		    bool shared);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
