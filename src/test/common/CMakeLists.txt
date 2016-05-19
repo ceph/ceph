@@ -1,7 +1,7 @@
 # get_command_descriptions
 add_executable(get_command_descriptions
   get_command_descriptions.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   )
 target_link_libraries(get_command_descriptions
   mon
