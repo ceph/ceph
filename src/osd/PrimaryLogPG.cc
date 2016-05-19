@@ -5955,7 +5955,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       {
 	epoch_t epoch = op.assert_interval.epoch;
-	epoch_t pg_epoch = get_epoch();
+	epoch_t pg_epoch = info.history.same_interval_since;
 	tracepoint(osd, do_osd_op_pre_assert_interval, soid.oid.name.c_str(), soid.snap.val, epoch);
 	dout(5) << "Check interval " << soid << " epoch " << epoch << " pg epoch " << pg_epoch << dendl;
 	if (epoch > pg_epoch) {
