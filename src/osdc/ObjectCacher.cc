@@ -462,7 +462,7 @@ void ObjectCacher::Object::replace_journal_tid(BufferHead *bh,
   if (bh_tid != 0 && bh_tid != tid) {
     // inform journal that it should not expect a writeback from this extent
     oc->writeback_handler.overwrite_extent(get_oid(), bh->start(),
-					   bh->length(), bh_tid);
+					   bh->length(), bh_tid, tid);
   }
   bh->set_journal_tid(tid);
 }

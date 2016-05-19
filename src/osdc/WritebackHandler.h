@@ -37,7 +37,8 @@ class WritebackHandler {
                            ceph_tid_t journal_tid, Context *oncommit) = 0;
 
   virtual void overwrite_extent(const object_t& oid, uint64_t off, uint64_t len,
-                                ceph_tid_t journal_tid) {}
+                                ceph_tid_t original_journal_tid,
+                                ceph_tid_t new_journal_tid) {}
 
   virtual bool can_scattered_write() { return false; }
   virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
