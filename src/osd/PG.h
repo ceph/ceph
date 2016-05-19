@@ -161,6 +161,7 @@ struct PGRecoveryStats {
 };
 
 struct PGPool {
+  epoch_t cached_epoch;
   int64_t id;
   string name;
   uint64_t auid;
@@ -171,8 +172,17 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(int64_t i, const string& _name, uint64_t au)
-    : id(i), name(_name), auid(au) { }
+  PGPool(OSDMapRef map, int64_t i)
+    : cached_epoch(map->get_epoch()),
+      id(i),
+      name(map->get_pool_name(id)),
+      auid(map->get_pg_pool(id)->auid) {
+    const pg_pool_t *pi = map->get_pg_pool(id);
+    assert(pi);
+    info = *pi;
+    snapc = pi->get_snap_context();
+    pi->build_removed_snaps(cached_removed_snaps);
+  }
 
   void update(OSDMapRef map);
 };
