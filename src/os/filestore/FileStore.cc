@@ -1566,7 +1566,7 @@ int FileStore::mount()
     ::unlink(nosnapfn);
   }
 
-  //check fsid with omap
+  // check fsid with omap
   // get omap fsid
   int omap_fsid_fd;
   char omap_fsid_buf[PATH_MAX];
@@ -1574,26 +1574,34 @@ int FileStore::mount()
   snprintf(omap_fsid_buf, sizeof(omap_fsid_buf), "%s/osd_uuid", omap_dir.c_str());
   // if osd_uuid not exists, assume as this omap matchs corresponding osd
   if (::stat(omap_fsid_buf, &omap_fsid_stat) != 0){
-    dout(10) << "Filestore::mount osd_uuid not found under omap, assume as matched." << dendl;
+    dout(10) << "Filestore::mount osd_uuid not found under omap, "
+             << "assume as matched."
+             << dendl;
   }else{
     // if osd_uuid exists, compares osd_uuid with fsid
     omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY, 0644);
     if (omap_fsid_fd < 0) {
         ret = -errno;
         derr << "FileStore::mount: error opening '" << omap_fsid_buf << "': "
-        << cpp_strerror(ret) << dendl;
+             << cpp_strerror(ret)
+             << dendl;
         goto close_current_fd;
     }
     ret = read_fsid(omap_fsid_fd, &omap_fsid);
     VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
     omap_fsid_fd = -1; // defensive 
     if (ret < 0) {
-      derr << "FileStore::mount: error reading omap_fsid_fd" << ", omap_fsid = " << omap_fsid
-      << cpp_strerror(ret) << dendl;
+      derr << "FileStore::mount: error reading omap_fsid_fd"
+           << ", omap_fsid = " << omap_fsid
+           << cpp_strerror(ret)
+           << dendl;
       goto close_current_fd;
     }
     if (fsid != omap_fsid) {
-      derr << "FileStore::mount: " << omap_fsid_buf << " has existed omap fsid " << omap_fsid << " != expected osd fsid " << fsid << dendl;
+      derr << "FileStore::mount: " << omap_fsid_buf
+           << " has existed omap fsid " << omap_fsid
+           << " != expected osd fsid " << fsid
+           << dendl;
       ret = -EINVAL;
       goto close_current_fd;
     }
