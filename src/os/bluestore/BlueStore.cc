@@ -5656,13 +5656,14 @@ void BlueStore::_wctx_finish(
   dout(10) << __func__ << " lex_old " << wctx->lex_old << dendl;
   for (auto &l : wctx->lex_old) {
     bluestore_blob_t *b = c->get_blob_ptr(o, l.blob);
-    // fixme: handle partial deallocation
-    b->ref_map.put(l.offset, l.length, NULL);
+    vector<bluestore_pextent_t> r;
+    b->put_ref(l.offset, l.length, min_alloc_size, &r);
+    for (auto e : r) {
+      dout(20) << __func__ << " release " << e << dendl;
+      txc->released.insert(e.offset, e.length);
+    }
     if (b->ref_map.empty()) {
       dout(20) << __func__ << " rm blob " << *b << dendl;
-      for (auto p : b->extents) {
-	txc->released.insert(p.offset, p.length);
-      }
       if (l.blob >= 0) {
 	o->onode.blob_map.erase(l.blob);
       } else {
