@@ -2986,14 +2986,8 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
     assert(0);
   }
 
-  PGPool p = PGPool(id, createmap->get_pool_name(id),
-		    createmap->get_pg_pool(id)->auid);
+  PGPool p = PGPool(createmap, id);
 
-  const pg_pool_t *pi = createmap->get_pg_pool(id);
-  p.info = *pi;
-  p.snapc = pi->get_snap_context();
-
-  pi->build_removed_snaps(p.cached_removed_snaps);
   dout(10) << "_get_pool " << p.id << dendl;
   return p;
 }
