@@ -538,11 +538,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       continue;
     }
 
-    // note candidate in case we can't find anything better, because
-    // something is better than nothing.  FIXME.
-    auth = j;
-    *auth_oi = oi;
-
     uint64_t correct_size = be_get_ondisk_size(oi.size);
     if (correct_size != i->second.size) {
       // invalid size, probably corrupt
@@ -551,7 +546,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	       << ", size mismatch"
 	       << dendl;
       // invalid object info, probably corrupt
-      continue;
+      goto fail;
     }
     if (parent->get_pool().is_replicated()) {
       if (oi.is_data_digest() && i->second.digest_present &&
@@ -561,7 +556,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 		 << ", data digest mismatch 0x" << std::hex
 		 << i->second.digest << " != 0x" << oi.data_digest
 		 << std::dec << dendl;
-	continue;
+	goto fail;
       }
       if (oi.is_omap_digest() && i->second.omap_digest_present &&
 	  oi.omap_digest != i->second.omap_digest) {
@@ -570,10 +565,19 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 		 << ", omap digest mismatch 0x" << std::hex
 		 << i->second.omap_digest << " != 0x" << oi.omap_digest
 		 << std::dec << dendl;
-	continue;
+	goto fail;
       }
     }
+    auth = j;
+    *auth_oi = oi;
     break;
+fail:
+    // note candidate in case we can't find anything better, because
+    // something is better than nothing.  FIXME.
+    if (auth == maps.end()) {
+      auth = j;
+      *auth_oi = oi;
+    }
   }
   dout(10) << __func__ << ": selecting osd " << auth->first
 	   << " for obj " << obj
