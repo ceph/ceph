@@ -1585,15 +1585,17 @@ int FileStore::mount()
         goto close_current_fd;
     }
     ret = read_fsid(omap_fsid_fd, &omap_fsid);
+    VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
+    omap_fsid_fd = -1; // defensive 
     if (ret < 0) {
       derr << "FileStore::mount: error reading omap_fsid_fd" << ", omap_fsid = " << omap_fsid
       << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_current_fd;
     }
     if (fsid != omap_fsid) {
       derr << "FileStore::mount: " << omap_fsid_buf << " has existed omap fsid " << omap_fsid << " != expected osd fsid " << fsid << dendl;
       ret = -EINVAL;
-      goto close_fsid_fd;
+      goto close_current_fd;
     }
   }
 
