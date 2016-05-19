@@ -3099,13 +3099,7 @@ int BlueStore::_blob2read_to_extents2read(
 
 int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const
 {
-  int bad = checksummer->verify(
-    blob->csum_type,
-    blob->get_csum_block_size(),
-    blob_xoffset,
-    bl.length(),
-    bl,
-    blob->csum_data);
+  int bad = blob->verify_csum(blob_xoffset, bl);
   if (bad >= 0) {
     dout(20) << __func__ << " at blob offset 0x" << bad << dendl;
     return -1;
@@ -4535,8 +4529,7 @@ int BlueStore::queue_transactions(
     dout(20) << __func__ << "  deferred csum calc blob " << d.blob
 	     << " b_off 0x" << std::hex << d.b_off << std::dec
 	     << " on " << d.onode->oid << dendl;
-    checksummer->calculate(b->csum_type, b->get_csum_block_size(),
-			   d.b_off, d.data.length(), d.data, &b->csum_data);
+    b->calc_csum(d.b_off, d.data);
   }
 
   _txc_write_nodes(txc, txc->t);
@@ -5450,10 +5443,7 @@ void BlueStore::_do_write_small(
 		  bdev->aio_write(offset, t,
 				  &txc->ioc, wctx->buffered);
 		});
-      if (b->csum_type) {
-	checksummer->calculate(b->csum_type, b->get_csum_block_size(),
-			       b_off, padded.length(), padded, &b->csum_data);
-      }
+      b->calc_csum(b_off, padded);
       o->onode.punch_hole(offset, length, &wctx->lex_old);
       dout(20) << __func__ << "  lexold 0x" << std::hex << offset << std::dec
 	       << ": " << ep->second << dendl;
@@ -5548,8 +5538,7 @@ void BlueStore::_do_write_small(
   if (csum_type) {
     // it's little; csum at block granularity.
     b->init_csum(csum_type, block_size_order, min_alloc_size);
-    checksummer->calculate(b->csum_type, b->get_csum_block_size(),
-			   b_off, b_len, bl, &b->csum_data);
+    b->calc_csum(b_off, bl);
   }
 
   // allocate and write
@@ -5660,9 +5649,7 @@ int BlueStore::_do_alloc_write(
     // checksum
     if (csum_type) {
       b->init_csum(csum_type, 12, l->length()); // FIXME adjust b size
-      checksummer->calculate(b->csum_type, b->get_csum_block_size(),
-			     0, l->length(), *l,
-			     &b->csum_data);
+      b->calc_csum(0, *l);
     }
 
     // queue io
