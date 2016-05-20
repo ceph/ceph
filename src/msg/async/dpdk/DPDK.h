@@ -534,7 +534,7 @@ class DPDKQueuePair {
     //
     static constexpr int gc_count = 1;
    public:
-    tx_buf_factory(CephContext *c, uint8_t qid);
+    tx_buf_factory(CephContext *c, DPDKDevice *dev, uint8_t qid);
     ~tx_buf_factory() {
       // put all mbuf back into mempool in order to make the next factory work
       gc();

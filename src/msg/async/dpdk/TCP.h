@@ -857,7 +857,6 @@ void tcp<InetTraits>::received(Packet p, ipaddr from, ipaddr to) {
   }
   auto h = th->ntoh();
   auto id = connid{to, from, h.dst_port, h.src_port};
-  std::cerr << " " << from << ":" << h.src_port << " -> " << from << ":" << h.dst_port << std::endl;
   auto tcbi = _tcbs.find(id);
   lw_shared_ptr<tcb> tcbp;
   if (tcbi == _tcbs.end()) {

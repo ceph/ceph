@@ -409,7 +409,7 @@ int DPDKDevice::init_port_fini()
   // Changing FC requires HW reset, so set it before the port is initialized.
   set_hw_flow_control();
 
-  if (rte_eth_dev_start(_port_idx) < 0) {
+  if (rte_eth_dev_start(_port_idx) != 0) {
     lderr(cct) << __func__ << " can't start port " << _port_idx << dendl;
     return -1;
   }
@@ -485,15 +485,15 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
 {
   std::string name = std::string(pktmbuf_pool_name) + std::to_string(_qid) + "_rx";
 
-  ldout(cct, 1) << __func__ << " Creating Rx mbuf pool '" << name.c_str()
-                << "' [" << mbufs_per_queue_rx << " mbufs] ..."<< dendl;
-
   // reserve the memory for Rx buffers containers
   _rx_free_pkts.reserve(mbufs_per_queue_rx);
   _rx_free_bufs.reserve(mbufs_per_queue_rx);
 
   _pktmbuf_pool_rx = rte_mempool_lookup(name.c_str());
   if (!_pktmbuf_pool_rx) {
+    ldout(cct, 1) << __func__ << " Creating Rx mbuf pool '" << name.c_str()
+                  << "' [" << mbufs_per_queue_rx << " mbufs] ..."<< dendl;
+
     //
     // Don't pass single-producer/single-consumer flags to mbuf create as it
     // seems faster to use a cache instead.
@@ -510,7 +510,7 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
         rte_socket_id(), 0);
     if (!_pktmbuf_pool_rx) {
       lderr(cct) << __func__ << " Failed to create mempool for rx" << dendl;
-      assert(0);
+      return false;
     }
 
     //
@@ -528,7 +528,7 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
       if (!init_noninline_rx_mbuf(m, mbuf_data_size)) {
         lderr(cct) << __func__ << " Failed to allocate data buffers for Rx ring. "
                    "Consider increasing the amount of memory." << dendl;
-        assert(0);
+        return false;
       }
     }
 
@@ -536,8 +536,15 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
                          _rx_free_bufs.size());
 
     _rx_free_bufs.clear();
+    if (rte_eth_rx_queue_setup(_dev_port_idx, _qid, default_ring_size,
+                               rte_eth_dev_socket_id(_dev_port_idx),
+                               _dev->def_rx_conf(), _pktmbuf_pool_rx) < 0) {
+      lderr(cct) << __func__ << " cannot initialize rx queue" << dendl;
+      return false;
+    }
   }
 
+  ldout(cct, 20) << __func__ << " count " << rte_mempool_count(_pktmbuf_pool_rx) << " free count " << rte_mempool_free_count(_pktmbuf_pool_rx) << dendl;
   return _pktmbuf_pool_rx != nullptr;
 }
 
@@ -545,7 +552,7 @@ int DPDKDevice::check_port_link_status()
 {
   int count = 0;
 
-  ldout(cct, 20) << __func__ << "Checking link status " << dendl;
+  ldout(cct, 20) << __func__ << dendl;
   const int sleep_time = 100 * 1000;
   const int max_check_time = 90;  /* 9s (90 * 100ms) in total */
   while (true) {
@@ -555,9 +562,9 @@ int DPDKDevice::check_port_link_status()
 
     if (true) {
       if (link.link_status) {
-        ldout(cct, 5) << __func__ << " done Port "
+        ldout(cct, 5) << __func__ << " done port "
                       << static_cast<unsigned>(_port_idx)
-                      << " Link Up - speed " << link.link_speed
+                      << " link Up - speed " << link.link_speed
                       << " Mbps - "
                       << ((link.link_duplex == ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"))
                       << dendl;
@@ -566,7 +573,7 @@ int DPDKDevice::check_port_link_status()
         ldout(cct, 20) << __func__ << " not ready, continue to wait." << dendl;
         usleep(sleep_time);
       } else {
-        lderr(cct) << __func__ << "done Port " << _port_idx << " Link Down" << dendl;
+        lderr(cct) << __func__ << "done port " << _port_idx << " link down" << dendl;
         return -1;
       }
     }
@@ -576,11 +583,12 @@ int DPDKDevice::check_port_link_status()
 
 DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, uint8_t qid)
   : cct(c), _dev(dev), _dev_port_idx(dev->port_idx()), center(cen), _qid(qid),
-    _tx_poller(this), _rx_gc_poller(this), _tx_buf_factory(c, qid),
+    _tx_poller(this), _rx_gc_poller(this), _tx_buf_factory(c, dev, qid),
     _tx_gc_poller(this)
 {
   if (!init_rx_mbuf_pool()) {
-    rte_exit(EXIT_FAILURE, "Cannot initialize mbuf pools\n");
+    lderr(cct) << __func__ << " cannot initialize mbuf pools" << dendl;
+    assert(0);
   }
 
   static_assert(offsetof(tx_buf, private_end) -
@@ -592,18 +600,6 @@ DPDKQueuePair::DPDKQueuePair(CephContext *c, EventCenter *cen, DPDKDevice* dev, 
                 "field!");
   static_assert((inline_mbuf_data_size & (inline_mbuf_data_size - 1)) == 0,
                 "inline_mbuf_data_size has to be a power of two!");
-
-  if (rte_eth_rx_queue_setup(_dev_port_idx, _qid, default_ring_size,
-                             rte_eth_dev_socket_id(_dev_port_idx),
-                             _dev->def_rx_conf(), _pktmbuf_pool_rx) < 0) {
-    lderr(cct) << __func__ << " cannot initialize rx queue" << dendl;
-    rte_exit(EXIT_FAILURE, "Cannot initialize rx queue\n");
-  }
-
-  if (rte_eth_tx_queue_setup(_dev_port_idx, _qid, default_ring_size,
-                             rte_eth_dev_socket_id(_dev_port_idx), _dev->def_tx_conf()) < 0) {
-    rte_exit(EXIT_FAILURE, "Cannot initialize tx queue\n");
-  }
 
   std::string name(std::string("queue") + std::to_string(qid));
   PerfCountersBuilder plb(cct, name, l_dpdk_qp_first, l_dpdk_qp_last);
@@ -827,15 +823,15 @@ bool DPDKQueuePair::poll_rx_once()
   return rx_count;
 }
 
-DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c, uint8_t qid)
-  : cct(c)
+DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c,
+        DPDKDevice *dev, uint8_t qid): cct(c)
 {
   std::string name = std::string(pktmbuf_pool_name) + std::to_string(qid) + "_tx";
-  ldout(cct, 0) << __func__ << " Creating Tx mbuf pool '" << name.c_str()
-                << "' [" << mbufs_per_queue_tx << " mbufs] ..." << dendl;
 
   _pool = rte_mempool_lookup(name.c_str());
   if (!_pool) {
+    ldout(cct, 0) << __func__ << " Creating Tx mbuf pool '" << name.c_str()
+                  << "' [" << mbufs_per_queue_tx << " mbufs] ..." << dendl;
     //
     // We are going to push the buffers from the mempool into
     // the circular_buffer and then poll them from there anyway, so
@@ -851,6 +847,12 @@ DPDKQueuePair::tx_buf_factory::tx_buf_factory(CephContext *c, uint8_t qid)
 
     if (!_pool) {
       lderr(cct) << __func__ << " Failed to create mempool for Tx" << dendl;
+      assert(0);
+    }
+    if (rte_eth_tx_queue_setup(dev->port_idx(), qid, default_ring_size,
+                               rte_eth_dev_socket_id(dev->port_idx()),
+                               dev->def_tx_conf()) < 0) {
+      lderr(cct) << __func__ << " cannot initialize tx queue" << dendl;
       assert(0);
     }
   }

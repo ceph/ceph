@@ -643,6 +643,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       } else {
         do_output = should_send_ack(seg_len);
       }
+      ldout(_tcp.cct, 20) << __func__ << " merged=" << merged << " do_output=" << do_output << dendl;
     }
   } else if (in_state(CLOSE_WAIT | CLOSING | LAST_ACK | TIME_WAIT)) {
     // This should not occur, since a FIN has been received from the
