@@ -76,8 +76,10 @@ function run() {
 function main() {
     if run "$@" ; then
         echo "make check: successful run on $(git rev-parse HEAD)"
+        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
         return 0
     else
+        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
         return 1
     fi
 }
