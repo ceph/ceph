@@ -47,13 +47,14 @@ class NetworkWorkerTest : public ::testing::TestWithParam<const char*> {
       port_addr = "127.0.0.1:15001";
     } else {
       g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_debug_allow_loopback", "true", false, false);
       g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_coremask", "3", false, false);
-      g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.199", false, false);
+      g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "172.16.218.3", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_gateway_ipv4_addr", "172.16.218.2", false, false);
       g_ceph_context->_conf->set_val("ms_dpdk_netmask_ipv4_addr", "255.255.255.0", false, false);
-      addr = "172.16.218.199:15000";
-      port_addr = "172.16.218.199:15001";
+      addr = "172.16.218.3:15000";
+      port_addr = "172.16.218.3:15001";
     }
     g_ceph_context->_conf->apply_changes(nullptr);
     stack = NetworkStack::create(g_ceph_context, GetParam());
@@ -222,8 +223,10 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
       }
       bind_socket.abort_accept();
     }
-    if (worker->id == 0)
+    if (worker->id == 0) {
       cli_socket.shutdown();
+      // ack delay is 200 ms
+    }
 
     bl.clear();
     bl.append(message, len);
@@ -235,6 +238,11 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
       cb.reset();
       ASSERT_EQ(cb.poll(500), true);
       r = srv_socket.read(buf, sizeof(buf));
+      if (r == -EAGAIN) {
+        cb.reset();
+        ASSERT_EQ(cb.poll(1000*500), true);
+        r = srv_socket.read(buf, sizeof(buf));
+      }
       ASSERT_EQ(r, 0);
       center->delete_file_event(srv_socket.fd(), EVENT_READABLE);
       srv_socket.close();
@@ -627,7 +635,6 @@ class StressFactory {
     std::deque<StressFactory::Message*> acking;
     std::deque<StressFactory::Message*> writings;
     std::string buffer;
-    bufferptr buf_bl;
     size_t index = 0;
     size_t left;
     bool write_enabled = false;
@@ -699,12 +706,11 @@ class StressFactory {
         std::cerr << " client " << this << " receive " << m->idx << " len " << r << " content: "  << std::endl;
         ASSERT_FALSE(must_no);
         if ((m->len - read_offset) == 0) {
-          ASSERT_TRUE(m->verify(buf_bl.c_str(), 0));
+          ASSERT_TRUE(m->verify(buffer.data(), 0));
           delete m;
           acking.pop_front();
           read_offset = 0;
           buffer.clear();
-          buf_bl.clear();
           if (acking.empty()) {
             m = &homeless_message;
             must_no = true;
@@ -826,7 +832,7 @@ class StressFactory {
         } else if (r == -EAGAIN)
           break;
         if (factory->zero_copy_read) {
-          buffers.emplace_back(data.c_str(), 0, buf.length());
+          buffers.emplace_back(data.c_str(), 0, data.length());
         } else {
           buffers.emplace_back(buf, 0, r);
         }

@@ -27,13 +27,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
 
-void Worker::stop()
-{
-  ldout(cct, 10) << __func__ << dendl;
-  done = true;
-  center.wakeup();
-}
-
 std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
 {
   if (t == "posix")
@@ -86,6 +79,7 @@ void NetworkStack::start()
             // TODO do something?
           }
         }
+        w->destroy();
       }
     );
   }
@@ -99,8 +93,10 @@ void NetworkStack::start()
 
 void NetworkStack::stop()
 {
-  for (auto &&w : workers)
-    w->stop();
+  for (auto &&w : workers) {
+    w->done = true;
+    w->center.wakeup();
+  }
   join_workers();
   threads.clear();
 }

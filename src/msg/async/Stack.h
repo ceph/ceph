@@ -236,7 +236,7 @@ class Worker {
                       const SocketOptions &opts, ConnectedSocket *socket) = 0;
 
   virtual void initialize() {}
-  void stop();
+  virtual void destroy() {}
   PerfCounters *get_perf_counter() { return perf_logger; }
 };
 

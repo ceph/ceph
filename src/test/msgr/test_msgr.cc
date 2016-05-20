@@ -61,7 +61,6 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
       if (string(GetParam()+6, 4) == "dpdk") {
         g_ceph_context->_conf->set_val("ms_dpdk_debug_allow_loopback", "true", false, false);
         g_ceph_context->_conf->set_val("ms_async_op_threads", "2", false, false);
-        g_ceph_context->_conf->set_val("ms_async_send_inline", "false", false, false);
         g_ceph_context->_conf->set_val("ms_async_transport_type", "dpdk", false, false);
         g_ceph_context->_conf->set_val("ms_dpdk_coremask", "3", false, false);
         g_ceph_context->_conf->set_val("ms_dpdk_host_ipv4_addr", "127.0.0.1", false, false);

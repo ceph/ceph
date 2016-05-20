@@ -70,24 +70,32 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   virtual ssize_t read(char *buf, size_t len) override {
     size_t left = len;
     ssize_t r = 0;
+    size_t off = 0;
     while (left > 0) {
       if (!_cache_ptr) {
         _cache_ptr.construct();
         r = zero_copy_read(*_cache_ptr);
         if (r <= 0) {
           _cache_ptr.destroy();
+          if (r == -EAGAIN)
+            break;
           return r;
         }
       }
       if (_cache_ptr->length() <= left) {
-        _cache_ptr->copy_out(0, _cache_ptr->length(), buf);
+        _cache_ptr->copy_out(0, _cache_ptr->length(), buf+off);
+        left -= _cache_ptr->length();
+        off += _cache_ptr->length();
         _cache_ptr.destroy();
       } else {
-        _cache_ptr->copy_out(0, left, buf);
+        _cache_ptr->copy_out(0, left, buf+off);
         _cache_ptr->set_offset(_cache_ptr->offset() + left);
+        _cache_ptr->set_length(_cache_ptr->length() - left);
+        left = 0;
+        break;
       }
     }
-    return len - left;
+    return len - left ? len - left : -EAGAIN;
   }
 
   virtual ssize_t zero_copy_read(bufferptr &data) override {
@@ -107,12 +115,14 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
             [](Packet &p) {}, std::move(p));
     data = buffer::claim_buffer(
             f.size, f.base, make_deleter(std::move(del)));
+    _cur_off += f.size;
     if (++_cur_frag == _buf->nr_frags()) {
       _cur_frag = 0;
       _cur_off = 0;
       _buf.destroy();
     }
-    return 0;
+    assert(data.length());
+    return data.length();
   }
   virtual ssize_t send(bufferlist &bl, bool more) override {
     auto err = _conn.get_errno();
@@ -217,6 +227,9 @@ class DPDKWorker : public Worker {
   static std::unique_ptr<NetworkStack> create(CephContext *cct, EventCenter *center);
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _impl->_inet.learn(l2, l3);
+  }
+  void destroy() {
+    _impl.reset();
   }
 
   friend class DPDKServerSocketImpl<tcp4>;
