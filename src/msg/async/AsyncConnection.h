@@ -196,6 +196,8 @@ class AsyncConnection : public Connection {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
+  
+  void release_worker();
 
  private:
   enum {
