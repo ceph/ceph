@@ -17,29 +17,14 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
-#include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
-
 #include "include/assert.h" 
-#include "include/unordered_map.h"
-#include "common/cmdparse.h"
-
-#include "HitSet.h"
-#include "OSD.h"
 #include "PG.h"
 #include "Watch.h"
-#include "OpRequest.h"
 #include "TierAgentState.h"
-
-#include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDSubOp.h"
-
 #include "common/sharedptr_registry.hpp"
-
-#include "PGBackend.h"
 #include "ReplicatedBackend.h"
-#include "ECBackend.h"
 
 class MOSDSubOpReply;
 
@@ -48,6 +33,13 @@ class PromoteCallback;
 
 class ReplicatedPG;
 class PGLSFilter;
+class HitSet;
+struct TierAgentState;
+class MOSDOp;
+class MOSDOpReply;
+class MOSDSubOp;
+class OSDService;
+
 void intrusive_ptr_add_ref(ReplicatedPG *pg);
 void intrusive_ptr_release(ReplicatedPG *pg);
 uint64_t get_with_id(ReplicatedPG *pg);

@@ -2,10 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
-#include "msg/Message.h"
-#include "osd/OSD.h"
 #include "ClassHandler.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
 
 #include <dlfcn.h>
 
@@ -16,6 +15,7 @@
 #endif
 
 #include "common/config.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

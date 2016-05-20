@@ -15,8 +15,6 @@
 #ifndef CEPH_OSD_H
 #define CEPH_OSD_H
 
-#include "boost/tuple/tuple.hpp"
-
 #include "PG.h"
 
 #include "msg/Dispatcher.h"
@@ -25,19 +23,15 @@
 #include "common/RWLock.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
-#include "common/LogClient.h"
 #include "common/AsyncReserver.h"
-#include "common/ceph_context.h"
-
 #include "os/ObjectStore.h"
-#include "OSDCap.h"
-
+#include "OSDCap.h" 
+ 
+#include "auth/KeyRing.h"
 #include "osd/ClassHandler.h"
 
 #include "include/CompatSet.h"
 
-#include "auth/KeyRing.h"
-#include "messages/MOSDRepScrub.h"
 #include "OpRequest.h"
 
 #include <atomic>
@@ -48,13 +42,11 @@ using namespace std;
 
 #include "include/unordered_map.h"
 
-#include "Watch.h"
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
 #include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
-#include "common/OpQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
 
@@ -222,8 +214,10 @@ class OpsFlightSocketHook;
 class HistoricOpsSocketHook;
 class TestOpsSocketHook;
 struct C_CompleteSplits;
-
+class LogChannel;
+class CephContext;
 typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
+class MOSDOp;
 
 class DeletingState {
   Mutex lock;
