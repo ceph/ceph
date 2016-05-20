@@ -800,15 +800,21 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
 {
   if (changed.count("bluestore_csum_type") ||
       changed.count("bluestore_csum")) {
-    csum_type = bluestore_blob_t::get_csum_string_type(
-      conf->bluestore_csum_type);
-    if (csum_type < 0 || !conf->bluestore_csum) {
-      csum_type = bluestore_blob_t::CSUM_NONE;
-    }
-    dout(10) << __func__ << " csum_type "
-	     << bluestore_blob_t::get_csum_type_string(csum_type)
-	     << dendl;
+    _set_csum();
   }
+}
+
+void BlueStore::_set_csum()
+{
+  int t = bluestore_blob_t::get_csum_string_type(
+    g_conf->bluestore_csum_type);
+  if (t < 0 || !g_conf->bluestore_csum) {
+    t = bluestore_blob_t::CSUM_NONE;
+  }
+  csum_type = t;
+  dout(10) << __func__ << " csum_type "
+	   << bluestore_blob_t::get_csum_type_string(csum_type)
+	   << dendl;
 }
 
 void BlueStore::_init_logger()
@@ -2020,6 +2026,7 @@ int BlueStore::mount()
   if (r < 0)
     goto out_stop;
 
+  _set_csum();
   mounted = true;
   return 0;
 
