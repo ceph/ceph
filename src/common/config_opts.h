@@ -953,7 +953,9 @@ OPTION(bluestore_csum, OPT_BOOL, true)
 OPTION(bluestore_csum_type, OPT_STR, "crc32c")
 OPTION(bluestore_min_csum_block, OPT_U32, 4096)
 OPTION(bluestore_max_csum_block, OPT_U32, 64*1024)
-OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
+OPTION(bluestore_min_alloc_size, OPT_U32, 0)
+OPTION(bluestore_min_alloc_size_hdd, OPT_U32, 64*1024)
+OPTION(bluestore_min_alloc_size_ssd, OPT_U32, 4*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")

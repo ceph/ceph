@@ -771,7 +771,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
-    min_alloc_size(g_conf->bluestore_min_alloc_size)
+    min_alloc_size(0)
 {
   _init_logger();
 }
@@ -790,7 +790,6 @@ const char **BlueStore::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "bluestore_csum",
     "bluestore_csum_type",
-    "bluestore_min_alloc_size",
     NULL
   };
   return KEYS;
@@ -809,11 +808,6 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
     dout(10) << __func__ << " csum_type "
 	     << bluestore_blob_t::get_csum_type_string(csum_type)
 	     << dendl;
-  }
-  if (changed.count("bluestore_min_alloc_size")) {
-    min_alloc_size = g_conf->bluestore_min_alloc_size;
-    dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
-	     << std::dec << dendl;
   }
 }
 
@@ -969,6 +963,26 @@ int BlueStore::_check_or_set_bdev_label(
   return 0;
 }
 
+void BlueStore::_set_min_alloc(void)
+{
+  /*
+   * Set device block size according to its media
+   */
+  if (g_conf->bluestore_min_alloc_size) {
+    min_alloc_size = g_conf->bluestore_min_alloc_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      min_alloc_size = g_conf->bluestore_min_alloc_size_hdd;
+    } else {
+      min_alloc_size = g_conf->bluestore_min_alloc_size_ssd;
+    }
+  }
+
+  dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+	   << std::dec << dendl;
+}
+
 int BlueStore::_open_bdev(bool create)
 {
   bluestore_bdev_label_t label;
@@ -992,6 +1006,8 @@ int BlueStore::_open_bdev(bool create)
   for (uint64_t t = 1; t < block_size; t <<= 1) {
     ++block_size_order;
   }
+
+  _set_min_alloc();
   return 0;
 
  fail_close:
