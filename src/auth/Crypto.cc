@@ -27,13 +27,12 @@
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/ceph_crypto.h"
-#include "common/config.h"
-#include "common/debug.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
 #include "include/ceph_fs.h"
 #include "include/compat.h"
-
+#include "common/Formatter.h"
+#include "common/debug.h"
 #include <errno.h>
 
 int get_random_bytes(char *buf, int len)
