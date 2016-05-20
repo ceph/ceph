@@ -5501,7 +5501,6 @@ void BlueStore::_do_write_big(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
 	   << std::dec << dendl;
-#warning max blob size if compressing?
   int64_t blob;
   bluestore_blob_t *b = o->onode.add_blob(&blob);
   b->length = length;
