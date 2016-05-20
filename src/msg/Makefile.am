@@ -17,6 +17,7 @@ libmsg_la_SOURCES += \
 	msg/simple/Pipe.cc \
 	msg/simple/PipeConnection.cc \
 	msg/simple/SimpleMessenger.cc \
+	msg/async/Stack.cc \
 	msg/async/AsyncConnection.cc \
 	msg/async/AsyncMessenger.cc \
 	msg/async/Event.cc \
@@ -42,6 +43,7 @@ noinst_HEADERS += \
 	msg/simple/Pipe.h \
 	msg/simple/PipeConnection.h \
 	msg/simple/SimpleMessenger.h \
+	msg/async/Stack.h \
 	msg/async/AsyncConnection.h \
 	msg/async/AsyncMessenger.h \
 	msg/async/Event.h \
@@ -62,8 +64,8 @@ libmsg_la_SOURCES += msg/async/EventKqueue.h
 endif
 
 if WITH_DPDK
-libmsg_la_CXXFLAGS += -I ${with_dpdk}/include -fPIC
-libmsg_la_LIBADD += ${DPDK_LIBS}
+libmsg_la_CXXFLAGS = -I ${with_dpdk}/include -fPIC
+libmsg_la_LIBADD = ${DPDK_LIBS}
 libmsg_la_SOURCES += \
 	msg/async/dpdk/ARP.cc \
 	msg/async/dpdk/DPDK.cc \
@@ -71,32 +73,37 @@ libmsg_la_SOURCES += \
 	msg/async/dpdk/DPDKStack.cc \
 	msg/async/dpdk/EventDPDK.cc \
 	msg/async/dpdk/UserspaceEvent.cc \
-	msg/async/dpdk/Stack.cc \
 	msg/async/dpdk/ethernet.cc \
 	msg/async/dpdk/IP.cc \
+	msg/async/dpdk/IPChecksum.cc \
 	msg/async/dpdk/Packet.cc \
+	msg/async/dpdk/net.cc \
 	msg/async/dpdk/TCP.cc
 
 noinst_HEADERS += \
 	msg/async/dpdk/ARP.h \
+	msg/async/dpdk/align.h \
 	msg/async/dpdk/array_map.h \
 	msg/async/dpdk/byteorder.h \
 	msg/async/dpdk/circular_buffer.h \
+	msg/async/dpdk/capture.h \
 	msg/async/dpdk/const.h \
-	msg/async/dpdk/DPDK.h \
 	msg/async/dpdk/dpdk_rte.h \
+	msg/async/dpdk/DPDK.h \
 	msg/async/dpdk/DPDKStack.h \
 	msg/async/dpdk/ethernet.h \
 	msg/async/dpdk/EventDPDK.h \
-	msg/async/dpdk/Stack.h \
 	msg/async/dpdk/IP.h \
 	msg/async/dpdk/IPChecksum.h \
+	msg/async/dpdk/ip_types.h \
+	msg/async/dpdk/net.h \
 	msg/async/dpdk/Packet.h \
 	msg/async/dpdk/PacketUtil.h \
 	msg/async/dpdk/queue.h \
 	msg/async/dpdk/shared_ptr.h \
 	msg/async/dpdk/stream.h \
 	msg/async/dpdk/TCP.h \
+	msg/async/dpdk/TCP-Stack.h \
 	msg/async/dpdk/toeplitz.h \
 	msg/async/dpdk/transfer.h \
 	msg/async/dpdk/unaligned.h \
