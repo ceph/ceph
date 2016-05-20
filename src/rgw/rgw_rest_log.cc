@@ -18,6 +18,8 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_log.h"
 #include "rgw_client_io.h"
+#include "rgw_sync.h"
+#include "rgw_data_sync.h"
 #include "common/errno.h"
 #include "include/assert.h"
 
@@ -837,6 +839,85 @@ void RGWOp_DATALog_Delete::execute() {
   http_ret = store->data_log->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
+// not in header to avoid pulling in rgw_sync.h
+class RGWOp_MDLog_Status : public RGWRESTOp {
+  rgw_meta_sync_status status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("mdlog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override;
+  void send_response() override;
+  const string name() override { return "get_metadata_log_status"; }
+};
+
+void RGWOp_MDLog_Status::execute()
+{
+  auto sync = store->get_meta_sync_manager();
+  if (sync == nullptr) {
+    ldout(s->cct, 1) << "no sync manager" << dendl;
+    http_ret = -ENOENT;
+    return;
+  }
+  http_ret = sync->read_sync_status();
+  status = sync->get_sync_status();
+}
+
+void RGWOp_MDLog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+// not in header to avoid pulling in rgw_data_sync.h
+class RGWOp_DATALog_Status : public RGWRESTOp {
+  rgw_data_sync_status status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("datalog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override ;
+  void send_response() override;
+  const string name() override { return "get_data_changes_log_status"; }
+};
+
+void RGWOp_DATALog_Status::execute()
+{
+  const auto source_zone = s->info.args.get("source-zone");
+  auto sync = store->get_data_sync_manager(source_zone);
+  if (sync == nullptr) {
+    ldout(s->cct, 1) << "no sync manager for source-zone " << source_zone << dendl;
+    http_ret = -ENOENT;
+    return;
+  }
+  http_ret = sync->read_sync_status(&status);
+}
+
+void RGWOp_DATALog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+
 RGWOp *RGWHandler_Log::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
@@ -852,6 +933,8 @@ RGWOp *RGWHandler_Log::op_get() {
       } else {
         return new RGWOp_MDLog_List;
       }
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_MDLog_Status;
     } else {
       return new RGWOp_MDLog_Info;
     }
@@ -868,6 +951,8 @@ RGWOp *RGWHandler_Log::op_get() {
       } else {
         return new RGWOp_DATALog_List;
       }
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_DATALog_Status;
     } else {
       return new RGWOp_DATALog_Info;
     }
