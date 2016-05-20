@@ -73,6 +73,8 @@ namespace librbd {
       bufferlist parent_bl;
       ::encode(snap, parent_bl);
       op->exec("rbd", "get_parent", parent_bl);
+
+      op->exec("rbd", "image_get_cg_ref", empty_bl);
       rados::cls::lock::get_lock_info_start(op, RBD_LOCK_NAME);
     }
 
@@ -82,7 +84,8 @@ namespace librbd {
                                     std::map<rados::cls::lock::locker_id_t,
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
-                                    ::SnapContext *snapc, parent_info *parent) {
+                                    ::SnapContext *snapc, parent_info *parent,
+				    std::pair<int64_t, std::string> *cg_ref) {
       assert(size);
       assert(features);
       assert(incompatible_features);
@@ -90,6 +93,7 @@ namespace librbd {
       assert(exclusive_lock);
       assert(snapc);
       assert(parent);
+      assert(cg_ref);
 
       try {
 	uint8_t order;
@@ -106,6 +110,9 @@ namespace librbd {
 	::decode(parent->spec.image_id, *it);
 	::decode(parent->spec.snap_id, *it);
 	::decode(parent->overlap, *it);
+	// image_get_cg_ref
+	::decode(cg_ref->first, *it);
+	::decode(cg_ref->second, *it);
 
 	// get_lock_info
 	ClsLockType lock_type = LOCK_NONE;
@@ -131,7 +138,7 @@ namespace librbd {
                              bool *exclusive_lock,
 			     string *lock_tag,
 			     ::SnapContext *snapc,
-			     parent_info *parent)
+			     parent_info *parent, std::pair<int64_t, std::string> *cg_ref)
     {
       librados::ObjectReadOperation op;
       get_mutable_metadata_start(&op, read_only);
@@ -146,7 +153,7 @@ namespace librbd {
       return get_mutable_metadata_finish(&it, size, features,
                                          incompatible_features, lockers,
                                          exclusive_lock, lock_tag, snapc,
-                                         parent);
+                                         parent, cg_ref);
     }
 
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -1298,6 +1305,25 @@ namespace librbd {
       ::encode(pool_id, bl);
 
       return ioctx->exec(oid, "rbd", "image_remove_cg_ref", bl, bl2);
+    }
+
+    int image_get_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+	                 std::string *cg_id, int64_t *pool_id)
+    {
+      bufferlist in, out;
+
+      int r = ioctx->exec(oid, "rbd", "image_get_cg_ref", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*cg_id, iter);
+	::decode(*pool_id, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
     }
 
     int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,

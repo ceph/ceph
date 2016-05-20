@@ -665,6 +665,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::cg_ref(std::pair<int64_t, std::string> *cg_ref)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, get_cg_ref_enter, ictx, ictx->name.c_str());
+    int r = librbd::get_cg_ref(ictx, cg_ref);
+    tracepoint(librbd, get_cg_ref_exit, r);
+    return r;
+  }
+
   int Image::features(uint64_t *features)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

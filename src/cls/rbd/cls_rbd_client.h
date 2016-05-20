@@ -35,7 +35,8 @@ namespace librbd {
                                     std::map<rados::cls::lock::locker_id_t,
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
-                                    ::SnapContext *snapc, parent_info *parent);
+                                    ::SnapContext *snapc, parent_info *parent,
+				    std::pair<int64_t, std::string> *cg_ref);
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			     bool read_only, uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
@@ -44,7 +45,7 @@ namespace librbd {
 			     bool *exclusive_lock,
 			     std::string *lock_tag,
 			     ::SnapContext *snapc,
-			     parent_info *parent);
+			     parent_info *parent, std::pair<int64_t, std::string> *cg_ref);
 
     // low-level interface (mainly for testing)
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -255,6 +256,9 @@ namespace librbd {
 		         const std::string &cg_id, int64_t pool_id);
     int image_remove_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
 		            const std::string &cg_id, int64_t pool_id);
+
+    int image_get_cg_ref(librados::IoCtx *ioctx, const std::string &oid,
+	                 std::string *cg_id, int64_t *pool_id);
 
     int dir_list_cgs(librados::IoCtx *ioctx, const std::string &oid,
 		     const std::string &start, uint64_t max_return,

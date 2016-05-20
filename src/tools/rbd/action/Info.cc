@@ -5,6 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/types.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include <iostream>
@@ -73,6 +74,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   bool snap_protected = false;
   librbd::mirror_image_info_t mirror_image;
   int r;
+  std::pair<int64_t, std::string> cg_ref;
 
   r = image.stat(info, sizeof(info));
   if (r < 0)
@@ -108,6 +110,11 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     }
   }
 
+  r = image.cg_ref(&cg_ref);
+  if (r < 0) {
+    return r;
+  }
+
   char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
   strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
   prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
@@ -121,6 +128,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     f->dump_unsigned("object_size", info.obj_size);
     f->dump_string("block_name_prefix", prefix);
     f->dump_int("format", (old_format ? 1 : 2));
+    f->dump_string("cg", stringify(cg_ref.first) + "." + cg_ref.second);
   } else {
     std::cout << "rbd image '" << imgname << "':\n"
               << "\tsize " << prettybyte_t(info.size) << " in "
@@ -132,6 +140,8 @@ static int do_show_info(const char *imgname, librbd::Image& image,
               << "\tblock_name_prefix: " << prefix
               << std::endl
               << "\tformat: " << (old_format ? "1" : "2")
+              << std::endl
+              << "\tconsistency group: " << stringify(cg_ref.first) + "." + cg_ref.second
               << std::endl;
   }
 

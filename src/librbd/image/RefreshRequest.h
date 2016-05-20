@@ -112,6 +112,7 @@ private:
   uint64_t m_flags;
   std::string m_object_prefix;
   parent_info m_parent_md;
+  std::pair<int64_t, std::string> m_cg_ref;
 
   ::SnapContext m_snapc;
   std::vector<std::string> m_snap_names;

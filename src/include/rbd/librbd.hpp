@@ -190,6 +190,7 @@ public:
 		      std::string *parent_snapname);
   int old_format(uint8_t *old);
   int size(uint64_t *size);
+  int cg_ref(std::pair<int64_t, std::string> *cg_ref);
   int features(uint64_t *features);
   int update_features(uint64_t features, bool enabled);
   int overlap(uint64_t *overlap);

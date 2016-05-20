@@ -161,6 +161,7 @@ struct C_InvalidateCache : public Context {
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
+      cg_ref(-1, ""),
       stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),

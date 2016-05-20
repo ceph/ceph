@@ -134,6 +134,7 @@ cls_method_handle_t h_cg_to_default;
 cls_method_handle_t h_cg_remove_image;
 cls_method_handle_t h_image_add_cg_ref;
 cls_method_handle_t h_image_remove_cg_ref;
+cls_method_handle_t h_image_get_cg_ref;
 cls_method_handle_t h_dir_list_cgs;
 cls_method_handle_t h_dir_add_cg;
 cls_method_handle_t h_dir_remove_cg;
@@ -3921,8 +3922,12 @@ int image_remove_cg_ref(cls_method_context_t hctx,
   std::string ref_cg_id;
   int64_t ref_pool_id;
   bufferlist::iterator iter = refbl.begin();
-  ::decode(ref_pool_id, iter);
-  ::decode(ref_cg_id, iter);
+  try {
+    ::decode(ref_pool_id, iter);
+    ::decode(ref_cg_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
 
   if (ref_pool_id != pool_id || ref_cg_id != cg_id) {
     return -EBADF;
@@ -3933,6 +3938,39 @@ int image_remove_cg_ref(cls_method_context_t hctx,
     return r;
   }
 
+  return 0;
+}
+
+/**
+ * Retrieve the id and pool of the consistency group this image belongs to.
+ *
+ * Input:
+ * @param cg_id (std::string)
+ * @param pool_id (int64_t)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int image_get_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist refbl;
+  int r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string cg_id;
+  int64_t pool_id;
+  bufferlist::iterator iter = refbl.begin();
+  try {
+    ::decode(pool_id, iter);
+    ::decode(cg_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  ::encode(pool_id, *out);
+  ::encode(cg_id, *out);
   return 0;
 }
 
@@ -4338,6 +4376,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "image_remove_cg_ref",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  image_remove_cg_ref, &h_image_remove_cg_ref);
+  cls_register_cxx_method(h_class, "image_get_cg_ref",
+			  CLS_METHOD_RD,
+			  image_get_cg_ref, &h_image_get_cg_ref);
   cls_register_cxx_method(h_class, "dir_list_cgs",
 			  CLS_METHOD_RD,
 			  dir_list_cgs, &h_dir_list_cgs);

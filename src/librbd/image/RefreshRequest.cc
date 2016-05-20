@@ -229,7 +229,8 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
                                                       &m_lockers,
                                                       &m_exclusive_locked,
                                                       &m_lock_tag, &m_snapc,
-                                                      &m_parent_md);
+                                                      &m_parent_md,
+						      &m_cg_ref);
   }
   if (*result < 0) {
     lderr(cct) << "failed to retrieve mutable metadata: "
@@ -733,6 +734,8 @@ void RefreshRequest<I>::apply() {
       m_image_ctx.flags = m_flags;
       m_image_ctx.parent_md = m_parent_md;
     }
+
+    m_image_ctx.cg_ref = m_cg_ref;
 
     for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
       std::vector<librados::snap_t>::const_iterator it = std::find(

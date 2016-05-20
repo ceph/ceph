@@ -201,6 +201,7 @@ namespace librbd {
                       librados::IoCtx& image_ioctx, const char *image_name);
   int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
                     std::vector<std::tuple<std::string, int64_t, int>>& images);
+  int get_cg_ref(ImageCtx *ictx, std::pair<int64_t, std::string> *cg_ref);
 }
 
 #endif

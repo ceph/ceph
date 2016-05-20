@@ -3310,4 +3310,13 @@ err_remove_id:
     return 0;
   }
 
+  int get_cg_ref(ImageCtx *ictx, std::pair<int64_t, std::string> *cg_ref)
+  {
+    int r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+    *cg_ref = ictx->cg_ref;
+    return 0;
+  }
+
 }
