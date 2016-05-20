@@ -149,7 +149,7 @@ std::string RGWRemoteAuthApplier::to_str() const
   return ss.str();
 }
 
-void RGWRemoteAuthApplier::create_account(const rgw_user acct_user,
+void RGWRemoteAuthApplier::create_account(const rgw_user& acct_user,
                                           RGWUserInfo& user_info) const      /* out */
 {
   rgw_user new_acct_user = acct_user;
@@ -310,7 +310,7 @@ bool RGWKeystoneAuthEngine::is_applicable() const noexcept
   return false == cct->_conf->rgw_keystone_url.empty();
 }
 
-KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string token) const
+KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) const
 {
   bufferlist token_body_bl;
   int ret = rgw_decode_b64_cms(cct, token, token_body_bl);
@@ -330,7 +330,7 @@ KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string token) c
   return token_body;
 }
 
-KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string token) const
+KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
 {
   bufferlist token_body_bl;
   RGWValidateKeystoneToken validate(cct, &token_body_bl);
@@ -380,7 +380,7 @@ RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
 {
   /* Check whether the user has an admin status. */
   bool is_admin = false;
-  for (const auto admin_role : admin_roles) {
+  for (const auto& admin_role : admin_roles) {
     if (token.has_role(admin_role)) {
       is_admin = true;
       break;
@@ -399,8 +399,8 @@ RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
   };
 }
 
-static inline const std::string make_spec_item(const std::string tenant,
-                                               const std::string id)
+static inline const std::string make_spec_item(const std::string& tenant,
+                                               const std::string& id)
 {
   return tenant + ":" + id;
 }
@@ -409,12 +409,12 @@ RGWKeystoneAuthEngine::acl_strategy_t
 RGWKeystoneAuthEngine::get_acl_strategy(const KeystoneToken& token) const
 {
   /* The primary identity is constructed upon UUIDs. */
-  const auto tenant_uuid = token.get_project_id();
-  const auto user_uuid = token.get_user_id();
+  const auto& tenant_uuid = token.get_project_id();
+  const auto& user_uuid = token.get_user_id();
 
   /* For Keystone v2 an alias may be also used. */
-  const auto tenant_name = token.get_project_name();
-  const auto user_name = token.get_user_name();
+  const auto& tenant_name = token.get_project_name();
+  const auto& user_name = token.get_user_name();
 
   /* Construct all possible combinations including Swift's wildcards. */
   const std::vector<std::string> allowed_items = {
@@ -465,7 +465,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
 
   /* Token ID is a concept that makes dealing with PKI tokens more effective.
    * Instead of storing several kilobytes, a short hash can be burried. */
-  const auto token_id = rgw_get_token_id(token);
+  const auto& token_id = rgw_get_token_id(token);
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
   /* Check cache first. */
@@ -499,7 +499,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
   }
 
   /* Check for necessary roles. */
-  for (const auto role : roles.plain) {
+  for (const auto& role : roles.plain) {
     if (t.has_role(role) == true) {
       ldout(cct, 0) << "validated token: " << t.get_project_name()
                     << ":" << t.get_user_name()

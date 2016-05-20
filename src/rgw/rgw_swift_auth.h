@@ -116,7 +116,9 @@ public:
   RGWXAuthTokenExtractor(const req_state * const s)
     : s(s) {
   }
-  std::string get_token() const {
+  std::string get_token() const override {
+    /* Returning a reference here would end in GCC complaining about a reference
+     * to temporary. */
     return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
   }
 };

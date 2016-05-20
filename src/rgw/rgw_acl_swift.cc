@@ -214,7 +214,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
                                                   const std::vector<std::string>& uids,
                                                   const int perm)
 {
-  for (const auto uid : uids) {
+  for (const auto& uid : uids) {
     ACLGrant grant;
     RGWUserInfo grant_user;
 
@@ -290,7 +290,7 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
   std::vector<std::string> readonly;
 
   /* Parition the grant map into three not-overlapping groups. */
-  for (const auto item : get_acl().get_grant_map()) {
+  for (const auto& item : get_acl().get_grant_map()) {
     const ACLGrant& grant = item.second;
     const int perm = grant.get_permission().get_permissions();
 

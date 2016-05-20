@@ -29,7 +29,7 @@ using namespace ceph::crypto;
 void RGWTempURLAuthApplier::modify_request_state(req_state * s) const       /* in/out */
 {
   bool inline_exists = false;
-  string filename = s->info.args.get("filename");
+  const string& filename = s->info.args.get("filename");
 
   s->info.args.get("inline", &inline_exists);
   if (inline_exists) {
@@ -309,7 +309,7 @@ RGWAuthApplier::aplptr_t RGWExternalTokenAuthEngine::authenticate() const
     if (0 == swift_groups.size()) {
       return nullptr;
     } else {
-      swift_user = swift_groups[0];
+      swift_user = std::move(swift_groups[0]);
     }
   } catch (std::out_of_range) {
     /* The X-Auth-Groups header isn't present in the response. */

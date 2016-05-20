@@ -3006,7 +3006,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* check if we have a valid role */
   bool found = false;
-  for (const auto role : accepted_roles) {
+  for (const auto& role : accepted_roles) {
     if (response.has_role(role) == true) {
       found = true;
       break;
