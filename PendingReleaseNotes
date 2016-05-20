@@ -21,3 +21,5 @@
   change it to a negative value (e.g., -1) to preserve the current
   behavior.
 
+* The `osd crush location` config option is no longer supported.  Please
+  update your ceph.conf to use the `crush location` option instead.
