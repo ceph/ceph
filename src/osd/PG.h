@@ -484,9 +484,10 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, stat_queue_item;
+  xlist<PG*>::item stat_queue_item;
   bool snap_trim_queued;
   bool scrub_queued;
+  bool recovery_queued;
 
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
@@ -1094,8 +1095,9 @@ public:
    * @returns true if any useful work was accomplished; false otherwise
    */
   virtual bool start_recovery_ops(
-    int max, ThreadPool::TPHandle &handle,
-    int *ops_begun) = 0;
+    uint64_t max,
+    ThreadPool::TPHandle &handle,
+    uint64_t *ops_begun) = 0;
 
   void purge_strays();
 
@@ -2254,6 +2256,7 @@ public:
 
   void queue_snap_trim();
   bool requeue_scrub();
+  void queue_recovery(bool front = false);
   bool queue_scrub();
   unsigned get_scrub_priority();
 
