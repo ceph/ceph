@@ -2172,6 +2172,7 @@ public:
   }
 
   void get_db_statistics(Formatter *f) override;
+
   void generate_db_histogram(Formatter *f) override;
   void _flush_cache();
   void flush_cache() override;
