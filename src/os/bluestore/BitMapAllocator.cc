@@ -24,7 +24,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size)
   : m_num_uncommitted(0),
     m_num_committing(0)
 {
-  int64_t block_size = g_conf->bluestore_min_alloc_size;
+  int64_t block_size = g_conf->bdev_block_size;
   int64_t zone_size_blks = 1024; // Change it later
 
   m_block_size = block_size;
