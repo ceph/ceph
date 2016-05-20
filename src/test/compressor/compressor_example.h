@@ -29,6 +29,7 @@
 
 class CompressorExample : public Compressor {
 public:
+  CompressorExample() : Compressor("example") {}
   virtual ~CompressorExample() {}
 
   virtual int compress(const bufferlist &in, bufferlist &out)
@@ -47,11 +48,6 @@ public:
     p.copy(p.get_remaining(), out);
     return 0;
   }
-  virtual const char* get_method_name()
-  {
-    return "example";
-  }
-
 };
 
 #endif

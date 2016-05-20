@@ -21,17 +21,21 @@
 class Compressor;
 typedef shared_ptr<Compressor> CompressorRef;
 
-
 class Compressor {
+  string type;
  public:
+  Compressor(string t) : type(t) {}
   virtual ~Compressor() {}
+  const string& get_type() const {
+    return type;
+  }
   virtual int compress(const bufferlist &in, bufferlist &out) = 0;
   virtual int decompress(const bufferlist &in, bufferlist &out) = 0;
-  virtual int decompress(bufferlist::iterator &p, bufferlist &out) = 0; //that's a bit weird but we need non-const iterator to be in alignment with decode methods
+  // this is a bit weird but we need non-const iterator to be in
+  // alignment with decode methods
+  virtual int decompress(bufferlist::iterator &p, bufferlist &out) = 0;
 
   static CompressorRef create(CephContext *cct, const string &type);
 };
-
-
 
 #endif
