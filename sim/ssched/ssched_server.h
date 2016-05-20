@@ -15,8 +15,6 @@
 
 #include "ssched_recs.h"
 
-#include "sim_recs.h"
-
 #ifdef PROFILE
 #include "profile.h"
 #endif

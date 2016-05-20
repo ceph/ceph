@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-
-# set(CMAKE_CXX_FLAGS "-std=gnu++11 -fdiagnostics-color=always")
 set(CMAKE_CXX_FLAGS "-std=c++11 -fdiagnostics-color=always -Wno-write-strings")
-include_directories(src)
-include_directories(sim)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -19,6 +15,9 @@ endif()
 if(PROFILE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPROFILE")
 endif()
+
+add_subdirectory(src)
+add_subdirectory(sim)
 
 find_package(gtest REQUIRED)
 if(GTEST_FOUND)
@@ -35,5 +34,3 @@ find_package(boost REQUIRED)
 if(NOT BOOST_FOUND)
   error("Could not find boost; cannot continue.")
 endif(NOT BOOST_FOUND)
-
-add_subdirectory(src)

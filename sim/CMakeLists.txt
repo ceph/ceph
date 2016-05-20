@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
+include_directories(ssched)
 include_directories(../src)
 include_directories(../support/src)
 include_directories(${BOOST_INCLUDE_DIR})

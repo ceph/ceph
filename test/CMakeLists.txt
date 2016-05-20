@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
+include_directories(../src)
 include_directories(../support/src)
 include_directories(../sim)
 include_directories(${BOOST_INCLUDE_DIR})
