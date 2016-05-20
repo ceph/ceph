@@ -83,6 +83,7 @@ JournalPlayer::~JournalPlayer() {
   {
     Mutex::Locker locker(m_lock);
     assert(m_fetch_object_numbers.empty());
+    assert(!m_watch_scheduled);
   }
   m_replay_handler->put();
 }
@@ -134,6 +135,7 @@ void JournalPlayer::prefetch_and_watch(double interval) {
     Mutex::Locker locker(m_lock);
     m_watch_enabled = true;
     m_watch_interval = interval;
+    m_watch_step = WATCH_STEP_FETCH_CURRENT;
   }
   prefetch();
 }
@@ -159,17 +161,16 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
     return false;
   }
 
-  if (!is_object_set_ready()) {
-    m_handler_notified = false;
-    return false;
-  }
-
   if (!verify_playback_ready()) {
-    if (!m_watch_enabled) {
-      notify_complete(0);
-    } else if (!m_watch_scheduled) {
+    if (!is_object_set_ready()) {
       m_handler_notified = false;
-      schedule_watch();
+    } else {
+      if (!m_watch_enabled) {
+        notify_complete(0);
+      } else if (!m_watch_scheduled) {
+        m_handler_notified = false;
+        schedule_watch();
+      }
     }
     return false;
   }
@@ -182,7 +183,10 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
 
   uint64_t last_entry_tid;
   if (m_active_tag_tid && *m_active_tag_tid != entry->get_tag_tid()) {
-    lderr(m_cct) << "unexpected tag in journal entry: " << *entry << dendl;
+    lderr(m_cct) << "unexpected tag in journal entry: "
+                 << "entry=" << *entry << ", "
+                 << "tag_tid=" << (m_active_tag_tid ? *m_active_tag_tid : -1)
+                 << dendl;
 
     m_state = STATE_ERROR;
     notify_complete(-ENOMSG);
@@ -329,16 +333,16 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
   }
 
   m_state = STATE_PLAYBACK;
-  if (!is_object_set_ready()) {
-    ldout(m_cct, 10) << __func__ << ": waiting for full object set" << dendl;
-  } else if (verify_playback_ready()) {
+  if (verify_playback_ready()) {
     notify_entries_available();
-  } else if (m_watch_enabled) {
-    schedule_watch();
-  } else {
-    ldout(m_cct, 10) << __func__ << ": no uncommitted entries available"
-                     << dendl;
-    notify_complete(0);
+  } else if (is_object_set_ready()) {
+    if (m_watch_enabled) {
+      schedule_watch();
+    } else {
+      ldout(m_cct, 10) << __func__ << ": no uncommitted entries available"
+                       << dendl;
+      notify_complete(0);
+    }
   }
   return 0;
 }
@@ -347,21 +351,19 @@ int JournalPlayer::process_playback(uint64_t object_number) {
   ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << dendl;
   assert(m_lock.is_locked());
 
-  if (!is_object_set_ready()) {
-    return 0;
-  }
-
   ObjectPlayerPtr object_player = get_object_player();
   if (verify_playback_ready()) {
     notify_entries_available();
-  } else if (m_watch_enabled) {
-    schedule_watch();
-  } else {
-    uint8_t splay_width = m_journal_metadata->get_splay_width();
-    uint64_t active_set = m_journal_metadata->get_active_set();
-    uint64_t object_set = object_player->get_object_number() / splay_width;
-    if (object_set == active_set) {
-      notify_complete(0);
+  } else if (is_object_set_ready()) {
+    if (m_watch_enabled) {
+      schedule_watch();
+    } else {
+      uint8_t splay_width = m_journal_metadata->get_splay_width();
+      uint64_t active_set = m_journal_metadata->get_active_set();
+      uint64_t object_set = object_player->get_object_number() / splay_width;
+      if (object_set == active_set) {
+        notify_complete(0);
+      }
     }
   }
   return 0;
@@ -377,7 +379,11 @@ bool JournalPlayer::is_object_set_ready() const {
 
 bool JournalPlayer::verify_playback_ready() {
   assert(m_lock.is_locked());
-  assert(is_object_set_ready());
+
+  if (!is_object_set_ready()) {
+    ldout(m_cct, 10) << __func__ << ": waiting for full object set" << dendl;
+    return false;
+  }
 
   ObjectPlayerPtr object_player = get_object_player();
   assert(object_player);
@@ -388,17 +394,36 @@ bool JournalPlayer::verify_playback_ready() {
   bool entry_available = false;
   if (!object_player->empty()) {
     entry_available = true;
+    m_watch_prune_active_tag = false;
     object_player->front(&entry);
     if (!m_active_tag_tid || entry.get_tag_tid() == *m_active_tag_tid) {
       return true;
+    } else if (m_active_tag_tid && entry.get_tag_tid() < m_active_tag_tid) {
+      // new tag is registered as primary commit position -- other object
+      // commit positions might still be associated with old tags
+      ldout(m_cct, 10) << __func__ << ": detected stale entry: " << entry
+                       << dendl;
+      return prune_tag(entry.get_tag_tid());
+    } else if (m_active_tag_tid && entry.get_tag_tid() > *m_active_tag_tid) {
+      // new tag at current playback position -- implies that previous
+      // tag ended abruptly without flushing out all records
+      // search for the start record for the next tag
+      ldout(m_cct, 10) << __func__ << ": new tag detected at current playback "
+                       << "position: active_tag=" << *m_active_tag_tid << ", "
+                       << "new_tag=" << entry.get_tag_tid() << dendl;
+      return prune_active_tag();
     }
-  }
-
-  // if we just advanced to this object, make sure we have the latest
-  // set of data before advancing to a new tag
-  if (m_watch_enabled && m_watch_required) {
-    m_watch_required = false;
-    return false;
+  } else if (!m_watch_enabled && m_active_tag_tid) {
+    // current playback position is empty so this tag is done
+    ldout(m_cct, 10) << __func__ << ": no more in-sequence entries for tag "
+                     << *m_active_tag_tid << dendl;
+    return prune_active_tag();
+  } else if (m_watch_enabled && m_active_tag_tid && m_watch_prune_active_tag) {
+    // detected current tag is now longer active and we have re-read the current
+    // object but it's still empty, so this tag is done
+    ldout(m_cct, 10) << __func__ << ": assuming no more in-sequence entries "
+                     << "for tag " << *m_active_tag_tid << dendl;
+    return prune_active_tag();
   }
 
   // NOTE: replay currently does not check tag class to playback multiple tags
@@ -424,6 +449,55 @@ bool JournalPlayer::verify_playback_ready() {
   return entry_available;
 }
 
+bool JournalPlayer::prune_tag(uint64_t tag_tid) {
+  assert(m_lock.is_locked());
+  ldout(m_cct, 10) << __func__ << ": pruning remaining entries for tag "
+                   << tag_tid << dendl;
+
+  for (auto &players : m_object_players) {
+    for (auto player_pair : players.second) {
+      ObjectPlayerPtr object_player = player_pair.second;
+      ldout(m_cct, 15) << __func__ << ": checking " << object_player->get_oid()
+                       << dendl;
+      while (!object_player->empty()) {
+        Entry entry;
+        object_player->front(&entry);
+        if (entry.get_tag_tid() == tag_tid) {
+          ldout(m_cct, 20) << __func__ << ": pruned " << entry << dendl;
+          object_player->pop_front();
+        } else {
+          break;
+        }
+      }
+    }
+
+    // trim any empty players to prefetch the next available object
+    ObjectPlayers object_players(players.second);
+    for (auto player_pair : object_players) {
+      remove_empty_object_player(player_pair.second);
+    }
+  }
+
+  // if we removed an empty object, a fetch will be in-flight
+  if (!is_object_set_ready()) {
+    return false;
+  }
+
+  // search for the start record for the next tag
+  return verify_playback_ready();
+}
+
+bool JournalPlayer::prune_active_tag() {
+  assert(m_lock.is_locked());
+  assert(m_active_tag_tid);
+
+  uint64_t tag_tid = *m_active_tag_tid;
+  m_active_tag_tid = boost::none;
+  m_splay_offset = 0;
+
+  return prune_tag(tag_tid);
+}
+
 const JournalPlayer::ObjectPlayers &JournalPlayer::get_object_players() const {
   assert(m_lock.is_locked());
 
@@ -441,6 +515,20 @@ ObjectPlayerPtr JournalPlayer::get_object_player() const {
   return object_players.begin()->second;
 }
 
+ObjectPlayerPtr JournalPlayer::get_object_player(uint64_t object_number) const {
+  assert(m_lock.is_locked());
+
+  uint8_t splay_width = m_journal_metadata->get_splay_width();
+  uint8_t splay_offset = object_number % splay_width;
+  auto splay_it = m_object_players.find(splay_offset);
+  assert(splay_it != m_object_players.end());
+
+  const ObjectPlayers &object_players = splay_it->second;
+  auto player_it = object_players.find(object_number);
+  assert(player_it != object_players.end());
+  return player_it->second;
+}
+
 ObjectPlayerPtr JournalPlayer::get_next_set_object_player() const {
   assert(m_lock.is_locked());
 
@@ -452,7 +540,7 @@ void JournalPlayer::advance_splay_object() {
   assert(m_lock.is_locked());
   ++m_splay_offset;
   m_splay_offset %= m_journal_metadata->get_splay_width();
-  m_watch_required = true;
+  m_watch_step = WATCH_STEP_FETCH_CURRENT;
   ldout(m_cct, 20) << __func__ << ": new offset "
                    << static_cast<uint32_t>(m_splay_offset) << dendl;
 }
@@ -466,9 +554,16 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
   uint64_t active_set = m_journal_metadata->get_active_set();
   if (!player->empty() || object_set == active_set) {
     return false;
+  } else if (m_watch_enabled && object_set < active_set &&
+             player->refetch_required()) {
+    ldout(m_cct, 20) << __func__ << ": refetching " << player->get_oid()
+                     << dendl;
+    player->clear_refetch_required();
+    return false;
   }
 
-  ldout(m_cct, 15) << player->get_oid() << " empty" << dendl;
+  ldout(m_cct, 15) << __func__ << ": " << player->get_oid() << " empty"
+                   << dendl;
   ObjectPlayers &object_players = m_object_players[
     player->get_object_number() % splay_width];
   assert(!object_players.empty());
@@ -514,13 +609,7 @@ void JournalPlayer::handle_fetched(uint64_t object_num, int r) {
     r = 0;
   }
   if (r == 0) {
-    uint8_t splay_width = m_journal_metadata->get_splay_width();
-    uint8_t splay_offset = object_num % splay_width;
-    assert(m_object_players.count(splay_offset) == 1);
-    ObjectPlayers &object_players = m_object_players[splay_offset];
-
-    assert(object_players.count(object_num) == 1);
-    ObjectPlayerPtr object_player = object_players[object_num];
+    ObjectPlayerPtr object_player = get_object_player(object_num);
     remove_empty_object_player(object_player);
   }
   process_state(object_num, r);
@@ -533,25 +622,39 @@ void JournalPlayer::schedule_watch() {
     return;
   }
 
-  // poll first splay offset and active splay offset since
-  // new records should only appear in those two objects
-  C_Watch *ctx = new C_Watch(this);
+  m_watch_scheduled = true;
 
-  ObjectPlayerPtr object_player = get_object_player();
-  uint8_t splay_width = m_journal_metadata->get_splay_width();
-  if (object_player->get_object_number() % splay_width != 0) {
-    ++ctx->pending_fetches;
-
-    ObjectPlayerPtr first_object_player =
-      m_object_players.begin()->second.begin()->second;
-    first_object_player->watch(ctx, m_watch_interval);
+  if (m_watch_step == WATCH_STEP_ASSERT_ACTIVE) {
+    // detect if a new tag has been created in case we are blocked
+    // by an incomplete tag sequence
+    ldout(m_cct, 20) << __func__ << ": asserting active tag" << dendl;
+    assert(m_active_tag_tid);
+    FunctionContext *ctx = new FunctionContext([this](int r) {
+        handle_watch_assert_active(r);
+      });
+    m_journal_metadata->assert_active_tag(*m_active_tag_tid, ctx);
+    return;
   }
 
+  ObjectPlayerPtr object_player = get_object_player();
+  switch (m_watch_step) {
+  case WATCH_STEP_FETCH_CURRENT:
+    object_player = get_object_player();
+    break;
+  case WATCH_STEP_FETCH_FIRST:
+    object_player = m_object_players.begin()->second.begin()->second;
+    break;
+  default:
+    assert(false);
+  }
+
+  ldout(m_cct, 20) << __func__ << ": scheduling watch on "
+                   << object_player->get_oid() << dendl;
+  C_Watch *ctx = new C_Watch(this, object_player->get_object_number());
   object_player->watch(ctx, m_watch_interval);
-  m_watch_scheduled = true;
 }
 
-void JournalPlayer::handle_watch(int r) {
+void JournalPlayer::handle_watch(uint64_t object_num, int r) {
   ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
   if (r == -ECANCELED) {
     // unwatch of object player(s)
@@ -559,17 +662,49 @@ void JournalPlayer::handle_watch(int r) {
   }
 
   Mutex::Locker locker(m_lock);
+  assert(m_watch_scheduled);
   m_watch_scheduled = false;
 
-  std::set<uint64_t> object_numbers;
-  for (auto &players : m_object_players) {
-    object_numbers.insert(
-      players.second.begin()->second->get_object_number());
+  ObjectPlayerPtr object_player = get_object_player(object_num);
+  if (r == 0) {
+    if (object_player->empty() && !object_player->refetch_required()) {
+      // already re-read object after trying to remove it before ... it's
+      // still empty so it's safe to remove
+      remove_empty_object_player(object_player);
+    }
   }
 
-  for (auto object_num : object_numbers) {
-    process_state(object_num, r);
+  // determine what object to query on next watch schedule tick
+  uint8_t splay_width = m_journal_metadata->get_splay_width();
+  if (m_watch_step == WATCH_STEP_FETCH_CURRENT &&
+      object_player->get_object_number() % splay_width != 0) {
+    m_watch_step = WATCH_STEP_FETCH_FIRST;
+  } else if (m_active_tag_tid) {
+    m_watch_step = WATCH_STEP_ASSERT_ACTIVE;
+  } else {
+    m_watch_step = WATCH_STEP_FETCH_CURRENT;
   }
+
+  process_state(object_num, r);
+}
+
+void JournalPlayer::handle_watch_assert_active(int r) {
+  ldout(m_cct, 10) << __func__ << ": r=" << r << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_watch_scheduled);
+  m_watch_scheduled = false;
+
+  if (m_active_tag_tid && r == -ESTALE) {
+    // newer tag exists -- since we are at this step in the watch sequence,
+    // we know we can prune the active tag if watch fails again
+    ldout(m_cct, 10) << __func__ << ": tag " << *m_active_tag_tid << " "
+                     << "no longer active" << dendl;
+    m_watch_prune_active_tag = true;
+  }
+
+  m_watch_step = WATCH_STEP_FETCH_CURRENT;
+  schedule_watch();
 }
 
 void JournalPlayer::notify_entries_available() {

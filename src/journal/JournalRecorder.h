@@ -47,14 +47,29 @@ private:
     }
   };
 
-  struct OverflowHandler : public ObjectRecorder::OverflowHandler {
+  struct ObjectHandler : public ObjectRecorder::Handler {
     JournalRecorder *journal_recorder;
 
-    OverflowHandler(JournalRecorder *_journal_recorder)
-      : journal_recorder(_journal_recorder) {}
+    ObjectHandler(JournalRecorder *_journal_recorder)
+      : journal_recorder(_journal_recorder) {
+    }
 
+    virtual void closed(ObjectRecorder *object_recorder) {
+      journal_recorder->handle_closed(object_recorder);
+    }
     virtual void overflow(ObjectRecorder *object_recorder) {
       journal_recorder->handle_overflow(object_recorder);
+    }
+  };
+
+  struct C_AdvanceObjectSet : public Context {
+    JournalRecorder *journal_recorder;
+
+    C_AdvanceObjectSet(JournalRecorder *_journal_recorder)
+      : journal_recorder(_journal_recorder) {
+    }
+    virtual void finish(int r) {
+      journal_recorder->handle_advance_object_set(r);
     }
   };
 
@@ -69,20 +84,31 @@ private:
   double m_flush_age;
 
   Listener m_listener;
-  OverflowHandler m_overflow_handler;
+  ObjectHandler m_object_handler;
 
   Mutex m_lock;
 
+  uint32_t m_in_flight_advance_sets = 0;
+  uint32_t m_in_flight_object_closes = 0;
   uint64_t m_current_set;
   ObjectRecorderPtrs m_object_ptrs;
 
   FutureImplPtr m_prev_future;
 
-  void close_object_set(uint64_t object_set);
+  void open_object_set();
+  bool close_object_set(uint64_t active_set);
+
+  void advance_object_set();
+  void handle_advance_object_set(int r);
+
+  void close_and_advance_object_set(uint64_t object_set);
+
   ObjectRecorderPtr create_object_recorder(uint64_t object_number);
   void create_next_object_recorder(ObjectRecorderPtr object_recorder);
 
   void handle_update();
+
+  void handle_closed(ObjectRecorder *object_recorder);
   void handle_overflow(ObjectRecorder *object_recorder);
 };
 
