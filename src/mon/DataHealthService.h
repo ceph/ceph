@@ -17,15 +17,14 @@
 #include <errno.h>
 
 #include "include/types.h"
-#include "include/Context.h"
 #include "mon/mon_types.h"
-#include "mon/QuorumService.h"
 #include "mon/HealthService.h"
-#include "common/Formatter.h"
 #include "common/config.h"
 #include "global/signal_handler.h"
 
 struct MMonHealth;
+namespace ceph { class Formatter; }
+
 
 class DataHealthService :
   public HealthService

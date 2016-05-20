@@ -20,13 +20,13 @@
 using namespace std;
 
 #include "include/types.h"
-#include "msg/Messenger.h"
 #include "PaxosService.h"
 
 #include "common/LogEntry.h"
-#include "messages/MLog.h"
+#include "include/str_map.h"
 
 class MMonCommand;
+class MLog;
 
 static const string LOG_META_CHANNEL = "$channel";
 

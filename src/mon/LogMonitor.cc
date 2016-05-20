@@ -24,13 +24,8 @@
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
-
-#include "common/Timer.h"
 #include "common/Graylog.h"
-
-#include "osd/osd_types.h"
 #include "common/errno.h"
-#include "common/config.h"
 #include "common/strtol.h"
 #include "include/assert.h"
 #include "include/str_list.h"

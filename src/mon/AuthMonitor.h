@@ -21,9 +21,7 @@ using namespace std;
 
 #include "include/ceph_features.h"
 #include "include/types.h"
-#include "msg/Messenger.h"
 #include "mon/PaxosService.h"
-#include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
 
 class MMonCommand;
@@ -31,6 +29,7 @@ struct MAuth;
 class MAuthMon;
 struct MMonGlobalID;
 class KeyRing;
+class Monitor;
 
 #define MIN_GLOBAL_ID 0x1000
 

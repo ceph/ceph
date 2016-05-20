@@ -32,19 +32,13 @@ using namespace std;
 #include "osd/OSDMap.h"
 
 #include "PaxosService.h"
-#include "Session.h"
 
 class Monitor;
 class PGMap;
-
-#include "messages/MOSDBoot.h"
-#include "messages/MMonCommand.h"
-#include "messages/MOSDMap.h"
-#include "messages/MPoolOp.h"
+class MonSession;
+class MOSDMap;
 
 #include "erasure-code/ErasureCodeInterface.h"
-
-#include "common/TrackedOp.h"
 #include "mon/MonOpRequest.h"
 
 #define OSD_METADATA_PREFIX "osd_metadata"

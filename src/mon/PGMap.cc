@@ -6,10 +6,8 @@
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
 #include "common/TextTable.h"
-#include "include/stringify.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
-#include "mon/MonitorDBStore.h"
 #include "osd/osd_types.h"
 
 // --

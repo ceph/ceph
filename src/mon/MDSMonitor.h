@@ -23,13 +23,10 @@
 using namespace std;
 
 #include "include/types.h"
-#include "msg/Messenger.h"
-
 #include "mds/FSMap.h"
-
+#include "mds/MDSMap.h"
 #include "PaxosService.h"
-#include "Session.h"
-
+#include "msg/Messenger.h"
 #include "messages/MMDSBeacon.h"
 
 class MMonCommand;
