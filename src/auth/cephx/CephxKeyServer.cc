@@ -13,10 +13,8 @@
  */
 
 #include "common/config.h"
-
 #include "CephxKeyServer.h"
-#include "common/Timer.h"
-
+#include "common/dout.h"
 #include <sstream>
 
 #define dout_subsys ceph_subsys_auth

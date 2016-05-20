@@ -18,9 +18,9 @@
 #include "CephxClientHandler.h"
 #include "CephxProtocol.h"
 
-#include "../KeyRing.h"
-
+#include "auth/KeyRing.h"
 #include "common/config.h"
+#include "common/dout.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
