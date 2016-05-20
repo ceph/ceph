@@ -135,6 +135,10 @@ namespace librbd {
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
                       const std::string &start, uint64_t max_return,
                       map<string, bufferlist> *pairs);
+    void metadata_list_start(librados::ObjectReadOperation *op,
+                             const std::string &start, uint64_t max_return);
+    int metadata_list_finish(bufferlist::iterator *it,
+                             std::map<std::string, bufferlist> *pairs);
     int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
                      const map<std::string, bufferlist> &data);
     int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
