@@ -1366,7 +1366,6 @@ if(${WITH_RADOSGW})
     rgw/rgw_rest_usage.cc
     rgw/rgw_rest_user.cc
     rgw/rgw_swift_auth.cc
-    rgw/rgw_swift.cc
     rgw/rgw_tools.cc
     rgw/rgw_usage.cc
     rgw/rgw_user.cc
