@@ -200,9 +200,16 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_random) {
 template <typename T>
 struct Greater {
   const T rhs;
-  Greater(const T &v) : rhs(v) {}
-  bool operator()(const T &lhs) const {
-    return std::get<2>(lhs) > std::get<2>(rhs);
+  std::list<T> *removed;
+  Greater(const T &v, std::list<T> *removed) : rhs(v), removed(removed) {}
+  bool operator()(const T &lhs) {
+    if (std::get<2>(lhs) > std::get<2>(rhs)) {
+      if (removed)
+	removed->push_back(lhs);
+      return true;
+    } else {
+      return false;
+    }
   }
 };
 
@@ -212,9 +219,9 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter_null) {
   unsigned num_items = 100;
   fill_queue(wq, strictq, normq, num_items);
   // Pick a value that we didn't enqueue
-  const Greater<Item> pred(std::make_tuple(0, 0, 1 << 17));
   Removed wq_removed;
-  wq.remove_by_filter(pred, &wq_removed);
+  Greater<Item> pred(std::make_tuple(0, 0, 1 << 17), &wq_removed);
+  wq.remove_by_filter(pred);
   EXPECT_EQ(0u, wq_removed.size());
 }
 
@@ -223,7 +230,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
   LQ strictq, normq;
   unsigned num_items = 1000;
   fill_queue(wq, strictq, normq, num_items);
-  const Greater<Item> pred(std::make_tuple(0, 0, (1 << 16) - (1 << 16)/10));
+  Greater<Item> pred2(std::make_tuple(0, 0, (1 << 16) - (1 << 16)/10), nullptr);
   Removed r_strictq, r_normq;
   unsigned num_to_remove = 0;
   // Figure out from what has been queued what we
@@ -234,7 +241,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
 	 ki != pi->second.end(); ++ki) {
       for (ItemList::iterator li = ki->second.begin();
 	   li != ki->second.end(); ++li) {
-	if (pred(li->second)) {
+	if (pred2(li->second)) {
 	  ++num_to_remove;
 	}
       }
@@ -246,18 +253,21 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
 	 ki != pi->second.end(); ++ki) {
       for (ItemList::iterator li = ki->second.begin();
 	   li != ki->second.end(); ++li) {
-	if (pred(li->second)) {
+	if (pred2(li->second)) {
 	  ++num_to_remove;
 	}
       }
     }
   }
   Removed wq_removed;
-  wq.remove_by_filter(pred, &wq_removed);
+  Greater<Item> pred(
+    std::make_tuple(0, 0, (1 << 16) - (1 << 16)/10),
+    &wq_removed);
+  wq.remove_by_filter(pred);
   // Check that what was removed was correct
   for (Removed::iterator it = wq_removed.begin();
        it != wq_removed.end(); ++it) {
-    EXPECT_TRUE(pred(*it));
+    EXPECT_TRUE(pred2(*it));
   }
   EXPECT_EQ(num_to_remove, wq_removed.size());
   EXPECT_EQ(num_items - num_to_remove, wq.length());
