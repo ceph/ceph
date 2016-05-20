@@ -14,6 +14,7 @@
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 
+extern string camelcase_dash_http_attr(const string& orig);
 extern string lowercase_dash_http_attr(const string& orig);
 
 extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
