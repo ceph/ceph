@@ -2339,7 +2339,7 @@ void buffer::list::write_stream(std::ostream &out) const
 }
 
 
-void buffer::list::hexdump(std::ostream &out) const
+void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
 {
   if (!length())
     return;
@@ -2377,7 +2377,8 @@ void buffer::list::hexdump(std::ostream &out) const
 	did_star = false;
       }
     }
-
+    if (o)
+      out << "\n";
     out << std::hex << std::setw(8) << o << " ";
 
     unsigned i;
@@ -2400,9 +2401,12 @@ void buffer::list::hexdump(std::ostream &out) const
       else
 	out << '.';
     }
-    out << '|' << std::dec << std::endl;
+    out << '|' << std::dec;
   }
-  out << std::hex << std::setw(8) << length() << "\n";
+  if (trailing_newline) {
+    out << "\n" << std::hex << std::setw(8) << length();
+    out << "\n";
+  }
 
   out.flags(original_flags);
 }
