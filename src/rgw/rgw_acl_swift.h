@@ -21,7 +21,7 @@ public:
 
   void add_grants(RGWRados *store,
                   const std::vector<std::string>& uids,
-                  int perm);
+                  uint32_t perm);
   bool create(RGWRados *store,
               const rgw_user& id,
               const std::string& name,
@@ -40,7 +40,7 @@ public:
 
   void add_grants(RGWRados *store,
                   const std::vector<std::string>& uids,
-                  int perm);
+                  uint32_t perm);
   bool create(RGWRados *store,
               const rgw_user& id,
               const std::string& name,

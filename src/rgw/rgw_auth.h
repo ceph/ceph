@@ -29,7 +29,7 @@ public:
    * XXX: implementation is responsible for giving the real semantic to the
    * items in @aclspec. That is, their meaning may depend on particular auth
    * engine that was used. */
-  virtual int get_perms_from_aclspec(const aclspec_t& aclspec) const = 0;
+  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const = 0;
 
   /* Verify whether a given identity *can be treated as* an admin of
    * the rgw_user (account in Swift's terminology) specified in @uid. */
@@ -42,7 +42,7 @@ public:
   /* Return the permission mask that is used to narrow down the set of
    * operations allowed for a given identity. This method reflects the idea
    * of subuser tied to RGWUserInfo. */
-  virtual int get_perm_mask() const = 0;
+  virtual uint32_t get_perm_mask() const = 0;
 
   virtual bool is_anonymous() const final {
     /* If the identity owns the anonymous account (rgw_user), it's considered
@@ -61,8 +61,9 @@ inline std::ostream& operator<<(std::ostream& out,
 std::unique_ptr<RGWIdentityApplier>
 rgw_auth_transform_old_authinfo(req_state * const s);
 
-int rgw_perms_from_aclspec_default_strategy(const rgw_user& uid,
-                                            const RGWIdentityApplier::aclspec_t& aclspec);
+uint32_t rgw_perms_from_aclspec_default_strategy(
+  const rgw_user& uid,
+  const RGWIdentityApplier::aclspec_t& aclspec);
 
 
 /* Interface for classes applying changes to request state/RADOS store imposed
@@ -128,7 +129,7 @@ public:
   };
 
   using aclspec_t = RGWIdentityApplier::aclspec_t;
-  typedef std::function<int(const aclspec_t&)> acl_strategy_t;
+  typedef std::function<uint32_t(const aclspec_t&)> acl_strategy_t;
 
 protected:
   /* Read-write is intensional here due to RGWUserInfo creation process. */
@@ -155,10 +156,10 @@ public:
       info(info) {
   }
 
-  virtual int get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
   virtual bool is_admin_of(const rgw_user& uid) const override;
   virtual bool is_owner_of(const rgw_user& uid) const override;
-  virtual int get_perm_mask() const { return info.perm_mask; }
+  virtual uint32_t get_perm_mask() const { return info.perm_mask; }
   virtual std::string to_str() const override;
   virtual void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 
@@ -198,10 +199,10 @@ public:
   }
 
 
-  virtual int get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
   virtual bool is_admin_of(const rgw_user& uid) const override;
   virtual bool is_owner_of(const rgw_user& uid) const override;
-  virtual int get_perm_mask() const override {
+  virtual uint32_t get_perm_mask() const override {
     return get_perm_mask(subuser, user_info);
   }
   virtual std::string to_str() const override;

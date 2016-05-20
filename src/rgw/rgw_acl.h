@@ -49,8 +49,8 @@ protected:
 public:
   ACLPermission() : flags(0) {}
   ~ACLPermission() {}
-  int get_permissions() const { return flags; }
-  void set_permissions(int perm) { flags = perm; }
+  uint32_t get_permissions() const { return flags; }
+  void set_permissions(uint32_t perm) { flags = perm; }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
@@ -184,18 +184,18 @@ public:
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
-  void set_canon(const rgw_user& _id, const string& _name, const  int perm) {
+  void set_canon(const rgw_user& _id, const string& _name, const uint32_t perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
     permission.set_permissions(perm);
   }
-  void set_group(ACLGroupTypeEnum _group, int perm) {
+  void set_group(ACLGroupTypeEnum _group, const uint32_t perm) {
     type.set(ACL_TYPE_GROUP);
     group = _group;
     permission.set_permissions(perm);
   }
-  void set_referer(const std::string& _url_spec, int perm) {
+  void set_referer(const std::string& _url_spec, const uint32_t perm) {
     type.set(ACL_TYPE_REFERER);
     url_spec = _url_spec;
     permission.set_permissions(perm);
@@ -205,11 +205,11 @@ WRITE_CLASS_ENCODER(ACLGrant)
 
 struct ACLReferer {
   std::string url_spec;
-  int perm;
+  uint32_t perm;
 
   ACLReferer() : perm(0) {}
   ACLReferer(const std::string& url_spec,
-             const int perm)
+             const uint32_t perm)
     : url_spec(url_spec),
       perm(perm) {
   }
@@ -255,6 +255,8 @@ class RGWAccessControlList
 {
 protected:
   CephContext *cct;
+  /* FIXME: in the feature we should consider switching to uint32_t also
+   * in data structures. */
   map<string, int> acl_user_map;
   map<uint32_t, int> acl_group_map;
   list<ACLReferer> referer_list;
@@ -270,10 +272,10 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  int get_perm(const RGWIdentityApplier& auth_identity,
-               int perm_mask);
-  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
-  int get_referer_perm(const std::string http_referer, int perm_mask);
+  uint32_t get_perm(const RGWIdentityApplier& auth_identity,
+                    uint32_t perm_mask);
+  uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
+  uint32_t get_referer_perm(const std::string http_referer, uint32_t perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 3, bl);
     bool maps_initialized = true;
@@ -376,13 +378,13 @@ public:
     acl.set_ctx(ctx);
   }
 
-  int get_perm(const RGWIdentityApplier& auth_identity,
-               int perm_mask,
-               const char * http_referer);
-  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
+  uint32_t get_perm(const RGWIdentityApplier& auth_identity,
+                    uint32_t perm_mask,
+                    const char * http_referer);
+  uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
   bool verify_permission(const RGWIdentityApplier& auth_identity,
-                         int user_perm_mask,
-                         int perm,
+                         uint32_t user_perm_mask,
+                         uint32_t perm,
                          const char * http_referer = nullptr);
 
   void encode(bufferlist& bl) const {

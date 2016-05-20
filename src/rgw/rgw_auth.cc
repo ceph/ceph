@@ -38,7 +38,7 @@ rgw_auth_transform_old_authinfo(req_state * const s)
         is_admin(is_admin) {
     }
 
-    int get_perms_from_aclspec(const aclspec_t& aclspec) const {
+    uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const {
       return rgw_perms_from_aclspec_default_strategy(id, aclspec);
     }
 
@@ -50,7 +50,7 @@ rgw_auth_transform_old_authinfo(req_state * const s)
       return id == acct_id;
     }
 
-    int get_perm_mask() const {
+    uint32_t get_perm_mask() const {
       return perm_mask;
     }
 
@@ -75,8 +75,9 @@ rgw_auth_transform_old_authinfo(req_state * const s)
 }
 
 
-int rgw_perms_from_aclspec_default_strategy(const rgw_user& uid,
-                                            const RGWIdentityApplier::aclspec_t& aclspec)
+uint32_t rgw_perms_from_aclspec_default_strategy(
+  const rgw_user& uid,
+  const RGWIdentityApplier::aclspec_t& aclspec)
 {
   dout(5) << "Searching permissions for uid=" << uid <<  dendl;
 
@@ -92,9 +93,9 @@ int rgw_perms_from_aclspec_default_strategy(const rgw_user& uid,
 
 
 /* RGWRemoteAuthApplier */
-int RGWRemoteAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+uint32_t RGWRemoteAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
 {
-  int perm = 0;
+  uint32_t perm = 0;
 
   /* For backward compatibility with ACLOwner. */
   perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user,
@@ -213,7 +214,7 @@ void RGWRemoteAuthApplier::load_acct_info(RGWUserInfo& user_info) const      /* 
 /* static declaration */
 const std::string RGWLocalAuthApplier::NO_SUBUSER;
 
-int RGWLocalAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
+uint32_t RGWLocalAuthApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
 {
   return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
 }
@@ -430,7 +431,7 @@ RGWKeystoneAuthEngine::get_acl_strategy(const KeystoneToken& token) const
 
   /* Lambda will obtain a copy of (not a reference to!) allowed_items. */
   return [allowed_items](const RGWIdentityApplier::aclspec_t& aclspec) {
-    int perm = 0;
+    uint32_t perm = 0;
 
     for (const auto& allowed_item : allowed_items) {
       const auto iter = aclspec.find(allowed_item);
