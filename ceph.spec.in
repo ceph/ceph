@@ -1456,7 +1456,7 @@ if [ $1 -eq 0 ]; then
     cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
 
     # Remove the module
-    /usr/sbin/semodule -n -r ceph
+    /usr/sbin/semodule -n -r ceph > /dev/null 2>&1
 
     # Reload the policy if SELinux is enabled
     if ! /usr/sbin/selinuxenabled ; then
