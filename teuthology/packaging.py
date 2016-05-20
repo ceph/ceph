@@ -585,7 +585,7 @@ class GitbuilderProject(object):
             # deb based systems use codename instead of a distro/version combo
             if not codename:
                 # lookup codename based on distro string
-                codename = cls._get_codename(distro, version)
+                codename = OS._version_to_codename(distro, version)
                 if not codename:
                     msg = "No codename found for: {distro} {version}".format(
                         distro=distro,
@@ -599,23 +599,6 @@ class GitbuilderProject(object):
             distro=distro,
             version=cls._parse_version(version),
         )
-
-    @staticmethod
-    def _get_codename(distro, version):
-        """
-        Attempts to find the codename for a given distro / version
-        pair.  Will first attempt to find the codename for the full
-        version and if not found will look again using only the major
-        version.  If a codename is not found, None is returned.
-
-        The constant DISTRO_CODENAME_MAP is used to provide this mapping.
-
-        :returns: The codename as string or None if not found.
-        """
-        try:
-            return OS._version_to_codename(distro, version)
-        except RuntimeError:
-            pass
 
     def _get_version(self):
         """
