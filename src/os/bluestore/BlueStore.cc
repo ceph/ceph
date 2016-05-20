@@ -770,7 +770,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
-    csum_type(bluestore_blob_t::CSUM_CRC32C)
+    csum_type(bluestore_blob_t::CSUM_CRC32C),
+    min_alloc_size(g_conf->bluestore_min_alloc_size)
 {
   _init_logger();
 }
@@ -811,6 +812,8 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
   }
   if (changed.count("bluestore_min_alloc_size")) {
     min_alloc_size = g_conf->bluestore_min_alloc_size;
+    dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+	     << std::dec << dendl;
   }
 }
 
