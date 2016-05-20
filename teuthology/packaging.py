@@ -8,6 +8,7 @@ from cStringIO import StringIO
 from .config import config
 from .contextutil import safe_while
 from .exceptions import VersionNotFoundError
+from .orchestra.opysys import DISTRO_CODENAME_MAP, DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -27,29 +28,6 @@ Map 'generic' service name to 'flavor-specific' service name.
 _SERVICE_MAP = {
     'httpd': {'deb': 'apache2', 'rpm': 'httpd'}
 }
-
-DISTRO_CODENAME_MAP = {
-    "ubuntu": {
-        "16.04": "xenial",
-        "14.04": "trusty",
-        "12.04": "precise",
-        "15.04": "vivid",
-    },
-    "debian": {
-        "7": "wheezy",
-        "8": "jessie",
-    },
-}
-
-DEFAULT_OS_VERSION = dict(
-    ubuntu="14.04",
-    fedora="20",
-    centos="7.0",
-    opensuse="12.2",
-    sles="11-sp2",
-    rhel="7.0",
-    debian='7.0'
-)
 
 
 def get_package_name(pkg, rem):

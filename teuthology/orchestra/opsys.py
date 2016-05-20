@@ -1,6 +1,29 @@
 import ast
 import re
 
+DISTRO_CODENAME_MAP = {
+    "ubuntu": {
+        "16.04": "xenial",
+        "14.04": "trusty",
+        "12.04": "precise",
+        "15.04": "vivid",
+    },
+    "debian": {
+        "7": "wheezy",
+        "8": "jessie",
+    },
+}
+
+DEFAULT_OS_VERSION = dict(
+    ubuntu="14.04",
+    fedora="20",
+    centos="7.0",
+    opensuse="12.2",
+    sles="11-sp2",
+    rhel="7.0",
+    debian='7.0'
+)
+
 
 class OS(object):
     """
