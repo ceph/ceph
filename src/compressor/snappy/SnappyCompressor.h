@@ -44,12 +44,9 @@ class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
 };
 
 class SnappyCompressor : public Compressor {
-
-
  public:
-  virtual ~SnappyCompressor() {}
-  virtual const char* get_method_name() { return "snappy"; }
-  virtual int compress(const bufferlist &src, bufferlist &dst) {
+  SnappyCompressor() : Compressor("snappy") {}
+  int compress(const bufferlist &src, bufferlist &dst) override {
     BufferlistSource source(const_cast<bufferlist&>(src).begin());
     bufferptr ptr(snappy::MaxCompressedLength(src.length()));
     snappy::UncheckedByteArraySink sink(ptr.c_str());
@@ -57,11 +54,11 @@ class SnappyCompressor : public Compressor {
     dst.append(ptr, 0, sink.CurrentDestination()-ptr.c_str());
     return 0;
   }
-  virtual int decompress(const bufferlist &src, bufferlist &dst) {
+  int decompress(const bufferlist &src, bufferlist &dst) override {
     bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
     return decompress(i, dst);
   }
-  virtual int decompress(bufferlist::iterator &p, bufferlist &dst) {
+  int decompress(bufferlist::iterator &p, bufferlist &dst) override {
     size_t res_len = 0;
     // Trick, decompress only need first 32bits buffer
     bufferlist::const_iterator ptmp = p;

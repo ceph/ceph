@@ -37,11 +37,6 @@ _prefix(std::ostream* _dout)
 
 const long unsigned int max_len = 2048;
 
-const char* CompressionZlib::get_method_name()
-{
-	return "zlib";
-}
-
 int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
 {
   int ret;

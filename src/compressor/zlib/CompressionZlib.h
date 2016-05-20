@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,34 +14,19 @@
  *
  */
 
-
 #ifndef CEPH_COMPRESSION_ZLIB_H
 #define CEPH_COMPRESSION_ZLIB_H
 
-// -----------------------------------------------------------------------------
 #include "compressor/Compressor.h"
-// -----------------------------------------------------------------------------
-#include <list>
-// -----------------------------------------------------------------------------
 
 class CompressionZlib : public Compressor {
-	const char version = '1';
+  const char version = '1';
+
 public:
-
-  CompressionZlib()
-  {
-  }
-
-  virtual
-  ~CompressionZlib()
-  {
-  }
-
-  virtual int compress(const bufferlist &in, bufferlist &out);
-  virtual int decompress(const bufferlist &in, bufferlist &out);
-  virtual int decompress(bufferlist::iterator &p, bufferlist &out);
-  virtual const char* get_method_name();
-
+  CompressionZlib() : Compressor("zlib") {}
+  int compress(const bufferlist &in, bufferlist &out) override;
+  int decompress(const bufferlist &in, bufferlist &out) override;
+  int decompress(bufferlist::iterator &p, bufferlist &out) override;
  };
 
 
