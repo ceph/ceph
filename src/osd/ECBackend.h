@@ -202,7 +202,6 @@ private:
     ObjectRecoveryInfo recovery_info;
     ObjectRecoveryProgress recovery_progress;
 
-    bool pending_read;
     enum state_t { IDLE, READING, WRITING, COMPLETE } state;
 
     static const char* tostr(state_t state) {
@@ -237,7 +236,7 @@ private:
 
     void dump(Formatter *f) const;
 
-    RecoveryOp() : pending_read(false), state(IDLE) {}
+    RecoveryOp() : state(IDLE) {}
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
   map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator> recovery_ops;
