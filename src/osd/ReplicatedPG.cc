@@ -5230,6 +5230,9 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
   }
+  if (oi.is_cache_pinned()) {
+    ctx->delta_stats.num_objects_pinned--;
+  }
   if (soid.is_head())
     snapset.head_exists = false;
   obs.exists = false;
