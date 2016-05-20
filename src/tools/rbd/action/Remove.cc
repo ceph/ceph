@@ -83,6 +83,7 @@ int execute(const po::variables_map &vm) {
       std::cerr << std::endl
                 << "Remove the image from the consistency group and try again."
                 << std::endl;
+      image.close();
     } else {
       std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
     }
