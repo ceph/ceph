@@ -473,8 +473,13 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
 
     // pool has no mirrored images
     if (pool_image_ids.find(pool_id) == pool_image_ids.end()) {
+      dout(20) << "pool " << pool_id << " has no mirrored images" << dendl;
       for (auto images_it = pool_images.begin();
 	   images_it != pool_images.end();) {
+        if (images_it->second->is_running()) {
+          dout(20) << "stop image replayer for "
+                   << images_it->second->get_global_image_id() << dendl;
+        }
 	if (stop_image_replayer(images_it->second)) {
 	  images_it = pool_images.erase(images_it);
 	} else {
@@ -495,6 +500,10 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
 	 images_it != pool_images.end();) {
       auto &image_ids = pool_image_ids.at(pool_id);
       if (image_ids.find(ImageIds(images_it->first)) == image_ids.end()) {
+        if (images_it->second->is_running()) {
+          dout(20) << "stop image replayer for "
+                   << images_it->second->get_global_image_id() << dendl;
+        }
 	if (stop_image_replayer(images_it->second)) {
 	  images_it = pool_images.erase(images_it);
 	} else {
@@ -562,6 +571,10 @@ void Replayer::set_sources(const PoolImageIds &pool_image_ids)
           local_ioctx.get_id(), pool_id, image_id.id, image_id.global_id));
 	it = pool_replayers.insert(
 	  std::make_pair(image_id.id, std::move(image_replayer))).first;
+      }
+      if (!it->second->is_running()) {
+        dout(20) << "starting image replayer for "
+                 << it->second->get_global_image_id() << dendl;
       }
       start_image_replayer(it->second);
     }
