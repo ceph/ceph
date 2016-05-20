@@ -6,7 +6,7 @@ include_directories(../support/src)
 include_directories(../sim)
 include_directories(${BOOST_INCLUDE_DIR})
 
-set(core_srcs ../support/src/run_every.cc ../sim/test_dmclock.cc)
+set(support_srcs ../sim/test_dmclock.cc)
 set(test_srcs
   test_test_client.cc
   test_dmclock_server.cc
@@ -18,10 +18,12 @@ set_source_files_properties(${core_srcs} ${test_srcs}
   COMPILE_FLAGS "${local_flags}"
   )
 
-add_executable(tests EXCLUDE_FROM_ALL ${core_srcs} ${test_srcs})
+add_executable(tests EXCLUDE_FROM_ALL ${test_srcs} ${support_srcs})
 
 target_link_libraries(tests
-  PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+  PUBLIC $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+
+add_dependencies(tests dmclock)
 
 # for every argument, adds a test with that name, using it as a gtest filter
 function(make_tests)
