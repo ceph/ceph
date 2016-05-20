@@ -3955,18 +3955,20 @@ int image_get_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist refbl;
   int r = cls_cxx_map_get_val(hctx, RBD_CG_REF_KEY, &refbl);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
-  std::string cg_id;
-  int64_t pool_id;
-  bufferlist::iterator iter = refbl.begin();
-  try {
-    ::decode(pool_id, iter);
-    ::decode(cg_id, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
+  std::string cg_id = "";
+  int64_t pool_id = -1;
+  if (r != -ENOENT) {
+    bufferlist::iterator iter = refbl.begin();
+    try {
+      ::decode(pool_id, iter);
+      ::decode(cg_id, iter);
+    } catch (const buffer::error &err) {
+      return -EINVAL;
+    }
   }
 
   ::encode(pool_id, *out);
