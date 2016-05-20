@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <array>
+
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_user.h"
@@ -418,7 +420,7 @@ RGWKeystoneAuthEngine::get_acl_strategy(const KeystoneToken& token) const
   const auto& user_name = token.get_user_name();
 
   /* Construct all possible combinations including Swift's wildcards. */
-  const std::vector<std::string> allowed_items = {
+  const std::array<std::string, 6> allowed_items = {
     make_spec_item(tenant_uuid, user_uuid),
     make_spec_item(tenant_name, user_name),
 

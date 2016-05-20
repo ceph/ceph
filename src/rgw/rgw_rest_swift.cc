@@ -17,6 +17,7 @@
 #include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
+#include <array>
 #include <sstream>
 #include <memory>
 
@@ -1517,7 +1518,8 @@ int RGWHandler_REST_SWIFT::authorize()
   RGWAnonymousAuthEngine anoneng(s->cct,                    &aplfact);
 
   /* Pipeline. */
-  const std::vector<const RGWAuthEngine *> engines = {
+  constexpr size_t ENGINES_NUM = 5;
+  const std::array<const RGWAuthEngine *, ENGINES_NUM> engines = {
     &tempurl, &rgwtk, &keystone, &ext, &anoneng
   };
 
