@@ -120,7 +120,7 @@ struct OSDCap {
   std::vector<OSDCapGrant> grants;
 
   OSDCap() {}
-  explicit OSDCap(std::vector<OSDCapGrant> g) : grants(g) {}
+  explicit OSDCap(std::vector<OSDCapGrant> g) : grants(std::move(g)) {}
 
   bool allow_all() const;
   void set_allow_all();
