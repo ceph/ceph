@@ -27,6 +27,7 @@
 #include "include/atomic.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/Cond.h"
 #include "msg/async/Event.h"
 
 // We use epoll, kqueue, evport, select in descending order by performance.
@@ -74,7 +75,7 @@ class EventDriverTest : public ::testing::TestWithParam<const char*> {
 #endif
     if (strcmp(GetParam(), "select"))
       driver = new SelectDriver(g_ceph_context);
-    driver->init(100);
+    driver->init(nullptr, 100);
   }
   virtual void TearDown() {
     delete driver;
@@ -253,7 +254,7 @@ class FakeEvent : public EventCallback {
 TEST(EventCenterTest, FileEventExpansion) {
   vector<int> sds;
   EventCenter center(g_ceph_context);
-  center.init(100);
+  center.init(100, 0);
   EventCallbackRef e(new FakeEvent());
   for (int i = 0; i < 300; i++) {
     int sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -273,14 +274,13 @@ class Worker : public Thread {
  public:
   EventCenter center;
   explicit Worker(CephContext *c): cct(c), done(false), center(c) {
-    center.init(100);
+    center.init(100, 0);
   }
   void stop() {
     done = true; 
     center.wakeup();
   }
   void* entry() {
-    center.set_owner();
     while (!done)
       center.process_events(1000000);
     return 0;

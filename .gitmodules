@@ -29,3 +29,6 @@
 [submodule "src/xxHash"]
 	path = src/xxHash
 	url = https://github.com/ceph/xxHash.git
+[submodule "src/dpdk"]
+	path = src/dpdk
+	url = https://github.com/yuyuyu101/dpdk

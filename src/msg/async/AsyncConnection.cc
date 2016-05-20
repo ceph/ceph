@@ -14,16 +14,13 @@
  *
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <unistd.h>
 
 #include "include/Context.h"
+#include "common/Cycles.h"
 #include "common/errno.h"
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
-
-#include "include/sock_compat.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
@@ -31,9 +28,11 @@
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
+
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
+  int fd = cs ? cs.fd() : -1;
   return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
-                << " sd=" << sd << " :" << port
+                << " sd=" << fd << " :" << port
                 << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq
                 << " cs=" << connect_seq
@@ -44,7 +43,7 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
 // Notes:
 // 1. Don't dispatch any event when closed! It may cause AsyncConnection alive even if AsyncMessenger dead
 
-const int AsyncConnection::TCP_PREFETCH_MIN_SIZE = 512;
+const int TCP_PREFETCH_MIN_SIZE = 512;
 const int ASYNC_COALESCE_THRESHOLD = 256;
 
 class C_time_wakeup : public EventCallback {
@@ -149,7 +148,7 @@ class C_clean_handler : public EventCallback {
  public:
   explicit C_clean_handler(AsyncConnectionRef c): conn(c) {}
   void do_request(int id) {
-    conn->cleanup_handler();
+    conn->cleanup();
     delete this;
   }
 };
@@ -175,14 +174,15 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(p), global_seq(0), connect_seq(0), 
-    peer_global_seq(0), out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1),
-    port(-1), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, Worker *w)
+  : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(w->get_perf_counter()), worker(w), global_seq(0), connect_seq(0),
+    peer_global_seq(0), out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0),
+    port(-1), local_stack(m->stack->support_local_listen_table()),
+    zero_copy(m->stack->support_zero_copy_read()), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
-    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
+    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), center(&w->center)
 {
   read_handler = new C_handle_read(this);
   write_handler = new C_handle_write(this);
@@ -191,6 +191,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   connect_handler = new C_deliver_connect(async_msgr, this);
   local_deliver_handler = new C_local_deliver(this);
   wakeup_handler = new C_time_wakeup(this);
+  cleanup_handler = new C_clean_handler(this);
   memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
@@ -219,233 +220,112 @@ void AsyncConnection::maybe_start_delay_thread()
   }
 }
 
-/* return -1 means `fd` occurs error or closed, it should be closed
- * return 0 means EAGAIN or EINTR */
-ssize_t AsyncConnection::read_bulk(int fd, char *buf, unsigned len)
-{
-  ssize_t nread = ::read(fd, buf, len);
-  if (nread == -1) {
-    if (errno == EAGAIN || errno == EINTR) {
-      nread = 0;
-    } else {
-      ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << fd
-                          << " : "<< strerror(errno) << dendl;
-      return -1;
-    }
-  } else if (nread == 0) {
-    ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor "
-                              << fd << dendl;
-    return -1;
-  }
-  return nread;
-}
-
-/* 
- SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
-  http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
-  http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
-*/
-void AsyncConnection::suppress_sigpipe()
-{
-#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
-  /*
-    We want to ignore possible SIGPIPE that we can generate on write.
-    SIGPIPE is delivered *synchronously* and *only* to the thread
-    doing the write.  So if it is reported as already pending (which
-    means the thread blocks it), then we do nothing: if we generate
-    SIGPIPE, it will be merged with the pending one (there's no
-    queuing), and that suits us well.  If it is not pending, we block
-    it in this thread (and we avoid changing signal action, because it
-    is per-process).
-  */
-  sigset_t pending;
-  sigemptyset(&pending);
-  sigpending(&pending);
-  sigpipe_pending = sigismember(&pending, SIGPIPE);
-  if (!sigpipe_pending) {
-    sigset_t blocked;
-    sigemptyset(&blocked);
-    pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
-
-    /* Maybe is was blocked already?  */
-    sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
-  }
-#endif /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
-}
-
-
-void AsyncConnection::restore_sigpipe()
-{
-#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
-  /*
-    If SIGPIPE was pending already we do nothing.  Otherwise, if it
-    become pending (i.e., we generated it), then we sigwait() it (thus
-    clearing pending status).  Then we unblock SIGPIPE, but only if it
-    were us who blocked it.
-  */
-  if (!sigpipe_pending) {
-    sigset_t pending;
-    sigemptyset(&pending);
-    sigpending(&pending);
-    if (sigismember(&pending, SIGPIPE)) {
-      /*
-        Protect ourselves from a situation when SIGPIPE was sent
-        by the user to the whole process, and was delivered to
-        other thread before we had a chance to wait for it.
-      */
-      static const struct timespec nowait = { 0, 0 };
-      TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
-    }
-
-    if (sigpipe_unblock)
-      pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
-  }
-#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
-}
-
-// return the length of msg needed to be sent,
-// < 0 means error occured
-ssize_t AsyncConnection::do_sendmsg(struct msghdr &msg, unsigned len, bool more)
-{
-  suppress_sigpipe();
-
-  while (len > 0) {
-    ssize_t r;
-#if defined(MSG_NOSIGNAL)
-    r = ::sendmsg(sd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
-#else
-    r = ::sendmsg(sd, &msg, (more ? MSG_MORE : 0));
-#endif /* defined(MSG_NOSIGNAL) */
-
-    if (r == 0) {
-      ldout(async_msgr->cct, 10) << __func__ << " sendmsg got r==0!" << dendl;
-    } else if (r < 0) {
-      if (errno == EINTR) {
-        continue;
-      } else if (errno == EAGAIN) {
-        break;
-      } else {
-        ldout(async_msgr->cct, 1) << __func__ << " sendmsg error: " << cpp_strerror(errno) << dendl;
-        restore_sigpipe();
-        return r;
-      }
-    }
-
-    len -= r;
-    if (len == 0) break;
-
-    // hrmph. drain r bytes from the front of our message.
-    ldout(async_msgr->cct, 20) << __func__ << " short write did " << r << ", still have " << len << dendl;
-    while (r > 0) {
-      if (msg.msg_iov[0].iov_len <= (size_t)r) {
-        // drain this whole item
-        r -= msg.msg_iov[0].iov_len;
-        msg.msg_iov++;
-        msg.msg_iovlen--;
-      } else {
-        msg.msg_iov[0].iov_base = (char *)msg.msg_iov[0].iov_base + r;
-        msg.msg_iov[0].iov_len -= r;
-        break;
-      }
-    }
-  }
-  restore_sigpipe();
-  return (ssize_t)len;
-}
-
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
 ssize_t AsyncConnection::_try_send(bool more)
 {
-  if (async_msgr->cct->_conf->ms_inject_socket_failures && sd >= 0) {
+  if (!outcoming_bl.length())
+    return 0;
+
+  if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
     if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
       ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
-      ::shutdown(sd, SHUT_RDWR);
+      cs.shutdown();
     }
   }
 
-  uint64_t sent_bytes = 0;
-  list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
-  uint64_t left_pbrs = outcoming_bl.buffers().size();
-  while (left_pbrs) {
-    struct msghdr msg;
-    uint64_t size = MIN(left_pbrs, ASYNC_IOV_MAX);
-    left_pbrs -= size;
-    memset(&msg, 0, sizeof(msg));
-    msg.msg_iovlen = 0;
-    msg.msg_iov = msgvec;
-    unsigned msglen = 0;
-    while (size > 0) {
-      msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str());
-      msgvec[msg.msg_iovlen].iov_len = pb->length();
-      msg.msg_iovlen++;
-      msglen += pb->length();
-      ++pb;
-      size--;
-    }
-
-    ssize_t r = do_sendmsg(msg, msglen, left_pbrs || more);
-    if (r < 0)
-      return r;
-
-    // "r" is the remaining length
-    sent_bytes += msglen - r;
-    if (r > 0) {
-      ldout(async_msgr->cct, 5) << __func__ << " remaining " << r
-                          << " needed to be sent, creating event for writing"
-                          << dendl;
-      break;
-    }
-    // only "r" == 0 continue
+  ssize_t r = cs.send(outcoming_bl, more);
+  if (r < 0) {
+    ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
+    return r;
   }
 
-  // trim already sent for outcoming_bl
-  if (sent_bytes) {
-    if (sent_bytes < outcoming_bl.length()) {
-      outcoming_bl.splice(0, sent_bytes);
-    } else {
-      outcoming_bl.clear();
-    }
-  }
-
-  ldout(async_msgr->cct, 20) << __func__ << " sent bytes " << sent_bytes
+  ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
                              << " remaining bytes " << outcoming_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
-    center->create_file_event(sd, EVENT_WRITABLE, write_handler);
-    open_write = true;
+    if (center->in_thread()) {
+      center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
+      open_write = true;
+    } else {
+      center->dispatch_event_external(write_handler);
+    }
   }
 
   if (open_write && !is_queued()) {
-    center->delete_file_event(sd, EVENT_WRITABLE);
-    open_write = false;
+    if (center->in_thread()) {
+      center->delete_file_event(cs.fd(), EVENT_WRITABLE);
+      open_write = false;
+    } else {
+      center->dispatch_event_external(write_handler);
+    }
   }
 
   return outcoming_bl.length();
 }
 
-// Because this func will be called multi times to populate
-// the needed buffer, so the passed in bufferptr must be the same.
-// Normally, only "read_message" will pass existing bufferptr in
-//
-// And it will uses readahead method to reduce small read overhead,
-// "recv_buf" is used to store read buffer
-//
-// return the remaining bytes, 0 means this buffer is finished
-// else return < 0 means error
-ssize_t AsyncConnection::read_until(unsigned len, char *p)
+ssize_t AsyncConnection::_zero_read_until(unsigned len, char *p)
 {
   ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
                              << state_offset << dendl;
 
-  if (async_msgr->cct->_conf->ms_inject_socket_failures && sd >= 0) {
+  if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
     if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
       ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
-      ::shutdown(sd, SHUT_RDWR);
+      cs.shutdown();
     }
   }
 
+  unsigned left = len - state_offset;
   ssize_t r = 0;
+  while (left > 0) {
+    if (recv_start == recv_end) {
+      r = cs.zero_copy_read(recv_ptr);
+      if (r < 0) {
+        if (r == -EAGAIN)
+          break;
+        ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                  << cpp_strerror(r) << dendl;
+        return -1;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
+        return -1;
+      }
+      recv_start = 0;
+      recv_end = r;
+    }
+
+    unsigned recv_gap = recv_end - recv_start;
+    if (recv_gap < left) {
+      recv_ptr.copy_out(recv_start, recv_gap, p+state_offset);
+      left -= recv_gap;
+      state_offset += recv_gap;
+      recv_start = recv_end;
+    } else {
+      recv_ptr.copy_out(recv_start, left, p+state_offset);
+      recv_start += left;
+      state_offset = 0;
+      return 0;
+    }
+  }
+
+  ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
+                             << len - state_offset << " bytes" << dendl;
+  return len - state_offset;
+}
+
+ssize_t AsyncConnection::_copy_read_until(unsigned len, char *p)
+{
+  ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
+                             << state_offset << dendl;
+
+  if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
+    if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
+      ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
+      cs.shutdown();
+    }
+  }
+
   uint64_t left = len - state_offset;
   if (recv_end > recv_start) {
     uint64_t to_read = MIN(recv_end - recv_start, left);
@@ -462,31 +342,49 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   }
 
   recv_end = recv_start = 0;
+  ssize_t r = 0;
   /* nothing left in the prefetch buffer */
   if (len > recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     do {
-      r = read_bulk(sd, p+state_offset, left);
-      ldout(async_msgr->cct, 25) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
+      r = cs.read(p+state_offset, left);
+
+      ldout(async_msgr->cct, 25) << __func__ << " read left is " << left << " got " << r << dendl;
       if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
-        return -1;
+        if (r != -EAGAIN && r != -EINTR) {
+          ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                    << cpp_strerror(r) << dendl;
+          return -1;
+        }
+        break;
       } else if (r == static_cast<int>(left)) {
         state_offset = 0;
         return 0;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
+        return -1;
+      } else {
+        state_offset += r;
+        left -= r;
       }
-      state_offset += r;
-      left -= r;
     } while (r > 0);
   } else {
     do {
-      r = read_bulk(sd, recv_buf+recv_end, recv_max_prefetch);
-      ldout(async_msgr->cct, 25) << __func__ << " read_bulk recv_end is " << recv_end
+      r = cs.read(recv_buf+recv_end, recv_max_prefetch);
+      ldout(async_msgr->cct, 25) << __func__ << " read recv_end is " << recv_end
                                  << " left is " << left << " got " << r << dendl;
       if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
+        if (r != -EAGAIN && r != -EINTR) {
+          ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                    << cpp_strerror(r) << dendl;
+          return -1;
+        }
+        break;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
         return -1;
       }
+
       recv_end += r;
       if (r >= static_cast<int>(left)) {
         recv_start = len - state_offset;
@@ -505,7 +403,8 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   return len - state_offset;
 }
 
-void AsyncConnection::inject_delay() {
+void AsyncConnection::inject_delay()
+{
   if (async_msgr->cct->_conf->ms_inject_internal_delays) {
     ldout(async_msgr->cct, 10) << __func__ << " sleep for " << 
       async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
@@ -515,8 +414,90 @@ void AsyncConnection::inject_delay() {
   }
 }
 
+template<>
+ssize_t AsyncConnection::read_data<true>(unsigned len, bufferlist &data)
+{
+  ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
+                             << state_offset << dendl;
+
+  if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
+    if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
+      ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;
+      cs.shutdown();
+    }
+  }
+
+  unsigned left = len - state_offset;
+  ssize_t r = 0;
+  while (left > 0) {
+    if (recv_start == recv_end) {
+      r = cs.zero_copy_read(recv_ptr);
+      if (r < 0) {
+        if (r == -EAGAIN)
+          break;
+        ldout(async_msgr->cct, 1) << __func__ << " reading failed:"
+                                  << cpp_strerror(r) << dendl;
+        return -1;
+      } else if (r == 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " peer close file descriptor" << dendl;
+        return -1;
+      }
+      recv_start = 0;
+      recv_end = r;
+    }
+
+    unsigned recv_gap = recv_end - recv_start;
+    if (recv_gap < left) {
+      data.append(recv_ptr, recv_start, recv_gap);
+      left -= recv_gap;
+      state_offset += recv_gap;
+      recv_start = recv_end;
+    } else {
+      data.append(recv_ptr, recv_start, left);
+      recv_start += left;
+      state_offset = 0;
+      return 0;
+    }
+  }
+
+  ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
+                             << len - state_offset << " bytes" << dendl;
+  return len - state_offset;
+}
+
+template<>
+ssize_t AsyncConnection::read_data<false>(unsigned len, bufferlist &bl)
+{
+  if (!bl.length())
+    bl.push_back(buffer::create(len));
+  if (bl.is_contiguous()) {
+    return read_until(len, bl.c_str());
+  } else {
+    // special case: only for the real data read
+    // note: aware of data_blp and msg_left
+    while (msg_left > 0) {
+      bufferptr bp = data_blp.get_current_ptr();
+      ssize_t r = read_until(bp.length(), bp.c_str());
+      if (r < 0) {
+        ldout(async_msgr->cct, 1) << __func__ << " read data error " << dendl;
+        return r;
+      } else if (r > 0) {
+        break;
+      }
+
+      data_blp.advance(r);
+      bl.append(bp, 0, r);
+      msg_left -= r;
+    }
+    return msg_left;
+  }
+}
+
 void AsyncConnection::process()
 {
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
   ssize_t r = 0;
   int prev_state = state;
   bool already_dispatch_writer = false;
@@ -732,10 +713,11 @@ void AsyncConnection::process()
           // read front
           unsigned front_len = current_header.front_len;
           if (front_len) {
-            if (!front.length())
-              front.push_back(buffer::create(front_len));
+            if (zero_copy)
+              r = read_data<true>(front_len, front);
+            else
+              r = read_data<false>(front_len, front);
 
-            r = read_until(front_len, front.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message front failed" << dendl;
               goto fail;
@@ -753,10 +735,10 @@ void AsyncConnection::process()
           // read middle
           unsigned middle_len = current_header.middle_len;
           if (middle_len) {
-            if (!middle.length())
-              middle.push_back(buffer::create(middle_len));
-
-            r = read_until(middle_len, middle.c_str());
+            if (zero_copy)
+              r = read_data<true>(middle_len, middle);
+            else
+              r = read_data<false>(middle_len, middle);
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message middle failed" << dendl;
               goto fail;
@@ -774,7 +756,7 @@ void AsyncConnection::process()
           // read data
           unsigned data_len = le32_to_cpu(current_header.data_len);
           unsigned data_off = le32_to_cpu(current_header.data_off);
-          if (data_len) {
+          if (data_len && !zero_copy) {
             // get a buffer
             map<ceph_tid_t,pair<bufferlist,int> >::iterator p = rx_buffers.find(current_header.tid);
             if (p != rx_buffers.end()) {
@@ -799,24 +781,18 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_READ_DATA:
         {
-          while (msg_left > 0) {
-            bufferptr bp = data_blp.get_current_ptr();
-            unsigned read = MIN(bp.length(), msg_left);
-            r = read_until(read, bp.c_str());
+          if (msg_left > 0) {
+            if (zero_copy)
+              r = read_data<true>(current_header.data_len, data);
+            else
+              r = read_data<false>(current_header.data_len, data);
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read data error " << dendl;
               goto fail;
             } else if (r > 0) {
               break;
             }
-
-            data_blp.advance(read);
-            data.append(bp, 0, read);
-            msg_left -= read;
           }
-
-          if (msg_left > 0)
-            break;
 
           state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
         }
@@ -970,8 +946,6 @@ void AsyncConnection::process()
 
       case STATE_CLOSED:
         {
-          if (sd >= 0)
-            center->delete_file_event(sd, EVENT_READABLE);
           ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
           break;
         }
@@ -991,6 +965,9 @@ void AsyncConnection::process()
     }
   } while (prev_state != state);
 
+#ifdef CEPH_PERF_DEV
+  rx_cycles += Cycles::rdtsc() - start;
+#endif
   return;
 
  fail:
@@ -1030,6 +1007,12 @@ ssize_t AsyncConnection::_process_connection()
   ssize_t r = 0;
 
   switch(state) {
+    case STATE_NONE:
+      {
+        ldout(async_msgr->cct, 20) << __func__ << " none state" << dendl;
+        break;
+      }
+
     case STATE_WAIT_SEND:
       {
         Mutex::Locker l(write_lock);
@@ -1054,28 +1037,28 @@ ssize_t AsyncConnection::_process_connection()
 
         global_seq = async_msgr->get_global_seq();
         // close old socket.  this is safe because we stopped the reader thread above.
-        if (sd >= 0) {
-          center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-          ::close(sd);
+        if (cs) {
+          center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
+          cs.close();
         }
 
-        sd = net.nonblock_connect(get_peer_addr());
-        if (sd < 0) {
+        SocketOptions opts;
+        r = worker->connect(get_peer_addr(), opts, &cs);
+        if (r < 0)
           goto fail;
-        }
 
-        center->create_file_event(sd, EVENT_READABLE, read_handler);
+        center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_RE;
         break;
       }
 
     case STATE_CONNECTING_RE:
       {
-        r = net.reconnect(get_peer_addr(), sd);
+        r = cs.is_connected();
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
           goto fail;
-        } else if (r > 0) {
+        } else if (r == 0) {
           break;
         }
 
@@ -1143,7 +1126,7 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
         }
         ldout(async_msgr->cct, 20) << __func__ <<  " connect read peer addr "
-                             << paddr << " on socket " << sd << dendl;
+                             << paddr << " on socket " << cs.fd() << dendl;
         if (peer_addr != paddr) {
           if (paddr.is_blank_ip() && peer_addr.get_port() == paddr.get_port() &&
               peer_addr.get_nonce() == paddr.get_nonce()) {
@@ -1385,27 +1368,14 @@ ssize_t AsyncConnection::_process_connection()
       {
         bufferlist bl;
 
-        if (net.set_nonblock(sd) < 0)
-          goto fail;
-
-        net.set_socket_options(sd);
+        center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
         ::encode(async_msgr->get_myaddr(), bl);
         port = async_msgr->get_myaddr().get_port();
-        // and peer's socket addr (they might not know their ip)
-	sockaddr_storage ss;
-        socklen_t len = sizeof(ss);
-        r = ::getpeername(sd, (sockaddr*)&ss, &len);
-        if (r < 0) {
-          ldout(async_msgr->cct, 0) << __func__ << " failed to getpeername "
-                              << cpp_strerror(errno) << dendl;
-          goto fail;
-        }
-	socket_addr.set_sockaddr((sockaddr*)&ss);
         ::encode(socket_addr, bl);
-        ldout(async_msgr->cct, 1) << __func__ << " sd=" << sd << " " << socket_addr << dendl;
+        ldout(async_msgr->cct, 1) << __func__ << " sd=" << cs.fd() << " " << socket_addr << dendl;
 
         r = try_send(bl);
         if (r == 0) {
@@ -1836,8 +1806,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   } else {
     assert(can_write == WriteStatus::NOWRITE);
     existing->write_lock.Lock(true);
-    // queue a reset on the new connection, which we're dumping for the old
-    center->dispatch_event_external(reset_handler);
 
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -1845,13 +1813,20 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       existing->is_reset_from_peer = true;
     }
 
+    center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
     // Now existing connection will be alive and the current connection will
     // exchange socket with existing connection because we want to maintain
     // original "connection_state"
-    if (existing->sd >= 0)
-      existing->center->delete_file_event(existing->sd, EVENT_READABLE|EVENT_WRITABLE);
-    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-    existing->center->create_file_event(sd, EVENT_READABLE, existing->read_handler);
+    std::swap(existing->cs, cs);
+    std::swap(existing->worker, worker);
+    std::swap(existing->center, center);
+    existing->delay_cleanup = delay_cleanup = true;
+
+    // queue a reset on the new connection, which we're dumping for the old
+    center->dispatch_event_external(reset_handler);
+
+    _stop();
+    ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
 
     reply.global_seq = existing->peer_global_seq;
 
@@ -1863,27 +1838,64 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     }
     existing->requeue_sent();
 
-    swap(existing->sd, sd);
     existing->can_write = WriteStatus::NOWRITE;
     existing->open_write = false;
     existing->replacing = true;
     existing->state_offset = 0;
-    existing->state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
+    // avoid previous thread modify event
+    existing->state = STATE_NONE;
     // Discard existing prefetch buffer in `recv_buf`
     existing->recv_start = existing->recv_end = 0;
     // there shouldn't exist any buffer
     assert(recv_start == recv_end);
 
+    reply.global_seq = existing->peer_global_seq;
     existing->write_lock.Unlock();
-    if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
-      // handle error
-      ldout(async_msgr->cct, 0) << __func__ << " reply fault for existing connection." << dendl;
-      existing->fault();
-    }
-
-    ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
-    _stop();
     existing->lock.Unlock();
+
+    // existing->sd now isn't register any event while it's new,
+    // previous existing->sd now is closed, no event will notify
+    // existing(EventCenter*) from now.
+    EventCenter::submit_to(center->get_id(), [this, existing, connect, reply, authorizer_reply]() mutable {
+      if (cs)
+        center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
+      assert(existing->delay_cleanup && delay_cleanup);
+      assert(state == STATE_CLOSED);
+      delay_cleanup = false;
+      center->dispatch_event_external(cleanup_handler);
+
+      {
+        // we need to delete time event in original thread
+        Mutex::Locker l(existing->lock);
+        assert(existing->cleanup_handler);
+        for (set<uint64_t>::iterator it = existing->register_time_events.begin();
+             it != existing->register_time_events.end(); ++it)
+          center->delete_time_event(*it);
+        existing->register_time_events.clear();
+      }
+
+      // Before changing existing->center, it may already exists some events in existing->center's queue.
+      // Then if we mark down `existing`, it will execute in another thread and clean up connection.
+      // Previous event will result in segment fault
+      EventCenter::submit_to(existing->center->get_id(), [existing, connect, reply, authorizer_reply]() mutable {
+        Mutex::Locker l(existing->lock);
+        assert(existing->delay_cleanup && existing->cleanup_handler);
+        existing->delay_cleanup = false;
+        if (existing->state == STATE_CLOSED) {
+          existing->center->dispatch_event_external(existing->cleanup_handler);
+          return ;
+        }
+        assert(existing->state == STATE_NONE);
+
+        existing->state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
+        existing->center->create_file_event(existing->cs.fd(), EVENT_READABLE, existing->read_handler);
+        if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
+          // handle error
+          existing->fault();
+        }
+      }, true);
+    }, true);
+
     return 0;
   }
   existing->lock.Unlock();
@@ -1992,15 +2004,15 @@ void AsyncConnection::_connect()
   center->dispatch_event_external(read_handler);
 }
 
-void AsyncConnection::accept(int incoming)
+void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 {
-  ldout(async_msgr->cct, 10) << __func__ << " sd=" << incoming << dendl;
-  assert(sd < 0);
+  ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd() << dendl;
+  assert(socket.fd() > 0);
 
   Mutex::Locker l(lock);
-  sd = incoming;
+  cs = std::move(socket);
+  socket_addr = addr;
   state = STATE_ACCEPTING;
-  center->create_file_event(sd, EVENT_READABLE, read_handler);
   // rescheduler connection in order to avoid lock dep
   center->dispatch_event_external(read_handler);
 }
@@ -2052,7 +2064,7 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 5) << __func__ << " clear encoded buffer previous "
                               << f << " != " << get_features() << dendl;
   }
-  if (!is_queued() && can_write == WriteStatus::CANWRITE && async_msgr->cct->_conf->ms_async_send_inline) {
+  if (!is_queued() && can_write == WriteStatus::CANWRITE && center->in_thread() && async_msgr->cct->_conf->ms_async_send_inline) {
     if (!can_fast_prepare)
       prepare_send_message(get_features(), m, bl);
     logger->inc(l_msgr_send_messages_inline);
@@ -2165,11 +2177,10 @@ void AsyncConnection::fault()
   }
 
   write_lock.Lock();
-  if (sd >= 0) {
-    shutdown_socket();
-    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-    ::close(sd);
-    sd = -1;
+  if (cs) {
+    center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
+    cs.shutdown();
+    cs.close();
   }
   can_write = WriteStatus::NOWRITE;
   open_write = false;
@@ -2265,8 +2276,6 @@ void AsyncConnection::_stop()
 
   ldout(async_msgr->cct, 1) << __func__ << dendl;
   Mutex::Locker l(write_lock);
-  if (sd >= 0)
-    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
   discard_out_queue();
   async_msgr->unregister_conn(this);
@@ -2275,21 +2284,17 @@ void AsyncConnection::_stop()
   open_write = false;
   can_write = WriteStatus::CLOSED;
   state_offset = 0;
-  if (sd >= 0) {
-    shutdown_socket();
-    ::close(sd);
-  }
-  sd = -1;
-  for (set<uint64_t>::iterator it = register_time_events.begin();
-       it != register_time_events.end(); ++it)
-    center->delete_time_event(*it);
-  // Make sure in-queue events will been processed
-  center->dispatch_event_external(EventCallbackRef(new C_clean_handler(this)));
 
+  // Make sure in-queue events will been processed
+  if (!delay_cleanup)
+    center->dispatch_event_external(cleanup_handler);
 }
 
 void AsyncConnection::prepare_send_message(uint64_t features, Message *m, bufferlist &bl)
 {
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
   ldout(async_msgr->cct, 20) << __func__ << " m" << " " << *m << dendl;
 
   // associate message with Connection (for benefit of encode_payload)
@@ -2306,10 +2311,17 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
   bl.append(m->get_payload());
   bl.append(m->get_middle());
   bl.append(m->get_data());
+#ifdef CEPH_PERF_DEV
+  tx_prepare_count++;
+  tx_prepare_cycles += Cycles::rdtsc() - start;
+#endif
 }
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
+#ifdef CEPH_PERF_DEV
+  uint64_t start = Cycles::rdtsc();
+#endif
   assert(can_write == WriteStatus::CANWRITE);
   m->set_seq(out_seq.inc());
 
@@ -2407,6 +2419,17 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   }
   m->put();
 
+#ifdef CEPH_PERF_DEV
+  tx_send_count++;
+  tx_send_cycles = Cycles::rdtsc() - start;
+  if (tx_send_count > 30000 && rx_count) {
+    ldout(async_msgr->cct, 0) << __func__ << " rx msg=" << rx_count << " avg rx=" << Cycles::to_nanoseconds(rx_cycles)/rx_count << "ns "
+                              << " tx prepare count=" << tx_prepare_count << " avg tx_prepare=" << Cycles::to_nanoseconds(tx_prepare_cycles)/tx_prepare_count << "ns "
+                              << " tx send count=" << tx_send_count << " avg tx_send=" << Cycles::to_nanoseconds(tx_send_cycles)/tx_send_count << "ns "
+                              << dendl;
+    rx_count = rx_cycles = tx_prepare_count = tx_prepare_cycles = tx_send_count = tx_send_cycles = 0;
+  }
+#endif
   return rc;
 }
 
@@ -2576,7 +2599,8 @@ void AsyncConnection::handle_write()
     if (state == STATE_STANDBY && !policy.server && is_queued()) {
       ldout(async_msgr->cct, 10) << __func__ << " policy.server is false" << dendl;
       _connect();
-    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CONNECTING_RE && state != STATE_CLOSED) {
+    } else if (cs && state != STATE_NONE && state != STATE_CONNECTING &&
+               state != STATE_CONNECTING_RE && state != STATE_CLOSED) {
       r = _try_send();
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;

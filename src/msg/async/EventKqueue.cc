@@ -22,7 +22,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "KqueueDriver."
 
-int KqueueDriver::init(int nevent)
+int KqueueDriver::init(EventCenter *c, int nevent)
 {
   events = (struct kevent*)malloc(sizeof(struct kevent)*nevent);
   if (!events) {

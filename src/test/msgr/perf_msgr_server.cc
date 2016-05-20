@@ -94,7 +94,8 @@ class ServerDispatcher : public Dispatcher {
   bool ms_handle_reset(Connection *con) { return true; }
   void ms_handle_remote_reset(Connection *con) {}
   void ms_fast_dispatch(Message *m) {
-    usleep(think_time);
+    if (think_time)
+      usleep(think_time);
     //cerr << __func__ << " reply message=" << m << std::endl;
     op_wq.queue(m);
   }

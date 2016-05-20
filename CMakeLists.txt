@@ -294,6 +294,18 @@ if(WITH_XIO)
 set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
+option(WITH_DPDK "Enable DPDK messaging" OFF)
+option(WITH_DPDK_MLX5 "Enable DPDK MLX5 PMD" OFF)
+if(WITH_DPDK)
+  find_package(dpdk REQUIRED)
+  set(HAVE_DPDK 1)
+endif(WITH_DPDK)
+
+option(WITH_PERF_DEV "Enable details performance counter print" OFF)
+if(WITH_PERF_DEV)
+  set(CEPH_PERF_DEV 1)
+endif(WITH_PERF_DEV)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 

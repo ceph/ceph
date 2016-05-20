@@ -39,7 +39,7 @@ class KqueueDriver : public EventDriver {
       free(events);
   }
 
-  int init(int nevent);
+  int init(EventCenter *c, int nevent);
   int add_event(int fd, int cur_mask, int add_mask);
   int del_event(int fd, int cur_mask, int del_mask);
   int resize_events(int newsize);

@@ -39,11 +39,14 @@
 
 #include <pthread.h>
 
-#include "include/atomic.h"
-#include "include/Context.h"
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
+
+#include "include/utime.h"
 #include "include/unordered_map.h"
 #include "common/ceph_time.h"
-#include "common/WorkQueue.h"
+#include "common/dout.h"
 #include "net_handler.h"
 
 #define EVENT_NONE 0
@@ -74,19 +77,29 @@ struct FiredFileEvent {
 class EventDriver {
  public:
   virtual ~EventDriver() {}       // we want a virtual destructor!!!
-  virtual int init(int nevent) = 0;
+  virtual int init(EventCenter *center, int nevent) = 0;
   virtual int add_event(int fd, int cur_mask, int mask) = 0;
   virtual int del_event(int fd, int cur_mask, int del_mask) = 0;
   virtual int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp) = 0;
   virtual int resize_events(int newsize) = 0;
+  virtual bool wakeup_support() { return true; }
 };
 
+extern thread_local EventCenter* local_center;
+
+inline EventCenter* center() {
+    return local_center;
+}
 
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
 class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
+  thread_local static unsigned local_id;
+  // should be enough;
+  static EventCenter *centers[24];
+
   struct FileEvent {
     int mask;
     EventCallbackRef read_cb;
@@ -101,23 +114,64 @@ class EventCenter {
     TimeEvent(): id(0), time_cb(NULL) {}
   };
 
+  /**
+     * A Poller object is invoked once each time through the dispatcher's
+     * inner polling loop.
+     */
+ public:
+  class Poller {
+   public:
+    explicit Poller(EventCenter* center, const string& pollerName);
+    virtual ~Poller();
+
+    /**
+     * This method is defined by a subclass and invoked once by the
+     * center during each pass through its inner polling loop.
+     *
+     * \return
+     *      1 means that this poller did useful work during this call.
+     *      0 means that the poller found no work to do.
+     */
+    virtual int poll() = 0;
+
+   private:
+    /// The EventCenter object that owns this Poller.  NULL means the
+    /// EventCenter has been deleted.
+    EventCenter* owner;
+
+    /// Human-readable string name given to the poller to make it
+    /// easy to identify for debugging. For most pollers just passing
+    /// in the subclass name probably makes sense.
+    string poller_name;
+
+    /// Index of this Poller in EventCenter::pollers.  Allows deletion
+    /// without having to scan all the entries in pollers. -1 means
+    /// this poller isn't currently in EventCenter::pollers (happens
+    /// after EventCenter::reset).
+    int slot;
+  };
+
   CephContext *cct;
   int nevent;
   // Used only to external event
-  Mutex external_lock, file_lock, time_lock;
-  atomic_t external_num_events;
+  std::mutex external_lock;
+  std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
   map<clock_type::time_point, list<TimeEvent> > time_events;
+  // Keeps track of all of the pollers currently defined.  We don't
+  // use an intrusive list here because it isn't reentrant: we need
+  // to add/remove elements while the center is traversing the list.
+  std::vector<Poller*> pollers;
   uint64_t time_event_next_id;
   clock_type::time_point last_time; // last time process time event
   clock_type::time_point next_time; // next wake up time
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
-  pthread_t owner;
   EventCallbackRef notify_handler;
+  unsigned id = 10000;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -130,12 +184,9 @@ class EventCenter {
 
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
-    external_lock("AsyncMessenger::external_lock"),
-    file_lock("AsyncMessenger::file_lock"),
-    time_lock("AsyncMessenger::time_lock"),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
-    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
+    notify_receive_fd(-1), notify_send_fd(-1), net(c),
     notify_handler(NULL),
     already_wakeup(0) {
     last_time = clock_type::now();
@@ -143,9 +194,10 @@ class EventCenter {
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
-  int init(int nevent);
-  void set_owner();
-  pthread_t get_owner() { return owner; }
+  int init(int nevent, unsigned idx);
+  unsigned get_id() { return id; }
+
+  EventDriver *get_driver() { return driver; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
@@ -155,8 +207,56 @@ class EventCenter {
   int process_events(int timeout_microseconds);
   void wakeup();
 
+  bool exist_pending_event() const {
+    return !external_events.empty() || !time_events.empty();
+  }
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
+  inline bool in_thread() const {
+    return local_center == this;
+  }
+ private:
+  template <typename func>
+  class C_submit_event : public EventCallback {
+    std::mutex lock;
+    std::condition_variable cond;
+    bool done = false;
+    func f;
+    bool nonwait;
+   public:
+    C_submit_event(func &&_f, bool nw)
+      : f(std::move(_f)), nonwait(nw) {}
+    void do_request(int id) {
+      f();
+      std::lock_guard<std::mutex> l(lock);
+      cond.notify_all();
+      done = true;
+      if (nonwait)
+        delete this;
+    }
+    void wait() {
+      std::unique_lock<std::mutex> l(lock);
+      while (!done)
+        cond.wait(l);
+    }
+  };
+ public:
+  template <typename func>
+  static void submit_to(int i, func &&f, bool nowait = false) {
+    EventCenter *c = centers[i];
+    if (c->in_thread()) {
+      f();
+      return ;
+    }
+    if (nowait) {
+      C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
+      c->dispatch_event_external(event);
+    } else {
+      C_submit_event<func> event(std::move(f), false);
+      c->dispatch_event_external(&event);
+      event.wait();
+    }
+  };
 };
 
 #endif

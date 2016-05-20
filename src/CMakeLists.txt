@@ -14,7 +14,7 @@ add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT 
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC -fsanitize=address -fsanitize=leak -fsanitize=undefined")
 
 include(CheckCCompilerFlag)
 CHECK_C_COMPILER_FLAG("-Wp,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
@@ -216,6 +216,25 @@ if(HAVE_XIO)
     msg/xio/QueueStrategy.cc)
 endif(HAVE_XIO)
 
+set(dpdk_common_srcs)
+if(HAVE_DPDK)
+  list(APPEND dpdk_common_srcs
+    msg/async/dpdk/ARP.cc
+	msg/async/dpdk/DPDK.cc
+	msg/async/dpdk/dpdk_rte.cc
+	msg/async/dpdk/DPDKStack.cc
+	msg/async/dpdk/EventDPDK.cc
+    msg/async/dpdk/UserspaceEvent.cc
+    msg/async/dpdk/ethernet.cc
+	msg/async/dpdk/IP.cc
+    msg/async/dpdk/IPChecksum.cc
+    msg/async/dpdk/net.cc
+	msg/async/dpdk/Packet.cc
+	msg/async/dpdk/TCP.cc)
+
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
+endif(HAVE_DPDK)
+
 if(HAVE_GOOD_YASM_ELF64)
   set(yasm_srcs
     common/crc32c_intel_fast_asm.S
@@ -293,7 +312,10 @@ set(libcommon_files
   msg/async/EventEpoll.cc
   msg/async/EventSelect.cc
   msg/async/net_handler.cc
+  msg/async/Stack.cc
+  msg/async/PosixStack.cc
   ${xio_common_srcs}
+  ${dpdk_common_srcs}
   msg/msg_types.cc
   common/hobject.cc
   osd/OSDMap.cc
@@ -402,7 +424,7 @@ add_library(global_common_objs OBJECT ${global_common_files})
 add_library(global STATIC ${libglobal_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
 target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
-  ${EXTRALIBS})
+  ${DPDK_LIBRARIES} ${EXTRALIBS})
 if(${WITH_LTTNG})
   target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
@@ -798,6 +820,9 @@ target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES})
 if(${HAVE_LIBFUSE})
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif(${HAVE_LIBFUSE})
+if(${HAVE_DPDK})
+  target_link_libraries(ceph-osd ${DPDK_LIBRARIES})
+endif(${HAVE_DPDK})
 install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS

@@ -12,7 +12,7 @@ add_executable(ceph_test_msgr
   )
 set_target_properties(ceph_test_msgr PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_msgr os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS})
+target_link_libraries(ceph_test_msgr global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${ALLOC_LIBS})
 
 #ceph_perf_msgr_server
 add_executable(ceph_perf_msgr_server perf_msgr_server.cc)
@@ -26,3 +26,28 @@ set_target_properties(ceph_perf_msgr_client PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_msgr_client os global ${UNITTEST_LIBS})
 
+# ceph_test_async_networkstack
+add_executable(ceph_test_async_networkstack
+  test_async_networkstack.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(ceph_test_async_networkstack PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_async_networkstack
+    global
+    ${CMAKE_DL_LIBS}
+    ${ALLOC_LIBS}
+    ${UNITTEST_LIBS})
+
+# test_userspace_event
+add_executable(ceph_test_userspace_event
+  test_userspace_event.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(ceph_test_userspace_event PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_userspace_event
+    global
+    ${CMAKE_DL_LIBS}
+    ${ALLOC_LIBS}
+    ${UNITTEST_LIBS})

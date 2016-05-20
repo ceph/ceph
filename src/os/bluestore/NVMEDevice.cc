@@ -44,6 +44,8 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/perf_counters.h"
+// FIXME: it's a tricky now
+#include "msg/async/dpdk/dpdk_rte.h"
 
 #include "NVMEDevice.h"
 
@@ -161,8 +163,15 @@ class SharedDriverData {
   bool aio_stop = false;
   void _aio_thread();
   void _aio_start() {
-    int r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&run_func), id);
-    assert(r == 0);
+    dpdk::eal::execute_on_master([this]() {
+      if (!rte_lcore_count() || rte_eal_get_lcore_state(rte_lcore_count()-1) == RUNNING) {
+        derr << __func__ << " rte core number is " << rte_lcore_count()
+             << " or the last is already running " << dendl;
+        assert(0);
+      }
+      int r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&run_func), rte_lcore_count()-1);
+      assert(r == 0);
+    });
   }
   void _aio_stop() {
     {
@@ -170,8 +179,10 @@ class SharedDriverData {
       aio_stop = true;
       queue_cond.Signal();
     }
-    int r = rte_eal_wait_lcore(id);
-    assert(r == 0);
+    dpdk::eal::execute_on_master([this]() {
+      int r = rte_eal_wait_lcore(rte_lcore_count()-1);
+      assert(r == 0);
+    });
     aio_stop = false;
   }
   std::atomic_bool queue_empty;
@@ -541,17 +552,11 @@ class NVMEManager {
     string sn_tag;
     NVMEManager *manager;
     SharedDriverData *driver;
-    bool done;
   };
 
  private:
   Mutex lock;
-  bool init = false;
   std::vector<SharedDriverData*> shared_driver_datas;
-  std::thread dpdk_thread;
-  std::mutex probe_queue_lock;
-  std::condition_variable probe_queue_cond;
-  std::list<ProbeContext*> probe_queue;
 
  public:
   NVMEManager()
@@ -658,65 +663,38 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
       return 0;
     }
   }
+  // note: only support one device now
+  assert(shared_driver_datas.empty());
 
-  if (!init) {
-    init = true;
-    dpdk_thread = std::thread(
-      [this]() {
-        static const char *ealargs[] = {
-            "ceph-osd",
-            "-c 0x3", /* This must be the second parameter. It is overwritten by index in main(). */
-            "-n 4",
-        };
-
-        int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
-        if (r < 0) {
-          derr << __func__ << " failed to do rte_eal_init" << dendl;
-          assert(0);
-        }
-
-        request_mempool = rte_mempool_create("nvme_request", 512,
-                                             spdk_nvme_request_size(), 128, 0,
-                                             NULL, NULL, NULL, NULL,
-                                             SOCKET_ID_ANY, 0);
-        if (request_mempool == NULL) {
-          derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
-          assert(0);
-        }
-
-        pci_system_init();
-        spdk_nvme_retry_count = g_conf->bdev_nvme_retry_count;
-        if (spdk_nvme_retry_count < 0)
-          spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
-
-        std::unique_lock<std::mutex> l(probe_queue_lock);
-        while (true) {
-          if (!probe_queue.empty()) {
-            ProbeContext* ctxt = probe_queue.front();
-            probe_queue.pop_front();
-            r = spdk_nvme_probe(ctxt, probe_cb, attach_cb);
-            if (r < 0) {
-              assert(!ctxt->driver);
-              derr << __func__ << " device probe nvme failed" << dendl;
-            }
-            ctxt->done = true;
-            probe_queue_cond.notify_all();
-          } else {
-            probe_queue_cond.wait(l);
-          }
-        }
-      }
-    );
-    dpdk_thread.detach();
+  std::mutex probe_lock;
+  std::condition_variable probe_cond;
+  ProbeContext ctx = {sn_tag, this, nullptr};
+  r = dpdk::eal::init(g_ceph_context);
+  if (r < 0) {
+    derr << __func__ << " init dpdk rte failed, r=" << r << dendl;
+    assert(0);
   }
 
-  ProbeContext ctx = {sn_tag, this, nullptr, false};
-  {
-    std::unique_lock<std::mutex> l(probe_queue_lock);
-    probe_queue.push_back(&ctx);
-    while (!ctx.done)
-      probe_queue_cond.wait(l);
+  request_mempool = rte_mempool_create("nvme_request", 1024,
+                                       spdk_nvme_request_size(), 128, 0,
+                                       NULL, NULL, NULL, NULL,
+                                       SOCKET_ID_ANY, 0);
+  if (request_mempool == NULL) {
+    derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
+    assert(0);
   }
+
+  pci_system_init();
+  spdk_nvme_retry_count = g_conf->bdev_nvme_retry_count;
+  if (spdk_nvme_retry_count < 0)
+    spdk_nvme_retry_count = SPDK_NVME_DEFAULT_RETRY_COUNT;
+
+  r = spdk_nvme_probe(&ctx, probe_cb, attach_cb);
+  if (r < 0) {
+    assert(!ctx.driver);
+    derr << __func__ << " device probe nvme failed" << dendl;
+  }
+
   if (!ctx.driver)
     return -1;
   *driver = ctx.driver;

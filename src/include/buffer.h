@@ -66,6 +66,8 @@ struct xio_reg_mem;
 class XioDispatchHook;
 #endif
 
+class deleter;
+
 namespace ceph {
 
 namespace buffer CEPH_BUFFER_API {
@@ -134,6 +136,7 @@ namespace buffer CEPH_BUFFER_API {
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
 
+  class raw_claim_buffer;
 
   class xio_mempool;
   class xio_msg_buffer;
@@ -151,6 +154,8 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
+  raw* create_static(unsigned len, char *buf);
+  raw* claim_buffer(unsigned len, char *buf, deleter del);
 
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);

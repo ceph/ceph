@@ -16,6 +16,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <chrono>
 #include <string>
 #include <unistd.h>
 #include <iostream>
@@ -25,10 +26,17 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
-#include "common/Cycles.h"
+#include "common/ceph_time.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
+
+#include "common/dout.h"
+#include "include/assert.h"
+
+#define dout_subsys ceph_subsys_ms
+#undef dout_prefix
+#define dout_prefix *_dout << "ms "
 
 class MessengerClient {
   class ClientThread;
@@ -63,6 +71,7 @@ class MessengerClient {
   };
 
   class ClientThread : public Thread {
+    MessengerClient *client;
     Messenger *msgr;
     int concurrent;
     ConnectionRef conn;
@@ -74,35 +83,61 @@ class MessengerClient {
     bufferlist data;
     int ops;
     ClientDispatcher dispatcher;
+    map<uint64_t, ceph::real_clock::time_point> starts;
 
    public:
     Mutex lock;
     Cond cond;
-    uint64_t inflight;
+    uint64_t inflight = 0;
+    vector<uint64_t> dones;
 
-    ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
-        msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
+    ClientThread(MessengerClient *cli, Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
+        client(cli), msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
         dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock") {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
-      memset(ptr.c_str(), 0, msg_len);
+      memset(ptr.c_str(), 2, msg_len);
       data.append(ptr);
     }
     void *entry() {
       lock.Lock();
       for (int i = 0; i < ops; ++i) {
-        if (inflight > uint64_t(concurrent)) {
+        if (inflight >= uint64_t(concurrent)) {
           cond.Wait(lock);
         }
-        MOSDOp *m = new MOSDOp(client_inc.read(), 0, oid, oloc, pgid, 0, 0, 0);
-        m->write(0, msg_len, data);
+        for (auto &i : dones) {
+          record(i);
+        }
+        dones.clear();
+        bufferlist c = data;
+        auto j = client_inc.inc();
+        starts[j] = ceph::real_clock::now(g_ceph_context);
+        MOSDOp *m = new MOSDOp(0, j, oid, oloc, pgid, 0, 0, 0);
+        m->write(0, msg_len, c);
         inflight++;
+        // ldout(g_ceph_context, 0) << __func__ << dendl;
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
       }
+      while (inflight)
+        cond.Wait(lock);
       lock.Unlock();
       msgr->shutdown();
       return 0;
+    }
+    void record(uint64_t tid) {
+      auto start = starts[tid];
+      assert(starts.erase(tid));
+      if (tid <= 5 * (uint64_t)concurrent)
+        return ;
+      auto us = std::chrono::duration_cast<std::chrono::microseconds>(
+              ceph::real_clock::now(g_ceph_context) - start).count();
+      if (client->max.read() < (uint64_t)us)
+        client->max.set(us);
+      if (client->min.read() > (uint64_t)us)
+        client->min.set(us);
+      client->total.add(us);
+      client->count.inc();
     }
   };
 
@@ -111,10 +146,15 @@ class MessengerClient {
   int think_time_us;
   vector<Messenger*> msgrs;
   vector<ClientThread*> clients;
-
  public:
+  atomic_t max;
+  atomic_t min;
+  atomic_t total;
+  atomic_t count;
+
   MessengerClient(string t, string addr, int delay):
-      type(t), serveraddr(addr), think_time_us(delay) {
+      type(t), serveraddr(addr), think_time_us(delay),
+      max(0), min(1000000), total(0), count(0) {
   }
   ~MessengerClient() {
     for (uint64_t i = 0; i < clients.size(); ++i)
@@ -124,7 +164,8 @@ class MessengerClient {
       msgrs[i]->wait();
     }
   }
-  void ready(int c, int jobs, int ops, int msg_len) {
+  void ready(int c, int jobs, int ops, int msg_len, bool latency) {
+    vector<double> latencies;
     entity_addr_t addr;
     addr.parse(serveraddr.c_str());
     addr.set_nonce(0);
@@ -133,7 +174,7 @@ class MessengerClient {
       msgr->set_default_policy(Messenger::Policy::lossless_client(0, 0));
       entity_inst_t inst(entity_name_t::OSD(0), addr);
       ConnectionRef conn = msgr->get_connection(inst);
-      ClientThread *t = new ClientThread(msgr, c, conn, msg_len, ops, think_time_us);
+      ClientThread *t = new ClientThread(this, msgr, c, conn, msg_len, ops, think_time_us);
       msgrs.push_back(msgr);
       clients.push_back(t);
       msgr->start();
@@ -150,10 +191,11 @@ class MessengerClient {
 
 void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
   usleep(think_time);
-  m->put();
   Mutex::Locker l(thread->lock);
+  thread->dones.push_back(m->get_tid());
   thread->inflight--;
   thread->cond.Signal();
+  m->put();
 }
 
 
@@ -165,6 +207,7 @@ void usage(const string &name) {
   cerr << "       [ios]: how much messages sent for each client" << std::endl;
   cerr << "       [thinktime]: sleep time when do fast dispatching(match client logic)" << std::endl;
   cerr << "       [msg length]: message data bytes" << std::endl;
+  cerr << "       [latency]: record each op latency" << std::endl;
 }
 
 int main(int argc, char **argv)
@@ -186,6 +229,7 @@ int main(int argc, char **argv)
   int ios = atoi(args[3]);
   int think_time = atoi(args[4]);
   int len = atoi(args[5]);
+  bool latency = atoi(args[6]);
 
   cerr << " using ms-type " << g_ceph_context->_conf->ms_type << std::endl;
   cerr << "       server ip:port " << args[0] << std::endl;
@@ -195,12 +239,16 @@ int main(int argc, char **argv)
   cerr << "       thinktime(us) " << think_time << std::endl;
   cerr << "       message data bytes " << len << std::endl;
   MessengerClient client(g_ceph_context->_conf->ms_type, args[0], think_time);
-  client.ready(concurrent, numjobs, ios, len);
-  Cycles::init();
-  uint64_t start = Cycles::rdtsc();
+  client.ready(concurrent, numjobs, ios, len, latency);
+  auto start = ceph::real_clock::now(g_ceph_context);
   client.start();
-  uint64_t stop = Cycles::rdtsc();
-  cerr << " Total op " << ios << " run time " << Cycles::to_microseconds(stop - start) << "us." << std::endl;
+  auto gap = std::chrono::duration_cast<std::chrono::microseconds>(
+          ceph::real_clock::now(g_ceph_context) - start).count();
+  auto avg = client.count.read() ? (double)(client.total.read())/client.count.read() : 0;
+  cerr << " Total op " << client.count.read() << " run time " << gap << "us." << std::endl;
+  cerr << "          Max(us) " << client.max.read() << "us." << std::endl;
+  cerr << "          Min(us) " << client.min.read() << "us." << std::endl;
+  cerr << "          Avg(us) " << avg << "us." << std::endl;
 
   return 0;
 }
