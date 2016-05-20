@@ -5,45 +5,34 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += --with-ocf --with-nss
-extraopts += --with-debug
-extraopts += --enable-cephfs-java
-
-# rocksdb is not packaged by anyone.  build it if we can.
-extraopts += --with-librocksdb-static=check
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON
+extraopts += -DWITH_CEPHFS_JAVA=ON
+# assumes that ceph is exmpt from multiarch support, so we override the libdir.
+extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 
 ifeq ($(DEB_HOST_ARCH), armel)
   # armel supports ARMv4t or above instructions sets.
   # libatomic-ops is only usable with Ceph for ARMv6 or above.
-  extraopts += --without-libatomic-ops
+  extraopts += -DWITH_ATOMIC_OPS=OFF
 endif
 
 %:
-	dh $@ --with javahelper,python2,autoreconf,systemd --parallel
-
-override_dh_autoreconf:
-	dh_autoreconf ./autogen.sh
+	dh $@ --buildsystem=cmake --with javahelper,python2,systemd --parallel
 
 override_dh_auto_configure:
-	dh_auto_configure -- $(extraopts) $(CEPH_EXTRA_CONFIGURE_ARGS)
+	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
 override_dh_auto_build:
-	dh_auto_build
-	cp src/init-ceph debian/ceph-base.ceph.init
+	dh_auto_build --buildsystem=cmake
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
 
 override_dh_auto_clean:
-	dh_auto_clean
-	rm -f build-stamp configure-stamp
-	rm -f aclocal.m4 compile config.sub config.guess depcomp install-sh \
-	  ltmain.sh missing
-	rm -f configure Makefile.in man/Makefile.in src/Makefile.in
-	rm -f src/acconfig.h.in
-	rm -f debian/ceph-base.ceph.init debian/radosgw.init debian/ceph.logrotate
+	dh_auto_clean --buildsystem=cmake
+	rm -f debian/radosgw.init debian/ceph.logrotate
 
 override_dh_auto_install:
-	dh_auto_install --destdir=$(DESTDIR)
+	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
