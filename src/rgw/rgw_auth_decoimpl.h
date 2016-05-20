@@ -21,7 +21,7 @@ public:
       decoratee(decoratee) {
   }
 
-  virtual int get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
     return decoratee.get_perms_from_aclspec(aclspec);
   }
 
@@ -33,7 +33,7 @@ public:
     return decoratee.is_owner_of(uid);
   }
 
-  virtual int get_perm_mask() const override {
+  virtual uint32_t get_perm_mask() const override {
     return decoratee.get_perm_mask();
   }
 
@@ -63,7 +63,7 @@ public:
       decoratee(std::move(decoratee)) {
   }
 
-  virtual int get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
     return decoratee->get_perms_from_aclspec(aclspec);
   }
 
@@ -75,7 +75,7 @@ public:
     return decoratee->is_owner_of(uid);
   }
 
-  virtual int get_perm_mask() const override {
+  virtual uint32_t get_perm_mask() const override {
     return decoratee->get_perm_mask();
   }
 

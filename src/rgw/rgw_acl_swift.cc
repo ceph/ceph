@@ -99,7 +99,7 @@ static bool normalize_referer_urlspec(string& url_spec, bool& is_negative)
 
 void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados * const store,
                                               const std::vector<std::string>& uids,
-                                              const int perm)
+                                              const uint32_t perm)
 {
   for (const auto& uid : uids) {
     ldout(cct, 20) << "trying to add grant for ACL uid=" << uid << dendl;
@@ -189,7 +189,7 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
 
   for (iter = m.begin(); iter != m.end(); ++iter) {
     ACLGrant& grant = iter->second;
-    int perm = grant.get_permission().get_permissions();
+    const uint32_t perm = grant.get_permission().get_permissions();
     rgw_user id;
     if (!grant.get_id(id)) {
       if (grant.get_group() != ACL_GROUP_ALL_USERS)
@@ -212,7 +212,7 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
 
 void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
                                                   const std::vector<std::string>& uids,
-                                                  const int perm)
+                                                  const uint32_t perm)
 {
   for (const auto& uid : uids) {
     ACLGrant grant;
@@ -292,7 +292,7 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
   /* Parition the grant map into three not-overlapping groups. */
   for (const auto& item : get_acl().get_grant_map()) {
     const ACLGrant& grant = item.second;
-    const int perm = grant.get_permission().get_permissions();
+    const uint32_t perm = grant.get_permission().get_permissions();
 
     rgw_user id;
     if (!grant.get_id(id)) {
