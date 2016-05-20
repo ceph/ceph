@@ -6163,7 +6163,7 @@ int BlueStore::_clone(TransContext *txc,
       // move blobs
       map<int64_t,int64_t> moved_blobs;
       for (auto& p : oldo->onode.extent_map) {
-	if (!p.second.is_shared()) {
+	if (!p.second.is_shared() && moved_blobs.count(p.second.blob) == 0) {
 	  int64_t id = e->get_new_blob_id();
 	  moved_blobs[p.second.blob] = id;
 	  dout(30) << __func__ << "  moving old onode blob " << p.second.blob
