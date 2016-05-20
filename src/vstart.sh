@@ -117,7 +117,7 @@ usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
 usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw)\n"
 usage=$usage"\t-n, --new\n"
-usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
+usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
@@ -187,6 +187,11 @@ case $1 in
     --valgrind_mon )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mon=$2
+	    shift
+	    ;;
+    --valgrind_rgw )
+	    [ -z "$2" ] && usage_exit
+	    valgrind_rgw=$2
 	    shift
 	    ;;
     --nodaemon )
@@ -796,7 +801,7 @@ do_rgw()
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
