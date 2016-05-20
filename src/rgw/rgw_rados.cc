@@ -2160,7 +2160,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   if (is_complete)
     return;
 
-  list<rgw_obj>::iterator iter;
+  set<rgw_obj>::iterator iter;
   bool is_multipart_obj = false;
   rgw_obj multipart_obj;
 
@@ -2172,7 +2172,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
    * details is describled on #11749
    */ 
   for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
-    rgw_obj &obj = *iter;
+    const rgw_obj &obj = *iter;
     if (RGW_OBJ_NS_MULTIPART == obj.ns) {
       ldout(store->ctx(), 5) << "NOTE: we should not process the multipart object (" << obj << ") here" << dendl;
       multipart_obj = *iter;
@@ -2201,7 +2201,6 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t 
     obj_len = abs_ofs + bl.length();
 
   if (!(obj == last_written_obj)) {
-    add_written_obj(obj);
     last_written_obj = obj;
   }
 
@@ -2211,7 +2210,6 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t 
                                      bl,
                                      ((ofs != 0) ? ofs : -1),
                                      exclusive, phandle);
-
   return r;
 }
 
@@ -2230,6 +2228,11 @@ int RGWPutObjProcessor_Aio::wait_pending_front()
   }
   struct put_obj_aio_info info = pop_pending();
   int ret = store->aio_wait(info.handle);
+
+  if (ret >= 0) {
+    add_written_obj(info.obj);
+  }
+
   return ret;
 }
 
@@ -2253,13 +2256,14 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
-int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
+int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait)
 {
   bool _wait = need_to_wait;
 
   if (handle) {
     struct put_obj_aio_info info;
     info.handle = handle;
+    info.obj = obj;
     pending.push_back(info);
   }
   size_t orig_size = pending.size();
@@ -2287,7 +2291,7 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive)
+int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool exclusive)
 {
   if (ofs >= next_part_ofs) {
     int r = prepare_next_part(ofs);
@@ -2296,10 +2300,12 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
     }
   }
 
+  *pobj = cur_obj;
+
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again)
 {
   *again = false;
 
@@ -2348,7 +2354,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
-  int ret = write_data(bl, write_ofs, phandle, exclusive);
+  int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
     if (hash) {
       hash->Update((const byte *)bl.c_str(), bl.length());
@@ -2436,19 +2442,20 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   }
   while (pending_data_bl.length()) {
     void *handle;
+    rgw_obj obj;
     uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
     if (max_write_size > pending_data_bl.length()) {
       max_write_size = pending_data_bl.length();
     }
     bufferlist bl;
     pending_data_bl.splice(0, max_write_size, &bl);
-    int r = write_data(bl, data_ofs, &handle, false);
+    int r = write_data(bl, data_ofs, &handle, &obj, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
       return r;
     }
     data_ofs += bl.length();
-    r = throttle_data(handle, false);
+    r = throttle_data(handle, obj, false);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
       return r;
@@ -6197,7 +6204,8 @@ public:
 
     do {
       void *handle;
-      int ret = processor->handle_data(bl, ofs, NULL, &handle, &again);
+      rgw_obj obj;
+      int ret = processor->handle_data(bl, ofs, NULL, &handle, &obj, &again);
       if (ret < 0)
         return ret;
 
@@ -6208,7 +6216,7 @@ public:
         ret = opstate->renew_state();
         if (ret < 0) {
           ldout(processor->ctx(), 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
-          int r = processor->throttle_data(handle, false);
+          int r = processor->throttle_data(handle, obj, false);
           if (r < 0) {
             ldout(processor->ctx(), 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
           }
@@ -6219,7 +6227,7 @@ public:
         need_opstate = false;
       }
 
-      ret = processor->throttle_data(handle, false);
+      ret = processor->throttle_data(handle, obj, false);
       if (ret < 0)
         return ret;
     } while (again);
@@ -6970,12 +6978,13 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
     do {
       void *handle;
+      rgw_obj obj;
 
-      ret = processor.handle_data(bl, ofs, NULL, &handle, &again);
+      ret = processor.handle_data(bl, ofs, NULL, &handle, &obj, &again);
       if (ret < 0) {
         return ret;
       }
-      ret = processor.throttle_data(handle, false);
+      ret = processor.throttle_data(handle, obj, false);
       if (ret < 0)
         return ret;
     } while (again);
@@ -7599,7 +7608,7 @@ int RGWRados::Object::Delete::delete_obj()
 
 int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
                          RGWBucketInfo& bucket_info,
-                         rgw_obj& obj,
+                         const rgw_obj& obj,
                          int versioning_status,
                          uint16_t bilog_flags,
                          const real_time& expiration_time)
