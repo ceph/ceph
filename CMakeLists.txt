@@ -1,19 +1,23 @@
 cmake_minimum_required(VERSION 2.8)
 
 
-set(CMAKE_CXX_FLAGS "-std=gnu++11 -fdiagnostics-color=always")
+# set(CMAKE_CXX_FLAGS "-std=gnu++11 -fdiagnostics-color=always")
+set(CMAKE_CXX_FLAGS "-std=c++11 -fdiagnostics-color=always -Wno-write-strings")
 include_directories(src)
+include_directories(sim)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-  set(my_compile_flags "-O3 -Wno-write-strings")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wno-write-strings")
+elseif(CMAKE_BUILD_TYPE MATCHES Debug)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -Wno-write-strings")
 else()
-  set(my_compile_flags "-g -O0 -Wno-write-strings")
+  error("build type '${CMAKE_BUILD_TYPE}' is neither 'Release' nor 'Debug'")
 endif()
 
 if(PROFILE)
-  set(my_compile_flags "${my_compile_flags} -DPROFILE")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPROFILE")
 endif()
 
 find_package(gtest REQUIRED)

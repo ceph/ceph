@@ -25,7 +25,6 @@ namespace sim = crimson::qos_simulation;
 
 using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
 
-
 static TimePoint now() { return std::chrono::system_clock::now(); }
 
 

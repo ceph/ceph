@@ -3,9 +3,7 @@ cmake_minimum_required(VERSION 2.8)
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src)
 
-set(local_flags "-std=gnu++11 -Wall -pthread")
-
-# set(local_flags "${local_flags} -g -O0")
+set(local_flags "-Wall -pthread")
 
 # get ready to remove this once gtest tests are made
 set(srcs
@@ -16,7 +14,7 @@ set(test_srcs test_indirect_intrusive_heap.cc)
 
 set_source_files_properties(${srcs} ${test_src}
   PROPERTIES
-  COMPILE_FLAGS "${my_compile_flags} ${local_flags}"
+  COMPILE_FLAGS "${local_flags}"
   )
 
 add_executable(crim_tests EXCLUDE_FROM_ALL ${test_srcs})
@@ -32,12 +30,3 @@ function(make_tests)
 endfunction()
 
 make_tests(ind_intru_heap)
-
-
-# target_link_libraries(sim PUBLIC pthread)
-
-# add_custom_target(crimtests
-#   DEPENDS test_intru_heap test_ind_intru_heap
-#   COMMAND $<TARGET_FILE:test_intru_heap>
-#   COMMAND $<TARGET_FILE:test_ind_intru_heap>
-#   COMMAND printf '\\a\\a\\a')

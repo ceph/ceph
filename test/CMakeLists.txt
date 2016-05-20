@@ -1,19 +1,20 @@
 cmake_minimum_required(VERSION 2.8)
 
 include_directories(${GTEST_INCLUDE_DIR})
-include_directories(../src/crimson/src)
+include_directories(../support/src)
+include_directories(../sim)
 include_directories(${BOOST_INCLUDE_DIR})
 
-# set(local_flags "-g -O0")
-
-set(core_srcs ../src/crimson/src/run_every.cc ../src/test_dmclock.cc)
+set(core_srcs ../support/src/run_every.cc ../sim/test_dmclock.cc)
 set(test_srcs
   test_test_client.cc
-  test_dmclock_server.cc test_dmclock_client.cc)
+  test_dmclock_server.cc
+  test_dmclock_client.cc
+  )
 
 set_source_files_properties(${core_srcs} ${test_srcs}
   PROPERTIES
-  COMPILE_FLAGS "${my_compile_flags} -std=gnu++11 ${local_flags}"
+  COMPILE_FLAGS "${local_flags}"
   )
 
 add_executable(tests EXCLUDE_FROM_ALL ${core_srcs} ${test_srcs})
