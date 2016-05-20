@@ -17,7 +17,6 @@
 
 #include "common/Timer.h"
 #include "MonitorDBStore.h"
-#include "MonmapMonitor.h"
 #include "messages/MMonElection.h"
 
 #include "common/config.h"

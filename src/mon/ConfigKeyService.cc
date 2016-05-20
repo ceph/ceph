@@ -17,12 +17,8 @@
 #include <limits.h>
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/MonitorDBStore.h"
-
-#include "common/config.h"
-#include "common/cmdparse.h"
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_mon

@@ -33,29 +33,16 @@
 #include "Paxos.h"
 #include "Session.h"
 
-#include "osd/OSDMap.h"
-
 #include "common/LogClient.h"
-#include "common/SimpleRNG.h"
-#include "common/cmdparse.h"
-
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
-
-#include "perfglue/heap_profiler.h"
-
 #include "messages/MMonCommand.h"
-#include "messages/MPing.h"
 #include "mon/MonitorDBStore.h"
-
-#include <memory>
 #include "include/memory.h"
-#include "include/str_map.h"
 #include <errno.h>
 #include <cmath>
 
-#include "common/TrackedOp.h"
 #include "mon/MonOpRequest.h"
 
 

@@ -16,19 +16,19 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include <boost/intrusive_ptr.hpp>
+// #include <boost/intrusive_ptr.hpp>
 // Because intusive_ptr clobbers our assert...
 #include "include/assert.h"
 
 #include "mon/Monitor.h"
-#include "mon/QuorumService.h"
-#include "mon/HealthService.h"
+// #include "mon/QuorumService.h"
+// #include "mon/HealthService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/DataHealthService.h"
 
 #include "messages/MMonHealth.h"
-
-#include "common/config.h"
+#include "common/Formatter.h"
+// #include "common/config.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

@@ -15,25 +15,18 @@
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
-#include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
 
 #include "common/Timer.h"
 #include "common/Finisher.h"
-
+#include "common/config.h"
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
-
-#include "messages/MMonSubscribe.h"
-
 #include "common/SimpleRNG.h"
-#include "osd/osd_types.h"
 
-#include <memory>
 
-class MonMap;
 class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
@@ -47,7 +40,9 @@ class LogClient;
 class AuthSupported;
 class AuthAuthorizeHandlerRegistry;
 class AuthMethodList;
-
+class Messenger;
+// class RotatingKeyRing;
+class KeyRing;
 enum MonClientState {
   MC_STATE_NONE,
   MC_STATE_NEGOTIATING,
