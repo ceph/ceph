@@ -495,7 +495,7 @@ void BitmapFreelistManager::_xor(
     bufferlist bl;
     bl.append(p);
     dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec << ": ";
-    bl.hexdump(*_dout);
+    bl.hexdump(*_dout, false);
     *_dout << dendl;
     txn->merge(bitmap_prefix, k, bl);
   } else {
@@ -513,7 +513,7 @@ void BitmapFreelistManager::_xor(
       bufferlist bl;
       bl.append(p);
       dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec << ": ";
-      bl.hexdump(*_dout);
+      bl.hexdump(*_dout, false);
       *_dout << dendl;
       txn->merge(bitmap_prefix, k, bl);
       first_key += bytes_per_block * blocks_per_key;
@@ -525,7 +525,7 @@ void BitmapFreelistManager::_xor(
 	make_offset_key(first_key, &k);
 	dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec
 		 << ": ";
-	all_set_bl.hexdump(*_dout);
+	all_set_bl.hexdump(*_dout, false);
 	*_dout << dendl;
 	txn->merge(bitmap_prefix, k, all_set_bl);
 	first_key += bytes_per_block * blocks_per_key;
@@ -544,7 +544,7 @@ void BitmapFreelistManager::_xor(
       bufferlist bl;
       bl.append(p);
       dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec << ": ";
-      bl.hexdump(*_dout);
+      bl.hexdump(*_dout, false);
       *_dout << dendl;
       txn->merge(bitmap_prefix, k, bl);
     }
