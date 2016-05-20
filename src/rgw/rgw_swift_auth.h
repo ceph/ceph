@@ -51,7 +51,7 @@ public:
   }
 
   /* Interface implementations. */
-  std::string get_name() const noexcept override {
+  const char* get_name() const noexcept override {
     return "RGWTempURLAuthEngine";
   }
 
@@ -75,7 +75,7 @@ public:
       apl_factory(apl_factory) {
   }
 
-  std::string get_name() const noexcept override {
+  const char* get_name() const noexcept override {
     return "RGWSignedTokenAuthEngine";
   }
 
@@ -99,7 +99,7 @@ public:
       apl_factory(apl_factory) {
   }
 
-  std::string get_name() const noexcept override {
+  const char* get_name() const noexcept override {
     return "RGWExternalTokenAuthEngine";
   }
 
