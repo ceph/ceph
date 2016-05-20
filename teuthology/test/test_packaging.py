@@ -428,7 +428,7 @@ class TestGitbuilderProject(object):
         ('centos', '6.5', None, 'centos6'),
         ('centos', '7.0', None, 'centos7'),
         ('centos', '7.1', None, 'centos7'),
-        ('fedora', '20', None, 'fc20'),
+        ('fedora', '20', None, 'fedora20'),
         ('ubuntu', '14.04', 'trusty', 'trusty'),
         ('ubuntu', '14.04', None, 'trusty'),
         ('debian', '7.0', None, 'wheezy'),
@@ -454,7 +454,7 @@ class TestGitbuilderProject(object):
         GITBUILDER_DISTRO_MATRIX + [
             ('rhel', None, None, 'centos7'),
             ('centos', None, None, 'centos7'),
-            ('fedora', None, None, 'fc20'),
+            ('fedora', None, None, 'fedora20'),
             ('ubuntu', None, None, 'trusty'),
             ('debian', None, None, 'wheezy'),
         ]
