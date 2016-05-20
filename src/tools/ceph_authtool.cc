@@ -14,7 +14,7 @@
 
 #include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
-
+#include "common/config.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 
