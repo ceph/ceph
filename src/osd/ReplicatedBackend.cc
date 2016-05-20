@@ -2426,7 +2426,8 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
 
 void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
 {
-  get_parent()->failed_push(from, soid);
+  list<pg_shard_t> fl = { from };
+  get_parent()->failed_push(fl, soid);
   pull_from_peer[from].erase(soid);
   if (pull_from_peer[from].empty())
     pull_from_peer.erase(from);

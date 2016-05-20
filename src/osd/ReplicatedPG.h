@@ -257,7 +257,7 @@ public:
   void on_global_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff) override;
-  void failed_push(pg_shard_t from, const hobject_t &soid) override;
+  void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
   void cancel_pull(const hobject_t &soid) override;
 
   template<class T> class BlessedGenContext;

@@ -504,6 +504,8 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size) {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
+  void _failed_push(const hobject_t &hoid,
+    pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
 };
 
 #endif
