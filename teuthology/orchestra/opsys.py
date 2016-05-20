@@ -4,9 +4,10 @@ import re
 DISTRO_CODENAME_MAP = {
     "ubuntu": {
         "16.04": "xenial",
-        "14.04": "trusty",
-        "12.04": "precise",
         "15.04": "vivid",
+        "14.04": "trusty",
+        "13.10": "saucy",
+        "12.04": "precise",
     },
     "debian": {
         "7": "wheezy",
@@ -19,7 +20,11 @@ DISTRO_CODENAME_MAP = {
     "centos": {
         "7": "core",
         "6": "core",
-    }
+    },
+    "fedora": {
+        "21": "twenty one",
+        "20": "heisenbug",
+    },
 }
 
 DEFAULT_OS_VERSION = dict(
