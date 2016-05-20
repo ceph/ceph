@@ -264,6 +264,10 @@ class Remote(object):
         """
         Use the paramiko.SFTPClient to get a file. Returns the local filename.
         """
+        file_size = self._format_size(
+            self._sftp_get_size(remote_path)
+        ).strip()
+        log.debug("{}:{} is {}".format(self.shortname, remote_path, file_size))
         sftp = self.ssh.open_sftp()
         sftp.get(remote_path, local_path)
         return local_path
@@ -275,6 +279,24 @@ class Remote(object):
         """
         sftp = self.ssh.open_sftp()
         return sftp.open(remote_path)
+
+    def _sftp_get_size(self, remote_path):
+        """
+        Via _sftp_open_file, return the filesize in bytes
+        """
+        with self._sftp_open_file(remote_path) as f:
+            return f.stat().st_size
+
+    @staticmethod
+    def _format_size(file_size):
+        """
+        Given a file_size in bytes, returns a human-readable representation.
+        """
+        for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+            if abs(file_size) < 1024.0:
+                break
+            file_size = file_size / 1024.0
+        return "{:3.0f}{}".format(file_size, unit)
 
     def remove(self, path):
         self.run(args=['rm', '-fr', path])
