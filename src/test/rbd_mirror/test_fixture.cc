@@ -23,6 +23,7 @@ TestFixture::TestFixture() {
 
 void TestFixture::SetUpTestCase() {
   ASSERT_EQ("", connect_cluster_pp(_rados));
+  ASSERT_EQ(0, _rados.conf_set("rbd_cache", "false"));
 
   _local_pool_name = get_temp_pool_name("test-rbd-mirror-");
   ASSERT_EQ(0, _rados.pool_create(_local_pool_name.c_str()));
