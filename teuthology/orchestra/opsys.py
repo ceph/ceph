@@ -12,6 +12,14 @@ DISTRO_CODENAME_MAP = {
         "7": "wheezy",
         "8": "jessie",
     },
+    "rhel": {
+        "7": "maipo",
+        "6": "santiago",
+    },
+    "centos": {
+        "7": "core",
+        "6": "core",
+    }
 }
 
 DEFAULT_OS_VERSION = dict(
@@ -40,9 +48,29 @@ class OS(object):
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
-        self.version = version
-        self.codename = codename
+        self.version = version or self._codename_to_version(name, codename)
+        self.codename = codename or self._version_to_codename(name, version)
         self._set_package_type()
+
+    @staticmethod
+    def _version_to_codename(name, version):
+        for (_version, codename) in DISTRO_CODENAME_MAP[name].iteritems():
+            if version == _version or version.split('.')[0] == _version:
+                return codename
+        raise RuntimeError("No codename found for %s %s !" % (
+            name,
+            version,
+        ))
+
+    @staticmethod
+    def _codename_to_version(name, codename):
+        for (version, _codename) in DISTRO_CODENAME_MAP[name].iteritems():
+            if codename == _codename:
+                return version
+        raise RuntimeError("No version found for %s %s !" % (
+            name,
+            codename,
+        ))
 
     @classmethod
     def from_python(cls, python_val):
@@ -70,11 +98,7 @@ class OS(object):
             name = 'centos'
         elif name.startswith('fedora'):
             name = 'fedora'
-        obj = cls()
-        obj.name = name
-        obj.version = version
-        obj.codename = codename.lower()
-        obj._set_package_type()
+        obj = cls(name=name, version=version, codename=codename.lower())
         return obj
 
     @classmethod
@@ -95,17 +119,15 @@ class OS(object):
         Additionally, we set the package type:
             package_type = 'deb'
         """
-        obj = cls()
         str_ = lsb_release_str.strip()
-        name = obj._get_value(str_, 'Distributor ID')
+        name = cls._get_value(str_, 'Distributor ID')
         if name == 'RedHatEnterpriseServer':
             name = 'rhel'
-        obj.name = name.lower()
+        name = name.lower()
 
-        obj.version = obj._get_value(str_, 'Release')
-        obj.codename = obj._get_value(str_, 'Codename').lower()
-
-        obj._set_package_type()
+        version = cls._get_value(str_, 'Release')
+        codename = cls._get_value(str_, 'Codename').lower()
+        obj = cls(name=name, version=version, codename=codename)
 
         return obj
 
@@ -129,13 +151,10 @@ class OS(object):
         Additionally, we set the package type:
             package_type = 'deb'
         """
-        obj = cls()
         str_ = os_release_str.strip()
-        obj.name = cls._get_value(str_, 'ID').lower()
-        obj.version = cls._get_value(str_, 'VERSION_ID')
-        obj.codename = None
-
-        obj._set_package_type()
+        name = cls._get_value(str_, 'ID').lower()
+        version = cls._get_value(str_, 'VERSION_ID')
+        obj = cls(name=name, version=version)
 
         return obj
 

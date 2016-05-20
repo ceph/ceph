@@ -93,7 +93,7 @@ class TestOS(object):
         os = OS.from_os_release(self.str_centos_7_os_release)
         assert os.name == 'centos'
         assert os.version == '7'
-        assert os.codename is None
+        assert os.codename == 'core'
         assert os.package_type == 'rpm'
 
     def test_debian_7_lsb_release(self):
@@ -107,7 +107,7 @@ class TestOS(object):
         os = OS.from_os_release(self.str_debian_7_os_release)
         assert os.name == 'debian'
         assert os.version == '7'
-        assert os.codename is None
+        assert os.codename == 'wheezy'
         assert os.package_type == 'deb'
 
     def test_ubuntu_12_04_python(self):
@@ -128,7 +128,7 @@ class TestOS(object):
         os = OS.from_os_release(self.str_ubuntu_12_04_os_release)
         assert os.name == 'ubuntu'
         assert os.version == '12.04'
-        assert os.codename is None
+        assert os.codename == 'precise'
         assert os.package_type == 'deb'
 
     def test_rhel_6_4_lsb_release(self):
@@ -156,7 +156,7 @@ class TestOS(object):
         os = OS.from_os_release(self.str_rhel_7_os_release)
         assert os.name == 'rhel'
         assert os.version == '7.0'
-        assert os.codename is None
+        assert os.codename == 'maipo'
         assert os.package_type == 'rpm'
 
     def test_repr(self):
@@ -167,3 +167,11 @@ class TestOS(object):
         os = OS(name='NAME', version='0.1.2', codename='code')
         ref_dict = dict(name='NAME', version='0.1.2', codename='code')
         assert os.to_dict() == ref_dict
+
+    def test_version_no_codename(self):
+        os = OS(name='ubuntu', version='16.04')
+        assert os.codename == 'xenial'
+
+    def test_codename_no_version(self):
+        os = OS(name='ubuntu', codename='trusty')
+        assert os.version == '14.04'
