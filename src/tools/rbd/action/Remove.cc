@@ -76,7 +76,8 @@ int execute(const po::variables_map &vm) {
 	image_r = image.cg_ref(&cg_ref);
       }
       if (image_r == 0)
-	std::cerr << "rbd: error: image pertains to a consistency group " << cg_ref.first << "." << cg_ref.second;
+	std::cerr << "rbd: error: image pertains to a consistency group "
+	          << cg_ref.first << "." << cg_ref.second;
       else
 	std::cerr << "rbd: error: image pertains to a consistency group";
 
