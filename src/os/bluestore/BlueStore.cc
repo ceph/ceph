@@ -4195,31 +4195,59 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
 
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
-  dout(20) << __func__ << " txc " << txc
-	   << " allocated " << txc->allocated
-	   << " released " << txc->released
-	   << dendl;
+  dout(20) << __func__ << " txc " << txc << std::hex
+	   << " allocated 0x" << txc->allocated
+	   << " released 0x" << txc->released
+	   << std::dec << dendl;
 
-  for (interval_set<uint64_t>::iterator p = txc->allocated.begin();
-      p != txc->allocated.end();
-      ++p) {
+  // We have to handle the case where we allocate *and* deallocate the
+  // same region in this transaction.  The freelist doesn't like that.
+  // (Actually, the only thing that cares is the BitmapFreelistManager
+  // debug check. But that's important.)
+  interval_set<uint64_t> overlap;
+  interval_set<uint64_t> tmp_allocated, tmp_released;
+  interval_set<uint64_t> *pallocated = &txc->allocated;
+  interval_set<uint64_t> *preleased = &txc->released;
+  if (!txc->allocated.empty() && !txc->released.empty()) {
+    overlap.intersection_of(txc->allocated, txc->released);
+    tmp_allocated = txc->allocated;
+    tmp_allocated.subtract(overlap);
+    tmp_released = txc->released;
+    tmp_released.subtract(overlap);
+    dout(20) << __func__ << "  overlap 0x" << std::hex << overlap
+	     << ", new allocated 0x" << tmp_allocated
+	     << " released 0x" << tmp_released << std::dec
+	     << dendl;
+    pallocated = &tmp_allocated;
+    preleased = &tmp_released;
+  }
+
+  // update freelist with non-overlap sets
+  for (interval_set<uint64_t>::iterator p = pallocated->begin();
+       p != pallocated->end();
+       ++p) {
     fm->allocate(p.get_start(), p.get_len(), t);
   }
-  txc->allocated.clear();
-
-  for (interval_set<uint64_t>::iterator p = txc->released.begin();
-      p != txc->released.end();
-      ++p) {
+  for (interval_set<uint64_t>::iterator p = preleased->begin();
+       p != preleased->end();
+       ++p) {
     dout(20) << __func__ << " release 0x" << std::hex << p.get_start()
 	     << "~0x" << p.get_len() << std::dec << dendl;
     fm->release(p.get_start(), p.get_len(), t);
-
-    if (!g_conf->bluestore_debug_no_reuse_blocks)
-      alloc->release(p.get_start(), p.get_len());
   }
+
+  // update allocator with full released set
+  if (!g_conf->bluestore_debug_no_reuse_blocks) {
+    for (interval_set<uint64_t>::iterator p = txc->released.begin();
+	 p != txc->released.end();
+	 ++p) {
+      alloc->release(p.get_start(), p.get_len());
+    }
+  }
+
+  txc->allocated.clear();
   txc->released.clear();
 }
-
 
 void BlueStore::_kv_sync_thread()
 {
