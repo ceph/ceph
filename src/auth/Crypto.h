@@ -18,8 +18,6 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/memory.h"
-
-#include "common/Formatter.h"
 #include "include/buffer.h"
 
 #include <string>
@@ -27,6 +25,8 @@
 class CephContext;
 class CryptoHandler;
 class CryptoKeyContext;
+namespace ceph { class Formatter; }
+
 
 /*
  * some per-key context that is specific to a particular crypto backend

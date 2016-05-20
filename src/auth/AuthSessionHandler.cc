@@ -17,7 +17,6 @@
 #include "cephx/CephxSessionHandler.h"
 #include "none/AuthNoneSessionHandler.h"
 #include "unknown/AuthUnknownSessionHandler.h"
-#include "common/config.h"
 
 #define dout_subsys ceph_subsys_auth
 
