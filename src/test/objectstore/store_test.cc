@@ -586,7 +586,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
   {
     ObjectStore::Transaction t;
     bufferlist bl, newdata;
-    bl.append("edbca");
+    bl.append("edcba");
     t.write(cid, hoid, 0, 5, bl);
     t.write(cid, hoid, 10, 5, bl);
     cerr << "TwinWrite" << std::endl;
@@ -624,9 +624,12 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append_zero(5);
       expected.append(bl2);
 
-      if(!newdata.contents_equal(expected)){
-        newdata.hexdump(cerr);
-        cerr<<std::endl;
+      if (!newdata.contents_equal(expected)){
+	cout << "expected:\n";
+	expected.hexdump(cout);
+        cout << "actual:\n";
+	newdata.hexdump(cout);
+        cout << std::endl;
       }
       ASSERT_TRUE(newdata.contents_equal(expected));
     }
@@ -639,7 +642,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
     bl2.append("1234567890");
     bl3.append("BA");
 
-    t.write(cid, hoid, 40, bl2.length(), bl2);
+    t.write(cid, hoid, 30, bl2.length(), bl2);
     t.write(cid, hoid, 1, bl.length(), bl);
     t.write(cid, hoid, 13, bl3.length(), bl3);
     cerr << "TripleWrite" << std::endl;
@@ -648,8 +651,6 @@ TEST_P(StoreTest, BufferCacheReadTest) {
 
     r = store->read(cid, hoid, 0, 40, newdata);
     ASSERT_EQ(r, 40);
-//newdata.hexdump(cerr);
-//cerr<<std::endl;
     {
       bufferlist expected;
       expected.append("eDCBa");
@@ -659,7 +660,14 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl2);
       expected.append(bl2);
 
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      if (!newdata.contents_equal(expected)){
+	cout << "expected:\n";
+	expected.hexdump(cout);
+        cout << "actual:\n";
+	newdata.hexdump(cout);
+        cout << std::endl;
+      }
+     ASSERT_TRUE(newdata.contents_equal(expected));
     }
   }
 }
