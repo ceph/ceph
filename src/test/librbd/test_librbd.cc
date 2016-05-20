@@ -4119,7 +4119,7 @@ TEST_F(TestLibRBD, EventSocketEventfd)
   ASSERT_TRUE(poll_fd.revents & POLLIN);
 
   ASSERT_EQ(static_cast<ssize_t>(sizeof(uint64_t)), read(event_fd, buf, 32));
-  ASSERT_EQ(1, *reinterpret_cast<uint64_t *>(buf));
+  ASSERT_EQ(1U, *reinterpret_cast<uint64_t *>(buf));
 
   close(event_fd);
 #endif
