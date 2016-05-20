@@ -78,7 +78,7 @@ void ThreadPool::handle_conf_change(const struct md_config_t *conf,
     assert(r >= 0);
     int v = atoi(buf);
     free(buf);
-    if (v > 0) {
+    if (v >= 0) {
       _lock.Lock();
       _num_threads = v;
       start_threads();
