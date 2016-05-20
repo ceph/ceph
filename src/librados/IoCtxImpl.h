@@ -253,7 +253,8 @@ struct librados::IoCtxImpl {
 
   int set_alloc_hint(const object_t& oid,
                      uint64_t expected_object_size,
-                     uint64_t expected_write_size);
+                     uint64_t expected_write_size,
+		     uint32_t flags);
 
   version_t last_version();
   void set_assert_version(uint64_t ver);

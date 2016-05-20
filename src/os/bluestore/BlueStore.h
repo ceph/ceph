@@ -976,7 +976,8 @@ private:
 		    CollectionRef& c,
 		    OnodeRef& o,
 		    uint64_t expected_object_size,
-		    uint64_t expected_write_size);
+		    uint64_t expected_write_size,
+		    uint32_t flags);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& oldo,
