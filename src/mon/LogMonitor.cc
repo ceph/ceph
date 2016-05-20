@@ -435,7 +435,7 @@ int LogMonitor::sub_name_to_id(const string& n)
     return CLOG_WARN;
   if (n == "log-error")
     return CLOG_ERROR;
-  return -1;
+  return CLOG_UNKNOWN;
 }
 
 void LogMonitor::check_subs()
