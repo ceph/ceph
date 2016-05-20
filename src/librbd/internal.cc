@@ -3315,7 +3315,21 @@ err_remove_id:
     int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
+
     *cg_ref = ictx->cg_ref;
+    if (-1 != ictx->cg_ref.first) {
+      librados::Rados rados(ictx->md_ctx);
+      IoCtx ioctx;
+      rados.ioctx_create2(ictx->cg_ref.first, ioctx);
+
+      std::string cg_name;
+      r = cls_client::dir_get_name(&ioctx, CG_DIRECTORY,
+				   ictx->cg_ref.second, &cg_name);
+      if (r < 0)
+	return r;
+      cg_ref->second = cg_name;
+    }
+
     return 0;
   }
 

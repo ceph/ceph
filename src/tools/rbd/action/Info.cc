@@ -119,6 +119,10 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
   prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
 
+  std::string cg_string = "";
+  if (-1 != cg_ref.first)
+    cg_string = stringify(cg_ref.first) + "." + cg_ref.second;
+
   if (f) {
     f->open_object_section("image");
     f->dump_string("name", imgname);
@@ -128,7 +132,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     f->dump_unsigned("object_size", info.obj_size);
     f->dump_string("block_name_prefix", prefix);
     f->dump_int("format", (old_format ? 1 : 2));
-    f->dump_string("cg", stringify(cg_ref.first) + "." + cg_ref.second);
+    f->dump_string("cg", cg_string);
   } else {
     std::cout << "rbd image '" << imgname << "':\n"
               << "\tsize " << prettybyte_t(info.size) << " in "
@@ -141,7 +145,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
               << std::endl
               << "\tformat: " << (old_format ? "1" : "2")
               << std::endl
-              << "\tconsistency group: " << stringify(cg_ref.first) + "." + cg_ref.second
+              << "\tconsistency group: " << cg_string
               << std::endl;
   }
 
