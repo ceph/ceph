@@ -113,8 +113,10 @@
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
+#include "common/AsyncReserver.h"
 #include "common/HeartbeatMap.h"
 #include "common/admin_socket.h"
+#include "common/ceph_context.h"
 
 #include "global/signal_handler.h"
 #include "global/pidfile.h"
@@ -123,11 +125,9 @@
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
-#include "osd/ClassHandler.h"
 #include "osd/OpRequest.h"
 
 #include "auth/AuthAuthorizeHandler.h"
-
 #include "common/errno.h"
 
 #include "objclass/objclass.h"
