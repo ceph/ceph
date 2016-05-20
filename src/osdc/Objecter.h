@@ -215,10 +215,12 @@ struct ObjectOperation {
     ::encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
-		      uint64_t expected_write_size) {
+                      uint64_t expected_write_size,
+		      uint32_t flags) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.alloc_hint.expected_object_size = expected_object_size;
     osd_op.op.alloc_hint.expected_write_size = expected_write_size;
+    osd_op.op.alloc_hint.flags = flags;
   }
 
   // ------
@@ -1089,9 +1091,10 @@ struct ObjectOperation {
   }
 
   void set_alloc_hint(uint64_t expected_object_size,
-		      uint64_t expected_write_size ) {
+                      uint64_t expected_write_size,
+		      uint32_t flags) {
     add_alloc_hint(CEPH_OSD_OP_SETALLOCHINT, expected_object_size,
-		   expected_write_size);
+		   expected_write_size, flags);
 
     // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
     // not worth a feature bit.  Set FAILOK per-op flag to make
