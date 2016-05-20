@@ -62,10 +62,6 @@ class OS(object):
         for (_version, codename) in DISTRO_CODENAME_MAP[name].iteritems():
             if version == _version or version.split('.')[0] == _version:
                 return codename
-        raise RuntimeError("No codename found for %s %s !" % (
-            name,
-            version,
-        ))
 
     @staticmethod
     def _codename_to_version(name, codename):
