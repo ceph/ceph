@@ -192,7 +192,7 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
-                                       map<string, bufferlist> &pairs, map<string, bufferlist> *res);
+                                       const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,
@@ -285,7 +285,7 @@ namespace librbd {
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);
 
-    void apply_metadata_confs();
+    void apply_metadata(const std::map<std::string, bufferlist> &meta);
 
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
     ObjectMap *create_object_map(uint64_t snap_id);
