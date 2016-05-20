@@ -82,7 +82,6 @@ check_SCRIPTS += \
 	test/mon/mkfs.sh \
 	test/mon/mon-scrub.sh \
        test/mon/test_pool_quota.sh \
-	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-reuse-id.sh \
