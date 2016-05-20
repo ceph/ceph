@@ -468,8 +468,7 @@ class GitbuilderProject(object):
         """
         Initializes the class from a teuthology job config
         """
-        # a bad assumption, but correct for most situations I believe
-        self.arch = "x86_64"
+        self.arch = self.job_config.get('arch', 'x86_64')
         self.os_type = self.job_config.get("os_type")
         self.os_version = self._get_version()
         self.distro = self._get_distro(
