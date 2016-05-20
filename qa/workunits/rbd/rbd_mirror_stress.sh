@@ -325,7 +325,8 @@ write_image()
     local duration=$(($RANDOM % 35 + 15))
 
     timeout ${duration}s rbd --cluster ${cluster} -p ${POOL} bench-write \
-	${image} --io-size 4096 --io-threads 8 --io-total 10G --io-pattern rand || true
+	${image} --io-size 4096 --io-threads 8 --io-total 10G --io-pattern rand \
+        --debug-rbd=20 --debug-journaler=20 2> ${TEMPDIR}/rbd-bench-write.log || true
 }
 
 create_snap()
@@ -334,7 +335,8 @@ create_snap()
     local image=$2
     local snap_name=$3
 
-    rbd --cluster ${cluster} -p ${POOL} snap create ${image}@${snap_name}
+    rbd --cluster ${cluster} -p ${POOL} snap create ${image}@${snap_name} \
+	--debug-rbd=20 --debug-journaler=20 2> ${TEMPDIR}/rbd-snap-create.log
 }
 
 wait_for_snap()
