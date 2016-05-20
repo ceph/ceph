@@ -863,7 +863,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
-    onack->m_ops, snap_seq, NULL, 0,
+    onack->m_ops, snapid, NULL, 0,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
