@@ -243,7 +243,7 @@ protected:
 
 public:
   /* Get name of the auth engine. */
-  virtual std::string get_name() const noexcept = 0;
+  virtual const char* get_name() const noexcept = 0;
 
   /* Fast, non-throwing method for screening whether a concrete engine may
    * be interested in handling a specific request. */
@@ -305,7 +305,7 @@ public:
       apl_factory(apl_factory) {
   }
 
-  std::string get_name() const noexcept override {
+  const char* get_name() const noexcept override {
     return "RGWKeystoneAuthEngine";
   }
 
@@ -329,7 +329,7 @@ public:
     return true;
   }
 
-  std::string get_name() const noexcept override {
+  const char* get_name() const noexcept override {
     return "RGWAnonymousAuthEngine";
   }
 
