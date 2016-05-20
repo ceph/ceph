@@ -94,7 +94,7 @@ struct shard_info_wrapper;
        pg_shard_t peer,
        const hobject_t oid) = 0;
 
-     virtual void failed_push(pg_shard_t from, const hobject_t &soid) = 0;
+     virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
      
      virtual void cancel_pull(const hobject_t &soid) = 0;
 
