@@ -79,7 +79,7 @@ int RGWAccessControlList::get_referer_perm(const std::string http_referer,
   /* FIXME: C++11 doesn't have std::rbegin nor std::rend. We would like to
    * switch when C++14 becomes available. */
   const auto iter = std::find_if(referer_list.crbegin(), referer_list.crend(),
-    [http_referer](const ACLReferer& r) -> bool {
+    [&http_referer](const ACLReferer& r) -> bool {
       return r.is_match(http_referer);
     }
   );

@@ -116,8 +116,8 @@ public:
     const bool is_admin;
 
   public:
-    AuthInfo(const rgw_user acct_user,
-             const std::string acct_name,
+    AuthInfo(const rgw_user& acct_user,
+             const std::string& acct_name,
              const uint32_t perm_mask,
              const bool is_admin)
     : acct_user(acct_user),
@@ -141,14 +141,14 @@ protected:
 
   const AuthInfo info;
 
-  virtual void create_account(const rgw_user acct_user,
+  virtual void create_account(const rgw_user& acct_user,
                               RGWUserInfo& user_info) const;          /* out */
 
 public:
   RGWRemoteAuthApplier(CephContext * const cct,
                        RGWRados * const store,
                        acl_strategy_t&& extra_acl_strategy,
-                       const AuthInfo info)
+                       const AuthInfo& info)
     : RGWAuthApplier(cct),
       store(store),
       extra_acl_strategy(std::move(extra_acl_strategy)),
@@ -291,8 +291,8 @@ protected:
   const RGWRemoteAuthApplier::Factory * const apl_factory;
 
   /* Helper methods. */
-  KeystoneToken decode_pki_token(const std::string token) const;
-  KeystoneToken get_from_keystone(const std::string token) const;
+  KeystoneToken decode_pki_token(const std::string& token) const;
+  KeystoneToken get_from_keystone(const std::string& token) const;
   acl_strategy_t get_acl_strategy(const KeystoneToken& token) const;
   RGWRemoteAuthApplier::AuthInfo get_creds_info(const KeystoneToken& token,
                                                 const std::vector<std::string>& admin_roles
