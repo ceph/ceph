@@ -25,6 +25,8 @@ from . import lock
 from .config import config, JobConfig
 from .exceptions import BranchNotFoundError, CommitNotFoundError, ScheduleFailError
 from .misc import deep_merge, get_results_url
+from .orchestra.opsys import OS
+from .packaging import GitbuilderProject
 from .repo_utils import fetch_qa_suite, fetch_teuthology
 from .report import ResultsReporter
 from .results import UNFINISHED_STATUSES
@@ -482,26 +484,32 @@ def get_distro_defaults(distro, machine_type):
     """
     arch = 'x86_64'
     if distro in (None, 'None'):
-        release = 'centos7'
-        pkg_type = 'rpm'
+        os_type = 'centos'
+        os_version = '7'
     elif distro in ('rhel', 'centos'):
-        release = 'centos7'
-        pkg_type = 'rpm'
+        os_type = 'centos'
+        os_version = '7'
     elif distro == 'ubuntu':
-        pkg_type = 'deb'
+        os_type = distro
         if machine_type == 'saya':
-            release = 'saucy'
+            os_version = '13.10'
             arch = 'armv7l'
         else:
-            release = 'trusty'
+            os_version = '14.04'
     elif distro == 'debian':
-        release = 'wheezy'
-        pkg_type = 'deb'
+        os_type = distro
+        os_version = '7'
     elif distro == 'fedora':
-        release = 'fedora20'
-        pkg_type = 'rpm'
+        os_type = distro
+        os_version = '20'
     else:
         raise ValueError("Invalid distro value passed: %s", distro)
+    _os = OS(name=os_type, version=os_version)
+    release = GitbuilderProject._get_distro(
+        _os.name,
+        _os.version,
+        _os.codename,
+    )
     template = "Defaults for machine_type {mtype} distro {distro}: " \
         "arch={arch}, release={release}, pkg_type={pkg}"
     log.debug(template.format(
@@ -509,12 +517,12 @@ def get_distro_defaults(distro, machine_type):
         distro=distro,
         arch=arch,
         release=release,
-        pkg=pkg_type)
+        pkg=_os.package_type)
     )
     return (
         arch,
         release,
-        pkg_type,
+        _os.package_type,
     )
 
 
@@ -638,7 +646,7 @@ def strip_fragment_path(original_path):
     http://tracker.ceph.com/issues/15470
     """
     scan_after = '/suites/'
-    scan_start = original_path.find(scan_after) 
+    scan_start = original_path.find(scan_after)
     if scan_start > 0:
         return original_path[scan_start + len(scan_after):]
     return original_path
