@@ -205,7 +205,7 @@ Requires:      python-setuptools
 Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
-Requires:      parted
+Requires:      parted >= 3.2.16
 Requires:      util-linux
 Requires:      hdparm
 Requires:      cryptsetup
