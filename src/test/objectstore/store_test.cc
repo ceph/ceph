@@ -37,6 +37,8 @@ typedef boost::mt11213b gen_type;
 
 #if GTEST_HAS_PARAM_TEST
 
+static void dump_bl_mismatch(bufferlist& expected, bufferlist& actual);
+
 template <typename T>
 int apply_transaction(
   T &store,
@@ -625,11 +627,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl2);
 
       if (!newdata.contents_equal(expected)){
-	cout << "expected:\n";
-	expected.hexdump(cout);
-        cout << "actual:\n";
-	newdata.hexdump(cout);
-        cout << std::endl;
+        dump_bl_mismatch(expected, newdata);
       }
       ASSERT_TRUE(newdata.contents_equal(expected));
     }
@@ -661,11 +659,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl2);
 
       if (!newdata.contents_equal(expected)){
-	cout << "expected:\n";
-	expected.hexdump(cout);
-        cout << "actual:\n";
-	newdata.hexdump(cout);
-        cout << std::endl;
+        dump_bl_mismatch(expected, newdata);
       }
      ASSERT_TRUE(newdata.contents_equal(expected));
     }
@@ -2206,19 +2200,26 @@ static void dump_bl_mismatch(bufferlist& expected, bufferlist& actual)
 {
   cout << __func__ << std::endl;
   unsigned first = 0;
-  while (expected[first] == actual[first])
+  if(expected.length() != actual.length()) {
+    cout << "--- buffer lengths mismatch " << std::hex
+         << "expected 0x" << expected.length() << " != actual 0x"
+         << actual.length() << std::dec << std::endl;
+  }
+  auto len = MIN(expected.length(), actual.length());
+  while ( first<len && expected[first] == actual[first])
     ++first;
-  assert(expected.length() == actual.length());
-  unsigned last = expected.length() - 1;
-  while (expected[last] == actual[last])
+  unsigned last = len;
+  while (last > 0 && expected[last-1] == actual[last-1])
     --last;
-  cout << "--- buffer mismatch between offset 0x" << std::hex << first
-       << " and 0x" << last+1 << ", total 0x" << expected.length() << std::dec
-       << std::endl;
-  cout << "--- expected:\n";
-  expected.hexdump(cout);
-  cout << "--- actual:\n";
-  actual.hexdump(cout);
+  if(len > 0) {
+    cout << "--- buffer mismatch between offset 0x" << std::hex << first
+         << " and 0x" << last << ", total 0x" << len << std::dec
+         << std::endl;
+    cout << "--- expected:\n";
+    expected.hexdump(cout);
+    cout << "--- actual:\n";
+    actual.hexdump(cout);
+  }
 }
 
 class SyntheticWorkloadState {
