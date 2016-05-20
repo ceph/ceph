@@ -46,6 +46,7 @@ KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
+  rotational = true;
 }
 
 int KernelDevice::_lock()

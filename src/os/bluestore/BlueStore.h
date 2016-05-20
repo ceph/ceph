@@ -900,6 +900,7 @@ private:
   int _read_fsid(uuid_d *f);
   int _write_fsid();
   void _close_fsid();
+  void _set_min_alloc();
   int _open_bdev(bool create);
   void _close_bdev();
   int _open_db(bool create);
