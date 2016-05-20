@@ -8,7 +8,7 @@ from cStringIO import StringIO
 from .config import config
 from .contextutil import safe_while
 from .exceptions import VersionNotFoundError
-from .orchestra.opysys import DISTRO_CODENAME_MAP, DEFAULT_OS_VERSION
+from .orchestra.opsys import OS, DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -609,15 +609,10 @@ class GitbuilderProject(object):
 
         :returns: The codename as string or None if not found.
         """
-        major_version = version.split(".")[0]
-        distro_codes = DISTRO_CODENAME_MAP.get(distro)
-        if not distro_codes:
-            return None
-        codename = distro_codes.get(version)
-        if not codename:
-            codename = distro_codes.get(major_version)
-
-        return codename
+        try:
+            return OS._version_to_codename(distro, version)
+        except RuntimeError:
+            pass
 
     def _get_version(self):
         """
