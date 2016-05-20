@@ -554,7 +554,8 @@ class GitbuilderProject(object):
             # debian and ubuntu just use the distro name
             return self.os_type
 
-    def _parse_version(self, version):
+    @staticmethod
+    def _parse_version(version):
         """
         Parses a distro version string and returns a modified string
         that matches the format needed for the gitbuilder url.
@@ -563,7 +564,8 @@ class GitbuilderProject(object):
         """
         return version.split(".")[0]
 
-    def _get_distro(self, distro=None, version=None, codename=None):
+    @classmethod
+    def _get_distro(cls, distro=None, version=None, codename=None):
         """
         Given a distro and a version, returned the combined string
         to use in a gitbuilder url.
@@ -583,7 +585,7 @@ class GitbuilderProject(object):
             # deb based systems use codename instead of a distro/version combo
             if not codename:
                 # lookup codename based on distro string
-                codename = self._get_codename(distro, version)
+                codename = cls._get_codename(distro, version)
                 if not codename:
                     msg = "No codename found for: {distro} {version}".format(
                         distro=distro,
@@ -595,10 +597,11 @@ class GitbuilderProject(object):
 
         return "{distro}{version}".format(
             distro=distro,
-            version=self._parse_version(version),
+            version=cls._parse_version(version),
         )
 
-    def _get_codename(self, distro, version):
+    @staticmethod
+    def _get_codename(distro, version):
         """
         Attempts to find the codename for a given distro / version
         pair.  Will first attempt to find the codename for the full
