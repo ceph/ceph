@@ -1857,7 +1857,9 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
           out_attrs.erase(aiter);
         }
       } else {
-        out_attrs[name] = kv.second;
+        /* emplace() won't alter the map if the key is already present.
+         * This behaviour is fully intensional here. */
+        out_attrs.emplace(kv);
       }
     } else if (out_attrs.find(name) == std::end(out_attrs)) {
       out_attrs[name] = kv.second;
