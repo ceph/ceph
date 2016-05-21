@@ -13,8 +13,6 @@
  */
 
 #include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "common/config.h"
 #include "common/debug.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
