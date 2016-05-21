@@ -8831,7 +8831,7 @@ void ReplicatedPG::submit_log_entries(
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&on_complete)
 {
-  dout(10) << __func__ << entries << dendl;
+  dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
   ObjectStore::Transaction t;
@@ -9830,7 +9830,7 @@ void ReplicatedPG::failed_push(pg_shard_t from, const hobject_t &soid)
   assert(recovering.count(soid));
   recovering.erase(soid);
   missing_loc.remove_location(soid, from);
-  dout(0) << "_failed_push " << soid << " from shard " << from
+  dout(0) << __func__ << " " << soid << " from shard " << from
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
   finish_recovery_op(soid);  // close out this attempt,
@@ -10425,7 +10425,7 @@ void ReplicatedPG::_clear_recovery_state()
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
 {
-  dout(20) << __func__ << ": soid" << dendl;
+  dout(20) << __func__ << ": " << soid << dendl;
   assert(recovering.count(soid));
   ObjectContextRef obc = recovering[soid];
   if (obc) {
