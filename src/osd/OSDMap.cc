@@ -2385,6 +2385,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",notieragent";
   if (f & CEPH_OSDMAP_SORTBITWISE)
     s += ",sortbitwise";
+  if (f & CEPH_OSDMAP_REQUIRE_JEWEL)
+    s += ",require_jewel_osds";
   if (s.length())
     s.erase(0, 1);
   return s;
