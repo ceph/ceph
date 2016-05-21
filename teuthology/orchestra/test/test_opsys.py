@@ -175,3 +175,11 @@ class TestOS(object):
     def test_codename_no_version(self):
         os = OS(name='ubuntu', codename='trusty')
         assert os.version == '14.04'
+
+    def test_eq_equal(self):
+        os = OS(name='ubuntu', codename='trusty', version='14.04')
+        assert OS(name='ubuntu', codename='trusty', version='14.04') == os
+
+    def test_eq_not_equal(self):
+        os = OS(name='ubuntu', codename='trusty', version='16.04')
+        assert OS(name='ubuntu', codename='trusty', version='14.04') != os

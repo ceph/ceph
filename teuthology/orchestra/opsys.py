@@ -188,3 +188,9 @@ class OS(object):
             .format(name=repr(self.name),
                     version=repr(self.version),
                     codename=repr(self.codename))
+
+    def __eq__(self, other):
+        for slot in self.__slots__:
+            if not getattr(self, slot) == getattr(other, slot):
+                return False
+        return True
