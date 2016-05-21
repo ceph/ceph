@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # rbd_mirror.sh - test rbd-mirror daemon
 #
@@ -74,7 +74,6 @@ TEMPDIR=
 # RBD_MIRROR_USE_RBD_MIRROR - if set, use an existing instance of rbd-mirror
 #                             running as ceph client $CEPH_ID. If empty,
 #                             this script will start and stop rbd-mirror
-
 #
 # Functions
 #
@@ -210,85 +209,6 @@ admin_daemon()
     ceph --admin-daemon ${asok_file} $@
 }
 
-status()
-{
-    local cluster daemon image
-
-    for cluster in ${CLUSTER1} ${CLUSTER2}
-    do
-	echo "${cluster} status"
-	ceph --cluster ${cluster} -s
-	echo
-
-	echo "${cluster} ${POOL} images"
-	rbd --cluster ${cluster} -p ${POOL} ls
-	echo
-
-	echo "${cluster} ${POOL} mirror pool status"
-	rbd --cluster ${cluster} -p ${POOL} mirror pool status --verbose
-	echo
-
-	for image in `rbd --cluster ${cluster} -p ${POOL} ls 2>/dev/null`
-	do
-	    echo "image ${image} info"
-	    rbd --cluster ${cluster} -p ${POOL} info ${image}
-	    echo
-	    echo "image ${image} journal status"
-	    rbd --cluster ${cluster} -p ${POOL} journal status --image ${image}
-	    echo
-	done
-    done
-
-    local ret
-
-    for cluster in "${CLUSTER1}" "${CLUSTER2}"
-    do
-	local pid_file=$(daemon_pid_file ${cluster} )
-	if [ ! -e ${pid_file} ]
-	then
-	    echo "${cluster} rbd-mirror not running or unknown" \
-		 "(${pid_file} not exist)"
-	    continue
-	fi
-
-	local pid
-	pid=$(cat ${pid_file} 2>/dev/null) || :
-	if [ -z "${pid}" ]
-	then
-	    echo "${cluster} rbd-mirror not running or unknown" \
-		 "(can't find pid using ${pid_file})"
-	    ret=1
-	    continue
-	fi
-
-	echo "${daemon} rbd-mirror process in ps output:"
-	if ps auxww |
-		awk -v pid=${pid} 'NR == 1 {print} $2 == pid {print; exit 1}'
-	then
-	    echo
-	    echo "${cluster} rbd-mirror not running" \
-		 "(can't find pid $pid in ps output)"
-	    ret=1
-	    continue
-	fi
-	echo
-
-	local asok_file=$(daemon_asok_file ${cluster} ${cluster})
-	if [ ! -S "${asok_file}" ]
-	then
-	    echo "${cluster} rbd-mirror asok is unknown (${asok_file} not exits)"
-	    ret=1
-	    continue
-	fi
-
-	echo "${cluster} rbd-mirror status"
-	ceph --admin-daemon ${asok_file} rbd mirror status
-	echo
-    done
-
-    return ${ret}
-}
-
 flush()
 {
     local cluster=$1
@@ -342,14 +262,6 @@ wait_for_image_replay_started()
     wait_for_image_replay_state "${cluster}" "${image}" started
 }
 
-wait_for_image_replay_stopped()
-{
-    local cluster=$1
-    local image=$2
-
-    wait_for_image_replay_state "${cluster}" "${image}" stopped
-}
-
 get_position()
 {
     local cluster=$1
@@ -382,23 +294,6 @@ get_mirror_position()
     get_position "${cluster}" "${image}" '..*'
 }
 
-wait_for_replay_complete()
-{
-    local local_cluster=$1
-    local cluster=$2
-    local image=$3
-    local s master_pos mirror_pos
-
-    for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16; do
-	sleep ${s}
-	flush "${local_cluster}" "${image}"
-	master_pos=$(get_master_position "${cluster}" "${image}")
-	mirror_pos=$(get_mirror_position "${cluster}" "${image}")
-	test -n "${master_pos}" -a "${master_pos}" = "${mirror_pos}" && return 0
-    done
-    return 1
-}
-
 test_status_in_pool_dir()
 {
     local cluster=$1
@@ -417,8 +312,9 @@ create_image()
 {
     local cluster=$1
     local image=$2
+    local size=$3
 
-    rbd --cluster ${cluster} -p ${POOL} create --size 128 \
+    rbd --cluster ${cluster} -p ${POOL} create --size ${size} \
 	--image-feature exclusive-lock --image-feature journaling ${image}
 }
 
@@ -426,40 +322,48 @@ write_image()
 {
     local cluster=$1
     local image=$2
-    local count=$3
+    local duration=$(($RANDOM % 35 + 15))
 
-    rbd --cluster ${cluster} -p ${POOL} bench-write ${image} \
-	--io-size 4096 --io-threads 1 --io-total $((4096 * count)) \
-	--io-pattern rand
+    timeout ${duration}s rbd --cluster ${cluster} -p ${POOL} bench-write \
+	${image} --io-size 4096 --io-threads 8 --io-total 10G --io-pattern rand || true
+}
+
+create_snap()
+{
+    local cluster=$1
+    local image=$2
+    local snap_name=$3
+
+    rbd --cluster ${cluster} -p ${POOL} snap create ${image}@${snap_name}
+}
+
+wait_for_snap()
+{
+    local cluster=$1
+    local image=$2
+    local snap_name=$3
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32; do
+	sleep ${s}
+        rbd --cluster ${cluster} -p ${POOL} info ${image}@${snap_name} || continue
+        return 0
+    done
+    return 1
 }
 
 compare_images()
 {
     local image=$1
+    local snap_name=$2
 
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${POOL}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${POOL}-${image}.export
 
     rm -f ${rmt_export} ${loc_export}
-    rbd --cluster ${CLUSTER2} -p ${POOL} export ${image} ${rmt_export}
-    rbd --cluster ${CLUSTER1} -p ${POOL} export ${image} ${loc_export}
+    rbd --cluster ${CLUSTER2} -p ${POOL} export ${image}@${snap_name} ${rmt_export}
+    rbd --cluster ${CLUSTER1} -p ${POOL} export ${image}@${snap_name} ${loc_export}
     cmp ${rmt_export} ${loc_export}
-}
-
-demote_image()
-{
-    local cluster=$1
-    local image=$2
-
-    rbd --cluster=${cluster} mirror image demote ${POOL}/${image}
-}
-
-promote_image()
-{
-    local cluster=$1
-    local image=$2
-
-    rbd --cluster=${cluster} mirror image promote ${POOL}/${image}
 }
 
 #
@@ -487,105 +391,19 @@ setup
 testlog "TEST: add image and test replay"
 start_mirror ${CLUSTER1}
 image=test
-create_image ${CLUSTER2} ${image}
-wait_for_image_replay_started ${CLUSTER1} ${image}
-write_image ${CLUSTER2} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
-test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
-if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-  test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
-fi
-compare_images ${image}
-
-testlog "TEST: stop mirror, add image, start mirror and test replay"
-stop_mirror ${CLUSTER1}
-image1=test1
-create_image ${CLUSTER2} ${image1}
-write_image ${CLUSTER2} ${image1} 100
-start_mirror ${CLUSTER1}
-wait_for_image_replay_started ${CLUSTER1} ${image1}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image1}
-test_status_in_pool_dir ${CLUSTER1} ${image1} 'up+replaying' 'master_position'
-if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-  test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
-fi
-compare_images ${image1}
-
-testlog "TEST: test the first image is replaying after restart"
-write_image ${CLUSTER2} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
-test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
-compare_images ${image}
-
-testlog "TEST: stop/start/restart mirror via admin socket"
-admin_daemon ${CLUSTER1} rbd mirror stop
-wait_for_image_replay_stopped ${CLUSTER1} ${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror start
-wait_for_image_replay_started ${CLUSTER1} ${image}
-wait_for_image_replay_started ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror restart
-wait_for_image_replay_started ${CLUSTER1} ${image}
-wait_for_image_replay_started ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror stop
-wait_for_image_replay_stopped ${CLUSTER1} ${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror restart
-wait_for_image_replay_started ${CLUSTER1} ${image}
-wait_for_image_replay_started ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror stop ${CLUSTER2}
-wait_for_image_replay_stopped ${CLUSTER1} ${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror start ${POOL}/${image}
+create_image ${CLUSTER2} ${image} '512M'
 wait_for_image_replay_started ${CLUSTER1} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror start
-wait_for_image_replay_started ${CLUSTER1} ${image1}
+for i in `seq 1 10`
+do
+  write_image ${CLUSTER2} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror start ${CLUSTER2}
+  test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 
-admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
-wait_for_image_replay_started ${CLUSTER1} ${image}
-
-admin_daemon ${CLUSTER1} rbd mirror restart ${CLUSTER2}
-wait_for_image_replay_started ${CLUSTER1} ${image}
-wait_for_image_replay_started ${CLUSTER1} ${image1}
-
-admin_daemon ${CLUSTER1} rbd mirror flush
-admin_daemon ${CLUSTER1} rbd mirror status
-
-testlog "TEST: failover and failback"
-start_mirror ${CLUSTER2}
-
-# failover
-demote_image ${CLUSTER2} ${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${image}
-test_status_in_pool_dir ${CLUSTER1} ${image} 'up+stopped'
-test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
-promote_image ${CLUSTER1} ${image}
-wait_for_image_replay_started ${CLUSTER2} ${image}
-write_image ${CLUSTER1} ${image} 100
-wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${image}
-test_status_in_pool_dir ${CLUSTER1} ${image} 'up+stopped'
-test_status_in_pool_dir ${CLUSTER2} ${image} 'up+replaying' 'master_position'
-compare_images ${image}
-
-# failback
-demote_image ${CLUSTER1} ${image}
-wait_for_image_replay_stopped ${CLUSTER2} ${image}
-test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
-promote_image ${CLUSTER2} ${image}
-wait_for_image_replay_started ${CLUSTER1} ${image}
-write_image ${CLUSTER2} ${image} 100
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
-test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
-test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
-compare_images ${image}
+  snap_name="snap${i}"
+  create_snap ${CLUSTER2} ${image} ${snap_name}
+  wait_for_snap ${CLUSTER1} ${image} ${snap_name}
+  compare_images ${image} ${snap_name}
+done
 
 echo OK
