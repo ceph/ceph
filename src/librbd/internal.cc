@@ -3180,7 +3180,7 @@ err_remove_id:
     if (r < 0) {
       lderr(cct) << "error adding image reference to consistency group: "
 		 << cpp_strerror(-r) << dendl;
-      return r;
+      goto exit;
     }
 
     r = cls_client::image_add_cg_ref(&image_ioctx, imctx->header_oid,
@@ -3191,10 +3191,13 @@ err_remove_id:
       cls_client::cg_remove_image(&cg_ioctx, cg_header_oid,
 	                          imctx->id, image_ioctx.get_id());
       // Ignore errors in the clean up procedure.
-      return r;
+      goto exit;
     }
     r = cls_client::cg_to_default(&cg_ioctx, cg_header_oid, imctx->id,
 	                          image_ioctx.get_id());
+
+exit:
+    imctx->state->close();
     return r;
   }
 
@@ -3239,7 +3242,7 @@ err_remove_id:
     if (r < 0) {
       lderr(cct) << "couldn't put image into removing state: "
 		 << cpp_strerror(-r) << dendl;
-      return r;
+      goto exit;
     }
 
     r = cls_client::image_remove_cg_ref(&image_ioctx, imctx->header_oid,
@@ -3247,7 +3250,7 @@ err_remove_id:
     if ((r < 0) && (r != -ENOENT)) {
       lderr(cct) << "couldn't remove cg ref from image"
 		 << cpp_strerror(-r) << dendl;
-      return r;
+      goto exit;
     }
 
     r = cls_client::cg_remove_image(&cg_ioctx, cg_header_oid, imctx->id,
@@ -3255,10 +3258,13 @@ err_remove_id:
     if (r < 0) {
       lderr(cct) << "couldn't remove image from cg"
 		 << cpp_strerror(-r) << dendl;
-      return r;
+      goto exit;
     }
+    r = 0;
 
-    return 0;
+exit:
+    imctx->state->close();
+    return r;
   }
 
   int cg_list_images(librados::IoCtx& cg_ioctx, const char *cg_name,
