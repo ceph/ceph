@@ -7,6 +7,7 @@ from fake_fs import make_fake_fstools
 from teuthology import suite
 from scripts.suite import main
 from teuthology.config import config
+from teuthology.orchestra.opsys import OS
 
 import os
 import pytest
@@ -105,7 +106,6 @@ class TestSuiteOffline(object):
         mock_resp.text = "the_hash"
         m_get.return_value = mock_resp
         result = suite.get_gitbuilder_hash()
-        m_get.assert_called_with("http://baseurl.com/ref/master/sha1")
         assert result == "the_hash"
 
     @patch('teuthology.suite.get_gitbuilder_url')
@@ -118,16 +118,13 @@ class TestSuiteOffline(object):
         result = suite.get_gitbuilder_hash()
         assert result is None
 
-    @patch('teuthology.suite.get_gitbuilder_url')
     @patch('requests.get')
-    def test_package_version_for_hash(self, m_get, m_get_gitbuilder_url):
-        m_get_gitbuilder_url.return_value = "http://baseurl.com"
+    def test_package_version_for_hash(self, m_get):
         mock_resp = Mock()
         mock_resp.ok = True
         mock_resp.text = "the_version"
         m_get.return_value = mock_resp
         result = suite.package_version_for_hash("hash")
-        m_get.assert_called_with("http://baseurl.com/sha1/hash/version")
         assert result == "the_version"
 
     @patch('requests.get')
@@ -406,33 +403,34 @@ class TestMissingPackages(object):
 class TestDistroDefaults(object):
 
     def test_distro_defaults_saya(self):
-        assert suite.get_distro_defaults('ubuntu', 'saya') == ('armv7l',
-                                                               'saucy', 'deb')
+        expected = ('armv7l', 'saucy',
+                    OS(name='ubuntu', version='13.10', codename='saucy'))
+        assert suite.get_distro_defaults('ubuntu', 'saya') == expected
 
     def test_distro_defaults_plana(self):
-        assert suite.get_distro_defaults('ubuntu', 'plana') == ('x86_64',
-                                                                'trusty',
-                                                                'deb')
+        expected = ('x86_64', 'trusty',
+                    OS(name='ubuntu', version='14.04', codename='trusty'))
+        assert suite.get_distro_defaults('ubuntu', 'plana') == expected
 
     def test_distro_defaults_debian(self):
-        assert suite.get_distro_defaults('debian', 'magna') == ('x86_64',
-                                                                'wheezy',
-                                                                'deb')
+        expected = ('x86_64', 'wheezy',
+                    OS(name='debian', version='7', codename='wheezy'))
+        assert suite.get_distro_defaults('debian', 'magna') == expected
 
     def test_distro_defaults_centos(self):
-        assert suite.get_distro_defaults('centos', 'magna') == ('x86_64',
-                                                                'centos7',
-                                                                'rpm')
+        expected = ('x86_64', 'centos7',
+                    OS(name='centos', version='7', codename='core'))
+        assert suite.get_distro_defaults('centos', 'magna') == expected
 
     def test_distro_defaults_fedora(self):
-        assert suite.get_distro_defaults('fedora', 'magna') == ('x86_64',
-                                                                'fedora20',
-                                                                'rpm')
+        expected = ('x86_64', 'fedora20',
+                    OS(name='fedora', version='20', codename='heisenbug'))
+        assert suite.get_distro_defaults('fedora', 'magna') == expected
 
     def test_distro_defaults_default(self):
-        assert suite.get_distro_defaults('rhel', 'magna') == ('x86_64',
-                                                              'centos7',
-                                                              'rpm')
+        expected = ('x86_64', 'centos7',
+                    OS(name='centos', version='7', codename='core'))
+        assert suite.get_distro_defaults('rhel', 'magna') == expected
 
 
 class TestBuildMatrix(object):

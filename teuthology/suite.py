@@ -450,24 +450,17 @@ def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
     # resp = requests.get(
     #     'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
     # hash = .json()['object']['sha']
-    (arch, release, pkg_type) = get_distro_defaults(distro, machine_type)
-    base_url = get_gitbuilder_url(project, release, pkg_type, arch, flavor)
-    url = os.path.join(base_url, 'ref', branch, 'sha1')
-    log.debug("Gitbuilder URL: %s", url)
-    resp = requests.get(url)
-    if not resp.ok:
-        msg = "Got a {0} trying to get hash for project '{1}' " + \
-            "and branch '{2}' from URL: {3}"
-        log.warn(
-            msg.format(
-                resp.status_code,
-                project,
-                branch,
-                url
-            )
-        )
-        return None
-    return str(resp.text.strip())
+    (arch, release, _os) = get_distro_defaults(distro, machine_type)
+    gp = GitbuilderProject(
+        project,
+        dict(
+            branch=branch,
+            flavor=flavor,
+            os_type=distro,
+            arch=arch,
+        ),
+    )
+    return gp.sha1
 
 
 def get_distro_defaults(distro, machine_type):
@@ -514,7 +507,7 @@ def get_distro_defaults(distro, machine_type):
         "arch={arch}, release={release}, pkg_type={pkg}"
     log.debug(template.format(
         mtype=machine_type,
-        distro=distro,
+        distro=_os.name,
         arch=arch,
         release=release,
         pkg=_os.package_type)
@@ -522,7 +515,7 @@ def get_distro_defaults(distro, machine_type):
     return (
         arch,
         release,
-        _os.package_type,
+        _os,
     )
 
 
@@ -549,14 +542,19 @@ def package_version_for_hash(hash, kernel_flavor='basic',
 
     :returns: a string.
     """
-    (arch, release, pkg_type) = get_distro_defaults(distro, machine_type)
-    base_url = get_gitbuilder_url('ceph', release, pkg_type, arch,
-                                  kernel_flavor)
-    url = os.path.join(base_url, 'sha1', hash, 'version')
-    log.debug("Looking for packages at {url}".format(url=url))
-    resp = requests.get(url)
-    if resp.ok:
-        return resp.text.strip()
+    (arch, release, _os) = get_distro_defaults(distro, machine_type)
+    if distro in (None, 'None'):
+        distro = _os.name
+    gp = GitbuilderProject(
+        'ceph',
+        dict(
+            flavor=kernel_flavor,
+            os_type=distro,
+            arch=arch,
+            sha1=hash,
+        ),
+    )
+    return gp.version
 
 
 def git_ls_remote(project, branch, project_owner='ceph'):
