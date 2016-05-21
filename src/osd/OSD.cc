@@ -458,6 +458,7 @@ void OSDService::start_shutdown()
 
 void OSDService::shutdown()
 {
+  reserver_finisher.wait_for_empty();
   reserver_finisher.stop();
   {
     Mutex::Locker l(watch_lock);
@@ -465,6 +466,7 @@ void OSDService::shutdown()
   }
 
   objecter->shutdown();
+  objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
 
   {
