@@ -9643,42 +9643,6 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   return v;
 }
 
-
-/* Mark an object as lost
- */
-ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
-							    const hobject_t &oid, eversion_t version,
-							    utime_t mtime, int what)
-{
-  // Wake anyone waiting for this object. Now that it's been marked as lost,
-  // we will just return an error code.
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator wmo =
-    waiting_for_unreadable_object.find(oid);
-  if (wmo != waiting_for_unreadable_object.end()) {
-    requeue_ops(wmo->second);
-  }
-
-  // Add log entry
-  ++info.last_update.version;
-  pg_log_entry_t e(what, oid, info.last_update, version, 0, osd_reqid_t(), mtime);
-  pg_log.add(e);
-  
-  ObjectContextRef obc = get_object_context(oid, true);
-
-  obc->ondisk_write_lock();
-
-  obc->obs.oi.set_flag(object_info_t::FLAG_LOST);
-  obc->obs.oi.version = info.last_update;
-  obc->obs.oi.prior_version = version;
-
-  bufferlist b2;
-  obc->obs.oi.encode(b2, get_osdmap()->get_up_osd_features());
-  assert(!pool.info.require_rollback());
-  t->setattr(coll, ghobject_t(oid), OI_ATTR, b2);
-
-  return obc;
-}
-
 void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
 {
   MOSDPGUpdateLogMissing *m = static_cast<MOSDPGUpdateLogMissing*>(
