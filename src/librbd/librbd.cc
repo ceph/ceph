@@ -2782,6 +2782,8 @@ extern "C" int rbd_list_cgs(rados_ioctx_t p, char *names, size_t *size)
   int r = librbd::list(io_ctx, cpp_names);
 
   if (r == -ENOENT) {
+    *size = 0;
+    *names = '\0';
     tracepoint(librbd, list_cgs_exit, 0, *size);
     return 0;
   }
@@ -2805,6 +2807,7 @@ extern "C" int rbd_list_cgs(rados_ioctx_t p, char *names, size_t *size)
   if (!names)
     return -EINVAL;
 
+  names[expected_size] = '\0';
   for (int i = 0; i < (int)cpp_names.size(); i++) {
     const char* name = cpp_names[i].c_str();
     tracepoint(librbd, list_cgs_entry, name);
