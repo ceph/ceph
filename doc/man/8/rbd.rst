@@ -525,7 +525,7 @@ To create an image and a clone from it::
 
 To create an image with a smaller stripe_unit (to better distribute small writes in some workloads)::
 
-       rbd create mypool/myimage --size 102400 --stripe-unit 65536B --stripe-count 16
+       rbd create mypool/myimage --size 102400 --stripe-unit 65536 --stripe-count 16
 
 To change an image from one image format to another, export it and then
 import it as the desired image format::
