@@ -25,7 +25,6 @@
 %endif
 %bcond_without libs_compat
 %bcond_with lowmem_builder
-%bcond_with lowmem_builder_override
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %endif
@@ -721,7 +720,7 @@ cmake .. \
 
 # Parallel build settings ...
 PARALLEL_BUILD=%{?_smp_mflags}
-%if %{with lowmem_builder} && ! %{with lowmem_builder_override}
+%if %{with lowmem_builder}
 lo_jobs="%{?jobs:%{jobs}}"
 %ifarch %arm
     %if ! 0%{?qemu_user_space_build:1}
