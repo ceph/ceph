@@ -3622,6 +3622,8 @@ int create_cg(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * List images pertaining to the consistency group.
  *
  * Output:
+ * @param length of the list of images
+ * @param tuples of descriptions of the images: image_id, pool_id, image reference state.
  * @return 0 on success, negative error code on failure
  */
 int cg_list_images(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -3949,6 +3951,8 @@ int image_remove_cg_ref(cls_method_context_t hctx,
  * @param pool_id (int64_t)
  *
  * Output:
+ * @param pool id
+ * @param consistency group id
  * @return 0 on success, negative error code on failure
  */
 int image_get_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -3984,6 +3988,7 @@ int image_get_cg_ref(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * @param max_return (int64_t)
  *
  * Output:
+ * @param map of consistency groups (name, id)
  * @return 0 on success, negative error code on failure
  */
 int dir_list_cgs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
