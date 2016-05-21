@@ -242,23 +242,8 @@ void entity_addrvec_t::decode(bufferlist::iterator& bl)
   ::decode(marker, bl);
   if (marker == 0) {
     // legacy!
-    ::decode(marker, bl);
-    __u16 rest;
-    ::decode(rest, bl);
     entity_addr_t addr;
-    addr.type = addr.TYPE_LEGACY;
-    ::decode(addr.nonce, bl);
-    sockaddr_storage ss;
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::decode(ss, bl);
-#else
-    ceph_sockaddr_storage wireaddr;
-    ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    ::decode(wireaddr, bl);
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-    ::memcpy(&ss, &wireaddr, copysize);
-#endif
-    addr.set_sockaddr((sockaddr*)&ss);
+    addr.decode_legacy_addr_after_marker(bl);
     v.clear();
     v.push_back(addr);
     return;

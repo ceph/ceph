@@ -148,8 +148,6 @@ namespace std {
   };
 } // namespace std
 
-
-
 /*
  * an entity's network address.
  * includes a random value that prevents it from being reused.
@@ -201,7 +199,6 @@ struct ceph_sockaddr_storage {
     *this = ss;
   }
 } __attribute__ ((__packed__));
-
 WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
 struct entity_addr_t {
@@ -386,6 +383,27 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
+  void decode_legacy_addr_after_marker(bufferlist::iterator& bl)
+  {
+    __u8 marker;
+    __u16 rest;
+    ::decode(marker, bl);
+    ::decode(rest, bl);
+    type = TYPE_LEGACY;
+    ::decode(nonce, bl);
+    sockaddr_storage ss;
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+    ::decode(ss, bl);
+#else
+    ceph_sockaddr_storage wireaddr;
+    ::memset(&wireaddr, '\0', sizeof(wireaddr));
+    ::decode(wireaddr, bl);
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
+    ::memcpy(&ss, &wireaddr, copysize);
+#endif
+    set_sockaddr((sockaddr*)&ss);
+  }
+
   // Right now, these only deal with sockaddr_storage that have only family and content.
   // Apparently on BSD there is also an ss_len that we need to handle; this requires
   // broader study
@@ -422,22 +440,7 @@ struct entity_addr_t {
     __u8 marker;
     ::decode(marker, bl);
     if (marker == 0) {
-      ::decode(marker, bl);
-      __u16 rest;
-      ::decode(rest, bl);
-      type = TYPE_LEGACY;
-      ::decode(nonce, bl);
-      sockaddr_storage ss;
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-      ::decode(ss, bl);
-#else
-      ceph_sockaddr_storage wireaddr;
-      ::memset(&wireaddr, '\0', sizeof(wireaddr));
-      ::decode(wireaddr, bl);
-      unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-      ::memcpy(&ss, &wireaddr, copysize);
-#endif
-      set_sockaddr((sockaddr*)&ss);
+      decode_legacy_addr_after_marker(bl);
       return;
     }
     if (marker != 1)
