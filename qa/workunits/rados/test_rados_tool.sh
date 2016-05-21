@@ -171,26 +171,6 @@ for i in `seq 1 5`; do
   run_expect_succ --tee "$fname.omap.vals" "$RADOS_TOOL" -p "$POOL" listomapvals $objname
 done
 
-run_expect_succ "$RADOS_TOOL" cppool "$POOL" "$POOL_CP_TARGET"
-
-mkdir -p "$TDIR/dir_cp_dst"
-for i in `seq 1 5`; do
-  fname="$TDIR/dir_cp_dst/f.$i"
-  objname="f.$i"
-  run_expect_succ "$RADOS_TOOL" -p "$POOL_CP_TARGET" get $objname "$fname"
-
-# a few random attrs
-  for j in `seq 1 4`; do
-    run_expect_succ --tee "$fname.attr.$j" "$RADOS_TOOL" -p "$POOL_CP_TARGET" getxattr $objname attr.$j
-  done
-
-  run_expect_succ --tee "$fname.omap.header" "$RADOS_TOOL" -p "$POOL_CP_TARGET" getomapheader $objname
-  run_expect_succ --tee "$fname.omap.vals" "$RADOS_TOOL" -p "$POOL_CP_TARGET" listomapvals $objname
-done
-
-diff -q -r "$TDIR/dir_cp_src" "$TDIR/dir_cp_dst" \
-    || die "copy pool validation failed!"
-
 for opt in \
     block-size \
     concurrent-ios \
