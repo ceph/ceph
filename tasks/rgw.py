@@ -452,9 +452,9 @@ def extract_zone_info(ctx, client, client_config):
     :param client_config: dictionary of client configuration information
     :returns: zone extracted from client and client_config information
     """
-    ceph_config = ctx.ceph.conf.get('global', {})
-    ceph_config.update(ctx.ceph.conf.get('client', {}))
-    ceph_config.update(ctx.ceph.conf.get(client, {}))
+    ceph_config = ctx.ceph['ceph'].conf.get('global', {})
+    ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
+    ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
     for key in ['rgw zone', 'rgw region', 'rgw zone root pool']:
         assert key in ceph_config, \
             'ceph conf must contain {key} for {client}'.format(key=key,

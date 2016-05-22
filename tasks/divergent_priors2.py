@@ -31,15 +31,17 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'divergent_priors task only accepts a dict for configuration'
 
-    while len(ctx.manager.get_osd_status()['up']) < 3:
+    manager = ctx.managers['ceph']
+
+    while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    ctx.manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    ctx.manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    ctx.manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    ctx.manager.raw_cluster_cmd('osd', 'set', 'noout')
-    ctx.manager.raw_cluster_cmd('osd', 'set', 'noin')
-    ctx.manager.raw_cluster_cmd('osd', 'set', 'nodown')
-    ctx.manager.wait_for_clean()
+    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.raw_cluster_cmd('osd', 'set', 'noout')
+    manager.raw_cluster_cmd('osd', 'set', 'noin')
+    manager.raw_cluster_cmd('osd', 'set', 'nodown')
+    manager.wait_for_clean()
 
     # something that is always there
     dummyfile = '/etc/fstab'
@@ -48,16 +50,16 @@ def task(ctx, config):
 
     # create 1 pg pool
     log.info('creating foo')
-    ctx.manager.raw_cluster_cmd('osd', 'pool', 'create', 'foo', '1')
+    manager.raw_cluster_cmd('osd', 'pool', 'create', 'foo', '1')
 
     osds = [0, 1, 2]
     for i in osds:
-        ctx.manager.set_config(i, osd_min_pg_log_entries=10)
-        ctx.manager.set_config(i, osd_max_pg_log_entries=10)
-        ctx.manager.set_config(i, osd_pg_log_trim_min=5)
+        manager.set_config(i, osd_min_pg_log_entries=10)
+        manager.set_config(i, osd_max_pg_log_entries=10)
+        manager.set_config(i, osd_pg_log_trim_min=5)
 
     # determine primary
-    divergent = ctx.manager.get_pg_primary('foo', 0)
+    divergent = manager.get_pg_primary('foo', 0)
     log.info("primary and soon to be divergent is %d", divergent)
     non_divergent = list(osds)
     non_divergent.remove(divergent)
@@ -69,12 +71,12 @@ def task(ctx, config):
     for i in range(100):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
 
-    ctx.manager.wait_for_clean()
+    manager.wait_for_clean()
 
     # blackhole non_divergent
     log.info("blackholing osds %s", str(non_divergent))
     for i in non_divergent:
-        ctx.manager.set_config(i, filestore_blackhole=1)
+        manager.set_config(i, filestore_blackhole=1)
 
     DIVERGENT_WRITE = 5
     DIVERGENT_REMOVE = 5
@@ -97,43 +99,43 @@ def task(ctx, config):
     # kill all the osds but leave divergent in
     log.info('killing all the osds')
     for i in osds:
-        ctx.manager.kill_osd(i)
+        manager.kill_osd(i)
     for i in osds:
-        ctx.manager.mark_down_osd(i)
+        manager.mark_down_osd(i)
     for i in non_divergent:
-        ctx.manager.mark_out_osd(i)
+        manager.mark_out_osd(i)
 
     # bring up non-divergent
     log.info("bringing up non_divergent %s", str(non_divergent))
     for i in non_divergent:
-        ctx.manager.revive_osd(i)
+        manager.revive_osd(i)
     for i in non_divergent:
-        ctx.manager.mark_in_osd(i)
+        manager.mark_in_osd(i)
 
     # write 1 non-divergent object (ensure that old divergent one is divergent)
     objname = "existing_%d" % (DIVERGENT_WRITE + DIVERGENT_REMOVE)
     log.info('writing non-divergent object ' + objname)
     rados(ctx, mon, ['-p', 'foo', 'put', objname, dummyfile2])
 
-    ctx.manager.wait_for_recovery()
+    manager.wait_for_recovery()
 
     # ensure no recovery of up osds first
     log.info('delay recovery')
     for i in non_divergent:
-        ctx.manager.wait_run_admin_socket(
+        manager.wait_run_admin_socket(
             'osd', i, ['set_recovery_delay', '100000'])
 
     # bring in our divergent friend
     log.info("revive divergent %d", divergent)
-    ctx.manager.raw_cluster_cmd('osd', 'set', 'noup')
-    ctx.manager.revive_osd(divergent)
+    manager.raw_cluster_cmd('osd', 'set', 'noup')
+    manager.revive_osd(divergent)
 
     log.info('delay recovery divergent')
-    ctx.manager.wait_run_admin_socket(
+    manager.wait_run_admin_socket(
         'osd', divergent, ['set_recovery_delay', '100000'])
 
-    ctx.manager.raw_cluster_cmd('osd', 'unset', 'noup')
-    while len(ctx.manager.get_osd_status()['up']) < 3:
+    manager.raw_cluster_cmd('osd', 'unset', 'noup')
+    while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
 
     log.info('wait for peering')
@@ -142,12 +144,12 @@ def task(ctx, config):
     # At this point the divergent_priors should have been detected
 
     log.info("killing divergent %d", divergent)
-    ctx.manager.kill_osd(divergent)
+    manager.kill_osd(divergent)
 
     # Export a pg
     (exp_remote,) = ctx.\
         cluster.only('osd.{o}'.format(o=divergent)).remotes.iterkeys()
-    FSPATH = ctx.manager.get_filepath()
+    FSPATH = manager.get_filepath()
     JPATH = os.path.join(FSPATH, "journal")
     prefix = ("sudo adjust-ulimits ceph-objectstore-tool "
               "--data-path {fpath} --journal-path {jpath} "
@@ -175,14 +177,14 @@ def task(ctx, config):
     assert proc.exitstatus == 0
 
     log.info("reviving divergent %d", divergent)
-    ctx.manager.revive_osd(divergent)
-    ctx.manager.wait_run_admin_socket('osd', divergent, ['dump_ops_in_flight'])
+    manager.revive_osd(divergent)
+    manager.wait_run_admin_socket('osd', divergent, ['dump_ops_in_flight'])
     time.sleep(20);
 
     log.info('allowing recovery')
     # Set osd_recovery_delay_start back to 0 and kick the queue
     for i in osds:
-        ctx.manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'debug',
+        manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'debug',
                                     'kick_recovery_wq', ' 0')
 
     log.info('reading divergent objects')

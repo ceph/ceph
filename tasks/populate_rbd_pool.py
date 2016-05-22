@@ -39,7 +39,7 @@ def task(ctx, config):
     for poolid in range(num_pools):
         poolname = "%s-%s" % (pool_prefix, str(poolid))
         log.info("Creating pool %s" % (poolname,))
-        ctx.manager.create_pool(poolname)
+        ctx.managers['ceph'].create_pool(poolname)
         for imageid in range(num_images):
             imagename = "rbd-%s" % (str(imageid),)
             log.info("Creating imagename %s" % (imagename,))

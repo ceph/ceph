@@ -1,0 +1,49 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - failed to encode map
+  conf:
+    mon:
+      mon warn on legacy crush tunables: false
+roles:
+- - ceph.mon.a
+  - ceph.mon.b
+  - backup.osd.0
+  - backup.osd.1
+  - backup.osd.2
+  - backup.client.0
+- - backup.mon.a
+  - ceph.osd.0
+  - ceph.osd.1
+  - ceph.osd.2
+  - ceph.client.0
+  - client.1
+  - osd.3
+tasks:
+- install:
+    branch: infernalis
+- ceph:
+    cluster: backup
+- ceph:
+- workunit:
+    clients:
+      backup.client.0: [true.sh]
+      ceph.client.0: [true.sh]
+- install.upgrade:
+    ceph.mon.a:
+      branch: jewel
+    backup.mon.a:
+      branch: jewel
+- ceph.restart: [ceph.mon.a, ceph.mon.b, ceph.osd.0, ceph.osd.1, ceph.osd.2, osd.3]
+- exec:
+    ceph.client.0:
+    - ceph --version | grep -F 'version 10.'
+    client.1:
+    - ceph --cluster backup --version | grep -F 'version 10.'
+    backup.client.0:
+    # cli upgraded
+    - ceph --cluster backup --id 0 --version | grep -F 'version 10.'
+    - ceph --version | grep -F 'version 10.'
+    # backup cluster mon not upgraded
+    - ceph --cluster backup --id 0 tell mon.a version | grep -F 'version 9.2.'
+    - ceph tell mon.a version | grep -F 'version 10.'

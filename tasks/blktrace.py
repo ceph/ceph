@@ -6,7 +6,7 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.orchestra import run 
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 blktrace = '/usr/sbin/blktrace'
@@ -17,7 +17,7 @@ def setup(ctx, config):
     """
     Setup all the remotes
     """
-    osds = ctx.cluster.only(teuthology.is_type('osd'))
+    osds = ctx.cluster.only(teuthology.is_type('osd', config['cluster']))
     log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=teuthology.get_testdir(ctx))
 
     for remote, roles_for_host in osds.remotes.iteritems():
@@ -40,9 +40,10 @@ def execute(ctx, config):
     osds = ctx.cluster.only(teuthology.is_type('osd'))
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = ctx.disk_config.remote_to_roles_to_dev[remote]
-        for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
-            if roles_to_devs.get(id_):
-                dev = roles_to_devs[id_]
+        for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd',
+                                                     config['cluster']):
+            if roles_to_devs.get(role):
+                dev = roles_to_devs[role]
                 log.info("running blktrace on %s: %s" % (remote.name, dev))
 
                 proc = remote.run(
@@ -59,7 +60,7 @@ def execute(ctx, config):
                         '-d',
                         dev,
                         ],
-                    wait=False,   
+                    wait=False,
                     stdin=run.PIPE,
                     )
                 procs.append(proc)
@@ -76,18 +77,20 @@ def task(ctx, config):
     """
     Usage:
         blktrace:
-      
-    Runs blktrace on all clients.
+
+    or:
+        blktrace:
+          cluster: backup
+
+    Runs blktrace on all osds in the specified cluster (the 'ceph' cluster by
+    default).
     """
     if config is None:
-        config = dict(('client.{id}'.format(id=id_), None)
-                  for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client'))
-    elif isinstance(config, list):
-        config = dict.fromkeys(config)
+        config = {}
+    config['cluster'] = config.get('cluster', 'ceph')
 
     with contextutil.nested(
         lambda: setup(ctx=ctx, config=config),
         lambda: execute(ctx=ctx, config=config),
         ):
         yield
-
