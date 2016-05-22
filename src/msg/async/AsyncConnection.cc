@@ -1029,6 +1029,10 @@ ssize_t AsyncConnection::_process_connection()
         r = net.reconnect(get_peer_addr(), sd);
         if (r < 0) {
           ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
+          if (r == -ECONNREFUSED) {
+            ldout(async_msgr->cct, 2) << __func__ << " connection refused!" << dendl;
+            dispatch_queue->queue_refused(this);
+          }
           goto fail;
         } else if (r > 0) {
           ldout(async_msgr->cct, 10) << __func__ << " nonblock connect inprogress" << dendl;
