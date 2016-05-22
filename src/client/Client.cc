@@ -41,17 +41,10 @@
 
 #include <sys/statvfs.h>
 
-#include <iostream>
-using namespace std;
-
 #include "common/config.h"
-
 #include "common/version.h"
 
 // ceph stuff
-
-#include "messages/MMonMap.h"
-
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -63,9 +56,7 @@ using namespace std;
 #include "messages/MCommandReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MClientQuota.h"
-
-#include "messages/MGenericMessage.h"
-
+#include "messages/MClientCapRelease.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 
@@ -73,10 +64,7 @@ using namespace std;
 
 #include "mds/flock.h"
 #include "osd/OSDMap.h"
-#include "mon/MonMap.h"
-
 #include "osdc/Filer.h"
-#include "osdc/WritebackHandler.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
