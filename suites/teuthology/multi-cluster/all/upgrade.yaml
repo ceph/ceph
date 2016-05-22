@@ -27,7 +27,8 @@ tasks:
 - ceph:
 - workunit:
     clients:
-      all: [true.sh]
+      backup.client.0: [true.sh]
+      ceph.client.0: [true.sh]
 - install.upgrade:
     ceph.mon.a:
       branch: jewel

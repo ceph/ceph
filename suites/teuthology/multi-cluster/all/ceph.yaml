@@ -19,4 +19,5 @@ tasks:
 - ceph:
 - workunit:
     clients:
-      all: [true.sh]
+      ceph.client.0: [true.sh]
+      backup.client.0: [true.sh]
