@@ -13,6 +13,7 @@
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
+#include "librbd/parent_types.h"
 
 enum {
   l_librbd_first = 26000,
@@ -88,6 +89,9 @@ namespace librbd {
   bool image_options_is_empty(rbd_image_options_t opts);
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
+
+  int list_images_v2(librados::IoCtx& io_ctx,
+      std::map<std::string, std::string>& images);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
@@ -125,7 +129,7 @@ namespace librbd {
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
 
   int remove(librados::IoCtx& io_ctx, const char *imgname,
-	     ProgressContext& prog_ctx);
+	     ProgressContext& prog_ctx, bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
