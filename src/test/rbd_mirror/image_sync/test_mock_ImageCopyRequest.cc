@@ -358,10 +358,10 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartPartialSync) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   std::string max_ops_str;
-  ASSERT_EQ(0, _rados.conf_get("rbd_concurrent_management_ops", max_ops_str));
-  ASSERT_EQ(0, _rados.conf_set("rbd_concurrent_management_ops", "1"));
+  ASSERT_EQ(0, _rados->conf_get("rbd_concurrent_management_ops", max_ops_str));
+  ASSERT_EQ(0, _rados->conf_set("rbd_concurrent_management_ops", "1"));
   BOOST_SCOPE_EXIT( (max_ops_str) ) {
-    ASSERT_EQ(0, _rados.conf_set("rbd_concurrent_management_ops", max_ops_str.c_str()));
+    ASSERT_EQ(0, _rados->conf_set("rbd_concurrent_management_ops", max_ops_str.c_str()));
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, create_snap("snap1"));

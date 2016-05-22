@@ -18,6 +18,7 @@
 #include "ClusterWatcher.h"
 #include "ImageReplayer.h"
 #include "PoolWatcher.h"
+#include "ImageDeleter.h"
 #include "types.h"
 
 namespace rbd {
@@ -32,8 +33,9 @@ class MirrorStatusWatchCtx;
  */
 class Replayer {
 public:
-  Replayer(Threads *threads, RadosRef local_cluster, const peer_t &peer,
-	   const std::vector<const char*> &args);
+  Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+           RadosRef local_cluster, const peer_t &peer,
+           const std::vector<const char*> &args);
   ~Replayer();
   Replayer(const Replayer&) = delete;
   Replayer& operator=(const Replayer&) = delete;
@@ -51,15 +53,18 @@ private:
   typedef PoolWatcher::ImageIds ImageIds;
   typedef PoolWatcher::PoolImageIds PoolImageIds;
 
+  void init_local_mirroring_images();
   void set_sources(const PoolImageIds &pool_image_ids);
 
-  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
+  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                            const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
   int mirror_image_status_init(int64_t pool_id, librados::IoCtx& ioctx);
   void mirror_image_status_shut_down(int64_t pool_id);
 
   Threads *m_threads;
+  std::shared_ptr<ImageDeleter> m_image_deleter;
   Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;
@@ -75,6 +80,27 @@ private:
 			     std::unique_ptr<ImageReplayer<> > > > m_images;
   std::map<int64_t, std::unique_ptr<MirrorStatusWatchCtx> > m_status_watchers;
   ReplayerAdminSocketHook *m_asok_hook;
+  struct InitImageInfo {
+    std::string global_id;
+    int64_t pool_id;
+    std::string id;
+    std::string name;
+
+    InitImageInfo(const std::string& global_id, int64_t pool_id = 0,
+             const std::string &id = "", const std::string &name = "")
+      : global_id(global_id), pool_id(pool_id), id(id), name(name) {
+    }
+
+    inline bool operator==(const InitImageInfo &rhs) const {
+      return (global_id == rhs.global_id && pool_id == rhs.pool_id &&
+              id == rhs.id && name == rhs.name);
+    }
+    inline bool operator<(const InitImageInfo &rhs) const {
+      return global_id < rhs.global_id;
+    }
+  };
+
+  std::map<int64_t, std::set<InitImageInfo> > m_init_images;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;

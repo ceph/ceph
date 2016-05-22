@@ -1033,6 +1033,7 @@ if(${WITH_RBD})
   set(rbd_mirror_internal
     tools/rbd_mirror/ClusterWatcher.cc 
     tools/rbd_mirror/ImageReplayer.cc
+    tools/rbd_mirror/ImageDeleter.cc
     tools/rbd_mirror/ImageSync.cc
     tools/rbd_mirror/Mirror.cc 
     tools/rbd_mirror/PoolWatcher.cc 

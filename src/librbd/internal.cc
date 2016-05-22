@@ -289,7 +289,8 @@ int mirror_image_enable_internal(ImageCtx *ictx) {
   return 0;
 }
 
-int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
+int mirror_image_disable_internal(ImageCtx *ictx, bool force,
+                                  bool remove=true) {
   CephContext *cct = ictx->cct;
 
   cls::rbd::MirrorImage mirror_image_internal;
@@ -332,10 +333,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
     return r;
-  }
-
-  if (!is_primary) {
-    goto remove_mirroring_image;
   }
 
   r = MirroringWatcher<>::notify_image_updated(
@@ -396,18 +393,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force) {
     }
   }
 
-remove_mirroring_image:
-  r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
-  if (r < 0) {
-    lderr(cct) << "failed to remove image from mirroring directory: "
-      << cpp_strerror(r) << dendl;
-    return r;
-  }
+  if (remove) {
+    r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
+    if (r < 0) {
+      lderr(cct) << "failed to remove image from mirroring directory: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
 
-  ldout(cct, 20) << "removed image state from rbd_mirroring object" << dendl;
+    ldout(cct, 20) << "removed image state from rbd_mirroring object" << dendl;
 
-  if (is_primary) {
-    // TODO: send notification to mirroring object about update
+    if (is_primary) {
+      // TODO: send notification to mirroring object about update
+    }
   }
 
   return 0;
@@ -1980,7 +1978,8 @@ remove_mirroring_image:
     return 0;
   }
 
-  int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx)
+  int remove(IoCtx& io_ctx, const char *imgname, ProgressContext& prog_ctx,
+             bool force)
   {
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "remove " << &io_ctx << " " << imgname << dendl;
@@ -2001,12 +2000,31 @@ remove_mirroring_image:
 
       ictx->owner_lock.get_read();
       if (ictx->exclusive_lock != nullptr) {
-        r = ictx->operations->prepare_image_update();
-        if (r < 0 || !ictx->exclusive_lock->is_lock_owner()) {
-	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
-	  ictx->owner_lock.put_read();
-	  ictx->state->close();
-          return -EBUSY;
+        if (force) {
+          // releasing read lock to avoid a deadlock when upgrading to
+          // write lock in the shut_down process
+          ictx->owner_lock.put_read();
+          if (ictx->exclusive_lock != nullptr) {
+            C_SaferCond ctx;
+            ictx->exclusive_lock->shut_down(&ctx);
+            r = ctx.wait();
+            if (r < 0) {
+              lderr(cct) << "error shutting down exclusive lock"
+                         << cpp_strerror(r) << dendl;
+              ictx->state->close();
+              return r;
+            }
+            assert (ictx->exclusive_lock == nullptr);
+            ictx->owner_lock.get_read();
+          }
+        } else {
+          r = ictx->operations->prepare_image_update();
+          if (r < 0 || !ictx->exclusive_lock->is_lock_owner()) {
+	    lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
+	    ictx->owner_lock.put_read();
+	    ictx->state->close();
+            return -EBUSY;
+          }
         }
       }
 
@@ -2049,7 +2067,7 @@ remove_mirroring_image:
       }
 
       if (!old_format) {
-        r = mirror_image_disable_internal(ictx, false);
+        r = mirror_image_disable_internal(ictx, force, !force);
         if (r < 0 && r != -EOPNOTSUPP) {
           lderr(cct) << "error disabling image mirroring: " << cpp_strerror(r)
                      << dendl;
@@ -2116,6 +2134,14 @@ remove_mirroring_image:
 		     << cpp_strerror(-r) << dendl;
         }
 	return r;
+      }
+
+      ldout(cct, 2) << "removing image from rbd_mirroring object..." << dendl;
+      r = cls_client::mirror_image_remove(&io_ctx, id);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "failed to remove image from mirroring directory: "
+                   << cpp_strerror(r) << dendl;
+        return r;
       }
     }
 
