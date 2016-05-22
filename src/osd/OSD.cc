@@ -4750,7 +4750,33 @@ bool OSD::ms_handle_reset(Connection *con)
 
 bool OSD::ms_handle_refused(Connection *con)
 {
-  return false;
+  if (!cct->_conf->osd_fast_fail_on_connection_refused)
+    return false;
+
+  OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
+  if (!session)
+    return false;
+  int type = con->get_peer_type();
+  // handle only OSD failures here
+  if (monc && (type == CEPH_ENTITY_TYPE_OSD)) {
+    OSDMapRef osdmap = get_osdmap();
+    if (osdmap) {
+      int id = osdmap->identify_osd(con->get_peer_addr());
+      if (osdmap->is_up(id)) {
+	// I'm cheating mon heartbeat grace logic, because we know it's not going
+	// to respawn alone. +1 so we won't hit any boundary case.
+	monc->send_mon_message(new MOSDFailure(monc->get_fsid(),
+						  osdmap->get_inst(id),
+						  cct->_conf->osd_heartbeat_grace + 1,
+						  osdmap->get_epoch(),
+						  MOSDFailure::FLAG_IMMEDIATE | MOSDFailure::FLAG_FAILED
+						  ));
+      }
+    }
+  }
+  session->put();
+  return true;
 }
 
 struct C_OSD_GetVersion : public Context {
