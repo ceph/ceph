@@ -526,7 +526,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   index_manager(do_update),
   lock("FileStore::lock"),
   force_sync(false),
-  sync_entry_timeo_lock("sync_entry_timeo_lock"),
+  sync_entry_timeo_lock("FileStore::sync_entry_timeo_lock"),
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
   fdcache(g_ceph_context),
