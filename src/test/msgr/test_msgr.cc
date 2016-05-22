@@ -997,10 +997,15 @@ class SyntheticWorkload {
     ASSERT_EQ(available_connections.erase(conn), 1U);
   }
 
-  void print_internal_state() {
+  void print_internal_state(bool detail=false) {
     Mutex::Locker l(lock);
     cerr << "available_connections: " << available_connections.size()
          << " inflight messages: " << dispatcher.get_pending() << std::endl;
+    if (detail && !available_connections.empty()) {
+      for (auto &&c : available_connections)
+        cerr << "available connection: " << c.first;
+      cerr << std::endl;
+    }
   }
 
   void wait_for_done() {
@@ -1008,7 +1013,7 @@ class SyntheticWorkload {
     while (dispatcher.get_pending()) {
       usleep(1000*100);
       if (i++ % 50 == 0)
-        print_internal_state();
+        print_internal_state(true);
     }
     for (set<Messenger*>::iterator it = available_servers.begin();
          it != available_servers.end(); ++it) {
