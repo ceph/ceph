@@ -2823,8 +2823,10 @@ int BlueStore::_do_read(
 
   ready_regions_t ready_regions_in_cache, ready_regions;
   interval_set<uint64_t> ready_intervals_in_cache;
-  o->bc.read(off, length, ready_regions_in_cache, ready_intervals_in_cache);
-  dout(20) << __func__ << " regions in cache " << ready_regions_in_cache.size() << " " << ready_intervals_in_cache << dendl;
+  o->bc.read(off, l, ready_regions_in_cache, ready_intervals_in_cache);
+  dout(20) << __func__ << " regions in cache 0x" << std::hex
+	   << ready_regions_in_cache.size() << " 0x" << ready_intervals_in_cache
+	   << std::dec << dendl;
 
   //build blob list to read
   blobs2read_t blobs2read;
