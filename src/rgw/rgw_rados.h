@@ -3229,4 +3229,89 @@ public:
   }
 }; /* RGWPutObjProcessor_Atomic */
 
+#define MP_META_SUFFIX ".meta"
+
+class RGWMPObj {
+  string oid;
+  string prefix;
+  string meta;
+  string upload_id;
+public:
+  RGWMPObj() {}
+  RGWMPObj(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
+  }
+  void init(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
+  }
+  void init(const string& _oid, const string& _upload_id, const string& part_unique_str) {
+    if (_oid.empty()) {
+      clear();
+      return;
+    }
+    oid = _oid;
+    upload_id = _upload_id;
+    prefix = oid + ".";
+    meta = prefix + upload_id + MP_META_SUFFIX;
+    prefix.append(part_unique_str);
+  }
+  string& get_meta() { return meta; }
+  string get_part(int num) {
+    char buf[16];
+    snprintf(buf, 16, ".%d", num);
+    string s = prefix;
+    s.append(buf);
+    return s;
+  }
+  string get_part(string& part) {
+    string s = prefix;
+    s.append(".");
+    s.append(part);
+    return s;
+  }
+  string& get_upload_id() {
+    return upload_id;
+  }
+  string& get_key() {
+    return oid;
+  }
+  bool from_meta(string& meta) {
+    int end_pos = meta.rfind('.'); // search for ".meta"
+    if (end_pos < 0)
+      return false;
+    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
+    if (mid_pos < 0)
+      return false;
+    oid = meta.substr(0, mid_pos);
+    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    init(oid, upload_id, upload_id);
+    return true;
+  }
+  void clear() {
+    oid = "";
+    prefix = "";
+    meta = "";
+    upload_id = "";
+  }
+};
+
+class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
+{
+  string part_num;
+  RGWMPObj mp;
+  req_state *s;
+  string upload_id;
+
+protected:
+  int prepare(RGWRados *store, string *oid_rand);
+  int do_complete(string& etag, real_time *mtime, real_time set_mtime,
+                  map<string, bufferlist>& attrs, real_time delete_at,
+                  const char *if_match = NULL, const char *if_nomatch = NULL);
+
+public:
+  bool immutable_head() { return true; }
+  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
+                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+  void get_mp(RGWMPObj** _mp);
+}; /* RGWPutObjProcessor_Multipart */
 #endif

@@ -2281,25 +2281,9 @@ int RGWPutObj::verify_permission()
 
   return 0;
 }
-
-class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
-{
-  string part_num;
-  RGWMPObj mp;
-  req_state *s;
-  string upload_id;
-
-protected:
-  int prepare(RGWRados *store, string *oid_rand);
-  int do_complete(string& etag, real_time *mtime, real_time set_mtime,
-                  map<string, bufferlist>& attrs, real_time delete_at,
-                  const char *if_match = NULL, const char *if_nomatch = NULL);
-
-public:
-  bool immutable_head() { return true; }
-  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
-};
+void RGWPutObjProcessor_Multipart::get_mp(RGWMPObj** _mp){
+  *_mp = &mp;
+}
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 {
