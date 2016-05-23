@@ -46,7 +46,7 @@ private:
     struct Lane
     {
       uint32_t size;
-      XioMsg::Queue q;
+      XioSubmit::Queue q;
       pthread_spinlock_t sp;
       CACHE_PAD(0);
     };
@@ -185,8 +185,8 @@ public:
       switch(xs->type) {
       case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
       {
-	XioMsg* xmsg = static_cast<XioMsg*>(xs);
-	xs->xcon->msg_send_fail(xmsg, -EINVAL);
+	XioSend* xsend = static_cast<XioSend*>(xs);
+	xs->xcon->msg_send_fail(xsend, -EINVAL);
       }
 	break;
       default:
@@ -207,7 +207,6 @@ public:
     // and push them in FIFO order to front of the input queue,
     // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
-    XioMsg *xmsg;
 
     while (q_iter != send_q.end()) {
       XioSubmit *xs = &(*q_iter);
@@ -216,9 +215,8 @@ public:
 	q_iter++;
 	continue;
       }
-      xmsg = static_cast<XioMsg*>(xs);
       q_iter = send_q.erase(q_iter);
-      requeue_q.push_back(*xmsg);
+      requeue_q.push_back(*xs);
     }
     pthread_spin_lock(&xcon->sp);
     XioSubmit::Queue::const_iterator i1 = xcon->outgoing.requeue.begin();
@@ -236,7 +234,7 @@ public:
       struct xio_msg *msg = NULL;
       XioConnection *xcon;
       XioSubmit *xs;
-      XioMsg *xmsg;
+      XioSend *xsend;
 
       do {
 	submit_q.deq(send_q);
@@ -248,7 +246,7 @@ public:
 	size = send_q.size();
 
 	if (_shutdown) {
-	  // XXX XioMsg queues for flow-controlled connections may require
+	  // XXX XioSend queues for flow-controlled connections may require
 	  // cleanup
 	  drained = true;
 	}
@@ -261,7 +259,7 @@ public:
 
 	    switch (xs->type) {
 	    case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
-	      xmsg = static_cast<XioMsg*>(xs);
+	      xsend = static_cast<XioSend*>(xs);
 	      if (unlikely(!xcon->conn || !xcon->is_connected()))
 		code = ENOTCONN;
 	      else {
@@ -269,18 +267,17 @@ public:
 		 * on Accelio's check on below, but this assures that
 		 * all chained xio_msg are accounted) */
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
-		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
+		if (unlikely((xcon->send_ctr + xsend->get_msg_count()) >
 			     xio_qdepth_high)) {
 		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 
-		msg = &xmsg->req_0.msg;
+		msg = xsend->get_xio_msg();
 		code = xio_send_msg(xcon->conn, msg);
 		/* header trace moved here to capture xio serial# */
 		if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
-		  print_xio_msg_hdr(msgr->cct, "xio_send_msg", xmsg->hdr, msg);
-		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
+		  xsend->print_debug(msgr->cct, "xio_send_msg");
 		}
 		/* get the right Accelio's errno code */
 		if (unlikely(code)) {
@@ -307,13 +304,13 @@ public:
 		  break;
 		default:
 		  q_iter = send_q.erase(q_iter);
-		  xcon->msg_send_fail(xmsg, code);
+		  xcon->msg_send_fail(xsend, code);
 		  continue;
 		  break;
 		};
 	      } else {
 		xcon->send.set(msg->timestamp); // need atomic?
-		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
+		xcon->send_ctr += xsend->get_msg_count(); // only inc if cb promised
 	      }
 	      break;
 	    default:
