@@ -2833,8 +2833,6 @@ void RGWPutMetadataBucket::pre_exec()
 
 void RGWPutMetadataBucket::execute()
 {
-  map<string, buffer::list> orig_attrs;
-
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -2865,8 +2863,7 @@ void RGWPutMetadataBucket::execute()
 
   /* It's supposed that following functions WILL NOT change any special
    * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-  orig_attrs = s->bucket_attrs; /* XXX map copy */
-  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
+  prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
   s->bucket_info.swift_ver_location = swift_ver_location;
