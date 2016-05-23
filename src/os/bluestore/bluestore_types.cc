@@ -565,6 +565,11 @@ void bluestore_blob_t::put_ref(
     return;
   }
 
+  // we cannot do partial deallocation on compressed blobs
+  if (has_flag(FLAG_COMPRESSED)) {
+    return;
+  }
+
   // search from logical releases
   for (auto le : logical) {
     uint64_t r_off = le.offset;
