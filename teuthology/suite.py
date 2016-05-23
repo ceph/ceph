@@ -23,7 +23,7 @@ import teuthology
 import matrix
 from . import lock
 from .config import config, JobConfig
-from .exceptions import BranchNotFoundError, ScheduleFailError
+from .exceptions import BranchNotFoundError, CommitNotFoundError, ScheduleFailError
 from .misc import deep_merge, get_results_url
 from .repo_utils import fetch_qa_suite, fetch_teuthology
 from .report import ResultsReporter
@@ -42,6 +42,7 @@ def main(args):
     base_yaml_paths = args['<config_yaml>']
     suite = args['--suite'].replace('/', ':')
     ceph_branch = args['--ceph']
+    ceph_sha1 = args['--sha1']
     kernel_branch = args['--kernel']
     kernel_flavor = args['--flavor']
     teuthology_branch = args['--teuthology-branch']
@@ -80,9 +81,9 @@ def main(args):
                          machine_type)
 
     job_config = create_initial_config(suite, suite_branch, ceph_branch,
-                                       teuthology_branch, kernel_branch,
-                                       kernel_flavor, distro, machine_type,
-                                       name)
+                                       ceph_sha1, teuthology_branch,
+                                       kernel_branch, kernel_flavor, distro,
+                                       machine_type, name)
 
     if suite_dir:
         suite_repo_path = suite_dir
@@ -221,9 +222,9 @@ def fetch_repos(branch, test_name):
     return suite_repo_path
 
 
-def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
-                          kernel_branch, kernel_flavor, distro, machine_type,
-                          name=None):
+def create_initial_config(suite, suite_branch, ceph_branch, ceph_sha1,
+                          teuthology_branch, kernel_branch, kernel_flavor,
+                          distro, machine_type, name=None):
     """
     Put together the config file used as the basis for each job in the run.
     Grabs hashes for the latest ceph, kernel and teuthology versions in the
@@ -252,12 +253,23 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     else:
         kernel_dict = dict()
 
-    # Get the ceph hash
-    ceph_hash = git_ls_remote('ceph', ceph_branch)
+    # Get the ceph hash: if --sha1/-S is supplied, use it if
+    # it is valid, and just keep the ceph_branch around.
+    # Otherwise use the current git branch tip.
 
-    if not ceph_hash:
-        exc = BranchNotFoundError(ceph_branch, 'ceph.git')
-        schedule_fail(message=str(exc), name=name)
+    if ceph_sha1:
+        ceph_hash = git_validate_sha1('ceph', ceph_sha1)
+        if not ceph_hash:
+            exc = CommitNotFoundError(ceph_sha1, 'ceph.git')
+            schedule_fail(message=str(exc), name=name)
+        log.info("ceph sha1 explicitly supplied")
+
+    elif ceph_branch:
+        ceph_hash = git_ls_remote('ceph', ceph_branch)
+        if not ceph_hash:
+            exc = BranchNotFoundError(ceph_branch, 'ceph.git')
+            schedule_fail(message=str(exc), name=name)
+
     log.info("ceph sha1: {hash}".format(hash=ceph_hash))
 
     if config.suite_verify_ceph_hash:
@@ -552,6 +564,32 @@ def git_ls_remote(project, branch, project_owner='ceph'):
     sha1 = result[0] if result else None
     log.debug("{} -> {}".format(cmd, sha1))
     return sha1
+
+
+def git_validate_sha1(project, sha1, project_owner='ceph'):
+    '''
+    Use http to validate that project contains sha1
+    I can't find a way to do this with git, period, so
+    we have specific urls to HEAD for github and git.ceph.com/gitweb
+    for now
+    '''
+    url = build_git_url(project, project_owner)
+
+    if '/github.com/' in url:
+        url = '/'.join((url, 'commit', sha1))
+    elif '/git.ceph.com/' in url:
+        # kinda specific to knowing git.ceph.com is gitweb
+        url = ('http://git.ceph.com/?p=%s.git;a=blob_plain;f=.gitignore;hb=%s'
+                    % (project, sha1))
+    else:
+        raise RuntimeError(
+            'git_validate_sha1: how do I check %s for a sha1?' % url
+        )
+
+    resp = requests.head(url)
+    if resp.ok:
+        return sha1
+    return None
 
 
 def build_git_url(project, project_owner='ceph'):
