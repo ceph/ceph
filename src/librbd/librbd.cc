@@ -2945,3 +2945,33 @@ extern "C" int rbd_cg_list_images(rados_ioctx_t cg_p, const char *cg_name,
   tracepoint(librbd, cg_list_images_exit, r);
   return r;
 }
+
+extern "C" int rbd_get_cg_ref(rados_ioctx_t image_p, const char *image_name,
+			      int64_t *pool_id,
+			      char *cg_name, size_t *cg_name_size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(image_p, io_ctx);
+
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(image_name, "", "", io_ctx, false);
+  int r = ictx->state->open();
+  if (r < 0) {
+    delete ictx;
+    tracepoint(librbd, open_image_exit, r);
+    return r;
+  }
+
+  tracepoint(librbd, get_cg_ref_enter, ictx, ictx->name.c_str());
+  std::pair<int64_t, std::string> cg_ref;
+  r = librbd::get_cg_ref(ictx, &cg_ref);
+  *pool_id = cg_ref.first;
+  if (cg_ref.second.size() < *cg_name_size) {
+    *cg_name_size = cg_ref.second.size();
+    tracepoint(librbd, get_cg_ref_exit, -ERANGE);
+    return -ERANGE;
+  }
+  strcpy(cg_name, cg_ref.second.c_str());
+  tracepoint(librbd, get_cg_ref_exit, r);
+  ictx->state->close();
+  return r;
+}
