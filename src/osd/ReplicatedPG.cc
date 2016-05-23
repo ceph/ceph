@@ -2238,37 +2238,23 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       }
       return cache_result_t::HANDLED_PROXY;
     } else {
-      bool did_proxy_read = false;
       do_proxy_read(op);
-      did_proxy_read = true;
 
       // Avoid duplicate promotion
       if (obc.get() && obc->is_blocked()) {
-	if (!did_proxy_read) {
-	  wait_for_blocked_object(obc->obs.oi.soid, op);
-	}
 	if (promote_obc)
 	  *promote_obc = obc;
         return cache_result_t::BLOCKED_PROMOTE;
       }
 
       // Promote too?
-      bool promoted = false;
       if (!op->need_skip_promote()) {
-        promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
-                                 pool.info.min_read_recency_for_promote,
-                                 promote_op, promote_obc);
+        (void)maybe_promote(obc, missing_oid, oloc, in_hit_set,
+                            pool.info.min_read_recency_for_promote,
+                            promote_op, promote_obc);
       }
-      if (!promoted && !did_proxy_read) {
-	// redirect the op if it's not proxied and not promoting
-	do_cache_redirect(op);
-	return cache_result_t::HANDLED_REDIRECT;
-      } else if (did_proxy_read) {
-	return cache_result_t::HANDLED_PROXY;
-      } else {
-	assert(promoted);
-	return cache_result_t::BLOCKED_PROMOTE;
-      }
+
+      return cache_result_t::HANDLED_PROXY;
     }
     assert(0 == "unreachable");
     return cache_result_t::NOOP;
