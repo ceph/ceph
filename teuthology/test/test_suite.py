@@ -12,6 +12,7 @@ import os
 import pytest
 import tempfile
 import random
+import requests     # to mock a Response
 
 @pytest.fixture
 def git_repository(request):
@@ -259,10 +260,60 @@ class TestFlavor(object):
         m_git_branch_exists.return_value = True
         with pytest.raises(suite.ScheduleFailError):
             suite.create_initial_config(
-                'suite', 'suite_branch', 'ceph_hash', 'teuth_branch',
-                None, 'kernel_flavor', 'ubuntu', 'machine_type',
+                'suite', 'suite_branch', 'ceph_hash', None,
+                'teuth_branch', None, 'kernel_flavor', 'ubuntu',
+                'machine_type',
             )
 
+    @patch('requests.head')
+    @patch('teuthology.suite.git_branch_exists')
+    @patch('teuthology.suite.package_version_for_hash')
+    @patch('teuthology.suite.git_ls_remote')
+    def test_sha1_exists(
+        self,
+        m_git_ls_remote,
+        m_package_version_for_hash,
+        m_git_branch_exists,
+        m_requests_head,
+    ):
+        config.gitbuilder_host = 'example.com'
+        m_package_version_for_hash.return_value = 'ceph_hash'
+        m_git_branch_exists.return_value = True
+        resp = requests.Response()
+        resp.reason = 'OK'
+        resp.status_code = 200
+        m_requests_head.return_value = resp
+        # only one call to git_ls_remote in this case
+        m_git_ls_remote.return_value = "suite_branch"
+        result = suite.create_initial_config(
+            'suite', 'suite_branch', 'ceph_branch', 'ceph_hash',
+            'teuth_branch', None, 'kernel_flavor', 'ubuntu', 'machine_type',
+        )
+        assert result.sha1 == 'ceph_hash'
+        assert result.branch == 'ceph_branch'
+
+    @patch('requests.head')
+    @patch('teuthology.suite.git_branch_exists')
+    @patch('teuthology.suite.package_version_for_hash')
+    def test_sha1_nonexistent(
+        self,
+        m_package_version_for_hash,
+        m_git_branch_exists,
+        m_requests_head,
+    ):
+        config.gitbuilder_host = 'example.com'
+        m_package_version_for_hash.return_value = 'ceph_hash'
+        m_git_branch_exists.return_value = True
+        resp = requests.Response()
+        resp.reason = 'Not Found'
+        resp.status_code = 404
+        m_requests_head.return_value = resp
+        with pytest.raises(suite.ScheduleFailError):
+            suite.create_initial_config(
+                'suite', 'suite_branch', 'ceph_branch', 'ceph_hash_dne',
+                'teuth_branch', None, 'kernel_flavor', 'ubuntu',
+                'machine_type',
+            )
 
 class TestMissingPackages(object):
     """
