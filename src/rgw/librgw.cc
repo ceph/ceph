@@ -230,7 +230,7 @@ namespace rgw {
 
     /* FIXME: remove this after switching all handlers to the new authentication
      * infrastructure. */
-    if (nullptr == s->auth_identity) {
+    if (! s->auth_identity) {
       s->auth_identity = rgw_auth_transform_old_authinfo(s);
     }
 
@@ -342,7 +342,7 @@ namespace rgw {
 
     /* FIXME: remove this after switching all handlers to the new authentication
      * infrastructure. */
-    if (nullptr == s->auth_identity) {
+    if (! s->auth_identity) {
       s->auth_identity = rgw_auth_transform_old_authinfo(s);
     }
 

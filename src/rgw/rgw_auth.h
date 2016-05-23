@@ -156,12 +156,12 @@ public:
       info(info) {
   }
 
-  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
-  virtual bool is_admin_of(const rgw_user& uid) const override;
-  virtual bool is_owner_of(const rgw_user& uid) const override;
-  virtual uint32_t get_perm_mask() const { return info.perm_mask; }
-  virtual std::string to_str() const override;
-  virtual void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  bool is_admin_of(const rgw_user& uid) const override;
+  bool is_owner_of(const rgw_user& uid) const override;
+  uint32_t get_perm_mask() const override { return info.perm_mask; }
+  std::string to_str() const override;
+  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 
   struct Factory {
     virtual ~Factory() {}
@@ -199,14 +199,14 @@ public:
   }
 
 
-  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
-  virtual bool is_admin_of(const rgw_user& uid) const override;
-  virtual bool is_owner_of(const rgw_user& uid) const override;
-  virtual uint32_t get_perm_mask() const override {
+  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  bool is_admin_of(const rgw_user& uid) const override;
+  bool is_owner_of(const rgw_user& uid) const override;
+  uint32_t get_perm_mask() const override {
     return get_perm_mask(subuser, user_info);
   }
-  virtual std::string to_str() const override;
-  virtual void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  std::string to_str() const override;
+  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 
   struct Factory {
     virtual ~Factory() {}

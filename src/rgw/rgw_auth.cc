@@ -306,11 +306,11 @@ typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
 bool RGWKeystoneAuthEngine::is_applicable() const noexcept
 {
-  if (false == RGWTokenBasedAuthEngine::is_applicable()) {
+  if (! RGWTokenBasedAuthEngine::is_applicable()) {
     return false;
   }
 
-  return false == cct->_conf->rgw_keystone_url.empty();
+  return ! cct->_conf->rgw_keystone_url.empty();
 }
 
 KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) const
@@ -390,7 +390,7 @@ RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
     }
   }
 
-  return {
+  return RGWRemoteAuthApplier::AuthInfo {
     /* Suggested account name for the authenticated user. */
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
