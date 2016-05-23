@@ -1913,7 +1913,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       return;
     }
     dout(20) << __func__ << "find_object_context got error " << r << dendl;
-    osd->reply_op_error(op, r);
+    if (op->may_write()) {
+      record_write_error(op, oid, nullptr, r);
+    } else {
+      osd->reply_op_error(op, r);
+    }
     return;
   }
 
@@ -2084,7 +2088,12 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   if (r) {
     dout(20) << __func__ << " returned an error: " << r << dendl;
-    reply_ctx(ctx, r);
+    close_op_ctx(ctx);
+    if (op->may_write()) {
+      record_write_error(op, oid, nullptr, r);
+    } else {
+      osd->reply_op_error(op, r);
+    }
     return;
   }
 
@@ -2133,6 +2142,37 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
   }
+}
+
+void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
+				      MOSDOpReply *orig_reply, int r)
+{
+  dout(20) << __func__ << " r=" << r << dendl;
+  assert(op->may_write());
+  const osd_reqid_t &reqid = static_cast<MOSDOp*>(op->get_req())->get_reqid();
+  ObjectContextRef obc;
+  list<pg_log_entry_t> entries;
+  entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
+				   get_next_version(), eversion_t(), 0,
+				   reqid, utime_t(), r));
+  ObcLockManager lock_manager;
+  submit_log_entries(
+    entries,
+    std::move(lock_manager),
+    boost::optional<std::function<void(void)> >(
+      [=]() {
+	dout(20) << "finished " << __func__ << " r=" << r << dendl;
+	int flags = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
+	MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+	MOSDOpReply *reply = orig_reply;
+	if (reply == nullptr) {
+	  reply = new MOSDOpReply(m, r, get_osdmap()->get_epoch(),
+				  flags, true);
+	}
+	dout(10) << " sending commit on " << *m << " " << reply << dendl;
+	osd->send_message_osd_client(reply, m->get_connection());
+      }
+      ));
 }
 
 ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
@@ -2843,6 +2883,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 {
   dout(10) << __func__ << " " << ctx << dendl;
   ctx->reset_obs(ctx->obc);
+  ctx->update_log_only = false; // reset in case finish_copyfrom() is re-running execute_ctx
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   ObjectContextRef obc = ctx->obc;
@@ -2959,7 +3000,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   ctx->reply->set_result(result);
 
   // read or error?
-  if (ctx->op_t->empty() || result < 0) {
+  if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
     // finish side-effects
     if (result >= 0)
       do_osd_op_effects(ctx, m->get_connection());
@@ -2999,6 +3040,26 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       }
       p->second = t;
     }
+  }
+
+  if (ctx->update_log_only) {
+    dout(20) << __func__ << " update_log_only -- result=" << result << dendl;
+    assert(result < 0);
+    // save just what we need from ctx
+    MOSDOpReply *reply = ctx->reply;
+    ctx->reply = nullptr;
+    reply->claim_op_out_data(ctx->ops);
+    reply->get_header().data_off = ctx->data_off;
+    close_op_ctx(ctx);
+
+    if (result == -ENOENT) {
+      reply->set_enoent_reply_versions(info.last_update,
+				       info.last_user_version);
+    }
+    reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+    // append to pg log for dup detection - don't save buffers for now
+    record_write_error(op, soid, reply, result);
+    return;
   }
 
   // no need to capture PG ref, repop cancel will handle that
@@ -6597,8 +6658,14 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops);
-  if (result < 0)
+  if (result < 0) {
+    if (ctx->op->may_write()) {
+      // need to save the error code in the pg log, to detect dup ops,
+      // but do nothing else
+      ctx->update_log_only = true;
+    }
     return result;
+  }
 
   // read-op?  done?
   if (ctx->op_t->empty() && !ctx->modify) {
