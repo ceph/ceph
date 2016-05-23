@@ -750,18 +750,42 @@ class TestClone(object):
         self.image.close()
         remove_image()
 
-    @require_features([RBD_FEATURE_STRIPINGV2])
-    def test_with_params(self):
-        global features
+    def _test_with_params(self, features=None, order=None, stripe_unit=None,
+                          stripe_count=None):
         self.image.create_snap('snap2')
         self.image.protect_snap('snap2')
         clone_name2 = get_temp_image_name()
-        self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
-                       features, self.image.stat()['order'],
-                       self.image.stripe_unit(), self.image.stripe_count())
+        if features is None:
+            self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2)
+        elif order is None:
+            self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
+                           features)
+        elif stripe_unit is None:
+            self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
+                           features, order)
+        elif stripe_count is None:
+            self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
+                           features, order, stripe_unit)
+        else:
+            self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
+                           features, order, stripe_unit, stripe_count)
         self.rbd.remove(ioctx, clone_name2)
         self.image.unprotect_snap('snap2')
         self.image.remove_snap('snap2')
+
+    def test_with_params(self):
+        self._test_with_params()
+
+    def test_with_params2(self):
+        global features
+        self._test_with_params(features, self.image.stat()['order'])
+
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_with_params3(self):
+        global features
+        self._test_with_params(features, self.image.stat()['order'],
+                               self.image.stripe_unit(),
+                               self.image.stripe_count())
 
     def test_unprotected(self):
         self.image.create_snap('snap2')
