@@ -576,12 +576,13 @@ class CephFSVolumeClient(object):
             else:
                 return self._get_ancestor_xattr(os.path.split(path)[0], attr)
 
-    def authorize(self, volume_path, auth_id):
+    def authorize(self, volume_path, auth_id, readonly=False):
         """
         Get-or-create a Ceph auth identity for `auth_id` and grant them access
         to
         :param volume_path:
         :param auth_id:
+        :param readonly:
         :return:
         """
 
@@ -594,8 +595,11 @@ class CephFSVolumeClient(object):
         # Now construct auth capabilities that give the guest just enough
         # permissions to access the share
         client_entity = "client.{0}".format(auth_id)
-        want_mds_cap = 'allow rw path={0}'.format(path)
-        want_osd_cap = 'allow rw pool={0} namespace={1}'.format(pool_name, namespace)
+        want_access_level = 'r' if readonly else 'rw'
+        want_mds_cap = 'allow {0} path={1}'.format(want_access_level, path)
+        want_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
+            want_access_level, pool_name, namespace)
+
         try:
             existing = self._rados_command(
                 'auth get',
@@ -615,18 +619,30 @@ class CephFSVolumeClient(object):
                         'mon', 'allow r']
                 })
         else:
-            # entity exists, extend it
+            # entity exists, update it
             cap = existing[0]
 
-            def cap_extend(orig, want):
-                cap_tokens = orig.split(",")
-                if want not in cap_tokens:
-                    cap_tokens.append(want)
+            # Construct auth caps that if present might conflict with the desired
+            # auth caps.
+            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
+            unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
+            unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
+                unwanted_access_level, pool_name, namespace)
+
+            def cap_update(orig, want, unwanted):
+                # Updates the existing auth caps such that there is a single
+                # occurrence of wanted auth caps and no occurrence of
+                # conflicting auth caps.
+
+                cap_tokens = set(orig.split(","))
+
+                cap_tokens.discard(unwanted)
+                cap_tokens.add(want)
 
                 return ",".join(cap_tokens)
 
-            osd_cap_str = cap_extend(cap['caps'].get('osd', ""), want_osd_cap)
-            mds_cap_str = cap_extend(cap['caps'].get('mds', ""), want_mds_cap)
+            osd_cap_str = cap_update(cap['caps'].get('osd', ""), want_osd_cap, unwanted_osd_cap)
+            mds_cap_str = cap_update(cap['caps'].get('mds', ""), want_mds_cap, unwanted_mds_cap)
 
             caps = self._rados_command(
                 'auth caps',
@@ -672,8 +688,14 @@ class CephFSVolumeClient(object):
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
         namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
 
-        want_mds_cap = 'allow rw path={0}'.format(path)
-        want_osd_cap = 'allow rw pool={0} namespace={1}'.format(pool_name, namespace)
+        # The auth_id might have read-only or read-write mount access for the
+        # volume path.
+        access_levels = ('r', 'rw')
+        want_mds_caps = {'allow {0} path={1}'.format(access_level, path)
+                         for access_level in access_levels}
+        want_osd_caps = {'allow {0} pool={1} namespace={2}'.format(
+                         access_level, pool_name, namespace)
+                         for access_level in access_levels}
 
         try:
             existing = self._rados_command(
@@ -684,15 +706,12 @@ class CephFSVolumeClient(object):
             )
 
             def cap_remove(orig, want):
-                cap_tokens = orig.split(",")
-                if want in cap_tokens:
-                    cap_tokens.remove(want)
-
-                return ",".join(cap_tokens)
+                cap_tokens = set(orig.split(","))
+                return ",".join(cap_tokens.difference(want))
 
             cap = existing[0]
-            osd_cap_str = cap_remove(cap['caps'].get('osd', ""), want_osd_cap)
-            mds_cap_str = cap_remove(cap['caps'].get('mds', ""), want_mds_cap)
+            osd_cap_str = cap_remove(cap['caps'].get('osd', ""), want_osd_caps)
+            mds_cap_str = cap_remove(cap['caps'].get('mds', ""), want_mds_caps)
             if (not osd_cap_str) and (not mds_cap_str):
                 self._rados_command('auth del', {'entity': client_entity}, decode=False)
             else:
