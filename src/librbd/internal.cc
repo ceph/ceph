@@ -1431,12 +1431,14 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
+    bool use_p_features = true;
     uint64_t features;
-    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) == 0) {
       if (features & ~RBD_FEATURES_ALL) {
 	lderr(cct) << "librbd does not support requested features" << dendl;
 	return -ENOSYS;
       }
+      use_p_features = false;
     }
 
     // make sure child doesn't already exist, in either format
@@ -1472,7 +1474,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       lderr(cct) << "parent image must support layering" << dendl;
       return -ENOSYS;
     }
-    
+
     if (r < 0) {
       // we lost the race with snap removal?
       lderr(cct) << "unable to locate parent's snapshot" << dendl;
@@ -1482,6 +1484,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (!snap_protected) {
       lderr(cct) << "parent snapshot must be protected" << dendl;
       return -EINVAL;
+    }
+
+    if (use_p_features) {
+      c_opts.set(RBD_IMAGE_OPTION_FEATURES, p_features);
     }
 
     order = p_imctx->order;
