@@ -424,6 +424,11 @@ bool JournalPlayer::verify_playback_ready() {
     ldout(m_cct, 10) << __func__ << ": assuming no more in-sequence entries "
                      << "for tag " << *m_active_tag_tid << dendl;
     return prune_active_tag();
+  } else if (m_watch_enabled && object_player->refetch_required()) {
+    // if the active object requires a refetch, don't proceed looking for a
+    // new tag before this process completes
+    ldout(m_cct, 10) << __func__ << ": object requires refetch" << dendl;
+    return false;
   }
 
   // NOTE: replay currently does not check tag class to playback multiple tags
@@ -555,11 +560,9 @@ bool JournalPlayer::remove_empty_object_player(const ObjectPlayerPtr &player) {
   uint64_t active_set = m_journal_metadata->get_active_set();
   if (!player->empty() || object_set == active_set) {
     return false;
-  } else if (m_watch_enabled && object_set < active_set &&
-             player->refetch_required()) {
-    ldout(m_cct, 20) << __func__ << ": refetching " << player->get_oid()
+  } else if (m_watch_enabled && player->refetch_required()) {
+    ldout(m_cct, 20) << __func__ << ": delaying removal of empty object"
                      << dendl;
-    player->clear_refetch_required();
     return false;
   }
 
@@ -640,7 +643,19 @@ void JournalPlayer::schedule_watch() {
   ObjectPlayerPtr object_player = get_object_player();
   switch (m_watch_step) {
   case WATCH_STEP_FETCH_CURRENT:
-    object_player = get_object_player();
+    {
+      object_player = get_object_player();
+
+      uint8_t splay_width = m_journal_metadata->get_splay_width();
+      uint64_t active_set = m_journal_metadata->get_active_set();
+      uint64_t object_set = object_player->get_object_number() / splay_width;
+      if (object_set < active_set && object_player->refetch_required()) {
+        ldout(m_cct, 20) << __func__ << ": refetching "
+                         << object_player->get_oid()
+                         << dendl;
+        object_player->clear_refetch_required();
+      }
+    }
     break;
   case WATCH_STEP_FETCH_FIRST:
     object_player = m_object_players.begin()->second.begin()->second;
@@ -667,12 +682,11 @@ void JournalPlayer::handle_watch(uint64_t object_num, int r) {
   m_watch_scheduled = false;
 
   ObjectPlayerPtr object_player = get_object_player(object_num);
-  if (r == 0) {
-    if (object_player->empty() && !object_player->refetch_required()) {
-      // already re-read object after trying to remove it before ... it's
-      // still empty so it's safe to remove
-      remove_empty_object_player(object_player);
-    }
+  if (r == 0 && object_player->empty()) {
+    // possibly need to prune this empty object player if we've
+    // already fetched it after the active set was advanced with no
+    // new records
+    remove_empty_object_player(object_player);
   }
 
   // determine what object to query on next watch schedule tick
