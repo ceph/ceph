@@ -2078,8 +2078,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   if (r) {
     dout(20) << __func__ << " returned an error: " << r << dendl;
-    close_op_ctx(ctx);
-    osd->reply_op_error(op, r);
+    reply_ctx(ctx, r);
     return;
   }
 
