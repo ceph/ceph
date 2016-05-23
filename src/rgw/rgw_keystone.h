@@ -33,6 +33,7 @@ enum class KeystoneApiVersion {
 };
 
 class KeystoneService {
+public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
   public:
     RGWKeystoneHTTPTransceiver(CephContext * const cct,
@@ -42,11 +43,12 @@ class KeystoneService {
                            { "X-Subject-Token" }) {
     }
 
-    std::string get_subject_token() const {
+    const header_value_t& get_subject_token() const {
       try {
         return get_header_value("X-Subject-Token");
       } catch (std::out_of_range&) {
-        return header_value_t();
+        static header_value_t empty_val;
+        return empty_val;
       }
     }
   };
@@ -55,7 +57,6 @@ class KeystoneService {
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
   typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
-public:
   static KeystoneApiVersion get_api_version();
 
   static int get_keystone_url(CephContext * const cct,
