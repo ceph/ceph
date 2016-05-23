@@ -787,7 +787,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
       if (bh->error < 0)
 	err = bh->error;
 
-      loff_t oldpos = opos;
       opos = bh->end();
 
       if (r == -ENOENT) {
@@ -807,7 +806,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
 	mark_error(bh);
       } else {
 	bh->bl.substr_of(bl,
-			 oldpos-bh->start(),
+			 bh->start() - start,
 			 bh->length());
 	mark_clean(bh);
       }
