@@ -2903,65 +2903,56 @@ int BlueStore::_do_read(
     ++b2r_it;
   }
 
-  //generate a resulting buffer
-  auto rr_it = ready_regions.begin();
-  auto rr_end = ready_regions.end();
-  auto rr0_it = ready_regions_in_cache.begin();
-  auto rr0_end = ready_regions_in_cache.end();
-
-  off = offset;
-  while ((rr_it != rr_end || rr0_it != rr0_end) && off < offset + length) {
-    ready_regions_t::iterator it;
-    if (rr_it != rr_end && (rr0_it == rr0_end || rr_it->first < rr0_it->first)) {
-      uint64_t r_off = 0;
-      uint64_t r_len = rr_it->second.length();
-      dout(30) << __func__ << " read region " << rr_it->first << "~" << rr_it->second.length() <<
-        " off " << off << " " << dendl;
-      if (off > rr_it->first + r_len) {
-	++rr_it;
-	continue;
-      }
-      if (rr0_it!=rr0_end && (rr0_it->first < rr_it->first + r_len)) {
-	r_len = rr0_it->first - rr_it->first;
-      }
-
-      if (off > rr_it->first && r_len) {
-	r_off = off - rr_it->first;
-	assert(r_len >= r_off);
-	r_len -= r_off;
-      }
-      if (r_len == 0) {
-	++rr_it;
-	continue;
-      }
-
-      if (off < rr_it->first + r_off)
-	bl.append_zero(rr_it->first + r_off - off);
-      if(r_off == 0 && r_len == rr_it->second.length()) {
-	bl.claim_append(rr_it->second);
-      } else {
-	bufferlist tmp;
-	tmp.substr_of(rr_it->second, r_off, r_len);
-	bl.claim_append(tmp);
-      }
-      off = rr_it->first + r_off + r_len;
-      dout(30) << __func__ << " used read region " << rr_it->first + r_off <<
-        "~" << r_len << " new off " << off << dendl;
-      ++rr_it;
-    } else if(rr0_it != rr0_end) {
-      if (off < rr0_it->first)
-	bl.append_zero(rr0_it->first + off);
-      dout(30) << __func__ << " used from cached buffer " <<
-        rr0_it->first << "~" << rr0_it->second.length() << dendl;
-      off = rr0_it->first + rr0_it->second.length();
-      bl.claim_append(rr0_it->second);
-      ++rr0_it;
+  // generate a resulting buffer
+  auto pc = ready_regions_in_cache.begin();
+  auto pc_end = ready_regions_in_cache.end();
+  auto pr = ready_regions.begin();
+  auto pr_end = ready_regions.end();
+  for (uint64_t pos = offset; pos < offset + length; ) {
+    // take any cache content at pos
+    if (pc != pc_end && pc->first <= pos) {
+      assert(pc->first == pos);
+      dout(30) << __func__ << " used cached region 0x" << std::hex
+	       << pc->first << "~" << pc->second.length() << std::dec
+	       << dendl;
+      pos = pc->first + pc->second.length();
+      bl.claim_append(pc->second);
+      ++pc;      // we can always move forward here.
+      continue;
     }
+    // calc space till next cached data
+    uint64_t l = offset + length - pos;
+    if (pc != pc_end) {
+      l = pc->first - pos;
+    }
+    // take any read data at pos
+    while (pr != pr_end && pr->first + pr->second.length() <= pos) {
+      ++pr;
+    }
+    if (pr != pr_end && pr->first <= pos) {
+      uint64_t r_off = pos - pr->first;
+      uint64_t r_len = MIN(l, pr->second.length() - r_off);
+      dout(30) << __func__ << " used read region 0x" << std::hex
+	       << r_off << "~" << r_len
+	       << " from 0x" << pr->first << "~" << pr->second.length()
+	       << std::dec << dendl;
+      bufferlist tmp;
+      tmp.substr_of(pr->second, r_off, r_len);
+      bl.claim_append(tmp);
+      pos += r_len;
+      continue;
+    }
+    // fill in any gap with zeros
+    if (pr != pr_end && pr->first < pos + l) {
+      l = pr->first - pos;
+    }
+    assert(l);
+    dout(30) << __func__ << " used zeros for 0x" << std::hex << pos
+	     << "~" << l << std::dec << dendl;
+    bl.append_zero(l);
+    pos += l;
   }
-  assert(offset + length >= off);
-  bl.append_zero(offset + length - off);
   assert(bl.length() == length);
-
   r = bl.length();
   return r;
 }
