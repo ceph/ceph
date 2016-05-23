@@ -6,14 +6,11 @@
 
 
 #include "include/types.h"
-#include "msg/msg_types.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
 #include "include/atomic.h"
 #include "mds/mdstypes.h"
 #include "InodeRef.h"
-
-#include "common/Mutex.h"
 
 #include "messages/MClientRequest.h"
 
