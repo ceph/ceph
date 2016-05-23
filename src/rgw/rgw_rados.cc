@@ -3368,6 +3368,17 @@ int RGWRados::replace_region_with_zonegroup()
     ldout(cct, 0) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret == -ENOENT || regions.empty()) {
+    RGWZoneParams zoneparams(default_zone_name);
+    int ret = zoneparams.init(cct, this);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << __func__ << ": error initializing default zone params: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    /* default zone is missing meta_heap */
+    if (ret != -ENOENT && zoneparams.metadata_heap.name.empty()) {
+      zoneparams.metadata_heap = ".rgw.meta";
+      return zoneparams.update();
+    }
     return 0;
   }
 
@@ -3467,6 +3478,9 @@ int RGWRados::replace_region_with_zonegroup()
       if (ret < 0) {
         ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
+      }
+      if (zoneparams.metadata_heap.name.empty()) {
+	zoneparams.metadata_heap = ".rgw.meta";
       }
       zonegroup.realm_id = realm.get_id();
       ret = zoneparams.update();
