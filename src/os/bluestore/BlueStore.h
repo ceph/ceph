@@ -270,47 +270,47 @@ public:
       }
     }
 
-    void read(uint64_t offset, uint64_t length, BlueStore::ready_regions_t& res, interval_set<uint64_t>& res_intervals) {
+    void read(uint64_t offset, uint64_t length,
+	      BlueStore::ready_regions_t& res,
+	      interval_set<uint64_t>& res_intervals) {
       res.clear();
-      auto i = _data_lower_bound(offset);
       uint64_t end = offset + length;
-      while (i != buffer_map.end() && offset < end && i->first < end) {
+      for (auto i = _data_lower_bound(offset);
+	   i != buffer_map.end() && offset < end && i->first < end;
+	   ++i) {
 	Buffer *b = i->second.get();
-        if(b->is_writing()) {
+	assert(b->end() > offset);
+        if (b->is_writing() || b->is_clean()) {
 	  if (b->offset < offset) {
-	    uint64_t head = offset - b->offset;
-	    uint64_t l = b->length > head ? b->length - head : 0;
-	    l = MIN(length, b->length - head);
-	    if(l>0){
-	      res[offset].substr_of(b->data, head, l);
-	      res_intervals.insert( offset, l);
-	      offset += l;
-	      length -= l;
+	    uint64_t skip = offset - b->offset;
+	    uint64_t l = MIN(length, b->length - skip);
+	    res[offset].substr_of(b->data, skip, l);
+	    res_intervals.insert(offset, l);
+	    offset += l;
+	    length -= l;
+	    continue;
+	  }
+	  if (b->offset > offset) {
+	    uint64_t gap = b->offset - offset;
+	    if (length <= gap) {
+	      break;
 	    }
-	  } else if (b->offset > offset) {
-	    uint64_t head = b->offset - offset;
-	    uint64_t l = length > head ? length - head : 0;
-	    l = MIN(l, b->length);
-	    if(l>0){
-	      res[b->offset].substr_of(b->data, 0, l);
-	      res_intervals.insert(b->offset, l);
-	    }
-	    offset += l + head;
-	    length -= l + head;
-	  } else if(b->length != length) {
+	    offset += gap;
+	    length -= gap;
+	  }
+	  if (b->length > length) {
 	    uint64_t l = MIN(length, b->length);
-	    res[b->offset].substr_of(b->data, 0, l);
-	    res_intervals.insert(b->offset, l);
+	    res[offset].substr_of(b->data, 0, l);
+	    res_intervals.insert(offset, l);
 	    offset += l;
 	    length -= l;
 	  } else {
-	    res[b->offset].append(b->data);
-	    res_intervals.insert(b->offset, b->length);
+	    res[offset].append(b->data);
+	    res_intervals.insert(offset, b->length);
 	    offset += b->length;
 	    length -= b->length;
 	  }
 	}
-	++i;
       }
     }
 
