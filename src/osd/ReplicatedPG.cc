@@ -9810,15 +9810,6 @@ void ReplicatedPG::mark_all_unfound_lost(
 
   info.stats.stats_invalid = true;
 
-  struct OnComplete {
-    ReplicatedPG *pg;
-    std::function<void(void)> on_complete;
-    void operator()() {
-      pg->requeue_ops(pg->waiting_for_all_missing);
-      pg->waiting_for_all_missing.clear();
-      pg->queue_recovery();
-    }
-  };
   submit_log_entries(
     log_entries,
     std::move(manager),
