@@ -99,9 +99,10 @@ int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, in
   }
 
   try {
-      decode_json_obj(out, &parser);
+    decode_json_obj(out, &parser);
   } catch (JSONDecoder::err& e) {
-      return -EINVAL;
+    free(data);
+    return -EINVAL;
   }
 
   *pdata = data;
