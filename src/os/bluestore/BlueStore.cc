@@ -1131,7 +1131,7 @@ int BlueStore::_open_fm(bool create)
 	l = ROUND_UP_TO(l, min_alloc_size);
 	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
 	u = ROUND_UP_TO(u, min_alloc_size);
-	dout(20) << "  free 0x" << std::hex << start << "~0x" << l
+	dout(20) << "  free 0x" << std::hex << start << "~" << l
 		 << " use 0x" << u << std::dec << dendl;
 	fm->allocate(start + l, u, t);
 	start += l + u;
@@ -2574,7 +2574,7 @@ int BlueStore::fsck()
     while (fm->enumerate_next(&offset, &length)) {
       if (used_blocks.intersects(offset, length)) {
 	derr << __func__ << " free extent 0x" << std::hex << offset
-	     << "~0x" << length << std::dec
+	     << "~" << length << std::dec
 	     << " intersects allocated blocks" << dendl;
 	interval_set<uint64_t> free, overlap;
 	free.insert(offset, length);
@@ -2792,7 +2792,7 @@ int BlueStore::read(
   Collection *c = static_cast<Collection*>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
   if (!c->exists)
     return -ENOENT;
@@ -2815,7 +2815,7 @@ int BlueStore::read(
 
  out:
   dout(10) << __func__ << " " << cid << " " << oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
 }
@@ -2844,7 +2844,7 @@ int BlueStore::_do_read(
     buffered = true;
   }
 
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size 0x" << o->onode.size << " (" << std::dec
 	   << o->onode.size << ")" << dendl;
   bl.clear();
@@ -3087,7 +3087,7 @@ int BlueStore::_read_extent_sparse(
       if (r < 0) {
 	dout(20) << __func__ << "  blob reading 0x" << std::hex
 	  << cur->logical_offset << " 0x"
-	  << cur->blob_xoffset << "~0x" << bl.length()
+	  << cur->blob_xoffset << "~" << bl.length()
 	  << " csum verification failed" << dendl;
 	return -EIO;
       }
@@ -3227,7 +3227,7 @@ int BlueStore::fiemap(
   }
   _dump_onode(o);
 
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size 0x" << o->onode.size << std::dec << dendl;
 
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
@@ -3254,7 +3254,7 @@ int BlueStore::fiemap(
     if (ep != eend && ep->first <= offset) {
       uint64_t x_off = offset - ep->first;
       x_len = MIN(x_len, ep->second.length - x_off);
-      dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~0x"
+      dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
 	       << x_len << std::dec << " blob " << ep->second.blob << dendl;
       m.insert(offset, x_len);
       length -= x_len;
@@ -3274,7 +3274,7 @@ int BlueStore::fiemap(
 
  out:
   ::encode(m, bl);
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size = 0 (" << m << ")" << std::dec << dendl;
   return 0;
 }
@@ -4302,7 +4302,7 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
        p != preleased->end();
        ++p) {
     dout(20) << __func__ << " release 0x" << std::hex << p.get_start()
-	     << "~0x" << p.get_len() << std::dec << dendl;
+	     << "~" << p.get_len() << std::dec << dendl;
     fm->release(p.get_start(), p.get_len(), t);
   }
 
@@ -5024,7 +5024,7 @@ int BlueStore::_do_overlay_trim(TransContext *txc,
 			       uint64_t length)
 {
   dout(10) << __func__ << " " << o->oid << " 0x"
-	   << std::hex << offset << "~0x" << length << std::dec << dendl;
+	   << std::hex << offset << "~" << length << std::dec << dendl;
   int changed = 0;
 
   map<uint64_t,bluestore_overlay_t>::iterator p =
@@ -5102,7 +5102,7 @@ int BlueStore::_do_overlay_write(TransContext *txc,
   _do_overlay_trim(txc, o, offset, length);
 
   dout(10) << __func__ << " " << o->oid << " 0x"
-	   << std::hex << offset << "~0x" << length << std::dec << dendl;
+	   << std::hex << offset << "~" << length << std::dec << dendl;
   bluestore_overlay_t& ov = o->onode.overlay_map[offset] =
     bluestore_overlay_t(++o->onode.last_overlay_key, 0, length);
   dout(20) << __func__ << " added 0x" << std::hex << offset << std::dec
@@ -5196,7 +5196,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     dout(log_level) << __func__ << "  buffer_cache size 0x" << std::hex
 		    << o->bc.size << std::dec << dendl;
     for (auto& i : o->bc.buffer_map) {
-      dout(log_level) << __func__ << "   0x" << std::hex << i.first << "~0x"
+      dout(log_level) << __func__ << "   0x" << std::hex << i.first << "~"
 		      << i.second->length << std::dec
 		      << " seq " << i.second->seq
 		      << " " << Buffer::get_state_name(i.second->state)
@@ -5233,7 +5233,7 @@ void BlueStore::_pad_zeros(
   bufferlist *bl, uint64_t *offset, uint64_t *length,
   uint64_t chunk_size)
 {
-  dout(30) << __func__ << " 0x" << std::hex << *offset << "~0x" << *length
+  dout(30) << __func__ << " 0x" << std::hex << *offset << "~" << *length
 	   << " chunk_size 0x" << chunk_size << std::dec << dendl;
   dout(40) << "before:\n";
   bl->hexdump(*_dout);
@@ -5277,7 +5277,7 @@ void BlueStore::_pad_zeros(
     *length += back_pad;
   }
   dout(20) << __func__ << " pad 0x" << std::hex << front_pad << " + 0x"
-	   << back_pad << " on front/back, now 0x" << *offset << "~0x"
+	   << back_pad << " on front/back, now 0x" << *offset << "~"
 	   << *length << std::dec << dendl;
   dout(40) << "after:\n";
   bl->hexdump(*_dout);
@@ -5312,7 +5312,7 @@ void BlueStore::_pad_zeros_head(
   *offset -= front_pad;
   *length += front_pad;
   dout(20) << __func__ << " pad 0x" << std::hex << front_pad
-	   << " on front, now 0x" << *offset << "~0x" << *length << std::dec
+	   << " on front, now 0x" << *offset << "~" << *length << std::dec
 	   << dendl;
   dout(40) << "after:\n";
   bl->hexdump(*_dout);
@@ -5353,7 +5353,7 @@ void BlueStore::_pad_zeros_tail(
   bl->append(tail);
   *length += back_pad;
   dout(20) << __func__ << " pad 0x" << std::hex << back_pad
-	   << " on back, now 0x" << offset << "~0x" << *length << std::dec
+	   << " on back, now 0x" << offset << "~" << *length << std::dec
 	   << dendl;
   dout(40) << "after:\n";
   bl->hexdump(*_dout);
@@ -5375,7 +5375,7 @@ void BlueStore::_do_write_small(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   assert(length < min_alloc_size);
 
@@ -5449,7 +5449,7 @@ void BlueStore::_do_write_small(
 	(!b->has_csum_data() || (b_off % b->get_csum_block_size() == 0 &&
 				 b_len % b->get_csum_block_size() == 0))) {
       dout(20) << __func__ << "  write to unused 0x" << std::hex
-	       << b_off << "~0x" << b_len
+	       << b_off << "~" << b_len
 	       << " pad 0x" << head_pad << " + 0x" << tail_pad
 	       << std::dec << " of mutable " << blob << ": " << b << dendl;
       assert(b->is_unreferenced(b_off, b_len));
@@ -5523,7 +5523,7 @@ void BlueStore::_do_write_small(
 	txc->add_deferred_csum(o, blob, b_off, padded);
       }
       op->data.claim(padded);
-      dout(20) << __func__ << "  wal write 0x" << std::hex << b_off << "~0x"
+      dout(20) << __func__ << "  wal write 0x" << std::hex << b_off << "~"
 	       << b_len << std::dec << " of mutable " << blob << ": " << *b
 	       << " at " << op->extents << dendl;
       o->onode.punch_hole(offset, length, &wctx->lex_old);
@@ -5601,7 +5601,7 @@ void BlueStore::_do_write_big(
   if (wctx->compress) {
     max_blob_len = MIN(length, wctx->comp_blob_size);
   }
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " max_blob_len 0x" << max_blob_len
 	   << std::dec << dendl;
   while (length > 0) {
@@ -5767,7 +5767,7 @@ int BlueStore::_do_write(
 
   dout(20) << __func__
 	   << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length
+	   << " 0x" << std::hex << offset << "~" << length
 	   << " - have 0x" << o->onode.size
 	   << " (" << std::dec << o->onode.size << ")"
 	   << " bytes in " << o->onode.extent_map.size() << " lextents"
@@ -5869,7 +5869,7 @@ int BlueStore::_write(TransContext *txc,
 		     uint32_t fadvise_flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
   o->exists = true;
   _assign_nid(txc, o);
@@ -5877,7 +5877,7 @@ int BlueStore::_write(TransContext *txc,
   txc->write_onode(o);
 
   dout(10) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
 }
@@ -5888,11 +5888,11 @@ int BlueStore::_zero(TransContext *txc,
 		     uint64_t offset, size_t length)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
   int r = _do_zero(txc, c, o, offset, length);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
 }
@@ -5903,7 +5903,7 @@ int BlueStore::_do_zero(TransContext *txc,
 			uint64_t offset, size_t length)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
   int r = 0;
   o->exists = true;
@@ -5928,7 +5928,7 @@ int BlueStore::_do_zero(TransContext *txc,
   txc->write_onode(o);
 
   dout(10) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << "~0x" << length << std::dec
+	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   return r;
 }
@@ -6372,7 +6372,7 @@ int BlueStore::_clone_range(TransContext *txc,
 			    uint64_t srcoff, uint64_t length, uint64_t dstoff)
 {
   dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
-	   << newo->oid << " from 0x" << std::hex << srcoff << "~0x" << length
+	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
 
@@ -6394,7 +6394,7 @@ int BlueStore::_clone_range(TransContext *txc,
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
-	   << newo->oid << " from 0x" << std::hex << srcoff << "~0x" << length
+	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec
 	   << " = " << r << dendl;
   return r;
