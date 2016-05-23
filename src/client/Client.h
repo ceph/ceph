@@ -19,30 +19,21 @@
 #include "include/types.h"
 
 // stl
-#include <functional>
 #include <string>
 #include <memory>
 #include <set>
 #include <map>
 #include <fstream>
-#include <exception>
 using std::set;
 using std::map;
 using std::fstream;
 
 #include "include/unordered_set.h"
 #include "include/unordered_map.h"
-
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
-
-//#include "barrier.h"
-
 #include "mds/mdstypes.h"
-#include "mds/MDSMap.h"
-
-#include "msg/Message.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
@@ -79,6 +70,8 @@ class Objecter;
 class WritebackHandler;
 
 class PerfCounters;
+class MDSMap;
+class Message;
 
 enum {
   l_c_first = 20000,

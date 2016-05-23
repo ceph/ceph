@@ -6,7 +6,6 @@
 
 #include "include/types.h"
 #include "include/xlist.h"
-#include "include/filepath.h"
 
 #include "mds/mdstypes.h" // hrm
 
@@ -24,6 +23,7 @@ struct Inode;
 class ceph_lock_state_t;
 class MetaRequest;
 class UserGroups;
+class filepath;
 
 struct Cap {
   MetaSession *session;
