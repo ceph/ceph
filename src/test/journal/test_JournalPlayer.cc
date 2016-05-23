@@ -613,7 +613,6 @@ TEST_F(TestJournalPlayer, LiveReplayLaggyAppend) {
   ASSERT_EQ(0, write_entry(oid, 0, 0, 2));
   ASSERT_EQ(0, write_entry(oid, 0, 0, 4));
   ASSERT_EQ(0, write_entry(oid, 3, 0, 5)); // laggy entry 0/3 in object 1
-  ASSERT_EQ(0, metadata->set_active_set(1));
   player->prefetch_and_watch(0.25);
 
   Entries entries;
@@ -630,6 +629,7 @@ TEST_F(TestJournalPlayer, LiveReplayLaggyAppend) {
   ASSERT_FALSE(player->try_pop_front(&entry, &commit_tid));
 
   ASSERT_EQ(0, write_entry(oid, 1, 0, 3));
+  ASSERT_EQ(0, metadata->set_active_set(1));
   ASSERT_TRUE(wait_for_entries(player, 3, &entries));
 
   expected_entries = {
