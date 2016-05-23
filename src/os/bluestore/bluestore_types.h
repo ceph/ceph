@@ -704,6 +704,8 @@ WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
   std::string type;
+  uint32_t length = 0;
+
   bluestore_compression_header_t() {}
   bluestore_compression_header_t(const std::string& _type)
     : type(_type) {}
