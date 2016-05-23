@@ -3145,15 +3145,15 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
 
-  OSDOp *first = NULL;
-  if (m->ops.size() >= 1) {
-    first = &m->ops[0];
-  }
-
   if (!is_peered()) {
     waiting_for_peered.push_back(op);
     op->mark_delayed("waiting for active");
     return;
+  }
+
+  OSDOp *first = NULL;
+  if (m->ops.size() >= 1) {
+    first = &m->ops[0];
   }
 
   if (first) {
