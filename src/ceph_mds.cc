@@ -138,7 +138,7 @@ int main(int argc, const char **argv)
 
   Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
 				      entity_name_t::MDS(-1), "mds",
-				      getpid());
+				      getpid(), 0, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
