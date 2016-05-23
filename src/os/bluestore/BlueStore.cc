@@ -5650,29 +5650,53 @@ int BlueStore::_do_alloc_write(
   uint64_t hint = 0;
   for ( ; bp != wctx->blob_new.end(); ++bp, ++blp) {
     bluestore_blob_t *b = *bp;
-    uint64_t length = blp->length();
+    uint64_t final_length = b->length;
     bufferlist *l = &*blp;
     bufferlist compressed_bl;
-    if (false /*compress*/) {
-      b->set_flag(bluestore_blob_t::FLAG_COMPRESSED);
-      // compress.
-      // adjust len and l.
-      l = &compressed_bl;
-      // pad zeros out to min_alloc_size.
+    CompressorRef c;
+    if (wctx->compress &&
+	b->length > min_alloc_size &&
+	(c = compressor) != nullptr) {
+      // compress
+      bluestore_compression_header_t chdr;
+      chdr.type = c->get_type();
+      // FIXME: memory alignment here is bad
+      bufferlist t;
+      c->compress(*l, t);
+      chdr.length = t.length();
+      ::encode(chdr, compressed_bl);
+      compressed_bl.claim_append(t);
+      uint64_t rawlen = compressed_bl.length();
+      uint64_t newlen = ROUND_UP_TO(rawlen, min_alloc_size);
+      if (newlen < final_length) {
+	// pad out to min_alloc_size
+	compressed_bl.append_zero(newlen - rawlen);
+	dout(20) << __func__ << "  compressed 0x" << b->length
+		 << " -> 0x" << rawlen << " => 0x" << newlen
+		 << " with " << chdr.type << dendl;
+	l = &compressed_bl;
+	final_length = newlen;
+	b->set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+      } else {
+	dout(20) << __func__ << "  compressed 0x" << l->length() << " -> 0x"
+		 << rawlen << " with " << chdr.type
+		 << ", leaving uncompressed" << dendl;
+	b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
+      }
     } else {
       b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
     }
-    while (length > 0) {
+    while (final_length > 0) {
       bluestore_pextent_t e;
       uint32_t l;
-      int r = alloc->allocate(length, min_alloc_size, hint,
+      int r = alloc->allocate(final_length, min_alloc_size, hint,
 			      &e.offset, &l);
       assert(r == 0);
       need -= l;
       e.length = l;
       txc->allocated.insert(e.offset, e.length);
       (*bp)->extents.push_back(e);
-      length -= e.length;
+      final_length -= e.length;
       hint = e.end();
     }
     dout(20) << __func__ << " blob " << **bp << dendl;
