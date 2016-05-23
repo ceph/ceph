@@ -100,7 +100,7 @@ follows:
 Each ``team`` is responsible for a project:
 
 * rgw lead is Yehuda Sadeh
-* CephFS lead is Gregory Farnum
+* CephFS lead is John Spray
 * rados lead is Samuel Just
 * rbd lead is Jason Dillaman
 

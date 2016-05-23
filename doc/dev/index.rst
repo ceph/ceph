@@ -56,7 +56,7 @@ Ceph      Sage Weil       liewegas
 RADOS     Samuel Just     athanatos
 RGW       Yehuda Sadeh    yehudasa
 RBD       Jason Dillaman  dillaman
-CephFS    Gregory Farnum  gregsfortytwo
+CephFS    John Spray      jcsp
 Build/Ops Ken Dreyer      ktdreyer
 ========= =============== =============
 
