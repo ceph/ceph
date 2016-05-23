@@ -56,14 +56,10 @@ rgw_auth_transform_old_authinfo(req_state * const s)
       return perm_mask;
     }
 
-    std::string to_str() const {
-      std::stringstream ss;
-
-      ss << "RGWDummyIdentityApplier(auth_id=" << id
-         << ", perm_mask=" << perm_mask
-         << ", is_admin=" << is_admin << ")";
-
-      return ss.str();
+    void to_str(std::ostream& out) const {
+      out << "RGWDummyIdentityApplier(auth_id=" << id
+          << ", perm_mask=" << perm_mask
+          << ", is_admin=" << is_admin << ")";
     }
   };
 
@@ -140,16 +136,12 @@ bool RGWRemoteAuthApplier::is_owner_of(const rgw_user& uid) const
   return info.acct_user == uid;
 }
 
-std::string RGWRemoteAuthApplier::to_str() const
+void RGWRemoteAuthApplier::to_str(std::ostream& out) const
 {
-  std::stringstream ss;
-
-  ss << "RGWRemoteAuthApplier(acct_user=" << info.acct_user
-     << ", acct_name=" << info.acct_name
-     << ", perm_mask=" << info.perm_mask
-     << ", is_admin=" << info.is_admin << ")";
-
-  return ss.str();
+  out << "RGWRemoteAuthApplier(acct_user=" << info.acct_user
+      << ", acct_name=" << info.acct_name
+      << ", perm_mask=" << info.perm_mask
+      << ", is_admin=" << info.is_admin << ")";
 }
 
 void RGWRemoteAuthApplier::create_account(const rgw_user& acct_user,
@@ -231,17 +223,13 @@ bool RGWLocalAuthApplier::is_owner_of(const rgw_user& uid) const
   return uid == user_info.user_id;
 }
 
-std::string RGWLocalAuthApplier::to_str() const
+void RGWLocalAuthApplier::to_str(std::ostream& out) const
 {
-  std::stringstream ss;
-
-  ss << "RGWLocalAuthApplier(acct_user=" << user_info.user_id
-     << ", acct_name=" << user_info.display_name
-     << ", subuser=" << subuser
-     << ", perm_mask=" << get_perm_mask()
-     << ", is_admin=" << user_info.admin << ")";
-
-  return ss.str();
+  out << "RGWLocalAuthApplier(acct_user=" << user_info.user_id
+      << ", acct_name=" << user_info.display_name
+      << ", subuser=" << subuser
+      << ", perm_mask=" << get_perm_mask()
+      << ", is_admin=" << user_info.admin << ")";
 }
 
 uint32_t RGWLocalAuthApplier::get_perm_mask(const std::string& subuser_name,

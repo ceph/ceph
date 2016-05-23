@@ -37,8 +37,8 @@ public:
     return decoratee.get_perm_mask();
   }
 
-  virtual std::string to_str() const override {
-    return decoratee.to_str();
+  virtual void to_str(std::ostream& out) const override {
+    decoratee.to_str(out);
   }
 
   virtual void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
@@ -79,8 +79,8 @@ public:
     return decoratee->get_perm_mask();
   }
 
-  virtual std::string to_str() const override {
-    return decoratee->to_str();
+  virtual void to_str(std::ostream& out) const override {
+    decoratee->to_str(out);
   }
 
   virtual void load_acct_info(RGWUserInfo& user_info) const override {  /* out */
@@ -110,7 +110,7 @@ public:
       acct_user_override(acct_user_override) {
   }
 
-  virtual std::string to_str() const override;
+  virtual void to_str(std::ostream& out) const override;
   virtual void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
 };
 
@@ -119,10 +119,11 @@ template <typename T>
 const rgw_user RGWThirdPartyAccountAuthApplier<T>::UNKNOWN_ACCT;
 
 template <typename T>
-std::string RGWThirdPartyAccountAuthApplier<T>::to_str() const
+void RGWThirdPartyAccountAuthApplier<T>::to_str(std::ostream& out) const
 {
-  return "RGWThirdPartyAccountAuthApplier(" + acct_user_override.to_str() + ")"
-         " -> " + RGWDecoratingAuthApplier<T>::to_str();
+  out << "RGWThirdPartyAccountAuthApplier(" + acct_user_override.to_str() + ")"
+      <<   " -> ";
+  RGWDecoratingAuthApplier<T>::to_str(out);
 }
 
 template <typename T>

@@ -6,6 +6,7 @@
 #define CEPH_RGW_AUTH_H
 
 #include <functional>
+#include <ostream>
 #include <type_traits>
 
 #include "rgw_common.h"
@@ -50,12 +51,13 @@ public:
     return is_owner_of(rgw_user(RGW_USER_ANON_ID));
   }
 
-  virtual std::string to_str() const = 0;
+  virtual void to_str(std::ostream& out) const = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out,
                                 const RGWIdentityApplier &id) {
-  return out << id.to_str();
+  id.to_str(out);
+  return out;
 }
 
 std::unique_ptr<RGWIdentityApplier>
@@ -160,7 +162,7 @@ public:
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   uint32_t get_perm_mask() const override { return info.perm_mask; }
-  std::string to_str() const override;
+  void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 
   struct Factory {
@@ -205,7 +207,7 @@ public:
   uint32_t get_perm_mask() const override {
     return get_perm_mask(subuser, user_info);
   }
-  std::string to_str() const override;
+  void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 
   struct Factory {
