@@ -74,6 +74,7 @@ class TestSessionMap(CephFSTestCase):
 
         initial_thread_count = self._get_thread_count(mds_id)
         self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
         self.assertGreater(self._get_thread_count(mds_id), initial_thread_count)
         self.mount_a.umount_wait()
         final_thread_count = self._get_thread_count(mds_id)
