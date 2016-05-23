@@ -9795,17 +9795,6 @@ void ReplicatedPG::mark_all_unfound_lost(
     default:
       assert(0);
     }
-
-    if (obc) {
-      bool got = manager.get_lock_type(
-	ObjectContext::RWState::RWEXCL,
-	oid,
-	obc,
-	OpRequestRef());
-      if (!got) {
-	assert(0 == "Couldn't lock unfound object?");
-      }
-    }
   }
 
   info.stats.stats_invalid = true;
