@@ -29,17 +29,17 @@ using namespace ceph::crypto;
 void RGWTempURLAuthApplier::modify_request_state(req_state * s) const       /* in/out */
 {
   bool inline_exists = false;
-  const string& filename = s->info.args.get("filename");
+  const std::string& filename = s->info.args.get("filename");
 
   s->info.args.get("inline", &inline_exists);
   if (inline_exists) {
     s->content_disp.override = "inline";
   } else if (!filename.empty()) {
-    string fenc;
+    std::string fenc;
     url_encode(filename, fenc);
     s->content_disp.override = "attachment; filename=\"" + fenc + "\"";
   } else {
-    string fenc;
+    std::string fenc;
     url_encode(s->object.name, fenc);
     s->content_disp.fallback = "attachment; filename=\"" + fenc + "\"";
   }

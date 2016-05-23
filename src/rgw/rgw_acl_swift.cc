@@ -63,7 +63,8 @@ static bool uid_is_public(const string& uid)
          sub.compare(".referrer") == 0;
 }
 
-static bool extract_referer_urlspec(const string& uid, string& url_spec)
+static bool extract_referer_urlspec(const std::string& uid,
+                                    std::string& url_spec)
 {
   const size_t pos = uid.find(':');
   if (string::npos == pos) {

@@ -1524,7 +1524,7 @@ int RGWHandler_REST_SWIFT::authorize()
   };
 
   for (const auto engine : engines) {
-    if (!engine->is_applicable()) {
+    if (! engine->is_applicable()) {
       /* Engine said it isn't suitable for handling this particular
        * request. Let's try a next one. */
       continue;
