@@ -749,11 +749,6 @@ public:
     }
 
     void flush() {
-      lock();
-      while (!wal_queue.empty()) {
-	_wait();
-      }
-      unlock();
       drain();
     }
   };
