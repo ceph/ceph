@@ -283,7 +283,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 		 << dendl;
 	*length = end - *offset;
        assert((*offset  + *length) <= size);
-       dout(10) << __func__ << std::hex << " 0x" << *offset << "~0x" << *length
+       dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 		<< std::dec << dendl;
 	return true;
       }
@@ -305,7 +305,7 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
   end = size;
   if (enumerate_offset < end) {
     *length = end - *offset;
-    dout(10) << __func__ << std::hex << " 0x" << *offset << "~0x" << *length
+    dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 	     << std::dec << dendl;
     enumerate_offset = end;
     assert((*offset  + *length) <= size);
@@ -321,7 +321,7 @@ void BitmapFreelistManager::dump()
   enumerate_reset();
   uint64_t offset, length;
   while (enumerate_next(&offset, &length)) {
-    dout(20) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+    dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	     << std::dec << dendl;
   }
 }
@@ -451,7 +451,7 @@ void BitmapFreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (g_conf->bluestore_debug_freelist)
     _verify_range(offset, length, 0);
@@ -462,7 +462,7 @@ void BitmapFreelistManager::release(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (g_conf->bluestore_debug_freelist)
     _verify_range(offset, length, 1);

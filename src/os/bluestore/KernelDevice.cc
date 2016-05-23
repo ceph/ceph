@@ -291,14 +291,14 @@ void KernelDevice::_aio_log_start(
   uint64_t offset,
   uint64_t length)
 {
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (g_conf->bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
 	   << std::hex
-	   << offset << "~0x" << length << std::dec
+	   << offset << "~" << length << std::dec
 	   << " with " << debug_inflight << dendl;
       assert(0);
     }
@@ -312,7 +312,7 @@ void KernelDevice::_aio_log_finish(
   uint64_t length)
 {
   dout(20) << __func__ << " " << aio << " 0x"
-	   << std::hex << offset << "~0x" << length << std::dec << dendl;
+	   << std::hex << offset << "~" << length << std::dec << dendl;
   if (g_conf->bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
     debug_inflight.erase(offset, length);
@@ -342,7 +342,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
     FS::aio_t& aio = *p;
     aio.priv = static_cast<void*>(ioc);
     dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
-	     << " 0x" << std::hex << aio.offset << "~0x" << aio.length
+	     << " 0x" << std::hex << aio.offset << "~" << aio.length
 	     << std::dec << dendl;
     for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
       dout(30) << __func__ << "   iov " << (void*)q->iov_base
@@ -375,7 +375,7 @@ int KernelDevice::aio_write(
   bool buffered)
 {
   uint64_t len = bl.length();
-  dout(20) << __func__ << " 0x" << std::hex << off << "~0x" << len << std::dec
+  dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   assert(off % block_size == 0);
@@ -402,7 +402,7 @@ int KernelDevice::aio_write(
     if (g_conf->bdev_inject_crash &&
 	rand() % g_conf->bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
-	   << off << "~0x" << len << std::dec
+	   << off << "~" << len << std::dec
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
@@ -417,17 +417,17 @@ int KernelDevice::aio_write(
       aio.bl.claim_append(bl);
       aio.pwritev(off);
     }
-    dout(5) << __func__ << " 0x" << std::hex << off << "~0x" << len
+    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 	    << std::dec << " aio " << &aio << dendl;
   } else
 #endif
   {
-    dout(5) << __func__ << " 0x" << std::hex << off << "~0x" << len
+    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 	    << std::dec << " buffered" << dendl;
     if (g_conf->bdev_inject_crash &&
 	rand() % g_conf->bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
-	   << off << "~0x" << len << std::dec << dendl;
+	   << off << "~" << len << std::dec << dendl;
       ++injecting_crash;
       return 0;
     }
@@ -462,7 +462,7 @@ int KernelDevice::aio_zero(
   uint64_t len,
   IOContext *ioc)
 {
-  dout(5) << __func__ << " 0x" << std::hex << off << "~0x" << len << std::dec
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
@@ -486,7 +486,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
 {
-  dout(5) << __func__ << " 0x" << std::hex << off << "~0x" << len << std::dec
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << (buffered ? " (buffered)" : " (direct)")
 	  << dendl;
   assert(off % block_size == 0);
@@ -522,7 +522,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
 int KernelDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
 {
-  dout(5) << __func__ << " 0x" << std::hex << off << "~0x" << len << std::dec
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << dendl;
   assert(len > 0);
   assert(off < size);
@@ -554,14 +554,14 @@ int KernelDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
 
 int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
-  dout(5) << __func__ << " 0x" << std::hex << off << "~0x" << len << std::dec
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
   if (r < 0) {
     r = -errno;
-    derr << __func__ << " 0x" << std::hex << off << "~0x" << len << std::dec
+    derr << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	 << " error: " << cpp_strerror(r) << dendl;
   }
   return r;
