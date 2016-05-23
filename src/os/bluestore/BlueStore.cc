@@ -29,7 +29,6 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
-#include "compressor/Compressor.h"
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -802,6 +801,58 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_csum")) {
     _set_csum();
   }
+  if (changed.count("bluestore_compression") ||
+      changed.count("bluestore_compression_algorithm") ||
+      changed.count("bluestore_compression_min_blob_size") ||
+      changed.count("bluestore_compression_max_blob_size")) {
+    _set_compression();
+  }
+}
+
+void BlueStore::_set_compression()
+{
+  comp_min_blob_size = g_conf->bluestore_compression_min_blob_size;
+  comp_max_blob_size = g_conf->bluestore_compression_max_blob_size;
+
+  const char *alg = 0;
+  if (g_conf->bluestore_compression_algorithm == "snappy") {
+    alg = "snappy";
+  } else if (g_conf->bluestore_compression_algorithm == "zlib") {
+    alg = "zlib";
+  } else if (g_conf->bluestore_compression_algorithm.length()) {
+    derr << __func__ << " unrecognized compression algorithm '"
+	 << g_conf->bluestore_compression_algorithm << "'" << dendl;
+  }
+  if (alg) {
+    compressor = Compressor::create(cct, alg);
+    if (!compressor) {
+      derr << __func__ << " unable to initialize " << alg << " compressor"
+	   << dendl;
+    }
+  } else {
+    compressor = nullptr;
+  }
+  CompressionMode m = COMP_NONE;
+  if (compressor) {
+    if (g_conf->bluestore_compression == "force") {
+      m = COMP_FORCE;
+    } else if (g_conf->bluestore_compression == "aggressive") {
+      m = COMP_AGGRESSIVE;
+    } else if (g_conf->bluestore_compression == "passive") {
+      m = COMP_PASSIVE;
+    } else if (g_conf->bluestore_compression == "none") {
+      m = COMP_NONE;
+    } else {
+      derr << __func__ << " unrecognized value '"
+	   << g_conf->bluestore_compression
+	   << "' for bluestore_compression, reverting to 'none'" << dendl;
+      m = COMP_NONE;
+    }
+  }
+  comp_mode = m;
+  dout(10) << __func__ << " mode " << get_comp_mode_name(comp_mode)
+	   << " alg " << (compressor ? compressor->get_type() : "(none)")
+	   << dendl;
 }
 
 void BlueStore::_set_csum()
@@ -1953,7 +2004,8 @@ int BlueStore::mount()
     string type;
     int r = read_meta("type", &type);
     if (r < 0) {
-      derr << __func__ << " failed to load os-type: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " failed to load os-type: " << cpp_strerror(r)
+	   << dendl;
       return r;
     }
 
@@ -2027,6 +2079,8 @@ int BlueStore::mount()
     goto out_stop;
 
   _set_csum();
+  _set_compression();
+
   mounted = true;
   return 0;
 

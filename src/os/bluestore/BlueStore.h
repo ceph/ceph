@@ -31,6 +31,7 @@
 #include "include/unordered_map.h"
 #include "include/memory.h"
 #include "common/Finisher.h"
+#include "compressor/Compressor.h"
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
@@ -69,6 +70,8 @@ public:
                                   const std::set<std::string> &changed) override;
 
   void _set_csum();
+  void _set_compression();
+
   class TransContext;
 
 
@@ -888,6 +891,27 @@ private:
 
   uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
 
+  // compression options
+  enum CompressionMode {
+    COMP_NONE,                  ///< compress never
+    COMP_PASSIVE,               ///< compress if hinted COMPRESSIBLE
+    COMP_AGGRESSIVE,            ///< compress unless hinted INCOMPRESSIBLE
+    COMP_FORCE                  ///< compress always
+  };
+  const char *get_comp_mode_name(int m) {
+    switch (m) {
+    case COMP_NONE: return "none";
+    case COMP_PASSIVE: return "passive";
+    case COMP_AGGRESSIVE: return "aggressive";
+    case COMP_FORCE: return "force";
+    default: return "???";
+    }
+  }
+  CompressionMode comp_mode = COMP_NONE;      ///< compression mode
+  CompressorRef compressor;
+  uint64_t comp_min_blob_size = 0;
+  uint64_t comp_max_blob_size = 0;
+
   // --------------------------------------------------------
   // private methods
 
@@ -1205,15 +1229,14 @@ private:
   // write ops
 
   struct WriteContext {
-    unsigned fadvise_flags;                    ///< write flags
-    bool buffered;                             ///< buffered write
+    unsigned fadvise_flags = 0;  ///< write flags
+    bool buffered = false;       ///< buffered write
+    bool compress = false;       ///< compressed write
+    uint64_t comp_blob_size = 0; ///< target compressed blob size
 
-    //map<uint64_t,bluestore_lextent_t> lex_new; ///< new lextents
     vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
     vector<bluestore_blob_t*> blob_new;        ///< new blobs
     vector<bufferlist> bl_new;                 ///< new data, for above blobs
-
-    WriteContext() : fadvise_flags(0), buffered(false) {}
   };
 
   void _do_write_small(
