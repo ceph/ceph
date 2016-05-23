@@ -22,6 +22,8 @@
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
 
+#include "ReplicatedPG.h"
+
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
@@ -66,7 +68,8 @@ ReplicatedBackend::ReplicatedBackend(
   ObjectStore *store,
   CephContext *cct) :
   PGBackend(pg, store, coll, c),
-  cct(cct) {}
+  cct(cct),
+  in_progress_ops_lock("ReplicatedBackend:ops_lock") {}
 
 void ReplicatedBackend::run_recovery_op(
   PGBackend::RecoveryHandle *_h,
@@ -530,6 +533,19 @@ public:
   }
 };
 
+class C_OSD_OnOpCommit_no_pg_lock : public Context {
+public:
+  ReplicatedBackend *pg;
+  ReplicatedBackend::InProgressOp *op;
+  pg_shard_t shard;
+//public:
+  C_OSD_OnOpCommit_no_pg_lock(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op, pg_shard_t shard)
+    : pg(pg), op(op), shard(shard) {}
+  void finish(int) {
+    pg->op_commit_no_pg_lock(op);
+  }
+};
+
 class C_OSD_OnOpApplied : public Context {
   ReplicatedBackend *pg;
   ReplicatedBackend::InProgressOp *op;
@@ -538,6 +554,19 @@ public:
     : pg(pg), op(op) {}
   void finish(int) {
     pg->op_applied(op);
+  }
+};
+
+class C_OSD_OnOpApplied_no_pg_lock : public Context {
+public:
+  ReplicatedBackend *pg;
+  ReplicatedBackend::InProgressOp *op;
+  pg_shard_t shard;
+//public:
+  C_OSD_OnOpApplied_no_pg_lock(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op, pg_shard_t shard)
+    : pg(pg), op(op), shard(shard) {}
+  void finish(int) {
+    pg->op_applied_no_pg_lock(op);
   }
 };
 
@@ -564,6 +593,7 @@ void ReplicatedBackend::submit_transaction(
   assert(t->get_temp_added().size() <= 1);
   assert(t->get_temp_cleared().size() <= 1);
 
+  in_progress_ops_lock.Lock();
   assert(!in_progress_ops.count(tid));
   InProgressOp &op = in_progress_ops.insert(
     make_pair(
@@ -573,6 +603,7 @@ void ReplicatedBackend::submit_transaction(
 	orig_op, at_version)
       )
     ).first->second;
+  in_progress_ops_lock.Unlock();
 
   op.waiting_for_applied.insert(
     parent->get_actingbackfill_shards().begin(),
@@ -611,12 +642,37 @@ void ReplicatedBackend::submit_transaction(
     op_t);
   
   op_t.register_on_applied_sync(on_local_applied_sync);
-  op_t.register_on_applied(
-    parent->bless_context(
-      new C_OSD_OnOpApplied(this, &op)));
-  op_t.register_on_commit(
-    parent->bless_context(
-      new C_OSD_OnOpCommit(this, &op)));
+  if (op.op && op.op->can_op_lock_comp) {
+    ReplicatedPG::RepGather * repop = (ReplicatedPG::RepGather*)op.op->rep_gather;
+    if (!repop) assert(0);
+
+    if (op_t.on_applied.size()) {
+      Context * temp = op_t.get_on_applied();
+      if (temp) {
+	delete temp;
+      }
+      repop->trim_to_applied_epoch = get_osdmap()->get_epoch();
+      repop->trim_to_applied_version = trim_rollback_to;
+    }
+#if 0
+    op.epoch = get_osdmap()->get_epoch();
+#endif
+    op.shard = get_parent()->whoami_shard();
+    repop->at_version = at_version;
+
+    op_t.register_on_applied(
+	new C_OSD_OnOpApplied_no_pg_lock(this, &op, get_parent()->whoami_shard()));
+    op_t.register_on_commit(
+	new C_OSD_OnOpCommit_no_pg_lock(this, &op, get_parent()->whoami_shard()));
+
+  } else {
+    op_t.register_on_applied(
+      parent->bless_context(
+	new C_OSD_OnOpApplied(this, &op)));
+    op_t.register_on_commit(
+      parent->bless_context(
+	new C_OSD_OnOpCommit(this, &op)));
+  }
 
   vector<ObjectStore::Transaction> tls;
   tls.push_back(std::move(op_t));
@@ -644,6 +700,58 @@ void ReplicatedBackend::op_applied(
   }
 }
 
+void ReplicatedBackend::op_applied_no_pg_lock(
+  InProgressOp *op)
+{
+  dout(20) << __func__ << " " << __LINE__ << " enter tid:" << op->tid << dendl;
+  op->op->comp_lock.Lock();
+
+  dout(10) << __func__ << ": " << op->tid << dendl;
+  if (op->op)
+  {
+    op->op->mark_event("op_applied");
+  }
+
+  op->waiting_for_applied.erase(op->shard);
+
+  if (op->waiting_for_applied.empty()) {
+
+    if (op->on_applied) {
+      if (op->waiting_for_commit.empty() && !op->op->completed) {
+	dout(20) << __func__ << " " << __LINE__ << 
+		" call on_applied->complete(3):" << op->tid << dendl;
+	// send ack and add completion q
+	op->on_applied->complete(OP_COMP_ACK_COMP);
+	op->op->completed = true;
+      } else {
+	dout(20) << __func__ << " " << __LINE__ << 
+		" call on_applied->complete(1):" << op->tid << dendl;
+	// send ack 
+	op->on_applied->complete(OP_COMP_ACK);
+      }
+
+    } else {
+      assert(0);
+    }
+
+    op->op->all_applied = true;
+    op->on_applied = 0;
+  }
+  if (op->done()) {
+    op->op->comp_lock.Unlock();
+    in_progress_ops_lock.Lock();
+    if (in_progress_ops.count(op->tid)) {
+      dout(20) << __func__ << " " << __LINE__ << 
+	      " op deleted out tid:" << op->tid << dendl;
+      in_progress_ops.erase(op->tid);
+    }
+    in_progress_ops_lock.Unlock();
+    return;
+  }
+  op->op->comp_lock.Unlock();
+  dout(20) << __func__ << " " << __LINE__ << " out tid:" << op->tid << dendl;
+}
+
 void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
@@ -660,6 +768,186 @@ void ReplicatedBackend::op_commit(
   if (op->done()) {
     assert(!op->on_commit && !op->on_applied);
     in_progress_ops.erase(op->tid);
+  }
+}
+
+void ReplicatedBackend::op_commit_no_pg_lock(
+  InProgressOp *op)
+{
+
+  dout(20) << __func__ << " " << __LINE__ << " enter tid:" << op->tid << dendl;
+  op->op->comp_lock.Lock();
+
+  dout(10) << __func__ << ": " << op->tid << dendl;
+  if (op->op)
+  {
+    op->op->mark_event("op_commit");
+  }
+
+  op->waiting_for_commit.erase(op->shard);
+  if (op->waiting_for_commit.empty()) {
+
+    if (op->on_commit) {
+      if (op->waiting_for_applied.empty() && !op->op->completed) {
+	dout(20) << __func__ << " " << __LINE__ << 
+		" call on_commit->complete(2): " << op->tid << dendl;
+	// send ack and add completion q
+	op->on_commit->complete(OP_COMP_ACK_COMP);
+	op->op->completed = true;
+      } else {
+	// send ack
+	dout(20) << __func__ << " " << __LINE__ << 
+		" call on_commit->complete(1): " << op->tid << dendl;
+	op->on_commit->complete(OP_COMP_ACK);
+      }
+    } else {
+      assert(0);
+    } 
+    op->op->all_committed = true;
+    op->on_commit = 0;
+  }
+
+  if (op->done()) {
+    //op->unlock();
+    op->op->comp_lock.Unlock();
+    in_progress_ops_lock.Lock();
+    if (in_progress_ops.count(op->tid)) {
+      dout(20) << __func__ << " " << __LINE__ << 
+	      " op deleted out tid:" << op->tid << dendl;
+      in_progress_ops.erase(op->tid);
+    }
+    in_progress_ops_lock.Unlock();
+    return;
+  }
+  op->op->comp_lock.Unlock();
+  dout(20) << __func__ << " " << __LINE__ << " out tid:" << op->tid << dendl;
+}
+
+void ReplicatedBackend::sub_op_modify_reply_no_pg_lock(OpRequestRef op)
+{
+  MOSDRepOpReply *r = static_cast<MOSDRepOpReply *>(op->get_req());
+  assert(r->get_header().type == MSG_OSD_REPOPREPLY);
+
+  op->mark_started();
+
+  // must be replication.
+  ceph_tid_t rep_tid = r->get_tid();
+  pg_shard_t from = r->from;
+  dout(20) << __func__ << __LINE__ << 
+	  " enter message rep tid: " << rep_tid << dendl;
+
+  in_progress_ops_lock.Lock();
+  if (in_progress_ops.count(rep_tid)) {
+    map<ceph_tid_t, InProgressOp>::iterator iter =
+      in_progress_ops.find(rep_tid);
+    in_progress_ops_lock.Unlock();
+    InProgressOp &ip_op = iter->second;
+    ip_op.op->comp_lock.Lock();
+    MOSDOp *m = NULL;
+    if (ip_op.op)
+      m = static_cast<MOSDOp *>(ip_op.op->get_req());
+
+    if (m)
+      dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
+	      << " ack_type " << (int)r->ack_type
+	      << " from " << from
+	      << dendl;
+    else
+      dout(7) << __func__ << ": tid " << ip_op.tid << " (no op) "
+	      << " ack_type " << (int)r->ack_type
+	      << " from " << from
+	      << dendl;
+
+    // oh, good.
+
+    if (r->ack_type & CEPH_OSD_FLAG_ONDISK) {
+      assert(ip_op.waiting_for_commit.count(from));
+      ip_op.waiting_for_commit.erase(from);
+      if (ip_op.op) {
+        ostringstream ss;
+        ss << "sub_op_commit_rec from " << from;
+	ip_op.op->mark_event(ss.str());
+      }
+    } else {
+      assert(ip_op.waiting_for_applied.count(from));
+      if (ip_op.op) {
+        ostringstream ss;
+        ss << "sub_op_applied_rec from " << from;
+	ip_op.op->mark_event(ss.str());
+      }
+    }
+    ip_op.waiting_for_applied.erase(from);
+
+#if 0
+    parent->update_peer_last_complete_ondisk(
+      from,
+      r->get_last_complete_ondisk());
+#endif
+    
+    ReplicatedPG::RepGather * repop = (ReplicatedPG::RepGather*)ip_op.op->rep_gather;
+    if (!repop) {
+      assert(0);
+    }
+    repop->fromosd = from;
+    repop->lcod = r->get_last_complete_ondisk();
+
+
+    if (ip_op.waiting_for_applied.empty() && !ip_op.op->all_applied) {
+      dout(20) << __func__ << __LINE__ << 
+	      " empty applied queue erase tid: " << rep_tid << dendl;
+      if (ip_op.on_applied) {
+	if (!ip_op.on_commit && !ip_op.op->completed) {
+	  // add completion q
+	  ip_op.on_applied->complete(2);
+	  ip_op.op->completed = true;
+	} else {
+	  // sent ack 
+	  ip_op.on_applied->complete(1);
+	}
+      } else {
+	assert(0);
+      }
+      ip_op.op->all_applied = true;
+      ip_op.on_applied = 0;
+    }
+
+    if (ip_op.waiting_for_commit.empty() && !ip_op.op->all_committed) {
+      dout(20) << __func__ << __LINE__ << 
+	      " empty commit queue erase tid: " << rep_tid << dendl;
+      if (ip_op.on_commit) {
+	if (!ip_op.on_applied && !ip_op.op->completed) {
+	  // add completion q
+	  ip_op.on_commit->complete(2);
+	  ip_op.op->completed = true;
+	} else {
+	  // sent ack 
+	  ip_op.on_commit->complete(1);
+	}
+      } else {
+	assert(0);
+      } 
+      ip_op.op->all_committed = true;
+      ip_op.on_commit = 0;
+    }
+    
+
+    if (ip_op.done()) {
+      assert(!ip_op.on_commit && !ip_op.on_applied);
+      ip_op.op->comp_lock.Unlock();
+      in_progress_ops_lock.Lock();
+      if (in_progress_ops.count(rep_tid)) {
+	dout(20) << __func__ << __LINE__ << 
+		" in_progress_ops erase tid: " << rep_tid << dendl;
+	in_progress_ops.erase(iter);
+      }
+      in_progress_ops_lock.Unlock();
+    } else {
+      ip_op.op->comp_lock.Unlock();
+    }
+    dout(20) << __func__ << " " << __LINE__ << " out " <<  dendl;
+  } else {
+    in_progress_ops_lock.Unlock();
+    assert(0);
   }
 }
 
@@ -1084,6 +1372,12 @@ void ReplicatedBackend::issue_op(
       peer,
       pinfo);
 
+    if (op->op && op->op->can_op_lock_comp) {
+      MOSDRepOp * rep_op = (MOSDRepOp*)wr;
+      // 16 marks that op should be handled by no pg lock completion.
+      rep_op->acks_wanted = rep_op->acks_wanted | CEPH_OSD_FLAG_OP_COMP;
+    }
+
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());
   }
@@ -1164,18 +1458,98 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     update_snaps,
     rm->localt);
 
-  rm->opt.register_on_commit(
-    parent->bless_context(
-      new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
-    parent->bless_context(
-      new C_OSD_RepModifyApply(this, rm)));
+  if (m->acks_wanted & CEPH_OSD_FLAG_OP_COMP) {
+    op->tid = m->get_tid();
+    if ((&rm->localt)->on_applied.size()) {
+      Context * temp = rm->localt.get_on_applied();
+      if (temp) {
+	delete temp;
+      }
+      rm->trim_to_applied_epoch = get_osdmap()->get_epoch();
+      rm->trim_to_applied_version = m->pg_trim_rollback_to;
+    }
+
+    rm->epoch = get_osdmap()->get_epoch();
+    rm->shard = parent->whoami_shard();
+
+    rm->opt.register_on_commit(
+	new C_OSD_RepModifyCommit_no_pg_lock(this, rm));
+    rm->localt.register_on_applied(
+	new C_OSD_RepModifyApply_no_pg_lock(this, rm));
+  } else {
+    rm->opt.register_on_commit(
+      parent->bless_context(
+	new C_OSD_RepModifyCommit(this, rm)));
+    rm->localt.register_on_applied(
+      parent->bless_context(
+	new C_OSD_RepModifyApply(this, rm)));
+  }
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
   tls.push_back(std::move(rm->opt));
   parent->queue_transactions(tls, op);
   // op is cleaned up by oncommit/onapply when both are executed
+}
+
+void ReplicatedBackend::sub_op_modify_applied_no_pg_lock(RepModifyRef rm)
+{
+  rm->op->mark_event("sub_op_applied");
+  rm->applied = true;
+
+  dout(10) << "sub_op_modify_applied on " << rm << " op "
+	   << *rm->op->get_req() << dendl;
+#if 0
+  dout(0) << "sub_op_modify_applied_no_pg_lock on " << rm << " op "
+	   << *rm->op->get_req() << " tid: " << rm->op->tid << dendl;
+#endif
+
+  Message *m = rm->op->get_req();
+  
+  if (m->get_type() == MSG_OSD_REPOP) {
+    rm->op->comp_lock.Lock();
+    if (!rm->committed) {
+      rm->committed = true;
+      Message * commit = NULL;
+      // 15 mark that this is special pupose packet
+      MOSDRepOpReply *reply = new MOSDRepOpReply(
+	static_cast<MOSDRepOp*>(m),
+	rm->shard,
+	MSG_OSD_OP_COMP_RESULT, rm->epoch, CEPH_OSD_FLAG_ONDISK);
+      if (!reply) {
+	assert(0);
+      }
+      rm->op->comp_lock.Unlock();
+      reply->set_last_complete_ondisk(rm->last_complete);
+      commit = reply;
+      commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+      get_parent()->send_message_osd_cluster(
+	rm->ackerosd, commit, rm->epoch);
+    } else {
+      MOSDRepOp *req = static_cast<MOSDRepOp*>(m);
+      eversion_t version = req->version;
+      CompletionItem * comp_item = new CompletionItem(OP_COMP_REPLICA_OP);
+      comp_item->rep_committed_version = rm->last_complete;
+      comp_item->rep_applied_version = version;
+      if (rm->trim_to_applied_version != eversion_t()) {
+	comp_item->trim_to_applied_epoch = rm->trim_to_applied_epoch;
+	comp_item->trim_to_applied_version = rm->trim_to_applied_version;
+      }
+      comp_item->op = rm->op;
+      comp_item->rep_tid = req->get_tid();
+      get_parent()->add_completion_q(comp_item);
+      rm->op->comp_lock.Unlock();
+    }
+  } else {
+    assert(0);
+  }
+
+#if 0
+  dout(0) << "sub_op_modify_applied_no_pg_lock on " << rm << " op "
+	   << *rm->op->get_req() << " tid " << rm->op->get_req()->get_tid() << dendl;
+#endif
+
+  //parent->op_applied(version);
 }
 
 void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
@@ -1217,6 +1591,67 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   }
 
   parent->op_applied(version);
+}
+
+void ReplicatedBackend::sub_op_modify_commit_no_pg_lock(RepModifyRef rm)
+{
+  rm->op->mark_commit_sent();
+  //rm->committed = true;
+
+  // send commit.
+  dout(10) << "sub_op_modify_commit on op " << *rm->op->get_req()
+	   << ", sending commit to osd." << rm->ackerosd
+	   << dendl;
+#if 0
+  dout(0) << "sub_op_modify_commit_no_pg_lock on op " << *rm->op->get_req()
+	   << ", sending commit to osd." << rm->ackerosd << " tid: " << rm->op->tid
+	   << dendl;
+
+  assert(get_osdmap()->is_up(rm->ackerosd));
+  get_parent()->update_last_complete_ondisk(rm->last_complete);
+#endif
+
+  Message *m = rm->op->get_req();
+  Message *commit = NULL;
+  if (m->get_type() == MSG_OSD_REPOP) {
+    rm->op->comp_lock.Lock();
+    if (!rm->committed) {
+      rm->committed = true;
+      // 15 mark that this is special pupose packet
+      MOSDRepOpReply *reply = new MOSDRepOpReply(
+	static_cast<MOSDRepOp*>(m),
+	rm->shard,
+	MSG_OSD_OP_COMP_RESULT, rm->epoch, CEPH_OSD_FLAG_ONDISK);
+      rm->op->comp_lock.Unlock();
+      reply->set_last_complete_ondisk(rm->last_complete);
+      commit = reply;
+    } else {
+      MOSDRepOp *req = static_cast<MOSDRepOp*>(m);
+      eversion_t version = req->version;
+      CompletionItem * comp_item = new CompletionItem(OP_COMP_REPLICA_OP);
+      comp_item->rep_committed_version = rm->last_complete;
+      comp_item->rep_applied_version = version;
+      if (rm->trim_to_applied_version != eversion_t()) {
+	comp_item->trim_to_applied_epoch = rm->trim_to_applied_epoch;
+	comp_item->trim_to_applied_version = rm->trim_to_applied_version;
+      }
+      comp_item->op = rm->op;
+      comp_item->rep_tid = req->get_tid();
+      get_parent()->add_completion_q(comp_item);
+      rm->op->comp_lock.Unlock();
+    }
+  }
+  else {
+    assert(0);
+  }
+
+  if (commit) {
+    commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+    get_parent()->send_message_osd_cluster(
+      rm->ackerosd, commit, rm->epoch);
+  }
+
+  //log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }
 
 void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)

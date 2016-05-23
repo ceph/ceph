@@ -328,6 +328,9 @@ private:
     Context *on_applied;
     OpRequestRef op;
     eversion_t v;
+    //version_t epoch;
+    pg_shard_t shard;
+
     InProgressOp(
       ceph_tid_t tid, Context *on_commit, Context *on_applied,
       OpRequestRef op, eversion_t v)
@@ -343,6 +346,8 @@ public:
   PGTransaction *get_transaction();
   friend class C_OSD_OnOpCommit;
   friend class C_OSD_OnOpApplied;
+  friend class C_OSD_OnOpCommit_no_pg_lock;
+  friend class C_OSD_OnOpApplied_no_pg_lock;
   void submit_transaction(
     const hobject_t &hoid,
     const eversion_t &at_version,
@@ -390,8 +395,13 @@ private:
     ObjectStore::Transaction &op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
+  void op_applied_no_pg_lock(InProgressOp *op);
+  void op_commit_no_pg_lock(InProgressOp *op);
   void sub_op_modify_reply(OpRequestRef op);
   void sub_op_modify(OpRequestRef op);
+public:
+  void sub_op_modify_reply_no_pg_lock(OpRequestRef op);
+private:
 
   struct RepModify {
     OpRequestRef op;
@@ -401,6 +411,11 @@ private:
     epoch_t epoch_started;
 
     ObjectStore::Transaction opt, localt;
+    version_t epoch;
+    pg_shard_t shard;
+    epoch_t trim_to_applied_epoch;
+    eversion_t trim_to_applied_version;
+    
     
     RepModify() : applied(false), committed(false), ackerosd(-1),
 		  epoch_started(0) {}
@@ -437,6 +452,28 @@ private:
     ScrubMap::object &o,
     ThreadPool::TPHandle &handle);
   uint64_t be_get_ondisk_size(uint64_t logical_size) { return logical_size; }
+public:
+  Mutex in_progress_ops_lock;
+  void sub_op_modify_commit_no_pg_lock(RepModifyRef rm);
+  void sub_op_modify_applied_no_pg_lock(RepModifyRef rm);
+  struct C_OSD_RepModifyApply_no_pg_lock : public Context {
+    ReplicatedBackend *pg;
+    RepModifyRef rm;
+    C_OSD_RepModifyApply_no_pg_lock(ReplicatedBackend *pg, RepModifyRef r)
+      : pg(pg), rm(r) {}
+    void finish(int r) {
+      pg->sub_op_modify_applied_no_pg_lock(rm);
+    }
+  };
+  struct C_OSD_RepModifyCommit_no_pg_lock : public Context {
+    ReplicatedBackend *pg;
+    RepModifyRef rm;
+    C_OSD_RepModifyCommit_no_pg_lock(ReplicatedBackend *pg, RepModifyRef r)
+      : pg(pg), rm(r) {}
+    void finish(int r) {
+      pg->sub_op_modify_commit_no_pg_lock(rm);
+    }
+  };
 };
 
 #endif

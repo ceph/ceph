@@ -707,6 +707,14 @@ public:
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
+
+    eversion_t rep_committed_version;
+    eversion_t rep_applied_version;
+    pg_shard_t fromosd;
+    eversion_t lcod;
+    epoch_t trim_to_applied_epoch;
+    eversion_t trim_to_applied_version;
+    eversion_t at_version;
     
     RepGather(OpContext *c, ceph_tid_t rt,
 	      eversion_t lc) :
@@ -749,6 +757,7 @@ public:
       assert(nref > 0);
       if (--nref == 0) {
 	assert(on_applied.empty());
+	//generic_dout(0) << "deleting " << this << " rep_tid: " << rep_tid <<  dendl;
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
@@ -1652,7 +1661,18 @@ public:
     ObjectContextRef obc,
     map<string, bufferlist> *out,
     bool user_only = false);
+public:
+  void lazy_completion_func(bool need_lock);
+  void add_completion_q(CompletionItem *comp_item);
+  void repop_all_applied_no_pg_lock(RepGather *repop);
+  void repop_all_committed_no_pg_lock(RepGather *repop);
+  int can_op_lock_comp_test_cnt;
+  Mutex completion_ops_lock;
+  list<CompletionItem *> completion_ops;   
 };
+
+#define OP_COMP_ACK 1
+#define OP_COMP_ACK_COMP 2
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {

@@ -239,6 +239,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
         (*i)->_dump_op_descriptor_unlocked(ss);
         ss << " currently "
 	   << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
+	ss << " rep_tid: " << (*i)->tid;
         warning_vector.push_back(ss.str());
 
         // only those that have been shown will backoff

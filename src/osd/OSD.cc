@@ -278,8 +278,10 @@ OSDService::OSDService(OSD *osd) :
 #ifdef PG_DEBUG_REFS
   , pgid_lock("OSDService::pgid_lock")
 #endif
+  , comp_thread(this)
 {
   objecter->init();
+  comp_thread_stop = false;
 }
 
 OSDService::~OSDService()
@@ -510,6 +512,8 @@ void OSDService::init()
 void OSDService::final_init()
 {
   objecter->start();
+  // modified by omw / checking completion 
+  comp_thread.create("comp_thread");
 }
 
 void OSDService::activate_map()
@@ -1455,6 +1459,25 @@ void OSDService::queue_for_peering(PG *pg)
   peering_wq.queue(pg);
 }
 
+void OSDService::check_completion_item() {
+  while (1) {
+    // dout(0) << __func__ << " " << __LINE__ << " enter!! " << dendl;
+    if (!osd) assert(0);
+
+    if (comp_thread_stop) {
+      dout(0) << __func__ << " " << __LINE__ << " out " << dendl;
+      break;
+    }
+    RWLock::RLocker l(osd->pg_map_lock);
+    ceph::unordered_map<spg_t, PG*>::iterator iter = osd->pg_map.begin();
+    for (; iter != osd->pg_map.end(); ++iter) {
+      PG * pg = iter->second; 
+      if (!pg) assert(0);
+      pg->lazy_completion_func(true);
+    }
+    sleep(1);
+  }
+}
 
 // ====================================================================
 // OSD
@@ -2201,6 +2224,7 @@ int OSD::init()
     tick_timer_without_osd_lock.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick_WithoutOSDLock(this));
   }
 
+
   service.init();
   service.publish_map(osdmap);
   service.publish_superblock(superblock);
@@ -2694,6 +2718,8 @@ int OSD::shutdown()
 
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
+
+  service.comp_thread_stop = true;
 
   osd_lock.Lock();
 
@@ -8725,6 +8751,34 @@ void OSD::enqueue_op(PG *pg, OpRequestRef& op)
 	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
 	   << " " << *(op->get_req()) << dendl;
+
+  // 15 --> op lock completion
+  if (op->get_req()->get_type() == MSG_OSD_REPOPREPLY) {
+    MOSDRepOpReply *r = static_cast<MOSDRepOpReply *>(op->get_req());
+    r->finish_decode();
+    spg_t pgid = pg->get_pgid();
+    const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+    if (r->get_result() == MSG_OSD_OP_COMP_RESULT && 
+	pp->get_type() == pg_pool_t::TYPE_REPLICATED) {
+      
+
+      PGBackend * pg_backend = pg->get_pgbackend();
+      if (!pg_backend) {
+	dout(0) << __func__ << " PGBackend is null " << dendl;
+	pg->unlock();
+	assert(0);
+      }
+
+      ReplicatedBackend * rep_backend = dynamic_cast<ReplicatedBackend*>(pg_backend);
+      if (!rep_backend) {
+	dout(0) << __func__ << " ReplicatedBackend is null " << dendl;
+	pg->unlock();
+	assert(0);
+      }
+      rep_backend->sub_op_modify_reply_no_pg_lock(op);
+      return;
+    }
+  }
   pg->queue_op(op);
 }
 
@@ -9351,3 +9405,4 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
   }
   in_use.insert(got.begin(), got.end());
 }
+

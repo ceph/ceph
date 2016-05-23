@@ -1175,6 +1175,29 @@ public:
   }
 #endif
 
+  void check_completion_item();
+#if 0
+  class CompletionThread : public Thread {
+  public:
+    OSD * osd;
+    CompletionThread(OSD *osd) : osd(osd) {}
+    void *entry() {
+      osd->check_completion_item();
+      return 0;
+    }
+  }comp_thread;
+#endif
+  class CompletionThread : public Thread {
+  public:
+    OSDService * osd_srv;
+    CompletionThread(OSDService *osd_srv) : osd_srv(osd_srv) {}
+    void *entry() {
+      osd_srv->check_completion_item();
+      return 0;
+    }
+  }comp_thread;
+
+  bool comp_thread_stop;
   explicit OSDService(OSD *osd);
   ~OSDService();
 };
@@ -2505,6 +2528,7 @@ public:
 public:
   OSDService service;
   friend class OSDService;
+
 };
 
 //compatibility of the executable
@@ -2512,4 +2536,21 @@ extern const CompatSet::Feature ceph_osd_feature_compat[];
 extern const CompatSet::Feature ceph_osd_feature_ro_compat[];
 extern const CompatSet::Feature ceph_osd_feature_incompat[];
 
+// for no pg lock completion
+#define OP_COMP_PRIMARY_OP 1
+#define OP_COMP_REPLICA_OP 2
+class CompletionItem {
+public:
+  eversion_t rep_committed_version;
+  eversion_t rep_applied_version;
+  pg_shard_t fromosd;
+  eversion_t lcod;
+  epoch_t trim_to_applied_epoch;
+  eversion_t trim_to_applied_version;
+  ceph_tid_t rep_tid;
+  int comp_type; // 1: primary 2: replica
+  void * rep_gather;
+  OpRequestRef op;
+  CompletionItem(int comp_type): comp_type(comp_type), rep_gather(NULL) {}
+};
 #endif
