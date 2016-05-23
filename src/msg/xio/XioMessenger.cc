@@ -351,12 +351,12 @@ static ostream& _prefix(std::ostream *_dout, XioMessenger *msgr) {
 
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 			   string mname, uint64_t _nonce, uint64_t features,
-			   DispatchStrategy *ds)
+			   uint64_t cflags, DispatchStrategy *ds)
   : SimplePolicyMessenger(cct, name, mname, _nonce),
     XioInit(cct),
     nsessions(0),
     shutdown_called(false),
-    portals(this, get_nportals(), get_nconns_per_portal()),
+    portals(this, get_nportals(cflags), get_nconns_per_portal(cflags)),
     dispatch_strategy(ds),
     loop_con(new XioLoopbackConnection(this)),
     special_handling(0),
@@ -383,8 +383,8 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 
   ldout(cct,2) << "Create msgr: " << this << " instance: "
     << nInstances.read() << " type: " << name.type_str()
-    << " subtype: " << mname << " nportals: " << get_nportals()
-    << " nconns_per_portal: " << get_nconns_per_portal() << " features: "
+    << " subtype: " << mname << " nportals: " << get_nportals(cflags)
+    << " nconns_per_portal: " << get_nconns_per_portal(cflags) << " features: "
     << features << dendl;
 
 } /* ctor */
@@ -399,14 +399,27 @@ int XioMessenger::pool_hint(uint32_t dsize) {
 				   XMSG_MEMPOOL_QUANTUM, 0);
 }
 
-int XioMessenger::get_nconns_per_portal()
+int XioMessenger::get_nconns_per_portal(uint64_t cflags)
 {
-  return max(cct->_conf->xio_max_conns_per_portal, 32);
+  const int XIO_DEFAULT_NUM_CONNS_PER_PORTAL = 8;
+  int nconns = XIO_DEFAULT_NUM_CONNS_PER_PORTAL;
+
+  if (cflags & Messenger::HAS_MANY_CONNECTIONS)
+    nconns = max(cct->_conf->xio_max_conns_per_portal, XIO_DEFAULT_NUM_CONNS_PER_PORTAL);
+  else if (cflags & Messenger::HEARTBEAT)
+    nconns = max(cct->_conf->osd_heartbeat_min_peers * 4, XIO_DEFAULT_NUM_CONNS_PER_PORTAL);
+
+  return nconns;
 }
 
-int XioMessenger::get_nportals()
+int XioMessenger::get_nportals(uint64_t cflags)
 {
-  return max(cct->_conf->xio_portal_threads, 1);
+  int nportals = 1;
+
+  if (cflags & Messenger::HAS_HEAVY_TRAFFIC)
+    nportals = max(cct->_conf->xio_portal_threads, 1);
+
+  return nportals;
 }
 
 void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)

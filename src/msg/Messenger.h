@@ -53,6 +53,14 @@ protected:
 
 public:
   /**
+   * Various Messenger conditional config/type flags to allow
+   * different "transport" Messengers to tune themselves
+   */
+  static const int HAS_HEAVY_TRAFFIC    = 0x0001;
+  static const int HAS_MANY_CONNECTIONS = 0x0002;
+  static const int HEARTBEAT            = 0x0004;
+
+  /**
    *  The CephContext this Messenger uses. Many other components initialize themselves
    *  from this value.
    */
@@ -151,13 +159,15 @@ public:
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    * @param features bits for the local connection
+   * @param cflags general set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
                            const string &type,
                            entity_name_t name,
 			   string lname,
                            uint64_t nonce,
-			   uint64_t features = 0);
+			   uint64_t features = 0,
+			   uint64_t cflags = 0);
 
   /**
    * create a new messenger
