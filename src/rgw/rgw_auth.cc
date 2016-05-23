@@ -363,9 +363,24 @@ KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string& token)
   if (ret < 0) {
     throw ret;
   }
-  token_body_bl.append((char)0); // NULL terminate for debug output
 
-  ldout(cct, 20) << "received response: " << token_body_bl.c_str() << dendl;
+  /* NULL terminate for debug output. */
+  token_body_bl.append(static_cast<char>(0));
+  ldout(cct, 20) << "received response status=" << validate.get_http_status()
+                 << ", body=" << token_body_bl.c_str() << dendl;
+
+  /* Detect Keystone rejection earlier than during the token parsing.
+   * Although failure at the parsing phase doesn't impose a threat,
+   * this allows to return proper error code (EACCESS instead of EINVAL
+   * or similar) and thus improves logging. */
+  if (validate.get_http_status() ==
+          /* Most likely: wrong admin credentials or admin token. */
+          RGWValidateKeystoneToken::HTTP_STATUS_UNAUTHORIZED ||
+      validate.get_http_status() ==
+          /* Most likely: non-existent token supplied by the client. */
+          RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
+    throw -EACCES;
+  }
 
   KeystoneToken token_body;
   ret = token_body.parse(cct, token, token_body_bl);

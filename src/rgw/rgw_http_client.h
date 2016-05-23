@@ -83,6 +83,7 @@ protected:
 public:
   static const long HTTP_STATUS_NOSTATUS     = 0;
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
+  static const long HTTP_STATUS_NOTFOUND     = 404;
 
   virtual ~RGWHTTPClient();
   explicit RGWHTTPClient(CephContext *cct)

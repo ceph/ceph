@@ -224,6 +224,13 @@ int KeystoneService::get_keystone_admin_token(CephContext * const cct,
   if (ret < 0) {
     return ret;
   }
+
+  /* Detect rejection earlier than during the token parsing step. */
+  if (token_req.get_http_status() ==
+          RGWGetKeystoneAdminToken::HTTP_STATUS_UNAUTHORIZED) {
+    return -EACCES;
+  }
+
   if (t.parse(cct, token_req.get_subject_token(), token_bl) != 0) {
     return -EINVAL;
   }
