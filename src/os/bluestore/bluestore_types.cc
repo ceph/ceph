@@ -1018,6 +1018,7 @@ void bluestore_compression_header_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(type, bl);
+  ::encode(length, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1025,12 +1026,14 @@ void bluestore_compression_header_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(type, p);
+  ::decode(length, p);
   DECODE_FINISH(p);
 }
 
 void bluestore_compression_header_t::dump(Formatter *f) const
 {
   f->dump_string("type", type);
+  f->dump_unsigned("length", length);
 }
 
 void bluestore_compression_header_t::generate_test_instances(
@@ -1038,4 +1041,5 @@ void bluestore_compression_header_t::generate_test_instances(
 {
   o.push_back(new bluestore_compression_header_t);
   o.push_back(new bluestore_compression_header_t("some_header"));
+  o.back()->length = 1234;
 }

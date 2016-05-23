@@ -3132,7 +3132,9 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
     derr << __func__ << " can't load decompressor " << chdr.type << dendl;
     r = -EIO;
   } else {
-    r = compressor->decompress(i, *result);
+    bufferlist t;
+    i.copy(chdr.length, t);
+    r = compressor->decompress(t, *result);
     if (r < 0) {
       derr << __func__ << " decompression failed with exit code " << r << dendl;
       r = -EIO;
