@@ -5599,21 +5599,30 @@ void BlueStore::_do_write_big(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
+  uint64_t max_blob_len = length;
+  if (wctx->compress) {
+    max_blob_len = MIN(length, wctx->comp_blob_size);
+  }
   dout(10) << __func__ << " 0x" << std::hex << offset << "~0x" << length
+	   << " max_blob_len 0x" << max_blob_len
 	   << std::dec << dendl;
-  int64_t blob;
-  bluestore_blob_t *b = o->onode.add_blob(&blob);
-  b->length = length;
-  wctx->blob_new.push_back(b);
-  bufferlist t;
-  blp.copy(length, t);
-  wctx->bl_new.push_back(t);
-  o->onode.punch_hole(offset, length, &wctx->lex_old);
-  o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, length, 0);
-  b->ref_map.get(0, length);
-  dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
-	   << o->onode.extent_map[offset] << dendl;
-  dout(20) << __func__ << "  blob " << *b << dendl;
+  while (length > 0) {
+    int64_t blob;
+    bluestore_blob_t *b = o->onode.add_blob(&blob);
+    wctx->blob_new.push_back(b);
+    b->length = MIN(max_blob_len, length);
+    bufferlist t;
+    blp.copy(b->length, t);
+    wctx->bl_new.push_back(t);
+    o->onode.punch_hole(offset, length, &wctx->lex_old);
+    o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, length, 0);
+    b->ref_map.get(0, length);
+    dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
+	     << o->onode.extent_map[offset] << dendl;
+    dout(20) << __func__ << "  blob " << *b << dendl;
+    offset += b->length;
+    length -= b->length;
+  }
 }
 
 int BlueStore::_do_alloc_write(
@@ -5755,6 +5764,24 @@ int BlueStore::_do_write(
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
   }
+
+  // compression parameters
+  unsigned alloc_hints = o->onode.alloc_hint_flags;
+  wctx.compress =
+    (comp_mode == COMP_FORCE) ||
+    (comp_mode == COMP_AGGRESSIVE &&
+     (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
+    (comp_mode == COMP_PASSIVE &&
+     (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE));
+
+  if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
+      (alloc_hints & (CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE|
+			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0)
+    wctx.comp_blob_size = comp_max_blob_size;
+  else
+    wctx.comp_blob_size = comp_min_blob_size;
 
   // write in buffer cache
   o->bc.write(txc->seq, offset, bl);
