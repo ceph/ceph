@@ -28,6 +28,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 assert task.config['key_1'] == 'overridden'
@@ -40,6 +41,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task_hosts = task.cluster.remotes.keys()
@@ -56,6 +58,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with raises(RuntimeError):
                 with self.klass(self.ctx, self.task_config):
@@ -71,6 +74,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task_hosts = task.cluster.remotes.keys()
@@ -88,6 +92,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task_hosts = task.cluster.remotes.keys()
@@ -106,6 +111,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task_hosts = task.cluster.remotes.keys()
@@ -125,6 +131,7 @@ class TestTask(object):
         with patch.multiple(
             self.klass,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task_hosts = task.cluster.remotes.keys()
@@ -138,6 +145,7 @@ class TestTask(object):
             self.klass,
             setup=DEFAULT,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task.setup.assert_called_once_with()
@@ -147,6 +155,7 @@ class TestTask(object):
             self.klass,
             setup=DEFAULT,
             begin=DEFAULT,
+            end=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
                 task.begin.assert_called_once_with()
@@ -168,6 +177,7 @@ class TestTask(object):
             self.klass,
             setup=DEFAULT,
             begin=DEFAULT,
+            end=DEFAULT,
             teardown=DEFAULT,
         ):
             with self.klass(self.ctx, self.task_config) as task:
@@ -186,6 +196,7 @@ class TestTask(object):
             self.klass,
             setup=DEFAULT,
             begin=DEFAULT,
+            end=DEFAULT,
             teardown=fake_teardown,
         ):
             with self.klass(self.ctx, self.task_config):

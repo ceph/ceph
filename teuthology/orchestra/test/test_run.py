@@ -431,3 +431,10 @@ class TestRun(object):
     def test_quote_and_raw(self):
         got = run.quote(['true', run.Raw('&&'), 'echo', 'yay'])
         assert got == "true && echo yay"
+
+
+class TestRaw(object):
+    def test_eq(self):
+        str_ = "I am a raw something or other"
+        raw = run.Raw(str_)
+        assert raw == run.Raw(str_)
