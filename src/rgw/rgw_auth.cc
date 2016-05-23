@@ -269,29 +269,6 @@ RGWAuthApplier::aplptr_t RGWAnonymousAuthEngine::authenticate() const
 
 
 /* Keystone */
-class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
-public:
-  RGWKeystoneHTTPTransceiver(CephContext * const cct,
-                             bufferlist * const token_body_bl)
-    : RGWHTTPTransceiver(cct, token_body_bl,
-                         cct->_conf->rgw_keystone_verify_ssl,
-                         { "X-Subject-Token" }) {
-  }
-
-  std::string get_subject_token() const {
-    try {
-      return get_header_value("X-Subject-Token");
-    } catch (std::out_of_range&) {
-      return header_value_t();
-    }
-  }
-};
-
-typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
-typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
-typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
-
-
 bool RGWKeystoneAuthEngine::is_applicable() const noexcept
 {
   if (! RGWTokenBasedAuthEngine::is_applicable()) {
@@ -323,6 +300,8 @@ KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) 
 
 KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
 {
+  using RGWValidateKeystoneToken = KeystoneService::RGWValidateKeystoneToken;
+
   bufferlist token_body_bl;
   RGWValidateKeystoneToken validate(cct, &token_body_bl);
 
