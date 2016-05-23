@@ -205,7 +205,7 @@ void XioConnection::send_keepalive_or_ack_internal(bool ack, const utime_t *tp)
   ldout(msgr->cct,8) << __func__ << " sending command with tag " << (int)(*(char*)msg->out.header.iov_base)
        << " len " << msg->out.header.iov_len << dendl;
 
-  portal->enqueue_for_send(this, xcmd);
+  portal->enqueue(this, xcmd);
 }
 
 
