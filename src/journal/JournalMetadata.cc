@@ -853,6 +853,34 @@ uint64_t JournalMetadata::allocate_commit_tid(uint64_t object_num,
   return commit_tid;
 }
 
+void JournalMetadata::overflow_commit_tid(uint64_t commit_tid,
+                                          uint64_t object_num) {
+  Mutex::Locker locker(m_lock);
+
+  auto it = m_pending_commit_tids.find(commit_tid);
+  assert(it != m_pending_commit_tids.end());
+  assert(it->second.object_num < object_num);
+
+  ldout(m_cct, 20) << __func__ << ": "
+                   << "commit_tid=" << commit_tid << ", "
+                   << "old_object_num=" << it->second.object_num << ", "
+                   << "new_object_num=" << object_num << dendl;
+  it->second.object_num = object_num;
+}
+
+void JournalMetadata::get_commit_entry(uint64_t commit_tid,
+                                       uint64_t *object_num,
+                                       uint64_t *tag_tid, uint64_t *entry_tid) {
+  Mutex::Locker locker(m_lock);
+
+  auto it = m_pending_commit_tids.find(commit_tid);
+  assert(it != m_pending_commit_tids.end());
+
+  *object_num = it->second.object_num;
+  *tag_tid = it->second.tag_tid;
+  *entry_tid = it->second.entry_tid;
+}
+
 void JournalMetadata::committed(uint64_t commit_tid,
                                 const CreateContext &create_context) {
   ldout(m_cct, 20) << "committed tid=" << commit_tid << dendl;
