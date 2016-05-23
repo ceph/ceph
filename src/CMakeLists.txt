@@ -113,6 +113,11 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
 
+option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
+if(WITH_OCF)
+  add_subdirectory(ocf)
+endif()
+
 # Python stuff
 find_package(PythonInterp 2 QUIET)
 if(NOT PYTHONINTERP_FOUND)
