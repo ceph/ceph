@@ -16,6 +16,8 @@ class RWLock;
 namespace librbd {
 
 class ImageCtx;
+class ImageUpdateWatchers;
+class UpdateWatchCtx;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageState {
@@ -39,6 +41,11 @@ public:
   void acquire_lock_refresh(Context *on_finish);
 
   void snap_set(const std::string &snap_name, Context *on_finish);
+
+  int register_update_watcher(UpdateWatchCtx *watcher, uint64_t *handle);
+  int unregister_update_watcher(uint64_t handle);
+  void flush_update_watchers(Context *on_finish);
+  void shut_down_update_watchers(Context *on_finish);
 
 private:
   enum State {
@@ -94,6 +101,8 @@ private:
 
   uint64_t m_last_refresh;
   uint64_t m_refresh_seq;
+
+  ImageUpdateWatchers *m_update_watchers;
 
   bool is_transition_state() const;
   bool is_closed() const;

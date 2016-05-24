@@ -1795,3 +1795,41 @@ TRACEPOINT_EVENT(librbd, stat_exit,
         ctf_array_text(char, parent_name, info->parent_name, RBD_MAX_IMAGE_NAME_SIZE)
     )
 )
+
+TRACEPOINT_EVENT(librbd, update_watch_enter,
+    TP_ARGS(
+        void*, imagectx,
+        void*, watchctx),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagctx, imagectx)
+        ctf_integer_hex(void*, watchctx, watchctx)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, update_watch_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, update_unwatch_enter,
+    TP_ARGS(
+        void*, imagectx,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagctx, imagectx)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, update_unwatch_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

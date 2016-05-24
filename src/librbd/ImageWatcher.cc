@@ -558,6 +558,10 @@ bool ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
 
   m_image_ctx.state->handle_update_notification();
   m_image_ctx.perfcounter->inc(l_librbd_notify);
+  if (ack_ctx != nullptr) {
+    m_image_ctx.state->flush_update_watchers(new C_ResponseMessage(ack_ctx));
+    return false;
+  }
   return true;
 }
 
