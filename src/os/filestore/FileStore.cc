@@ -1026,6 +1026,7 @@ int FileStore::mkjournal()
 
   new_journal();
   if (journal) {
+    journal->set_on_abort(on_abort);
     ret = journal->check();
     if (ret < 0) {
       ret = journal->create();
