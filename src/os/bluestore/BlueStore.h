@@ -369,14 +369,12 @@ public:
     Sequencer *parent;
 
     std::mutex wal_apply_mutex;
-    std::unique_lock<std::mutex> wal_apply_lock;
 
     uint64_t last_seq = 0;
 
     OpSequencer()
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL),
-	wal_apply_lock(wal_apply_mutex, std::defer_lock) {
+      : parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -482,12 +480,12 @@ public:
 
       // preserve wal ordering for this sequencer by taking the lock
       // while still holding the queue lock
-      i->osr->wal_apply_lock.lock();
+      i->osr->wal_apply_mutex.lock();
       return i;
     }
     void _process(TransContext *i, ThreadPool::TPHandle &) override {
       store->_wal_apply(i);
-      i->osr->wal_apply_lock.unlock();
+      i->osr->wal_apply_mutex.unlock();
     }
     void _clear() {
       assert(wal_queue.empty());
