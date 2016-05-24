@@ -369,6 +369,44 @@ TEST_P(MessengerTest, FeatureTest) {
   client_msgr->wait();
 }
 
+TEST_P(MessengerTest, TimeoutTest) {
+  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "1");
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("127.0.0.1");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  // 1. build the connection
+  MPing *m = new MPing();
+  ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 1);
+  ASSERT_TRUE(conn->peer_is_osd());
+
+  // 2. wait for idle
+  usleep(2500*1000);
+  ASSERT_FALSE(conn->is_connected());
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+
+  client_msgr->shutdown();
+  client_msgr->wait();
+  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "900");
+}
+
 TEST_P(MessengerTest, StatefulTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
