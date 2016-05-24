@@ -40,20 +40,6 @@ static struct xio_session_ops xio_msgr_ops;
 
 /* Accelio API callouts */
 
-/* string table */
-static const char *xio_session_event_types[] =
-{ "XIO_SESSION_REJECT_EVENT",
-  "XIO_SESSION_TEARDOWN_EVENT",
-  "XIO_SESSION_NEW_CONNECTION_EVENT",
-  "XIO_SESSION_CONNECTION_ESTABLISHED_EVENT",
-  "XIO_SESSION_CONNECTION_TEARDOWN_EVENT",
-  "XIO_SESSION_CONNECTION_CLOSED_EVENT",
-  "XIO_SESSION_CONNECTION_DISCONNECTED_EVENT",
-  "XIO_SESSION_CONNECTION_REFUSED_EVENT",
-  "XIO_SESSION_CONNECTION_ERROR_EVENT",
-  "XIO_SESSION_ERROR_EVENT"
-};
-
 namespace xio_log
 {
 typedef pair<const char*, int> level_pair;
@@ -221,13 +207,13 @@ static string xio_uri_from_entity(const string &type,
   char addr_buf[129];
   string xio_uri;
 
-  switch(addr.addr.ss_family) {
+  switch(addr.get_family()) {
   case AF_INET:
-    host = inet_ntop(AF_INET, &addr.addr4.sin_addr, addr_buf,
+    host = inet_ntop(AF_INET, &addr.u.sin.sin_addr, addr_buf,
 		     INET_ADDRSTRLEN);
     break;
   case AF_INET6:
-    host = inet_ntop(AF_INET6, &addr.addr6.sin6_addr, addr_buf,
+    host = inet_ntop(AF_INET6, &addr.u.sin6.sin6_addr, addr_buf,
 		     INET6_ADDRSTRLEN);
     break;
   default:
@@ -293,7 +279,9 @@ void XioInit::package_init(CephContext *cct) {
        xopt = max(cct->_conf->xio_max_send_inline, 512);
        xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
                   &xopt, sizeof(xopt));
-       xopt = 216;
+
+       xopt = XioMsgHdr::get_max_encoded_length();
+       ldout(cct,2) << "setting accelio max header size " << xopt << dendl;
        xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
                   &xopt, sizeof(xopt));
 
@@ -436,7 +424,7 @@ void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    my_inst.addr.addr = t.addr;
+    my_inst.addr.u = t.u;
     ldout(cct,2) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     // init_local_connection();
@@ -543,7 +531,7 @@ int XioMessenger::session_event(struct xio_session *session,
   case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT: /* unexpected discon */
   case XIO_SESSION_CONNECTION_REFUSED_EVENT:
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
-    ldout(cct,2) << xio_session_event_types[event_data->event]
+    ldout(cct,2) << xio_session_event_str(event_data->event)
       << " xcon " << xcon << " session " << session  << dendl;
     if (likely(!!xcon)) {
       Spinlock::Locker lckr(conns_sp);
@@ -567,12 +555,13 @@ int XioMessenger::session_event(struct xio_session *session,
     break;
   case XIO_SESSION_CONNECTION_TEARDOWN_EVENT:
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
-    ldout(cct,2) << xio_session_event_types[event_data->event]
+    ldout(cct,2) << xio_session_event_str(event_data->event)
       << " xcon " << xcon << " session " << session << dendl;
     xcon->on_teardown_event();
     break;
   case XIO_SESSION_TEARDOWN_EVENT:
-    ldout(cct,2) << "xio_session_teardown " << session << dendl;
+    ldout(cct,2) << xio_session_event_str(event_data->event)
+      << " session " << session << dendl;
     if (unlikely(XioPool::trace_mempool)) {
       xp_stats.dump("xio session dtor", reinterpret_cast<uint64_t>(session));
     }
@@ -787,6 +776,18 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
   return xmsg;
 }
 
+XioCommand* pool_alloc_xio_command(XioConnection *xcon)
+{
+  struct xio_reg_mem mp_mem;
+  int e = xpool_alloc(xio_msgr_noreg_mpool, sizeof(XioCommand), &mp_mem);
+  if (!!e)
+    return NULL;
+  XioCommand *xcmd = reinterpret_cast<XioCommand*>(mp_mem.addr);
+  assert(!!xcmd);
+  new (xcmd) XioCommand(xcon, mp_mem);
+  return xcmd;
+}
+
 int XioMessenger::_send_message(Message *m, Connection *con)
 {
   if (con == loop_con.get() /* intrusive_ptr get() */) {
@@ -857,7 +858,8 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   }
 
   ldout(cct,4) << __func__ << " " << m << " new XioMsg " << xmsg
-       << " req_0 " << &xmsg->req_0.msg << " msg type " << m->get_type()
+       << " tag " << (int)xmsg->hdr.tag
+       << " req_0 " << xmsg->get_xio_msg() << " msg type " << m->get_type()
        << " features: " << xcon->get_features()
        << " conn " << xcon->conn << " sess " << xcon->session << dendl;
 
@@ -874,7 +876,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
     }
   }
 
-  struct xio_msg *req = &xmsg->req_0.msg;
+  struct xio_msg *req = xmsg->get_xio_msg();
   struct xio_iovec_ex *msg_iov = req->out.pdata_iov.sglist;
 
   if (magic & (MSG_MAGIC_XIO)) {
@@ -903,14 +905,14 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   xio_place_buffers(data, xmsg, req, msg_iov, req_size, ex_cnt, msg_off,
 		    req_off, BUFFER_DATA);
   ldout(cct,10) << "ex_cnt " << ex_cnt << ", req_off " << req_off
-    << ", msg_cnt " << xmsg->hdr.msg_cnt << dendl;
+    << ", msg_cnt " << xmsg->get_msg_count() << dendl;
 
   /* finalize request */
   if (msg_off)
     req->out.pdata_iov.nents = msg_off;
 
   /* fixup first msg */
-  req = &xmsg->req_0.msg;
+  req = xmsg->get_xio_msg();
 
   const std::list<buffer::ptr>& header = xmsg->hdr.get_bl().buffers();
   assert(header.size() == 1); /* XXX */
@@ -919,10 +921,10 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   req->out.header.iov_len = pb->length();
 
   /* deliver via xio, preserve ordering */
-  if (xmsg->hdr.msg_cnt > 1) {
-    struct xio_msg *head = &xmsg->req_0.msg;
+  if (xmsg->get_msg_count() > 1) {
+    struct xio_msg *head = xmsg->get_xio_msg();
     struct xio_msg *tail = head;
-    for (req_off = 0; ((unsigned) req_off) < xmsg->hdr.msg_cnt-1; ++req_off) {
+    for (req_off = 0; ((unsigned) req_off) < xmsg->get_msg_count()-1; ++req_off) {
       req = &xmsg->req_arr[req_off].msg;
 assert(!req->in.pdata_iov.nents);
 assert(req->out.pdata_iov.nents || !nbuffers);

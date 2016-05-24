@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
@@ -18,6 +19,7 @@
 #include "librbd/journal/TypeTraits.h"
 #include "ProgressContext.h"
 #include "types.h"
+#include <boost/optional.hpp>
 
 class AdminSocketHook;
 
@@ -40,6 +42,7 @@ namespace mirror {
 
 struct Threads;
 
+namespace image_replayer { template <typename> class BootstrapRequest; }
 namespace image_replayer { template <typename> class ReplayStatusFormatter; }
 
 /**
@@ -52,7 +55,6 @@ public:
 
   enum State {
     STATE_UNKNOWN,
-    STATE_UNINITIALIZED,
     STATE_STARTING,
     STATE_REPLAYING,
     STATE_STOPPING,
@@ -86,6 +88,10 @@ public:
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
+  inline uint64_t get_local_pool_id() { return m_local_pool_id; }
+  inline const std::string get_local_image_id() { return m_local_image_id; }
+  inline const std::string get_global_image_id() { return m_global_image_id; }
+  inline const std::string get_local_image_name() { return m_local_image_name; }
 
   void start(Context *on_finish = nullptr,
 	     const BootstrapParams *bootstrap_params = nullptr,
@@ -99,6 +105,9 @@ public:
   virtual void handle_replay_ready();
   virtual void handle_replay_complete(int r, const std::string &error_desc);
 
+  inline const std::string get_global_image_id() const {
+    return m_global_image_id;
+  }
   inline int64_t get_remote_pool_id() const {
     return m_remote_pool_id;
   }
@@ -187,6 +196,7 @@ protected:
 
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
+  typedef boost::optional<State> OptionalState;
 
   class BootstrapProgressContext : public ProgressContext {
   public:
@@ -209,7 +219,7 @@ private:
   std::string m_local_image_name;
   std::string m_name;
   Mutex m_lock;
-  State m_state = STATE_UNINITIALIZED;
+  State m_state = STATE_STOPPED;
   int m_last_r = 0;
   std::string m_state_desc;
   BootstrapProgressContext m_progress_cxt;
@@ -226,11 +236,16 @@ private:
   Context *m_update_status_task = nullptr;
   int m_update_status_interval = 0;
   librados::AioCompletion *m_update_status_comp = nullptr;
-  bool m_update_status_pending = false;
   bool m_stop_requested = false;
   bool m_manual_stop = false;
 
   AdminSocketHook *m_asok_hook = nullptr;
+
+  image_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
+
+  uint32_t m_in_flight_status_updates = 0;
+  bool m_update_status_requested = false;
+  Context *m_on_update_status_finish = nullptr;
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
@@ -255,17 +270,27 @@ private:
 
   static std::string to_string(const State state);
 
-  State get_state_() const { return m_state; }
-  bool is_stopped_() const { return m_state == STATE_UNINITIALIZED ||
-                                    m_state == STATE_STOPPED; }
-  bool is_running_() const { return !is_stopped_() && m_state != STATE_STOPPING; }
+  State get_state_() const {
+    return m_state;
+  }
+  bool is_stopped_() const {
+    return m_state == STATE_STOPPED;
+  }
+  bool is_running_() const {
+    return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
+  }
 
   void shut_down_journal_replay(bool cancel_ops);
 
-  void update_mirror_image_status(bool final = false,
-				  State expected_state = STATE_UNKNOWN);
+  bool update_mirror_image_status(bool force, const OptionalState &state);
+  bool start_mirror_image_status_update(bool force, bool restarting);
+  void finish_mirror_image_status_update();
+  void queue_mirror_image_status_update(const OptionalState &state);
+  void send_mirror_status_update(const OptionalState &state);
+  void handle_mirror_status_update(int r);
   void reschedule_update_status_task(int new_interval = 0);
-  void start_update_status_task();
+
+  void handle_stop(int r, Context *on_start, Context *on_stop);
 
   void bootstrap();
   void handle_bootstrap(int r);

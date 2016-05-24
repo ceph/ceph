@@ -16,9 +16,8 @@
  */
 
 #include "PGLog.h"
-#include "PG.h"
-#include "SnapMapper.h"
-#include "../include/unordered_map.h"
+#include "include/unordered_map.h"
+#include "common/ceph_context.h"
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix

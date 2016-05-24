@@ -7,16 +7,31 @@ TOPDIR=`pwd`
 install -d -m0755 build-doc
 
 if command -v dpkg >/dev/null; then
-    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev zlib1g-dev cython graphviz; do
-	if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
-            # add a space after old values
-	    missing="${missing:+$missing }$package"
-	fi
+    packages='
+      git
+      gcc
+      python-dev
+      python-pip
+      python-virtualenv
+      libxml2-dev
+      libxslt1-dev
+      doxygen
+      ditaa
+      graphviz
+      ant
+      cython
+      librbd-dev
+      zlib1g-dev'
+    for package in $packages; do
+    if [ "$(dpkg --status -- $package 2>&1 | sed -n 's/^Status: //p')" != "install ok installed" ]; then
+        # add a space after old values
+        missing="${missing:+$missing }$package"
+    fi
     done
     if [ -n "$missing" ]; then
-	echo "$0: missing required packages, please install them:" 1>&2
-	echo "sudo apt-get install $missing"
-	exit 1
+        echo "$0: missing required packages, please install them:" 1>&2
+        echo "sudo apt-get install -o APT::Install-Recommends=true $missing" 1>&2
+        exit 1
     fi
 elif command -v yum >/dev/null; then
     for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython graphviz; do

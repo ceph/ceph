@@ -150,7 +150,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (rc < 0)  {
       rc = -errno;
-      lderr(msgr->cct) << "accepter.bind failed to set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
+      lderr(msgr->cct) << "accepter.bind failed to set SO_RCVBUF to " << size << ": " << cpp_strerror(rc) << dendl;
       return rc;
     }
   }

@@ -863,7 +863,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
-    onack->m_ops, snap_seq, NULL, 0,
+    onack->m_ops, snapid, NULL, 0,
     onack, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
@@ -1622,11 +1622,12 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
 
 int librados::IoCtxImpl::set_alloc_hint(const object_t& oid,
                                         uint64_t expected_object_size,
-                                        uint64_t expected_write_size)
+                                        uint64_t expected_write_size,
+					uint32_t flags)
 {
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
-  wr.set_alloc_hint(expected_object_size, expected_write_size);
+  wr.set_alloc_hint(expected_object_size, expected_write_size, flags);
   return operate(oid, &wr, NULL);
 }
 

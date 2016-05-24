@@ -19,7 +19,6 @@
 
 #include "msg/Message.h"
 #include "include/types.h"
-//#include "common/config.h"
 
 namespace ceph {
   class Formatter;

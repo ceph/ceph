@@ -113,6 +113,11 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
 
+option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
+if(WITH_OCF)
+  add_subdirectory(ocf)
+endif()
+
 # Python stuff
 find_package(PythonInterp 2 QUIET)
 if(NOT PYTHONINTERP_FOUND)
@@ -1033,6 +1038,7 @@ if(${WITH_RBD})
   set(rbd_mirror_internal
     tools/rbd_mirror/ClusterWatcher.cc 
     tools/rbd_mirror/ImageReplayer.cc
+    tools/rbd_mirror/ImageDeleter.cc
     tools/rbd_mirror/ImageSync.cc
     tools/rbd_mirror/Mirror.cc 
     tools/rbd_mirror/PoolWatcher.cc 
@@ -1311,7 +1317,8 @@ add_custom_target(vstart DEPENDS
     ceph-authtool
     ceph-conf
     monmaptool
-    crushtool)
+    crushtool
+    cython_rados)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

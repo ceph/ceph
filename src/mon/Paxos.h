@@ -112,12 +112,8 @@ e 12v
 #include "include/types.h"
 #include "mon_types.h"
 #include "include/buffer.h"
-#include "messages/PaxosServiceMessage.h"
 #include "msg/msg_types.h"
-
 #include "include/Context.h"
-
-#include "common/Timer.h"
 #include "common/perf_counters.h"
 #include <errno.h>
 

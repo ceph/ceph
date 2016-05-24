@@ -149,7 +149,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
       image.close();
 
       m_mirrored_images[ioctx.get_id()].insert(PoolWatcher::ImageIds(
-        get_image_id(&ioctx, name), mirror_image_info.global_id));
+        get_image_id(&ioctx, name), name, mirror_image_info.global_id));
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -194,7 +194,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
       image.close();
 
       m_mirrored_images[cioctx.get_id()].insert(PoolWatcher::ImageIds(
-        get_image_id(&cioctx, name), mirror_image_info.global_id));
+        get_image_id(&cioctx, name), name, mirror_image_info.global_id));
     }
     if (image_name != nullptr)
       *image_name = name;

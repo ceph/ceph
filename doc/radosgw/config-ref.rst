@@ -757,10 +757,14 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift API. 
+:Description: The URL prefix for the Swift StorageURL that goes in front of
+              the "/v1" part. This allows to run several Gateway instances
+              on the same host. For compatibility, setting this configuration
+              variable to empty causes the default "/swift" to be used.
+              Use explicit prefix "/" to start StorageURL at the root.
 :Default: ``swift``
-:Example: http://fqdn.com/swift
-	
+:Example: "/swift-testing"
+
 
 ``rgw swift auth url``
 
@@ -955,9 +959,40 @@ Keystone Settings
 :Default: None
 
 
+``rgw keystone api version``
+
+:Description: The version (2 or 3) of OpenStack Identity API that should be
+              used for communication with the Keystone server.
+:Type: Integer
+:Default: ``2``
+
+
+``rgw keystone admin domain``
+
+:Description: The name of OpenStack domain with admin privilege when using
+              OpenStack Identity API v3.
+:Type: String
+:Default: None
+
+
+``rgw keystone admin project``
+
+:Description: The name of OpenStack project with admin privilege when using
+              OpenStack Identity API v3. If left unspecified, value of
+              ``rgw keystone admin tenant`` will be used instead.
+:Type: String
+:Default: None
+
+
 ``rgw keystone admin token``
 
-:Description: The Keystone admin token (shared secret).
+:Description: The Keystone admin token (shared secret). In Ceph RadosGW
+              authentication with the admin token has priority over
+              authentication with the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``). Admin token feature is considered
+              as deprecated.
 :Type: String
 :Default: None
 

@@ -3588,7 +3588,7 @@ TEST_P(StoreTest, SetAllocHint) {
   }
   {
     ObjectStore::Transaction t;
-    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4);
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4, 0);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -3600,7 +3600,7 @@ TEST_P(StoreTest, SetAllocHint) {
   }
   {
     ObjectStore::Transaction t;
-    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4);
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*4, 0);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }

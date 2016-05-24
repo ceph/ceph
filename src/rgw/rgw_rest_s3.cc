@@ -715,13 +715,15 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
 {
 #define GET_BUCKET_VERSIONING_BUF_MAX (128 * 1024)
 
-  char *data;
+  char *data = nullptr;
   int len = 0;
   int r =
     rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_VERSIONING_BUF_MAX);
   if (r < 0) {
     return r;
   }
+  
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   if (s->aws4_auth_needs_complete) {
     int ret_auth = do_aws4_auth_completion();
@@ -735,20 +737,17 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
   if (!parser.init()) {
     ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
     r = -EIO;
-    goto done;
+    return r;
   }
 
   if (!parser.parse(data, len, 1)) {
     ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
     r = -EINVAL;
-    goto done;
+    return r;
   }
 
   r = parser.get_versioning_status(&enable_versioning);
-
-done:
-  free(data);
-
+  
   return r;
 }
 
@@ -764,12 +763,14 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
   static constexpr uint32_t GET_BUCKET_WEBSITE_BUF_MAX = (128 * 1024);
 
-  char *data;
+  char *data = nullptr;
   int len = 0;
   int r = rgw_rest_read_all_input(s, &data, &len, GET_BUCKET_WEBSITE_BUF_MAX);
   if (r < 0) {
     return r;
   }
+
+  auto data_deleter = std::unique_ptr<char, decltype(free)*>{data, free};
 
   if (s->aws4_auth_needs_complete) {
       int ret_auth = do_aws4_auth_completion();
@@ -3225,7 +3226,11 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   string algorithm = "AWS4-HMAC-SHA256";
 
-  s->aws4_auth = new rgw_aws4_auth;
+  try {
+    s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
+  } catch (std::bad_alloc&) {
+    return -ENOMEM;
+  }
 
   if ((!s->http_auth) || !(*s->http_auth)) {
 
@@ -3581,7 +3586,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* aws4 auth not completed... delay aws4 auth */
 
-    dout(10) << "body content detected... delaying v4 auth" << dendl;
+    dout(10) << "delaying v4 auth" << dendl;
 
     switch (s->op_type)
     {

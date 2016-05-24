@@ -196,7 +196,8 @@ OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
 OPTION(ms_dump_on_send, OPT_BOOL, false)           // hexdump msg to log on send
 OPTION(ms_dump_corrupt_message_level, OPT_INT, 1)  // debug level to hexdump undecodeable messages at
-OPTION(ms_async_op_threads, OPT_INT, 3)
+OPTION(ms_async_op_threads, OPT_INT, 3)            // number of worker processing threads for async messenger created on init
+OPTION(ms_async_max_op_threads, OPT_INT, 5)        // max number of worker processing threads for async messenger
 OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // example: ms_async_affinity_cores = 0,1
 // The number of coreset is expected to equal to ms_async_op_threads, otherwise
@@ -746,8 +747,8 @@ OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
-OPTION(osd_recovery_max_active, OPT_INT, 3)
-OPTION(osd_recovery_max_single_start, OPT_INT, 1)
+OPTION(osd_recovery_max_active, OPT_U64, 3)
+OPTION(osd_recovery_max_single_start, OPT_U64, 1)
 OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
 OPTION(osd_copyfrom_max_chunk, OPT_U64, 8<<20)   // max size of a COPYFROM chunk
 OPTION(osd_push_per_object_cost, OPT_U64, 1000)  // push cost per object
@@ -865,6 +866,10 @@ OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
 OPTION(osd_scrub_priority, OPT_U32, 5)
 // set default cost equal to 50MB io
 OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+
+OPTION(osd_recovery_priority, OPT_U32, 5)
+// set default cost equal to 20MB io
+OPTION(osd_recovery_cost, OPT_U32, 20<<20)
 
 /**
  * osd_recovery_op_warn_multiple scales the normal warning threshhold,

@@ -153,6 +153,40 @@ static const char *config_keys[] = {
   NULL
 };
 
+/**
+ * This is a more limited form of C_Contexts, but that requires
+ * a ceph_context which we don't have here.
+ */
+class ObjectOperation::C_TwoContexts : public Context {
+  Context *first;
+  Context *second;
+public:
+  C_TwoContexts(Context *first, Context *second) :
+    first(first), second(second) {}
+  void finish(int r) {
+    first->complete(r);
+    second->complete(r);
+    first = NULL;
+    second = NULL;
+  }
+
+  virtual ~C_TwoContexts() {
+    delete first;
+    delete second;
+  }
+};
+
+void ObjectOperation::add_handler(Context *extra) {
+  size_t last = out_handler.size() - 1;
+  Context *orig = out_handler[last];
+  if (orig) {
+    Context *wrapper = new C_TwoContexts(orig, extra);
+    out_handler[last] = wrapper;
+  } else {
+    out_handler[last] = extra;
+  }
+}
+
 Objecter::OSDSession::unique_completion_lock Objecter::OSDSession::get_lock(
   object_t& oid)
 {

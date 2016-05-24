@@ -20,11 +20,7 @@
 using namespace std;
 
 #include "include/types.h"
-#include "msg/Message.h"
-
 #include "include/Context.h"
-
-#include "common/Timer.h"
 #include "mon/MonOpRequest.h"
 
 class Monitor;

@@ -96,6 +96,13 @@ int CrushLocation::init_on_startup()
   int r = gethostname(hostname, sizeof(hostname)-1);
   if (r < 0)
     strcpy(hostname, "unknown_host");
+  // use short hostname
+  for (unsigned i=0; hostname[i]; ++i) {
+    if (hostname[i] == '.') {
+      hostname[i] = '\0';
+      break;
+    }
+  }
   std::lock_guard<std::mutex> l(lock);
   loc.clear();
   loc.insert(make_pair<std::string,std::string>("host", hostname));

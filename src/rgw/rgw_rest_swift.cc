@@ -102,8 +102,9 @@ static void dump_account_metadata(struct req_state * const s,
       STREAM_IO(s)->print("%s: %s\r\n", geniter->second.c_str(),
 			  iter->second.c_str());
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-      STREAM_IO(s)->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN,
-			  iter->second.c_str());
+      STREAM_IO(s)->print("X-Account-Meta-%s: %s\r\n",
+                          camelcase_dash_http_attr(name + PREFIX_LEN).c_str(),
+                          iter->second.c_str());
     }
   }
 }
@@ -366,8 +367,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
         STREAM_IO(s)->print("%s: %s\r\n", geniter->second.c_str(),
 			    iter->second.c_str());
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
-        STREAM_IO(s)->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN,
-			    iter->second.c_str());
+        STREAM_IO(s)->print("X-Container-Meta-%s: %s\r\n",
+                            camelcase_dash_http_attr(name + PREFIX_LEN).c_str(),
+                            iter->second.c_str());
       }
     }
   }
@@ -820,23 +822,24 @@ static void bulkdelete_respond(const unsigned num_deleted,
     dump_errno(200, resp_status);
   }
 
-  formatter.dump_int("Number Deleted", num_deleted);
-  formatter.dump_int("Number Not Found", num_unfound);
-  formatter.dump_string("Response Body", resp_body);
-  formatter.dump_string("Response Status", resp_status);
+  encode_json("Number Deleted", num_deleted, &formatter);
+  encode_json("Number Not Found", num_unfound, &formatter);
+  encode_json("Response Body", resp_body, &formatter);
+  encode_json("Response Status", resp_status, &formatter);
+
   formatter.open_array_section("Errors");
   for (const auto fail_desc : failures) {
     formatter.open_array_section("object");
 
     stringstream ss_name;
     ss_name << fail_desc.path;
-    formatter.dump_string("Name", ss_name.str());
+    encode_json("Name", ss_name.str(), &formatter);
 
     rgw_err err;
     set_req_state_err(err, fail_desc.err, prot_flags);
     string status;
     dump_errno(err, status);
-    formatter.dump_string("Status", status);
+    encode_json("Status", status, &formatter);
     formatter.close_section();
   }
   formatter.close_section();
@@ -919,7 +922,8 @@ static void dump_object_metadata(struct req_state * const s,
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n", name,
+      STREAM_IO(s)->print("X-Object-Meta-%s: %s\r\n",
+                          camelcase_dash_http_attr(name).c_str(),
                           kv.second.c_str());
     }
   }
@@ -1173,21 +1177,31 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
 
     RGWBulkDelete::acct_path_t path;
 
-    const size_t sep_pos = path_str.find('/');
-    if (string::npos == sep_pos) {
-      url_decode(path_str, path.bucket_name);
-    } else {
-      string bucket_name;
-      url_decode(path_str.substr(0, sep_pos), bucket_name);
+    /* We need to skip all slashes at the beginning in order to preserve
+     * compliance with Swift. */
+    const size_t start_pos = path_str.find_first_not_of('/');
 
-      string obj_name;
-      url_decode(path_str.substr(sep_pos + 1), obj_name);
+    if (string::npos != start_pos) {
+      /* Seperator is the first slash after the leading ones. */
+      const size_t sep_pos = path_str.find('/', start_pos);
 
-      path.bucket_name = bucket_name;
-      path.obj_key = obj_name;
+      if (string::npos != sep_pos) {
+        string bucket_name;
+        url_decode(path_str.substr(start_pos, sep_pos - start_pos), bucket_name);
+
+        string obj_name;
+        url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+        path.bucket_name = bucket_name;
+        path.obj_key = obj_name;
+      } else {
+        /* It's guaranteed here that bucket name is at least one character
+         * long and is different than slash. */
+        url_decode(path_str.substr(start_pos), path.bucket_name);
+      }
+
+      items.push_back(path);
     }
-
-    items.push_back(path);
 
     if (items.size() == MAX_CHUNK_ENTRIES) {
       *is_truncated = true;

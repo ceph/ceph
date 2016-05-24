@@ -2,13 +2,11 @@
 #define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
-
 #include "objclass/objclass.h"
-
-#include "common/Cond.h"
 #include "common/Mutex.h"
-#include "common/ceph_context.h"
 
+//forward declaration
+class CephContext;
 
 class ClassHandler
 {

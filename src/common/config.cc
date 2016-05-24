@@ -998,7 +998,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       return 0;
     case OPT_U32: {
       std::string err;
-      int f = strict_si_cast<int>(val, &err);
+      int f = strict_si_cast<uint32_t>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->conf_ptr(this) = f;

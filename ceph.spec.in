@@ -619,7 +619,7 @@ python-cephfs instead.
 # common
 #################################################################################
 %prep
-%setup -q
+%autosetup -p1
 
 %build
 %if 0%{with cephfs_java}
@@ -1222,9 +1222,11 @@ fi
 %{_libdir}/librados_tp.so.*
 %endif
 
-%post -n librados2 -p /sbin/ldconfig
+%post -n librados2
+/sbin/ldconfig
 
-%postun -n librados2 -p /sbin/ldconfig
+%postun -n librados2
+/sbin/ldconfig
 
 #################################################################################
 %files -n librados2-devel
@@ -1257,9 +1259,11 @@ fi
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
 
-%post -n libradosstriper1 -p /sbin/ldconfig
+%post -n libradosstriper1
+/sbin/ldconfig
 
-%postun -n libradosstriper1 -p /sbin/ldconfig
+%postun -n libradosstriper1
+/sbin/ldconfig
 
 #################################################################################
 %files -n libradosstriper1-devel
@@ -1282,7 +1286,8 @@ fi
 mkdir -p /usr/lib64/qemu/
 ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
-%postun -n librbd1 -p /sbin/ldconfig
+%postun -n librbd1
+/sbin/ldconfig
 
 #################################################################################
 %files -n librbd1-devel
@@ -1301,9 +1306,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_libdir}/librgw.so.*
 
-%post -n librgw2 -p /sbin/ldconfig
+%post -n librgw2
+/sbin/ldconfig
 
-%postun -n librgw2 -p /sbin/ldconfig
+%postun -n librgw2
+/sbin/ldconfig
 
 #################################################################################
 %files -n librgw2-devel
@@ -1324,9 +1331,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
 
-%post -n libcephfs1 -p /sbin/ldconfig
+%post -n libcephfs1
+/sbin/ldconfig
 
-%postun -n libcephfs1 -p /sbin/ldconfig
+%postun -n libcephfs1
+/sbin/ldconfig
 
 #################################################################################
 %files -n libcephfs1-devel
@@ -1385,9 +1394,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
 
-%post -n libcephfs_jni1 -p /sbin/ldconfig
+%post -n libcephfs_jni1
+/sbin/ldconfig
 
-%postun -n libcephfs_jni1 -p /sbin/ldconfig
+%postun -n libcephfs_jni1
+/sbin/ldconfig
 
 #################################################################################
 %files -n libcephfs_jni1-devel
@@ -1441,6 +1452,8 @@ fi
 # Now, relabel the files
 /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
 rm -f ${FILE_CONTEXT}.pre
+# The fixfiles command won't fix label for /var/run/ceph
+/usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
 # Start the daemons iff they were running before
 if test $STATUS -eq 0; then
@@ -1456,7 +1469,7 @@ if [ $1 -eq 0 ]; then
     cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
 
     # Remove the module
-    /usr/sbin/semodule -n -r ceph
+    /usr/sbin/semodule -n -r ceph > /dev/null 2>&1
 
     # Reload the policy if SELinux is enabled
     if ! /usr/sbin/selinuxenabled ; then
@@ -1475,6 +1488,8 @@ if [ $1 -eq 0 ]; then
 
     /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
     rm -f ${FILE_CONTEXT}.pre
+    # The fixfiles command won't fix label for /var/run/ceph
+    /usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
     # Start the daemons if they were running before
     if test $STATUS -eq 0; then

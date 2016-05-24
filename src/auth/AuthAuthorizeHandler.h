@@ -18,7 +18,7 @@
 #include "Auth.h"
 #include "AuthMethodList.h"
 #include "include/types.h"
-
+#include "common/Mutex.h"
 // Different classes of session crypto handling
 
 #define SESSION_CRYPTO_NONE 0

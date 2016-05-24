@@ -12,18 +12,19 @@
  *
  */
 
-#include <boost/variant.hpp>
-#include <boost/optional/optional_io.hpp>
 #include <iostream>
 #include <sstream>
 
-#include "ECUtil.h"
 #include "ECBackend.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
-#include "ReplicatedPG.h"
+#include "messages/MOSDECSubOpWrite.h"
+#include "messages/MOSDECSubOpWriteReply.h"
+#include "messages/MOSDECSubOpRead.h"
+#include "messages/MOSDECSubOpReadReply.h"
+#include "ECMsgTypes.h"
 
-class ReplicatedPG;
+#include "ReplicatedPG.h"
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
