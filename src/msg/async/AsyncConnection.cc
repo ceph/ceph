@@ -93,7 +93,7 @@ class C_tick_wakeup : public EventCallback {
  public:
   explicit C_tick_wakeup(AsyncConnectionRef c): conn(c) {}
   void do_request(int fd_or_id) {
-    conn->tick();
+    conn->tick(fd_or_id);
   }
 };
 
@@ -1309,6 +1309,11 @@ ssize_t AsyncConnection::_process_connection()
         dispatch_queue->queue_connect(this);
         async_msgr->ms_deliver_handle_fast_connect(this);
 
+        // make sure no pending tick timer
+        center->delete_time_event(last_tick_id);
+        last_tick_id = center->create_time_event(
+            async_msgr->cct->_conf->ms_tcp_read_timeout*1000*1000, tick_handler);
+
         // message may in queue between last _try_send and connection ready
         // write event may already notify and we need to force scheduler again
         write_lock.Lock();
@@ -1475,6 +1480,12 @@ ssize_t AsyncConnection::_process_connection()
         ldout(async_msgr->cct, 20) << __func__ << " accept done" << dendl;
         state = STATE_OPEN;
         memset(&connect_msg, 0, sizeof(connect_msg));
+
+        // make sure no pending tick timer
+        center->delete_time_event(last_tick_id);
+        last_tick_id = center->create_time_event(
+            async_msgr->cct->_conf->ms_tcp_read_timeout*1000*1000, tick_handler);
+
         write_lock.Lock();
         can_write = WriteStatus::CANWRITE;
         if (is_queued())
@@ -2598,15 +2609,21 @@ void AsyncConnection::wakeup_from(uint64_t id)
   process();
 }
 
-void AsyncConnection::tick()
+void AsyncConnection::tick(uint64_t id)
 {
-  Mutex::Locker l(lock);
   auto now = ceph::coarse_mono_clock::now();
+  ldout(async_msgr->cct, 20) << __func__ << " last_id=" << last_tick_id
+                             << " last_active" << last_active << dendl;
+  assert(last_tick_id == id);
+  Mutex::Locker l(lock);
   auto idle_period = std::chrono::duration_cast<std::chrono::seconds>(now - last_active).count();
-  if (async_msgr->cct->_conf->ms_tcp_read_timeout > (uint64_t)idle_period) {
+  if (async_msgr->cct->_conf->ms_tcp_read_timeout >= (uint64_t)idle_period) {
     ldout(async_msgr->cct, 1) << __func__ << " idle(" << idle_period << ") more than "
                               << async_msgr->cct->_conf->ms_tcp_read_timeout
                               << ", mark self fault." << dendl;
     fault();
+  } else if (is_connected()) {
+    last_tick_id = center->create_time_event(
+        async_msgr->cct->_conf->ms_tcp_read_timeout*1000*1000, tick_handler);
   }
 }

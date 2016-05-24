@@ -323,6 +323,7 @@ class AsyncConnection : public Connection {
   uint32_t recv_end;
   set<uint64_t> register_time_events; // need to delete it if stop
   ceph::coarse_mono_clock::time_point last_active;
+  uint64_t last_tick_id = 0;
 
   // Tis section are temp variables used by state transition
 
@@ -371,7 +372,7 @@ class AsyncConnection : public Connection {
   void handle_write();
   void process();
   void wakeup_from(uint64_t id);
-  void tick();
+  void tick(uint64_t id);
   void local_deliver();
   void stop() {
     lock.Lock();
