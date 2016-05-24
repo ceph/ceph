@@ -3199,7 +3199,7 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
-
+  uint32_t i;
   num_rados_handles = cct->_conf->rgw_num_rados_handles;
 
   rados = new librados::Rados *[num_rados_handles];
@@ -3208,7 +3208,10 @@ int RGWRados::init_rados()
     return ret;
   }
 
-  for (uint32_t i=0; i < num_rados_handles; i++) {
+  memset(rados, 0, sizeof(librados::Rados) * num_rados_handles);
+
+
+  for (i=0; i < num_rados_handles; i++) {
 
     rados[i] = new Rados();
     if (!rados[i]) {
@@ -3239,16 +3242,23 @@ int RGWRados::init_rados()
   return ret;
 
 fail:
-  for (uint32_t i=0; i < num_rados_handles; i++) {
+  for (i=0; i < num_rados_handles; i++) {
     if (rados[i]) {
       delete rados[i];
       rados[i] = NULL;
+    } else {
+      break;
     }
   }
   num_rados_handles = 0;
   if (rados) {
     delete[] rados;
     rados = NULL;
+  }
+
+  if(cr_registry){
+    delete cr_registry;
+    cr_registry = NULL;
   }
 
   return ret;
