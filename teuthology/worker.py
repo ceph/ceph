@@ -14,7 +14,7 @@ from . import report
 from . import safepath
 from .config import config as teuth_config
 from .config import set_config_attr
-from .exceptions import BranchNotFoundError, SkipJob
+from .exceptions import BranchNotFoundError, SkipJob, MaxWhileTries
 from .kill import kill_job
 from .repo_utils import fetch_qa_suite, fetch_teuthology
 
@@ -154,6 +154,13 @@ def prep_job(job_config, log_file_path, archive_dir):
         job_config['suite_path'] = fetch_qa_suite(suite_branch)
     except BranchNotFoundError as exc:
         log.exception("Branch not found; marking job as dead")
+        report.try_push_job_info(
+            job_config,
+            dict(status='dead', failure_reason=str(exc))
+        )
+        raise SkipJob()
+    except MaxWhileTries as exc:
+        log.exception("Failed to fetch or bootstrap; marking job as dead")
         report.try_push_job_info(
             job_config,
             dict(status='dead', failure_reason=str(exc))
