@@ -3202,7 +3202,7 @@ int RGWRados::init_rados()
 
   num_rados_handles = cct->_conf->rgw_num_rados_handles;
 
-  rados = new librados::Rados *[num_rados_handles];
+  rados = new (std::nothrow) librados::Rados *[num_rados_handles];
   if (!rados) {
     ret = -ENOMEM;
     return ret;
@@ -3210,7 +3210,7 @@ int RGWRados::init_rados()
 
   for (uint32_t i=0; i < num_rados_handles; i++) {
 
-    rados[i] = new Rados();
+    rados[i] = new (std::nothrow) Rados();
     if (!rados[i]) {
       ret = -ENOMEM;
       goto fail;
@@ -3227,14 +3227,23 @@ int RGWRados::init_rados()
     }
   }
 
-  cr_registry = new RGWCoroutinesManagerRegistry(cct);
+  cr_registry = new (std::nothrow) RGWCoroutinesManagerRegistry(cct);
+  if (!cr_registry) {
+    ret = -ENOMEM;
+    goto fail;
+  }
+
   ret =  cr_registry->hook_to_admin_command("cr dump");
   if (ret < 0) {
     goto fail;
   }
 
-  meta_mgr = new RGWMetadataManager(cct, this);
-  data_log = new RGWDataChangesLog(cct, this);
+  meta_mgr = new (std::nothrow) RGWMetadataManager(cct, this);
+  data_log = new (std::nothrow) RGWDataChangesLog(cct, this);
+  if (!meta_mgr || !data_log) {
+    ret = -ENOMEM;
+    goto fail;
+  }
 
   return ret;
 
@@ -3250,6 +3259,9 @@ fail:
     delete[] rados;
     rados = NULL;
   }
+
+  delete cr_registry;
+  cr_registry = NULL;
 
   return ret;
 }
