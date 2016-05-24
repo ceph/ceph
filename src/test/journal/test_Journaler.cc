@@ -39,6 +39,11 @@ public:
     return cond.wait();
   }
 
+  int shut_down_journaler() {
+    m_journaler->shut_down();
+    return 0;
+  }
+
   int register_client(const std::string &client_id, const std::string &desc) {
     journal::Journaler journaler(m_work_queue, m_timer, &m_timer_lock,
                                  m_ioctx, m_journal_id, client_id, 5);
@@ -95,10 +100,12 @@ TEST_F(TestJournaler, Init) {
   ASSERT_EQ(0, create_journal(12, 8));
   ASSERT_EQ(0, register_client(CLIENT_ID, "foo"));
   ASSERT_EQ(0, init_journaler());
+  ASSERT_EQ(0, shut_down_journaler());
 }
 
 TEST_F(TestJournaler, InitDNE) {
   ASSERT_EQ(-ENOENT, init_journaler());
+  ASSERT_EQ(0, shut_down_journaler());
 }
 
 TEST_F(TestJournaler, RegisterClientDuplicate) {

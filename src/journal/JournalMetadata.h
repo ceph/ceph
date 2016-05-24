@@ -52,7 +52,7 @@ public:
   ~JournalMetadata();
 
   void init(Context *on_init);
-  void shut_down();
+  void shut_down(Context *on_finish);
 
   bool is_initialized() const { return m_initialized; }
 
