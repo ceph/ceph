@@ -14,8 +14,6 @@
  *
  */
 
-#include <time.h>
-
 #include "common/errno.h"
 #include "Event.h"
 
