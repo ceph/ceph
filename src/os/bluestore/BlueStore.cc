@@ -645,19 +645,19 @@ BlueStore::BnodeRef BlueStore::Collection::get_bnode(
     get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
     BnodeRef e = new Bnode(hash, key, &bnode_set);
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " created " << e << dendl;
+	     << " created " << e << " " << key << dendl;
 
     bufferlist v;
     int r = store->db->get(PREFIX_OBJ, key, &v);
     if (r >= 0) {
       assert(v.length() > 0);
       bufferlist::iterator p = v.begin();
-      ::decode(e->ref_map, p);
+      ::decode(e->blob_map, p);
       dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	       << " loaded ref_map " << e->ref_map << dendl;
+	       << " loaded blob_map " << e->blob_map << dendl;
     } else {
       dout(10) << __func__ << " hash " <<std::hex << hash << std::dec
-	       << " missed, new ref_map" << dendl;
+	       << " missed, new blob_map" << dendl;
     }
     bnode_set.uset.insert(*e);
     return e;
@@ -2887,6 +2887,10 @@ int BlueStore::_do_read(
   while (l > 0 && lext != lextents.end()) {
     //bluestore_blob_t* bptr = get_blob(lext->second.blob);
     const bluestore_blob_t *bptr = c->get_blob_ptr(o, lext->second.blob);
+    if (bptr == nullptr) {
+      dout(20) << __func__ << " missed blob " << lext->second.blob << dendl;
+      _dump_onode(o);
+    }
     assert(bptr != nullptr);
     uint32_t l2read;
     if (off >= lext->first && off < lext->first + lext->second.length) {
@@ -4159,15 +4163,15 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   for (set<BnodeRef>::iterator p = txc->bnodes.begin();
        p != txc->bnodes.end();
        ++p) {
-    if ((*p)->ref_map.empty()) {
-      dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
-	       << " ref_map is empty" << dendl;
+    if ((*p)->blob_map.empty()) {
+      dout(20) << "  bnode " << std::hex << (*p)->hash << " " << (*p)->key << std::dec
+	       << " blob_map is empty" << dendl;
       t->rmkey(PREFIX_OBJ, (*p)->key);
     } else {
       bufferlist bl;
-      ::encode((*p)->ref_map, bl);
-      dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
-	       << " ref_map is " << bl.length() << dendl;
+      ::encode((*p)->blob_map, bl);
+      dout(20) << "  bnode " << std::hex << (*p)->hash << " " << (*p)->key << std::dec
+	       << " blob_map is " << bl.length() << dendl;
       t->set(PREFIX_OBJ, (*p)->key, bl);
     }
   }
@@ -5211,7 +5215,6 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
   if (!g_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
     return;
   dout(log_level) << __func__ << " " << std::hex << b->hash << std::dec << dendl;
-  dout(log_level) << __func__ << "  " << b->ref_map << dendl;
   for (auto &p : b->blob_map) {
     dout(log_level) << __func__ << "  " << p.first << ": " << p.second << dendl;
     if (p.second.csum_data.size()) {
