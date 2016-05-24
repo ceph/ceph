@@ -26,7 +26,7 @@ public:
   CompressionZlib() : Compressor("zlib") {}
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
-  int decompress(bufferlist::iterator &p, bufferlist &out) override;
+  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override;
  };
 
 

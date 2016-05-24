@@ -94,7 +94,7 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
   return 0;
 }
 
-int CompressionZlib::decompress(bufferlist::iterator &p, bufferlist &out)
+int CompressionZlib::decompress(bufferlist::iterator &p, size_t compressed_size, bufferlist &out)
 {
   int ret;
   unsigned have;
@@ -115,11 +115,11 @@ int CompressionZlib::decompress(bufferlist::iterator &p, bufferlist &out)
   }
 
   unsigned char c_out[max_len];
+  size_t remaining = MIN( p.get_remaining(), compressed_size);
+  while(remaining) {
 
-  while(!p.end()) {
-
-    long unsigned int len = p.get_ptr_and_advance(p.get_remaining(), &c_in);
-
+    long unsigned int len = p.get_ptr_and_advance(remaining, &c_in);
+    remaining -= len;
     strm.avail_in = len;
     strm.next_in = (unsigned char*)c_in;
 
@@ -147,5 +147,5 @@ int CompressionZlib::decompress(bufferlist::iterator &p, bufferlist &out)
 int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
 {
   bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
-  return decompress(i, out);
+  return decompress(i, in.length(), out);
 }
