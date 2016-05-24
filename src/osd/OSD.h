@@ -2494,6 +2494,15 @@ public:
 
   int enable_disable_fuse(bool stop);
 
+  class C_OSD_OnAbort : public Context {
+    OSD *osd;
+  public:
+    C_OSD_OnAbort(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->on_abort();
+    }
+  };
+
   void kick_pgs(bool flush);
   void on_abort();
   int shutdown();
