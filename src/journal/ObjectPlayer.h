@@ -117,16 +117,15 @@ private:
   EntryKeys m_entry_keys;
   InvalidRanges m_invalid_ranges;
 
-  Context *m_watch_ctx;
-  Cond m_watch_in_progress_cond;
-  bool m_watch_in_progress;
+  Context *m_watch_ctx = nullptr;
 
+  bool m_unwatched = false;
   bool m_refetch_required = true;
 
   int handle_fetch_complete(int r, const bufferlist &bl);
 
   void schedule_watch();
-  void cancel_watch();
+  bool cancel_watch();
   void handle_watch_task();
   void handle_watch_fetched(int r);
 };
