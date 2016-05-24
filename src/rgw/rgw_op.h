@@ -179,7 +179,7 @@ public:
   /**
    * calculates filter used to decrypt RGW objects data
    */
-  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb) {
+  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb, bufferlist* manifest_bl) {
     *filter = NULL;
     return 0;
   }
