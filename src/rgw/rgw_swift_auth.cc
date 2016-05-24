@@ -13,7 +13,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#define DEFAULT_SWIFT_PREFIX "swift"
+#define DEFAULT_SWIFT_PREFIX "/swift"
 
 using namespace ceph::crypto;
 
@@ -141,6 +141,7 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
 void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
+  const char *token_tag = "rgwtk";
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
@@ -157,8 +158,20 @@ void RGW_SWIFT_Auth_Get::execute()
   string swift_prefix = g_conf->rgw_swift_url_prefix;
   string tenant_path;
 
+  /*
+   * We did not allow an empty Swift prefix before, but we want it now.
+   * So, we take rgw_swift_url_prefix = "/" to yield the empty prefix.
+   * The rgw_swift_url_prefix = "" is the default and yields "/swift"
+   * in a backwards-compatible way.
+   */
   if (swift_prefix.size() == 0) {
     swift_prefix = DEFAULT_SWIFT_PREFIX;
+  } else if (swift_prefix == "/") {
+    swift_prefix.clear();
+  } else {
+    if (swift_prefix[0] != '/') {
+      swift_prefix.insert(0, "/");
+    }
   }
 
   if (swift_url.size() == 0) {
@@ -220,8 +233,8 @@ void RGW_SWIFT_Auth_Get::execute()
     tenant_path.append(info.user_id.to_str());
   }
 
-  STREAM_IO(s)->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),
-		swift_prefix.c_str(), tenant_path.c_str());
+  STREAM_IO(s)->print("X-Storage-Url: %s%s/v1%s\r\n", swift_url.c_str(),
+	        swift_prefix.c_str(), tenant_path.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
