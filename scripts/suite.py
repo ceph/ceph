@@ -31,6 +31,10 @@ Standard arguments:
   --wait                      Block until the suite is finished
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
                               [default: master]
+  -S <sha1>, --sha1 <sha1>    The ceph sha1 to run against (overrides -c)
+                              If both -S and -c are supplied, -S wins, and
+                              there is no validation that sha1 is contained
+                              in branch
   -k <kernel>, --kernel <kernel>
                               The kernel branch to run against; if not
                               supplied, the installed kernel is unchanged
