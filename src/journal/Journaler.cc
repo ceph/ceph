@@ -116,7 +116,14 @@ Journaler::~Journaler() {
     m_metadata->put();
     m_metadata = nullptr;
   }
-  delete m_trimmer;
+
+  // TODO
+  if (m_trimmer != nullptr) {
+    C_SaferCond ctx;
+    m_trimmer->shut_down(&ctx);
+    ctx.wait();
+    delete m_trimmer;
+  }
   assert(m_player == nullptr);
   assert(m_recorder == nullptr);
 
