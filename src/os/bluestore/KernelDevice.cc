@@ -115,9 +115,13 @@ int KernelDevice::open(string p)
     if (r < 0) {
       goto out_fail;
     }
+
+    rotational = block_device_is_rotational(path.c_str());
     size = s;
   } else {
     size = st.st_size;
+    //regular file is rotational device
+    rotational = true;
   }
 
   // Operate as though the block size is 4 KB.  The backing file
@@ -142,6 +146,7 @@ int KernelDevice::open(string p)
 	  << " (" << pretty_si_t(size) << "B)"
 	  << " block_size " << block_size
 	  << " (" << pretty_si_t(block_size) << "B)"
+	  << " " << (rotational ? "rotational" : "non-rotational")
 	  << dendl;
   return 0;
 
