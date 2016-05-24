@@ -451,7 +451,8 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
   }
   ret = 0;
  out:
-  VOID_TEMP_FAILURE_RETRY(close(fd));
+  if (fd != STDOUT_FILENO)
+    VOID_TEMP_FAILURE_RETRY(close(fd));
   delete[] buf;
   return ret;
 }
