@@ -524,6 +524,13 @@ ceph_test_rbd_mirror_LDADD = \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_rbd_mirror
 
+ceph_test_rbd_mirror_random_write_SOURCES = \
+	test/rbd_mirror/random_write.cc
+ceph_test_rbd_mirror_random_write_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+ceph_test_rbd_mirror_random_write_LDADD = \
+	$(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_random_write
+
 ceph_test_rbd_mirror_image_replay_SOURCES = \
 	test/rbd_mirror/image_replay.cc
 ceph_test_rbd_mirror_image_replay_LDADD = \
