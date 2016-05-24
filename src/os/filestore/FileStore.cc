@@ -2974,6 +2974,7 @@ void FileStore::_do_transaction(
 	  dump_open_fds(g_ceph_context);
 	}
 
+	on_abort->complete(r);
 	assert(0 == "unexpected error");
       }
     }
