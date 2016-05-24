@@ -41,8 +41,6 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "include/utime.h"
-#include "include/unordered_map.h"
 #include "common/ceph_time.h"
 #include "common/dout.h"
 #include "net_handler.h"
