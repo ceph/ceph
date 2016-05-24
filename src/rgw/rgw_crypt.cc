@@ -5,52 +5,144 @@
  */
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_crypt.h>
+#include <crypto++/cryptlib.h>
+#include <crypto++/modes.h>
+#include <crypto++/aes.h>
+
 #define dout_subsys ceph_subsys_rgw
 
+using namespace CryptoPP;
 
+class AES_256_CTR_impl {
+  static const size_t AES_256_KEYSIZE = 256 / 8;
+  static const size_t AES_256_IVSIZE = 128 / 8;
+  static const uint8_t IV[AES_256_IVSIZE];
 
+  CephContext* cct;
+  uint8_t key[AES_256_KEYSIZE];
+  uint8_t nonce[AES_256_IVSIZE];
+public:
+  AES_256_CTR_impl(CephContext* cct): cct(cct) {
+  }
+  ~AES_256_CTR_impl() {
+  }
+  /**
+   * Sets key and nonce.
+   */
+  bool set_key(uint8_t* _key, size_t key_size) {
+    if (key_size != AES_256_KEYSIZE) {
+      return false;
+    }
+    memcpy(key, _key, AES_256_KEYSIZE);
+    return true;
+  }
+  size_t get_block_size() {
+    return AES_256_KEYSIZE;
+  }
+  bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
+    byte iv[AES_256_IVSIZE];
+    ldout(cct, 20)
+        << "encrypt in_ofs " << in_ofs
+        << " size=" << size
+        << " stream_offset=" << stream_offset
+        << " input buffer #=" << input.buffers().size()
+        << " input buffer 0=" << input.buffers().begin()->length()
+        << dendl;
+    if (input.length() < in_ofs + size) {
+      return false;
+    }
 
-AES_256_CTR::AES_256_CTR(CephContext* cct):
-cct(cct) {
+    if ((size % AES_256_KEYSIZE) == 0) {
+      //uneven
+    }
+    output.clear();
+    buffer::ptr buf((size + AES_256_KEYSIZE - 1) / AES_256_KEYSIZE * AES_256_KEYSIZE);
+    /*create CTR mask*/
+    prepare_iv(iv, stream_offset);
+    CTR_Mode< AES >::Encryption e;
+    e.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
+    buf.zero();
+    e.ProcessData((byte*)buf.c_str(), (byte*)buf.c_str(), buf.length());
+    buf.set_length(size);
+    off_t plaintext_pos = in_ofs;
+    off_t crypt_pos = 0;
+    auto iter = input.buffers().begin();
+    //skip unaffected begin
+    while ((iter != input.buffers().end()) && (plaintext_pos >= iter->length())) {
+      plaintext_pos -= iter->length();
+      ++iter;
+    }
+    while (iter != input.buffers().end()) {
+      off_t cnt = std::min((off_t)(iter->length() - plaintext_pos), (off_t)(size - crypt_pos));
+      byte* src = (byte*)iter->c_str() + plaintext_pos;
+      byte* dst = (byte*)buf.c_str() + crypt_pos;
+      ldout(cct, 20)
+              << "cnt= " << cnt
+              << " plaintext_pos=" << plaintext_pos
+              << " crypt_pos=" << crypt_pos
+              << dendl;
+      for (off_t i=0; i<cnt; i++) {
+        dst[i] ^= src[i];
+      }
+      ++iter;
+      plaintext_pos = 0;
+      crypt_pos += cnt;
+    }
+    output.append(buf);
+    return true;
+  }
+  bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
+    return encrypt(input, in_ofs, size, output, stream_offset);
+  }
+  void prepare_iv(byte iv[AES_256_IVSIZE], off_t offset) {
+    off_t index = offset / AES_256_IVSIZE;
+    off_t i = AES_256_IVSIZE - 1;
+    unsigned int val;
+    unsigned int carry = 0;
+    while (i>=0) {
+      val = (index & 0xff) + IV[i] + carry;
+      iv[i] = val;
+      carry = val >> 8;
+      index = index >> 8;
+      i--;
+    }
+  }
+};
 
+const uint8_t AES_256_CTR_impl::IV[AES_256_CTR_impl::AES_256_IVSIZE] =
+    { 'a', 'e', 's', '2', '5', '6', 'i', 'v', '_', 'c', 't', 'r', '1', '3', '3', '7' };
+
+AES_256_CTR::AES_256_CTR(CephContext* cct) {
+  pimpl = new AES_256_CTR_impl(cct);
 }
 AES_256_CTR::~AES_256_CTR() {
-
+  delete pimpl;
 }
-bool AES_256_CTR::set_key(uint8_t* key, uint8_t* nonce, size_t key_len)
-{
-  return true;
+bool AES_256_CTR::set_key(uint8_t* key, size_t key_size) {
+  return pimpl->set_key(key, key_size);
 }
 size_t AES_256_CTR::get_block_size() {
-  return 4096;
+  return pimpl->get_block_size();
 }
 bool AES_256_CTR::encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
-
-  ldout(cct, 20)
-    << "ENC: offset= " << stream_offset
-    << " size=" << size
-    << dendl;
-
-  output.append(input.get_contiguous(in_ofs, size), size);
-  char* dst = output.get_contiguous(0,size);
-  for (size_t i=0; i<size; i++) {
-    *(dst+i)=*(dst+i)^((stream_offset+i)*111+((stream_offset+i)>>8)*117);
-  }
-  return true;
+  return pimpl->encrypt(input, in_ofs, size, output, stream_offset);
 }
 bool AES_256_CTR::decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
+  return pimpl->decrypt(input, in_ofs, size, output, stream_offset);
+}
 
-  ldout(cct, 20)
-    << "DEC: offset= " << stream_offset
-    << " size=" << size
-    << dendl;
-
-  output.append(input.get_contiguous(in_ofs, size), size);
-  char* dst = output.get_contiguous(0,size);
-  for (size_t i=0; i<size; i++) {
-    *(dst+i)=*(dst+i)^((stream_offset+i)*111+((stream_offset+i)>>8)*117);
+bool AES_256_ECB_encrypt(uint8_t* key, size_t key_size, uint8_t* data_in, uint8_t* data_out, size_t data_size) {
+  bool res = false;
+  if (key_size == AES_256_KEYSIZE) {
+    try {
+      ECB_Mode< AES >::Encryption e;
+      e.SetKey( key, key_size );
+      e.ProcessData(data_out, data_in, data_size);
+      res = true;
+    } catch( CryptoPP::Exception& ex ) {
+    }
   }
-  return true;
+  return res;
 }
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(RGWObjState* s,req_state* req, RGWGetDataCB& next, BlockCrypt* crypt):
