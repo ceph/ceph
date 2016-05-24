@@ -62,6 +62,7 @@ public:
 
   void init(Context *on_init);
   void shut_down();
+  void shut_down(Context *on_finish);
 
   bool is_initialized() const;
 
@@ -95,6 +96,7 @@ public:
   void start_live_replay(ReplayHandler *replay_handler, double interval);
   bool try_pop_front(ReplayEntry *replay_entry, uint64_t *tag_tid = nullptr);
   void stop_replay();
+  void stop_replay(Context *on_finish);
 
   uint64_t get_max_append_size() const;
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
