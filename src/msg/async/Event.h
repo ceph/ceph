@@ -113,7 +113,8 @@ class EventCenter {
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
-  multimap<clock_type::time_point, TimeEvent> time_events;
+  std::multimap<clock_type::time_point, TimeEvent> time_events;
+  std::map<uint64_t, std::multimap<clock_type::time_point, TimeEvent>::iterator> event_map;
   uint64_t time_event_next_id;
   int notify_receive_fd;
   int notify_send_fd;
