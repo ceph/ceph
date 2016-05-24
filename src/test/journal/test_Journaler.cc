@@ -40,8 +40,9 @@ public:
   }
 
   int shut_down_journaler() {
-    m_journaler->shut_down();
-    return 0;
+    C_SaferCond ctx;
+    m_journaler->shut_down(&ctx);
+    return ctx.wait();
   }
 
   int register_client(const std::string &client_id, const std::string &desc) {
