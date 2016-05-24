@@ -77,6 +77,51 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
+/**
+ * CopyResults stores the object metadata of interest to a copy initiator.
+ */
+struct ReplicatedPG::CopyResults {
+  ceph::real_time mtime; ///< the copy source's mtime
+  uint64_t object_size; ///< the copied object's size
+  bool started_temp_obj; ///< true if the callback needs to delete temp object
+  hobject_t temp_oid;    ///< temp object (if any)
+  /**
+   * Final transaction; if non-empty the callback must execute it before any
+   * other accesses to the object (in order to complete the copy).
+   */
+  PGBackend::PGTransaction *final_tx;
+  version_t user_version; ///< The copy source's user version
+  bool should_requeue;  ///< op should be requeued on cancel
+  vector<snapid_t> snaps;  ///< src's snaps (if clone)
+  snapid_t snap_seq;       ///< src's snap_seq (if head)
+  librados::snap_set_t snapset; ///< src snapset (if head)
+  bool mirror_snapset;
+  map<string, bufferlist> attrs; ///< src user attrs
+  bool has_omap;
+  uint32_t flags;    // object_copy_data_t::FLAG_*
+  uint32_t source_data_digest, source_omap_digest;
+  uint32_t data_digest, omap_digest;
+  vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+  uint64_t truncate_seq;
+  uint64_t truncate_size;
+  bool is_data_digest() {
+    return flags & object_copy_data_t::FLAG_DATA_DIGEST;
+  }
+  bool is_omap_digest() {
+    return flags & object_copy_data_t::FLAG_OMAP_DIGEST;
+  }
+  CopyResults()
+    : object_size(0), started_temp_obj(false),
+      final_tx(NULL), user_version(0),
+      should_requeue(false), mirror_snapset(false),
+      has_omap(false),
+      flags(0),
+      source_data_digest(-1), source_omap_digest(-1),
+      data_digest(-1), omap_digest(-1),
+      truncate_seq(0), truncate_size(0)
+  {}
+};
+
 struct ReplicatedPG::CopyOp {
   CopyCallback *cb;
   ObjectContextRef obc;
@@ -128,6 +173,31 @@ struct ReplicatedPG::CopyOp {
     results.mirror_snapset = mirror_snapset;
   }
 };
+
+/**
+ * The CopyCallback class defines an interface for completions to the
+ * copy_start code. Users of the copy infrastructure must implement
+ * one and give an instance of the class to start_copy.
+ *
+ * The implementer is responsible for making sure that the CopyCallback
+ * can associate itself with the correct copy operation.
+ */
+class ReplicatedPG::CopyCallback : public GenContext<CopyCallbackResults> {
+protected:
+  CopyCallback() {}
+  /**
+   * results.get<0>() is the return code: 0 for success; -ECANCELLED if
+   * the operation was cancelled by the local OSD; -errno for other issues.
+   * results.get<1>() is a pointer to a CopyResults object, which you are
+   * responsible for deleting.
+   */
+  virtual void finish(CopyCallbackResults results_) = 0;
+
+public:
+  /// Provide the final size of the copied object to the CopyCallback
+  virtual ~CopyCallback() {}
+};
+
 struct OnReadComplete : public Context {
   ReplicatedPG *pg;
   ReplicatedPG::OpContext *opcontext;
