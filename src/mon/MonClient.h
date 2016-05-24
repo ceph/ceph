@@ -38,7 +38,6 @@ class MAuthRotating;
 class MPing;
 class LogClient;
 class AuthSupported;
-class AuthAuthorizeHandlerRegistry;
 class AuthMethodList;
 class Messenger;
 // class RotatingKeyRing;
@@ -125,10 +124,6 @@ private:
   Mutex monc_lock;
   SafeTimer timer;
   Finisher finisher;
-
-  // Added to support session signatures.  PLR
-
-  AuthAuthorizeHandlerRegistry *authorize_handler_registry;
 
   bool initialized;
   bool no_keyring_disabled_cephx;
