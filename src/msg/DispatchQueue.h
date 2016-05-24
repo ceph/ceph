@@ -215,6 +215,11 @@ class DispatchQueue {
                          cct->_conf->ms_dispatch_throttle_bytes),
       stop(false)
     {}
+  ~DispatchQueue() {
+    assert(mqueue.empty());
+    assert(marrival.empty());
+    assert(local_messages.empty());
+  }
 };
 
 #endif
