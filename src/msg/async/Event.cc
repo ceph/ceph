@@ -57,11 +57,11 @@ class C_handle_notify : public EventCallback {
 
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
-  return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
+  return *_dout << "Event(" << this << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
 }
 
-static thread_local pthread_t thread_id = 0;
+thread_local EventCenter* local_center = nullptr;
 
 int EventCenter::init(int n)
 {
@@ -141,7 +141,7 @@ EventCenter::~EventCenter()
 
 void EventCenter::set_owner()
 {
-  thread_id = owner = pthread_self();
+  local_center = this;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
@@ -297,8 +297,6 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
-  // Must set owner before looping
-  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;
@@ -398,7 +396,7 @@ void EventCenter::dispatch_event_external(EventCallbackRef e)
   external_events.push_back(e);
   uint64_t num = external_num_events.inc();
   external_lock.Unlock();
-  if (thread_id != owner)
+  if (!in_thread())
     wakeup();
 
   ldout(cct, 10) << __func__ << " " << e << " pending " << num << dendl;
