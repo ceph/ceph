@@ -233,10 +233,7 @@ public:
 
     bool verify_permission(RGWBucketInfo& binfo,
                            map<string, bufferlist>& battrs,
-                           rgw_obj& obj,
                            ACLOwner& bucket_owner /* out */);
-    bool verify_permission(RGWBucketInfo& binfo,
-                           map<string, bufferlist>& battrs);
     bool delete_single(const acct_path_t& path);
     bool delete_chunk(const std::list<acct_path_t>& paths);
   };
