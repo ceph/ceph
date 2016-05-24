@@ -115,7 +115,6 @@ class EventCenter {
   EventDriver *driver;
   multimap<clock_type::time_point, TimeEvent> time_events;
   uint64_t time_event_next_id;
-  clock_type::time_point next_time; // next wake up time
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
