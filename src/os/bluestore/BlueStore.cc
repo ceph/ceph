@@ -2879,7 +2879,7 @@ int BlueStore::_do_read(
   interval_set<uint64_t> ready_intervals_in_cache;
   o->bc.read(off, l, ready_regions_in_cache, ready_intervals_in_cache);
   dout(20) << __func__ << " regions in cache 0x" << std::hex
-	   << ready_regions_in_cache.size() << " 0x" << ready_intervals_in_cache
+	   << ready_regions_in_cache.size() << " " << ready_intervals_in_cache
 	   << std::dec << dendl;
 
   //build blob list to read
@@ -3029,7 +3029,6 @@ int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool b
     uint32_t x_len = ROUND_UP_TO(r_len, block_size);
 
     bufferlist bl;
-    //  dout(30) << __func__ << "  reading " << it->offset << "~" << x_len << dendl;
     int r = bdev->read(it->offset, x_len, &bl, &ioc, buffered);
     if (r < 0) {
       return r;
@@ -3078,7 +3077,6 @@ int BlueStore::_read_extent_sparse(
     uint64_t x_len = cur->length;
     uint64_t r_len = ROUND_UP_TO(x_len + front_extra, chunk_size);
 
-    //    dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
     bufferlist bl;
     int r = bdev->read(r_off + extent->offset, r_len, &bl, &ioc, buffered);
     if (r < 0) {
