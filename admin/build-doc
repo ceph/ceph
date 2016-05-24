@@ -20,7 +20,6 @@ if command -v dpkg >/dev/null; then
       graphviz
       ant
       cython
-      librbd-dev
       zlib1g-dev'
     for package in $packages; do
     if [ "$(dpkg --status -- $package 2>&1 | sed -n 's/^Status: //p')" != "install ok installed" ]; then
@@ -127,7 +126,7 @@ rm -f $TOPDIR/src/pybind/rbd/rados.pxd $TOPDIR/src/pybind/cephfs/rados.pxd
 
 
 $vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/html
-$vdir/bin/sphinx-build -a -b man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
+$vdir/bin/sphinx-build -a -b man -t man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
 
 #
 # Build and install JavaDocs
