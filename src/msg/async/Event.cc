@@ -275,20 +275,9 @@ int EventCenter::process_time_events()
   ldout(cct, 10) << __func__ << " cur time is " << now << dendl;
 
   Mutex::Locker l(time_lock);
-  /* If the system clock is moved to the future, and then set back to the
-   * right value, time events may be delayed in a random way. Often this
-   * means that scheduled operations will not be performed soon enough.
-   *
-   * Here we try to detect system clock skews, and force all the time
-   * events to be processed ASAP when this happens: the idea is that
-   * processing events earlier is less dangerous than delaying them
-   * indefinitely, and practice suggests it is. */
-  bool clock_skewed = now < last_time;
-  last_time = now;
-
   while (!time_events.empty()) {
     auto it = time_events.begin();
-    if (now >= it->first || clock_skewed) {
+    if (now >= it->first) {
       TimeEvent &e = it->second;
       EventCallbackRef cb = e.time_cb;
       uint64_t id = e.id;
