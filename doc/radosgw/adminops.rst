@@ -238,7 +238,7 @@ Request Parameters
 :Description: The user for which the information is requested.
 :Type: String
 :Example: ``foo_user``
-:Required: No
+:Required: Yes
 
 
 Response Entities
