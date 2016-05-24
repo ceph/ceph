@@ -2560,13 +2560,7 @@ void RGWPutObj::execute()
   bl.append(etag.c_str(), etag.size() + 1);
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
-  for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
-       ++iter) {
-    bufferlist& attrbl = attrs[iter->first];
-    const string& val = iter->second;
-    attrbl.append(val.c_str(), val.size() + 1);
-  }
-
+  populate_with_generic_attrs(s, attrs);
   rgw_get_request_metadata(s->cct, s->info, attrs);
   encode_delete_at_attr(delete_at, attrs);
 
@@ -3248,13 +3242,7 @@ int RGWCopyObj::init_common()
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
-
-  map<string, string>::iterator iter;
-  for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {
-    bufferlist& attrbl = attrs[iter->first];
-    const string& val = iter->second;
-    attrbl.append(val.c_str(), val.size() + 1);
-  }
+  populate_with_generic_attrs(s, attrs);
 
   return 0;
 }
@@ -3700,15 +3688,9 @@ void RGWInitMultipart::execute()
     return;
 
   policy.encode(aclbl);
-
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end(); ++iter) {
-    bufferlist& attrbl = attrs[iter->first];
-    const string& val = iter->second;
-    attrbl.append(val.c_str(), val.size() + 1);
-  }
-
+  populate_with_generic_attrs(s, attrs);
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   do {
