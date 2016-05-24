@@ -352,7 +352,7 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   // set chunked without either
   {
     std::size_t r = chain_fsetxattr(fd, name, buf, sizeof(buf));
-    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(sizeof(buf), r);
     ASSERT_GT(get_xattrs(fd).size(), 1UL);
   }
 
@@ -360,23 +360,23 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   {
     char buf2[sizeof(buf)*2];
     std::size_t r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
-    ASSERT_EQ(r, sizeof(buf));
-    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+    ASSERT_EQ(sizeof(buf), r);
+    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   }
 
   // overwrite
   {
     std::size_t r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
-    ASSERT_EQ(r, sizeof(buf));
-    ASSERT_EQ(get_xattrs(fd).size(), 1UL);
+    ASSERT_EQ(sizeof(buf), r);
+    ASSERT_EQ(1UL, get_xattrs(fd).size());
   }
 
   // verify
   {
     char buf2[sizeof(buf)*2];
     std::size_t r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
-    ASSERT_EQ(r, sizeof(buf));
-    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+    ASSERT_EQ(sizeof(buf), r);
+    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   }
 
   ::close(fd);
@@ -396,7 +396,7 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   // set chunked without either
   {
     std::size_t r = chain_setxattr(file, name, buf, sizeof(buf));
-    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(sizeof(buf), r);
     ASSERT_GT(get_xattrs(file).size(), 1UL);
   }
 
@@ -404,23 +404,23 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   {
     char buf2[sizeof(buf)*2];
     std::size_t r = chain_getxattr(file, name, buf2, sizeof(buf2));
-    ASSERT_EQ(r, sizeof(buf));
-    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+    ASSERT_EQ(sizeof(buf), r);
+    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   }
 
   // overwrite
   {
     std::size_t r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
-    ASSERT_EQ(r, sizeof(buf));
-    ASSERT_EQ(get_xattrs(file).size(), 1UL);
+    ASSERT_EQ(sizeof(buf), r);
+    ASSERT_EQ(1UL, get_xattrs(file).size());
   }
 
   // verify
   {
     char buf2[sizeof(buf)*2];
     std::size_t r = chain_getxattr(file, name, buf2, sizeof(buf2));
-    ASSERT_EQ(r, sizeof(buf));
-    ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
+    ASSERT_EQ(sizeof(buf), r);
+    ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   }
 
   ::unlink(file);
