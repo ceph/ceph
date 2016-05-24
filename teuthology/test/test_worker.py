@@ -1,3 +1,4 @@
+import beanstalkc
 import os
 import subprocess
 
@@ -8,6 +9,12 @@ from .. import worker
 
 
 class TestWorker(object):
+    def setup(self):
+        self.ctx = Mock()
+        self.ctx.verbose = True
+        self.ctx.archive_dir = '/archive/dir'
+        self.ctx.log_dir = '/log/dir'
+        self.ctx.tube = 'tube'
 
     @patch("os.path.exists")
     def test_restart_file_path_doesnt_exist(self, m_exists):
@@ -206,3 +213,60 @@ class TestWorker(object):
         assert teuth_bin_path == '/teuth/path/virtualenv/bin'
         assert m_fetch_qa_suite.called_once_with_args(branch='master')
         assert got_config['suite_path'] == '/suite/path'
+
+    def build_fake_jobs(self, m_connection, m_job, job_bodies):
+        """
+        Given patched copies of:
+            beanstalkc.Connection
+            beanstalkc.Job
+        And a list of basic job bodies, return a list of mocked Job objects
+        """
+        # Make sure instantiating m_job returns a new object each time
+        m_job.side_effect = lambda **kwargs: Mock(spec=beanstalkc.Job)
+        jobs = []
+        job_id = 0
+        for job_body in job_bodies:
+            job_id += 1
+            job = m_job(conn=m_connection, jid=job_id, body=job_body)
+            job.jid = job_id
+            job.body = job_body
+            jobs.append(job)
+        return jobs
+
+    @patch("teuthology.worker.run_job")
+    @patch("teuthology.worker.prep_job")
+    @patch("beanstalkc.Job", autospec=True)
+    @patch("teuthology.worker.fetch_qa_suite")
+    @patch("teuthology.worker.fetch_teuthology")
+    @patch("teuthology.worker.beanstalk.watch_tube")
+    @patch("teuthology.worker.beanstalk.connect")
+    @patch("os.path.isdir", return_value=True)
+    @patch("teuthology.worker.setup_log_file")
+    def test_main_loop(
+        self, m_setup_log_file, m_isdir, m_connect, m_watch_tube,
+        m_fetch_teuthology, m_fetch_qa_suite, m_job, m_prep_job, m_run_job,
+                       ):
+        m_connection = Mock()
+        jobs = self.build_fake_jobs(
+            m_connection,
+            m_job,
+            [
+                'foo: bar',
+                'stop_worker: true',
+            ],
+        )
+        m_connection.reserve.side_effect = jobs
+        m_connect.return_value = m_connection
+        m_prep_job.return_value = (dict(), '/bin/path')
+        worker.main(self.ctx)
+        # There should be one reserve call per item in the jobs list
+        expected_reserve_calls = [
+            dict(timeout=60) for i in range(len(jobs))
+        ]
+        got_reserve_calls = [
+            call[1] for call in m_connection.reserve.call_args_list
+        ]
+        assert got_reserve_calls == expected_reserve_calls
+        for job in jobs:
+            job.bury.assert_called_once_with()
+            job.delete.assert_called_once_with()
