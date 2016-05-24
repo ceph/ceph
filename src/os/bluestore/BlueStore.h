@@ -363,7 +363,6 @@ public:
     string key;           ///< key under PREFIX_OBJ where we are stored
     BnodeSet *bnode_set;  ///< reference to the containing set
 
-    bluestore_extent_ref_map_t ref_map;
     bluestore_blob_map_t blob_map;
 
     Bnode(uint32_t h, const string& k, BnodeSet *s)
