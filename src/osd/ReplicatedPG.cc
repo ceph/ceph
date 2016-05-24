@@ -77,6 +77,57 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
+struct ReplicatedPG::CopyOp {
+  CopyCallback *cb;
+  ObjectContextRef obc;
+  hobject_t src;
+  object_locator_t oloc;
+  unsigned flags;
+  bool mirror_snapset;
+
+  CopyResults results;
+
+  ceph_tid_t objecter_tid;
+  ceph_tid_t objecter_tid2;
+
+  object_copy_cursor_t cursor;
+  map<string,bufferlist> attrs;
+  bufferlist data;
+  bufferlist omap_header;
+  bufferlist omap_data;
+  int rval;
+
+  object_copy_cursor_t temp_cursor;
+
+  /*
+   * For CopyOp the process is:
+   * step1: read the data(attr/omap/data) from the source object
+   * step2: handle those data(w/ those data create a new object)
+   * src_obj_fadvise_flags used in step1;
+   * dest_obj_fadvise_flags used in step2
+   */
+  unsigned src_obj_fadvise_flags;
+  unsigned dest_obj_fadvise_flags;
+
+  CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
+         object_locator_t l,
+         version_t v,
+         unsigned f,
+         bool ms,
+         unsigned src_obj_fadvise_flags,
+         unsigned dest_obj_fadvise_flags)
+    : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
+      mirror_snapset(ms),
+      objecter_tid(0),
+      objecter_tid2(0),
+      rval(-1),
+      src_obj_fadvise_flags(src_obj_fadvise_flags),
+      dest_obj_fadvise_flags(dest_obj_fadvise_flags)
+  {
+    results.user_version = v;
+    results.mirror_snapset = mirror_snapset;
+  }
+};
 struct OnReadComplete : public Context {
   ReplicatedPG *pg;
   ReplicatedPG::OpContext *opcontext;
