@@ -9304,15 +9304,6 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
   }
 }
 
-SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
-{
-  Mutex::Locker l(snapset_contexts_lock);
-  SnapSetContext *ssc = new SnapSetContext(oid.get_snapdir());
-  _register_snapset_context(ssc);
-  ssc->ref++;
-  return ssc;
-}
-
 SnapSetContext *ReplicatedPG::get_snapset_context(
   const hobject_t& oid,
   bool can_create,
