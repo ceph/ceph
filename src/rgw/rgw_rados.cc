@@ -3171,8 +3171,7 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
-  auto count = cct->_conf->rgw_num_rados_handles;
-  auto handles = std::vector<librados::Rados>{count};
+  auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
 
   for (auto& r : handles) {
     ret = r.init_with_context(cct);
@@ -3195,7 +3194,6 @@ int RGWRados::init_rados()
   meta_mgr = new RGWMetadataManager(cct, this);
   data_log = new RGWDataChangesLog(cct, this);
 
-  num_rados_handles = count;
   std::swap(handles, rados);
   return ret;
 }
@@ -12062,7 +12060,7 @@ void RGWStoreManager::close_storage(RGWRados *store)
 
 librados::Rados* RGWRados::get_rados_handle()
 {
-  if (num_rados_handles == 1) {
+  if (rados.size() == 1) {
     return &rados[0];
   } else {
     handle_lock.get_read();
@@ -12076,7 +12074,7 @@ librados::Rados* RGWRados::get_rados_handle()
       handle_lock.put_read();
       handle_lock.get_write();
       uint32_t handle = next_rados_handle.read();
-      if (handle == num_rados_handles) {
+      if (handle == rados.size()) {
         next_rados_handle.set(0);
         handle = 0;
       }

@@ -1802,7 +1802,6 @@ protected:
 
   std::vector<librados::Rados> rados;
   atomic_t next_rados_handle;
-  uint32_t num_rados_handles;
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
 
@@ -1842,7 +1841,7 @@ public:
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
                next_rados_handle(0),
-               num_rados_handles(0), handle_lock("rados_handle_lock"),
+               handle_lock("rados_handle_lock"),
                binfo_cache(NULL),
                pools_initialized(false),
                quota_handler(NULL),
