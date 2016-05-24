@@ -25,6 +25,8 @@
 #include <arpa/inet.h>
 #include "include/Context.h"
 #include "include/atomic.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/Event.h"
