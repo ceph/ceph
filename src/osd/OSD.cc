@@ -6905,12 +6905,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	       osd_markdown_log.front() + grace < now)
 	  osd_markdown_log.pop_front();
 	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
-	  dout(10) << __func__ << " marked down "
-		   << osd_markdown_log.size()
-		   << " > osd_max_markdown_count "
-		   << g_conf->osd_max_markdown_count
-		   << " in last " << grace << " seconds, shutting down"
-		   << dendl;
+	  dout(0) << __func__ << " marked down "
+		  << osd_markdown_log.size()
+		  << " > osd_max_markdown_count "
+		  << g_conf->osd_max_markdown_count
+		  << " in last " << grace << " seconds, shutting down"
+		  << dendl;
 	  do_restart = false;
 	  do_shutdown = true;
 	}
@@ -6926,18 +6926,21 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
+          dout(0) << __func__ << " marked down: rebind failed" << dendl;
         }
 
 	r = hb_back_server_messenger->rebind(avoid_ports);
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
+          dout(0) << __func__ << " marked down: rebind failed" << dendl;
         }
 
 	r = hb_front_server_messenger->rebind(avoid_ports);
 	if (r != 0) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
+          dout(0) << __func__ << " marked down: rebind failed" << dendl;
         }
 
 	hbclient_messenger->mark_down_all();
