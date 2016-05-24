@@ -44,6 +44,12 @@ void RadosTestFixture::SetUp() {
 }
 
 void RadosTestFixture::TearDown() {
+  for (auto metadata : m_metadatas) {
+    C_SaferCond ctx;
+    metadata->shut_down(&ctx);
+    ASSERT_EQ(0, ctx.wait());
+  }
+
   {
     Mutex::Locker locker(m_timer_lock);
     m_timer->shutdown();
@@ -65,6 +71,7 @@ journal::JournalMetadataPtr RadosTestFixture::create_metadata(
   journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
     m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id,
     commit_internal));
+  m_metadatas.push_back(metadata);
   return metadata;
 }
 

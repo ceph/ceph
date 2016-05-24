@@ -162,7 +162,9 @@ int Journaler::init_complete() {
 }
 
 void Journaler::shut_down() {
-  m_metadata->shut_down();
+  C_SaferCond ctx;
+  m_metadata->shut_down(&ctx);
+  ctx.wait();
 }
 
 bool Journaler::is_initialized() const {
@@ -201,7 +203,9 @@ int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
 }
 
 int Journaler::remove(bool force) {
-  m_metadata->shut_down();
+  C_SaferCond ctx;
+  m_metadata->shut_down(&ctx);
+  ctx.wait();
 
   ldout(m_cct, 5) << "removing journal: " << m_header_oid << dendl;
   int r = m_trimmer->remove_objects(force);
