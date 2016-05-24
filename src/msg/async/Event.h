@@ -111,7 +111,6 @@ class EventCenter {
   EventDriver *driver;
   multimap<clock_type::time_point, TimeEvent> time_events;
   uint64_t time_event_next_id;
-  clock_type::time_point last_time; // last time process time event
   clock_type::time_point next_time; // next wake up time
   int notify_receive_fd;
   int notify_send_fd;
@@ -138,7 +137,6 @@ class EventCenter {
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
     notify_handler(NULL),
     already_wakeup(0) {
-    last_time = clock_type::now();
   }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
