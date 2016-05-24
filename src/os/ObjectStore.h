@@ -94,6 +94,7 @@ const int SKIP_MOUNT_OMAP = 1 << 1;
 class ObjectStore {
 protected:
   string path;
+  Context* on_abort = NULL;
 
 public:
   /**
@@ -111,6 +112,10 @@ public:
 			     const string& data,
 			     const string& journal,
 			     osflagbits_t flags = 0);
+
+  void set_on_abort(Context* c) {
+    on_abort = c;
+  }
 
   /**
    * probe a block device to learn the uuid of the owning OSD
