@@ -71,8 +71,7 @@ static const size_t AES_256_KEYSIZE = 256 / 8;
 bool AES_256_ECB_encrypt(uint8_t* key, size_t key_size, uint8_t* data_in, uint8_t* data_out, size_t data_size);
 
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
-  RGWObjState* s;
-  req_state* req;
+  CephContext* cct;
   BlockCrypt* crypt;
   off_t enc_begin_skip;
   off_t ofs;
@@ -81,14 +80,14 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   size_t block_size;
   std::vector<size_t> parts_len;
 public:
-  RGWGetObj_BlockDecrypt(RGWObjState* s, req_state* req, RGWGetDataCB& next, BlockCrypt* crypt);
+  RGWGetObj_BlockDecrypt(CephContext* cct, RGWGetDataCB& next, BlockCrypt* crypt);
   virtual ~RGWGetObj_BlockDecrypt();
 
   virtual int fixup_range(off_t& bl_ofs, off_t& bl_end) override;
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
   virtual int flush() override;
-private:
-  int read_manifest();
+
+  int read_manifest(bufferlist& manifest_bl);
 }; /* RGWGetObj_BlockDecrypt */
 
 class RGWPutObj_BlockEncrypt : public RGWPutObj_Filter

@@ -145,39 +145,41 @@ bool AES_256_ECB_encrypt(uint8_t* key, size_t key_size, uint8_t* data_in, uint8_
   return res;
 }
 
-RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(RGWObjState* s,req_state* req, RGWGetDataCB& next, BlockCrypt* crypt):
-    RGWGetObj_Filter(next), s(s), req(req), crypt(crypt),
+
+
+
+
+RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct, RGWGetDataCB& next, BlockCrypt* crypt):
+    RGWGetObj_Filter(next),
+    cct(cct),
+    crypt(crypt),
     enc_begin_skip(0), ofs(0), end(0), cache() {
   block_size = crypt->get_block_size();
   }
 RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {}
 
-int RGWGetObj_BlockDecrypt::read_manifest() {
-  CephContext* cct = req->cct;
-
+int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
   parts_len.clear();
-  bufferlist manifest_bl = s->attrset[RGW_ATTR_MANIFEST];
+  RGWObjManifest manifest;
   if (manifest_bl.length()) {
     bufferlist::iterator miter = manifest_bl.begin();
     try {
-      ::decode(s->manifest, miter);
-      s->has_manifest = true;
-      s->size = s->manifest.get_obj_size();
+      ::decode(manifest, miter);
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
-
     RGWObjManifest::obj_iterator mi;
-    for (mi = s->manifest.obj_begin(); mi != s->manifest.obj_end(); ++mi) {
+    for (mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
       if (mi.get_cur_stripe() == 0) {
         parts_len.push_back(0);
       }
       parts_len.back() += mi.get_stripe_size();
     }
-
-    for (size_t i = 0; i<parts_len.size(); i++) {
-      ldout(cct, 0) << "part " << i << " size=" << parts_len[i] << dendl;
+    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+      for (size_t i = 0; i<parts_len.size(); i++) {
+        ldout(cct, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
+      }
     }
   }
   return 0;
@@ -185,10 +187,6 @@ int RGWGetObj_BlockDecrypt::read_manifest() {
 int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   off_t inp_ofs = bl_ofs;
   off_t inp_end = bl_end;
-  int res = read_manifest();
-  if (res != 0) {
-    return res;
-  }
   if (parts_len.size() > 0) {
     off_t in_ofs=bl_ofs;
     off_t in_end=bl_end;
@@ -226,14 +224,14 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
     bl_ofs = bl_ofs & ~(block_size - 1);
     bl_end = ( bl_end & ~(block_size - 1) ) + (block_size - 1);
   }
-  ldout(req->cct, 20) << "fixup_range [" << inp_ofs << "," << inp_end
+  ldout(cct, 20) << "fixup_range [" << inp_ofs << "," << inp_end
       << "] => [" << bl_ofs << "," << bl_end << "]" << dendl;
   return 0;
 }
 
 int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
   int res = 0;
-  ldout(req->cct, 20) << "Decrypt " << bl_len << " bytes" << dendl;
+  ldout(cct, 20) << "Decrypt " << bl_len << " bytes" << dendl;
   size_t part_ofs = ofs;
   size_t i = 0;
   while (i<parts_len.size() && (part_ofs >= parts_len[i])) {
@@ -319,7 +317,10 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct, RGWPutObjDataPr
       ofs(0), cache() {
   block_size = crypt->get_block_size();
 }
-RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {}
+
+RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
+  delete crypt;
+}
 int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl, off_t in_ofs, void **phandle, rgw_obj *pobj, bool *again) {
   int res = 0;
   if (*again) {
