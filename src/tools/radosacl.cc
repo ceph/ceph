@@ -52,7 +52,7 @@ typedef __u32 ACLFlags;
 
 inline bool operator<(const ACLID& l, const ACLID& r)
 {
-  return (memcmp(&l, &r, ID_SIZE) > 0);
+  return (memcmp(&l, &r, ID_SIZE) < 0);
 }
 
 struct ACLPair {
