@@ -118,6 +118,11 @@ if(WITH_OCF)
   add_subdirectory(ocf)
 endif()
 
+option(WITH_CEPHFS_JAVA "build libcephfs Java bindings" OFF)
+if(WITH_CEPHFS_JAVA)
+  add_subdirectory(java)
+endif()
+
 # Python stuff
 find_package(PythonInterp 2 QUIET)
 if(NOT PYTHONINTERP_FOUND)
