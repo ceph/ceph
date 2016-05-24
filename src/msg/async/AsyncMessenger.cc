@@ -513,9 +513,7 @@ void WorkerPool::release_worker(EventCenter* c)
 void WorkerPool::barrier()
 {
   ldout(cct, 10) << __func__ << " started." << dendl;
-  pthread_t cur = pthread_self();
   for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
-    assert(cur != (*it)->center.get_owner());
     barrier_count.inc();
     (*it)->center.dispatch_event_external(EventCallbackRef(new C_barrier(this)));
   }

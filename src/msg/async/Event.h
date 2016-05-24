@@ -37,8 +37,6 @@
 #endif
 #endif
 
-#include <pthread.h>
-
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/unordered_map.h"
@@ -81,6 +79,11 @@ class EventDriver {
   virtual int resize_events(int newsize) = 0;
 };
 
+extern thread_local EventCenter* local_center;
+
+inline EventCenter* center() {
+  return local_center;
+}
 
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
@@ -115,7 +118,6 @@ class EventCenter {
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
-  pthread_t owner;
   EventCallbackRef notify_handler;
 
   int process_time_events();
@@ -134,7 +136,7 @@ class EventCenter {
     time_lock("AsyncMessenger::time_lock"),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
-    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
+    notify_receive_fd(-1), notify_send_fd(-1), net(c),
     notify_handler(NULL),
     already_wakeup(0) {
   }
@@ -143,7 +145,6 @@ class EventCenter {
 
   int init(int nevent);
   void set_owner();
-  pthread_t get_owner() { return owner; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
@@ -155,6 +156,9 @@ class EventCenter {
 
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
+  inline bool in_thread() const {
+    return local_center == this;
+  }
 };
 
 #endif
