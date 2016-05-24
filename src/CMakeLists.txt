@@ -1337,3 +1337,11 @@ add_custom_target(cephfs_testing DEPENDS
     cephfs-journal-tool
     cephfs-data-scan
     cephfs-table-tool)
+
+if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
+  add_custom_target(
+    git-update
+    COMMAND git submodule sync
+    COMMAND git submodule update --force --init --recursive
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+endif()
