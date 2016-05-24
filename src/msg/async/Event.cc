@@ -232,7 +232,7 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   clock_type::time_point expire = clock_type::now() + std::chrono::microseconds(microseconds);
   event.id = id;
   event.time_cb = ctxt;
-  time_events[expire].push_back(event);
+  time_events[expire] = event;
   if (expire < next_time)
     wakeup();
 
@@ -248,14 +248,9 @@ void EventCenter::delete_time_event(uint64_t id)
     return ;
 
   for (auto it = time_events.begin(); it != time_events.end(); ++it) {
-    for (list<TimeEvent>::iterator j = it->second.begin();
-         j != it->second.end(); ++j) {
-      if (j->id == id) {
-        it->second.erase(j);
-        if (it->second.empty())
-          time_events.erase(it);
-        return ;
-      }
+    if (it->second.id == id) {
+      time_events.erase(it);
+      return ;
     }
   }
 }
@@ -294,19 +289,15 @@ int EventCenter::process_time_events()
   while (!time_events.empty()) {
     auto it = time_events.begin();
     if (now >= it->first || clock_skewed) {
-      if (it->second.empty()) {
-        time_events.erase(it);
-      } else {
-        TimeEvent &e = it->second.front();
-        EventCallbackRef cb = e.time_cb;
-        uint64_t id = e.id;
-        it->second.pop_front();
-        ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
-        processed++;
-        time_lock.Unlock();
-        cb->do_request(id);
-        time_lock.Lock();
-      }
+      TimeEvent &e = it->second;
+      EventCallbackRef cb = e.time_cb;
+      uint64_t id = e.id;
+      time_events.erase(it);
+      ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
+      processed++;
+      time_lock.Unlock();
+      cb->do_request(id);
+      time_lock.Lock();
     } else {
       break;
     }

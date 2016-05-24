@@ -109,7 +109,7 @@ class EventCenter {
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
-  map<clock_type::time_point, list<TimeEvent> > time_events;
+  multimap<clock_type::time_point, TimeEvent> time_events;
   uint64_t time_event_next_id;
   clock_type::time_point last_time; // last time process time event
   clock_type::time_point next_time; // next wake up time
