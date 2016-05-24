@@ -10,7 +10,9 @@ RECURSIVE = YES
 EXCLUDE = src/gmock \
 	src/test/virtualenv \
 	src/out \
-        src/tracing
+	src/tracing \
+	src/civetweb
+
 VERBATIM_HEADERS = NO
 GENERATE_HTML = NO
 GENERATE_LATEX = NO
