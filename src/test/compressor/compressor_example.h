@@ -43,9 +43,9 @@ public:
     out = in;
     return 0;
   }
-  virtual int decompress(bufferlist::iterator &p, bufferlist &out)
+  virtual int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out)
   {
-    p.copy(p.get_remaining(), out);
+    p.copy(MIN(p.get_remaining(), compressed_len), out);
     return 0;
   }
 };
