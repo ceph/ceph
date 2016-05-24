@@ -87,6 +87,16 @@ class C_clean_handler : public EventCallback {
   }
 };
 
+class C_tick_wakeup : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  explicit C_tick_wakeup(AsyncConnectionRef c): conn(c) {}
+  void do_request(int fd_or_id) {
+    conn->tick();
+  }
+};
+
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
@@ -116,12 +126,14 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     dispatch_queue(q), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
-    recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
+    recv_start(0), recv_end(0), last_active(ceph::coarse_mono_clock::now()),
+    got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler = new C_handle_read(this);
   write_handler = new C_handle_write(this);
   wakeup_handler = new C_time_wakeup(this);
+  tick_handler = new C_tick_wakeup(this);
   memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
@@ -456,6 +468,7 @@ void AsyncConnection::process()
   int prev_state = state;
   bool already_dispatch_writer = false;
   Mutex::Locker l(lock);
+  last_active = ceph::coarse_mono_clock::now();
   do {
     ldout(async_msgr->cct, 20) << __func__ << " prev state is " << get_state_name(prev_state) << dendl;
     prev_state = state;
@@ -2583,4 +2596,17 @@ void AsyncConnection::wakeup_from(uint64_t id)
   register_time_events.erase(id);
   lock.Unlock();
   process();
+}
+
+void AsyncConnection::tick()
+{
+  Mutex::Locker l(lock);
+  auto now = ceph::coarse_mono_clock::now();
+  auto idle_period = std::chrono::duration_cast<std::chrono::seconds>(now - last_active).count();
+  if (async_msgr->cct->_conf->ms_tcp_read_timeout > (uint64_t)idle_period) {
+    ldout(async_msgr->cct, 1) << __func__ << " idle(" << idle_period << ") more than "
+                              << async_msgr->cct->_conf->ms_tcp_read_timeout
+                              << ", mark self fault." << dendl;
+    fault();
+  }
 }
