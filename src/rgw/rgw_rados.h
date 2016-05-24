@@ -1801,7 +1801,7 @@ protected:
   CephContext *cct;
 
   std::vector<librados::Rados> rados;
-  atomic_t next_rados_handle;
+  uint32_t next_rados_handle;
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
 
