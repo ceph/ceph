@@ -317,7 +317,12 @@ bool Journaler::try_pop_front(ReplayEntry *replay_entry,
 
 void Journaler::stop_replay() {
   assert(m_player != NULL);
-  m_player->unwatch();
+
+  // TODO
+  C_SaferCond ctx;
+  m_player->shut_down(&ctx);
+  ctx.wait();
+
   delete m_player;
   m_player = NULL;
 }
