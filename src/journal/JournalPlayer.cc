@@ -654,6 +654,8 @@ void JournalPlayer::schedule_watch() {
     return;
   }
 
+  double watch_interval = m_watch_interval;
+
   ObjectPlayerPtr object_player = get_object_player();
   switch (m_watch_step) {
   case WATCH_STEP_FETCH_CURRENT:
@@ -668,11 +670,13 @@ void JournalPlayer::schedule_watch() {
                          << object_player->get_oid()
                          << dendl;
         object_player->clear_refetch_required();
+        watch_interval = 0;
       }
     }
     break;
   case WATCH_STEP_FETCH_FIRST:
     object_player = m_object_players.begin()->second.begin()->second;
+    watch_interval = 0;
     break;
   default:
     assert(false);
@@ -681,7 +685,7 @@ void JournalPlayer::schedule_watch() {
   ldout(m_cct, 20) << __func__ << ": scheduling watch on "
                    << object_player->get_oid() << dendl;
   C_Watch *ctx = new C_Watch(this, object_player->get_object_number());
-  object_player->watch(ctx, m_watch_interval);
+  object_player->watch(ctx, watch_interval);
 }
 
 void JournalPlayer::handle_watch(uint64_t object_num, int r) {
