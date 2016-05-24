@@ -230,12 +230,13 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   clock_type::time_point expire = clock_type::now() + std::chrono::microseconds(microseconds);
   event.id = id;
   event.time_cb = ctxt;
-  time_events[expire] = event;
+  std::multimap<clock_type::time_point, TimeEvent>::value_type s_val(expire, event);
+  auto it = time_events.insert(std::move(s_val));
+  event_map[id] = it;
 
   return id;
 }
 
-// TODO: Ineffective implementation now!
 void EventCenter::delete_time_event(uint64_t id)
 {
   assert(in_thread());
@@ -243,12 +244,13 @@ void EventCenter::delete_time_event(uint64_t id)
   if (id >= time_event_next_id)
     return ;
 
-  for (auto it = time_events.begin(); it != time_events.end(); ++it) {
-    if (it->second.id == id) {
-      time_events.erase(it);
-      return ;
-    }
+  auto it = event_map.find(id);
+  if (it == event_map.end()) {
+    ldout(cct, 10) << __func__ << " id=" << id << " not found" << dendl;
+    return ;
   }
+
+  time_events.erase(it->second);
 }
 
 void EventCenter::wakeup()
@@ -277,6 +279,7 @@ int EventCenter::process_time_events()
       EventCallbackRef cb = e.time_cb;
       uint64_t id = e.id;
       time_events.erase(it);
+      event_map.erase(id);
       ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
       processed++;
       cb->do_request(id);
