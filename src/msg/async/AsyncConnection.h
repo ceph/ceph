@@ -26,6 +26,7 @@
 using namespace std;
 
 #include "auth/AuthSessionHandler.h"
+#include "common/ceph_time.h"
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
 #include "include/buffer.h"
@@ -312,12 +313,14 @@ class AsyncConnection : public Connection {
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
   EventCallbackRef wakeup_handler;
+  EventCallbackRef tick_handler;
   struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
   uint32_t recv_end;
   set<uint64_t> register_time_events; // need to delete it if stop
+  ceph::coarse_mono_clock::time_point last_active;
 
   // Tis section are temp variables used by state transition
 
@@ -366,6 +369,7 @@ class AsyncConnection : public Connection {
   void handle_write();
   void process();
   void wakeup_from(uint64_t id);
+  void tick();
   void local_deliver();
   void stop(bool queue_reset) {
     lock.Lock();
@@ -379,6 +383,7 @@ class AsyncConnection : public Connection {
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;
+    delete tick_handler;
     if (delay_state) {
       delete delay_state;
       delay_state = NULL;
