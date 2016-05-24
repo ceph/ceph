@@ -491,8 +491,8 @@ int AsyncMessenger::shutdown()
 
   // break ref cycles on the loopback connection
   processor.stop();
-  dispatch_queue.shutdown();
   mark_down_all();
+  dispatch_queue.shutdown();
   local_connection->set_priv(NULL);
   pool->barrier();
   lock.Lock();
@@ -577,15 +577,15 @@ void AsyncMessenger::wait()
   did_bind = false;
   ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
 
+  // close all connections
+  mark_down_all();
+
   if (dispatch_queue.is_started()) {
     ldout(cct, 10) << __func__ << ": waiting for dispatch queue" << dendl;
     dispatch_queue.wait();
     dispatch_queue.discard_local();
     ldout(cct, 10) << __func__ << ": dispatch queue is stopped" << dendl;
   }
-
-  // close all connections
-  mark_down_all();
 
   ldout(cct, 10) << __func__ << ": done." << dendl;
   ldout(cct, 1) << __func__ << " complete." << dendl;
