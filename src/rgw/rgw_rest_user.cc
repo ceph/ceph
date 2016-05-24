@@ -34,6 +34,15 @@ void RGWOp_User_Info::execute()
   bool fetch_stats;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
+
+  // if uid was not supplied in rest argument, error out now, otherwise we'll
+  // end up initializing anonymous user, for which keys.init will eventually
+  // return -EACESS
+  if (uid_str.empty()){
+    http_ret=-EINVAL;
+    return;
+  }
+
   rgw_user uid(uid_str);
 
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
