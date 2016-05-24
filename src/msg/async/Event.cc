@@ -231,8 +231,6 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   event.id = id;
   event.time_cb = ctxt;
   time_events[expire] = event;
-  if (expire < next_time)
-    wakeup();
 
   return id;
 }
@@ -301,7 +299,6 @@ int EventCenter::process_events(int timeout_microseconds)
   if (external_num_events.load()) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
-    next_time = now;
   } else {
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
@@ -321,7 +318,6 @@ int EventCenter::process_events(int timeout_microseconds)
     }
     tv.tv_sec = timeout_microseconds / 1000000;
     tv.tv_usec = timeout_microseconds % 1000000;
-    next_time = shortest;
   }
 
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
