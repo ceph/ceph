@@ -342,6 +342,19 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
 {
   dout(20) << "enter" << dendl;
   assert(m_lock.is_locked());
+
+  // remove stale replayers before creating new replayers
+  for (auto it = m_replayers.begin(); it != m_replayers.end();) {
+    peer_t peer = it->first;
+    if (peer_configs.find(peer) == peer_configs.end()) {
+      dout(20) << "removing replayer for " << peer << dendl;
+      // TODO: make async
+      m_replayers.erase(it++);
+    } else {
+      ++it;
+    }
+  }
+
   for (auto &kv : peer_configs) {
     const peer_t &peer = kv.first;
     if (m_replayers.find(peer) == m_replayers.end()) {
@@ -354,17 +367,6 @@ void Mirror::update_replayers(const map<peer_t, set<int64_t> > &peer_configs)
 	continue;
       }
       m_replayers.insert(std::make_pair(peer, std::move(replayer)));
-    }
-  }
-
-  // TODO: make async
-  for (auto it = m_replayers.begin(); it != m_replayers.end();) {
-    peer_t peer = it->first;
-    if (peer_configs.find(peer) == peer_configs.end()) {
-      dout(20) << "removing replayer for " << peer << dendl;
-      m_replayers.erase(it++);
-    } else {
-      ++it;
     }
   }
 }
