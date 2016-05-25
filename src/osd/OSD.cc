@@ -2593,6 +2593,24 @@ void OSD::create_recoverystate_perf()
   cct->get_perfcounters_collection()->add(recoverystate_perf);
 }
 
+void OSD::kick_pgs(bool flush)
+{
+  {
+    RWLock::RLocker l(pg_map_lock);
+    for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
+        p != pg_map.end();
+        ++p) {
+      dout(20) << " kicking pg " << p->first << dendl;
+      p->second->lock();
+      p->second->on_shutdown();
+      p->second->unlock();
+      if (flush)
+	p->second->osr->flush();
+    }
+  }
+  clear_pg_stat_queue();
+}
+
 int OSD::shutdown()
 {
   if (!service.prepare_to_stop())
@@ -2618,19 +2636,7 @@ int OSD::shutdown()
   clear_waiting_sessions();
 
   // Shutdown PGs
-  {
-    RWLock::RLocker l(pg_map_lock);
-    for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
-        p != pg_map.end();
-        ++p) {
-      dout(20) << " kicking pg " << p->first << dendl;
-      p->second->lock();
-      p->second->on_shutdown();
-      p->second->unlock();
-      p->second->osr->flush();
-    }
-  }
-  clear_pg_stat_queue();
+  kick_pgs(true);
 
   // finish ops
   op_shardedwq.drain(); // should already be empty except for laggard PGs
