@@ -8,16 +8,7 @@
 #ifndef EBADE
 #define EBADE EFTYPE
 #endif
-
-#include <iostream>
-#include <stack>
-#include <functional>
 #include <string>
-#include <stdexcept>
-#include <map>
-#include <cctype>
-
-#include <typeinfo>
 #include "common/errno.h"
 #include <boost/algorithm/string.hpp>
 

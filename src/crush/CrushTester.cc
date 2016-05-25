@@ -17,7 +17,7 @@
 #endif
 #include <boost/icl/interval_map.hpp>
 #include <boost/algorithm/string/join.hpp>
-#include <common/SubProcess.h>
+#include "common/SubProcess.h"
 
 void CrushTester::set_device_weight(int dev, float f)
 {

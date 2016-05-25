@@ -7,7 +7,6 @@
 #include "crush/CrushWrapper.h"
 
 #include <fstream>
-#include <sstream>
 
 class CrushTester {
   CrushWrapper& crush;
