@@ -2495,6 +2495,7 @@ public:
   int enable_disable_fuse(bool stop);
 
   void kick_pgs(bool flush);
+  void on_abort();
   int shutdown();
 
   void handle_signal(int signum);

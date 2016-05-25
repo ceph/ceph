@@ -2611,6 +2611,19 @@ void OSD::kick_pgs(bool flush)
   clear_pg_stat_queue();
 }
 
+void OSD::on_abort()
+{
+  if (!service.prepare_to_stop())
+    return; // already shutting down
+  osd_lock.Lock();
+  if (is_stopping()) {
+    osd_lock.Unlock();
+    return;
+  }
+  // Shutdown PGs
+  kick_pgs(true);
+}
+
 int OSD::shutdown()
 {
   if (!service.prepare_to_stop())
