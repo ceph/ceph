@@ -83,6 +83,15 @@ namespace rados {
         return ioctx->operate(oid, &op);
       }
 
+      int aio_unlock(IoCtx *ioctx, const string& oid,
+		     const string& name, const string& cookie,
+		     librados::AioCompletion *completion)
+      {
+        ObjectWriteOperation op;
+        unlock(&op, name, cookie);
+        return ioctx->aio_operate(oid, completion, &op);
+      }
+
       void break_lock(ObjectWriteOperation *rados_op,
                       const string& name, const string& cookie,
                       const entity_name_t& locker)
