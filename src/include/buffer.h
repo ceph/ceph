@@ -289,7 +289,7 @@ namespace buffer CEPH_BUFFER_API {
       friend class iterator_impl<true>;
 
     public:
-      // constructor.  position.
+      // constructor. position.
       iterator_impl()
 	: bl(0), ls(0), off(0), p_off(0) {}
       iterator_impl(bl_t *l, unsigned o=0);
