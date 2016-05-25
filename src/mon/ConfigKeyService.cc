@@ -49,7 +49,6 @@ void ConfigKeyService::get_store_prefixes(set<string>& s)
 
 void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
 {
-  bufferlist proposal_bl;
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   t->put(STORE_PREFIX, key, bl);
   if (cb)
@@ -59,7 +58,6 @@ void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
 
 void ConfigKeyService::store_delete(string key, Context *cb)
 {
-  bufferlist proposal_bl;
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   t->erase(STORE_PREFIX, key);
   if (cb)
