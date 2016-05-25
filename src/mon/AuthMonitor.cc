@@ -393,7 +393,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     if (!m->get_connection()->has_feature(CEPH_FEATURE_MSG_AUTH)) {
       if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
-	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS) {
+	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	  entity_name.get_type() == CEPH_ENTITY_TYPE_MGR) {
 	if (g_conf->cephx_cluster_require_signatures ||
 	    g_conf->cephx_require_signatures) {
 	  dout(1) << m->get_source_inst()
@@ -417,7 +418,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     int type;
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
 	entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
-	entity_name.get_type() == CEPH_ENTITY_TYPE_MDS)
+	entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	entity_name.get_type() == CEPH_ENTITY_TYPE_MGR)
       type = mon->auth_cluster_required.pick(supported);
     else
       type = mon->auth_service_required.pick(supported);

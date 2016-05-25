@@ -156,6 +156,7 @@ bool KeyServer::_check_rotating_secrets()
   added += _rotate_secret(CEPH_ENTITY_TYPE_MON);
   added += _rotate_secret(CEPH_ENTITY_TYPE_OSD);
   added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
+  added += _rotate_secret(CEPH_ENTITY_TYPE_MGR);
 
   if (added) {
     ldout(cct, 10) << __func__ << " added " << added << dendl;
