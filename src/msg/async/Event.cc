@@ -67,7 +67,7 @@ int EventCenter::init(int n, unsigned i)
   // can't init multi times
   assert(nevent == 0);
 
-  id = i;
+  idx = i;
 
 #ifdef HAVE_EPOLL
   driver = new EpollDriver(cct);
@@ -143,7 +143,7 @@ EventCenter::~EventCenter()
 
 void EventCenter::set_owner()
 {
-  centers[id] = local_center = this;
+  centers[idx] = local_center = this;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
