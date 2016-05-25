@@ -3216,6 +3216,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ret = PoolDump(file_fd).dump(&io_ctx);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
     if (ret < 0) {
       cerr << "error from export: "
 	   << cpp_strerror(ret) << std::endl;
