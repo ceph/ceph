@@ -36,7 +36,7 @@ class TestSessionMap(CephFSTestCase):
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
-            if line.find("ceph-mds") != -1:
+            if "ceph-mds" in line and not "daemon-helper" in line:
                 if line.find("-i {0}".format(mds_id)) != -1:
                     log.info("Found ps line for daemon: {0}".format(line))
                     return int(line.split()[0])
@@ -74,6 +74,7 @@ class TestSessionMap(CephFSTestCase):
 
         initial_thread_count = self._get_thread_count(mds_id)
         self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
         self.assertGreater(self._get_thread_count(mds_id), initial_thread_count)
         self.mount_a.umount_wait()
         final_thread_count = self._get_thread_count(mds_id)
