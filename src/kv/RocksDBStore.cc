@@ -436,10 +436,12 @@ int RocksDBStore::get(
   assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
-  KeyValueDB::Iterator it = get_iterator(prefix);
-  it->lower_bound(key);
-  if (it->valid() && it->key() == key) {
-    out->append(it->value_as_ptr());
+  string value, k;
+  rocksdb::Status s;
+  k = combine_strings(prefix, key);
+  s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
+  if (s.ok()) {
+    out->append(value);
   } else {
     r = -ENOENT;
   }
