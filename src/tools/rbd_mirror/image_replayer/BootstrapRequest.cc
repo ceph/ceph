@@ -3,6 +3,7 @@
 
 #include "BootstrapRequest.h"
 #include "CloseImageRequest.h"
+#include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
 #include "common/dout.h"
@@ -274,12 +275,13 @@ void BootstrapRequest<I>::open_remote_image() {
 
   update_progress("OPEN_REMOTE_IMAGE");
 
-  m_remote_image_ctx = I::create("", m_remote_image_id, nullptr,
-                                 m_remote_io_ctx, false);
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_remote_image>(
       this);
-  m_remote_image_ctx->state->open(ctx);
+  OpenImageRequest<I> *request = OpenImageRequest<I>::create(
+    m_remote_io_ctx, &m_remote_image_ctx, m_remote_image_id, false,
+    m_work_queue, ctx);
+  request->send();
 }
 
 template <typename I>
@@ -291,8 +293,8 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
 
   if (r < 0) {
     derr << ": failed to open remote image: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    close_remote_image();
+    assert(m_remote_image_ctx == nullptr);
+    finish(r);
     return;
   }
 
