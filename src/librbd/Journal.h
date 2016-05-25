@@ -312,7 +312,7 @@ private:
   void handle_replay_process_safe(ReplayEntry replay_entry, int r);
 
   void handle_flushing_restart(int r);
-  void handle_flushing_replay(int r);
+  void handle_flushing_replay();
 
   void handle_recording_stopped(int r);
 
