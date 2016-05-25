@@ -6,6 +6,7 @@
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/OpenImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -77,6 +78,29 @@ struct CloseImageRequest<librbd::MockImageCtx> {
 };
 
 template<>
+struct OpenImageRequest<librbd::MockImageCtx> {
+  static OpenImageRequest* s_instance;
+  Context *on_finish = nullptr;
+
+  static OpenImageRequest* create(librados::IoCtx &io_ctx,
+                                  librbd::MockImageCtx **image_ctx,
+                                  const std::string &local_image_id,
+                                  bool read_only, ContextWQ *work_queue,
+                                  Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  OpenImageRequest() {
+    assert(s_instance == nullptr);
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+template<>
 struct OpenLocalImageRequest<librbd::MockImageCtx> {
   static OpenLocalImageRequest* s_instance;
   Context *on_finish = nullptr;
@@ -101,6 +125,7 @@ struct OpenLocalImageRequest<librbd::MockImageCtx> {
 };
 
 CloseImageRequest<librbd::MockImageCtx>* CloseImageRequest<librbd::MockImageCtx>::s_instance = nullptr;
+OpenImageRequest<librbd::MockImageCtx>* OpenImageRequest<librbd::MockImageCtx>::s_instance = nullptr;
 OpenLocalImageRequest<librbd::MockImageCtx>* OpenLocalImageRequest<librbd::MockImageCtx>::s_instance = nullptr;
 
 } // namespace image_replayer
