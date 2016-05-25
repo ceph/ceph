@@ -3261,6 +3261,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ret = RadosImport(file_fd, 0, dry_run).import(io_ctx, no_overwrite);
+
+    if (file_fd != STDIN_FILENO) {
+      VOID_TEMP_FAILURE_RETRY(::close(file_fd));
+    }
+
     if (ret < 0) {
       cerr << "error from import: "
 	   << cpp_strerror(ret) << std::endl;
