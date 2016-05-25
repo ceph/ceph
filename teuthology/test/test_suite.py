@@ -12,6 +12,7 @@ from teuthology.orchestra.opsys import OS
 import os
 import pytest
 import tempfile
+import time
 import random
 import requests     # to mock a Response
 
@@ -918,6 +919,22 @@ def test_git_branch_exists(m_check_output):
     m_check_output.return_value = 'HHH branch'
     assert True == suite.git_branch_exists('ceph', 'master')
 
+
+def get_fake_time_and_sleep():
+    m_time = Mock()
+    m_time.return_value = time.time()
+
+    def m_time_side_effect():
+        # Fake the slow passage of time
+        m_time.return_value += 0.1
+        return m_time.return_value
+    m_time.side_effect = m_time_side_effect
+
+    def m_sleep(seconds):
+        m_time.return_value += seconds
+    return m_time, m_sleep
+
+
 @patch.object(suite.ResultsReporter, 'get_jobs')
 def test_wait_success(m_get_jobs, caplog):
     results = [
@@ -948,7 +965,12 @@ def test_wait_success(m_get_jobs, caplog):
 
     in_progress = deepcopy(results)
     in_progress = deepcopy(results)
-    assert 0 == suite.wait('name', 1, None)
+    m_time, m_sleep = get_fake_time_and_sleep()
+    with patch.multiple(suite,
+                        time=m_time,
+                        sleep=m_sleep,
+                        ):
+        assert 0 == suite.wait('name', 1, None)
     assert m_get_jobs.called_with('name', fields=['job_id', 'status'])
     assert 0 == len(in_progress)
     assert 'fail http://URL2' in caplog.text()
@@ -964,9 +986,14 @@ def test_wait_fails(m_get_jobs):
     m_get_jobs.side_effect = get_jobs
     suite.WAIT_PAUSE = 1
     suite.WAIT_MAX_JOB_TIME = 1
-    with pytest.raises(suite.WaitException) as error:
-        suite.wait('name', 1, None)
-        assert 'abc' in str(error)
+    m_time, m_sleep = get_fake_time_and_sleep()
+    with patch.multiple(suite,
+                        time=m_time,
+                        sleep=m_sleep,
+                        ):
+        with pytest.raises(suite.WaitException) as error:
+            suite.wait('name', 1, None)
+            assert 'abc' in str(error)
 
 class TestSuiteMain(object):
 
