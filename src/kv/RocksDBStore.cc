@@ -293,8 +293,21 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     bbt_opts.block_cache = NULL;
   }
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
+
+  if (g_conf->rocksdb_row_cache_size) {
+    if (g_conf->rocksdb_cache_shard_bits >= 1) {
+      opt.row_cache = rocksdb::NewLRUCache(g_conf->rocksdb_row_cache_size,
+                                           g_conf->rocksdb_cache_shard_bits);
+    } else {
+      opt.row_cache = rocksdb::NewLRUCache(g_conf->rocksdb_row_cache_size);
+    }
+  } else {
+    opt.row_cache = NULL;
+  }
+
   dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
-           << " cache size to " << g_conf->rocksdb_block_cache_size
+           << " block cache size to " << g_conf->rocksdb_block_cache_size
+           << " row cache size to " << g_conf->rocksdb_row_cache_size
            << " num of cache shards to " << (1 << g_conf->rocksdb_cache_shard_bits) << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));

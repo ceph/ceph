@@ -843,7 +843,8 @@ OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_block_cache_size, OPT_INT, 128*1024*1024)  // default rocksdb block cache size
-OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards
+OPTION(rocksdb_row_cache_size, OPT_INT, 128*1024*1024)    // default rocksdb row cache size
+OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block&row cache shard bits, 4 bit -> 16 shards
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
