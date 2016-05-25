@@ -70,7 +70,7 @@ class Worker : public Thread {
   std::atomic_uint references;
   Worker(CephContext *c, WorkerPool *p, int i)
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
-    center.init(InitEventNumber);
+    center.init(InitEventNumber, i);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
     // initialize perf_logger
