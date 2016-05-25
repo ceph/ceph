@@ -519,22 +519,6 @@ def get_distro_defaults(distro, machine_type):
     )
 
 
-def get_gitbuilder_url(project, distro, pkg_type, arch, kernel_flavor):
-    """
-    Return a base URL like:
-        http://gitbuilder.ceph.com/ceph-deb-squeeze-x86_64-basic/
-
-    :param project:       'ceph' or 'kernel'
-    :param distro:        A distro-ish string like 'trusty' or 'fedora20'
-    :param pkg_type:      Probably 'rpm' or 'deb'
-    :param arch:          A string like 'x86_64'
-    :param kernel_flavor: A string like 'basic'
-    """
-    templ = 'http://{host}/{proj}-{pkg}-{distro}-{arch}-{flav}/'
-    return templ.format(proj=project, pkg=pkg_type, distro=distro, arch=arch,
-                        flav=kernel_flavor, host=config.gitbuilder_host)
-
-
 def package_version_for_hash(hash, kernel_flavor='basic',
                              distro='rhel', machine_type='plana'):
     """

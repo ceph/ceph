@@ -50,13 +50,6 @@ class TestSuiteOffline(object):
                                    'mtype', user='USER')
         assert name.startswith('USER-')
 
-    def test_gitbuilder_url(self):
-        ref_url = "http://{host}/ceph-deb-squeeze-x86_64-basic/".format(
-            host=config.gitbuilder_host
-        )
-        assert suite.get_gitbuilder_url('ceph', 'squeeze', 'deb', 'x86_64',
-                                        'basic') == ref_url
-
     def test_substitute_placeholders(self):
         suite_hash = 'suite_hash'
         input_dict = dict(
@@ -97,10 +90,8 @@ class TestSuiteOffline(object):
                                                     input_dict)
         assert 'os_type' not in output_dict
 
-    @patch('teuthology.suite.get_gitbuilder_url')
     @patch('requests.get')
-    def test_get_hash_success(self, m_get, m_get_gitbuilder_url):
-        m_get_gitbuilder_url.return_value = "http://baseurl.com"
+    def test_get_hash_success(self, m_get):
         mock_resp = Mock()
         mock_resp.ok = True
         mock_resp.text = "the_hash"
@@ -108,10 +99,8 @@ class TestSuiteOffline(object):
         result = suite.get_gitbuilder_hash()
         assert result == "the_hash"
 
-    @patch('teuthology.suite.get_gitbuilder_url')
     @patch('requests.get')
-    def test_get_hash_fail(self, m_get, m_get_gitbuilder_url):
-        m_get_gitbuilder_url.return_value = "http://baseurl.com"
+    def test_get_hash_fail(self, m_get):
         mock_resp = Mock()
         mock_resp.ok = False
         m_get.return_value = mock_resp
