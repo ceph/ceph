@@ -61,10 +61,13 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
 
 thread_local EventCenter* local_center = nullptr;
 
-int EventCenter::init(int n)
+int EventCenter::init(int n, unsigned i)
 {
   // can't init multi times
   assert(nevent == 0);
+
+  id = i;
+
 #ifdef HAVE_EPOLL
   driver = new EpollDriver(cct);
 #else

@@ -120,6 +120,7 @@ class EventCenter {
   int notify_send_fd;
   NetHandler net;
   EventCallbackRef notify_handler;
+  unsigned id = 10000;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -141,8 +142,9 @@ class EventCenter {
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
-  int init(int nevent);
+  int init(int nevent, unsigned id);
   void set_owner();
+  unsigned get_id() { return id; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
