@@ -14,8 +14,6 @@ from distutils.errors import CompileError, LinkError
 from distutils.extension import Extension
 from distutils.sysconfig import customize_compiler
 
-from Cython.Build import cythonize
-
 # PEP 440 versioning of the Rados package on PyPI
 # Bump this version, after every changeset
 # NOTE: This version is not the same as get_ceph_version()
@@ -115,13 +113,6 @@ def check_sanity():
 if not check_sanity():
     sys.exit(1)
 
-# Disable cythonification if we're not really building anything
-if (len(sys.argv) >= 2 and
-        any(i in sys.argv[1:] for i in ('--help', 'clean', 'egg_info', '--version')
-            )):
-    def cythonize(x, **kwargs):
-        return x
-
 if '--without-cython' in sys.argv:
     if not os.path.isfile('rados.c'):
         print('Error: Cannot find Cythonized file rados.c', file=sys.stderr)
@@ -136,7 +127,16 @@ if '--without-cython' in sys.argv:
     sys.argv.remove('--without-cython')
     source = "rados.c"
 else:
+    from Cython.Build import cythonize
+
     source = "rados.pyx"
+
+# Disable cythonification if we're not really building anything
+if (len(sys.argv) >= 2 and
+        any(i in sys.argv[1:] for i in ('--help', 'clean', 'egg_info', '--version')
+            )):
+    def cythonize(x, **kwargs):
+        return x
 
 flags = get_python_flags()
 
