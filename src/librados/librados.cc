@@ -1627,6 +1627,31 @@ int librados::IoCtx::unlock(const std::string &oid, const std::string &name,
   return rados::cls::lock::unlock(this, oid, name, cookie);
 }
 
+struct AioUnlockCompletion : public librados::ObjectOperationCompletion {
+  librados::AioCompletionImpl *completion;
+  AioUnlockCompletion(librados::AioCompletion *c) : completion(c->pc) {
+    completion->get();
+  };
+  void handle_completion(int r, bufferlist& outbl) {
+    rados_callback_t cb = completion->callback_complete;
+    void *cb_arg = completion->callback_complete_arg;
+    cb(completion, cb_arg);
+    completion->lock.Lock();
+    completion->callback_complete = NULL;
+    completion->cond.Signal();
+    completion->put_unlock();
+  }
+};
+
+int librados::IoCtx::aio_unlock(const std::string &oid, const std::string &name,
+			        const std::string &cookie, AioCompletion *c)
+{
+  librados::AioCompletion *completion = librados::Rados::aio_create_completion();
+  int rc = rados::cls::lock::aio_unlock(this, oid, name, cookie, completion);
+  completion->release();
+  return rc;
+}
+
 int librados::IoCtx::break_lock(const std::string &oid, const std::string &name,
 				const std::string &client, const std::string &cookie)
 {
@@ -4806,6 +4831,19 @@ extern "C" int rados_unlock(rados_ioctx_t io, const char *o, const char *name,
 
   int retval = ctx.unlock(o, name, cookie);
   tracepoint(librados, rados_unlock_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_aio_unlock(rados_ioctx_t io, const char *o, const char *name,
+			        const char *cookie, rados_completion_t completion)
+{
+  tracepoint(librados, rados_aio_unlock_enter, io, o, name, cookie, completion);
+  librados::IoCtx ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, ctx);
+  librados::AioCompletionImpl *comp = (librados::AioCompletionImpl*)completion;
+  librados::AioCompletion c(comp);
+  int retval = ctx.aio_unlock(o, name, cookie, &c);
+  tracepoint(librados, rados_aio_unlock_exit, retval);
   return retval;
 }
 

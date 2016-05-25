@@ -983,6 +983,12 @@ namespace librados
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
 	         bufferlist& inbl, bufferlist *outbl);
 
+    /*
+     * asynchronous version of unlock
+     */
+    int aio_unlock(const std::string &oid, const std::string &name,
+	           const std::string &cookie, AioCompletion *c);
+
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);

@@ -3087,6 +3087,20 @@ CEPH_RADOS_API int rados_unlock(rados_ioctx_t io, const char *o,
                                 const char *name, const char *cookie);
 
 /**
+ * Asynchronous release a shared or exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @param completion what to do when operation has been attempted
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_unlock(rados_ioctx_t io, const char *o,
+                                    const char *name, const char *cookie,
+			            rados_completion_t completion);
+
+/**
  * List clients that have locked the named object lock and information about
  * the lock.
  *
