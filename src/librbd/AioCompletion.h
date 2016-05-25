@@ -30,6 +30,12 @@ namespace librbd {
     AIO_TYPE_FLUSH,
   } aio_type_t;
 
+  typedef enum {
+    STATE_PENDING = 0,
+    STATE_CALLBACK,
+    STATE_COMPLETE,
+  } aio_state_t;
+
   /**
    * AioCompletion is the overall completion for a single
    * rbd I/O request. It may be composed of many AioObjectRequests,
@@ -46,7 +52,7 @@ namespace librbd {
   struct AioCompletion {
     Mutex lock;
     Cond cond;
-    bool done;
+    aio_state_t state;
     ssize_t rval;
     callback_t complete_cb;
     void *complete_arg;
@@ -95,7 +101,7 @@ namespace librbd {
     }
 
     AioCompletion() : lock("AioCompletion::lock", true, false),
-		      done(false), rval(0), complete_cb(NULL),
+		      state(STATE_PENDING), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
 		      pending_count(0), blockers(1),
 		      ref(1), released(false), ictx(NULL),
