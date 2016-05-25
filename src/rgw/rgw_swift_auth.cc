@@ -4,7 +4,13 @@
 #include <array>
 
 #include <boost/utility/string_ref.hpp>
-#include <boost/container/static_vector.hpp>
+/* TODO(rzarzynski): we want to use static_vector when it will be available
+ * also on RHEL/Centos 7. At the moment std::vetor is being used instead. */
+#if 0
+#  include <boost/container/static_vector.hpp>
+#else
+#  include <vector>
+#endif
 
 #include "rgw_swift_auth.h"
 #include "rgw_rest.h"
@@ -223,7 +229,12 @@ RGWAuthApplier::aplptr_t RGWTempURLAuthEngine::authenticate() const
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
+  /* TODO(rzarzynski): switch to static_vector when possible. */
+#if 0
   boost::container::static_vector<boost::string_ref, 3> allowed_methods;
+#else
+  std::vector<boost::string_ref> allowed_methods;
+#endif
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting
