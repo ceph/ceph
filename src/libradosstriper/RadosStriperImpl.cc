@@ -194,7 +194,7 @@ libradosstriper::RadosStriperImpl::RemoveCompletionData::RemoveCompletionData
  librados::AioCompletionImpl *userCompletion,
  RadosExclusiveLock *lock,
  int flags) :
-  CompletionData(striper, soid, lockCookie, userCompletion), m_lock(lock) {}
+  CompletionData(striper, soid, lockCookie, userCompletion), flags(flags), m_lock(lock) {}
 
 libradosstriper::RadosStriperImpl::RemoveCompletionData::~RemoveCompletionData() {
   if (m_lock) delete m_lock;
@@ -215,6 +215,11 @@ libradosstriper::RadosStriperImpl::TruncateCompletionData::~TruncateCompletionDa
 
 ///////////////////////// RadosExclusiveLock /////////////////////////////
 
+void rados_req_unlock_complete(rados_completion_t c, void *arg)
+{
+  ((librados::AioCompletionImpl*)c)->put();
+}
+
 libradosstriper::RadosStriperImpl::RadosExclusiveLock::RadosExclusiveLock(librados::IoCtx* ioCtx,
 									  const std::string& oid) :
   m_ioCtx(ioCtx), m_oid(oid)
@@ -229,7 +234,11 @@ libradosstriper::RadosStriperImpl::RadosExclusiveLock::RadosExclusiveLock(librad
 }
 
 libradosstriper::RadosStriperImpl::RadosExclusiveLock::~RadosExclusiveLock() {
-  m_ioCtx->unlock(m_oid, RADOS_LOCK_NAME, m_lockCookie);
+  // use asynchronous unlocking
+  librados::AioCompletion *c =
+    librados::Rados::aio_create_completion(NULL, rados_req_unlock_complete, NULL);
+  m_ioCtx->aio_unlock(m_oid, RADOS_LOCK_NAME, m_lockCookie, c);
+  c->release();
 }
 
 ///////////////////////// constructor /////////////////////////////
@@ -779,7 +788,10 @@ void libradosstriper::RadosStriperImpl::unlockObject(const std::string& soid,
 {
   // unlock the shared lock on the first rados object
   std::string firstObjOid = getObjectId(soid, 0);
-  m_ioCtx.unlock(firstObjOid, RADOS_LOCK_NAME, lockCookie);
+  librados::AioCompletion *c =
+    librados::Rados::aio_create_completion(NULL, rados_req_unlock_complete, NULL);
+  m_ioCtx.aio_unlock(firstObjOid, RADOS_LOCK_NAME, lockCookie, c);
+  c->release();
 }
 
 static void striper_write_req_complete(rados_striper_multi_completion_t c, void *arg)
@@ -1003,7 +1015,7 @@ int libradosstriper::RadosStriperImpl::openStripedObjectForRead(
   }
   rc = internal_get_layout_and_size(firstObjOid, layout, size);
   if (rc) {
-    m_ioCtx.unlock(firstObjOid, RADOS_LOCK_NAME, *lockCookie);
+    unlockObject(soid, *lockCookie);
     lderr(cct()) << "RadosStriperImpl::openStripedObjectForRead : "
 		 << "could not load layout and size for "
 		 << soid << " : rc = " << rc << dendl;
@@ -1041,7 +1053,7 @@ int libradosstriper::RadosStriperImpl::openStripedObjectForWrite(const std::stri
   uint64_t curSize;
   rc = internal_get_layout_and_size(firstObjOid, layout, &curSize);
   if (rc) {
-    m_ioCtx.unlock(firstObjOid, RADOS_LOCK_NAME, *lockCookie);
+    unlockObject(soid, *lockCookie);
     lderr(cct()) << "RadosStriperImpl::openStripedObjectForWrite : "
 		   << "could not load layout and size for "
 		   << soid << " : rc = " << rc << dendl;
@@ -1064,7 +1076,7 @@ int libradosstriper::RadosStriperImpl::openStripedObjectForWrite(const std::stri
   if (-ECANCELED == rc) 
     rc = 0;
   if (rc) {
-    m_ioCtx.unlock(firstObjOid, RADOS_LOCK_NAME, *lockCookie);
+    unlockObject(soid, *lockCookie);
     lderr(cct()) << "RadosStriperImpl::openStripedObjectForWrite : "
 		   << "could not set new size for "
 		   << soid << " : rc = " << rc << dendl;
