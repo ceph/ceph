@@ -33,6 +33,7 @@ rbd_SOURCES = \
 	tools/rbd/action/BenchWrite.cc \
 	tools/rbd/action/Children.cc \
 	tools/rbd/action/Clone.cc \
+	tools/rbd/action/Group.cc \
 	tools/rbd/action/Copy.cc \
 	tools/rbd/action/Create.cc \
 	tools/rbd/action/Diff.cc \
