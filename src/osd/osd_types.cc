@@ -1148,6 +1148,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("tier_of", tier_of);
   f->dump_int("read_tier", read_tier);
   f->dump_int("write_tier", write_tier);
+  f->dump_int("last_tier_change", last_tier_change);
   f->dump_string("cache_mode", get_cache_mode_name());
   f->dump_unsigned("target_max_bytes", target_max_bytes);
   f->dump_unsigned("target_max_objects", target_max_objects);
@@ -1489,7 +1490,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(24, 5, bl);
+  ENCODE_START(25, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1538,6 +1539,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(hit_set_grade_decay_rate, bl);
   ::encode(hit_set_search_last_n, bl);
   ::encode(opts, bl);
+  ::encode(last_tier_change, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1685,6 +1687,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 24) {
     ::decode(opts, bl);
   }
+  if (struct_v >= 25) {
+    ::decode(last_tier_change, bl);
+  } else {
+    last_tier_change = 0;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1747,6 +1754,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
+  a.last_tier_change = 10;
   o.push_back(new pg_pool_t(a));
 }
 

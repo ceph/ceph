@@ -7114,9 +7114,9 @@ done:
       err = -ENOTSUP;
       goto reply;
     }
-    if ((!tp->removed_snaps.empty() || !tp->snaps.empty()) &&
-	((force_nonempty != "--force-nonempty") ||
-	 (!g_conf->mon_debug_unsafe_allow_tier_with_nonempty_snaps))) {
+    if (tp->get_snap_seq() > 0 &&
+        tier_stats.stats.sum.num_objects != 0 &&
+        !g_conf->mon_debug_unsafe_allow_tier_with_nonempty_snaps) {
       ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
       err = -ENOTEMPTY;
       goto reply;
@@ -7128,9 +7128,11 @@ done:
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
+
     np->tiers.insert(tierpool_id);
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
+    ntp->last_tier_change = pending_inc.epoch;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -7205,6 +7207,11 @@ done:
     }
     np->tiers.erase(tierpool_id);
     ntp->clear_tier();
+    ntp->snaps.clear();
+    ntp->removed_snaps.clear();
+    ntp->snap_seq = 0;
+    ntp->snap_epoch = pending_inc.epoch;
+    ntp->last_tier_change = pending_inc.epoch;
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -7491,6 +7498,7 @@ done:
       err = -ENOTEMPTY;
       goto reply;
     }
+
     string modestr = g_conf->osd_tier_default_cache_mode;
     pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
     if (mode < 0) {
@@ -7534,6 +7542,7 @@ done:
     ntp->hit_set_search_last_n = g_conf->osd_tier_default_cache_hit_set_search_last_n;
     ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
+    ntp->last_tier_change = pending_inc.epoch;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
