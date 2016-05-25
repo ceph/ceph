@@ -531,7 +531,7 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
     // will release one
     RadosReadCompletionData *data = new RadosReadCompletionData(nc, p->length, oid_bl, cct(), 2);
     librados::AioCompletion *rados_completion =
-      m_radosCluster.aio_create_completion(data, rados_req_read_complete, rados_req_read_safe);
+      librados::Rados::aio_create_completion(data, rados_req_read_complete, rados_req_read_safe);
     r = m_ioCtx.aio_read(p->oid.name, rados_completion, oid_bl, p->length, p->offset);
     rados_completion->release();
     if (r < 0)
@@ -916,7 +916,7 @@ libradosstriper::RadosStriperImpl::internal_aio_write(const std::string& soid,
       // and write the object
       c->add_request();
       librados::AioCompletion *rados_completion =
-        m_radosCluster.aio_create_completion(c, rados_req_write_complete, rados_req_write_safe);
+        librados::Rados::aio_create_completion(c, rados_req_write_complete, rados_req_write_safe);
       r = m_ioCtx.aio_write(p->oid.name, rados_completion, oid_bl, p->length, p->offset);
       rados_completion->release();
       if (r < 0)
@@ -1201,9 +1201,9 @@ int libradosstriper::RadosStriperImpl::aio_truncate
     if (exists) {
       // remove asynchronously
       librados::AioCompletion *rados_completion =
-	m_radosCluster.aio_create_completion(multi_completion,
-					     rados_req_remove_complete,
-					     0);
+	librados::Rados::aio_create_completion(multi_completion,
+					       rados_req_remove_complete,
+					       0);
       int rc = m_ioCtx.aio_remove(getObjectId(soid, objectno), rados_completion);
       rados_completion->release();
       // in case the object did not exist, it means we had a sparse file, all is fine
@@ -1233,9 +1233,9 @@ int libradosstriper::RadosStriperImpl::aio_truncate
       } else {
 	// removes are asynchronous in order to speed up truncations of big files
 	librados::AioCompletion *rados_completion =
-	  m_radosCluster.aio_create_completion(multi_completion,
-					       rados_req_remove_complete,
-					       0);
+	  librados::Rados::aio_create_completion(multi_completion,
+						 rados_req_remove_complete,
+						 0);
 	rc = m_ioCtx.aio_remove(getObjectId(soid, objectno), rados_completion);
 	rados_completion->release();
       }
