@@ -892,7 +892,7 @@ def main():
 
         if ret < 0:
             ret = -ret
-            print('Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs), file=sys.stderr)
+            print(u'Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs), file=sys.stderr)
             if len(targets) > 1:
                 final_ret = ret
             else:
