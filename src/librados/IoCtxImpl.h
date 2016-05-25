@@ -46,9 +46,6 @@ struct librados::IoCtxImpl {
   xlist<AioCompletionImpl*> aio_write_list;
   map<ceph_tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
-  Mutex cached_pool_names_lock;
-  std::list<std::string> cached_pool_names;
-
   Objecter *objecter;
 
   IoCtxImpl();
