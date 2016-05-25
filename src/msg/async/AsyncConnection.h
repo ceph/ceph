@@ -160,16 +160,18 @@ class AsyncConnection : public Connection {
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
-      Mutex::Locker l(delay_lock);
-      while (!delay_queue.empty()) {
-        Message *m = delay_queue.front().second;
-        dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
-        m->put();
-        delay_queue.pop_front();
-      }
-      for (auto i : register_time_events)
-        center->delete_time_event(i);
-      register_time_events.clear();
+      EventCenter::submit_to(center->get_id(), [this] () mutable {
+        Mutex::Locker l(delay_lock);
+        while (!delay_queue.empty()) {
+          Message *m = delay_queue.front().second;
+          dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
+          m->put();
+          delay_queue.pop_front();
+        }
+        for (auto i : register_time_events)
+          center->delete_time_event(i);
+        register_time_events.clear();
+      }, true);
     }
     void flush();
   } *delay_state;
