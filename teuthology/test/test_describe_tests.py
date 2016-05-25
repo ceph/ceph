@@ -107,7 +107,7 @@ class TestDescribeTests(object):
 
     def setup(self):
         self.fake_exists, self.fake_listdir, self.fake_isfile,
-            self.fake_isdir, self.fake_open = make_fake_fstools(realistic_fs)
+        self.fake_isdir, self.fake_open = make_fake_fstools(realistic_fs)
 
     @staticmethod
     def assert_expected_combo_headers(headers):
