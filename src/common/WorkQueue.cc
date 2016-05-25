@@ -168,9 +168,10 @@ void ThreadPool::start_threads()
     _threads.insert(wt);
 
     int r = wt->set_ioprio(ioprio_class, ioprio_priority);
-    if (r < 0)
+    if (r < 0) {
+      r = -errno;
       lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
-
+    }
     wt->create(thread_name.c_str());
   }
 }
@@ -283,8 +284,10 @@ void ThreadPool::set_ioprio(int cls, int priority)
 		  << " pid " << (*p)->get_pid()
 		  << dendl;
     int r = (*p)->set_ioprio(cls, priority);
-    if (r < 0)
+    if (r < 0) {
+      r = -errno;
       lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
+    }
   }
 }
 

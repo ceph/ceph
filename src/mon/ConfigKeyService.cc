@@ -122,6 +122,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     ret = store_get(key, rdata);
     if (ret < 0) {
       assert(!rdata.length());
+      ret = -errno;
       ss << "error obtaining '" << key << "': " << cpp_strerror(ret);
       goto out;
     }

@@ -1724,6 +1724,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	  ECUtil::get_hinfo_key(),
 	  bl);
 	if (r < 0) {
+	  r = -errno;
 	  dout(5) << __func__ << ": getattr failed: " << cpp_strerror(r) << dendl;
 	  bl.clear(); // just in case
 	}

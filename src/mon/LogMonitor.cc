@@ -190,6 +190,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     } else {
       int err = p->second.write_fd(fd);
       if (err < 0) {
+	err = -errno;
 	dout(1) << "error writing to '" << log_file << "' for channel '"
                 << p->first << ": " << cpp_strerror(err) << dendl;
       }

@@ -152,6 +152,7 @@ int DataHealthService::update_stats()
 
   int err = get_fs_stats(ours.fs_stats, g_conf->mon_data.c_str());
   if (err < 0) {
+    err = -errno;
     derr << __func__ << " get_fs_stats error: " << cpp_strerror(err) << dendl;
     return err;
   }
@@ -194,6 +195,7 @@ void DataHealthService::service_tick()
 
   int err = update_stats();
   if (err < 0) {
+    err = -errno;
     derr << "something went wrong obtaining our disk stats: "
          << cpp_strerror(err) << dendl;
     force_shutdown();

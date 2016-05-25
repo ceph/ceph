@@ -770,6 +770,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   struct statfs stbuf;
   int r = osd->store->statfs(&stbuf);
   if (r < 0) {
+    r = -errno;
     derr << "statfs() failed: " << cpp_strerror(r) << dendl;
     return;
   }
@@ -2053,6 +2054,7 @@ int OSD::init()
     l.nspace = string(g_conf->osd_max_object_namespace_len, 's');
     r = store->validate_hobject_key(l);
     if (r < 0) {
+      r = -errno;
       derr << "backend (" << store->get_type() << ") is unable to support max "
 	   << "object name[space] len" << dendl;
       derr << "   osd max object name len = "
@@ -2793,6 +2795,7 @@ int OSD::update_crush_location()
     struct statfs st;
     int r = store->statfs(&st);
     if (r < 0) {
+      r = -errno;
       derr << "statfs: " << cpp_strerror(r) << dendl;
       return r;
     }
@@ -2839,6 +2842,7 @@ int OSD::update_crush_location()
 	if (r == 0)
 	  r = w.wait();
 	if (r < 0) {
+	  r = -errno;
 	  derr << __func__ << " fail: osd does not exist and created failed: "
 	       << cpp_strerror(r) << dendl;
 	  return r;

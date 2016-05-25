@@ -141,6 +141,7 @@ std::string AdminSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
   int ret = pipe_cloexec(pipefd);
   if (ret < 0) {
     ostringstream oss;
+    ret = -errno;
     oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(ret);
     return oss.str();
   }
@@ -233,6 +234,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
     }
     if (err != 0) {
       ostringstream oss;
+      err = -errno;
       oss << "AdminSocket::bind_and_listen: "
 	  << "failed to bind the UNIX domain socket to '" << sock_path
 	  << "': " << cpp_strerror(err);
@@ -320,6 +322,7 @@ bool AdminSocket::do_accept()
   while (1) {
     int ret = safe_read(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
+      ret = -errno;
       lderr(m_cct) << "AdminSocket: error reading request code: "
 		   << cpp_strerror(ret) << dendl;
       close(connection_fd);
@@ -424,6 +427,7 @@ bool AdminSocket::do_accept()
     uint32_t len = htonl(out.length());
     int ret = safe_write(connection_fd, &len, sizeof(len));
     if (ret < 0) {
+      ret = -errno;  
       lderr(m_cct) << "AdminSocket: error writing response length "
 		   << cpp_strerror(ret) << dendl;
     } else {
