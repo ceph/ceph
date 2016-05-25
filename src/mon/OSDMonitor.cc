@@ -3353,7 +3353,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
             // Drop error, continue to get other daemons' metadata
             dout(4) << "No metadata for osd." << i << dendl;
             r = 0;
-            continue;
           } else if (r < 0) {
             // Unexpected error
             goto reply;
