@@ -490,6 +490,7 @@ bool librados::RadosClient::_dispatch(Message *m)
     break;
 
   case CEPH_MSG_MDS_MAP:
+    m->put();
     break;
 
   case MSG_LOG:
