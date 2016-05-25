@@ -3,6 +3,7 @@
 
 #include "BootstrapRequest.h"
 #include "CloseImageRequest.h"
+#include "CreateImageRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
@@ -31,58 +32,6 @@ namespace image_replayer {
 
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_ack_callback;
-
-namespace {
-
-template <typename I>
-struct C_CreateImage : public Context {
-  librados::IoCtx &local_io_ctx;
-  std::string global_image_id;
-  std::string remote_mirror_uuid;
-  std::string local_image_name;
-  I *remote_image_ctx;
-  Context *on_finish;
-
-  C_CreateImage(librados::IoCtx &local_io_ctx,
-                const std::string &global_image_id,
-                const std::string &remote_mirror_uuid,
-                const std::string &local_image_name, I *remote_image_ctx,
-                Context *on_finish)
-    : local_io_ctx(local_io_ctx), global_image_id(global_image_id),
-      remote_mirror_uuid(remote_mirror_uuid),
-      local_image_name(local_image_name), remote_image_ctx(remote_image_ctx),
-      on_finish(on_finish) {
-  }
-
-  virtual void finish(int r) override {
-    assert(r == 0);
-
-    // TODO: rbd-mirror should offer a feature mask capability
-    RWLock::RLocker snap_locker(remote_image_ctx->snap_lock);
-    int order = remote_image_ctx->order;
-
-    CephContext *cct = reinterpret_cast<CephContext*>(local_io_ctx.cct());
-    uint64_t journal_order = cct->_conf->rbd_journal_order;
-    uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
-    std::string journal_pool = cct->_conf->rbd_journal_pool;
-
-    // NOTE: bid is 64bit but overflow will result due to
-    // RBD_MAX_BLOCK_NAME_SIZE being too small
-    librados::Rados rados(local_io_ctx);
-    uint64_t bid = rados.get_instance_id();
-
-    r = librbd::create_v2(local_io_ctx, local_image_name.c_str(), bid,
-                          remote_image_ctx->size, order,
-                          remote_image_ctx->features,
-                          remote_image_ctx->stripe_unit,
-                          remote_image_ctx->stripe_count,
-                          journal_order, journal_splay_width, journal_pool,
-                          global_image_id, remote_mirror_uuid);
-    on_finish->complete(r);
-  }
-};
-
-} // anonymous namespace
 
 template <typename I>
 BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
@@ -394,15 +343,13 @@ void BootstrapRequest<I>::create_local_image() {
 
   update_progress("CREATE_LOCAL_IMAGE");
 
-  // TODO: librbd should provide an AIO image creation method -- this is
-  //       blocking so we execute in our worker thread
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
       this);
-  m_work_queue->queue(new C_CreateImage<I>(m_local_io_ctx, m_global_image_id,
-                                           m_remote_mirror_uuid,
-                                           m_local_image_name,
-                                           m_remote_image_ctx, ctx), 0);
+  CreateImageRequest<I> *request = CreateImageRequest<I>::create(
+    m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
+    m_local_image_name, m_remote_image_ctx, ctx);
+  request->send();
 }
 
 template <typename I>
