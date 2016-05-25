@@ -817,6 +817,24 @@ AX_INTEL_FEATURES()
 AM_CONDITIONAL(HAVE_SSSE3, [ test "x$ax_cv_support_ssse3_ext" = "xyes"])
 AM_CONDITIONAL(HAVE_SSE4_PCLMUL, [ test "x$ax_cv_support_pclmuldq_ext" = "xyes"])
 
+# Find supported power crc32
+AC_MSG_CHECKING([for power_crc32])
+AC_RUN_IFELSE([AC_LANG_PROGRAM([[#include <sys/auxv.h>]], [[
+#if defined(__linux__) && defined(__powerpc__) && defined(AT_HWCAP2)
+if (getauxval(AT_HWCAP2) & PPC_FEATURE2_ARCH_2_07) return 0;
+#endif
+return 1;
+]])],
+      [
+      AC_MSG_RESULT([yes])
+      have_power_crc32=yes],
+     [AC_MSG_RESULT([no])
+      have_power_crc32=no])
+AM_CONDITIONAL(HAVE_POWER_CRC32, test "x$have_power_crc32" = "xyes")
+if test "x$have_power_crc32" = "xyes"; then
+    AC_DEFINE([POWER_CRC32], [1], [Define if using power crc32.])
+fi
+
 # kinetic osd backend?
 AC_ARG_WITH([kinetic],
             [AS_HELP_STRING([--with-kinetic], [build kinetic support])],

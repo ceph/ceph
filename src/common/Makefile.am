@@ -139,6 +139,12 @@ if WITH_GOOD_YASM_ELF64
 libcommon_crc_la_SOURCES += common/crc32c_intel_fast_asm.S common/crc32c_intel_fast_zero_asm.S
 libcommon_crc_la_LIBTOOLFLAGS = --tag=CC
 endif
+
+if HAVE_POWER_CRC32
+libcommon_crc_la_SOURCES += common/crc32c_power_asm.S common/crc32c_power_wrapper.c
+libcommon_crc_la_LIBTOOLFLAGS = --tag=CC
+endif
+
 LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
@@ -155,6 +161,9 @@ noinst_HEADERS += \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h \
 	common/crc32c_aarch64.h \
+        common/crc32c_power_constants.h \
+        common/crc32c_power_wrapper.h \
+        common/crc32c_power_opcode.h \
 	common/cohort_lru.h \
 	common/sstring.hh \
 	xxHash/xxhash.h

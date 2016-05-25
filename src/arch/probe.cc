@@ -5,6 +5,7 @@
 
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "arch/power.h"
 
 int ceph_arch_probe(void)
 {
@@ -13,6 +14,7 @@ int ceph_arch_probe(void)
 
   ceph_arch_intel_probe();
   ceph_arch_arm_probe();
+  ceph_arch_power_probe();
 
   ceph_arch_probed = 1;
   return 1;

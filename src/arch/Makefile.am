@@ -1,5 +1,6 @@
 libarch_la_SOURCES = \
 	arch/intel.c \
+        arch/power.c\
 	arch/arm.c \
 	arch/probe.cc
 
@@ -7,5 +8,6 @@ noinst_LTLIBRARIES += libarch.la
 
 noinst_HEADERS += \
 	arch/intel.h \
+        arch/power.h \
 	arch/arm.h \
 	arch/probe.h

@@ -173,8 +173,10 @@ AM_CFLAGS += -fprofile-arcs -ftest-coverage
 AM_CXXFLAGS += -fprofile-arcs -ftest-coverage -O0
 endif
 
+if WITH_GOOD_YASM_ELF64
 CCAS = ${srcdir}/yasm-wrapper
 AM_CCASFLAGS = -f elf64
+endif
 
 
 #####################
