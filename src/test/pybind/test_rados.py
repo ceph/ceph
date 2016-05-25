@@ -228,7 +228,7 @@ class TestRados(object):
                     eq(pool_id, self.rados.get_pool_base_tier(pool_id))
                     eq(pool_id, self.rados.get_pool_base_tier(tier_pool_id))
                 finally:
-                    cmd = {"prefix":"osd tier remove", "pool":"foo", "tierpool":"foo-cache"}
+                    cmd = {"prefix":"osd tier remove", "pool":"foo", "tierpool":"foo-cache", "force_nonempty":"--force-nonempty"}
                     ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
             finally:

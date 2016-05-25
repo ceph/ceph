@@ -112,7 +112,7 @@ public:
       inbl, NULL, NULL));
     ASSERT_EQ(0, m_cluster->mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool +
-      "\", \"tierpool\": \"" + cache_pool + "\"}",
+      "\", \"tierpool\": \"" + cache_pool + "\", \"force_nonempty\": \"--force-nonempty\"}",
       inbl, NULL, NULL));
     m_cluster->wait_for_latest_osdmap();
     m_cluster->pool_delete(cache_pool.c_str());

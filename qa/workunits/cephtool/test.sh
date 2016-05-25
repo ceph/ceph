@@ -274,7 +274,7 @@ function test_tiering_agent()
   done
   $evicted # assert
   ceph osd tier remove-overlay $slow
-  ceph osd tier remove $slow $fast
+  ceph osd tier remove $slow $fast --force-nonempty
   ceph osd pool delete $fast $fast --yes-i-really-really-mean-it
   ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
@@ -352,7 +352,8 @@ function test_tiering()
   done
   expect_false ceph osd tier add slow cache2
   ceph osd tier add slow cache2 --force-nonempty
-  ceph osd tier remove slow cache2
+  expect_false ceph osd tier remove slow cache2
+  ceph osd tier remove slow cache2 --force-nonempty
 
   ceph osd pool ls | grep cache2
   ceph osd pool ls -f json-pretty | grep cache2

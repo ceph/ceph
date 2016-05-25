@@ -2116,7 +2116,7 @@ TEST_F(TestLibRBD, ListChildrenTiered)
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
   cmdstr = "{\"prefix\": \"osd tier remove\", \"pool\": \"" +
-     pool_name1 + "\", \"tierpool\":\"" + pool_name3 + "\"}";
+     pool_name1 + "\", \"tierpool\":\"" + pool_name3 + "\", \"force_nonempty\": \"--force-nonempty\"}";
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(_cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 }

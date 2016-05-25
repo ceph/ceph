@@ -100,7 +100,7 @@ protected:
       inbl, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+      "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
     // wait for maps to settle before next test
@@ -1835,7 +1835,7 @@ TEST_F(LibRadosTierPP, FlushWriteRaces) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -2501,7 +2501,7 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -2559,7 +2559,7 @@ TEST_F(LibRadosTwoPoolsPP, ProxyRead) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -2710,7 +2710,7 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -2751,7 +2751,7 @@ protected:
       inbl, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+      "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
     // wait for maps to settle before next test
@@ -4429,7 +4429,7 @@ TEST_F(LibRadosTierECPP, FlushWriteRaces) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -4773,7 +4773,7 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -5132,7 +5132,7 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -5190,7 +5190,7 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
@@ -5341,7 +5341,7 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
-    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    "\", \"tierpool\": \"" + cache_pool_name + "\", \"force_nonempty\": \"--force-nonempty\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test
