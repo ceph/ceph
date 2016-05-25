@@ -59,6 +59,7 @@ ostream& EventCenter::_event_prefix(std::ostream *_dout)
                 << " time_id=" << time_event_next_id << ").";
 }
 
+EventCenter *EventCenter::centers[MAX_EVENTCENTER];
 thread_local EventCenter* local_center = nullptr;
 
 int EventCenter::init(int n, unsigned i)
@@ -142,7 +143,7 @@ EventCenter::~EventCenter()
 
 void EventCenter::set_owner()
 {
-  local_center = this;
+  centers[id] = local_center = this;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)

@@ -91,6 +91,10 @@ inline EventCenter* center() {
  */
 class EventCenter {
   using clock_type = ceph::coarse_mono_clock;
+  // should be enough;
+  static const int MAX_EVENTCENTER = 24;
+  static EventCenter *centers[MAX_EVENTCENTER];
+
   struct FileEvent {
     int mask;
     EventCallbackRef read_cb;
@@ -159,6 +163,53 @@ class EventCenter {
   inline bool in_thread() const {
     return local_center == this;
   }
+
+ private:
+  template <typename func>
+  class C_submit_event : public EventCallback {
+    std::mutex lock;
+    std::condition_variable cond;
+    bool done = false;
+    func f;
+    bool nonwait;
+   public:
+    C_submit_event(func &&_f, bool nw)
+      : f(std::move(_f)), nonwait(nw) {}
+    void do_request(int id) {
+      f();
+      lock.lock();
+      cond.notify_all();
+      done = true;
+      lock.unlock();
+      if (nonwait)
+        delete this;
+    }
+    void wait() {
+      assert(!nonwait);
+      std::unique_lock<std::mutex> l(lock);
+      while (!done)
+        cond.wait(l);
+    }
+  };
+
+ public:
+  template <typename func>
+  static void submit_to(int i, func &&f, bool nowait = false) {
+    assert(i < MAX_EVENTCENTER);
+    EventCenter *c = centers[i];
+    if (c->in_thread()) {
+      f();
+      return ;
+    }
+    if (nowait) {
+      C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
+      c->dispatch_event_external(event);
+    } else {
+      C_submit_event<func> event(std::move(f), false);
+      c->dispatch_event_external(&event);
+      event.wait();
+    }
+  };
 };
 
 #endif
