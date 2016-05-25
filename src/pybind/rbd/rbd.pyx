@@ -462,7 +462,7 @@ class RBD(object):
         return (major, minor, extra)
 
     def create(self, ioctx, name, size, order=None, old_format=True,
-               features=0, stripe_unit=0, stripe_count=0):
+               features=None, stripe_unit=0, stripe_count=0):
         """
         Create an rbd image.
 
@@ -499,7 +499,7 @@ class RBD(object):
         if order is not None:
             _order = order
         if old_format:
-            if features != 0 or stripe_unit != 0 or stripe_count != 0:
+            if features or stripe_unit != 0 or stripe_count != 0:
                 raise InvalidArgument('format 1 images do not support feature'
                                       ' masks or non-default striping')
             with nogil:
@@ -509,8 +509,10 @@ class RBD(object):
             try:
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FORMAT,
                                              1 if old_format else 2)
-                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
-                                             features)
+                if features is not None:
+                    rbd_image_options_set_uint64(opts,
+                                                 RBD_IMAGE_OPTION_FEATURES,
+                                                 features)
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                              _order)
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
@@ -526,7 +528,7 @@ class RBD(object):
             raise make_ex(ret, 'error creating image')
 
     def clone(self, p_ioctx, p_name, p_snapname, c_ioctx, c_name,
-              features=0, order=None, stripe_unit=0, stripe_count=0):
+              features=None, order=None, stripe_unit=0, stripe_count=0):
         """
         Clone a parent rbd snapshot into a COW sparse child.
 
@@ -569,8 +571,9 @@ class RBD(object):
 
         rbd_image_options_create(&opts)
         try:
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
-                                         features)
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                          order)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
@@ -1259,8 +1262,8 @@ cdef class Image(object):
             raise make_ex(ret, 'error getting lock status for image' % (self.name))
         return owner == 1
 
-    def copy(self, dest_ioctx, dest_name, features=0, order=None, stripe_unit=0,
-             stripe_count=0):
+    def copy(self, dest_ioctx, dest_name, features=None, order=None,
+             stripe_unit=0, stripe_count=0):
         """
         Copy the image to another location.
 
@@ -1292,8 +1295,9 @@ cdef class Image(object):
 
         rbd_image_options_create(&opts)
         try:
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
-                                         features)
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                          order)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
