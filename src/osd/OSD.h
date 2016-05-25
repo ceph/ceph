@@ -2494,7 +2494,6 @@ public:
 
   int enable_disable_fuse(bool stop);
 
-  void suicide(int exitcode);
   int shutdown();
 
   void handle_signal(int signum);
