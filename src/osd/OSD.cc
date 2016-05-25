@@ -1716,6 +1716,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                          cct->_conf->osd_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                            cct->_conf->osd_op_history_duration);
+  store->set_on_abort(new C_OSD_OnAbort(this));
 }
 
 OSD::~OSD()
