@@ -1,10 +1,18 @@
 # Largely taken from
 # https://blog.kevin-brown.com/programming/2014/09/24/combining-autotools-and-setuptools.html
+from __future__ import print_function
+
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import textwrap
+from distutils.ccompiler import new_compiler
 from distutils.core import setup
+from distutils.errors import CompileError, LinkError
 from distutils.extension import Extension
+from distutils.sysconfig import customize_compiler
 
 from Cython.Build import cythonize
 
@@ -60,6 +68,52 @@ def get_python_flags():
         'ldflags': ldflags
     }
 
+
+def check_sanity():
+    """
+    Test if development headers and library for rados is available by compiling a dummy C program.
+    """
+
+    tmp_dir = tempfile.mkdtemp(dir=os.path.dirname(__file__))
+    tmp_file = os.path.join(tmp_dir, 'rados_dummy.c')
+
+    with open(tmp_file, 'w') as fp:
+        dummy_prog = textwrap.dedent("""
+        #include <rados/librados.h>
+
+        int main(void) {
+            rados_t cluster;
+            rados_create(&cluster, NULL);
+            return 0;
+        }
+        """)
+        fp.write(dummy_prog)
+
+    compiler = new_compiler()
+    customize_compiler(compiler)
+
+    try:
+        compiler.link_executable(
+            compiler.compile([tmp_file]),
+            os.path.join(tmp_dir, 'rados_dummy'),
+            libraries=['rados'],
+            output_dir=tmp_dir
+        )
+
+    except CompileError:
+        print('\nCompile Error: RADOS development headers not found', file=sys.stderr)
+        return False
+    except LinkError:
+        print('\nLink Error: RADOS library not found', file=sys.stderr)
+        return False
+    else:
+        return True
+    finally:
+        shutil.rmtree(tmp_dir)
+
+
+if not check_sanity():
+    sys.exit(1)
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and
