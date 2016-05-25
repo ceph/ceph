@@ -2478,7 +2478,7 @@ void RGWPutObj::execute()
   } while (len > 0);
 
   if (!chunked_upload && ofs != s->content_length) {
-    op_ret = -ERR_REQUEST_TIMEOUT;
+    op_ret = -ERR_LENGTH_REQUIRED;
     goto done;
   }
   s->obj_size = ofs;
