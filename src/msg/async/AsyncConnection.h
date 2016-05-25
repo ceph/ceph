@@ -383,6 +383,10 @@ class AsyncConnection : public Connection {
       dispatch_queue->queue_reset(this);
   }
   void cleanup_handler() {
+    for (auto &&t : register_time_events)
+      center->delete_time_event(t);
+    register_time_events.clear();
+    center->delete_time_event(last_tick_id);
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;
