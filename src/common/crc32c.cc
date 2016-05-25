@@ -4,12 +4,14 @@
 #include "include/crc32c.h"
 
 #include "arch/probe.h"
+#include "arch/power.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_intel_fast.h"
 #include "common/crc32c_aarch64.h"
+#include "common/crc32c_power_wrapper.h"
 
 /*
  * choose best implementation based on the CPU architecture.
@@ -20,6 +22,9 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   // link order of this file relative to arch/probe.cc.
   ceph_arch_probe();
 
+  if (ceph_arch_power_crc32){
+   return ceph_crc32c_power;
+  }
   // if the CPU supports it, *and* the fast version is compiled in,
   // use that.
   if (ceph_arch_intel_sse42 && ceph_crc32c_intel_fast_exists()) {
