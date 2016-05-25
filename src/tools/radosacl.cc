@@ -176,26 +176,6 @@ int main(int argc, const char **argv)
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
-#if 0
-  Rados::ListCtx ctx;
-  int entries;
-  do {
-    list<object_t> vec;
-    r = rados.list(io_ctx, 2, vec, ctx);
-    entries = vec.size();
-    cout << "list result=" << r << " entries=" << entries << std::endl;
-    list<object_t>::iterator iter;
-    for (iter = vec.begin(); iter != vec.end(); ++iter) {
-      cout << *iter << std::endl;
-    }
-  } while (entries);
-#endif
-#if 0
-  r = rados.remove(io_ctx, oid);
-  cout << "remove result=" << r << std::endl;
-  rados.close_io_ctx(io_ctx);
-#endif
-
   return 0;
 }
 
