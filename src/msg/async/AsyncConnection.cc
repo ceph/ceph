@@ -2236,9 +2236,6 @@ void AsyncConnection::_stop()
     ::close(sd);
   }
   sd = -1;
-  for (set<uint64_t>::iterator it = register_time_events.begin();
-       it != register_time_events.end(); ++it)
-    center->delete_time_event(*it);
   // Make sure in-queue events will been processed
   center->dispatch_event_external(EventCallbackRef(new C_clean_handler(this)));
 
