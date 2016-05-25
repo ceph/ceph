@@ -122,6 +122,22 @@ if (len(sys.argv) >= 2 and
     def cythonize(x, **kwargs):
         return x
 
+if '--without-cython' in sys.argv:
+    if not os.path.isfile('rados.c'):
+        print('Error: Cannot find Cythonized file rados.c', file=sys.stderr)
+        print('Retry without using --without-cython', file=sys.stderr)
+        sys.exit(1)
+
+
+    def cythonize(x, **kwargs):
+        return x
+
+
+    sys.argv.remove('--without-cython')
+    source = "rados.c"
+else:
+    source = "rados.pyx"
+
 flags = get_python_flags()
 
 setup(
@@ -141,7 +157,7 @@ setup(
         [
             Extension(
                 "rados",
-                ["rados.pyx"],
+                [source],
                 include_dirs=flags['cflags']['I'],
                 library_dirs=flags['ldflags']['L'],
                 libraries=["rados"] + flags['ldflags']['l'],
