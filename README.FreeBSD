@@ -1,0 +1,59 @@
+
+The FreeBSD build will build most of the tools in Ceph.
+Note that the RBD dependant items will not work since FreeBSD does not have RBS
+
+Build Prerequisites
+===================
+
+Compiling and building Ceph is tested on 11-CURRENT 
+It uses the CLANG toolset that is available, which needs to be atleast 3.7
+Clang 3.4 (on 10.2-STABLE) does not have all required capabilites to compile everything
+
+The following setup will get things running for FreeBSD:
+
+ - Install bash and link it in /bin
+	# requires root privileges
+	sudo pkg install bash
+	sudo ln -s /usr/local/bin/bash /bin/bash
+
+Building Ceph
+=============
+ - Go and start building
+	./do_freebsd.sh
+
+Parts not (yet) included:
+=========================
+
+ - RBD kernel client
+   Rados Block Devices is implemented in the Linux kernel
+   It seems that there used to be a userspace implementation first.
+   And perhaps ggated could be used as a template since it does some of the
+   same, other than just between 2 disks. And it has a userspace counterpart.
+   * @trociny suggests:
+      Userspace RBD is available under FreeBSD (both librbd and rbd tool 
+      (without linux specific commands) are buildable).
+ - BlueStore.
+   FreeBSD and Linux have different AIO API, and that needs to be made compatible
+   Next to that is there discussion in FreeBSD about aio_cancel not working for all
+   devicetypes
+ - CephFS
+   Cython tries to access an internal field in dirent which does not compile
+
+Tests that verify the correct working of the above are also excluded from the testset
+
+Test not (yet) include:
+=======================
+
+ - ceph-detect-init/run-tox.sh
+   Because the current implementation does not know anything about FreeBSD rc-init.
+ - Tests that make use on nosestests.
+   Calling these doest not really work since nostests is not in /usr/bin, and calling
+   thru /usr/bin/env/nosetests does not work on FreeBSD.
+     test/pybind/test_ceph_argparse.py
+     test/pybind/test_ceph_daemon.py
+
+Things to investigate:
+======================
+
+ - ceph-{osd,mon} need 2 signals before they actually terminate.
+

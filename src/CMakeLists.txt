@@ -16,6 +16,18 @@ set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
+include(CheckCCompilerFlag)
+CHECK_C_COMPILER_FLAG("-Wp,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(HAS_FORTIFY_SOURCE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-D_FORTIFY_SOURCE=2")
+endif()
+endif()
+CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
+if (HAS_STACK_PROTECT)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
+endif()
+
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
   RESULT_VARIABLE no_yasm
@@ -100,6 +112,11 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
+
+option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
+if(WITH_OCF)
+  add_subdirectory(ocf)
+endif()
 
 # Python stuff
 find_package(PythonInterp 2 QUIET)
@@ -210,6 +227,9 @@ if(HAVE_GOOD_YASM_ELF64)
     common/crc32c_intel_fast_zero_asm.S)
 endif(HAVE_GOOD_YASM_ELF64)
 
+add_library(common_texttable_obj OBJECT
+  common/TextTable.cc)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -256,7 +276,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
-  common/TextTable.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -540,8 +560,8 @@ add_subdirectory(ceph-detect-init)
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
   $<TARGET_OBJECTS:krbd_objs>
-  common/secret.c
-  common/TextTable.cc
+  $<TARGET_OBJECTS:parse_secret_objs>
+  $<TARGET_OBJECTS:common_texttable_obj>
   )
 if(${WITH_RADOSGW})
   list(APPEND dencoder_srcs
@@ -625,9 +645,9 @@ add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
 target_link_libraries(mon ${ALLOC_LIBS})
 
 set(ceph_mon_srcs
-  ceph_mon.cc
-  common/TextTable.cc)
-add_executable(ceph-mon ${ceph_mon_srcs})
+  ceph_mon.cc)
+add_executable(ceph-mon ${ceph_mon_srcs}
+  $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
       target_link_libraries(ceph-mon mon common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
@@ -671,6 +691,8 @@ set(libos_srcs
   os/bluestore/FreelistManager.cc
   os/bluestore/KernelDevice.cc
   os/bluestore/StupidAllocator.cc
+  os/bluestore/BitMapAllocator.cc
+  os/bluestore/BitAllocator.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
 if(${HAVE_LIBFUSE})
@@ -1016,6 +1038,7 @@ if(${WITH_RBD})
   set(rbd_mirror_internal
     tools/rbd_mirror/ClusterWatcher.cc 
     tools/rbd_mirror/ImageReplayer.cc
+    tools/rbd_mirror/ImageDeleter.cc
     tools/rbd_mirror/ImageSync.cc
     tools/rbd_mirror/Mirror.cc 
     tools/rbd_mirror/PoolWatcher.cc 
@@ -1029,6 +1052,7 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/ImageCopyRequest.cc
     tools/rbd_mirror/image_sync/ObjectCopyRequest.cc
     tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc
+    tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
   add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
@@ -1085,10 +1109,11 @@ if(${WITH_RBD})
     tools/rbd/action/Resize.cc
     tools/rbd/action/Snap.cc
     tools/rbd/action/Status.cc
-    tools/rbd/action/Watch.cc
-    common/TextTable.cc)
-  add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
-    $<TARGET_OBJECTS:parse_secret_objs>)
+    tools/rbd/action/Watch.cc)
+  add_executable(rbd ${rbd_srcs}
+    $<TARGET_OBJECTS:common_util_obj>
+    $<TARGET_OBJECTS:parse_secret_objs>
+    $<TARGET_OBJECTS:common_texttable_obj>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
@@ -1292,7 +1317,8 @@ add_custom_target(vstart DEPENDS
     ceph-authtool
     ceph-conf
     monmaptool
-    crushtool)
+    crushtool
+    cython_rados)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

@@ -49,6 +49,17 @@ def test_syncfs():
     stat = cephfs.sync_fs()
 
 @with_setup(setup_test)
+def test_fsync():
+    fd = cephfs.open('file-1', 'w', 0755)
+    cephfs.write(fd, "asdf", 0)
+    stat = cephfs.fsync(fd, 0)
+    cephfs.write(fd, "qwer", 0)
+    stat = cephfs.fsync(fd, 1)
+    cephfs.close(fd)
+    #sync on non-existing fd (assume fd 12345 is not exists)
+    assert_raises(libcephfs.Error, cephfs.fsync, 12345, 0)
+
+@with_setup(setup_test)
 def test_directory():
     cephfs.mkdir("/temp-directory", 0755)
     cephfs.mkdirs("/temp-directory/foo/bar", 0755)

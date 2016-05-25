@@ -14,14 +14,11 @@
 #ifndef CEPH_HEALTH_MONITOR_H
 #define CEPH_HEALTH_MONITOR_H
 
-#include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthService.h"
 
-#include "messages/MMonHealth.h"
-
-#include "common/config.h"
-#include "common/Formatter.h"
+//forward declaration
+namespace ceph { class Formatter; }
 
 class HealthMonitor : public QuorumService
 {

@@ -1246,26 +1246,14 @@ static void dump_shard(const shard_info_t& shard,
 		       const inconsistent_obj_t& inc,
 		       Formatter &f)
 {
+  // A missing shard just has that error and nothing else
   if (shard.has_shard_missing()) {
-    f.dump_bool("missing", shard.has_shard_missing());
+    f.open_array_section("errors");
+    f.dump_string("error", "missing");
+    f.close_section();
     return;
   }
-  if (shard.has_read_error())
-    f.dump_bool("read_error", shard.has_read_error());
-  if (shard.has_data_digest_mismatch())
-    f.dump_bool("data_digest_mismatch", shard.has_data_digest_mismatch());
-  if (shard.has_omap_digest_mismatch())
-    f.dump_bool("omap_digest_mismatch", shard.has_omap_digest_mismatch());
-  if (shard.has_size_mismatch())
-    f.dump_bool("size_mismatch", shard.has_size_mismatch());
-  if (!shard.has_read_error()) {
-    if (shard.has_data_digest_mismatch_oi())
-      f.dump_bool("data_digest_mismatch_oi", shard.has_data_digest_mismatch_oi());
-    if (shard.has_omap_digest_mismatch_oi())
-      f.dump_bool("omap_digest_mismatch_oi", shard.has_omap_digest_mismatch_oi());
-    if (shard.has_size_mismatch_oi())
-      f.dump_bool("size_mismatch_oi", shard.has_size_mismatch_oi());
-  }
+
   f.dump_unsigned("size", shard.size);
   if (shard.omap_digest_present) {
     f.dump_format("omap_digest", "0x%08x", shard.omap_digest);
@@ -1273,6 +1261,30 @@ static void dump_shard(const shard_info_t& shard,
   if (shard.data_digest_present) {
     f.dump_format("data_digest", "0x%08x", shard.data_digest);
   }
+
+  f.open_array_section("errors");
+  if (shard.has_read_error())
+    f.dump_string("error", "read_error");
+  if (shard.has_data_digest_mismatch())
+    f.dump_string("error", "data_digest_mismatch");
+  if (shard.has_omap_digest_mismatch())
+    f.dump_string("error", "omap_digest_mismatch");
+  if (shard.has_size_mismatch())
+    f.dump_string("error", "size_mismatch");
+  if (!shard.has_read_error()) {
+    if (shard.has_data_digest_mismatch_oi())
+      f.dump_string("error", "data_digest_mismatch_oi");
+    if (shard.has_omap_digest_mismatch_oi())
+      f.dump_string("error", "omap_digest_mismatch_oi");
+    if (shard.has_size_mismatch_oi())
+      f.dump_string("error", "size_mismatch_oi");
+  }
+  if (shard.has_attr_missing())
+    f.dump_string("error", "attr_missing");
+  if (shard.has_attr_unexpected())
+    f.dump_string("error", "attr_unexpected");
+  f.close_section();
+
   if (inc.has_attr_mismatch()) {
     f.open_object_section("attrs");
     for (auto kv : shard.attrs) {
@@ -1286,10 +1298,6 @@ static void dump_shard(const shard_info_t& shard,
     }
     f.close_section();
   }
-  if (shard.has_attr_missing())
-    f.dump_bool("attr_missing", shard.has_attr_missing());
-  if (shard.has_attr_unexpected())
-    f.dump_bool("attr_unexpected", shard.has_attr_unexpected());
 }
 
 static void dump_object_id(const object_id_t& object,
@@ -1306,7 +1314,7 @@ static void dump_object_id(const object_id_t& object,
     f.dump_string("snap", "snapdir");
     break;
   default:
-    f.dump_format("snap", "0x%08x", object.snap);
+    f.dump_unsigned("snap", object.snap);
     break;
   }
 }
@@ -1317,20 +1325,26 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
   f.open_object_section("object");
   dump_object_id(inc.object, f);
   f.close_section();
+
+  f.open_array_section("errors");
+  if (inc.has_attr_unexpected())
+    f.dump_string("error", "attr_unexpected");
   if (inc.has_shard_missing())
-    f.dump_bool("missing", inc.has_shard_missing());
+    f.dump_string("error", "missing");
   if (inc.has_stat_error())
-    f.dump_bool("stat_err", inc.has_stat_error());
+    f.dump_string("error", "stat_error");
   if (inc.has_read_error())
-    f.dump_bool("read_err", inc.has_read_error());
+    f.dump_string("error", "read_error");
   if (inc.has_data_digest_mismatch())
-    f.dump_bool("data_digest_mismatch", inc.has_data_digest_mismatch());
+    f.dump_string("error", "data_digest_mismatch");
   if (inc.has_omap_digest_mismatch())
-    f.dump_bool("omap_digest_mismatch", inc.has_omap_digest_mismatch());
+    f.dump_string("error", "omap_digest_mismatch");
   if (inc.has_size_mismatch())
-    f.dump_bool("size_mismatch", inc.has_size_mismatch());
+    f.dump_string("error", "size_mismatch");
   if (inc.has_attr_mismatch())
-    f.dump_bool("attr_mismatch", inc.has_attr_mismatch());
+    f.dump_string("error", "attr_mismatch");
+  f.close_section();
+
   f.open_array_section("shards");
   for (auto osd_shard : inc.shards) {
     f.open_object_section("shard");
@@ -1345,25 +1359,31 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
 			      Formatter &f)
 {
   dump_object_id(inc.object, f);
+
+  f.open_array_section("errors");
   if (inc.ss_attr_missing())
-    f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
+    f.dump_string("error", "ss_attr_missing");
   if (inc.ss_attr_corrupted())
-    f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
+    f.dump_string("error", "ss_attr_corrupted");
   if (inc.oi_attr_missing())
-    f.dump_bool("oi_attr_missing", inc.oi_attr_missing());
+    f.dump_string("error", "oi_attr_missing");
   if (inc.oi_attr_corrupted())
-    f.dump_bool("oi_attr_corrupted", inc.oi_attr_corrupted());
+    f.dump_string("error", "oi_attr_corrupted");
   if (inc.snapset_mismatch())
-    f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
+    f.dump_string("error", "snapset_mismatch");
   if (inc.head_mismatch())
-    f.dump_bool("head_mismatch", inc.head_mismatch());
+    f.dump_string("error", "head_mismatch");
   if (inc.headless())
-    f.dump_bool("headless", inc.headless());
+    f.dump_string("error", "headless");
   if (inc.size_mismatch())
-    f.dump_bool("size_mismatch", inc.size_mismatch());
+    f.dump_string("error", "size_mismatch");
+  if (inc.extra_clones())
+    f.dump_string("error", "extra_clones");
+  if (inc.clone_missing())
+    f.dump_string("error", "clone_missing");
+  f.close_section();
 
   if (inc.extra_clones()) {
-    f.dump_bool("extra_clones", inc.extra_clones());
     f.open_array_section("extra clones");
     for (auto snap : inc.clones) {
       f.dump_unsigned("snap", snap);
@@ -1372,7 +1392,6 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   }
 
   if (inc.clone_missing()) {
-    f.dump_bool("clone_missing", inc.clone_missing());
     f.open_array_section("missing");
     for (auto snap : inc.missing) {
       f.dump_unsigned("snap", snap);

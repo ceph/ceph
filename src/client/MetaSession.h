@@ -6,11 +6,9 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "msg/msg_types.h"
+#include "msg/Message.h"
 #include "include/xlist.h"
-
-#include "messages/MClientCapRelease.h"
-#include "mds/MDSMap.h"
+#include "mds/mdstypes.h"
 
 struct Cap;
 struct Inode;

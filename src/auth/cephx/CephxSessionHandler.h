@@ -13,10 +13,11 @@
  */
 
 
-#include "../AuthSessionHandler.h"
-#include "../Auth.h"
+#include "auth/AuthSessionHandler.h"
+#include "auth/Auth.h"
 
 class CephContext;
+class Message;
 
 class CephxSessionHandler  : public AuthSessionHandler {
   uint64_t features;

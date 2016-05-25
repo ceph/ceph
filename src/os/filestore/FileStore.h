@@ -615,13 +615,6 @@ public:
   int _rmattrs(const coll_t& cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
-  int collection_getattr(const coll_t& c, const char *name, void *value, size_t size);
-  int collection_getattr(const coll_t& c, const char *name, bufferlist& bl);
-  int collection_getattrs(const coll_t& cid, map<string,bufferptr> &aset);
-
-  int _collection_setattr(const coll_t& c, const char *name, const void *value, size_t size);
-  int _collection_rmattr(const coll_t& c, const char *name);
-  int _collection_setattrs(const coll_t& cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 

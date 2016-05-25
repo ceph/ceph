@@ -17,29 +17,14 @@
 #ifndef CEPH_REPLICATEDPG_H
 #define CEPH_REPLICATEDPG_H
 
-#include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
-
 #include "include/assert.h" 
-#include "include/unordered_map.h"
-#include "common/cmdparse.h"
-
-#include "HitSet.h"
-#include "OSD.h"
 #include "PG.h"
 #include "Watch.h"
-#include "OpRequest.h"
 #include "TierAgentState.h"
-
-#include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDSubOp.h"
-
 #include "common/sharedptr_registry.hpp"
-
-#include "PGBackend.h"
 #include "ReplicatedBackend.h"
-#include "ECBackend.h"
 
 class MOSDSubOpReply;
 
@@ -48,6 +33,13 @@ class PromoteCallback;
 
 class ReplicatedPG;
 class PGLSFilter;
+class HitSet;
+struct TierAgentState;
+class MOSDOp;
+class MOSDOpReply;
+class MOSDSubOp;
+class OSDService;
+
 void intrusive_ptr_add_ref(ReplicatedPG *pg);
 void intrusive_ptr_release(ReplicatedPG *pg);
 uint64_t get_with_id(ReplicatedPG *pg);
@@ -842,7 +834,7 @@ protected:
       &requeue_recovery,
       &requeue_snaptrim);
     if (requeue_recovery)
-      osd->recovery_wq.queue(this);
+      queue_recovery();
     if (requeue_snaptrim)
       queue_snap_trim();
 
@@ -1240,18 +1232,19 @@ protected:
   void _clear_recovery_state();
 
   bool start_recovery_ops(
-    int max, ThreadPool::TPHandle &handle, int *started);
+    uint64_t max,
+    ThreadPool::TPHandle &handle, uint64_t *started);
 
-  int recover_primary(int max, ThreadPool::TPHandle &handle);
-  int recover_replicas(int max, ThreadPool::TPHandle &handle);
+  uint64_t recover_primary(uint64_t max, ThreadPool::TPHandle &handle);
+  uint64_t recover_replicas(uint64_t max, ThreadPool::TPHandle &handle);
   hobject_t earliest_peer_backfill() const;
   bool all_peer_done() const;
   /**
    * @param work_started will be set to true if recover_backfill got anywhere
    * @returns the number of operations started
    */
-  int recover_backfill(int max, ThreadPool::TPHandle &handle,
-                       bool *work_started);
+  uint64_t recover_backfill(uint64_t max, ThreadPool::TPHandle &handle,
+			    bool *work_started);
 
   /**
    * scan a (hash) range of objects in the current pg

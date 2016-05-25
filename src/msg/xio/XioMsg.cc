@@ -29,7 +29,7 @@ int XioDispatchHook::release_msgs()
   new (xrsp) XioRsp(xcon, this);
 
   /* merge with portal traffic */
-  xcon->portal->enqueue_for_send(xcon, xrsp);
+  xcon->portal->enqueue(xcon, xrsp);
 
   assert(r);
   return r;

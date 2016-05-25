@@ -16,7 +16,7 @@
  * own argument and payload serialization/deserialization, so for ease
  * of implementation we use the existing ceph encoding/decoding
  * methods. Something like json might be preferable, but the rbd
- * kernel module has to be able understand format as well. The
+ * kernel module has to be able to understand format as well. The
  * datatypes exposed to the clients are strings, unsigned integers,
  * and vectors of those types. The on-wire format can be found in
  * src/include/encoding.h.
@@ -3320,8 +3320,8 @@ int image_status_list(cls_method_context_t hctx,
       (*mirror_images)[image_id] = mirror_image;
 
       cls::rbd::MirrorImageStatus status;
-      r = image_status_get(hctx, mirror_image.global_image_id, &status);
-      if (r < 0) {
+      int r1 = image_status_get(hctx, mirror_image.global_image_id, &status);
+      if (r1 < 0) {
 	continue;
       }
 

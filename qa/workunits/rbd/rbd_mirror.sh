@@ -71,9 +71,9 @@ TEMPDIR=
 # by default.
 #
 # RBD_MIRROR_USE_EXISTING_CLUSTER - if set, do not start and stop ceph clusters
-# RBD_MIRROR_USE_EXISTING_DAEMON - if set, use an existing instance of rbd-mirror
-#                                  running as ceph client $CEPH_ID. If empty,
-#                                  this script will start and stop rbd-mirror
+# RBD_MIRROR_USE_RBD_MIRROR - if set, use an existing instance of rbd-mirror
+#                             running as ceph client $CEPH_ID. If empty,
+#                             this script will start and stop rbd-mirror
 
 #
 # Functions
@@ -462,6 +462,58 @@ promote_image()
     rbd --cluster=${cluster} mirror image promote ${POOL}/${image}
 }
 
+set_pool_mirror_mode()
+{
+    local cluster=$1
+    local mode=$2
+
+    rbd --cluster=${cluster} -p ${POOL} mirror pool enable ${mode}
+}
+
+disable_mirror()
+{
+    local cluster=$1
+    local image=$2
+
+    rbd --cluster=${cluster} mirror image disable ${POOL}/${image}
+}
+
+enable_mirror()
+{
+    local cluster=$1
+    local image=$2
+
+    rbd --cluster=${cluster} mirror image enable ${POOL}/${image}
+}
+
+test_image_present()
+{
+    local cluster=$1
+    local image=$2
+    local test_state=$3
+    local current_state=deleted
+
+    rbd --cluster=${cluster} -p ${POOL} ls | grep "^${image}$" &&
+    current_state=present
+
+    test "${test_state}" = "${current_state}"
+}
+
+wait_for_image_present()
+{
+    local cluster=$1
+    local image=$2
+    local state=$3
+    local s
+
+    # TODO: add a way to force rbd-mirror to update replayers
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+	sleep ${s}
+	test_image_present "${cluster}" "${image}" "${state}" && return 0
+    done
+    return 1
+}
+
 #
 # Main
 #
@@ -492,7 +544,9 @@ wait_for_image_replay_started ${CLUSTER1} ${image}
 write_image ${CLUSTER2} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
-test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  test_status_in_pool_dir ${CLUSTER2} ${image} 'down+unknown'
+fi
 compare_images ${image}
 
 testlog "TEST: stop mirror, add image, start mirror and test replay"
@@ -504,7 +558,9 @@ start_mirror ${CLUSTER1}
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image1}
 test_status_in_pool_dir ${CLUSTER1} ${image1} 'up+replaying' 'master_position'
-test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  test_status_in_pool_dir ${CLUSTER2} ${image1} 'down+unknown'
+fi
 compare_images ${image1}
 
 testlog "TEST: test the first image is replaying after restart"
@@ -583,5 +639,26 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 compare_images ${image}
+
+testlog "TEST: disable mirroring / delete non-primary image"
+test_image_present ${CLUSTER1} ${image} 'present'
+set_pool_mirror_mode ${CLUSTER2} 'image'
+disable_mirror ${CLUSTER2} ${image}
+wait_for_image_present ${CLUSTER1} ${image} 'deleted'
+set_pool_mirror_mode ${CLUSTER2} 'pool'
+wait_for_image_present ${CLUSTER1} ${image} 'present'
+wait_for_image_replay_started ${CLUSTER1} ${image}
+
+testlog "TEST: disable mirror while daemon is stopped"
+stop_mirror ${CLUSTER1}
+stop_mirror ${CLUSTER2}
+set_pool_mirror_mode ${CLUSTER2} 'image'
+disable_mirror ${CLUSTER2} ${image}
+test_image_present ${CLUSTER1} ${image} 'present'
+start_mirror ${CLUSTER1}
+wait_for_image_present ${CLUSTER1} ${image} 'deleted'
+set_pool_mirror_mode ${CLUSTER2} 'pool'
+wait_for_image_present ${CLUSTER1} ${image} 'present'
+wait_for_image_replay_started ${CLUSTER1} ${image}
 
 echo OK

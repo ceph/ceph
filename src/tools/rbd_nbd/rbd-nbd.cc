@@ -49,6 +49,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "include/xlist.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

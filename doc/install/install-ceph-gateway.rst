@@ -77,7 +77,7 @@ If you execute ``purge``, you must re-install Ceph.
 Change the Default Port
 -----------------------
 
-Civetweb runs on port ``7480`` by default. To change the default port (e.g,. to
+Civetweb runs on port ``7480`` by default. To change the default port (e.g., to
 port ``80``), modify your Ceph configuration file in the working directory of
 your administration server. Add a section entitled
 ``[client.rgw.<gateway-node>]``, replacing ``<gateway-node>`` with the short
@@ -97,7 +97,7 @@ after the ``[global]`` section::
           the ``rgw_frontends`` key/value pair. The ``[client.rgw.gateway-node1]``
           heading identifies this portion of the Ceph configuration file as 
           configuring a Ceph Storage Cluster client where the client type is a Ceph
-          Object Gateway (i.e., ``rgw``), and the name of the instance is )
+          Object Gateway (i.e., ``rgw``), and the name of the instance is
           ``gateway-node1``.
 
 Push the updated configuration file to your Ceph Object Gateway node
@@ -112,7 +112,7 @@ Gateway::
 
 Finally, check to ensure that the port you selected is open on the node's
 firewall (e.g., port ``80``). If it is not open, add the port and reload the
-firewall configuration. If you use the ``firewald``, daemon execute::
+firewall configuration. If you use the ``firewalld`` daemon, execute::
 
   sudo firewall-cmd --list-all
   sudo firewall-cmd --zone=public --add-port 80/tcp --permanent
@@ -530,7 +530,7 @@ Execute the following steps:
      )
 
    Replace ``{hostname}`` with the hostname of the host where you have
-   configured the gateway service i.e, the ``gateway host``. Replace {port}
+   configured the gateway service i.e., the ``gateway host``. Replace {port}
    with the port number you are using with Civetweb.
 
 #. Run the script::

@@ -52,7 +52,7 @@ See `User Management`_ for additional details on Ceph authentication.
 	sudo mv ceph.client.radosgw.keyring /etc/ceph/ceph.client.radosgw.keyring
 
 
-   .. note:: The 5th step is optional if ``admin node`` is the ``gateway host``.
+   .. note:: The 2nd step is optional if ``admin node`` is the ``gateway host``.
 
 Create Pools
 ============
@@ -150,7 +150,7 @@ following configuration to ``/etc/ceph/ceph.conf`` in your ``admin node``::
    See: `Backport support for UDS in Ubuntu Trusty`_
 
 Here, ``{hostname}`` is the short hostname (output of command ``hostname -s``)
-of the node that is going to provide the gateway service i.e, the
+of the node that is going to provide the gateway service i.e., the
 ``gateway host``.
 
 The ``[client.radosgw.gateway]`` portion of the gateway instance identifies this
@@ -158,7 +158,7 @@ portion of the Ceph configuration file as configuring a Ceph Storage Cluster
 client where the client type is a Ceph Object Gateway (i.e., ``radosgw``).
 
 
-.. note:: The last line in the configuration i.e, ``rgw print continue = false``
+.. note:: The last line in the configuration i.e., ``rgw print continue = false``
    is added to avoid issues with ``PUT`` operations.
 
 Once you finish the setup procedure, if you encounter issues with your
@@ -270,7 +270,7 @@ On RPM-based distros::
 Create a Gateway Configuration file
 ===================================
 
-On the host where you installed the Ceph Object Gateway i.e, ``gateway host``,
+On the host where you installed the Ceph Object Gateway i.e., ``gateway host``,
 create an ``rgw.conf`` file. Place the file in ``/etc/apache2/conf-available``
 directory for ``Debian-based`` distros and in ``/etc/httpd/conf.d`` directory
 for ``RPM-based`` distros. It is a Apache configuration file which is needed
@@ -534,7 +534,7 @@ Execute the following steps:
 	)
 
    Replace ``{hostname}`` with the hostname of the host where you have
-   configured the gateway service i.e, the ``gateway host``.
+   configured the gateway service i.e., the ``gateway host``.
 
 #. Run the script::
 

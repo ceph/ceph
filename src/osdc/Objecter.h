@@ -86,43 +86,12 @@ struct ObjectOperation {
     ops.rbegin()->op.flags = flags;
   }
 
-  /**
-   * This is a more limited form of C_Contexts, but that requires
-   * a ceph_context which we don't have here.
-   */
-  class C_TwoContexts : public Context {
-    Context *first;
-    Context *second;
-  public:
-    C_TwoContexts(Context *first, Context *second) : first(first),
-						     second(second) {}
-    void finish(int r) {
-      first->complete(r);
-      second->complete(r);
-      first = NULL;
-      second = NULL;
-    }
-
-    virtual ~C_TwoContexts() {
-      delete first;
-      delete second;
-    }
-  };
-
+  class C_TwoContexts;
   /**
    * Add a callback to run when this operation completes,
    * after any other callbacks for it.
    */
-  void add_handler(Context *extra) {
-    size_t last = out_handler.size() - 1;
-    Context *orig = out_handler[last];
-    if (orig) {
-      Context *wrapper = new C_TwoContexts(orig, extra);
-      out_handler[last] = wrapper;
-    } else {
-      out_handler[last] = extra;
-    }
-  }
+  void add_handler(Context *extra);
 
   OSDOp& add_op(int op) {
     int s = ops.size();
@@ -215,10 +184,12 @@ struct ObjectOperation {
     ::encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
-		      uint64_t expected_write_size) {
+                      uint64_t expected_write_size,
+		      uint32_t flags) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.alloc_hint.expected_object_size = expected_object_size;
     osd_op.op.alloc_hint.expected_write_size = expected_write_size;
+    osd_op.op.alloc_hint.flags = flags;
   }
 
   // ------
@@ -1089,9 +1060,10 @@ struct ObjectOperation {
   }
 
   void set_alloc_hint(uint64_t expected_object_size,
-		      uint64_t expected_write_size ) {
+                      uint64_t expected_write_size,
+		      uint32_t flags) {
     add_alloc_hint(CEPH_OSD_OP_SETALLOCHINT, expected_object_size,
-		   expected_write_size);
+		   expected_write_size, flags);
 
     // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
     // not worth a feature bit.  Set FAILOK per-op flag to make

@@ -2,6 +2,7 @@ set(rbd_mirror_test_srcs
   test_ClusterWatcher.cc
   test_PoolWatcher.cc
   test_ImageReplayer.cc
+  test_ImageDeleter.cc
   test_ImageSync.cc
   test_fixture.cc
   )
@@ -19,7 +20,6 @@ add_executable(unittest_rbd_mirror EXCLUDE_FROM_ALL
   image_sync/test_mock_SnapshotCopyRequest.cc
   image_sync/test_mock_SyncPointCreateRequest.cc
   image_sync/test_mock_SyncPointPruneRequest.cc
-  mock/MockJournaler.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   )
 add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
@@ -32,6 +32,7 @@ target_link_libraries(unittest_rbd_mirror
   rbd_internal
   rbd_api
   journal
+  journal_test
   cls_rbd_client
   cls_lock_client
   cls_journal_client

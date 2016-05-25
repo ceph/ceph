@@ -14,6 +14,7 @@
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
 #include "Replayer.h"
+#include "ImageDeleter.h"
 #include "types.h"
 
 namespace rbd {
@@ -59,6 +60,7 @@ private:
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
   std::map<peer_t, std::unique_ptr<Replayer> > m_replayers;
+  std::shared_ptr<ImageDeleter> m_image_deleter;
   atomic_t m_stopping;
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;

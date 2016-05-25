@@ -1044,7 +1044,8 @@ void BlueStore::_close_fm()
 int BlueStore::_open_alloc()
 {
   assert(alloc == NULL);
-  alloc = Allocator::create("stupid");
+  assert(bdev->get_size());
+  alloc = Allocator::create(g_conf->bluestore_allocator, bdev->get_size());
   uint64_t num = 0, bytes = 0;
   fm->enumerate_reset();
   uint64_t offset, length;
@@ -1702,6 +1703,34 @@ int BlueStore::_setup_block_symlink_or_file(
 	       << size << ": " << cpp_strerror(r) << dendl;
 	  VOID_TEMP_FAILURE_RETRY(::close(fd));
 	  return r;
+	}
+
+	if (g_conf->bluestore_block_preallocate_file) {
+#ifdef HAVE_POSIX_FALLOCATE
+	  r = ::posix_fallocate(fd, 0, size);
+	  if (r < 0) {
+	    r = -errno;
+	    derr << __func__ << " failed to prefallocate " << name << " file to "
+	      << size << ": " << cpp_strerror(r) << dendl;
+	    VOID_TEMP_FAILURE_RETRY(::close(fd));
+	    return r;
+	  }
+#else
+	  char data[1024*128];
+	  for (uint64_t off = 0; off < size; off += sizeof(data)) {
+	    if (off + sizeof(data) > size)
+	      r = ::write(fd, data, size - off);
+	    else
+	      r = ::write(fd, data, sizeof(data));
+	    if (r < 0) {
+	      r = -errno;
+	      derr << __func__ << " failed to prefallocate w/ write " << name << " file to "
+		<< size << ": " << cpp_strerror(r) << dendl;
+	      VOID_TEMP_FAILURE_RETRY(::close(fd));
+	      return r;
+	    }
+	  }
+#endif
 	}
 	dout(1) << __func__ << " resized " << name << " file to "
 		<< pretty_si_t(size) << "B" << dendl;
@@ -2462,10 +2491,17 @@ void BlueStore::_sync()
 int BlueStore::statfs(struct statfs *buf)
 {
   memset(buf, 0, sizeof(*buf));
-  buf->f_blocks = bdev->get_size() / bdev->get_block_size();
-  buf->f_bsize = bdev->get_block_size();
-  buf->f_bfree = alloc->get_free() / bdev->get_block_size();
+  uint64_t block_size  = bdev->get_block_size();
+  uint64_t bluefs_len = 0;
+  for (interval_set<uint64_t>::iterator p = bluefs_extents.begin();
+      p != bluefs_extents.end(); p++)
+    bluefs_len += p.get_len();
+
+  buf->f_blocks = bdev->get_size() / block_size;
+  buf->f_bsize = block_size;
+  buf->f_bfree = (alloc->get_free() - bluefs_len) / block_size;
   buf->f_bavail = buf->f_bfree;
+
   dout(20) << __func__ << " free " << pretty_si_t(buf->f_bfree * buf->f_bsize)
 	   << " / " << pretty_si_t(buf->f_blocks * buf->f_bsize) << dendl;
   return 0;
@@ -4663,11 +4699,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_SETALLOCHINT:
       {
-        uint64_t expected_object_size = op->expected_object_size;
-        uint64_t expected_write_size = op->expected_write_size;
 	r = _setallochint(txc, c, o,
-			  expected_object_size,
-			  expected_write_size);
+			  op->expected_object_size,
+			  op->expected_write_size,
+			  op->alloc_hint_flags);
       }
       break;
 
@@ -6264,19 +6299,23 @@ int BlueStore::_setallochint(TransContext *txc,
 			     CollectionRef& c,
 			     OnodeRef& o,
 			     uint64_t expected_object_size,
-			     uint64_t expected_write_size)
+			     uint64_t expected_write_size,
+			     uint32_t flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
+	   << " flags " << flags
 	   << dendl;
   int r = 0;
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
+  o->onode.alloc_hint_flags = flags;
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
+	   << " flags " << flags
 	   << " = " << r << dendl;
   return r;
 }

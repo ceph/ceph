@@ -110,7 +110,7 @@ class NVMEDevice : public BlockDevice {
           }
           ++it;
         } else {
-          assert(it->first > off) ;
+          assert(it->first > off);
           if (extent_it_end > end) {
             //  <-     data    ->
             //      <-           it          ->
@@ -227,7 +227,7 @@ class NVMEDevice : public BlockDevice {
 
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
-                bool buffered) override ;
+                bool buffered) override;
   int aio_zero(uint64_t off, uint64_t len,
                IOContext *ioc) override;
   int flush() override;

@@ -17,8 +17,6 @@
 #define CEPH_AUTHSESSIONHANDLER_H
 
 #include "include/types.h"
-#include "common/config.h"
-#include "msg/Message.h"
 #include "Auth.h"
 
 #define SESSION_SIGNATURE_FAILURE -1
@@ -27,6 +25,7 @@
 
 class CephContext;
 class KeyServer;
+class Message;
 
 struct AuthSessionHandler {
 protected:

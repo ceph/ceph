@@ -30,17 +30,15 @@ using namespace std;
 #include "include/utime.h"
 #include "common/histogram.h"
 #include "msg/Messenger.h"
-#include "common/config.h"
 #include "mon/MonitorDBStore.h"
 
-#include "messages/MPGStats.h"
-#include "messages/MPGStatsAck.h"
 class MStatfs;
 class MMonCommand;
 class MGetPoolStats;
 
 class RatioMonitor;
 class TextTable;
+class MPGStats;
 
 class PGMonitor : public PaxosService {
 public:

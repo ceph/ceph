@@ -24,19 +24,11 @@
  *   disks, disk groups, total # osds,
  *
  */
-#include "common/config.h"
 #include "include/types.h"
 #include "osd_types.h"
-#include "msg/Message.h"
-#include "common/Mutex.h"
-#include "common/Clock.h"
 
-#include "include/ceph_features.h"
-
+//#include "include/ceph_features.h"
 #include "crush/CrushWrapper.h"
-
-#include "include/interval_set.h"
-
 #include <vector>
 #include <list>
 #include <set>
@@ -44,8 +36,9 @@
 #include "include/memory.h"
 using namespace std;
 
-#include "include/unordered_set.h"
-
+//forward declaration
+class CephContext;
+class CrushWrapper;
 /*
  * we track up to two intervals during which the osd was alive and
  * healthy.  the most recent is [up_from,up_thru), where up_thru is
@@ -575,10 +568,8 @@ public:
   /// try to re-use/reference addrs in oldmap from newmap
   static void dedup(const OSDMap *oldmap, OSDMap *newmap);
 
-  static void remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap,
-					   Incremental *pending_inc);
-  static void remove_down_temps(CephContext *cct, const OSDMap& osdmap,
-                                Incremental *pending_inc);
+  static void clean_temps(CephContext *cct, const OSDMap& osdmap,
+			  Incremental *pending_inc);
 
   // serialize, unserialize
 private:

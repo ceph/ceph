@@ -27,8 +27,6 @@
 
 #include "MonitorDBStore.h"
 
-#include "msg/Messenger.h"
-
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
@@ -62,13 +60,12 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
-
 #include "global/signal_handler.h"
-
+#include "common/Formatter.h"
+#include "include/stringify.h"
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
-#include "include/str_map.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -79,13 +76,11 @@
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
-
-#include "auth/AuthMethodList.h"
-#include "auth/KeyRing.h"
-
 #include "common/config.h"
 #include "common/cmdparse.h"
 #include "include/assert.h"
+#include "include/compat.h"
+#include "perfglue/heap_profiler.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -464,6 +459,7 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "host",
     "fsid",
     // periodic health to clog
     "mon_health_to_clog",
@@ -2923,7 +2919,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
 
     ostringstream ss2;
-    ss2 << "report " << rdata.crc32c(6789);
+    ss2 << "report " << rdata.crc32c(CEPH_MON_PORT);
     rs = ss2.str();
     r = 0;
   } else if (prefix == "node ls") {
@@ -3760,14 +3756,14 @@ void Monitor::handle_ping(MonOpRequestRef op)
   MPing *reply = new MPing;
   entity_inst_t inst = m->get_source_inst();
   bufferlist payload;
-  Formatter *f = new JSONFormatter(true);
+  boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
   list<string> health_str;
-  get_health(health_str, NULL, f);
+  get_health(health_str, NULL, f.get());
   {
     stringstream ss;
-    get_mon_status(f, ss);
+    get_mon_status(f.get(), ss);
   }
 
   f->close_section();
@@ -5017,7 +5013,7 @@ int Monitor::write_default_keyring(bufferlist& bl)
   err = bl.write_fd(fd);
   if (!err)
     ::fsync(fd);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 
   return err;
 }

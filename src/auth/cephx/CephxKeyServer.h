@@ -15,12 +15,10 @@
 #ifndef CEPH_KEYSSERVER_H
 #define CEPH_KEYSSERVER_H
 
-#include "common/config.h"
-
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
-
-#include "common/Timer.h"
+#include "CephxKeyServer.h"
+#include "common/Mutex.h"
 
 class CephContext;
 

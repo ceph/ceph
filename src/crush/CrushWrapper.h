@@ -1094,6 +1094,32 @@ public:
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
+  
+  bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
+   
+    assert(crush);    
+
+    __u32 i;
+    for (i = 0; i < crush->max_rules; i++) {
+      if (crush->rules[i] &&
+          crush->rules[i]->mask.ruleset == ruleset &&
+          crush->rules[i]->mask.type == type) {
+
+        if (crush->rules[i]->mask.min_size <= size &&
+            crush->rules[i]->mask.max_size >= size) {
+          return true;
+        } else if (size < crush->rules[i]->mask.min_size) {
+          ss << "pool size is smaller than the crush rule min size";
+          return false;
+        } else {
+          ss << "pool size is bigger than the crush rule max size";
+          return false;
+        }
+      }
+    }
+
+    return false;
+  }
 
   void encode(bufferlist &bl, bool lean=false) const;
   void decode(bufferlist::iterator &blp);

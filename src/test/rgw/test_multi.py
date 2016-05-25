@@ -507,8 +507,6 @@ class RGWMulti:
         user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret())
         realm.create_user(user)
 
-        realm.meta_checkpoint()
-
 def check_all_buckets_exist(zone, buckets):
     conn = zone.get_connection(user)
 

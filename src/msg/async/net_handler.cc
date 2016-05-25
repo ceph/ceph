@@ -119,7 +119,7 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
   set_socket_options(s);
 
-  ret = ::connect(s, (sockaddr*)&addr.addr, addr.addr_size());
+  ret = ::connect(s, addr.get_sockaddr(), addr.get_sockaddr_len());
   if (ret < 0) {
     if (errno == EINPROGRESS && nonblock)
       return s;
@@ -134,7 +134,7 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
 int NetHandler::reconnect(const entity_addr_t &addr, int sd)
 {
-  int ret = ::connect(sd, (sockaddr*)&addr.addr, addr.addr_size());
+  int ret = ::connect(sd, addr.get_sockaddr(), addr.get_sockaddr_len());
 
   if (ret < 0 && errno != EISCONN) {
     ldout(cct, 10) << __func__ << " reconnect: " << strerror(errno) << dendl;

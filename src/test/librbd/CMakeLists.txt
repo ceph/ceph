@@ -39,11 +39,13 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRemoveRequest.cc 
   operation/test_mock_SnapshotRollbackRequest.cc 
   operation/test_mock_SnapshotUnprotectRequest.cc
+  mock/MockImageCtx.cc
+  mock/MockJournal.cc
   )
 add_executable(unittest_librbd EXCLUDE_FROM_ALL
   ${unittest_librbd_srcs}
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_compile_definitions(unittest_librbd PUBLIC "-DTEST_LIBRBD_INTERNALS")
@@ -55,6 +57,7 @@ target_link_libraries(unittest_librbd
   cls_lock
   cls_lock_client
   journal
+  journal_test
   cls_journal
   cls_journal_client
   rados_test_stub
@@ -73,8 +76,8 @@ target_link_libraries(unittest_librbd
 
 add_executable(ceph_test_librbd
   test_main.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd
@@ -101,7 +104,7 @@ add_executable(ceph_test_librbd_api
   test_support.cc
   test_librbd.cc
   test_main.cc
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd_api
@@ -118,8 +121,8 @@ set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
 add_executable(ceph_test_librbd_fsx
   fsx.cc
   $<TARGET_OBJECTS:krbd_objs>
-  ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  ${CMAKE_SOURCE_DIR}/src/common/secret.c
+  $<TARGET_OBJECTS:common_texttable_obj>
+  $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd_fsx
   librbd

@@ -110,11 +110,14 @@ public:
     return m_minimum_set;
   }
 
-  void set_active_set(uint64_t object_set);
+  int set_active_set(uint64_t object_set);
+  void set_active_set(uint64_t object_set, Context *on_finish);
   inline uint64_t get_active_set() const {
     Mutex::Locker locker(m_lock);
     return m_active_set;
   }
+
+  void assert_active_tag(uint64_t tag_tid, Context *on_finish);
 
   void flush_commit_position();
   void flush_commit_position(Context *on_safe);

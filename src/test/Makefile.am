@@ -71,6 +71,7 @@ check_SCRIPTS += \
 	test/cephtool-test-mds.sh \
 	test/cephtool-test-rados.sh \
        test/test_pool_create.sh \
+       test/test_crush_bucket.sh \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
@@ -82,7 +83,6 @@ check_SCRIPTS += \
 	test/mon/mkfs.sh \
 	test/mon/mon-scrub.sh \
        test/mon/test_pool_quota.sh \
-	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-reuse-id.sh \
@@ -141,6 +141,11 @@ UNITTEST_LDADD = \
 if SOLARIS
 UNITTEST_LDADD += \
 	-lsocket -lnsl
+endif
+
+if FREEBSD
+UNITTEST_LDADD += \
+      -lexecinfo
 endif
 
 unittest_addrs_SOURCES = test/test_addrs.cc
@@ -447,8 +452,14 @@ unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
+if LINUX
+#
+# XXX FREEBSD
+# These tests use nosetests and getting that to work thusfar has not worked
+#
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 check_SCRIPTS += test/pybind/test_ceph_daemon.py
+endif
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \

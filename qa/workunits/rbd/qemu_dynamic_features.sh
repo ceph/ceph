@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -x
 
 if [[ -z "${IMAGE_NAME}" ]]; then
   echo image name must be provided
@@ -17,28 +17,32 @@ wait_for_qemu() {
 }
 
 wait_for_qemu
-rbd feature disable ${IMAGE_NAME} journaling || true
-rbd feature disable ${IMAGE_NAME} fast-diff || true
-rbd feature disable ${IMAGE_NAME} object-map || true
-rbd feature disable ${IMAGE_NAME} exclusive-lock || true
+rbd feature disable ${IMAGE_NAME} journaling
+rbd feature disable ${IMAGE_NAME} fast-diff
+rbd feature disable ${IMAGE_NAME} object-map
+rbd feature disable ${IMAGE_NAME} exclusive-lock
 
 while is_qemu_running ; do
   echo "*** Enabling all features"
-  rbd feature enable ${IMAGE_NAME} exclusive-lock
-  rbd feature enable ${IMAGE_NAME} journaling
-  rbd feature enable ${IMAGE_NAME} object-map
-  rbd feature enable ${IMAGE_NAME} fast-diff
+  rbd feature enable ${IMAGE_NAME} exclusive-lock || break
+  rbd feature enable ${IMAGE_NAME} journaling || break
+  rbd feature enable ${IMAGE_NAME} object-map || break
+  rbd feature enable ${IMAGE_NAME} fast-diff || break
   if is_qemu_running ; then
     sleep 60
   fi
 
   echo "*** Disabling all features"
-  rbd feature disable ${IMAGE_NAME} journaling
-  rbd feature disable ${IMAGE_NAME} fast-diff
-  rbd feature disable ${IMAGE_NAME} object-map
-  rbd feature disable ${IMAGE_NAME} exclusive-lock
+  rbd feature disable ${IMAGE_NAME} journaling || break
+  rbd feature disable ${IMAGE_NAME} fast-diff || break
+  rbd feature disable ${IMAGE_NAME} object-map || break
+  rbd feature disable ${IMAGE_NAME} exclusive-lock || break
   if is_qemu_running ; then
     sleep 60
   fi
 done
 
+if is_qemu_running ; then
+    echo "RBD command failed on alive QEMU"
+    exit 1
+fi

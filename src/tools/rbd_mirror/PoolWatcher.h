@@ -26,14 +26,17 @@ class PoolWatcher {
 public:
   struct ImageIds {
     std::string id;
+    boost::optional<std::string> name;
     std::string global_id;
 
-    ImageIds(const std::string &id, const std::string &global_id = "")
-      : id(id), global_id(global_id) {
+    ImageIds(const std::string &id,
+             const boost::optional<std::string> &name = boost::none,
+             const std::string &global_id = "")
+      : id(id), name(name), global_id(global_id) {
     }
 
     inline bool operator==(const ImageIds &rhs) const {
-      return (id == rhs.id && global_id == rhs.global_id);
+      return (id == rhs.id && name == rhs.name && global_id == rhs.global_id);
     }
     inline bool operator<(const ImageIds &rhs) const {
       return id < rhs.id;

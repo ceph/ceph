@@ -14,6 +14,7 @@
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 
+extern string camelcase_dash_http_attr(const string& orig);
 extern string lowercase_dash_http_attr(const string& orig);
 
 extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
@@ -391,14 +392,6 @@ public:
 
   virtual RGWOp* get_op(RGWRados* store);
   virtual void put_op(RGWOp* op);
-
-  virtual int retarget(RGWOp* op, RGWOp** new_op) {
-    *new_op = op;
-    return 0;
-  }
-
-  virtual int authorize() = 0;
-  // virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
 class RGWHandler_REST_SWIFT;

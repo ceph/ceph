@@ -18,7 +18,7 @@ void entity_name_t::dump(Formatter *f) const
 void entity_addr_t::dump(Formatter *f) const
 {
   f->dump_unsigned("nonce", nonce);
-  f->dump_stream("addr") << addr;
+  f->dump_stream("addr") << get_sockaddr();
 }
 
 void entity_name_t::generate_test_instances(list<entity_name_t*>& o)
@@ -87,12 +87,12 @@ bool entity_addr_t::parse(const char *s, const char **end)
   struct in_addr a4;
   struct in6_addr a6;
   if (inet_pton(AF_INET, buf4, &a4)) {
-    addr4.sin_addr.s_addr = a4.s_addr;
-    addr.ss_family = AF_INET;
+    u.sin.sin_addr.s_addr = a4.s_addr;
+    u.sa.sa_family = AF_INET;
     p = start + strlen(buf4);
   } else if (inet_pton(AF_INET6, buf6, &a6)) {
-    addr.ss_family = AF_INET6;
-    memcpy(&addr6.sin6_addr, &a6, sizeof(a6));
+    u.sa.sa_family = AF_INET6;
+    memcpy(&u.sin6.sin6_addr, &a6, sizeof(a6));
     p = start + strlen(buf6);
   } else {
     return false;
@@ -149,6 +149,25 @@ ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 	      NI_NUMERICHOST | NI_NUMERICSERV);
   if (ss.ss_family == AF_INET6)
     return out << '[' << buf << "]:" << serv;
-  return out //<< ss.ss_family << ":"
-	     << buf << ':' << serv;
+  return out << buf << ':' << serv;
+}
+
+ostream& operator<<(ostream& out, const sockaddr *sa)
+{
+  char buf[NI_MAXHOST] = { 0 };
+  char serv[NI_MAXSERV] = { 0 };
+  size_t hostlen;
+
+  if (sa->sa_family == AF_INET)
+    hostlen = sizeof(struct sockaddr_in);
+  else if (sa->sa_family == AF_INET6)
+    hostlen = sizeof(struct sockaddr_in6);
+  else
+    hostlen = sizeof(struct sockaddr_storage);
+  getnameinfo(sa, hostlen, buf, sizeof(buf),
+	      serv, sizeof(serv),
+	      NI_NUMERICHOST | NI_NUMERICSERV);
+  if (sa->sa_family == AF_INET6)
+    return out << '[' << buf << "]:" << serv;
+  return out << buf << ':' << serv;
 }

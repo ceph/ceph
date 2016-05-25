@@ -184,6 +184,7 @@ using ceph::crypto::MD5;
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
+#define ERR_SERVICE_UNAVAILABLE  2202
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -1736,11 +1737,6 @@ struct rgw_cache_entry_info {
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_object();
-}
-
-static inline bool str_startswith(const string& str, const string& prefix)
-{
-  return (str.compare(0, prefix.size(), prefix) == 0);
 }
 
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)

@@ -20,13 +20,13 @@
 using namespace std;
 
 #include "include/types.h"
-#include "msg/Messenger.h"
 #include "PaxosService.h"
 
 #include "common/LogEntry.h"
-#include "messages/MLog.h"
+#include "include/str_map.h"
 
 class MMonCommand;
+class MLog;
 
 static const string LOG_META_CHANNEL = "$channel";
 
@@ -168,9 +168,6 @@ private:
 
   bool _create_sub_summary(MLog *mlog, int level);
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
-
-  void store_do_append(MonitorDBStore::TransactionRef t,
-		       const string& key, bufferlist& bl);
 
  public:
   LogMonitor(Monitor *mn, Paxos *p, const string& service_name) 

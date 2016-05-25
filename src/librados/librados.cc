@@ -553,7 +553,15 @@ void librados::ObjectWriteOperation::set_alloc_hint(
                                             uint64_t expected_write_size)
 {
   ::ObjectOperation *o = &impl->o;
-  o->set_alloc_hint(expected_object_size, expected_write_size);
+  o->set_alloc_hint(expected_object_size, expected_write_size, 0);
+}
+void librados::ObjectWriteOperation::set_alloc_hint2(
+                                            uint64_t expected_object_size,
+                                            uint64_t expected_write_size,
+					    uint32_t flags)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->set_alloc_hint(expected_object_size, expected_write_size, flags);
 }
 
 void librados::ObjectWriteOperation::cache_pin()
@@ -1430,27 +1438,27 @@ static int translate_flags(int flags)
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->operate(obj, (::ObjectOperation*)o->impl, (ceph::real_time *)o->impl->prt);
+  return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt);
 }
 
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->operate_read(obj, (::ObjectOperation*)o->impl, pbl);
+  return io_ctx_impl->operate_read(obj, &o->impl->o, pbl);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc, 0);
 }
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 ObjectWriteOperation *o, int flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc,
 				  translate_flags(flags));
 }
@@ -1465,7 +1473,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   for (size_t i = 0; i < snaps.size(); ++i)
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  snapc, 0);
 }
 
@@ -1474,7 +1482,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
 				       0, pbl);
 }
 
@@ -1493,7 +1501,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   if (flags & OPERATION_ORDER_READS_WRITES)
     op_flags |= CEPH_OSD_FLAG_RWORDERED;
 
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
 				       op_flags, pbl);
 }
 
@@ -1502,7 +1510,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 int flags, bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
 				       translate_flags(flags), pbl);
 }
 
@@ -1961,7 +1969,17 @@ int librados::IoCtx::set_alloc_hint(const std::string& o,
 {
   object_t oid(o);
   return io_ctx_impl->set_alloc_hint(oid, expected_object_size,
-                                     expected_write_size);
+                                     expected_write_size, 0);
+}
+
+int librados::IoCtx::set_alloc_hint2(const std::string& o,
+				     uint64_t expected_object_size,
+				     uint64_t expected_write_size,
+				     uint32_t flags)
+{
+  object_t oid(o);
+  return io_ctx_impl->set_alloc_hint(oid, expected_object_size,
+                                     expected_write_size, flags);
 }
 
 void librados::IoCtx::set_assert_version(uint64_t ver)
@@ -4676,8 +4694,23 @@ extern "C" int rados_set_alloc_hint(rados_ioctx_t io, const char *o,
   tracepoint(librados, rados_set_alloc_hint_enter, io, o, expected_object_size, expected_write_size);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
-  int retval = ctx->set_alloc_hint(oid, expected_object_size, expected_write_size);
+  int retval = ctx->set_alloc_hint(oid, expected_object_size,
+				   expected_write_size, 0);
   tracepoint(librados, rados_set_alloc_hint_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_set_alloc_hint2(rados_ioctx_t io, const char *o,
+				     uint64_t expected_object_size,
+				     uint64_t expected_write_size,
+				     uint32_t flags)
+{
+  tracepoint(librados, rados_set_alloc_hint2_enter, io, o, expected_object_size, expected_write_size, flags);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->set_alloc_hint(oid, expected_object_size,
+				   expected_write_size, flags);
+  tracepoint(librados, rados_set_alloc_hint2_exit, retval);
   return retval;
 }
 
@@ -5039,8 +5072,20 @@ extern "C" void rados_write_op_set_alloc_hint(rados_write_op_t write_op,
 {
   tracepoint(librados, rados_write_op_set_alloc_hint_enter, write_op, expected_object_size, expected_write_size);
   ((::ObjectOperation *)write_op)->set_alloc_hint(expected_object_size,
-                                                  expected_write_size);
+                                                  expected_write_size, 0);
   tracepoint(librados, rados_write_op_set_alloc_hint_exit);
+}
+
+extern "C" void rados_write_op_set_alloc_hint2(rados_write_op_t write_op,
+					       uint64_t expected_object_size,
+					       uint64_t expected_write_size,
+					       uint32_t flags)
+{
+  tracepoint(librados, rados_write_op_set_alloc_hint2_enter, write_op, expected_object_size, expected_write_size, flags);
+  ((::ObjectOperation *)write_op)->set_alloc_hint(expected_object_size,
+                                                  expected_write_size,
+						  flags);
+  tracepoint(librados, rados_write_op_set_alloc_hint2_exit);
 }
 
 extern "C" int rados_write_op_operate(rados_write_op_t write_op,

@@ -123,7 +123,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
        ++it) {
     if (it != monmap.mon_addr.begin())
       oss << ",";
-    oss << it->second.addr;
+    oss << it->second.get_sockaddr();
   }
 
   oss << " name=" << cct->_conf->name.get_id();
