@@ -113,14 +113,16 @@ private:
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
   SplayedObjectPositions m_commit_positions;
+
   boost::optional<uint64_t> m_active_tag_tid = boost::none;
+  boost::optional<uint64_t> m_prune_tag_tid = boost::none;
 
   void advance_splay_object();
 
   bool is_object_set_ready() const;
   bool verify_playback_ready();
-  bool prune_tag(uint64_t tag_tid);
-  bool prune_active_tag();
+  void prune_tag(uint64_t tag_tid);
+  void prune_active_tag(const boost::optional<uint64_t>& tag_tid);
 
   const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;
