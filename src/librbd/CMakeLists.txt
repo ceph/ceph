@@ -67,10 +67,11 @@ if(WITH_LTTNG)
   add_dependencies(rbd_internal librbd-tp)
 endif()
 
-add_library(librbd ${CEPH_SHARED}
+add_library(librbd
   $<TARGET_OBJECTS:osdc_rbd_objs>
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:krbd_objs>
+  $<TARGET_OBJECTS:parse_secret_objs>
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
 target_link_libraries(librbd LINK_PRIVATE 
@@ -85,10 +86,11 @@ target_link_libraries(librbd LINK_PRIVATE
   cls_journal_client 
   pthread
   udev
+  keyutils
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
     OUTPUT_NAME rbd)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 install(TARGETS librbd DESTINATION lib)
