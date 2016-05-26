@@ -520,6 +520,10 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	if (*q >= (int)pgs_by_osd.size())
 	  pgs_by_osd.resize(*q);
 	if (pgs_by_osd[*q] == 0) {
+          if (osdmap.crush->get_item_weightf(*q) <= 0) {
+            //skip if we currently can not identify item
+            continue;
+          }
 	  weight_sum += osdmap.crush->get_item_weightf(*q);
 	  ++num_osds;
 	}
@@ -537,7 +541,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
     average_util = (double)num_pg_copies / weight_sum;
   } else {
     // by osd utilization
-    int num_osd = MIN(1, pgm.osd_stat.size());
+    int num_osd = MAX(1, pgm.osd_stat.size());
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
@@ -565,9 +569,9 @@ int OSDMonitor::reweight_by_utilization(int oload,
   ostringstream oss;
   if (f) {
     f->open_object_section("reweight_by_utilization");
-    f->dump_unsigned("overload_min", oload);
+    f->dump_int("overload_min", oload);
     f->dump_float("max_change", max_changef);
-    f->dump_float("max_change_osds", max_osds);
+    f->dump_int("max_change_osds", max_osds);
     f->dump_float("average_utilization", average_util);
     f->dump_float("overload_utilization", overload_util);
   } else {
@@ -591,6 +595,18 @@ int OSDMonitor::reweight_by_utilization(int oload,
     std::pair<int, float> osd_util;
     osd_util.first = p->first;
     if (by_pg) {
+      if (p->first >= (int)pgs_by_osd.size() ||
+        pgs_by_osd[p->first] == 0) {
+        // skip if this OSD does not contain any pg
+        // belonging to the specified pool(s).
+        continue;
+      }
+
+      if (osdmap.crush->get_item_weightf(p->first) <= 0) {
+        // skip if we are unable to locate item.
+        continue;
+      }
+
       osd_util.second = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
     } else {
       osd_util.second = (double)p->second.kb_used / (double)p->second.kb;
@@ -615,13 +631,17 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	 util_by_osd.begin();
        p != util_by_osd.end();
        ++p) {
+    unsigned weight = osdmap.get_weight(p->first);
+    if (weight == 0) {
+      // skip if OSD is currently out
+      continue;
+    }
     float util = p->second;
 
     if (util >= overload_util) {
       // Assign a lower weight to overloaded OSDs. The current weight
       // is a factor to take into account the original weights,
       // to represent e.g. differing storage capacities
-      unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       if (weight > max_change)
 	new_weight = MAX(new_weight, weight - max_change);
@@ -632,7 +652,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
       }
       if (f) {
 	f->open_object_section("osd");
-	f->dump_unsigned("osd", p->first);
+	f->dump_int("osd", p->first);
 	f->dump_float("weight", (float)weight / (float)0x10000);
 	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
 	f->close_section();
@@ -648,7 +668,6 @@ int OSDMonitor::reweight_by_utilization(int oload,
     }
     if (!no_increasing && util <= underload_util) {
       // assign a higher weight.. if we can.
-      unsigned weight = osdmap.get_weight(p->first);
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       new_weight = MIN(new_weight, weight + max_change);
       if (new_weight > 0x10000)
