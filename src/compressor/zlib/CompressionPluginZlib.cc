@@ -17,9 +17,7 @@
 #include "ceph_ver.h"
 #include "compressor/CompressionPlugin.h"
 #include "CompressionZlib.h"
-#include "common/debug.h"
 
-#define dout_subsys ceph_subsys_mon
 // -----------------------------------------------------------------------------
 
 class CompressionPluginZlib : public CompressionPlugin {
@@ -29,7 +27,7 @@ public:
   {}
 
   virtual int factory(CompressorRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     if (compressor == 0) {
       CompressionZlib *interface = new CompressionZlib();

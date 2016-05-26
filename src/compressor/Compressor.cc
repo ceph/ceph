@@ -14,9 +14,11 @@
 
 #include "Compressor.h"
 #include "CompressionPlugin.h"
+#include "common/ceph_context.h"
+#include "common/debug.h"
+#include <sstream>
 
-
-CompressorRef Compressor::create(CephContext *cct, const string &type)
+CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 {
   CompressorRef cs_impl = NULL;
   stringstream ss;

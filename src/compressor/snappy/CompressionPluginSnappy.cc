@@ -17,6 +17,8 @@
 #include "ceph_ver.h"
 #include "compressor/CompressionPlugin.h"
 #include "SnappyCompressor.h"
+#include <ostream>
+
 // -----------------------------------------------------------------------------
 
 class CompressionPluginSnappy : public CompressionPlugin {
@@ -27,7 +29,7 @@ public:
   {}
 
   virtual int factory(CompressorRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     if (compressor == 0) {
       SnappyCompressor *interface = new SnappyCompressor();

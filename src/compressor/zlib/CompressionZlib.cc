@@ -15,11 +15,10 @@
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
 #include "CompressionZlib.h"
-#include "osd/osd_types.h"
 // -----------------------------------------------------------------------------
 
 #include <zlib.h>
-
+#include <ostream>
 // -----------------------------------------------------------------------------
 #define dout_subsys ceph_subsys_compressor
 #undef dout_prefix
