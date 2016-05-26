@@ -88,10 +88,27 @@ public:
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
-  inline uint64_t get_local_pool_id() { return m_local_pool_id; }
-  inline const std::string get_local_image_id() { return m_local_image_id; }
-  inline const std::string get_global_image_id() { return m_global_image_id; }
-  inline const std::string get_local_image_name() { return m_local_image_name; }
+
+  inline int64_t get_local_pool_id() const {
+    return m_local_pool_id;
+  }
+  inline int64_t get_remote_pool_id() const {
+    return m_remote_pool_id;
+  }
+  inline const std::string& get_global_image_id() const {
+    return m_global_image_id;
+  }
+  inline const std::string& get_remote_image_id() const {
+    return m_remote_image_id;
+  }
+  inline std::string get_local_image_id() {
+    Mutex::Locker locker(m_lock);
+    return m_local_image_id;
+  }
+  inline std::string get_local_image_name() {
+    Mutex::Locker locker(m_lock);
+    return m_local_image_name;
+  }
 
   void start(Context *on_finish = nullptr,
 	     const BootstrapParams *bootstrap_params = nullptr,
@@ -105,15 +122,6 @@ public:
   virtual void handle_replay_ready();
   virtual void handle_replay_complete(int r, const std::string &error_desc);
 
-  inline const std::string get_global_image_id() const {
-    return m_global_image_id;
-  }
-  inline int64_t get_remote_pool_id() const {
-    return m_remote_pool_id;
-  }
-  inline const std::string get_remote_image_id() const {
-    return m_remote_image_id;
-  }
 protected:
   /**
    * @verbatim
