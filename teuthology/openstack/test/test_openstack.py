@@ -414,12 +414,12 @@ class TestOpenStack(object):
         flavors = o.get_sorted_flavors('arch', select)
         assert ['vps-ssd-1',
                 'vps-ssd-2',
-                'eg-7',
+                'hg-7-ssd',
                 'vps-ssd-3',
-                'eg-15',
-                'eg-30',
-                'eg-60',
-                'eg-120',
+                'hg-15-ssd',
+                'hg-30-ssd',
+                'hg-60-ssd',
+                'hg-120-ssd',
         ] == [ f['Name'] for f in flavors ]
         m_sh.assert_called_with("openstack flavor list -f json")
 
