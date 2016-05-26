@@ -275,13 +275,20 @@ namespace librbd {
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   parent_spec pspec, uint64_t parent_overlap)
     {
-      bufferlist inbl, outbl;
-      ::encode(pspec.pool_id, inbl);
-      ::encode(pspec.image_id, inbl);
-      ::encode(pspec.snap_id, inbl);
-      ::encode(parent_overlap, inbl);
+      librados::ObjectWriteOperation op;
+      set_parent(&op, pspec, parent_overlap);
+      return ioctx->operate(oid, &op);
+    }
 
-      return ioctx->exec(oid, "rbd", "set_parent", inbl, outbl);
+    void set_parent(librados::ObjectWriteOperation *op,
+                    parent_spec pspec, uint64_t parent_overlap) {
+      bufferlist in_bl;
+      ::encode(pspec.pool_id, in_bl);
+      ::encode(pspec.image_id, in_bl);
+      ::encode(pspec.snap_id, in_bl);
+      ::encode(parent_overlap, in_bl);
+
+      op->exec("rbd", "set_parent", in_bl);
     }
 
     void get_flags_start(librados::ObjectReadOperation *op,
