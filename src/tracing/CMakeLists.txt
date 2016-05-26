@@ -1,40 +1,45 @@
-add_custom_target(lttng_gen_tp
-  ALL
-  COMMAND 
-  lttng-gen-tp tracing/librados.tp -o tracing/librados.h && 
-  lttng-gen-tp tracing/librbd.tp -o tracing/librbd.h && 
-  lttng-gen-tp tracing/objectstore.tp -o tracing/objectstore.h && 
-  lttng-gen-tp tracing/oprequest.tp -o tracing/oprequest.h &&
-  lttng-gen-tp tracing/osd.tp -o tracing/osd.h &&
-  lttng-gen-tp tracing/pg.tp -o tracing/pg.h
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src
-  COMMENT "lttng-gen-tp generated .h files")
+# we are in "src/tracing", so create the output dir manually.
+# the source files include the tracing headers like
+# #include "tracing/oprequest.h". so better put them into
+# ${PROJECT_BINARY_DIR}/include, where acconfig.h is also located
+set(header_dir ${PROJECT_BINARY_DIR}/include/tracing)
+file(MAKE_DIRECTORY ${header_dir})
 
-add_library(libosd_tp STATIC
-  oprequest.c
-  osd.c
-  pg.c)
-target_link_libraries(libosd_tp lttng-ust dl)
-target_include_directories(libosd_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
-add_dependencies(libosd_tp lttng_gen_tp)
-set_target_properties(libosd_tp PROPERTIES OUTPUT_NAME osd_tp VERSION 1.0.0 SOVERSION 1)
+file(GLOB tps "*.tp")
+foreach(tp tps)
+  get_filename_component(name ${tp} NAME_WE)
+  set(header ${header_dir}/${name}.h)
+  set(src ${CMAKE_CURRENT_BINARY_DIR}/${name}.c)
+  add_custom_command(
+    OUTPUT ${header} ${src}
+    COMMAND ${LTTNG_GEN_TP} ${tp} -o ${header} -o ${src}
+    DEPENDS ${tp})
+endforeach()
 
-add_library(librados_tp STATIC librados.c)
-target_link_libraries(librados_tp lttng-ust dl)
-target_include_directories(librados_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
-add_dependencies(librados_tp lttng_gen_tp)
-set_target_properties(librados_tp PROPERTIES OUTPUT_NAME rados_tp VERSION 2.0.0 SOVERSION 2)
+function(add_tracing_library name tracings version)
+  foreach(tp_file ${tracings})
+    get_filename_component(tp ${tp_file} NAME_WE)
+    list(APPEND srcs ${tp}.c ${tp}.h)
+  endforeach()
+  add_library(${name} STATIC ${srcs})
+  target_link_libraries(${name} ${LTTNG_LIBRARIES} dl)
+  string(REGEX MATCH "^[0-9]+" soversion ${version})
+  string(REGEX REPLACE "^lib" "" output_name ${name})
+  message(STATUS "name = ${name}")
+  message(STATUS "output_name = ${output_name}")
+  message(STATUS "version = ${version}")
+  message(STATUS "soversion = ${soversion}")
+  set_target_properties(${name} PROPERTIES
+    OUTPUT_NAME ${output_name}
+    VERSION ${version}
+    SOVERSION ${soversion})
+endfunction()
 
-add_library(librbd_tp STATIC librbd.c)
-target_link_libraries(librbd_tp lttng-ust dl)
-target_include_directories(librbd_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
-add_dependencies(librbd_tp lttng_gen_tp)
-set_target_properties(librbd_tp PROPERTIES OUTPUT_NAME rbd_tp VERSION 1.0.0 SOVERSION 1)
-
-add_library(libos_tp STATIC objectstore.c)
-target_link_libraries(libos_tp lttng-ust dl)
-target_include_directories(libos_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
-add_dependencies(libos_tp lttng_gen_tp)
-set_target_properties(libos_tp PROPERTIES OUTPUT_NAME os_tp VERSION 1.0.0 SOVERSION 1)
+set(osd_traces oprequest.tp osd.tp pg.tp)
+add_tracing_library(libosd_tp "${osd_traces}" 1.0.0)
+add_tracing_library(librados_tp librados.tp 2.0.0)
+add_tracing_library(librbd_tp librbd.tp 1.0.0)
+add_tracing_library(libos_tp objectstore.tp 1.0.0)
 
 install(TARGETS librados_tp libosd_tp librbd_tp libos_tp DESTINATION lib)
+

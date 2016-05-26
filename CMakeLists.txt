@@ -319,8 +319,7 @@ find_package(ZLIB REQUIRED)
 #currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
 option(WITH_LTTNG "LTTng tracing is enabled" OFF)
 if(${WITH_LTTNG})
-  find_package(lttng-ust)
-  set(WITH_LTTNG ${LTTNG_FOUND})
+  find_package(lttng-ust REQUIRED)
 endif(${WITH_LTTNG})
 
 #option for Babeltrace
