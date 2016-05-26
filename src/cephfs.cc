@@ -194,6 +194,7 @@ int init_options(int argc, char **argv, int *fd, char **path, int *cmd,
 
   *fd = open(argv[1], O_RDONLY);
   if (*fd < 0) {
+    *fd = -errno;
     cerr << "error opening path: " << cpp_strerror(*fd) << endl;
     return 1;
   }
