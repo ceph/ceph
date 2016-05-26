@@ -530,6 +530,9 @@ add_library(librados ${CEPH_SHARED} ${librados_srcs}
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
+if(WITH_LTTNG)
+  add_dependencies(librados librados-tp)
+endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
@@ -844,6 +847,9 @@ if(WITH_SPDK)
     ${DPDK_INCLUDE_DIR}
     ${PCIACCESS_INCLUDE_DIR})
 endif(WITH_SPDK)
+if(WITH_LTTNG)
+  add_dependencies(os objectstore-tp)
+endif()
 target_link_libraries(os kv)
 
 set(cls_references_files objclass/class_api.cc)
@@ -882,6 +888,9 @@ add_library(osd_mon_objs OBJECT ${osd_mon_files})
 add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs> $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(osd dl leveldb ${ALLOC_LIBS})
+if(WITH_LTTNG)
+  add_dependencies(osd osd-tp)
+endif()
 
 set(ceph_osd_srcs
   ceph_osd.cc
