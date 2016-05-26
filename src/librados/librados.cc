@@ -2313,6 +2313,11 @@ int librados::Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   return 0;
 }
 
+void librados::Rados::set_block_on_osdfull(bool block)
+{
+  client->set_block_on_osdfull(block);
+}
+
 void librados::Rados::test_blacklist_self(bool set)
 {
   client->blacklist_self(set);
