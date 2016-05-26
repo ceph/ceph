@@ -549,6 +549,7 @@ install(FILES include/rados/librados.h
   include/rados/librados.hpp
   include/buffer.h
   include/buffer_fwd.h
+  include/memory.h
   include/page.h
   include/crc32c.h
   DESTINATION include/rados)
