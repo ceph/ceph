@@ -555,6 +555,10 @@ install(FILES include/rados/librados.h
 install(TARGETS librados DESTINATION lib)
 
 add_subdirectory(libradosstriper)
+install(FILES
+  include/radosstriper/libradosstriper.h
+  include/radosstriper/libradosstriper.hpp
+  DESTINATION include/radosstriper)
 
 add_executable(ceph_scratchtool tools/scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)
