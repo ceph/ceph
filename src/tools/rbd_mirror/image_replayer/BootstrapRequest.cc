@@ -515,7 +515,7 @@ void BootstrapRequest<I>::image_sync() {
                                                m_remote_image_ctx, m_timer,
                                                m_timer_lock,
                                                m_local_mirror_uuid, m_journaler,
-                                               m_client_meta, ctx,
+                                               m_client_meta, m_work_queue, ctx,
 					       m_progress_ctx);
   request->start();
 }

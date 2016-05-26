@@ -47,7 +47,7 @@ struct ImageSync<librbd::MockTestImageCtx> {
                            const std::string &mirror_uuid,
                            ::journal::MockJournaler *journaler,
                            librbd::journal::MirrorPeerClientMeta *client_meta,
-                           Context *on_finish,
+                           ContextWQ *work_queue, Context *on_finish,
                            ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     return s_instance;
