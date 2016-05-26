@@ -5529,11 +5529,10 @@ void BlueStore::_do_write_big(
   while (length > 0) {
     int64_t blob;
     bluestore_blob_t *b = o->onode.add_blob(&blob);
-    wctx->blob_new.push_back(b);
     b->length = MIN(max_blob_len, length);
     bufferlist t;
     blp.copy(b->length, t);
-    wctx->bl_new.push_back(t);
+    wctx->write(b, 0, t);
     o->onode.punch_hole(offset, length, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, length, 0);
     b->ref_map.get(0, length);
@@ -5550,12 +5549,12 @@ int BlueStore::_do_alloc_write(
   WriteContext *wctx)
 {
   dout(20) << __func__ << " txc " << txc
-	   << " " << wctx->blob_new.size() << " blobs"
+	   << " " << wctx->writes.size() << " blobs"
 	   << dendl;
 
   uint64_t need = 0;
-  for (auto &bl : wctx->bl_new) {
-    need += bl.length();
+  for (auto &wi : wctx->writes) {
+    need += wi.b->length;
   }
   int r = alloc->reserve(need);
   if (r < 0) {
@@ -5564,17 +5563,17 @@ int BlueStore::_do_alloc_write(
     return r;
   }
 
-  assert(wctx->blob_new.size() == wctx->bl_new.size());
-  vector<bluestore_blob_t*>::iterator bp = wctx->blob_new.begin();
-  vector<bufferlist>::iterator blp = wctx->bl_new.begin();
   uint64_t hint = 0;
-  for ( ; bp != wctx->blob_new.end(); ++bp, ++blp) {
-    bluestore_blob_t *b = *bp;
+  for (auto& wi : wctx->writes) {
+    bluestore_blob_t *b = wi.b;
+    uint64_t b_off = wi.b_off;
+    bufferlist *l = &wi.bl;
     uint64_t final_length = b->length;
-    bufferlist *l = &*blp;
+    uint64_t csum_length = b->length;
     bufferlist compressed_bl;
     CompressorRef c;
-    if (wctx->compress &&
+    if (b_off == 0 &&
+	wctx->compress &&
 	b->length > min_alloc_size &&
 	(c = compressor) != nullptr) {
       // compress
@@ -5596,6 +5595,7 @@ int BlueStore::_do_alloc_write(
 		 << " with " << chdr.type << dendl;
 	l = &compressed_bl;
 	final_length = newlen;
+	csum_length = newlen;
 	b->set_flag(bluestore_blob_t::FLAG_COMPRESSED);
       } else {
 	dout(20) << __func__ << "  compressed 0x" << l->length() << " -> 0x"
@@ -5615,25 +5615,24 @@ int BlueStore::_do_alloc_write(
       need -= l;
       e.length = l;
       txc->allocated.insert(e.offset, e.length);
-      (*bp)->extents.push_back(e);
+      b->extents.push_back(e);
       final_length -= e.length;
       hint = e.end();
     }
-    dout(20) << __func__ << " blob " << **bp << dendl;
+    dout(20) << __func__ << " blob " << *b << dendl;
 
     // checksum
     if (csum_type) {
-      b->init_csum(csum_type, 12, l->length()); // FIXME adjust b size
-      b->calc_csum(0, *l);
+      b->init_csum(csum_type, 12, csum_length); // FIXME adjust b size
+      b->calc_csum(b_off, *l);
     }
 
     // queue io
-    bufferlist::iterator p = l->begin();
-    for (auto &v : (*bp)->extents) {
-      bufferlist t;
-      p.copy(v.length, t);
-      bdev->aio_write(v.offset, t, &txc->ioc, wctx->buffered);
-    }
+    b->map_bl(
+      b_off, *l,
+      [&](uint64_t offset, uint64_t length, bufferlist& t) {
+	bdev->aio_write(offset, t, &txc->ioc, wctx->buffered);
+      });
   }
   if (need > 0) {
     alloc->unreserve(need);

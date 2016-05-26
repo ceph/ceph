@@ -1235,8 +1235,20 @@ private:
     uint64_t comp_blob_size = 0; ///< target compressed blob size
 
     vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
-    vector<bluestore_blob_t*> blob_new;        ///< new blobs
-    vector<bufferlist> bl_new;                 ///< new data, for above blobs
+
+    struct write_item {
+      bluestore_blob_t *b;
+      uint64_t b_off;
+      bufferlist bl;
+
+      write_item(bluestore_blob_t *b, uint64_t o, bufferlist& bl)
+	: b(b), b_off(o), bl(bl) {}
+    };
+    vector<write_item> writes;                 ///< blobs we're writing
+
+    void write(bluestore_blob_t *b, uint64_t o, bufferlist& bl) {
+      writes.emplace_back(write_item(b, o, bl));
+    }
   };
 
   void _do_write_small(
