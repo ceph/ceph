@@ -1395,10 +1395,11 @@ def update_partition(dev, description):
     LOG.debug('Calling partprobe on %s device %s', description, dev)
     partprobe_ok = False
     error = 'unknown error'
+    partprobe = _get_command_executable(['partprobe'])[0]
     for i in (1, 2, 3, 4, 5):
         command_check_call(['udevadm', 'settle', '--timeout=600'])
         try:
-            _check_output(['partprobe', dev])
+            _check_output(['flock', '-s', dev, partprobe, dev])
             partprobe_ok = True
             break
         except subprocess.CalledProcessError as e:
