@@ -5,6 +5,8 @@
 #define CEPH_RGW_USER_H
 
 #include <string>
+#include <boost/algorithm/string.hpp>
+#include "include/assert.h"
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -225,6 +227,7 @@ struct RGWUserAdminOpState {
     gen_access = false;
     key_op = true;
   }
+
   void set_secret_key(std::string& secret_key) {
     if (secret_key.empty())
       return;
@@ -234,19 +237,24 @@ struct RGWUserAdminOpState {
     gen_secret = false;
     key_op = true;
   }
+
   void set_user_id(rgw_user& id) {
     if (id.empty())
       return;
 
     user_id = id;
   }
+
   void set_user_email(std::string& email) {
     if (email.empty())
       return;
 
+    /* always lowercase email address */
+    boost::algorithm::to_lower(email);
     user_email = email;
     user_email_specified = true;
   }
+
   void set_display_name(std::string& name) {
     if (name.empty())
       return;
@@ -254,6 +262,7 @@ struct RGWUserAdminOpState {
     display_name = name;
     display_name_specified = true;
   }
+
   void set_subuser(std::string& _subuser) {
     if (_subuser.empty())
       return;
@@ -274,6 +283,7 @@ struct RGWUserAdminOpState {
 
     subuser_specified = true;
   }
+
   void set_caps(std::string& _caps) {
     if (_caps.empty())
       return;
@@ -281,52 +291,65 @@ struct RGWUserAdminOpState {
     caps = _caps;
     caps_specified = true;
   }
+
   void set_perm(uint32_t perm) {
     perm_mask = perm;
     perm_specified = true;
   }
+
   void set_op_mask(uint32_t mask) {
     op_mask = mask;
     op_mask_specified = true;
   }
+
   void set_temp_url_key(const string& key, int index) {
     temp_url_keys[index] = key;
     temp_url_key_specified = true;
   }
+
   void set_key_type(int32_t type) {
     key_type = type;
     type_specified = true;
   }
+
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
   }
+
   void set_system(__u8 is_system) {
     system = is_system;
     system_specified = true;
   }
+
   void set_exclusive(__u8 is_exclusive) {
     exclusive = is_exclusive;
   }
+
   void set_fetch_stats(__u8 is_fetch_stats) {
     fetch_stats = is_fetch_stats;
   }
+
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;
     info = user_info;
   }
+
   void set_max_buckets(uint32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;
   }
+
   void set_gen_access() {
     gen_access = true;
     key_op = true;
   }
+
   void set_gen_secret() {
     gen_secret = true;
     key_op = true;
   }
+
   void set_generate_key() {
     if (id.empty())
       gen_access = true;
@@ -334,10 +357,12 @@ struct RGWUserAdminOpState {
       gen_secret = true;
     key_op = true;
   }
+
   void clear_generate_key() {
     gen_access = false;
     gen_secret = false;
   }
+
   void set_purge_keys() {
     purge_keys = true;
     key_op = true;
