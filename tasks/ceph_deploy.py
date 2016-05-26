@@ -24,7 +24,8 @@ def download_ceph_deploy(ctx, config):
     """
     Downloads ceph-deploy from the ceph.com git mirror and (by default)
     switches to the master branch. If the `ceph-deploy-branch` is specified, it
-    will use that instead.
+    will use that instead. The `bootstrap` script is ran, with the argument
+    obtained from `python_version`, if specified.
     """
     log.info('Downloading ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
@@ -38,14 +39,17 @@ def download_ceph_deploy(ctx, config):
             '{tdir}/ceph-deploy'.format(tdir=testdir),
         ],
     )
-    ceph_admin.run(
-        args=[
-            'cd',
-            '{tdir}/ceph-deploy'.format(tdir=testdir),
-            run.Raw('&&'),
-            './bootstrap',
-        ],
-    )
+    args = [
+        'cd',
+        '{tdir}/ceph-deploy'.format(tdir=testdir),
+        run.Raw('&&'),
+        './bootstrap',
+    ]
+    try:
+        args.append(str(config['python_version']))
+    except KeyError:
+        pass
+    ceph_admin.run(args=args)
 
     try:
         yield
