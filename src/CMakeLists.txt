@@ -1,15 +1,11 @@
 include(GetGitRevisionDescription)
 
 enable_language(C ASM)
-set(bindir ${CMAKE_INSTALL_PREFIX}/bin)
-set(sbindir ${CMAKE_INSTALL_PREFIX}/sbin)
-set(libdir ${CMAKE_INSTALL_PREFIX}/lib)
-set(sysconfdir ${CMAKE_INSTALL_PREFIX}/etc)
-set(pkgdatadir ${CMAKE_INSTALL_PREFIX}/share)
+include(GNUInstallDirs)
 set(prefix ${CMAKE_INSTALL_PREFIX})
 
-add_definitions("-DCEPH_LIBDIR=\"${libdir}\"")
-add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
+add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"")
+add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
@@ -1047,7 +1043,7 @@ install(PROGRAMS
 
 install(FILES
   ${CMAKE_SOURCE_DIR}/doc/start/ceph.conf
-  DESTINATION ${sysconfdir}/ceph/ RENAME ceph.conf.example)
+  DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/ceph/ RENAME ceph.conf.example)
 
 install(PROGRAMS
   ceph_common.sh
