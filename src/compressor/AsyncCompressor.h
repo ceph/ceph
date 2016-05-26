@@ -16,12 +16,10 @@
 #define CEPH_ASYNCCOMPRESSOR_H
 
 #include <deque>
-
+#include <vector>
 #include "include/atomic.h"
-#include "include/str_list.h"
 #include "Compressor.h"
 #include "common/WorkQueue.h"
-
 
 class AsyncCompressor {
  private:

@@ -13,8 +13,12 @@
  */
 
 #include <random>
-#include "Compressor.h"
+#include <sstream>
+
 #include "CompressionPlugin.h"
+#include "Compressor.h"
+#include "common/ceph_context.h"
+#include "common/debug.h"
 #include "common/dout.h"
 
 const char * Compressor::get_comp_alg_name(int a) {
