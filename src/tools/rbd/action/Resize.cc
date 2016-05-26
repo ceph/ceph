@@ -74,6 +74,10 @@ int execute(const po::variables_map &vm) {
     std::cerr << "rbd: shrinking an image is only allowed with the "
               << "--allow-shrink flag" << std::endl;
     return -EINVAL;
+  } else if (info.size < size && vm["allow-shrink"].as<bool>()) {
+    std::cerr << "rbd: enlarging an image is not allowed with the "
+              << "--allow-shrink flag" << std::endl;
+    return -EINVAL;
   }
 
   r = do_resize(image, size, vm[at::NO_PROGRESS].as<bool>());
