@@ -599,7 +599,6 @@ Package: radosgw
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
          mime-support,
-         python-flask,
          librgw2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
