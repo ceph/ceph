@@ -5850,7 +5850,6 @@ bool OSD::ms_dispatch(Message *m)
 
   do_waiters();
   _dispatch(m);
-  do_waiters();
 
   dispatch_running = false;
   dispatch_cond.Signal();
