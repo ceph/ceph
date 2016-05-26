@@ -30,11 +30,13 @@ template <typename I>
 ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
                         SafeTimer *timer, Mutex *timer_lock,
                         const std::string &mirror_uuid, Journaler *journaler,
-                        MirrorPeerClientMeta *client_meta, Context *on_finish,
+                        MirrorPeerClientMeta *client_meta,
+                        ContextWQ *work_queue, Context *on_finish,
 			ProgressContext *progress_ctx)
   : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
-    m_journaler(journaler), m_client_meta(client_meta), m_on_finish(on_finish),
+    m_journaler(journaler), m_client_meta(client_meta),
+    m_work_queue(work_queue), m_on_finish(on_finish),
     m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)) {
 }
@@ -138,7 +140,7 @@ void ImageSync<I>::send_copy_snapshots() {
     ImageSync<I>, &ImageSync<I>::handle_copy_snapshots>(this);
   SnapshotCopyRequest<I> *request = SnapshotCopyRequest<I>::create(
     m_local_image_ctx, m_remote_image_ctx, &m_snap_map, m_journaler,
-    m_client_meta, ctx);
+    m_client_meta, m_work_queue, ctx);
   request->send();
 }
 
