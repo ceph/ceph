@@ -1922,7 +1922,7 @@ private:
       : ThreadPool::BatchWorkQueue<PG>(
 	"OSD::PeeringWQ", ti, si, tp), osd(o) {}
 
-    void _dequeue(PG *pg) {
+    void _dequeue(PG *pg) override {
       for (list<PG*>::iterator i = peering_queue.begin();
 	   i != peering_queue.end();
 	   ) {
@@ -1934,15 +1934,15 @@ private:
 	}
       }
     }
-    bool _enqueue(PG *pg) {
+    bool _enqueue(PG *pg) override {
       pg->get("PeeringWQ");
       peering_queue.push_back(pg);
       return true;
     }
-    bool _empty() {
+    bool _empty() override {
       return peering_queue.empty();
     }
-    void _dequeue(list<PG*> *out);
+    void _dequeue(list<PG*> *out) override;
     void _process(
       const list<PG *> &pgs,
       ThreadPool::TPHandle &handle) override {
@@ -1953,14 +1953,14 @@ private:
 	(*i)->put("PeeringWQ");
       }
     }
-    void _process_finish(const list<PG *> &pgs) {
+    void _process_finish(const list<PG *> &pgs) override {
       for (list<PG*>::const_iterator i = pgs.begin();
 	   i != pgs.end();
 	   ++i) {
 	in_use.erase(*i);
       }
     }
-    void _clear() {
+    void _clear() override {
       assert(peering_queue.empty());
     }
   } peering_wq;
@@ -2284,17 +2284,17 @@ protected:
     CommandWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
       : ThreadPool::WorkQueue<Command>("OSD::CommandWQ", ti, si, tp), osd(o) {}
 
-    bool _empty() {
+    bool _empty() override {
       return osd->command_queue.empty();
     }
-    bool _enqueue(Command *c) {
+    bool _enqueue(Command *c) override {
       osd->command_queue.push_back(c);
       return true;
     }
-    void _dequeue(Command *pg) {
+    void _dequeue(Command *pg) override {
       assert(0);
     }
-    Command *_dequeue() {
+    Command *_dequeue() override {
       if (osd->command_queue.empty())
 	return NULL;
       Command *c = osd->command_queue.front();
@@ -2312,7 +2312,7 @@ protected:
       osd->osd_lock.Unlock();
       delete c;
     }
-    void _clear() {
+    void _clear() override {
       while (!osd->command_queue.empty()) {
 	Command *c = osd->command_queue.front();
 	osd->command_queue.pop_front();
@@ -2350,19 +2350,19 @@ protected:
 	"OSD::RemoveWQ", ti, si, tp),
 	store(o) {}
 
-    bool _empty() {
+    bool _empty() override {
       return remove_queue.empty();
     }
-    void _enqueue(pair<PGRef, DeletingStateRef> item) {
+    void _enqueue(pair<PGRef, DeletingStateRef> item) override {
       remove_queue.push_back(item);
     }
-    void _enqueue_front(pair<PGRef, DeletingStateRef> item) {
+    void _enqueue_front(pair<PGRef, DeletingStateRef> item) override {
       remove_queue.push_front(item);
     }
     bool _dequeue(pair<PGRef, DeletingStateRef> item) {
       assert(0);
     }
-    pair<PGRef, DeletingStateRef> _dequeue() {
+    pair<PGRef, DeletingStateRef> _dequeue() override {
       assert(!remove_queue.empty());
       pair<PGRef, DeletingStateRef> item = remove_queue.front();
       remove_queue.pop_front();
@@ -2370,7 +2370,7 @@ protected:
     }
     void _process(pair<PGRef, DeletingStateRef>,
 		  ThreadPool::TPHandle &) override;
-    void _clear() {
+    void _clear() override {
       remove_queue.clear();
     }
   } remove_wq;
