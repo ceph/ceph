@@ -2642,6 +2642,36 @@ class PrepareBluestoreData(PrepareData):
         write_one_line(path, 'type', 'bluestore')
 
 
+#
+# Temporary workaround: if ceph-osd --mkfs does not
+# complete within 5 minutes, assume it is blocked
+# because of http://tracker.ceph.com/issues/13522
+# and retry a few times.
+#
+# Remove this function calls with command_check_call
+# when http://tracker.ceph.com/issues/13522 is fixed
+#
+def ceph_osd_mkfs(arguments):
+    timeout = _get_command_executable(['timeout'])
+    mkfs_ok = False
+    error = 'unknown error'
+    for delay in os.environ.get('CEPH_OSD_MKFS_DELAYS',
+                                '300 300 300 300 300').split():
+        try:
+            _check_output(timeout + [delay] + arguments)
+            mkfs_ok = True
+            break
+        except subprocess.CalledProcessError as e:
+            error = e.output
+            if e.returncode == 124:  # timeout fired, retry
+                LOG.debug('%s timed out : %s (retry)'
+                          % (str(arguments), error))
+            else:
+                break
+    if not mkfs_ok:
+        raise Error('%s failed : %s' % (str(arguments), error))
+
+
 def mkfs(
     path,
     cluster,
@@ -2663,7 +2693,7 @@ def mkfs(
     osd_type = read_one_line(path, 'type')
 
     if osd_type == 'bluestore':
-        command_check_call(
+        ceph_osd_mkfs(
             [
                 'ceph-osd',
                 '--cluster', cluster,
@@ -2679,7 +2709,7 @@ def mkfs(
             ],
         )
     else:
-        command_check_call(
+        ceph_osd_mkfs(
             [
                 'ceph-osd',
                 '--cluster', cluster,
