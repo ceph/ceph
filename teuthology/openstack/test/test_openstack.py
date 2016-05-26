@@ -409,7 +409,7 @@ class TestOpenStack(object):
     @patch('teuthology.misc.sh')
     def test_sorted_flavors(self, m_sh):
         o = OpenStack()
-        select = '^(vps|eg)-'
+        select = '^(vps|hg)-.*-ssd'
         m_sh.return_value = TestOpenStack.flavors
         flavors = o.get_sorted_flavors('arch', select)
         assert ['vps-ssd-1',
