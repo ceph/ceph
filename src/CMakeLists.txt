@@ -1054,6 +1054,8 @@ install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
 
+add_subdirectory(bash_completion)
+
 set(parse_secret_files
   common/secret.c)
 add_library(parse_secret_objs OBJECT ${parse_secret_files})
