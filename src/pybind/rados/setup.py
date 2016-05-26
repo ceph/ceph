@@ -1,5 +1,3 @@
-# Largely taken from
-# https://blog.kevin-brown.com/programming/2014/09/24/combining-autotools-and-setuptools.html
 from __future__ import print_function
 
 import os
@@ -90,12 +88,20 @@ def check_sanity():
     compiler = new_compiler()
     customize_compiler(compiler)
 
+    if set(['MAKEFLAGS', 'MFLAGS', 'MAKELEVEL']).issubset(set(os.environ.keys())):
+        # The setup.py has been invoked by a top-level Ceph make.
+        # Set the appropriate CFLAGS and LDFLAGS
+        CEPH_ROOT = subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).strip().decode('utf-8')
+
+        compiler.add_include_dir(os.path.join(CEPH_ROOT, 'src', 'include'))
+        compiler.add_library_dir(os.path.join(CEPH_ROOT, 'src', '.libs'))
+
     try:
         compiler.link_executable(
             compiler.compile([tmp_file]),
             os.path.join(tmp_dir, 'rados_dummy'),
             libraries=['rados'],
-            output_dir=tmp_dir
+            output_dir=tmp_dir,
         )
 
     except CompileError:
