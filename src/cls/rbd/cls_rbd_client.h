@@ -66,6 +66,8 @@ namespace librbd {
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   parent_spec pspec, uint64_t parent_overlap);
+    void set_parent(librados::ObjectWriteOperation *op,
+                    parent_spec pspec, uint64_t parent_overlap);
     void get_flags_start(librados::ObjectReadOperation *op,
                          const std::vector<snapid_t> &snap_ids);
     int get_flags_finish(bufferlist::iterator *it, uint64_t *flags,
