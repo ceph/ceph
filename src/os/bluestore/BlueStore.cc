@@ -5404,7 +5404,7 @@ void BlueStore::_do_write_small(
       ++ep;
       continue;
     }
-    if (ep->first < ep->second.offset) {
+    if (ep->first % min_alloc_size != ep->second.offset % min_alloc_size) {
       dout(20) << __func__ << " ignoring offset-skewed " << blob << ": " << *b
 	       << dendl;
       ++ep;
