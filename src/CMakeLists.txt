@@ -1138,7 +1138,12 @@ add_library(krbd_objs OBJECT krbd.cc)
 
 if(${WITH_RBD})
   add_subdirectory(librbd)
-  
+  install(FILES
+    include/rbd/features.h
+    include/rbd/librbd.h
+    include/rbd/librbd.hpp
+    DESTINATION include/rbd)
+
   add_executable(rbd-nbd tools/rbd_nbd/rbd-nbd.cc
     $<TARGET_OBJECTS:parse_secret_objs>)
   target_link_libraries(rbd-nbd librbd librados global keyutils
