@@ -653,6 +653,7 @@ function test_mon_misc()
   ceph_watch_wait "$mymsg"
 
   ceph mon metadata a
+  ceph mon metadata
   ceph node ls
 }
 
@@ -799,6 +800,8 @@ function test_mon_mds()
   for mds_gid in $(get_mds_gids $FS_NAME) ; do
       ceph mds metadata $mds_id
   done
+  ceph mds metadata
+
   # XXX mds fail, but how do you undo it?
   mdsmapfile=$TMPDIR/mdsmap.$$
   current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')

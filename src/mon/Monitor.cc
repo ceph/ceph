@@ -1910,7 +1910,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     do_health_to_clog_interval();
     scrub_event_start();
   }
-  collect_sys_info(&metadata[rank], g_ceph_context);
+
+  Metadata my_meta;
+  collect_sys_info(&my_meta, g_ceph_context);
+  update_mon_metadata(rank, std::move(my_meta));
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -2945,19 +2948,46 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon metadata") {
-    string name;
-    cmd_getval(g_ceph_context, cmdmap, "id", name);
-    int mon = monmap->get_rank(name);
-    if (mon < 0) {
-      rs = "requested mon not found";
-      r = -ENOENT;
-      goto out;
-    }
     if (!f)
       f.reset(Formatter::create("json-pretty"));
-    f->open_object_section("mon_metadata");
-    r = get_mon_metadata(mon, f.get(), ds);
-    f->close_section();
+
+    string name;
+    bool all = !cmd_getval(g_ceph_context, cmdmap, "id", name);
+    if (!all) {
+      // Dump a single mon's metadata
+      int mon = monmap->get_rank(name);
+      if (mon < 0) {
+        rs = "requested mon not found";
+        r = -ENOENT;
+        goto out;
+      }
+      f->open_object_section("mon_metadata");
+      r = get_mon_metadata(mon, f.get(), ds);
+      f->close_section();
+    } else {
+      // Dump all mons' metadata
+      r = 0;
+      f->open_array_section("mon_metadata");
+      for (unsigned int rank = 0; rank < monmap->size(); ++rank) {
+        std::ostringstream get_err;
+        f->open_object_section("mon");
+        f->dump_string("name", monmap->get_name(rank));
+        r = get_mon_metadata(rank, f.get(), get_err);
+        f->close_section();
+        if (r == -ENOENT || r == -EINVAL) {
+          dout(1) << get_err.str() << dendl;
+          // Drop error, list what metadata we do have
+          r = 0;
+        } else if (r != 0) {
+          derr << "Unexpected error from get_mon_metadata: "
+               << cpp_strerror(r) << dendl;
+          ds << get_err.str();
+          break;
+        }
+      }
+      f->close_section();
+    }
+
     f->flush(ds);
     rdata.append(ds);
     rs = "";
@@ -4398,13 +4428,13 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
   MMonMetadata *m = static_cast<MMonMetadata*>(op->get_req());
   if (is_leader()) {
     dout(10) << __func__ << dendl;
-    update_mon_metadata(m->get_source().num(), m->data);
+    update_mon_metadata(m->get_source().num(), std::move(m->data));
   }
 }
 
-void Monitor::update_mon_metadata(int from, const Metadata& m)
+void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
-  metadata[from] = m;
+  pending_metadata.insert(make_pair(from, std::move(m)));
 
   bufferlist bl;
   int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
@@ -4412,12 +4442,12 @@ void Monitor::update_mon_metadata(int from, const Metadata& m)
   if (!err) {
     bufferlist::iterator iter = bl.begin();
     ::decode(last_metadata, iter);
-    metadata.insert(last_metadata.begin(), last_metadata.end());
+    pending_metadata.insert(last_metadata.begin(), last_metadata.end());
   }
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   bl.clear();
-  ::encode(metadata, bl);
+  ::encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
