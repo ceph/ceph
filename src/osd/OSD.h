@@ -1219,9 +1219,6 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
-  Cond dispatch_cond;
-  bool dispatch_running;
-
   void create_logger();
   void create_recoverystate_perf();
   void tick();

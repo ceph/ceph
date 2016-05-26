@@ -1652,7 +1652,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   clog(log_client.create_channel()),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  dispatch_running(false),
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state(STATE_INITIALIZING),
@@ -4336,15 +4335,7 @@ void OSD::tick()
     service.promote_throttle_recalibrate();
   }
 
-  // only do waiters if dispatch() isn't currently running.  (if it is,
-  // it'll do the waiters, and doing them here may screw up ordering
-  // of op_queue vs handle_osd_map.)
-  if (!dispatch_running) {
-    dispatch_running = true;
-    do_waiters();
-    dispatch_running = false;
-    dispatch_cond.Signal();
-  }
+  do_waiters();
 
   check_ops_in_flight();
 
@@ -5842,17 +5833,8 @@ bool OSD::ms_dispatch(Message *m)
     return true;
   }
 
-  while (dispatch_running) {
-    dout(10) << "ms_dispatch waiting for other dispatch thread to complete" << dendl;
-    dispatch_cond.Wait(osd_lock);
-  }
-  dispatch_running = true;
-
   do_waiters();
   _dispatch(m);
-
-  dispatch_running = false;
-  dispatch_cond.Signal();
 
   osd_lock.Unlock();
 
