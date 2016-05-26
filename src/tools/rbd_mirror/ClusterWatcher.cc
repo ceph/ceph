@@ -32,13 +32,13 @@ ClusterWatcher::ClusterWatcher(RadosRef cluster, Mutex &lock) :
 {
 }
 
-const map<peer_t, set<int64_t> >& ClusterWatcher::get_peer_configs() const
+const ClusterWatcher::PoolPeers& ClusterWatcher::get_pool_peers() const
 {
   assert(m_lock.is_locked());
-  return m_peer_configs;
+  return m_pool_peers;
 }
 
-const std::set<std::string>& ClusterWatcher::get_pool_names() const
+const ClusterWatcher::PoolNames& ClusterWatcher::get_pool_names() const
 {
   assert(m_lock.is_locked());
   return m_pool_names;
@@ -47,19 +47,20 @@ const std::set<std::string>& ClusterWatcher::get_pool_names() const
 void ClusterWatcher::refresh_pools()
 {
   dout(20) << "enter" << dendl;
-  map<peer_t, set<int64_t> > peer_configs;
-  set<string> pool_names;
-  read_configs(&peer_configs, &pool_names);
+
+  PoolPeers pool_peers;
+  PoolNames pool_names;
+  read_pool_peers(&pool_peers, &pool_names);
 
   Mutex::Locker l(m_lock);
-  m_peer_configs = peer_configs;
+  m_pool_peers = pool_peers;
   m_pool_names = pool_names;
   // TODO: perhaps use a workqueue instead, once we get notifications
   // about config changes for existing pools
 }
 
-void ClusterWatcher::read_configs(map<peer_t, set<int64_t> > *peer_configs,
-				  set<string> *pool_names)
+void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
+				     PoolNames *pool_names)
 {
   list<pair<int64_t, string> > pools;
   int r = m_cluster->pool_list2(pools);
@@ -115,12 +116,7 @@ void ClusterWatcher::read_configs(map<peer_t, set<int64_t> > *peer_configs,
       continue;
     }
 
-    for (peer_t peer : configs) {
-      dout(20) << "pool " << pool_name << " has mirroring enabled for peer "
-	       << peer << dendl;
-      (*peer_configs)[peer].insert(pool_id);
-    }
-
+    pool_peers->insert({pool_id, Peers{configs.begin(), configs.end()}});
     pool_names->insert(pool_name);
   }
 }
