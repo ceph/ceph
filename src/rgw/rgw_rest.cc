@@ -1550,9 +1550,6 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri,
 {
   *out_uri = uri;
 
-  if (resources_by_size.empty())
-    return this;
-
   multimap<size_t, string>::reverse_iterator iter;
 
   for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
