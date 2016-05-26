@@ -957,3 +957,8 @@ void librados::RadosClient::handle_log(MLog *m)
 
   m->put();
 }
+
+void librados::RadosClient::set_block_on_osdfull(bool block)
+{
+  objecter->set_osdmap_full_try(!block);
+}

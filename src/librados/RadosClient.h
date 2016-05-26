@@ -141,6 +141,11 @@ public:
   void get();
   bool put();
   void blacklist_self(bool set);
+
+  /*
+   * If block=false, this mean all Op be with CEPH_OSD_FLAG_FULL_TRY flag.
+   */
+  void set_block_on_osdfull(bool block);
 };
 
 #endif
