@@ -14,7 +14,8 @@
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-mirror: PoolWatcher::" << __func__ << ": "
+#define dout_prefix *_dout << "rbd::mirror::PoolWatcher: " << this << " " \
+                           << __func__ << ": "
 
 using std::list;
 using std::string;
