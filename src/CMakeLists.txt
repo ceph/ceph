@@ -887,8 +887,12 @@ set(osd_srcs
 set(osd_mon_files
   mon/Monitor.cc)
 add_library(osd_mon_objs OBJECT ${osd_mon_files})
-add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
-  $<TARGET_OBJECTS:cls_references_objs> $<TARGET_OBJECTS:heap_profiler_objs>)
+add_library(osd STATIC ${osd_srcs}
+  $<TARGET_OBJECTS:osd_mon_objs>
+  $<TARGET_OBJECTS:cls_references_objs>
+  $<TARGET_OBJECTS:global_common_objs>
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(osd dl leveldb ${ALLOC_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp)
