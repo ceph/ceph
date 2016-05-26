@@ -141,7 +141,6 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store,
 void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
-  const char *token_tag = "rgwtk";
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
