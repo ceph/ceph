@@ -1669,7 +1669,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   hb_back_server_messenger(hb_back_serverm),
   heartbeat_thread(this),
   heartbeat_dispatcher(this),
-  finished_lock("OSD::finished_lock"),
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
                   cct->_conf->osd_num_op_tracker_shard),
   test_ops_hook(NULL),
@@ -2634,7 +2633,6 @@ int OSD::shutdown()
   // finish ops
   op_shardedwq.drain(); // should already be empty except for laggard PGs
   {
-    Mutex::Locker l(finished_lock);
     finished.clear(); // zap waiters (bleh, this is messy)
   }
 
@@ -6070,15 +6068,11 @@ void OSD::do_waiters()
   assert(osd_lock.is_locked());
 
   dout(10) << "do_waiters -- start" << dendl;
-  finished_lock.Lock();
   while (!finished.empty()) {
     OpRequestRef next = finished.front();
     finished.pop_front();
-    finished_lock.Unlock();
     dispatch_op(next);
-    finished_lock.Lock();
   }
-  finished_lock.Unlock();
   dout(10) << "do_waiters -- finish" << dendl;
 }
 

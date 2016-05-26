@@ -1714,12 +1714,10 @@ public:
 private:
   // -- waiters --
   list<OpRequestRef> finished;
-  Mutex finished_lock;
   
   void take_waiters(list<OpRequestRef>& ls) {
-    finished_lock.Lock();
+    assert(osd_lock.is_locked());
     finished.splice(finished.end(), ls);
-    finished_lock.Unlock();
   }
   void do_waiters();
   
