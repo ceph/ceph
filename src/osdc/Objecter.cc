@@ -2310,22 +2310,32 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
+  /*
+   * For FULL_FORCE/FULL_TRY, it can set directly on OP or set by Objcter
+   * like osdmap_full_force & osdmap_full_try
+   */
+  int flags = op->target.flags;
+  if (osdmap_full_force)
+    flags |= CEPH_OSD_FLAG_FULL_FORCE;
+  if (osdmap_full_try)
+    flags |= CEPH_OSD_FLAG_FULL_TRY;
+
   bool need_send = false;
 
-  if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
+  if ((flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_READ) &&
+  } else if ((flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
     ldout(cct, 10) << " paused read " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-	     !(op->target.flags & (CEPH_OSD_FLAG_FULL_TRY |
+  } else if ((flags & CEPH_OSD_FLAG_WRITE) &&
+	     !(flags & (CEPH_OSD_FLAG_FULL_TRY |
 				   CEPH_OSD_FLAG_FULL_FORCE)) &&
 	     (_osdmap_full_flag() ||
 	      _osdmap_pool_full(op->target.base_oloc.pool))) {
