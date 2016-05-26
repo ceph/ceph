@@ -5477,37 +5477,10 @@ void BlueStore::_do_write_small(
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
     bluestore_lextent_t(blob, offset % min_alloc_size, length);
   b->ref_map.get(lex.offset, lex.length);
-  // it's little; don't bother compressing
-  b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
-  if (csum_type) {
-    // it's little; csum at block granularity.
-    b->init_csum(csum_type, block_size_order, min_alloc_size);
-    b->calc_csum(b_off, bl);
-  }
-
-  // allocate and write
-  int r = alloc->reserve(min_alloc_size);
-  if (r < 0) {
-    derr << __func__ << " failed to reserve 0x" << std::hex << min_alloc_size
-	 << std::dec << dendl;
-    assert(0 == "enospc");
-  }
-  bluestore_pextent_t e;
-  uint32_t l;
-  r = alloc->allocate(min_alloc_size, min_alloc_size, 0 /* fixme hint */,
-		      &e.offset, &l);
-  assert(r == 0);
-  e.length = l;
-  txc->allocated.insert(e.offset, e.length);
-  b->extents.push_back(e);
-  b->map_bl(
-    b_off, bl,
-    [&](uint64_t offset, uint64_t length, bufferlist& t) {
-      bdev->aio_write(offset, t, &txc->ioc, wctx->buffered);
-    });
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	   << ": " << lex << dendl;
   dout(20) << __func__ << "  new " << blob << ": " << *b << dendl;
+  wctx->write(b, b_off, bl);
   return;
 }
 
