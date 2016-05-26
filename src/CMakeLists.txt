@@ -558,15 +558,15 @@ add_subdirectory(libradosstriper)
 
 add_executable(ceph_scratchtool tools/scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)
-install(TARGETS ceph_scratchtool DESTINATION bin/debug)
+install(TARGETS ceph_scratchtool DESTINATION bin)
 
 add_executable(ceph_scratchtoolpp tools/scratchtoolpp.cc)
 target_link_libraries(ceph_scratchtoolpp librados global)
-install(TARGETS ceph_scratchtoolpp DESTINATION bin/debug)
+install(TARGETS ceph_scratchtoolpp DESTINATION bin)
 
 add_executable(ceph_radosacl tools/radosacl.cc)
 target_link_libraries(ceph_radosacl librados global)
-install(TARGETS ceph_radosacl DESTINATION bin/debug)
+install(TARGETS ceph_radosacl DESTINATION bin)
 
 add_executable(ceph-osdomap-tool tools/ceph_osdomap_tool.cc)
 target_link_libraries(ceph-osdomap-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
@@ -977,7 +977,7 @@ add_subdirectory(compressor)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
 target_link_libraries(ceph-client-debug cephfs librados global common)
-install(TARGETS ceph-client-debug DESTINATION bin/debug)
+install(TARGETS ceph-client-debug DESTINATION bin)
 
 add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
