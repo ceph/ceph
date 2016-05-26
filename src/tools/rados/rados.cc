@@ -1734,6 +1734,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
      goto out;
   }
 
+  // make all osd op of rados cli w/ CEPH_OSD_FLAG_FULL_TRY flag.
+  rados.set_block_on_osdfull(false);
+
   if (create_pool && !pool_name) {
     cerr << "--create-pool requested but pool_name was not specified!" << std::endl;
     usage_exit();
