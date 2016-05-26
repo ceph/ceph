@@ -357,14 +357,14 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
     void enqueue_front(K cl, unsigned p, unsigned cost, T item) override final {
       normal.insert(p, cl, cost, item, true);
     }
-    T dequeue() {
+    T dequeue() override {
       assert(strict.size + normal.size > 0);
       if (!strict.empty()) {
 	return strict.pop(true);
       }
       return normal.pop();
     }
-    void dump(ceph::Formatter *f) const {
+    void dump(ceph::Formatter *f) const override {
       f->open_array_section("high_queues");
       strict.dump(f);
       f->close_section();
