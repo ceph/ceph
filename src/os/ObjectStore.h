@@ -83,8 +83,8 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 }
 
 // this isn't the best place for these, but...
-void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
-void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist &out);
+void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist &out);
 
 // Flag bits
 typedef uint32_t osflagbits_t;
@@ -997,13 +997,13 @@ public:
       void decode_attrset(map<string,bufferlist>& aset) {
         ::decode(aset, data_bl_p);
       }
-      void decode_attrset_bl(bufferlist *pbl) {
+      void decode_attrset_bl(bufferlist &pbl) {
 	decode_str_str_map_to_bl(data_bl_p, pbl);
       }
       void decode_keyset(set<string> &keys){
         ::decode(keys, data_bl_p);
       }
-      void decode_keyset_bl(bufferlist *pbl){
+      void decode_keyset_bl(bufferlist &pbl){
         decode_str_set_to_bl(data_bl_p, pbl);
       }
 

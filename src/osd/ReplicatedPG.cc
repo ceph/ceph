@@ -5784,7 +5784,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	bufferlist to_set_bl;
 	try {
-	  decode_str_str_map_to_bl(bp, &to_set_bl);
+	  decode_str_str_map_to_bl(bp, to_set_bl);
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
@@ -5867,7 +5867,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	bufferlist to_rm_bl;
 	try {
-	  decode_str_set_to_bl(bp, &to_rm_bl);
+	  decode_str_set_to_bl(bp, to_rm_bl);
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;

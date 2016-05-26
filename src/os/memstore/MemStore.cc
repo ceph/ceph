@@ -906,7 +906,7 @@ void MemStore::_do_transaction(Transaction& t)
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
         bufferlist aset_bl;
-        i.decode_attrset_bl(&aset_bl);
+        i.decode_attrset_bl(aset_bl);
 	r = _omap_setkeys(cid, oid, aset_bl);
       }
       break;
@@ -915,7 +915,7 @@ void MemStore::_do_transaction(Transaction& t)
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
         bufferlist keys_bl;
-        i.decode_keyset_bl(&keys_bl);
+        i.decode_keyset_bl(keys_bl);
 	r = _omap_rmkeys(cid, oid, keys_bl);
       }
       break;
