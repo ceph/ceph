@@ -250,7 +250,6 @@ class TestMultiFilesystems(CephFSTestCase):
         self.mount_a.write_n_mb("test.bin", 2)
         a_created_ino = self.mount_a.path_to_ino("test.bin")
         self.mount_a.create_files()
-        self.mount_a.umount_wait()
 
         # Mount a client on fs_b
         fs_b.set_ceph_conf(
@@ -261,6 +260,26 @@ class TestMultiFilesystems(CephFSTestCase):
         self.mount_b.write_n_mb("test.bin", 1)
         b_created_ino = self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()
+
+        # Check that a non-default filesystem mount survives an MDS
+        # failover (i.e. that map subscription is continuous, not
+        # just the first time), reproduces #16022
+        old_fs_b_mds = fs_b.get_active_names()[0]
+        self.mds_cluster.mds_stop(old_fs_b_mds)
+        self.mds_cluster.mds_fail(old_fs_b_mds)
+        fs_b.wait_for_daemons()
+        background = self.mount_b.write_background()
+        # Raise exception if the write doesn't finish (i.e. if client
+        # has not kept up with MDS failure)
+        try:
+            self.wait_until_true(lambda: background.finished, timeout=30)
+        except RuntimeError:
+            # The mount is stuck, we'll have to force it to fail cleanly
+            background.stdin.close()
+            self.mount_b.umount_wait(force=True)
+            raise
+
+        self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
         # See that the client's files went into the correct pool
