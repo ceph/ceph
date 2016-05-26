@@ -5666,9 +5666,7 @@ void BlueStore::_wctx_finish(
     } else {
       dout(20) << __func__ << " keep blob " << *b << dendl;
     }
-    if (l.blob >= 0) {
-      txc->write_onode(o);
-    } else {
+    if (l.blob < 0) {
       txc->write_bnode(o->bnode);
     }
   }
@@ -5771,6 +5769,7 @@ int BlueStore::_do_write(
   }
 
   _wctx_finish(txc, c, o, &wctx);
+  txc->write_onode(o);
 
   if (end > o->onode.size) {
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
