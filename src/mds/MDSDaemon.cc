@@ -131,7 +131,7 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
 
   mdsmap = new MDSMap;
 
-  objecter->unset_honor_osdmap_full();
+  objecter->set_osdmap_full_force(true);
 }
 
 MDSDaemon::~MDSDaemon() {

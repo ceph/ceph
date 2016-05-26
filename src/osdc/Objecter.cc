@@ -2599,7 +2599,7 @@ bool Objecter::_osdmap_has_pool_full() const
 
 bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
 {
-  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_osdmap_full;
+  return p.has_flag(pg_pool_t::FLAG_FULL) && !osdmap_full_force;
 }
 
 /**
@@ -2607,8 +2607,8 @@ bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
  */
 bool Objecter::_osdmap_full_flag() const
 {
-  // Ignore the FULL flag if the caller has honor_osdmap_full
-  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_osdmap_full;
+  // Ignore the FULL flag if the caller set osdmap_full_force
+  return osdmap->test_flag(CEPH_OSDMAP_FULL) && !osdmap_full_force;
 }
 
 void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
@@ -3024,7 +3024,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   if (op->onack)
     flags |= CEPH_OSD_FLAG_ACK;
 
-  if (!honor_osdmap_full)
+  if (osdmap_full_force)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   op->target.paused = false;
