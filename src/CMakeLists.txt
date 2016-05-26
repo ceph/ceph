@@ -708,6 +708,7 @@ target_link_libraries(ceph-dencoder
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
 set(lib_mon_srcs
@@ -1033,6 +1034,7 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
   ${CMAKE_SOURCE_DIR}/src/ceph-run
+  ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
@@ -1042,7 +1044,8 @@ install(FILES
   DESTINATION ${sysconfdir}/ceph/ RENAME ceph.conf.example)
 
 install(PROGRAMS
-  ${CMAKE_SOURCE_DIR}/src/ceph_common.sh
+  ceph_common.sh
+  ceph-osd-prestart.sh
   DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/ceph)
 
 install(PROGRAMS
@@ -1217,7 +1220,7 @@ if(${WITH_RBD})
   target_link_libraries(rbd librbd librados global common keyutils udev
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-  install(TARGETS rbd DESTINATION bin)
+  install(TARGETS rbd rbd-nbd rbd-mirror DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/rbdmap DESTINATION bin)
   add_subdirectory(rbd_replay)
