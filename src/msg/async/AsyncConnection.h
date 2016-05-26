@@ -143,12 +143,14 @@ class AsyncConnection : public Connection {
     EventCenter *center;
     DispatchQueue *dispatch_queue;
     uint64_t conn_id;
+    std::atomic_bool stop_dispatch;
 
    public:
     explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
                              DispatchQueue *q, uint64_t cid)
       : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid) { }
+        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
+        stop_dispatch(false) { }
     ~DelayedDelivery() {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
@@ -160,6 +162,7 @@ class AsyncConnection : public Connection {
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
+      stop_dispatch = true;
       EventCenter::submit_to(center->get_id(), [this] () mutable {
         Mutex::Locker l(delay_lock);
         while (!delay_queue.empty()) {
@@ -171,8 +174,10 @@ class AsyncConnection : public Connection {
         for (auto i : register_time_events)
           center->delete_time_event(i);
         register_time_events.clear();
+        stop_dispatch = false;
       }, true);
     }
+    bool ready() const { return !stop_dispatch && delay_queue.empty() && register_time_events.empty(); }
     void flush();
   } *delay_state;
 
