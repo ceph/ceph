@@ -7687,7 +7687,6 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   }
 
   const md_config_t *conf = cct->_conf;
-  loff_t p = in->layout.stripe_count * in->layout.object_size;
   f->readahead.set_trigger_requests(1);
   f->readahead.set_min_readahead_size(conf->client_readahead_min);
   uint64_t max_readahead = Readahead::NO_LIMIT;
@@ -7695,11 +7694,11 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
     max_readahead = MIN(max_readahead, (uint64_t)conf->client_readahead_max_bytes);
   }
   if (conf->client_readahead_max_periods) {
-    max_readahead = MIN(max_readahead, ((uint64_t)conf->client_readahead_max_periods) * p);
+    max_readahead = MIN(max_readahead, in->layout.get_period()*(uint64_t)conf->client_readahead_max_periods);
   }
   f->readahead.set_max_readahead_size(max_readahead);
   vector<uint64_t> alignments;
-  alignments.push_back(p);
+  alignments.push_back(in->layout.get_period());
   alignments.push_back(in->layout.stripe_unit);
   f->readahead.set_alignments(alignments);
 
