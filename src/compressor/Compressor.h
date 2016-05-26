@@ -16,19 +16,21 @@
 #define CEPH_COMPRESSOR_H
 
 #include "include/int_types.h"
-#include "include/Context.h"
+#include "include/buffer_fwd.h"
+#include <memory>
+#include <string>
 
 class Compressor;
-typedef shared_ptr<Compressor> CompressorRef;
-
+typedef std::shared_ptr<Compressor> CompressorRef;
+class CephContext;
 
 class Compressor {
  public:
   virtual ~Compressor() {}
-  virtual int compress(const bufferlist &in, bufferlist &out) = 0;
-  virtual int decompress(const bufferlist &in, bufferlist &out) = 0;
+  virtual int compress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
+  virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
 
-  static CompressorRef create(CephContext *cct, const string &type);
+  static CompressorRef create(CephContext *cct, const std::string &type);
 };
 
 

@@ -17,11 +17,11 @@
 
 #include <snappy.h>
 #include <snappy-sinksource.h>
-#include "include/buffer.h"
 #include "compressor/Compressor.h"
+#include "include/buffer.h"
 
 class BufferlistSource : public snappy::Source {
-  list<bufferptr>::const_iterator pb;
+  std::list<bufferptr>::const_iterator pb;
   size_t pb_off;
   size_t left;
 
