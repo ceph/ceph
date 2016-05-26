@@ -159,10 +159,6 @@ which are as follows:
 :command:`usage trim`
   Trim usage information (with optional user and date range).
 
-:command:`temp remove`
-  Remove temporary objects that were created up to specified date
-  (and optional time).
-
 :command:`gc list`
   Dump expired garbage collection objects (specify --include-all to list all
   entries, including unexpired).
