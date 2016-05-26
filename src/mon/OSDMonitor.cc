@@ -7180,6 +7180,20 @@ done:
       err = -EBUSY;
       goto reply;
     }
+
+    //make sure no objects leaves on tier(except hit_set_archives)
+    string force_nonempty;
+    cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
+    const pool_stat_t& tier_stats =
+      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
+    if ((tier_stats.stats.sum.num_objects -
+         tier_stats.stats.sum.num_objects_hit_set_archive) != 0 &&
+        force_nonempty != "--force-nonempty") {
+      ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
+
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
