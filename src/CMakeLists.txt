@@ -1101,7 +1101,7 @@ endif(${ENABLE_SHARED})
   target_link_libraries(mount.ceph keyutils)
 
   install(TARGETS ceph-syn DESTINATION bin)
-  install(TARGETS mount.ceph DESTINATION sbin)
+  install(TARGETS mount.ceph DESTINATION /sbin)
 
   if(HAVE_LIBFUSE)
     set(ceph_fuse_srcs
