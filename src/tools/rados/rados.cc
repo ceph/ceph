@@ -27,6 +27,7 @@ using namespace libradosstriper;
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/obj_bencher.h"
+#include "common/TextTable.h"
 #include "include/stringify.h"
 #include "mds/inode_backtrace.h"
 #include "auth/Crypto.h"
@@ -1861,13 +1862,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
 
+    TextTable tab;
+
     if (!formatter) {
-      printf("%-15s "
-	     "%12s %12s %12s %12s "
-	     "%12s %12s %12s %12s %12s\n",
-	     "pool name",
-	     "KB", "objects", "clones", "degraded",
-	     "unfound", "rd", "rd KB", "wr", "wr KB");
+      tab.define_column("POOL_NAME", TextTable::LEFT, TextTable::LEFT);
+      tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("CLONES", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("COPIES", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("DEGRAED", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("RD_OPS", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("RD", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("WR_OPS", TextTable::LEFT, TextTable::RIGHT);
+      tab.define_column("WR", TextTable::LEFT, TextTable::RIGHT);
     } else {
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
@@ -1878,17 +1887,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       const char *pool_name = i->first.c_str();
       librados::pool_stat_t& s = i->second;
       if (!formatter) {
-	printf("%-15s "
-	       "%12lld %12lld %12lld %12lld "
-	       "%12lld %12lld %12lld %12lld %12lld\n",
-	       pool_name,
-	       (long long)s.num_kb,
-	       (long long)s.num_objects,
-	       (long long)s.num_object_clones,
-	       (long long)s.num_objects_degraded,
-	       (long long)s.num_objects_unfound,
-	       (long long)s.num_rd, (long long)s.num_rd_kb,
-	         (long long)s.num_wr, (long long)s.num_wr_kb);
+        tab << pool_name
+            << si_t(s.num_bytes)
+            << s.num_objects
+            << s.num_object_clones
+            << s.num_object_copies
+            << s.num_objects_missing_on_primary
+            << s.num_objects_unfound
+            << s.num_objects_degraded
+            << s.num_rd
+            << si_t(s.num_rd_kb << 10)
+            << s.num_wr
+            << si_t(s.num_wr_kb << 10)
+            << TextTable::endrow;
       } else {
         formatter->open_object_section("pool");
         int64_t pool_id = rados.pool_lookup(pool_name);
@@ -1913,6 +1924,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
     }
 
+    if (!formatter) {
+      cout << tab;
+    }
+
     // total
     cluster_stat_t tstats;
     ret = rados.cluster_stat(tstats);
@@ -1921,10 +1936,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     if (!formatter) {
-      printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
-	     (long long unsigned)tstats.num_objects);
-      printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
-      printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
+      cout << std::endl;
+      cout << "total_objects    " << tstats.num_objects
+           << std::endl;
+      cout << "total_used       " << si_t(tstats.kb_used << 10)
+           << std::endl;
+      cout << "total_avail      " << si_t(tstats.kb_avail << 10)
+           << std::endl;
+      cout << "total_space      " << si_t(tstats.kb << 10)
+           << std::endl;
     } else {
       formatter->close_section();
       formatter->dump_format("total_objects", "%lld", (long long unsigned)tstats.num_objects);
