@@ -53,18 +53,19 @@ find_program(LTTNG_EXECUTABLE
   PATHS ${LTTNG_PATH_HINT}/bin
   NO_DEFAULT_PATH
   DOC "The LTTNG command line tool")
-find_program(LEX_PROGRAM
+find_program(LTTNG_EXECUTABLE
   NAMES ${LTTNG_NAMES}
   PATHS ${LTTNG_PATH_HINT}/bin
   DOC "The LTTNG command line tool")
+find_program(LTTNG_GEN_TP NAMES lttng-gen-tp
+  DOC "The lttng-gen-tp command line tool")
 
 # handle the QUIETLY and REQUIRED arguments and set PRELUDE_FOUND to TRUE if
 # all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(LTTNG
-                                  REQUIRED_VARS LTTNG_INCLUDE_DIR LTTNG_LIBRARY_DIR)
+                                  REQUIRED_VARS LTTNG_INCLUDE_DIR LTTNG_LIBRARY_DIR LTTNG_GEN_TP)
 # VERSION FPHSA options not handled by CMake version < 2.8.2)
 #                                  VERSION_VAR)
 mark_as_advanced(LTTNG_INCLUDE_DIR)
 mark_as_advanced(LTTNG_LIBRARY_DIR)
-
