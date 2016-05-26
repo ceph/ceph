@@ -929,10 +929,9 @@ int FileStore::mkfs()
   ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
   if (ret < 0) {
     derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
-    ret = -1;
     goto close_fsid_fd;
   }
-  //create fsid under omap
+  // create fsid under omap
   // open+lock fsid
   int omap_fsid_fd;
   char omap_fsid_fn[PATH_MAX];
@@ -941,7 +940,7 @@ int FileStore::mkfs()
   if (omap_fsid_fd < 0) {
     ret = -errno;
     derr << "mkfs: failed to open " << omap_fsid_fn << ": " << cpp_strerror(ret) << dendl;
-    goto close_basedir_fd;
+    goto close_fsid_fd;
   }
 
   if (read_fsid(omap_fsid_fd, &old_omap_fsid) < 0 || old_omap_fsid.is_zero()) {
@@ -953,27 +952,30 @@ int FileStore::mkfs()
       ret = -errno;
       derr << "mkfs: failed to truncate fsid: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     ret = safe_write(omap_fsid_fd, fsid_str, strlen(fsid_str));
     if (ret < 0) {
       derr << "mkfs: failed to write fsid: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     dout(10) << "mkfs: write success, fsid:" << fsid_str << ", ret:" << ret << dendl;
     if (::fsync(omap_fsid_fd) < 0) {
-      ret = errno;
+      ret = -errno;
       derr << "mkfs: close failed: can't write fsid: "
 	   << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     dout(10) << "mkfs omap fsid is " << fsid << dendl;
   } else {
     if (fsid != old_omap_fsid) {
-      derr << "FileStore::mkfs: " << omap_fsid_fn << " has existed omap fsid " << old_omap_fsid << " != expected osd fsid " << fsid << dendl;
+      derr << "FileStore::mkfs: " << omap_fsid_fn
+           << " has existed omap fsid " << old_omap_fsid
+           << " != expected osd fsid " << fsid
+           << dendl;
       ret = -EINVAL;
-      goto close_fsid_fd;
+      goto close_omap_fsid_fd;
     }
     dout(1) << "FileStore::mkfs: omap fsid is already set to " << fsid << dendl;
   }
@@ -983,15 +985,17 @@ int FileStore::mkfs()
   // journal?
   ret = mkjournal();
   if (ret)
-    goto close_fsid_fd;
+    goto close_omap_fsid_fd;
 
   ret = write_meta("type", "filestore");
   if (ret)
-    goto close_fsid_fd;
+    goto close_omap_fsid_fd;
 
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
+ close_omap_fsid_fd:
+  VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
  close_fsid_fd:
   VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
@@ -1562,7 +1566,7 @@ int FileStore::mount()
     ::unlink(nosnapfn);
   }
 
-  //check fsid with omap
+  // check fsid with omap
   // get omap fsid
   int omap_fsid_fd;
   char omap_fsid_buf[PATH_MAX];
@@ -1570,26 +1574,36 @@ int FileStore::mount()
   snprintf(omap_fsid_buf, sizeof(omap_fsid_buf), "%s/osd_uuid", omap_dir.c_str());
   // if osd_uuid not exists, assume as this omap matchs corresponding osd
   if (::stat(omap_fsid_buf, &omap_fsid_stat) != 0){
-    dout(10) << "Filestore::mount osd_uuid not found under omap, assume as matched." << dendl;
+    dout(10) << "Filestore::mount osd_uuid not found under omap, "
+             << "assume as matched."
+             << dendl;
   }else{
     // if osd_uuid exists, compares osd_uuid with fsid
     omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY, 0644);
     if (omap_fsid_fd < 0) {
         ret = -errno;
         derr << "FileStore::mount: error opening '" << omap_fsid_buf << "': "
-        << cpp_strerror(ret) << dendl;
-        goto done;
+             << cpp_strerror(ret)
+             << dendl;
+        goto close_current_fd;
     }
     ret = read_fsid(omap_fsid_fd, &omap_fsid);
+    VOID_TEMP_FAILURE_RETRY(::close(omap_fsid_fd));
+    omap_fsid_fd = -1; // defensive 
     if (ret < 0) {
-      derr << "FileStore::mount: error reading omap_fsid_fd" << ", omap_fsid = " << omap_fsid
-      << cpp_strerror(ret) << dendl;
-      goto close_fsid_fd;
+      derr << "FileStore::mount: error reading omap_fsid_fd"
+           << ", omap_fsid = " << omap_fsid
+           << cpp_strerror(ret)
+           << dendl;
+      goto close_current_fd;
     }
     if (fsid != omap_fsid) {
-      derr << "FileStore::mount: " << omap_fsid_buf << " has existed omap fsid " << omap_fsid << " != expected osd fsid " << fsid << dendl;
+      derr << "FileStore::mount: " << omap_fsid_buf
+           << " has existed omap fsid " << omap_fsid
+           << " != expected osd fsid " << fsid
+           << dendl;
       ret = -EINVAL;
-      goto close_fsid_fd;
+      goto close_current_fd;
     }
   }
 
