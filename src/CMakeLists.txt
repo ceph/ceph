@@ -945,13 +945,14 @@ if(${WITH_MDS})
     ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
   add_library(mds ${mds_srcs}
-    $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_link_libraries(mds ${ALLOC_LIBS})
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    $<TARGET_OBJECTS:common_util_obj>)
+  target_link_libraries(mds ${ALLOC_LIBS} osdc)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs}
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(ceph-mds mds osdc ${CMAKE_DL_LIBS} global
+  target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
     ${Boost_THREAD_LIBRARY})
   install(TARGETS ceph-mds DESTINATION bin)
 endif(${WITH_MDS})
@@ -1160,7 +1161,15 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
   add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
-  
+
+  if(WITH_FUSE)
+    add_executable(rbd-fuse
+      rbd_fuse/rbd-fuse.cc)
+    target_link_libraries(rbd-fuse
+      librbd ${FUSE_LIBRARIES})
+    install(TARGETS rbd-fuse DESTINATION bin)
+  endif()
+
   add_executable(rbd-mirror
     tools/rbd_mirror/main.cc
     common/ContextCompletion.cc)
