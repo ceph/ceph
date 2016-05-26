@@ -17,8 +17,8 @@
 
 #include <snappy.h>
 #include <snappy-sinksource.h>
-#include "include/buffer.h"
 #include "compressor/Compressor.h"
+#include "include/buffer.h"
 
 class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
   bufferlist::iterator pb;
