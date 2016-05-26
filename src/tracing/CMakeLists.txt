@@ -30,7 +30,7 @@ function(add_tracing_library name tracings version)
       ${header_dir}/${tp}.h
       ${header_dir}/${tp}.c)
   endforeach()
-  add_library(${name} STATIC ${srcs})
+  add_library(${name} SHARED ${srcs})
   target_link_libraries(${name} ${LTTNG_LIBRARIES} dl)
   string(REGEX MATCH "^[0-9]+" soversion ${version})
   string(REGEX REPLACE "^lib" "" output_name ${name})
