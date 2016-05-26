@@ -451,10 +451,10 @@ else()
     perfglue/disabled_stubs.cc)
 endif(${HAVE_GPERFTOOLS})
 
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   list(APPEND libcommon_files
     $<TARGET_OBJECTS:global_common_objs>)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
@@ -498,10 +498,10 @@ target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
 if(${WITH_LTTNG})
   target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(global PROPERTIES
     OUTPUT_NAME ceph-global VERSION "1.0.0" SOVERSION "1")
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 # rados object classes
 add_subdirectory(cls)
@@ -523,7 +523,7 @@ set(librados_srcs
   librados/snap_set_diff.cc
   librados/RadosXattrIter.cc
   )
-add_library(librados ${CEPH_SHARED} ${librados_srcs}
+add_library(librados ${librados_srcs}
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
@@ -533,10 +533,10 @@ endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
 
@@ -1077,19 +1077,19 @@ if(WITH_LIBCEPHFS)
     client/MetaSession.cc
     client/Trace.cc
     client/posix_acl.cc)
-  add_library(client ${libclient_srcs})
+  add_library(client STATIC ${libclient_srcs})
   target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
+  add_library(cephfs ${libcephfs_srcs}
     $<TARGET_OBJECTS:cls_references_objs>
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common cls_lock_client
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
@@ -1134,7 +1134,7 @@ set(journal_srcs
   journal/ObjectPlayer.cc
   journal/ObjectRecorder.cc
   journal/Utils.cc)
-add_library(journal ${journal_srcs})
+add_library(journal STATIC ${journal_srcs})
 
 add_library(krbd_objs OBJECT krbd.cc)
 
@@ -1177,7 +1177,7 @@ if(${WITH_RBD})
     add_executable(rbd-fuse
       rbd_fuse/rbd-fuse.cc)
     target_link_libraries(rbd-fuse
-      librbd ${FUSE_LIBRARIES})
+      librbd librados ${FUSE_LIBRARIES})
     install(TARGETS rbd-fuse DESTINATION bin)
   endif()
 
