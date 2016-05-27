@@ -345,18 +345,16 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
 
   // remove stale replayers before creating new replayers
   for (auto it = m_replayers.begin(); it != m_replayers.end();) {
-    auto next_it(it);
-    ++next_it;
-
     auto &peer = it->first.second;
     auto pool_peer_it = pool_peers.find(it->first.first);
     if (pool_peer_it == pool_peers.end() ||
         pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
       dout(20) << "removing replayer for " << peer << dendl;
       // TODO: make async
-      m_replayers.erase(it);
+      it = m_replayers.erase(it);
+    } else {
+      ++it;
     }
-    it = next_it;
   }
 
   for (auto &kv : pool_peers) {
@@ -365,7 +363,8 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
       if (m_replayers.find(pool_peer) == m_replayers.end()) {
         dout(20) << "starting replayer for " << peer << dendl;
         unique_ptr<Replayer> replayer(new Replayer(m_threads, m_image_deleter,
-                                                   m_local, peer, m_args));
+                                                   m_local, kv.first, peer,
+                                                   m_args));
         // TODO: make async, and retry connecting within replayer
         int r = replayer->init();
         if (r < 0) {
