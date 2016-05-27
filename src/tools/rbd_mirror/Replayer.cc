@@ -242,8 +242,6 @@ Replayer::Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter
   m_asok_hook(nullptr),
   m_replayer_thread(this)
 {
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  m_asok_hook = new ReplayerAdminSocketHook(cct, m_peer.cluster_name, this);
 }
 
 Replayer::~Replayer()
@@ -408,6 +406,17 @@ void Replayer::run()
   dout(20) << "enter" << dendl;
 
   while (!m_stopping.read()) {
+
+    std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
+                                 m_peer.cluster_name;
+    if (m_asok_hook_name != asok_hook_name || m_asok_hook == nullptr) {
+      m_asok_hook_name = asok_hook_name;
+      delete m_asok_hook;
+
+      CephContext *cct = static_cast<CephContext *>(m_local->cct());
+      m_asok_hook = new ReplayerAdminSocketHook(cct, m_asok_hook_name, this);
+    }
+
     Mutex::Locker l(m_lock);
     if (!m_manual_stop) {
       set_sources(m_pool_watcher->get_images());
@@ -436,6 +445,7 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
 
   if (f) {
     f->open_object_section("replayer_status");
+    f->dump_string("pool", m_local_io_ctx.get_pool_name());
     f->dump_stream("peer") << m_peer;
     f->open_array_section("image_replayers");
   };
