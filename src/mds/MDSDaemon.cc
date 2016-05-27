@@ -539,6 +539,9 @@ int MDSDaemon::init()
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
+    dout(4) << __func__ << ": terminated already, dropping out" << dendl;
+    mds_lock.Unlock();
+    return 0; 
   }
 
   timer.init();
@@ -1049,6 +1052,10 @@ void MDSDaemon::handle_signal(int signum)
 void MDSDaemon::suicide()
 {
   assert(mds_lock.is_locked());
+  
+  // make sure we don't suicide twice
+  assert(stopping == false);
+  stopping = true;
 
   dout(1) << "suicide.  wanted state "
           << ceph_mds_state_name(beacon.get_want_state()) << dendl;
