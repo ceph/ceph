@@ -68,6 +68,7 @@
 #if defined(__APPLE__)
 /* PATH_MAX */
 #include <limits.h>
+#define EREMOTEIO 121
 #endif /* __APPLE__ */
 
 /* O_LARGEFILE is not defined/required on OSX/FreeBSD */
