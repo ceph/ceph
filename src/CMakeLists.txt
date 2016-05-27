@@ -1082,7 +1082,7 @@ if(WITH_LIBCEPHFS)
   add_library(cephfs ${libcephfs_srcs}
     $<TARGET_OBJECTS:cls_references_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common cls_lock_client
+  target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
 if(BUILD_SHARED_LIBS)
