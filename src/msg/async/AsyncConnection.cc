@@ -119,16 +119,17 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 }
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
-                                 EventCenter *c, PerfCounters *p)
+                                 Worker *w)
   : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
-    logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
+    logger(w->get_perf_counter()), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1), port(-1),
     dispatch_queue(q), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), last_active(ceph::coarse_mono_clock::now()),
     got_bad_auth(false), authorizer(NULL), replacing(false),
-    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
+    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct),
+    worker(w), center(&w->center)
 {
   read_handler = new C_handle_read(this);
   write_handler = new C_handle_write(this);
@@ -2231,6 +2232,7 @@ void AsyncConnection::_stop()
   dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
   async_msgr->unregister_conn(this);
+  worker->release_worker();
 
   state = STATE_CLOSED;
   open_write = false;
@@ -2486,12 +2488,6 @@ void AsyncConnection::mark_down()
   ldout(async_msgr->cct, 1) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   _stop();
-}
-
-void AsyncConnection::release_worker()
-{
-  if (msgr)
-    reinterpret_cast<AsyncMessenger*>(msgr)->release_worker(center);
 }
 
 void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
