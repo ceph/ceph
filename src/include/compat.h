@@ -69,6 +69,7 @@
 /* PATH_MAX */
 #include <limits.h>
 #define EREMOTEIO 121
+#define HOST_NAME_MAX 255
 #endif /* __APPLE__ */
 
 /* O_LARGEFILE is not defined/required on OSX/FreeBSD */
