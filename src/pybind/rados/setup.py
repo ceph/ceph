@@ -91,10 +91,14 @@ def check_sanity():
     if set(['MAKEFLAGS', 'MFLAGS', 'MAKELEVEL']).issubset(set(os.environ.keys())):
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
-        CEPH_ROOT = subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).strip().decode('utf-8')
+        CEPH_SRC_DIR = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            '..',
+            '..'
+        )
 
-        compiler.add_include_dir(os.path.join(CEPH_ROOT, 'src', 'include'))
-        compiler.add_library_dir(os.path.join(CEPH_ROOT, 'src', '.libs'))
+        compiler.add_include_dir(os.path.join(CEPH_SRC_DIR, 'include'))
+        compiler.add_library_dir(os.environ['CEPH_LIB_DIR'])
 
     try:
         compiler.link_executable(
@@ -119,22 +123,21 @@ def check_sanity():
 if not check_sanity():
     sys.exit(1)
 
-if '--without-cython' in sys.argv:
-    if not os.path.isfile('rados.c'):
-        print('Error: Cannot find Cythonized file rados.c', file=sys.stderr)
-        print('Retry without using --without-cython', file=sys.stderr)
-        sys.exit(1)
-
-
-    def cythonize(x, **kwargs):
-        return x
-
-
-    sys.argv.remove('--without-cython')
-    source = "rados.c"
-else:
+try:
     from Cython.Build import cythonize
+except ImportError:
+    print("WARNING: Cython is not installed.")
 
+    if not os.path.isfile('rados.c'):
+        print('ERROR: Cannot find Cythonized file rados.c', file=sys.stderr)
+        sys.exit(1)
+    else:
+        def cythonize(x, **kwargs):
+            return x
+
+
+        source = "rados.c"
+else:
     source = "rados.pyx"
 
 # Disable cythonification if we're not really building anything
@@ -177,10 +180,7 @@ setup(
         'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Cython',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.2',
-        'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5'
     ],

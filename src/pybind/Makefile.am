@@ -13,6 +13,7 @@ PY_DISTUTILS = \
 	CFLAGS="-iquote \${abs_srcdir}/include ${AM_CFLAGS} ${PYTHON_CFLAGS}" \
 	LDFLAGS="-L\${abs_builddir}/.libs $(subst -pie,,${AM_LDFLAGS}) ${PYTHON_LDFLAGS}" \
 	CYTHON_BUILD_DIR=$(CYTHON_BUILD_DIR) \
+	CEPH_LIB_DIR="$(abs_builddir)/.libs" \
 	${PYTHON} ./setup.py
 
 if WITH_RADOS
