@@ -313,12 +313,6 @@ Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librgw2 = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
-# python-flask for powerdns
-Requires:	python-flask
-%endif
-%if 0%{?suse_version}
-# python-Flask for powerdns
-Requires:      python-Flask
 %endif
 %description radosgw
 RADOS is a distributed object store used by the Ceph distributed
