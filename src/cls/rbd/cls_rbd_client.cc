@@ -1433,5 +1433,52 @@ namespace librbd {
       op->exec("rbd", "mirror_image_status_remove_down", bl);
     }
 
+    // Consistency groups functions
+    int group_create(librados::IoCtx *ioctx, const std::string &oid)
+    {
+      bufferlist bl, bl2;
+
+      return ioctx->exec(oid, "rbd", "group_create", bl, bl2);
+    }
+
+    int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
+	             const std::string &start, uint64_t max_return,
+		     map<string, string> *cgs)
+    {
+      bufferlist in, out;
+      ::encode(start, in);
+      ::encode(max_return, in);
+      int r = ioctx->exec(oid, "rbd", "group_dir_list", in, out);
+      if (r < 0)
+	return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+	::decode(*cgs, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
+		   const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "group_dir_add", in, out);
+    }
+
+    int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
+	              const std::string &name, const std::string &id)
+    {
+      bufferlist in, out;
+      ::encode(name, in);
+      ::encode(id, in);
+      return ioctx->exec(oid, "rbd", "group_dir_remove", in, out);
+    }
+
   } // namespace cls_client
 } // namespace librbd
