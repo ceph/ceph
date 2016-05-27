@@ -364,9 +364,15 @@ namespace rgw {
 
       st->st_mode = state.unix_mode;
 
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+      st->st_atimespec = state.atime;
+      st->st_mtimespec = state.mtime;
+      st->st_ctimespec = state.ctime;
+#else
       st->st_atim = state.atime;
       st->st_mtim = state.mtime;
       st->st_ctim = state.ctime;
+#endif
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:

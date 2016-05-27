@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
+#include <array>
 #include <string.h>
 
 #include "common/ceph_crypto.h"
