@@ -773,10 +773,12 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     min_alloc_size(0)
 {
   _init_logger();
+  g_ceph_context->_conf->add_observer(this);
 }
 
 BlueStore::~BlueStore()
 {
+  g_ceph_context->_conf->remove_observer(this);
   _shutdown_logger();
   assert(!mounted);
   assert(db == NULL);
@@ -789,6 +791,10 @@ const char **BlueStore::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "bluestore_csum",
     "bluestore_csum_type",
+    "bluestore_compression",
+    "bluestore_compression_algorithm",
+    "bluestore_compression_min_blob_size",
+    "bluestore_compression_max_blob_size",
     NULL
   };
   return KEYS;
@@ -5497,6 +5503,7 @@ void BlueStore::_do_write_big(
   }
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " max_blob_len 0x" << max_blob_len
+	   << " compress " << (int)wctx->compress
 	   << std::dec << dendl;
   while (length > 0) {
     int64_t blob;
@@ -5562,17 +5569,19 @@ int BlueStore::_do_alloc_write(
       if (newlen < final_length) {
 	// pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
-	dout(20) << __func__ << "  compressed 0x" << b->length
+	dout(20) << __func__ << hex << "  compressed 0x" << b->length
 		 << " -> 0x" << rawlen << " => 0x" << newlen
-		 << " with " << chdr.type << dendl;
+		 << " with " << chdr.type
+		 << dec << dendl;
 	l = &compressed_bl;
 	final_length = newlen;
 	csum_length = newlen;
 	b->set_flag(bluestore_blob_t::FLAG_COMPRESSED);
       } else {
-	dout(20) << __func__ << "  compressed 0x" << l->length() << " -> 0x"
+	dout(20) << __func__ << hex << "  compressed 0x" << l->length() << " -> 0x"
 		 << rawlen << " with " << chdr.type
-		 << ", leaving uncompressed" << dendl;
+		 << ", leaving uncompressed"
+		 << dec << dendl;
 	b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
       }
     } else {
