@@ -2710,14 +2710,14 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_OMAP_SETKEYS:
       {
 	bufferlist aset_bl;
-        i.decode_attrset_bl(&aset_bl);
+        i.decode_attrset_bl(aset_bl);
 	r = _omap_setkeys(txc, c, o, aset_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
 	bufferlist keys_bl;
-        i.decode_keyset_bl(&keys_bl);
+        i.decode_keyset_bl(keys_bl);
 	r = _omap_rmkeys(txc, c, o, keys_bl);
       }
       break;
