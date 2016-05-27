@@ -1237,6 +1237,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 _remove_from_crush_map=lambda cluster, osd_id: True,
                 _delete_osd_auth_key=lambda cluster, osd_id: True,
                 _deallocate_osd_id=lambda cluster, osd_id: True,
+                unmount=lambda path: True,
                 zap=lambda dev: True
         ):
             main.main_destroy(args)
