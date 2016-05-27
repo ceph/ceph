@@ -373,7 +373,7 @@ OPTION(client_mount_timeout, OPT_DOUBLE, 300.0)
 OPTION(client_tick_interval, OPT_DOUBLE, 1.0)
 OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
-OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  //8 * 1024*1024
+OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
