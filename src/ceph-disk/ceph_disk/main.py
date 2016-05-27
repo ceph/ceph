@@ -3609,6 +3609,12 @@ def main_destroy_locked(args):
     # Deallocate OSD ID
     _deallocate_osd_id(args.cluster, osd_id)
 
+    # Unmount the osd data
+    cluster = target_dev['cluster']
+    path = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
+        cluster=cluster, osd_id=osd_id)
+    unmount(path)
+
     # we remove the crypt map and device mapper (if dmcrypt is True)
     if dmcrypt:
         for name in Space.NAMES:
