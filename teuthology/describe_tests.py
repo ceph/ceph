@@ -71,8 +71,7 @@ def output_results(headers, rows, output_format, hrule):
 
 def get_combinations(suite_dir, fields, subset,
                      limit, filter_in, filter_out,
-                     include_facet, _isdir=os.path.isdir, _open=open,
-                     _isfile=os.path.isfile, _listdir=os.listdir):
+                     include_facet):
     """
     Describes the combinations of a suite, optionally limiting
     or filtering output based on the given parameters. Includes
@@ -82,7 +81,7 @@ def get_combinations(suite_dir, fields, subset,
     of strings.
     """
     configs = [(combine_path(suite_dir, item[0]), item[1]) for item in
-               build_matrix(suite_dir, _isfile, _isdir, _listdir, subset)]
+               build_matrix(suite_dir, subset)]
 
     num_listed = 0
     rows = []
@@ -101,7 +100,7 @@ def get_combinations(suite_dir, fields, subset,
                                for path in fragment_paths]):
             continue
 
-        fragment_fields = [extract_info(path, fields, _isdir, _open)
+        fragment_fields = [extract_info(path, fields)
                            for path in fragment_paths]
 
         # merge fields from multiple fragments by joining their values with \n
@@ -173,7 +172,7 @@ def describe_suite(suite_dir, fields, include_facet, output_format):
     return headers + fields, rows
 
 
-def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
+def extract_info(file_name, fields):
     """
     Read a yaml file and return a dictionary mapping the fields to the
     values of those fields in the file.
@@ -195,10 +194,10 @@ def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
     message and raises ParseError.
     """
     empty_result = {f: '' for f in fields}
-    if _isdir(file_name) or not file_name.endswith('.yaml'):
+    if os.path.isdir(file_name) or not file_name.endswith('.yaml'):
         return empty_result
 
-    with _open(file_name, 'r') as f:
+    with open(file_name, 'r') as f:
         parsed = yaml.load(f)
 
     if not isinstance(parsed, dict):
@@ -229,8 +228,7 @@ def path_relative_to_suites(path):
 
 
 def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
-                   _listdir=os.listdir, _isdir=os.path.isdir,
-                   _open=open, output_format='plain'):
+                   output_format='plain'):
     """
     Gather fields from all files and directories in cur_dir.
     Returns a list of strings for each path containing:
@@ -241,7 +239,7 @@ def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
     3) the values of the provided fields in the path ('' is used for
        missing values) in the same order as the provided fields
     """
-    files = sorted(_listdir(cur_dir))
+    files = sorted(os.listdir(cur_dir))
     has_yamls = any([x.endswith('.yaml') for x in files])
     facet = os.path.basename(cur_dir) if has_yamls else ''
     for i, f in enumerate(files):
@@ -252,7 +250,7 @@ def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
         else:
             file_pad = '├── '
             dir_pad = '│   '
-        info = extract_info(path, fields, _isdir, _open)
+        info = extract_info(path, fields)
         tree_node = prefix + file_pad + f
         if output_format != 'plain':
             tree_node = path_relative_to_suites(path)
@@ -261,8 +259,7 @@ def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
         if include_facet:
             row.append(facet)
         rows.append(row + meta)
-        if _isdir(path):
+        if os.path.isdir(path):
             tree_with_info(path, fields, include_facet,
-                           prefix + dir_pad, rows,
-                           _listdir, _isdir, _open, output_format)
+                           prefix + dir_pad, rows, output_format)
     return rows

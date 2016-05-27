@@ -5,6 +5,7 @@ from fake_fs import make_fake_fstools
 from teuthology.describe_tests import (tree_with_info, extract_info,
                                        get_combinations)
 from teuthology.exceptions import ParseError
+from mock import MagicMock, patch
 
 realistic_fs = {
     'basic': {
@@ -105,9 +106,33 @@ expected_rbd_features = [
 
 class TestDescribeTests(object):
 
+    patchpoints = [
+        'os.path.exists',
+        'os.listdir',
+        'os.path.isfile',
+        'os.path.isdir',
+        '__builtin__.open',
+    ]
+    fake_fns = make_fake_fstools(realistic_fs)
+
     def setup(self):
-        self.fake_exists, self.fake_listdir, self.fake_isfile,
-        self.fake_isdir, self.fake_open = make_fake_fstools(realistic_fs)
+        self.mocks = dict()
+        self.patchers = dict()
+        klass = self.__class__
+        for ppoint, fn in zip(klass.patchpoints, klass.fake_fns):
+            mockobj = MagicMock()
+            patcher = patch(ppoint, mockobj)
+            mockobj.side_effect = fn
+            patcher.start()
+            self.mocks[ppoint] = mockobj
+            self.patchers[ppoint] = patcher
+
+    def stop_patchers(self):
+        for patcher in self.patchers.values():
+            patcher.stop()
+
+    def teardown(self):
+        self.stop_patchers()
 
     @staticmethod
     def assert_expected_combo_headers(headers):
@@ -115,94 +140,65 @@ class TestDescribeTests(object):
                            sorted(set(filter(bool, expected_facets))))
 
     def test_no_filters(self):
-        rows = tree_with_info('basic', [], False, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', [], False, '', [])
         assert rows == [[x] for x in expected_tree]
 
     def test_single_filter(self):
-        rows = tree_with_info('basic', ['desc'], False, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', ['desc'], False, '', [])
         assert rows == map(list, zip(expected_tree, expected_desc))
 
-        rows = tree_with_info('basic', ['rbd_features'], False, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', ['rbd_features'], False, '', [])
         assert rows == map(list, zip(expected_tree, expected_rbd_features))
 
     def test_single_filter_with_facets(self):
-        rows = tree_with_info('basic', ['desc'], True, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', ['desc'], True, '', [])
         assert rows == map(list, zip(expected_tree, expected_facets,
                                      expected_desc))
 
-        rows = tree_with_info('basic', ['rbd_features'], True, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', ['rbd_features'], True, '', [])
         assert rows == map(list, zip(expected_tree, expected_facets,
                                      expected_rbd_features))
 
     def test_no_matching(self):
-        rows = tree_with_info('basic', ['extra'], False, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', ['extra'], False, '', [])
         assert rows == map(list, zip(expected_tree, [''] * len(expected_tree)))
 
-        rows = tree_with_info('basic', ['extra'], True, '', [],
-                              self.fake_listdir, self.fake_isdir,
-                              self.fake_open)
+        rows = tree_with_info('basic', ['extra'], True, '', [])
         assert rows == map(list, zip(expected_tree, expected_facets,
                                      [''] * len(expected_tree)))
 
     def test_multiple_filters(self):
-        rows = tree_with_info('basic', ['desc', 'rbd_features'], False,
-                              '', [], self.fake_listdir,
-                              self.fake_isdir, self.fake_open)
+        rows = tree_with_info('basic', ['desc', 'rbd_features'], False, '', [])
         assert rows == map(list, zip(expected_tree,
                                      expected_desc,
                                      expected_rbd_features))
 
-        rows = tree_with_info('basic', ['rbd_features', 'desc'], False,
-                              '', [], self.fake_listdir,
-                              self.fake_isdir, self.fake_open)
+        rows = tree_with_info('basic', ['rbd_features', 'desc'], False, '', [])
         assert rows == map(list, zip(expected_tree,
                                      expected_rbd_features,
                                      expected_desc))
 
     def test_multiple_filters_with_facets(self):
-        rows = tree_with_info('basic', ['desc', 'rbd_features'], True,
-                              '', [], self.fake_listdir,
-                              self.fake_isdir, self.fake_open)
+        rows = tree_with_info('basic', ['desc', 'rbd_features'], True, '', [])
         assert rows == map(list, zip(expected_tree,
                                      expected_facets,
                                      expected_desc,
                                      expected_rbd_features))
 
-        rows = tree_with_info('basic', ['rbd_features', 'desc'], True,
-                              '', [], self.fake_listdir,
-                              self.fake_isdir, self.fake_open)
+        rows = tree_with_info('basic', ['rbd_features', 'desc'], True, '', [])
         assert rows == map(list, zip(expected_tree,
                                      expected_facets,
                                      expected_rbd_features,
                                      expected_desc))
 
     def test_combinations_only_facets(self):
-        headers, rows = get_combinations('basic', [], None, 1, None,
-                                         None, True,
-                                         self.fake_isdir, self.fake_open,
-                                         self.fake_isfile,
-                                         self.fake_listdir)
+        headers, rows = get_combinations('basic', [], None, 1, None, None, True)
         self.assert_expected_combo_headers(headers)
         assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
     def test_combinations_desc_features(self):
         headers, rows = get_combinations('basic', ['desc', 'rbd_features'],
-                                         None, 1, None, None, False,
-                                         self.fake_isdir, self.fake_open,
-                                         self.fake_isfile,
-                                         self.fake_listdir)
+                                         None, 1, None, None, False)
         assert headers == ['desc', 'rbd_features']
         descriptions = '\n'.join([
             'install ceph',
@@ -213,39 +209,40 @@ class TestDescribeTests(object):
 
     def test_combinations_filter_in(self):
         headers, rows = get_combinations('basic', [], None, 0, ['old_format'],
-                                         None, True,
-                                         self.fake_isdir, self.fake_open,
-                                         self.fake_isfile, self.fake_listdir)
+                                         None, True)
         self.assert_expected_combo_headers(headers)
         assert rows == [['basic', 'install', 'fixed-1',
                          'rbd_api_tests_old_format']]
 
     def test_combinations_filter_out(self):
         headers, rows = get_combinations('basic', [], None, 0, None,
-                                         ['old_format'], True,
-                                         self.fake_isdir, self.fake_open,
-                                         self.fake_isfile, self.fake_listdir)
+                                         ['old_format'], True)
         self.assert_expected_combo_headers(headers)
         assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
 
-def test_extract_info_dir():
+@patch('__builtin__.open')
+@patch('os.path.isdir')
+def test_extract_info_dir(m_isdir, m_open):
     simple_fs = {'a': {'b.yaml': 'meta: [{foo: c}]'}}
-    _, _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
-    info = extract_info('a', [], fake_isdir, fake_open)
+    _, _, _, m_isdir.side_effect, m_open.side_effect = \
+        make_fake_fstools(simple_fs)
+    info = extract_info('a', [])
     assert info == {}
 
-    info = extract_info('a', ['foo', 'bar'], fake_isdir, fake_open)
+    info = extract_info('a', ['foo', 'bar'])
     assert info == {'foo': '', 'bar': ''}
 
-    info = extract_info('a/b.yaml', ['foo', 'bar'], fake_isdir, fake_open)
+    info = extract_info('a/b.yaml', ['foo', 'bar'])
     assert info == {'foo': 'c', 'bar': ''}
 
 
-def check_parse_error(fs):
-    _, _, _, fake_isdir, fake_open = make_fake_fstools(fs)
+@patch('__builtin__.open')
+@patch('os.path.isdir')
+def check_parse_error(fs, m_isdir, m_open):
+    _, _, _, m_isdir.side_effect, m_open.side_effect = make_fake_fstools(fs)
     with pytest.raises(ParseError):
-        a = extract_info('a.yaml', ['a'], fake_isdir, fake_open)
+        a = extract_info('a.yaml', ['a'])
         raise Exception(str(a))
 
 
@@ -261,8 +258,11 @@ def test_extract_info_not_a_dict():
     check_parse_error({'a.yaml': 'meta: [[a, b]]'})
 
 
-def test_extract_info_empty_file():
+@patch('__builtin__.open')
+@patch('os.path.isdir')
+def test_extract_info_empty_file(m_isdir, m_open):
     simple_fs = {'a.yaml': ''}
-    _, _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
-    info = extract_info('a.yaml', [], fake_isdir, fake_open)
+    _, _, _, m_isdir.side_effect, m_open.side_effect = \
+        make_fake_fstools(simple_fs)
+    info = extract_info('a.yaml', [])
     assert info == {}
