@@ -20,6 +20,9 @@
       feature enable              Enable the specified image feature.
       flatten                     Fill clone with parent data (make it
                                   independent).
+      group create                Create a consistency group.
+      group list (group ls)       List rbd consistency groups.
+      group remove (group rm)     Delete a consistency group.
       image-meta get              Image metadata get the value associated with
                                   the key.
       image-meta list             Image metadata list keys with values.
@@ -399,6 +402,44 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --no-progress        disable progress output
+  
+  rbd help group create
+  usage: rbd group create [--pool <pool>] [--group <group>] 
+                          <group-spec> 
+  
+  Create a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+  
+  rbd help group list
+  usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 
+  
+  List rbd consistency groups.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help group remove
+  usage: rbd group remove [--pool <pool>] [--group <group>] 
+                          <group-spec> 
+  
+  Delete a consistency group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--image <image>] 

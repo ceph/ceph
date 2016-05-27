@@ -641,6 +641,11 @@ CEPH_RBD_API int rbd_mirror_image_get_status(rbd_image_t image,
                                              rbd_mirror_image_status_t *mirror_image_status,
                                              size_t status_size);
 
+// RBD consistency groups support functions
+CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);
+CEPH_RBD_API int rbd_group_remove(rados_ioctx_t p, const char *name);
+CEPH_RBD_API int rbd_group_list(rados_ioctx_t p, char *names, size_t *size);
+
 #ifdef __cplusplus
 }
 #endif
