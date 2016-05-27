@@ -877,7 +877,6 @@ set(osd_srcs
   osd/OSDCap.cc
   osd/Watch.cc
   osd/ClassHandler.cc
-  osd/OpRequest.cc
   common/TrackedOp.cc
   osd/SnapMapper.cc
   osd/ScrubStore.cc
