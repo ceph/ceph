@@ -20,6 +20,9 @@ public:
 
     for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
          it != m_trimmers.end(); ++it) {
+      C_SaferCond ctx;
+      (*it)->shut_down(&ctx);
+      ASSERT_EQ(0, ctx.wait());
       delete *it;
     }
     RadosTestFixture::TearDown();

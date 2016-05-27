@@ -36,7 +36,7 @@ public:
 
   void prefetch();
   void prefetch_and_watch(double interval);
-  void unwatch();
+  void shut_down(Context *on_finish);
 
   bool try_pop_front(Entry *entry, uint64_t *commit_tid);
 
@@ -79,6 +79,10 @@ private:
     uint64_t object_num;
     C_Watch(JournalPlayer *player, uint64_t object_num)
       : player(player), object_num(object_num) {
+      player->m_async_op_tracker.start_op();
+    }
+    virtual ~C_Watch() {
+      player->m_async_op_tracker.finish_op();
     }
 
     virtual void finish(int r) override {
@@ -105,6 +109,7 @@ private:
   WatchStep m_watch_step = WATCH_STEP_FETCH_CURRENT;
   bool m_watch_prune_active_tag = false;
 
+  bool m_shut_down = false;
   bool m_handler_notified = false;
 
   ObjectNumbers m_fetch_object_numbers;

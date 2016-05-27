@@ -11,6 +11,7 @@
 #include "gtest/gtest.h"
 #include "test/journal/RadosTestFixture.h"
 #include <list>
+#include <boost/scope_exit.hpp>
 
 class TestJournalPlayer : public RadosTestFixture {
 public:
@@ -142,6 +143,11 @@ TEST_F(TestJournalPlayer, Prefetch) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
   ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
@@ -183,6 +189,11 @@ TEST_F(TestJournalPlayer, PrefetchSkip) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
   ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
@@ -213,6 +224,11 @@ TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
   ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
@@ -248,6 +264,11 @@ TEST_F(TestJournalPlayer, PrefetchMultipleTags) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 120));
   ASSERT_EQ(0, write_entry(oid, 1, 234, 121));
@@ -282,6 +303,11 @@ TEST_F(TestJournalPlayer, PrefetchCorruptSequence) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 120));
   ASSERT_EQ(0, write_entry(oid, 1, 234, 121));
@@ -311,6 +337,11 @@ TEST_F(TestJournalPlayer, PrefetchMissingSequence) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, metadata->set_active_set(1));
   ASSERT_EQ(0, write_entry(oid, 0, 2, 852));
@@ -356,6 +387,11 @@ TEST_F(TestJournalPlayer, PrefetchLargeMissingSequence) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, metadata->set_active_set(2));
   ASSERT_EQ(0, write_entry(oid, 0, 0, 0));
@@ -387,6 +423,11 @@ TEST_F(TestJournalPlayer, PrefetchBlockedNewTag) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 0, 0));
   ASSERT_EQ(0, write_entry(oid, 1, 0, 1));
@@ -421,6 +462,11 @@ TEST_F(TestJournalPlayer, PrefetchStaleEntries) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 1, 0, 1));
   ASSERT_EQ(0, write_entry(oid, 1, 0, 3));
@@ -452,6 +498,11 @@ TEST_F(TestJournalPlayer, PrefetchUnexpectedTag) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 120));
   ASSERT_EQ(0, write_entry(oid, 1, 235, 121));
@@ -484,6 +535,11 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
 
@@ -518,6 +574,11 @@ TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
   ASSERT_EQ(0, metadata->set_active_set(2));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 234, 122));
   ASSERT_EQ(0, write_entry(oid, 1, 234, 123));
@@ -565,6 +626,11 @@ TEST_F(TestJournalPlayer, ImbalancedJournal) {
   metadata->set_minimum_set(2);
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 8, 300, 0));
   ASSERT_EQ(0, write_entry(oid, 8, 301, 0));
@@ -607,6 +673,11 @@ TEST_F(TestJournalPlayer, LiveReplayLaggyAppend) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 0, 0));
   ASSERT_EQ(0, write_entry(oid, 1, 0, 1));
@@ -652,6 +723,11 @@ TEST_F(TestJournalPlayer, LiveReplayMissingSequence) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 0, 2, 852));
   ASSERT_EQ(0, write_entry(oid, 0, 2, 856));
@@ -702,6 +778,11 @@ TEST_F(TestJournalPlayer, LiveReplayLargeMissingSequence) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, metadata->set_active_set(2));
   ASSERT_EQ(0, write_entry(oid, 0, 0, 0));
@@ -733,6 +814,11 @@ TEST_F(TestJournalPlayer, LiveReplayBlockedNewTag) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   C_SaferCond ctx1;
   cls::journal::Tag tag1;
@@ -787,6 +873,11 @@ TEST_F(TestJournalPlayer, LiveReplayStaleEntries) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, write_entry(oid, 1, 0, 1));
   ASSERT_EQ(0, write_entry(oid, 1, 0, 3));
@@ -818,6 +909,11 @@ TEST_F(TestJournalPlayer, LiveReplayRefetchRemoveEmpty) {
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
 
   ASSERT_EQ(0, metadata->set_active_set(1));
   ASSERT_EQ(0, write_entry(oid, 0, 0, 0));
@@ -842,5 +938,43 @@ TEST_F(TestJournalPlayer, LiveReplayRefetchRemoveEmpty) {
   expected_entries = {
     create_entry(1, 1)};
   ASSERT_EQ(expected_entries, entries);
+}
+
+TEST_F(TestJournalPlayer, PrefechShutDown) {
+  std::string oid = get_temp_oid();
+
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  ASSERT_EQ(0, client_commit(oid, {}));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+
+  journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
+  player->prefetch();
+}
+
+TEST_F(TestJournalPlayer, LiveReplayShutDown) {
+  std::string oid = get_temp_oid();
+
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  ASSERT_EQ(0, client_commit(oid, {}));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+
+  journal::JournalPlayer *player = create_player(oid, metadata);
+  BOOST_SCOPE_EXIT_ALL( (player) ) {
+    C_SaferCond unwatch_ctx;
+    player->shut_down(&unwatch_ctx);
+    ASSERT_EQ(0, unwatch_ctx.wait());
+  };
+  player->prefetch_and_watch(0.25);
 }
 

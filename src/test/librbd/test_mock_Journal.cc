@@ -20,6 +20,8 @@
 #include <list>
 #include <boost/scope_exit.hpp>
 
+#define dout_subsys ceph_subsys_rbd
+
 namespace librbd {
 
 namespace {
@@ -148,6 +150,11 @@ public:
                   .WillOnce(CompleteContext(r, NULL));
   }
 
+  void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, shut_down(_))
+                  .WillOnce(CompleteContext(0, NULL));
+  }
+
   void expect_get_max_append_size(::journal::MockJournaler &mock_journaler,
                                   uint32_t max_size) {
     EXPECT_CALL(mock_journaler, get_max_append_size())
@@ -193,7 +200,8 @@ public:
   }
 
   void expect_stop_replay(::journal::MockJournaler &mock_journaler) {
-    EXPECT_CALL(mock_journaler, stop_replay());
+    EXPECT_CALL(mock_journaler, stop_replay(_))
+                  .WillOnce(CompleteContext(0, NULL));
   }
 
   void expect_shut_down_replay(MockJournalImageCtx &mock_image_ctx,
@@ -310,10 +318,18 @@ public:
     Contexts commit_contexts;
     std::swap(commit_contexts, m_commit_contexts);
 
+    derr << "SHUT DOWN REPLAY START" << dendl;
     for (auto ctx : commit_contexts) {
       mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
     }
+
+    on_flush = new FunctionContext([on_flush](int r) {
+        derr << "FLUSH START" << dendl;
+        on_flush->complete(r);
+        derr << "FLUSH FINISH" << dendl;
+      });
     mock_image_ctx.image_ctx->op_work_queue->queue(on_flush, 0);
+    derr << "SHUT DOWN REPLAY FINISH" << dendl;
   }
 
   void open_journal(MockJournalImageCtx &mock_image_ctx,
@@ -400,6 +416,7 @@ TEST_F(TestMockJournal, StateTransitions) {
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, 0);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(0, when_close(mock_journal));
 }
 
@@ -418,6 +435,7 @@ TEST_F(TestMockJournal, InitError) {
   ::journal::MockJournaler mock_journaler;
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, -EINVAL);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(-EINVAL, when_open(mock_journal));
 }
 
@@ -438,6 +456,7 @@ TEST_F(TestMockJournal, GetCachedClientError) {
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, -ENOENT);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(-ENOENT, when_open(mock_journal));
 }
 
@@ -459,6 +478,7 @@ TEST_F(TestMockJournal, GetTagsError) {
   expect_get_max_append_size(mock_journaler, 1 << 16);
   expect_get_journaler_cached_client(mock_journaler, 0);
   expect_get_journaler_tags(mock_image_ctx, mock_journaler, -EBADMSG);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(-EBADMSG, when_open(mock_journal));
 }
 
@@ -488,6 +508,7 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   MockJournalReplay mock_journal_replay;
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0, true);
+  expect_shut_down_journaler(mock_journaler);
 
   // replay failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
@@ -506,6 +527,7 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, 0);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(0, when_close(mock_journal));
 }
 
@@ -540,6 +562,7 @@ TEST_F(TestMockJournal, FlushReplayError) {
   expect_try_pop_front(mock_journaler, false, mock_replay_entry);
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, -EINVAL);
+  expect_shut_down_journaler(mock_journaler);
 
   // replay flush failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
@@ -558,6 +581,7 @@ TEST_F(TestMockJournal, FlushReplayError) {
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, 0);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(0, when_close(mock_journal));
 }
 
@@ -591,6 +615,7 @@ TEST_F(TestMockJournal, StopError) {
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, -EINVAL);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(-EINVAL, when_close(mock_journal));
 }
 
@@ -631,6 +656,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   expect_try_pop_front(mock_journaler, false, mock_replay_entry);
   expect_stop_replay(mock_journaler);
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0, true);
+  expect_shut_down_journaler(mock_journaler);
 
   // replay write-to-disk failure should result in replay-restart
   expect_construct_journaler(mock_journaler);
@@ -670,6 +696,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   ASSERT_EQ(0, ctx.wait());
 
   expect_stop_append(mock_journaler, 0);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(0, when_close(mock_journal));
 }
 
@@ -710,6 +737,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
                     InvokeWithoutArgs(this, &TestMockJournal::wake_up)));
 
   // replay write-to-disk failure should result in replay-restart
+  expect_shut_down_journaler(mock_journaler);
   expect_construct_journaler(mock_journaler);
   expect_init_journaler(mock_journaler, 0);
   expect_get_max_append_size(mock_journaler, 1 << 16);
@@ -750,6 +778,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   ASSERT_EQ(0, ctx.wait());
 
   expect_stop_append(mock_journaler, 0);
+  expect_shut_down_journaler(mock_journaler);
   ASSERT_EQ(0, when_close(mock_journal));
 }
 
@@ -793,6 +822,8 @@ TEST_F(TestMockJournal, EventAndIOCommitOrder) {
   on_journal_safe2->complete(0);
   ictx->op_work_queue->drain();
   ASSERT_EQ(0, event_ctx.wait());
+
+  expect_shut_down_journaler(mock_journaler);
 }
 
 TEST_F(TestMockJournal, AppendWriteEvent) {
@@ -829,6 +860,8 @@ TEST_F(TestMockJournal, AppendWriteEvent) {
   expect_future_committed(mock_journaler);
   mock_journal.commit_io_event(1U, 0);
   ictx->op_work_queue->drain();
+
+  expect_shut_down_journaler(mock_journaler);
 }
 
 TEST_F(TestMockJournal, EventCommitError) {
@@ -866,6 +899,8 @@ TEST_F(TestMockJournal, EventCommitError) {
   C_SaferCond flush_ctx;
   mock_journal.flush_event(1U, &flush_ctx);
   ASSERT_EQ(-EINVAL, flush_ctx.wait());
+
+  expect_shut_down_journaler(mock_journaler);
 }
 
 TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
@@ -904,6 +939,8 @@ TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
 
   // cache should receive the error if waiting
   ASSERT_EQ(-EINVAL, flush_ctx.wait());
+
+  expect_shut_down_journaler(mock_journaler);
 }
 
 TEST_F(TestMockJournal, IOCommitError) {
@@ -930,6 +967,8 @@ TEST_F(TestMockJournal, IOCommitError) {
   on_journal_safe->complete(0);
   ictx->op_work_queue->drain();
   mock_journal.commit_io_event(1U, -EINVAL);
+
+  expect_shut_down_journaler(mock_journaler);
 }
 
 TEST_F(TestMockJournal, FlushCommitPosition) {
@@ -950,6 +989,8 @@ TEST_F(TestMockJournal, FlushCommitPosition) {
   C_SaferCond ctx;
   mock_journal.flush_commit_position(&ctx);
   ASSERT_EQ(0, ctx.wait());
+
+  expect_shut_down_journaler(mock_journaler);
 }
 
 } // namespace librbd
