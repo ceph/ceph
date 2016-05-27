@@ -6,7 +6,7 @@ from mock import patch, Mock, DEFAULT, MagicMock
 from fake_fs import make_fake_fstools
 from teuthology import suite
 from scripts.suite import main
-from teuthology.config import config
+from teuthology.config import config, YamlConfig
 from teuthology.orchestra.opsys import OS
 
 import os
@@ -15,6 +15,40 @@ import tempfile
 import time
 import random
 import requests     # to mock a Response
+
+
+def get_fake_time_and_sleep():
+    m_time = Mock()
+    m_time.return_value = time.time()
+
+    def m_time_side_effect():
+        # Fake the slow passage of time
+        m_time.return_value += 0.1
+        return m_time.return_value
+    m_time.side_effect = m_time_side_effect
+
+    def f_sleep(seconds):
+        m_time.return_value += seconds
+    m_sleep = Mock(wraps=f_sleep)
+    return m_time, m_sleep
+
+
+def setup_module():
+    global m_time
+    global m_sleep
+    m_time, m_sleep = get_fake_time_and_sleep()
+    global patcher_time_sleep
+    patcher_time_sleep = patch.multiple(
+        'teuthology.suite.time',
+        time=m_time,
+        sleep=m_sleep,
+    )
+    patcher_time_sleep.start()
+
+
+def teardown_module():
+    patcher_time_sleep.stop()
+
 
 @pytest.fixture
 def git_repository(request):
@@ -33,24 +67,8 @@ def git_repository(request):
     request.addfinalizer(fin)
     return d
 
+
 class TestSuiteOffline(object):
-    def test_name_timestamp_passed(self):
-        stamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-        name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
-                                   'mtype', timestamp=stamp)
-        assert str(stamp) in name
-
-    def test_name_timestamp_not_passed(self):
-        stamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-        name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
-                                   'mtype')
-        assert str(stamp) in name
-
-    def test_name_user(self):
-        name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
-                                   'mtype', user='USER')
-        assert name.startswith('USER-')
-
     def test_substitute_placeholders(self):
         suite_hash = 'suite_hash'
         input_dict = dict(
@@ -176,6 +194,7 @@ class TestSuiteOffline(object):
         assert None == suite.git_ls_remote('ceph', 'nobranch')
         assert suite.git_ls_remote('ceph', 'master') is not None
 
+
 class TestFlavor(object):
     def test_get_install_task_flavor_bare(self):
         config = dict(
@@ -227,6 +246,41 @@ class TestFlavor(object):
         )
         assert suite.get_install_task_flavor(config) == 'notcmalloc'
 
+
+class TestRun(object):
+    klass = suite.Run
+
+    def setup(self):
+        self.args_dict = dict(
+            suite='suite',
+            suite_branch='suite_branch',
+            ceph_branch='ceph_branch',
+            ceph_sha1='ceph_sha1',
+            teuthology_branch='teuthology_branch',
+            kernel_branch=None,
+            kernel_flavor='kernel_flavor',
+            distro='ubuntu',
+            machine_type='machine_type',
+            base_yaml_paths=list(),
+        )
+        self.args = suite.YamlConfig.from_dict(self.args_dict)
+
+    @patch('teuthology.suite.fetch_repos')
+    def test_name(self, m_fetch_repos):
+        stamp = datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
+        with patch.object(suite.Run, 'create_initial_config',
+                          return_value=suite.JobConfig()):
+            name = suite.Run(self.args).name
+        assert str(stamp) in name
+
+    @patch('teuthology.suite.fetch_repos')
+    def test_name_user(self, m_fetch_repos):
+        self.args.user = 'USER'
+        with patch.object(suite.Run, 'create_initial_config',
+                          return_value=suite.JobConfig()):
+            name = suite.Run(self.args).name
+        assert name.startswith('USER-')
+
     @patch('teuthology.suite.git_branch_exists')
     @patch('teuthology.suite.package_version_for_hash')
     @patch('teuthology.suite.git_ls_remote')
@@ -245,13 +299,12 @@ class TestFlavor(object):
         ]
         m_package_version_for_hash.return_value = 'a_version'
         m_git_branch_exists.return_value = True
+        self.args.ceph_branch = 'ceph_sha1'
+        self.args.ceph_sha1 = None
         with pytest.raises(suite.ScheduleFailError):
-            suite.create_initial_config(
-                'suite', 'suite_branch', 'ceph_hash', None,
-                'teuth_branch', None, 'kernel_flavor', 'ubuntu',
-                'machine_type',
-            )
+            self.klass(self.args)
 
+    @patch('teuthology.suite.fetch_repos')
     @patch('requests.head')
     @patch('teuthology.suite.git_branch_exists')
     @patch('teuthology.suite.package_version_for_hash')
@@ -262,6 +315,7 @@ class TestFlavor(object):
         m_package_version_for_hash,
         m_git_branch_exists,
         m_requests_head,
+        m_fetch_repos,
     ):
         config.gitbuilder_host = 'example.com'
         m_package_version_for_hash.return_value = 'ceph_hash'
@@ -272,12 +326,9 @@ class TestFlavor(object):
         m_requests_head.return_value = resp
         # only one call to git_ls_remote in this case
         m_git_ls_remote.return_value = "suite_branch"
-        result = suite.create_initial_config(
-            'suite', 'suite_branch', 'ceph_branch', 'ceph_hash',
-            'teuth_branch', None, 'kernel_flavor', 'ubuntu', 'machine_type',
-        )
-        assert result.sha1 == 'ceph_hash'
-        assert result.branch == 'ceph_branch'
+        run = self.klass(self.args)
+        assert run.base_config.sha1 == 'ceph_sha1'
+        assert run.base_config.branch == 'ceph_branch'
 
     @patch('requests.head')
     @patch('teuthology.suite.git_branch_exists')
@@ -295,12 +346,10 @@ class TestFlavor(object):
         resp.reason = 'Not Found'
         resp.status_code = 404
         m_requests_head.return_value = resp
+        self.args.ceph_sha1 = 'ceph_hash_dne'
         with pytest.raises(suite.ScheduleFailError):
-            suite.create_initial_config(
-                'suite', 'suite_branch', 'ceph_branch', 'ceph_hash_dne',
-                'teuth_branch', None, 'kernel_flavor', 'ubuntu',
-                'machine_type',
-            )
+            self.klass(self.args)
+
 
 class TestMissingPackages(object):
     """
@@ -920,21 +969,6 @@ def test_git_branch_exists(m_check_output):
     assert True == suite.git_branch_exists('ceph', 'master')
 
 
-def get_fake_time_and_sleep():
-    m_time = Mock()
-    m_time.return_value = time.time()
-
-    def m_time_side_effect():
-        # Fake the slow passage of time
-        m_time.return_value += 0.1
-        return m_time.return_value
-    m_time.side_effect = m_time_side_effect
-
-    def m_sleep(seconds):
-        m_time.return_value += seconds
-    return m_time, m_sleep
-
-
 @patch.object(suite.ResultsReporter, 'get_jobs')
 def test_wait_success(m_get_jobs, caplog):
     results = [
@@ -955,7 +989,7 @@ def test_wait_success(m_get_jobs, caplog):
         else:
             return final
     m_get_jobs.side_effect = get_jobs
-    suite.WAIT_PAUSE = 1
+    suite.Run.WAIT_PAUSE = 1
 
     in_progress = deepcopy(results)
     assert 0 == suite.wait('name', 1, 'http://UPLOAD_URL')
@@ -965,12 +999,7 @@ def test_wait_success(m_get_jobs, caplog):
 
     in_progress = deepcopy(results)
     in_progress = deepcopy(results)
-    m_time, m_sleep = get_fake_time_and_sleep()
-    with patch.multiple(suite,
-                        time=m_time,
-                        sleep=m_sleep,
-                        ):
-        assert 0 == suite.wait('name', 1, None)
+    assert 0 == suite.wait('name', 1, None)
     assert m_get_jobs.called_with('name', fields=['job_id', 'status'])
     assert 0 == len(in_progress)
     assert 'fail http://URL2' in caplog.text()
@@ -984,27 +1013,22 @@ def test_wait_fails(m_get_jobs):
     def get_jobs(name, **kwargs):
         return results.pop(0)
     m_get_jobs.side_effect = get_jobs
-    suite.WAIT_PAUSE = 1
-    suite.WAIT_MAX_JOB_TIME = 1
-    m_time, m_sleep = get_fake_time_and_sleep()
-    with patch.multiple(suite,
-                        time=m_time,
-                        sleep=m_sleep,
-                        ):
-        with pytest.raises(suite.WaitException) as error:
-            suite.wait('name', 1, None)
-            assert 'abc' in str(error)
+    suite.Run.WAIT_PAUSE = 1
+    suite.Run.WAIT_MAX_JOB_TIME = 1
+    with pytest.raises(suite.WaitException) as error:
+        suite.wait('name', 1, None)
+        assert 'abc' in str(error)
+
 
 class TestSuiteMain(object):
-
     def test_main(self):
         suite_name = 'SUITE'
         throttle = '3'
         machine_type = 'burnupi'
 
-        def prepare_and_schedule(**kwargs):
-            assert kwargs['job_config']['suite'] == suite_name
-            assert kwargs['throttle'] == throttle
+        def prepare_and_schedule(obj):
+            assert obj.base_config.suite == suite_name
+            assert obj.args.throttle == throttle
 
         def fake_str(*args, **kwargs):
             return 'fake'
@@ -1015,15 +1039,19 @@ class TestSuiteMain(object):
         with patch.multiple(
                 suite,
                 fetch_repos=DEFAULT,
-                prepare_and_schedule=prepare_and_schedule,
                 package_version_for_hash=fake_str,
                 git_branch_exists=fake_bool,
                 git_ls_remote=fake_str,
                 ):
-            main(['--suite', suite_name,
-                  '--throttle', throttle,
-                  '--machine-type', machine_type,
-                  ])
+            with patch.multiple(
+                suite.Run,
+                prepare_and_schedule=prepare_and_schedule,
+            ):
+                main([
+                    '--suite', suite_name,
+                    '--throttle', throttle,
+                    '--machine-type', machine_type,
+                ])
 
     def test_schedule_suite(self):
         suite_name = 'noop'
@@ -1034,7 +1062,6 @@ class TestSuiteMain(object):
                 suite,
                 fetch_repos=DEFAULT,
                 teuthology_schedule=DEFAULT,
-                sleep=DEFAULT,
                 get_arch=lambda x: 'x86_64',
                 git_ls_remote=lambda *args: '12345',
                 package_version_for_hash=DEFAULT,
@@ -1045,18 +1072,16 @@ class TestSuiteMain(object):
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
-            m['sleep'].assert_called_with(int(throttle))
+            m_sleep.assert_called_with(int(throttle))
 
     def test_schedule_suite_noverify(self):
         suite_name = 'noop'
         throttle = '3'
         machine_type = 'burnupi'
-
         with patch.multiple(
                 suite,
                 fetch_repos=DEFAULT,
                 teuthology_schedule=DEFAULT,
-                sleep=DEFAULT,
                 get_arch=lambda x: 'x86_64',
                 get_gitbuilder_hash=DEFAULT,
                 git_ls_remote=lambda *args: '1234',
@@ -1067,5 +1092,5 @@ class TestSuiteMain(object):
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
-            m['sleep'].assert_called_with(int(throttle))
+            m_sleep.assert_called_with(int(throttle))
             m['get_gitbuilder_hash'].assert_not_called()
