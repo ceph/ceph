@@ -1750,7 +1750,7 @@ cdef class Ioctx(object):
         self.close()
         return False
 
-    def __del__(self):
+    def __dealloc__(self):
         self.close()
 
     def __track_completion(self, completion_obj):
