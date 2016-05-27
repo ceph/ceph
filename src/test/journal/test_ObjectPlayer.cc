@@ -262,14 +262,11 @@ TEST_F(TestObjectPlayer, Unwatch) {
   std::string oid = get_temp_oid();
   journal::ObjectPlayerPtr object = create_object(oid, 14);
 
-  Mutex mutex("lock");
-  Cond cond;
-  bool done = false;
-  int rval = 0;
-  C_SafeCond *ctx = new C_SafeCond(&mutex, &cond, &done, &rval);
-  object->watch(ctx, 600);
+  C_SaferCond watch_ctx;
+  object->watch(&watch_ctx, 600);
 
   usleep(200000);
-  ASSERT_FALSE(done);
+
   object->unwatch();
+  ASSERT_EQ(-ECANCELED, watch_ctx.wait());
 }
