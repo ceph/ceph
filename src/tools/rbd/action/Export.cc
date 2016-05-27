@@ -110,7 +110,9 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress)
     if (fd < 0) {
       return -errno;
     }
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   utils::ProgressContext pc("Exporting image", no_progress);

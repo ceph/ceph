@@ -3339,7 +3339,9 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
  
   if (replaying || m_disable_wbthrottle) {
     if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED) {
+#ifdef HAVE_POSIX_FADVISE
         posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
     }
   } else {
     wbthrottle.queue_wb(fd, oid, offset, len,

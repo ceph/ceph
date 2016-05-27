@@ -126,8 +126,9 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       assert(bdev_size >= 0);
       size = (uint64_t) bdev_size;
     }
-
+#ifdef HAVE_POSIX_FADVISE
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
   }
 
   uint64_t format;
