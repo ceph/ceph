@@ -3017,8 +3017,6 @@ int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool b
 
   result->clear();
 
-  uint64_t block_size = bdev->get_block_size();
-
   uint32_t l = blob->length;
   uint64_t ext_pos = 0;
   auto it = blob->extents.cbegin();
