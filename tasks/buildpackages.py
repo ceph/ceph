@@ -182,7 +182,7 @@ def task(ctx, config):
         openstack = OpenStack()
         openstack.set_provider()
         if openstack.provider == 'ovh':
-            select = '^(vps|eg)-'
+            select = '^(vps|hg)-.*ssd'
         else:
             select = ''
         network = openstack.net()
