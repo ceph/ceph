@@ -25,7 +25,7 @@ endif()
 #list(APPEND BABELTRACE_PATH_HINT ${MYPATH})
 
 find_path(BABELTRACE_INCLUDE_DIR
-          NAMES babeltrace/babeltrace.h babeltrace/ctf/events.h
+          NAMES babeltrace/babeltrace.h babeltrace/ctf/events.h babeltrace/ctf/iterator.h
           PATHS ${BABELTRACE_PATH_HINT}
           PATH_SUFFIXES include
           DOC "The Babeltrace include headers")

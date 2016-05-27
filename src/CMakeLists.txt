@@ -55,7 +55,6 @@ else(no_yasm)
     if(not_arch_x32)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
-      add_definitions("-DHAVE_GOOD_YASM_ELF64")
       execute_process(COMMAND yasm -f elf64 -i
         ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
         ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
@@ -64,7 +63,6 @@ else(no_yasm)
         OUTPUT_QUIET)
       if(NOT rc)
         set(HAVE_BETTER_YASM_ELF64 1)
-        add_definitions("-DHAVE_BETTER_YASM_ELF64")
         message(STATUS " yasm can also build the isa-l stuff")
       endif(NOT rc)
     else(not_arch_x32)
@@ -87,12 +85,93 @@ else()
   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
 endif()
 
+## detect sse support
+
+# create a tmp file with an empty main()
+set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
+file(WRITE ${sse_srcs} "void main() {}")
+
+# try each -msse flag
+try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse")
+try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse2")
+try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse3")
+try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-mssse3")
+try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse4.1")
+try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse4.2")
+try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-mfpu=neon")
+try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-march=armv8-a+simd")
+try_compile(ARM_CRC ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-march=armv8-a+crc")
+
+# clean up tmp file
+file(REMOVE ${sse_srcs})
+
+if(ARM_CRC)
+  set(HAVE_ARMV8_CRC 1)
+  set(ARM_CRC_FLAGS "-march=armv8-a+crc -DARCH_AARCH64")
+endif(ARM_CRC)
+
+if(ARM_NEON OR ARM_NEON2)
+  set(HAVE_NEON 1)
+  if(ARM_NEON)
+    set(ARM_NEON_FLAGS "-mfpu=neon -DARM_NEON")
+  else(ARM_NEON)
+    set(ARM_NEON_FLAGS "-march=armv8-a+simd -DARCH_AARCH64 -DARM_NEON")
+  endif(ARM_NEON)
+else(ARM_NEON OR ARM_NEON2)
+  message(STATUS "Skipping target ec_jerasure_neon & ec_shec_neon: Architecture not ARM")
+endif(ARM_NEON OR ARM_NEON2)
+
+if(INTEL_SSE)
+  set(HAVE_SSE 1)
+  set(SSE3_FLAGS "-msse")
+  if (INTEL_SSE2)
+    set(HAVE_SSE2 1)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -msse2")
+  endif (INTEL_SSE2)
+  if (INTEL_SSE3)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -msse3")
+  endif (INTEL_SSE3)
+  if (INTEL_SSSE3)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -mssse3")
+  endif (INTEL_SSSE3)
+else(INTEL_SSE)
+  message(STATUS "Skipping target ec_jerasure_sse3 & ec_shec_sse3: -msse not supported")
+endif(INTEL_SSE)
+
+if(INTEL_SSE4_1)
+  set(SSE4_FLAGS "${SSE3_FLAGS} -msse4.1")
+  if (INTEL_SSE4_2)
+    set(SSE4_FLAGS "${SSE4_FLAGS} -msse4.2")
+  endif (INTEL_SSE4_2)
+else(INTEL_SSE4_1)
+  message(STATUS "Skipping target ec_jerasure_sse4 & ec_shec_sse4: -msse4.1 not supported")
+endif(INTEL_SSE4_1)
+
 
 set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
 endif(${WITH_PROFILER})
+
+if(${ENABLE_COVERAGE})
+  find_program(HAVE_GCOV gcov)
+  if(NOT HAVE_GCOV)
+    message(FATAL_ERROR "Coverage Enabled but gcov Not Found")
+  endif(NOT HAVE_GCOV)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -O0")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
+  list(APPEND EXTRALIBS gcov)
+endif(${ENABLE_COVERAGE})
 
 if(USE_NSS)
   if(NSS_FOUND)
@@ -394,6 +473,12 @@ if(${HAVE_GPERFTOOLS})
   target_link_libraries(common profiler)
 endif(${HAVE_GPERFTOOLS})
 
+if(${HAVE_ARMV8_CRC})
+  add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
+  set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
+  target_link_libraries(common common_crc_aarch64)
+endif(${HAVE_ARMV8_CRC})
+
 add_library(common_utf8 STATIC common/utf8.c)
 
 target_link_libraries(common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES} ${EXECINFO_LIBRARIES})
@@ -659,11 +744,11 @@ add_dependencies(ceph-mon erasure_code_plugins)
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD
-if(${HAVE_XFS})
+if(${HAVE_LIBXFS})
   set(libos_xfs_srcs
     os/filestore/XfsFileStoreBackend.cc
     os/fs/XFS.cc)
-endif(${HAVE_XFS})
+endif(${HAVE_LIBXFS})
 set(libos_srcs
   os/ObjectStore.cc
   os/Transaction.cc
@@ -1231,10 +1316,6 @@ if(${WITH_RADOSGW})
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
     cls_replica_log_client cls_user_client curl global expat)
 
-  if(HAVE_BOOST_ASIO_COROUTINE)
-    target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
-  endif()
-
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
     rgw/rgw_loadgen_process.cc
@@ -1313,6 +1394,12 @@ if(${WITH_RADOSGW})
     curl expat global fcgi resolv)
   install(TARGETS radosgw-object-expirer DESTINATION bin)
 endif(${WITH_RADOSGW})
+
+# Now create a useable config.h
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
+  ${CMAKE_BINARY_DIR}/include/acconfig.h
+)
 
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart DEPENDS
