@@ -288,6 +288,16 @@ namespace librbd {
     int mirror_image_status_remove_down(librados::IoCtx *ioctx);
     void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 
+    // Consistency groups functions
+    int group_create(librados::IoCtx *ioctx, const std::string &oid);
+    int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
+		    const std::string &start, uint64_t max_return,
+		    map<string, string> *groups);
+    int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
+	           const std::string &name, const std::string &id);
+    int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
+		      const std::string &name, const std::string &id);
+
   } // namespace cls_client
 } // namespace librbd
 #endif // CEPH_LIBRBD_CLS_RBD_CLIENT_H
