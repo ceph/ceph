@@ -822,6 +822,57 @@ TEST_P(StoreTest, SimpleObjectTest) {
     ASSERT_TRUE(in.contents_equal(bl));
   }
   {
+    //verifying unaligned csums
+    std::string s1("1"), s2(0x1000, '2'), s3("00");
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(s1);
+      bl.append(s2);
+      t.truncate(cid, hoid, 0);
+      t.write(cid, hoid, 0x1000-1, bl.length(), bl);
+      cerr << "Write unaligned csum, stage 1" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+
+    bufferlist in, exp1, exp2, exp3;
+    exp1.append(s1);
+    exp2.append(s2);
+    exp3.append(s3);
+    r = store->read(cid, hoid, 0x1000-1, 1, in);
+    ASSERT_EQ(1, r);
+    ASSERT_TRUE(in.contents_equal(exp1));
+    in.clear();
+    r = store->read(cid, hoid, 0x1000, 0x1000, in);
+    ASSERT_EQ(0x1000, r);
+    ASSERT_TRUE(in.contents_equal(exp2));
+
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(s3);
+      t.write(cid, hoid, 1, bl.length(), bl);
+      cerr << "Write unaligned csum, stage 2" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    in.clear();
+    r = store->read(cid, hoid, 1, 2, in);
+    ASSERT_EQ(2, r);
+    ASSERT_TRUE(in.contents_equal(exp3));
+    in.clear();
+    r = store->read(cid, hoid, 0x1000-1, 1, in);
+    ASSERT_EQ(1, r);
+    ASSERT_TRUE(in.contents_equal(exp1));
+    in.clear();
+    r = store->read(cid, hoid, 0x1000, 0x1000, in);
+    ASSERT_EQ(0x1000, r);
+    ASSERT_TRUE(in.contents_equal(exp2));
+
+  }
+
+  {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove_collection(cid);
