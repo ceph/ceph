@@ -1461,7 +1461,7 @@ def task(ctx, config):
     subtasks += [
         lambda: cluster(ctx=ctx, config=dict(
             conf=config.get('conf', {}),
-            fs=config.get('fs', None),
+            fs=config.get('fs', 'xfs'),
             mkfs_options=config.get('mkfs_options', None),
             mount_options=config.get('mount_options', None),
             block_journal=config.get('block_journal', None),
