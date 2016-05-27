@@ -37,6 +37,7 @@ using namespace std;
 #include "net_handler.h"
 
 class AsyncMessenger;
+class Worker;
 
 static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 
@@ -182,7 +183,7 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, EventCenter *c, PerfCounters *p);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -210,8 +211,6 @@ class AsyncConnection : public Connection {
     policy.lossy = true;
   }
   
-  void release_worker();
-
  private:
   enum {
     STATE_NONE,
@@ -364,6 +363,7 @@ class AsyncConnection : public Connection {
   // used only by "read_until"
   uint64_t state_offset;
   NetHandler net;
+  Worker *worker;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 

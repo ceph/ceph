@@ -454,8 +454,6 @@ public:
    * See "deleted_conns"
    */
   int reap_dead();
-  
-  void release_worker(EventCenter* c);
 
   /**
    * @} // AsyncMessenger Internals
