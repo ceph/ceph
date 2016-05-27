@@ -1985,6 +1985,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     ObjectMap::ObjectMapIterator iter =
       store->get_omap_iterator(coll,
 			       ghobject_t(recovery_info.soid));
+    assert(iter);
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
 	 iter->next(false)) {
