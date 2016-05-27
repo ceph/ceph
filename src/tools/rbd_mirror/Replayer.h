@@ -85,7 +85,9 @@ private:
   std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
   std::unique_ptr<MirrorStatusWatchCtx> m_status_watcher;
 
+  std::string m_asok_hook_name;
   ReplayerAdminSocketHook *m_asok_hook;
+
   struct InitImageInfo {
     std::string global_id;
     std::string id;
