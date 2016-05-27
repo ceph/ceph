@@ -31,7 +31,7 @@ namespace librbd {
   int AioCompletion::wait_for_complete() {
     tracepoint(librbd, aio_wait_for_complete_enter, this);
     lock.Lock();
-    while (!done)
+    while (state != STATE_COMPLETE)
       cond.Wait(lock);
     lock.Unlock();
     tracepoint(librbd, aio_wait_for_complete_exit, 0);
@@ -95,7 +95,7 @@ namespace librbd {
       ictx->journal->commit_io_event(journal_tid, rval);
     }
 
-    done = true;
+    state = STATE_CALLBACK;
     if (complete_cb) {
       lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
@@ -108,6 +108,8 @@ namespace librbd {
       ictx->completed_reqs_lock.Unlock();
       ictx->event_socket.notify();
     }
+
+    state = STATE_COMPLETE;
     cond.Signal();
 
     // note: possible for image to be closed after op marked finished
@@ -129,7 +131,7 @@ namespace librbd {
     init_time(i, t);
 
     Mutex::Locker locker(lock);
-    if (!done && !async_op.started()) {
+    if (state == STATE_PENDING && !async_op.started()) {
       async_op.start_op(*ictx);
     }
   }
@@ -179,7 +181,7 @@ namespace librbd {
 
   void AioCompletion::associate_journal_event(uint64_t tid) {
     Mutex::Locker l(lock);
-    assert(!done);
+    assert(state == STATE_PENDING);
     journal_tid = tid;
   }
 
@@ -188,7 +190,7 @@ namespace librbd {
     bool done;
     {
       Mutex::Locker l(lock);
-      done = this->done;
+      done = this->state == STATE_COMPLETE;
     }
     tracepoint(librbd, aio_is_complete_exit, done);
     return done;
