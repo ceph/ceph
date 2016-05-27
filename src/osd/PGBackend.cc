@@ -432,7 +432,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
 		  << (known ? "known" : "best guess")
 		  << " data_digest 0x" << auth.digest << std::dec
 		  << " from auth shard " << auth_shard;
-      result.set_data_digest_mismatch();
+      result.set_data_digest_mismatch(known);
     }
   }
   if (auth.omap_digest_present && candidate.omap_digest_present) {
@@ -447,7 +447,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
 		  << (known ? "known" : "best guess")
 		  << " omap_digest 0x" << auth.omap_digest << std::dec
 		  << " from auth shard " << auth_shard;
-      result.set_omap_digest_mismatch();
+      result.set_omap_digest_mismatch(known);
     }
   }
   if (!candidate.stat_error && auth.size != candidate.size) {
@@ -460,7 +460,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
 		<< " != "
                 << (known ? "known" : "best guess")
                 << " size " << auth.size;
-    result.set_size_mismatch();
+    result.set_size_mismatch(known);
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();

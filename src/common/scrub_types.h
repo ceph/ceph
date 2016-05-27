@@ -27,6 +27,7 @@ inline void decode(librados::object_id_t& obj, bufferlist::iterator& bp) {
 
 struct shard_info_wrapper : public librados::shard_info_t {
 public:
+  err_t guessed;
   shard_info_wrapper() = default;
   shard_info_wrapper(const ScrubMap::object& object) {
     set_object(object);
@@ -35,20 +36,29 @@ public:
   void set_missing() {
     errors |= err_t::SHARD_MISSING;
   }
-  void set_omap_digest_mismatch() {
-    errors |= err_t::OMAP_DIGEST_MISMATCH;
+  void set_omap_digest_mismatch(bool known) {
+    if (known)
+      errors |= err_t::OMAP_DIGEST_MISMATCH;
+    else
+      guessed.errors |= err_t::OMAP_DIGEST_MISMATCH;
   }
   void set_omap_digest_mismatch_oi() {
     errors |= err_t::OMAP_DIGEST_MISMATCH_OI;
   }
-  void set_data_digest_mismatch() {
-    errors |= err_t::DATA_DIGEST_MISMATCH;
+  void set_data_digest_mismatch(bool known) {
+    if (known)
+      errors |= err_t::DATA_DIGEST_MISMATCH;
+    else
+      guessed.errors |= err_t::DATA_DIGEST_MISMATCH;
   }
   void set_data_digest_mismatch_oi() {
     errors |= err_t::DATA_DIGEST_MISMATCH_OI;
   }
-  void set_size_mismatch() {
-    errors |= err_t::SIZE_MISMATCH;
+  void set_size_mismatch(bool known) {
+    if (known)
+      errors |= err_t::SIZE_MISMATCH;
+    else
+      guessed.errors |= err_t::SIZE_MISMATCH;
   }
   void set_attr_missing() {
     errors |= err_t::ATTR_MISSING;

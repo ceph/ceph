@@ -93,6 +93,7 @@ void inconsistent_obj_wrapper::add_shard(const pg_shard_t& pgs,
                                          const shard_info_wrapper& shard)
 {
   errors |= shard.errors;
+  errors |= shard.guessed.errors;
   shards[pgs.osd] = shard;
 }
 
