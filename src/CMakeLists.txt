@@ -953,7 +953,7 @@ if(${WITH_MDS})
   add_library(mds ${mds_srcs}
     $<TARGET_OBJECTS:heap_profiler_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(mds ${ALLOC_LIBS} osdc)
+  target_link_libraries(mds ${ALLOC_LIBS} osdc common)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs}
