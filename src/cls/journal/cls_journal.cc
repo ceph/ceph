@@ -279,16 +279,18 @@ int find_min_commit_position(cls_method_context_t hctx,
     for(std::set<cls::journal::Client>::iterator it = batch.begin();
         it != batch.end(); ++it) {
       cls::journal::ObjectSetPosition object_set_position = (*it).commit_position;
-      if (!object_set_position.object_positions.empty()) {
-        cls::journal::ObjectPosition first = object_set_position.object_positions.front();
+      if (object_set_position.object_positions.empty()) {
+	*minset = cls::journal::ObjectSetPosition();
+	break;
+      }
+      cls::journal::ObjectPosition first = object_set_position.object_positions.front();
 
-        // least tag_tid (or least entry_tid for matching tag_tid)
-        if (!valid || (tag_tid > first.tag_tid) || ((tag_tid == first.tag_tid) && (entry_tid > first.entry_tid))) {
-          tag_tid = first.tag_tid;
-          entry_tid = first.entry_tid;
-          *minset = cls::journal::ObjectSetPosition(object_set_position);
-          valid = true;
-        }
+      // least tag_tid (or least entry_tid for matching tag_tid)
+      if (!valid || (tag_tid > first.tag_tid) || ((tag_tid == first.tag_tid) && (entry_tid > first.entry_tid))) {
+	tag_tid = first.tag_tid;
+	entry_tid = first.entry_tid;
+	*minset = cls::journal::ObjectSetPosition(object_set_position);
+	valid = true;
       }
     }
 
