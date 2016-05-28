@@ -63,6 +63,7 @@
 CLUSTER1=cluster1
 CLUSTER2=cluster2
 POOL=mirror
+PARENT_POOL=mirror_parent
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
 
@@ -134,12 +135,18 @@ setup()
 
     ceph --cluster ${CLUSTER1} osd pool create ${POOL} 64 64
     ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
+    ceph --cluster ${CLUSTER1} osd pool create ${PARENT_POOL} 64 64
+    ceph --cluster ${CLUSTER2} osd pool create ${PARENT_POOL} 64 64
 
     rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} pool
+    rbd --cluster ${CLUSTER1} mirror pool enable ${PARENT_POOL} image
+    rbd --cluster ${CLUSTER2} mirror pool enable ${PARENT_POOL} image
 
     rbd --cluster ${CLUSTER1} mirror pool peer add ${POOL} ${CLUSTER2}
     rbd --cluster ${CLUSTER2} mirror pool peer add ${POOL} ${CLUSTER1}
+    rbd --cluster ${CLUSTER1} mirror pool peer add ${PARENT_POOL} ${CLUSTER2}
+    rbd --cluster ${CLUSTER2} mirror pool peer add ${PARENT_POOL} ${CLUSTER1}
 }
 
 cleanup()
@@ -158,6 +165,8 @@ cleanup()
     else
         ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
         ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+        ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+        ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
     fi
     rm -Rf ${TEMPDIR}
 }
@@ -590,7 +599,7 @@ admin_daemon ${CLUSTER1} rbd mirror restart
 wait_for_image_replay_started ${CLUSTER1} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 
-admin_daemon ${CLUSTER1} rbd mirror stop ${CLUSTER2}
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
 wait_for_image_replay_stopped ${CLUSTER1} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${image1}
 
@@ -600,12 +609,12 @@ wait_for_image_replay_started ${CLUSTER1} ${image}
 admin_daemon ${CLUSTER1} rbd mirror start
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 
-admin_daemon ${CLUSTER1} rbd mirror start ${CLUSTER2}
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror restart ${CLUSTER2}
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
 wait_for_image_replay_started ${CLUSTER1} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 
