@@ -194,10 +194,10 @@ void Server::dispatch(Message *m)
   case MSG_MDS_SLAVE_REQUEST:
     handle_slave_request(static_cast<MMDSSlaveRequest*>(m));
     return;
+  default:
+    derr << "server unknown message " << m->get_type() << dendl;
+    assert(0 == "server unknown message");  
   }
-
-  dout(1) << "server unknown message " << m->get_type() << dendl;
-  assert(0);
 }
 
 

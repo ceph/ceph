@@ -127,7 +127,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     break;
 
   default:
-    assert(0);
+    assert(0 == "unrecognized mds_table_client request op");
   }
 
   m->put();
