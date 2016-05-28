@@ -1009,9 +1009,9 @@ install(TARGETS osdmaptool DESTINATION bin)
 
 set(ceph_psim_srcs
   tools/psim.cc)
-add_executable(ceph-psim ${ceph_psim_srcs})
-target_link_libraries(ceph-psim global)
-install(TARGETS ceph-psim DESTINATION bin)
+add_executable(ceph_psim ${ceph_psim_srcs})
+target_link_libraries(ceph_psim global)
+install(TARGETS ceph_psim DESTINATION bin)
 
 set(ceph_authtool_srcs
   tools/ceph_authtool.cc)
