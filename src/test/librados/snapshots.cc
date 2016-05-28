@@ -41,7 +41,9 @@ TEST_F(LibRadosSnapshotsPP, SnapListPP) {
   bufferlist bl1;
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_FALSE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   ASSERT_EQ(0, ioctx.snap_create("snap1"));
+  ASSERT_FALSE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   std::vector<snap_t> snaps;
   EXPECT_EQ(0, ioctx.snap_list(&snaps));
   EXPECT_EQ(1U, snaps.size());
@@ -49,6 +51,7 @@ TEST_F(LibRadosSnapshotsPP, SnapListPP) {
   EXPECT_EQ(0, ioctx.snap_lookup("snap1", &rid));
   EXPECT_EQ(rid, snaps[0]);
   EXPECT_EQ(0, ioctx.snap_remove("snap1"));
+  ASSERT_FALSE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
 }
 
 TEST_F(LibRadosSnapshots, SnapRemove) {
@@ -238,7 +241,9 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
 TEST_F(LibRadosSnapshotsSelfManagedPP, SnapPP) {
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
+  ASSERT_FALSE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
+  ASSERT_TRUE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
@@ -269,6 +274,7 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapPP) {
   ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps.back()));
   my_snaps.pop_back();
   ioctx.snap_set_read(LIBRADOS_SNAP_HEAD);
+  ASSERT_TRUE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   ASSERT_EQ(0, ioctx.remove("foo"));
 }
 

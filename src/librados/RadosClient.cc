@@ -595,6 +595,18 @@ int librados::RadosClient::get_pool_stats(std::list<string>& pools,
   return ret;
 }
 
+bool librados::RadosClient::get_pool_is_selfmanaged_snaps_mode(
+  const std::string& pool)
+{
+  bool ret = false;
+  objecter->with_osdmap([&](const OSDMap& osdmap) {
+      int64_t poolid = osdmap.lookup_pg_pool_name(pool);
+      if (poolid >= 0)
+	ret = osdmap.get_pg_pool(poolid)->is_unmanaged_snaps_mode();
+    });
+  return ret;
+}
+
 int librados::RadosClient::get_fs_stats(ceph_statfs& stats)
 {
   Mutex mylock ("RadosClient::get_fs_stats::mylock");
