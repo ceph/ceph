@@ -1211,7 +1211,7 @@ namespace librados
     // Features useful for test cases
     void test_blacklist_self(bool set);
 
-    /* listing objects */
+    /* pool info */
     int pool_list(std::list<std::string>& v);
     int pool_list2(std::list<std::pair<int64_t, std::string> >& v);
     int get_pool_stats(std::list<std::string>& v,
@@ -1223,6 +1223,9 @@ namespace librados
     int get_pool_stats(std::list<std::string>& v,
                        std::string& category,
 		       std::map<std::string, stats_map>& stats);
+    /// check if pool has selfmanaged snaps
+    bool get_pool_is_selfmanaged_snaps_mode(const std::string& poolname);
+
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
 
