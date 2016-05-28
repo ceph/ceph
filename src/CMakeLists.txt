@@ -537,7 +537,7 @@ add_library(librados ${librados_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
-  add_dependencies(librados librados-tp)
+  add_dependencies(librados rados-tp)
 endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
@@ -869,7 +869,7 @@ if(WITH_SPDK)
     ${PCIACCESS_INCLUDE_DIR})
 endif(WITH_SPDK)
 if(WITH_LTTNG)
-  add_dependencies(os objectstore-tp)
+  add_dependencies(os os-tp)
 endif()
 target_link_libraries(os kv)
 if(HAVE_LIBAIO)
