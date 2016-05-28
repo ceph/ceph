@@ -249,7 +249,7 @@ public:
   typedef ceph::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
-  PGBackend *get_pgbackend() {
+  PGBackend *get_pgbackend() override {
     return pgbackend.get();
   }
 
@@ -259,13 +259,13 @@ public:
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
     ObjectStore::Transaction *t
-    );
+    ) override;
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     const object_stat_sum_t &stat
-    );
+    ) override;
   void begin_peer_recover(
     pg_shard_t peer,
     const hobject_t oid);
