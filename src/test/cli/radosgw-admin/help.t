@@ -143,14 +143,14 @@
      --master-url              master url
      --master-zonegroup=<id>   master zonegroup id
      --master-zone=<id>        master zone id
-     --rgw-realm=<realm>       realm name
-     --realm-id=<realm id>     realm id
-     --realm-new-name=<realm new name> realm new name
-     --rgw-zonegroup=<zonegroup>   zonegroup name
-     --zonegroup-id=<zonegroup id> zonegroup id
-     --rgw-zone=<zone>         name of zone in which radosgw is running
-     --zone-id=<zone id>       zone id
-     --zone-new-name=<zone>    zone new name
+     --rgw-realm=<name>        realm name
+     --realm-id=<id>           realm id
+     --realm-new-name=<name>   realm new name
+     --rgw-zonegroup=<name>    zonegroup name
+     --zonegroup-id=<id>       zonegroup id
+     --rgw-zone=<name>         name of zone in which radosgw is running
+     --zone-id=<id>            zone id
+     --zone-new-name=<name>    zone new name
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
