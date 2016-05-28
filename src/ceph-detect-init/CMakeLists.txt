@@ -6,3 +6,6 @@ add_custom_target(ceph-detect-init
   ${CEPH_DETECT_INIT_VIRTUALENV}/bin/pip install --no-index --use-wheel --find-links=file:${CMAKE_SOURCE_DIR}/src/ceph-detect-init/wheelhouse -e .
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/ceph-detect-init
   COMMENT "ceph-detect-init is being created")
+
+include(Distutils)
+distutils_install_module(ceph_detect_init)

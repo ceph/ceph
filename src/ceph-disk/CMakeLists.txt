@@ -6,3 +6,6 @@ add_custom_target(ceph-disk
   ${CEPH_DISK_VIRTUALENV}/bin/pip install --no-index --use-wheel --find-links=file:${CMAKE_SOURCE_DIR}/src/ceph-disk/wheelhouse -e .
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/ceph-disk
   COMMENT "ceph-disk is being created")
+
+include(Distutils)
+distutils_install_module(ceph_disk)
