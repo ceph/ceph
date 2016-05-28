@@ -18,14 +18,13 @@ foreach(tp ${tps})
     COMMENT "generating ${header} ${src}")
   set_source_files_properties(${header} ${src}
     PROPERTIES GENERATED TRUE)
-  add_custom_target(
-    ${name}-tp
-    DEPENDS ${header})
 endforeach()
 
 function(add_tracing_library name tracings version)
   foreach(tp_file ${tracings})
     get_filename_component(tp ${tp_file} NAME_WE)
+    list(APPEND hdrs
+      ${header_dir}/${tp}.h)
     list(APPEND srcs
       ${header_dir}/${tp}.h
       ${header_dir}/${tp}.c)
@@ -33,18 +32,21 @@ function(add_tracing_library name tracings version)
   add_library(${name} SHARED ${srcs})
   target_link_libraries(${name} ${LTTNG_LIBRARIES} dl)
   string(REGEX MATCH "^[0-9]+" soversion ${version})
-  string(REGEX REPLACE "^lib" "" output_name ${name})
   set_target_properties(${name} PROPERTIES
-    OUTPUT_NAME ${output_name}
+    OUTPUT_NAME ${name}
     VERSION ${version}
     SOVERSION ${soversion})
+  string(REGEX REPLACE "_tp$" "" traced ${name})
+  add_custom_target(
+    ${traced}-tp
+    DEPENDS ${hdrs})
 endfunction()
 
 set(osd_traces oprequest.tp osd.tp pg.tp)
-add_tracing_library(libosd_tp "${osd_traces}" 1.0.0)
-add_tracing_library(librados_tp librados.tp 2.0.0)
-add_tracing_library(librbd_tp librbd.tp 1.0.0)
-add_tracing_library(libos_tp objectstore.tp 1.0.0)
+add_tracing_library(osd_tp "${osd_traces}" 1.0.0)
+add_tracing_library(rados_tp librados.tp 2.0.0)
+add_tracing_library(rbd_tp librbd.tp 1.0.0)
+add_tracing_library(os_tp objectstore.tp 1.0.0)
 
-install(TARGETS librados_tp libosd_tp librbd_tp libos_tp DESTINATION lib)
+install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION lib)
 
