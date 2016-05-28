@@ -10,6 +10,18 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst']
+if tags.has('man'):
+    exclude_patterns += ['architecture.rst', 'glossary.rst', 'release*.rst',
+                         'api/*',
+                         'cephfs/*',
+                         'dev/*',
+                         'install/*',
+                         'mon/*',
+                         'rados/*',
+                         'radosgw/*',
+                         'rbd/*',
+                         'start/*']
+
 pygments_style = 'sphinx'
 
 html_theme = 'ceph'
