@@ -908,7 +908,6 @@ set(osd_srcs
   osd/ScrubStore.cc
   osd/osd_types.cc
   osd/ECUtil.cc
-  objclass/class_api.cc
   ${osdc_osd_srcs})
 set(osd_mon_files
   mon/Monitor.cc)
@@ -925,8 +924,7 @@ if(WITH_LTTNG)
 endif()
 
 set(ceph_osd_srcs
-  ceph_osd.cc
-  objclass/class_api.cc)
+  ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
