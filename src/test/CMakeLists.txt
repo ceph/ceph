@@ -37,7 +37,9 @@ add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(osdc)
 add_subdirectory(pybind)
-add_subdirectory(rgw)
+if(${WITH_RADOSGW})
+  add_subdirectory(rgw)
+endif(${WITH_RADOSGW})
 add_subdirectory(rbd_mirror)
 add_subdirectory(system)
 
@@ -77,8 +79,10 @@ target_link_libraries(test_crypto
 add_executable(test_build_libcommon buildtest_skeleton.cc)
 target_link_libraries(test_build_libcommon common pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 
+if(${WITH_RADOSGW})
 add_executable(test_build_librgw buildtest_skeleton.cc)
 target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+endif(${WITH_RADOSGW})
 
 # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
 add_executable(test_build_libcephfs buildtest_skeleton.cc)
@@ -239,84 +243,6 @@ if(${WITH_RADOSGW})
     )
   set_target_properties(test_cls_rgw_opstate PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
-endif(${WITH_RADOSGW})
-
-# ceph_multi_stress_watch
-add_executable(ceph_multi_stress_watch
-  multi_stress_watch.cc
-  )
-target_link_libraries(ceph_multi_stress_watch librados global radostest
-  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-
-#ceph_perf_local
-add_executable(ceph_perf_local 
-  perf_local.cc
-  perf_helper.cc)
-#INTEL_SSE & INTEL_SSE2 flags
-set(PERF_LOCAL_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2") 
-set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
-  ${PERF_LOCAL_FLAGS})
-target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
-
-# ceph_test_xattr_bench
-add_executable(ceph_test_xattr_bench
-  xattr_bench.cc
-  )
-set_target_properties(ceph_test_xattr_bench PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_xattr_bench
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
-# ceph_test_filejournal
-add_executable(ceph_test_filejournal
-  test_filejournal.cc
-  )
-set_target_properties(ceph_test_filejournal PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_filejournal
-  os
-  common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${EXTRALIBS}
-  )
-
-# ceph_test_keys
-add_executable(ceph_test_keys
-  testkeys.cc
-  )
-target_link_libraries(ceph_test_keys mon global ${CMAKE_DL_LIBS})
-
-# ceph_test_snap_mapper
-add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
-  test_snap_mapper.cc
-  )
-target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES})
-
-add_executable(ceph_test_stress_watch
-  test_stress_watch.cc
-  )
-set_target_properties(ceph_test_stress_watch PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_stress_watch
-  librados
-  global
-  ${UNITTEST_LIBS}
-  radostest
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
 
 # ceph_test_librgw_file (nfs-like RGW interface)
 add_executable(ceph_test_librgw_file
@@ -409,6 +335,85 @@ target_link_libraries(test_rgw_ldap
   ${OPENLDAP_LIBS}
   ${Boost_LIBRARIES}
   ${UNITTEST_LIBS}
+  )
+
+endif(${WITH_RADOSGW})
+
+# ceph_multi_stress_watch
+add_executable(ceph_multi_stress_watch
+  multi_stress_watch.cc
+  )
+target_link_libraries(ceph_multi_stress_watch librados global radostest
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+
+#ceph_perf_local
+add_executable(ceph_perf_local 
+  perf_local.cc
+  perf_helper.cc)
+#INTEL_SSE & INTEL_SSE2 flags
+set(PERF_LOCAL_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2") 
+set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
+  ${PERF_LOCAL_FLAGS})
+target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
+
+# ceph_test_xattr_bench
+add_executable(ceph_test_xattr_bench
+  xattr_bench.cc
+  )
+set_target_properties(ceph_test_xattr_bench PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_xattr_bench
+  os
+  common
+  ${UNITTEST_LIBS}
+  global
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  )
+
+# ceph_test_filejournal
+add_executable(ceph_test_filejournal
+  test_filejournal.cc
+  )
+set_target_properties(ceph_test_filejournal PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_filejournal
+  os
+  common
+  ${UNITTEST_LIBS}
+  global
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${EXTRALIBS}
+  )
+
+# ceph_test_keys
+add_executable(ceph_test_keys
+  testkeys.cc
+  )
+target_link_libraries(ceph_test_keys mon global ${CMAKE_DL_LIBS})
+
+# ceph_test_snap_mapper
+add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
+  test_snap_mapper.cc
+  )
+target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES})
+
+add_executable(ceph_test_stress_watch
+  test_stress_watch.cc
+  )
+set_target_properties(ceph_test_stress_watch PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_stress_watch
+  librados
+  global
+  ${UNITTEST_LIBS}
+  radostest
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
   )
 
 if(${HAVE_FUSE})
