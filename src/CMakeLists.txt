@@ -586,6 +586,9 @@ install(TARGETS ceph-osdomap-tool DESTINATION bin)
 add_executable(ceph-monstore-tool tools/ceph_monstore_tool.cc)
 target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
 install(TARGETS ceph-monstore-tool DESTINATION bin)
+install(PROGRAMS
+  tools/ceph-monstore-update-crush.sh
+  DESTINATION lib/ceph)
 
 add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
@@ -635,8 +638,14 @@ if (WITH_CEPHFS)
     tools/cephfs/MDSUtility.cc)
   add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
   target_link_libraries(cephfs-data-scan librados mds osdc global
-                        cls_cephfs_client
-                        ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+    cls_cephfs_client
+    ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+
+  install(TARGETS
+    cephfs-journal-tool
+    cephfs-table-tool
+    cephfs-data-scan
+    DESTINATION bin)
 endif (WITH_CEPHFS)
 
 set(librados_config_srcs
@@ -1058,6 +1067,7 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
@@ -1147,6 +1157,7 @@ endif(BUILD_SHARED_LIBS)
     target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
+    install(PROGRAMS mount.fuse.ceph DESTINATION /sbin)
   endif(HAVE_LIBFUSE)
 endif(WITH_LIBCEPHFS)
 
@@ -1458,6 +1469,14 @@ if(${WITH_RADOSGW})
   install(TARGETS radosgw-object-expirer DESTINATION bin)
   add_subdirectory(rgw)
 endif(${WITH_RADOSGW})
+
+install(FILES
+  sample.ceph.conf
+  DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(FILES
+  fetch_config
+  DESTINATION ${CMAKE_INSTALL_DOCDIR}
+  RENAME sample.fetch_config)
 
 # Now create a useable config.h
 configure_file(

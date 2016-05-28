@@ -372,6 +372,16 @@ target_link_libraries(ceph_xattr_bench
   ${CMAKE_DL_LIBS}
   )
 
+install(TARGETS
+  ceph_bench_log
+  ceph_kvstorebench
+  ceph_multi_stress_watch
+  ceph_objectstore_bench
+  ceph_omapbench
+  ceph_perf_local
+  ceph_xattr_bench
+  DESTINATION bin)
+
 # ceph_test_filejournal
 add_executable(ceph_test_filejournal
   test_filejournal.cc
