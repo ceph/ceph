@@ -1836,7 +1836,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     dispatch_queue->queue_reset(this);
     existing->lock.Unlock();
 
-    EventCenter::submit_to(existing->center->get_id(), [existing, connect, reply, authorizer_reply]() mutable {
+    center->submit_to(existing->center->get_id(), [existing, connect, reply, authorizer_reply]() mutable {
       Mutex::Locker l(existing->lock);
       if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
         // handle error
@@ -2454,7 +2454,7 @@ void AsyncConnection::DelayedDelivery::do_request(int id)
 
 void AsyncConnection::DelayedDelivery::flush() {
   stop_dispatch = true;
-  EventCenter::submit_to(
+  center->submit_to(
       center->get_id(), [this] () mutable {
     Mutex::Locker l(delay_lock);
     while (!delay_queue.empty()) {
