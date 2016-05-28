@@ -854,6 +854,14 @@ if(WITH_LTTNG)
   add_dependencies(os objectstore-tp)
 endif()
 target_link_libraries(os kv)
+if(HAVE_LIBAIO)
+  add_executable(ceph-bluefs-tool
+    os/bluestore/bluefs_tool.cc)
+  target_link_libraries(ceph-bluefs-tool
+    os global)
+  install(TARGETS ceph-bluefs-tool
+    DESTINATION bin)
+endif()
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
