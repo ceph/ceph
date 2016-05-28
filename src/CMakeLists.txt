@@ -1059,12 +1059,16 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
+install(PROGRAMS
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
+  DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
+  RENAME ceph)
+
 install(FILES
   ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com
   ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com.pub
