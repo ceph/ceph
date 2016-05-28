@@ -1042,16 +1042,25 @@ configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
+configure_file(ceph-post-file.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
+
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
+install(FILES
+  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com
+  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com.pub
+  ${CMAKE_SOURCE_DIR}/share/known_hosts_drop.ceph.com
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/ceph)
 
 install(FILES
   ${CMAKE_SOURCE_DIR}/doc/start/ceph.conf
