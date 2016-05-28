@@ -62,8 +62,9 @@ struct OSDCapSpec {
 
   OSDCapSpec() : allow(0) {}
   explicit OSDCapSpec(osd_rwxa_t v) : allow(v) {}
-  explicit OSDCapSpec(std::string n) : allow(0), class_name(n) {}
-  OSDCapSpec(std::string n, std::string a) : allow(0), class_name(n), class_allow(a) {}
+  explicit OSDCapSpec(std::string n) : allow(0), class_name(std::move(n)) {}
+  OSDCapSpec(std::string n, std::string a) :
+    allow(0), class_name(std::move(n)), class_allow(std::move(a)) {}
 
   bool allow_all() const {
     return allow == OSD_CAP_ANY;
@@ -120,7 +121,7 @@ struct OSDCap {
   std::vector<OSDCapGrant> grants;
 
   OSDCap() {}
-  explicit OSDCap(std::vector<OSDCapGrant> g) : grants(g) {}
+  explicit OSDCap(std::vector<OSDCapGrant> g) : grants(std::move(g)) {}
 
   bool allow_all() const;
   void set_allow_all();
