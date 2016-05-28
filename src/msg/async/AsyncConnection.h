@@ -164,7 +164,7 @@ class AsyncConnection : public Connection {
     }
     void discard() {
       stop_dispatch = true;
-      EventCenter::submit_to(center->get_id(), [this] () mutable {
+      center->submit_to(center->get_id(), [this] () mutable {
         Mutex::Locker l(delay_lock);
         while (!delay_queue.empty()) {
           Message *m = delay_queue.front().second;
