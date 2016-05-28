@@ -1434,6 +1434,7 @@ if(${WITH_RADOSGW})
     cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv)
   install(TARGETS radosgw-object-expirer DESTINATION bin)
+  add_subdirectory(rgw)
 endif(${WITH_RADOSGW})
 
 # Now create a useable config.h
