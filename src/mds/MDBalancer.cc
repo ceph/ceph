@@ -58,10 +58,8 @@ int MDBalancer::proc_message(Message *m)
     break;
 
   default:
-    dout(1) << " balancer unknown message " << m->get_type() << dendl;
-    assert(0);
-    m->put();
-    break;
+    derr << " balancer unknown message " << m->get_type() << dendl;
+    assert(0 == "balancer unknown message");
   }
 
   return 0;

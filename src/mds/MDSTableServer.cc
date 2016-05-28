@@ -33,7 +33,7 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
   case TABLESERVER_OP_PREPARE: return handle_prepare(req);
   case TABLESERVER_OP_COMMIT: return handle_commit(req);
   case TABLESERVER_OP_ROLLBACK: return handle_rollback(req);
-  default: assert(0);
+  default: assert(0 == "unrecognized mds_table_server request op");
   }
 }
 
