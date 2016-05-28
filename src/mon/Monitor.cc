@@ -3712,8 +3712,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       {
         op->set_type_paxos();
         MMonPaxos *pm = static_cast<MMonPaxos*>(op->get_req());
-        if (!op->is_src_mon() ||
-            !op->get_session()->is_capable("mon", MON_CAP_X)) {
+        if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
           //can't send these!
           break;
         }
