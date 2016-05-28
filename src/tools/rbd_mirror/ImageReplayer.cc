@@ -26,7 +26,8 @@
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd-mirror: " << *this << "::" << __func__ << ": "
+#define dout_prefix *_dout << "rbd::mirror::" << *this << " " \
+                           << __func__ << ": "
 
 using std::map;
 using std::string;
@@ -1250,8 +1251,8 @@ std::string ImageReplayer<I>::to_string(const State state) {
 template <typename I>
 std::ostream &operator<<(std::ostream &os, const ImageReplayer<I> &replayer)
 {
-  os << "ImageReplayer[" << replayer.get_remote_pool_id() << "/"
-     << replayer.get_remote_image_id() << "]";
+  os << "ImageReplayer: " << &replayer << " [" << replayer.get_local_pool_id()
+     << "/" << replayer.get_global_image_id() << "]";
   return os;
 }
 
