@@ -1338,6 +1338,7 @@ function test_mon_pg()
   ceph pg ls
   ceph pg ls 0
   ceph pg ls stale
+  expect_false ceph pg ls scrubq
   ceph pg ls active stale repair recovering
   ceph pg ls 0 active
   ceph pg ls 0 active stale
