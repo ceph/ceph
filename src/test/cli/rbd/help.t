@@ -60,6 +60,7 @@
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
       nbd unmap                   Unmap a nbd device.
+      object-map check            Verify the object map is correct.
       object-map rebuild          Rebuild an invalid object map.
       remove (rm)                 Delete an image.
       rename (mv)                 Rename image within pool.
@@ -978,6 +979,23 @@
   
   Positional arguments
     <device-spec>        specify nbd device
+  
+  rbd help object-map check
+  usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
+                              [--no-progress] 
+                              <image-or-snap-spec> 
+  
+  Verify the object map is correct.
+  
+  Positional arguments
+    <image-or-snap-spec>  image or snapshot specification
+                          (example: [<pool-name>/]<image-name>[@<snap-name>])
+  
+  Optional arguments
+    -p [ --pool ] arg     pool name
+    --image arg           image name
+    --snap arg            snapshot name
+    --no-progress         disable progress output
   
   rbd help object-map rebuild
   usage: rbd object-map rebuild [--pool <pool>] [--image <image>] 
