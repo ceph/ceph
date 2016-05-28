@@ -1443,6 +1443,8 @@ configure_file(
   ${CMAKE_BINARY_DIR}/include/acconfig.h
 )
 
+add_subdirectory(brag)
+
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart DEPENDS
     ceph-osd
