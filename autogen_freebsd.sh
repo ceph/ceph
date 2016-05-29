@@ -19,6 +19,7 @@ if [ x`uname`x = x"FreeBSD"x ]; then
     CLANGWARN="$CLANGWARN -Wno-unused-private-field"
     CLANGWARN="$CLANGWARN -Wno-varargs"
     CLANGWARN="$CLANGWARN -Wno-gnu-designator"
+    CLANGWARN="$CLANGWARN -Wno-mismatched-tags"
 
 # "-Wno-unused-local-typedef -Wno-mismatched-tags -Wno-macro-redefined -Wno-unused-function -Wno-unused-label -Wno-undefined-bool-conversion -Wno-unused-private-field -Wno-unused-local-typedef -Wno-uninitialized -Wno-gnu-designator -Wno-inconsistent-missing-override -Wno-deprecated-declarations -Wno-parentheses"
 
