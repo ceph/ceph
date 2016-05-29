@@ -4,6 +4,13 @@
 #Generic create pool use crush rule  test
 #
 
+  SRC_PATH=`dirname $0`
+  SRC_PATH=`(cd $SRC_PATH; pwd)`/..
+
+  CEPH_DIR=$SRC_PATH
+  CEPH_BIN=$SRC_PATH
+  CEPH_LIB=$SRC_PATH/.libs
+
 # Includes
 source ../qa/workunits/ceph-helpers.sh
 
@@ -39,7 +46,18 @@ function TEST_pool_create() {
 
     local minsize=0
     local maxsize=1
-    sed -i '/# end crush map/i\rule '$rulename' {\n ruleset \'$var'\n type replicated\n min_size \'$minsize'\n max_size \'$maxsize'\n step take default\n step choose firstn 0 type osd\n step emit\n }\n' "$dir/map1.txt"
+    # sed -i '/# end crush map/i\rule '$rulename' {\n ruleset \'$var'\n type replicated\n min_size \'$minsize'\n max_size \'$maxsize'\n step take default\n step choose firstn 0 type osd\n step emit\n }\n' "$dir/map1.txt"
+    cat >> "$dir/map1.txt" << _EOF
+rule $rulename {
+	ruleset $var
+	type replicated
+	min_size $minsize
+	max_size $maxsize
+	step take default
+	step choose firstn 0 type osd
+	step emit
+}
+_EOF
     crushtool  -c "$dir/map1.txt" -o "$dir/map1.bin"
     ceph osd setcrushmap -i "$dir/map1.bin"
     ceph osd pool create $poolname 200 $rulename 2>"$dir/rev"
