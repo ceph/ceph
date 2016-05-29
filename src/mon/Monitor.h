@@ -538,30 +538,7 @@ private:
       *abs = abs_skew;
     return (abs_skew > g_conf->mon_clock_drift_allowed);
   }
-  /**
-   * @}
-   */
-  /**
-   * @defgroup Monitor_h_stats Keep track of monitor statistics
-   * @{
-   */
-  struct MonStatsEntry {
-    // data dir
-    uint64_t kb_total;
-    uint64_t kb_used;
-    uint64_t kb_avail;
-    unsigned int latest_avail_ratio;
-    utime_t last_update;
-  };
 
-  struct MonStats {
-    MonStatsEntry ours;
-    map<entity_inst_t,MonStatsEntry> others;
-  };
-
-  MonStats stats;
-
-  void stats_update();
   /**
    * @}
    */
