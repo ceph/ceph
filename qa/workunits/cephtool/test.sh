@@ -363,11 +363,18 @@ function test_tiering()
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
-  # make sure we can't clobber snapshot state
+  # clobber snapshot state when tier change
   ceph osd pool create snap_base 2
   ceph osd pool create snap_cache 2
   ceph osd pool mksnap snap_cache snapname
-  expect_false ceph osd tier add snap_base snap_cache
+  rados -p snap_cache lssnap | grep snapname
+  ceph osd tier add snap_base snap_cache
+  rados -p snap_cache lssnap | grep snapname && false || true
+  ceph osd pool mksnap snap_base snapname
+  rados -p snap_base lssnap | grep snapname
+  rados -p snap_cache lssnap | grep snapname && false || true
+  ceph osd tier remove snap_base snap_cache
+  rados -p snap_cache lssnap | grep snapname && false || true
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
 
