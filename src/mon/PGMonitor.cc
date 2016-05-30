@@ -1771,16 +1771,31 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     }
     if (states.empty())
       states.push_back("all");
+
+    uint32_t state = 0;
+
     while (!states.empty()) {
-      string state = states.back();
-      pg_map.get_filtered_pg_stats(state,pool,osd,primary,pgs);
+      string state_str = states.back();
+
+      if (state_str == "all") {
+        state = -1;
+        break;
+      } else {
+        int filter = pg_string_state(state_str);
+        assert(filter != -1);
+        state |= filter;
+      }
+
       states.pop_back();
     }
+
+    pg_map.get_filtered_pg_stats(state, pool, osd, primary, pgs);
+
     if (f && !pgs.empty()) {
-      pg_map.dump_filtered_pg_stats(f.get(),pgs);
+      pg_map.dump_filtered_pg_stats(f.get(), pgs);
       f->flush(ds);
     } else if (!pgs.empty()) {
-      pg_map.dump_filtered_pg_stats(ds,pgs);
+      pg_map.dump_filtered_pg_stats(ds, pgs);
     }
     r = 0;
   } else if (prefix == "pg dump_stuck") {

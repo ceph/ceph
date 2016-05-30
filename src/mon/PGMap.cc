@@ -1754,16 +1754,9 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs)
 {
-  int type = 0;
-  if (state != "all") {
-    type = pg_string_state(state);
-    if (type == -1)
-      assert(0 == "invalid type");
-  }
-
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
@@ -1771,7 +1764,7 @@ void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t o
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
-    if ((state != "all") && !(i->second.state & type))
+    if (!(i->second.state & state))
       continue;
     pgs.insert(i->first);
   }
