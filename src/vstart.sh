@@ -88,6 +88,7 @@ start_mon=0
 start_mds=0
 start_osd=0
 start_rgw=0
+rgw_port_override=0
 ip=""
 nodaemon=0
 smallmds=0
@@ -109,7 +110,7 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
-usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"]\n"
+usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"] [\"rgw\"]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -130,6 +131,7 @@ usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
 usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
+usage=$usage"\t--rgw_num specify ceph rgw count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
@@ -208,8 +210,13 @@ case $1 in
             CEPH_NUM_MDS=$2
             shift
             ;;
+    --rgw_num )
+            CEPH_NUM_RGW=$2
+            shift
+            ;;
     --rgw_port )
             CEPH_RGW_PORT=$2
+            rgw_port_override=1
             shift
             ;;
     mon )
@@ -222,6 +229,10 @@ case $1 in
 	    ;;
     osd )
 	    start_osd=1
+	    start_all=0
+	    ;;
+    rgw )
+	    start_rgw=1
 	    start_all=0
 	    ;;
     -m )
@@ -320,6 +331,8 @@ if [ "$debug" -eq 0 ]; then
         debug ms = 1'
     CMDSDEBUG='
         debug ms = 1'
+    CRGWDEBUG='
+        debug rgw = 1'
 else
     echo "** going verbose **"
     CMONDEBUG='
@@ -348,6 +361,9 @@ else
         mds debug scatterstat = true
         mds verify scatter = true
         mds log max segments = 2'
+    CRGWDEBUG='
+        debug ms = 1
+        debug rgw = 20'
 fi
 
 if [ -n "$MON_ADDR" ]; then
@@ -385,7 +401,11 @@ $SUDO rm -f core*
 
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
 test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
-$SUDO rm -rf $CEPH_OUT_DIR/*
+
+# Only clear out pidfiles/heartbeats/logs/etc on a $new run.
+if [ "$new" -eq 1 ]; then
+    $SUDO rm -rf $CEPH_OUT_DIR/*
+fi
 test -d gmon && $SUDO rm -rf gmon/*
 
 [ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
@@ -463,8 +483,6 @@ if [ "$start_mon" -eq 1 ]; then
         erasure code dir = $EC_PATH
         plugin dir = $CS_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
-        rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
-        rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -635,6 +653,29 @@ EOF
     done
 fi
 
+# rgw
+if [ "$start_rgw" -eq 1 ]; then
+    for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+    do
+	if [ "$new" -eq 1 ]; then
+            mkdir -p $CEPH_DEV_DIR/client.rgw.$rgw
+	    key_fn=$CEPH_DEV_DIR/client.rgw.$rgw/keyring
+	    if [ $overwrite_conf -eq 1 ]; then
+		    cat <<EOF >> $conf_fn
+[client.rgw.$rgw]
+        rgw frontends = fastcgi, civetweb port=$((CEPH_RGW_PORT+$rgw))
+        rgw dns name = localhost
+        keyring = $key_fn
+$DAEMONOPTS
+$CRGWDEBUG
+EOF
+            fi
+	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=client.rgw.$rgw $key_fn
+	    $SUDO $CEPH_ADM -i $key_fn auth add client.rgw.$rgw osd "allow rwx" mon 'allow rwx'
+        fi
+    done
+fi
+
 # mds
 if [ "$smallmds" -eq 1 ]; then
     cat <<EOF >> $conf_fn
@@ -753,28 +794,40 @@ do_rgw()
     # Create S3 user
     local akey='0555b35654ad1656d804'
     local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
-    echo "setting up user testid"
-    $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    if [ "$new" -eq 1 ]; then
+        echo "setting up user testid"
+        $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+    else
+        echo "re-using user testid"
+    fi
 
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
-    echo "setting up s3-test users"
-    $CEPH_BIN/radosgw-admin user create \
-        --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
-        --access-key ABCDEFGHIJKLMNOPQRST \
-        --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
-        --display-name youruseridhere \
-        --email s3@example.com -c $conf_fn > /dev/null
-    $CEPH_BIN/radosgw-admin user create \
-        --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
-        --access-key NOPQRSTUVWXYZABCDEFG \
-        --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
-        --display-name john.doe \
-        --email john.doe@example.com -c $conf_fn > /dev/null
+    if [ "$new" -eq 1 ]; then
+        echo "setting up s3-test users"
+        $CEPH_BIN/radosgw-admin user create \
+            --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+            --access-key ABCDEFGHIJKLMNOPQRST \
+            --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
+            --display-name youruseridhere \
+            --email s3@example.com -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user create \
+            --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
+            --access-key NOPQRSTUVWXYZABCDEFG \
+            --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
+            --display-name john.doe \
+            --email john.doe@example.com -c $conf_fn > /dev/null
+    else
+        echo "re-using s3-test users"
+    fi
 
     # Create Swift user
-    echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing --access=full > /dev/null
+    if [ "$new" -eq 1 ]; then
+        echo "setting up user tester"
+        $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing --access=full > /dev/null
+    else
+        echo "re-using user tester"
+    fi
 
     echo ""
     echo "S3 User Info:"
@@ -787,16 +840,53 @@ do_rgw()
     echo "  password  : testing"
     echo ""
 
-    # Start server
-    echo start rgw on http://localhost:$CEPH_RGW_PORT
-    RGWDEBUG=""
-    if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
+    # There is currently no --rgw_port command line option that we can pass
+    # directly to radosgw. Instead, when applicable, we need to override the
+    # --rgw_frontends option, which includes the civetweb port.
+    # First, when this is not a _new_ run, and CEPH_RGW_PORT != ceph_rgw_conf_port,
+    # we check:
+    # 1. If rgw_port_override is set, CEPH_RGW_PORT actually has been overridden,
+    #    which means we must override --rgw_frontends when setting the rgw
+    #    commandline. This is controlled by setting port_modified=1.
+    # 2. Else rgw_port_override is not set, meaning the user simply didn't supply
+    #    a port. rgw_frontends is picked up from the config file and for accurate
+    #    command output, we reset CEPH_RGW_PORT to ceph_rgw_conf_port.
+    # Note that if more than once instance of rgw is to be run, we only check the first
+    # port found (client.rgw.0) and use that as a base port. Each additional instance
+    # will run on port="$CEPH_RGW_PORT+rgw instance number".
+    local port_modified=0
+    local ceph_rgw_conf_port=$(grep "rgw frontends" $conf_fn | sed "s/.*port=\(.*\)$/\1/" | head -n 1) 2>/dev/null
+    if [ "$new" -ne 1 ] && [ "$CEPH_RGW_PORT" -ne "$ceph_rgw_conf_port" ]; then
+        if [ "$rgw_port_override" -eq 1 ]; then
+            port_modified=1
+        else
+            CEPH_RGW_PORT="$ceph_rgw_conf_port"
+        fi
     fi
+
+    # Start server
+    for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+    do
+        if [ "$port_modified" -eq 1 ]; then
+            echo "start rgw on http://localhost:$((CEPH_RGW_PORT+$rgw)) - config file port ($ceph_rgw_conf_port) overridden"
+        else
+            echo "start rgw on http://localhost:$((CEPH_RGW_PORT+$rgw))"
+        fi
+    done
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    if [ "$port_modified" -eq 1 ]; then
+        for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+        do
+            $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --name client.rgw.$rgw --rgw_frontends="fastcgi, civetweb port=$((CEPH_RGW_PORT+$rgw))"
+        done
+    else
+        for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
+        do
+            $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --name client.rgw.$rgw
+        done       
+    fi
 }
 if [ "$start_rgw" -eq 1 ]; then
     do_rgw
