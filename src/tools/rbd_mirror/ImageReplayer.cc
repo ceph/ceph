@@ -512,10 +512,10 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
       {
         Mutex::Locker locker(m_lock);
         m_state = STATE_STOPPING;
-        if (r < 0 && r != -EINTR) {
+        if (r < 0 && r != -ECANCELED) {
           derr << "start failed: " << cpp_strerror(r) << dendl;
         } else {
-          dout(20) << "start interrupted" << dendl;
+          dout(20) << "start canceled" << dendl;
         }
         std::swap(m_on_start_finish, on_start_finish);
       }
@@ -536,7 +536,7 @@ bool ImageReplayer<I>::on_start_interrupted()
     return false;
   }
 
-  on_start_fail(-EINTR);
+  on_start_fail(-ECANCELED);
   return true;
 }
 
