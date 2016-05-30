@@ -579,8 +579,9 @@ C Example
 	#include <stdio.h>
 	#include <string.h>
 	#include <rados/librados.h>
+       #include <stdlib.h>
 
-	int main (int argc, const char argv**) 
+	int main (int argc, const char **argv) 
 	{
 		/* 
 		 * Continued from previous C example, where cluster handle and
