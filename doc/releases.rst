@@ -6,8 +6,8 @@ Timeline
 --------
 
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
-|                            |`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |`Infernalis`_ |           |
-|                            |LTS        |Stable     |LTS        |Stable     |LTS        |Stable        |           |
+|                            |`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |`Infernalis`_ |`Jewel`_   |
+|                            |LTS        |Stable     |LTS        |Stable     |LTS        |Stable        |LTS        |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+-----------+
 |     First release          | August    | November  | May       | October   | April     | November     | April     |
 |                            | 2013      | 2013      | 2014      | 2014      | 2015      | 2015         | 2016      |
