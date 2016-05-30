@@ -153,7 +153,7 @@ public:
   int64_t add_used_blocks(int64_t blks);
   int64_t sub_used_blocks(int64_t blks);
 
-  int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block);
+  int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block, bool partly=false);
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
   void free_blocks(int64_t start_block, int64_t num_blocks);
 
@@ -210,7 +210,7 @@ private:
   bool is_allocated(int64_t start_block, int64_t num_blocks);
   bool is_allocated(int64_t *blocks, int64_t num_blocks);
 
-  int64_t alloc_blocks_int(int64_t num_blocks, int64_t *start_block, bool lock);
+  int64_t alloc_blocks_int(int64_t num_blocks, int64_t *start_block, bool lock, bool partly=false);
   int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t *block_list, bool lock);
   void free_blocks_int(int64_t start_block, int64_t num_blocks);
   bool zone_free_to_alloc(BmapEntity *zone, int64_t required, bool lock);
@@ -232,7 +232,7 @@ public:
   ~BitAllocator();
   void shutdown();
   int64_t alloc_blocks(int64_t num_blocks, int64_t *start_block);
-  int64_t alloc_blocks_res(int64_t num_blocks, int64_t *start_block);
+  int64_t alloc_blocks_res(int64_t num_blocks, int64_t *start_block, bool partly=false);
   void free_blocks(int64_t start_block, int64_t num_blocks);
   void set_blocks_used(int64_t start_block, int64_t num_blocks);
   int64_t sub_used_blocks(int64_t num_blocks);

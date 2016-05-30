@@ -558,11 +558,12 @@ int64_t BitMapZone::sub_used_blocks(int64_t blks)
 
 /*
  * Try find N contiguous blocks in a Zone.
- * Nothing less than N is good and considered failure.
+ * If partly == false: Nothing less than N is good and considered failure.
+ * If partly == true, allow return blocks which less than N.
  *
  * Caller must take exclusive lock on Zone.
  */
-int64_t BitMapZone::alloc_blocks(int64_t num_blocks, int64_t *start_block)
+int64_t BitMapZone::alloc_blocks(int64_t num_blocks, int64_t *start_block, bool partly)
 {
   int64_t bmap_idx = 0;
   int bit_idx = 0;
@@ -604,7 +605,7 @@ int64_t BitMapZone::alloc_blocks(int64_t num_blocks, int64_t *start_block)
       bit_idx = scanned % BmapEntry::size();
     }
 
-    if (allocated < num_blocks) {
+    if (!partly && allocated < num_blocks) {
       free_blocks_int((*start_block - zone_block_offset), allocated);
       allocated = 0;
     } else {
@@ -943,9 +944,10 @@ bool BitAllocator::is_allocated(int64_t *alloc_blocks, int64_t num_blocks)
 
 /*
  * Allocate N contiguous blocks.
+ * If partly == true; it can return n contiguouse blocks which less than N
  */
 int64_t BitAllocator::alloc_blocks_int(int64_t num_blocks,
-       int64_t *start_block, bool wait)
+       int64_t *start_block, bool wait, bool partly)
 {
 
   int64_t zone_mark = m_zone_list->get_marker();
@@ -957,20 +959,16 @@ int64_t BitAllocator::alloc_blocks_int(int64_t num_blocks,
 
   while ((zone = (BitMapZone *) iter.next())) {
 
-    if (!zone_free_to_alloc(zone,
-      num_blocks - allocated, wait)) {
+    if (!zone_free_to_alloc(zone, num_blocks, wait)) {
       continue;
     }
 
     allocated = zone->alloc_blocks(num_blocks, start_block);
 
     zone->unlock_zone();
-    if (allocated == num_blocks) {
+    if (!partly && allocated == num_blocks) {
       break;
     }
-
-    zone->free_blocks(*start_block, allocated);
-    allocated = 0;
   }
 
   return allocated;
@@ -1002,8 +1000,9 @@ bool BitAllocator::check_input(int64_t num_blocks)
 
 /*
  * Interface to allocate blocks after reserve.
+ * If partly is true, it can return blocks which less than N.
  */
-int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
+int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block, bool partly)
 {
   int scans = 2;
   int64_t allocated = 0;
@@ -1016,7 +1015,9 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
   serial_lock();
 
   while (scans && !allocated) {
-    allocated = alloc_blocks_int(num_blocks, start_block, false);
+    //if parlty == true, the first we hope get the N contiguous blocks.
+    //If fail, the second we can get partly blocks.
+    allocated = alloc_blocks_int(num_blocks, start_block, false, partly && scans == 1);
     scans --;
   }
 
@@ -1029,7 +1030,6 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
   }
 
   debug_assert(is_allocated(*start_block, allocated));
-  unreserve(num_blocks, allocated);
 
   serial_unlock();
   alloc_unlock();
@@ -1065,8 +1065,8 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
      */
     allocated = alloc_blocks_int(num_blocks, start_block, true);
   }
-
-  unreserve(num_blocks, allocated);
+  if (allocated != num_blocks)
+    unreserve(num_blocks, allocated);
   debug_assert((m_allocated_blocks <= m_total_blocks));
   debug_assert(is_allocated(*start_block, allocated));
 
