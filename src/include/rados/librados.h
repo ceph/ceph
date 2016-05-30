@@ -3261,6 +3261,16 @@ typedef void (*rados_log_callback_t)(void *arg,
 CEPH_RADOS_API int rados_monitor_log(rados_t cluster, const char *level,
                                      rados_log_callback_t cb, void *arg);
 
+/*
+ * When osd full, the osd op will discard at default.
+ * If using this api and set block = false, the ops will be
+ * w/ LIBRADOS_OPERATION_FULL_TRY flag and bypass this check.
+ *
+ * @param cluster cluster handle
+ * @param block if not equal zero  mean don't block on osdfull.
+ */
+CEPH_RADOS_API void rados_set_block_on_osdfull(rados_t cluster, int block);
+
 /** @} Mon/OSD/PG commands */
 
 #ifdef __cplusplus
