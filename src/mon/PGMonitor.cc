@@ -1756,7 +1756,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     int64_t pool = -1;
     vector<string>states;
     set<pg_t> pgs;
-    set<string> what;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool);
     cmd_getval(g_ceph_context, cmdmap, "osd", osd);
     cmd_getval(g_ceph_context, cmdmap, "states", states);
@@ -1774,7 +1773,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
       states.push_back("all");
     while (!states.empty()) {
       string state = states.back();
-      what.insert(state);
       pg_map.get_filtered_pg_stats(state,pool,osd,primary,pgs);
       states.pop_back();
     }
