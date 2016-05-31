@@ -824,7 +824,7 @@ std::string pg_state_string(int state)
     oss << "repair+";
   if ((state & PG_STATE_BACKFILL_WAIT) &&
       !(state &PG_STATE_BACKFILL))
-    oss << "wait_backfill+";
+    oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
