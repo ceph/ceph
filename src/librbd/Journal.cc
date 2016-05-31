@@ -160,8 +160,8 @@ public:
   }
 };
 
-template <typename I, typename J>
-int open_journaler(I *image_ctx, J *journaler, bool *initialized,
+template <typename J>
+int open_journaler(CephContext *cct, J *journaler, bool *initialized,
                    cls::journal::Client *client,
                    journal::ImageClientMeta *client_meta,
                    journal::TagData *tag_data) {
@@ -197,7 +197,7 @@ int open_journaler(I *image_ctx, J *journaler, bool *initialized,
   Mutex lock("lock");
   uint64_t tag_tid;
   C_DecodeTags *tags_ctx = new C_DecodeTags(
-    image_ctx->cct, &lock, &tag_tid, tag_data, &get_tags_ctx);
+      cct, &lock, &tag_tid, tag_data, &get_tags_ctx);
   journaler->get_tags(client_meta->tag_class, &tags_ctx->tags, tags_ctx);
 
   r = get_tags_ctx.wait();
@@ -480,8 +480,14 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
 
 template <typename I>
 int Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner) {
+  return Journal<>::is_tag_owner(image_ctx->md_ctx, image_ctx->id, is_tag_owner);
+}
+
+template <typename I>
+int Journal<I>::is_tag_owner(IoCtx& io_ctx, std::string& image_id,
+                             bool *is_tag_owner) {
   std::string mirror_uuid;
-  int r = get_tag_owner(image_ctx, &mirror_uuid);
+  int r = get_tag_owner(io_ctx, image_id, &mirror_uuid);
   if (r < 0) {
     return r;
   }
@@ -492,17 +498,23 @@ int Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner) {
 
 template <typename I>
 int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
-  CephContext *cct = image_ctx->cct;
+  return get_tag_owner(image_ctx->md_ctx, image_ctx->id, mirror_uuid);
+}
+
+template <typename I>
+int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
+                              std::string *mirror_uuid) {
+  CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID,
-                      image_ctx->cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID,
+                      cct->_conf->rbd_journal_commit_age);
 
   bool initialized;
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
   journal::TagData tag_data;
-  int r = open_journaler(image_ctx, &journaler, &initialized, &client,
+  int r = open_journaler(cct, &journaler, &initialized, &client,
                          &client_meta, &tag_data);
   if (r >= 0) {
     *mirror_uuid = tag_data.mirror_uuid;
@@ -526,7 +538,7 @@ int Journal<I>::request_resync(I *image_ctx) {
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
   journal::TagData tag_data;
-  int r = open_journaler(image_ctx, &journaler, &initialized, &client,
+  int r = open_journaler(image_ctx->cct, &journaler, &initialized, &client,
                          &client_meta, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
     if (initialized) {
@@ -567,7 +579,7 @@ int Journal<I>::promote(I *image_ctx) {
   cls::journal::Client client;
   journal::ImageClientMeta client_meta;
   journal::TagData tag_data;
-  int r = open_journaler(image_ctx, &journaler, &initialized, &client,
+  int r = open_journaler(image_ctx->cct, &journaler, &initialized, &client,
                          &client_meta, &tag_data);
   BOOST_SCOPE_EXIT_ALL(&journaler, &initialized) {
     if (initialized) {
