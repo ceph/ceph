@@ -135,14 +135,11 @@ it runs ``gatherkeys`` to get the keyring. It then creates a mds on the desired
 host under the path ``/var/lib/ceph/mds/`` in ``/var/lib/ceph/mds/{cluster}-{name}``
 format and a bootstrap keyring under ``/var/lib/ceph/bootstrap-mds/`` in
 ``/var/lib/ceph/bootstrap-mds/{cluster}.keyring`` format. It then runs appropriate
-commands based on ``distro.init`` to start the ``mds``. To remove the mds,
-subcommand ``destroy`` is used.
+commands based on ``distro.init`` to start the ``mds``.
 
 Usage::
 
 	ceph-deploy mds create [HOST[:DAEMON-NAME]] [HOST[:DAEMON-NAME]...]
-
-	ceph-deploy mds destroy [HOST[:DAEMON-NAME]] [HOST[:DAEMON-NAME]...]
 
 The [DAEMON-NAME] is optional.
 
