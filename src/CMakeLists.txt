@@ -750,6 +750,9 @@ target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
   ${Boost_THREAD_LIBRARY})
 install(TARGETS ceph-mds DESTINATION bin)
 
+set(GMOCK_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/gmock/include")
+set(GTEST_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/gmock/gtest/include")
+
 add_subdirectory(erasure-code)
 
 # Support/Tools
