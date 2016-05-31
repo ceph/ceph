@@ -17,7 +17,6 @@ PrivateTmp=true
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
-TasksMax=infinity
 
 [Install]
 WantedBy=ceph-rbd-mirror.target
