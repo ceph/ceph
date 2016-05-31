@@ -1044,13 +1044,23 @@ OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
 OPTION(filestore_max_inline_xattr_size, OPT_U32, 0)	//Override
 OPTION(filestore_max_inline_xattr_size_xfs, OPT_U32, 65536)
 OPTION(filestore_max_inline_xattr_size_btrfs, OPT_U32, 2048)
+#if defined(__FreeBSD__)
+// Assuming ZFS
+OPTION(filestore_max_inline_xattr_size_other, OPT_U32, 2048)
+#else
 OPTION(filestore_max_inline_xattr_size_other, OPT_U32, 512)
+#endif
 
 // for more than filestore_max_inline_xattrs attrs
 OPTION(filestore_max_inline_xattrs, OPT_U32, 0)	//Override
 OPTION(filestore_max_inline_xattrs_xfs, OPT_U32, 10)
 OPTION(filestore_max_inline_xattrs_btrfs, OPT_U32, 10)
+#if defined(__FreeBSD__)
+// Assuming ZFS
+OPTION(filestore_max_inline_xattrs_other, OPT_U32, 10)
+#else
 OPTION(filestore_max_inline_xattrs_other, OPT_U32, 2)
+#endif
 
 // max xattr value size
 OPTION(filestore_max_xattr_value_size, OPT_U32, 0)	//Override
@@ -1062,7 +1072,12 @@ OPTION(filestore_max_xattr_value_size_btrfs, OPT_U32, 64<<10)
 // two attrs of this value.  That means we need this value to be around 1k
 // to be safe.  This is hacky, but it's not worth complicating the code
 // to work around ext4's total xattr limit.
+#if defined(__FreeBSD__)
+// Assuming ZFS
+OPTION(filestore_max_xattr_value_size_other, OPT_U32, 64<<10)
+#else
 OPTION(filestore_max_xattr_value_size_other, OPT_U32, 1<<10)
+#endif
 
 OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
 OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
