@@ -205,7 +205,6 @@ Requires:      python-setuptools
 Requires:      grep
 Requires:      xfsprogs
 Requires:      logrotate
-Requires:      parted
 Requires:      util-linux
 Requires:      hdparm
 Requires:      cryptsetup
@@ -344,6 +343,7 @@ Requires:	gdisk
 %if 0%{?suse_version}
 Requires:	gptfdisk
 %endif
+Requires:       parted
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
