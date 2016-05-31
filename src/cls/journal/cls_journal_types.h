@@ -19,6 +19,8 @@ class Formatter;
 namespace cls {
 namespace journal {
 
+static const uint64_t JOURNAL_MAX_RETURN = 256;
+
 struct ObjectPosition {
   uint64_t object_number;
   uint64_t tag_tid;
