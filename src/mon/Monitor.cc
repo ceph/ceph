@@ -777,7 +777,7 @@ int Monitor::preinit()
 int Monitor::init()
 {
   dout(2) << "init" << dendl;
-  lock.Lock();
+  Mutex::Locker l(lock);
 
   // start ticker
   timer.init();
@@ -797,7 +797,6 @@ int Monitor::init()
   get_classic_monitor_commands(&cmds, &cmdsize);
   MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
 
-  lock.Unlock();
   return 0;
 }
 
