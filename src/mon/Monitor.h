@@ -587,6 +587,9 @@ private:
 public:
   epoch_t get_epoch();
   int get_leader() { return leader; }
+  string get_leader_name() {
+    return quorum.empty() ? string() : monmap->get_name(*quorum.begin());
+  }
   const set<int>& get_quorum() { return quorum; }
   list<string> get_quorum_names() {
     list<string> q;
