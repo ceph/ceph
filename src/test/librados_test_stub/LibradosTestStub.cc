@@ -1184,7 +1184,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
 }
 
 uint64_t cls_get_features(cls_method_context_t hctx) {
-  return CEPH_FEATURES_DEFAULT_SUPPORTED;
+  return CEPH_FEATURES_SUPPORTED_DEFAULT;
 }
 
 int cls_log(int level, const char *format, ...) {
