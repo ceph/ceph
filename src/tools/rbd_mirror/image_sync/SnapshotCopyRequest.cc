@@ -36,6 +36,7 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
 } // anonymous namespace
 
 using librbd::util::create_context_callback;
+using librbd::util::unique_lock_name;
 
 template <typename I>
 SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
@@ -45,10 +46,12 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
                                             librbd::journal::MirrorPeerClientMeta *meta,
                                             ContextWQ *work_queue,
                                             Context *on_finish)
-  : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
+  : BaseRequest("rbd::mirror::image_sync::SnapshotCopyRequest",
+		local_image_ctx->cct, on_finish),
+    m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_snap_map(snap_map), m_journaler(journaler), m_client_meta(meta),
-    m_work_queue(work_queue), m_on_finish(on_finish),
-    m_snap_seqs(meta->snap_seqs) {
+    m_work_queue(work_queue), m_snap_seqs(meta->snap_seqs),
+    m_lock(unique_lock_name("SnapshotCopyRequest::m_lock", this)) {
   m_snap_map->clear();
 
   // snap ids ordered from oldest to newest
@@ -76,6 +79,15 @@ void SnapshotCopyRequest<I>::send() {
   }
 
   send_snap_unprotect();
+}
+
+template <typename I>
+void SnapshotCopyRequest<I>::cancel() {
+  Mutex::Locker locker(m_lock);
+
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+  m_canceled = true;
 }
 
 template <typename I>
@@ -173,6 +185,10 @@ void SnapshotCopyRequest<I>::handle_snap_unprotect(int r) {
     finish(r);
     return;
   }
+  if (handle_cancellation())
+  {
+    return;
+  }
 
   send_snap_unprotect();
 }
@@ -231,6 +247,10 @@ void SnapshotCopyRequest<I>::handle_snap_remove(int r) {
     lderr(cct) << ": failed to remove snapshot '" << m_snap_name << "': "
                << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -312,6 +332,10 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
     lderr(cct) << ": failed to create snapshot '" << m_snap_name << "': "
                << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -412,6 +436,10 @@ void SnapshotCopyRequest<I>::handle_snap_protect(int r) {
     finish(r);
     return;
   }
+  if (handle_cancellation())
+  {
+    return;
+  }
 
   send_snap_protect();
 }
@@ -447,6 +475,10 @@ void SnapshotCopyRequest<I>::handle_update_client(int r) {
     finish(r);
     return;
   }
+  if (handle_cancellation())
+  {
+    return;
+  }
 
   m_client_meta->snap_seqs = m_snap_seqs;
 
@@ -454,24 +486,24 @@ void SnapshotCopyRequest<I>::handle_update_client(int r) {
 }
 
 template <typename I>
-void SnapshotCopyRequest<I>::error(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  m_work_queue->queue(create_context_callback<
-    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::finish>(this), r);
+bool SnapshotCopyRequest<I>::handle_cancellation() {
+  {
+    Mutex::Locker locker(m_lock);
+    if (!m_canceled) {
+      return false;
+    }
+  }
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 10) << ": snapshot copy canceled" << dendl;
+  finish(-ECANCELED);
+  return true;
 }
 
 template <typename I>
-void SnapshotCopyRequest<I>::finish(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+void SnapshotCopyRequest<I>::error(int r) {
+  dout(20) << ": r=" << r << dendl;
 
-  if (r >= 0) {
-    m_client_meta->snap_seqs = m_snap_seqs;
-  }
-
-  m_on_finish->complete(r);
-  delete this;
+  m_work_queue->queue(new FunctionContext([this, r](int r1) { finish(r); }));
 }
 
 template <typename I>
