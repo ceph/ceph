@@ -117,9 +117,20 @@ public:
       default: return "???";
       }
     }
+    enum {
+      FLAG_NOCACHE = 1,  ///< trim when done WRITING (do not become CLEAN)
+      // NOTE: fix operator<< when you define a second flag
+    };
+    static const char *get_flag_name(int s) {
+      switch (s) {
+      case FLAG_NOCACHE: return "nocache";
+      default: return "???";
+      }
+    }
 
     BufferSpace *space;
-    unsigned state;            ///< STATE_*
+    uint32_t state;            ///< STATE_*
+    uint32_t flags;            ///< FLAG_*
     uint64_t seq;
     uint64_t offset, length;
     bufferlist data;
@@ -127,10 +138,13 @@ public:
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
 
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint64_t l)
-      : space(space), state(s), seq(q), offset(o), length(l) {}
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, bufferlist& b)
-      : space(space), state(s), seq(q), offset(o), length(b.length()), data(b) {}
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint64_t l,
+	   unsigned f = 0)
+      : space(space), state(s), flags(f), seq(q), offset(o), length(l) {}
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, bufferlist& b,
+	   unsigned f = 0)
+      : space(space), state(s), flags(f), seq(q), offset(o),
+	length(b.length()), data(b) {}
 
     bool is_clean() const {
       return state == STATE_CLEAN;
@@ -203,6 +217,9 @@ public:
 	writing.push_back(*b);
       }
     }
+    void _rm_buffer(Buffer *b) {
+      _rm_buffer(buffer_map.find(b->offset));
+    }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->size -= p->second->length;
       cache->lru.erase(cache->lru.iterator_to(*p->second));
@@ -236,22 +253,12 @@ public:
 
     void discard(uint64_t offset, uint64_t length);
 
-    void write(uint64_t seq, uint64_t offset, bufferlist& bl) {
+    void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
       discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl));
+      _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+			     flags));
     }
-    void finish_write(uint64_t seq) {
-      auto i = writing.begin();
-      while (i != writing.end()) {
-	assert(i->is_writing());
-	if (i->seq <= seq) {
-	  i->state = Buffer::STATE_CLEAN;
-	  writing.erase(i++);
-	} else {
-	  ++i;
-	}
-      }
-    }
+    void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {
       discard(offset, bl.length());
       _add_buffer(new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl));

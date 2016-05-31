@@ -443,9 +443,12 @@ static void get_wal_key(uint64_t seq, string *out)
 
 ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 {
-  return out << "buffer(space " << b.space << " 0x" << std::hex
-	     << b.offset << "~" << b.length << std::dec
-	     << " " << BlueStore::Buffer::get_state_name(b.state) << ")";
+  out << "buffer(space " << b.space << " 0x" << std::hex
+      << b.offset << "~" << b.length << std::dec
+      << " " << BlueStore::Buffer::get_state_name(b.state);
+  if (b.flags)
+    out << " " << BlueStore::Buffer::get_flag_name(b.flags);
+  return out << ")";
 }
 
 void BlueStore::BufferCache::trim(uint64_t keep)
@@ -573,6 +576,27 @@ void BlueStore::BufferSpace::read(
 	offset += b->length;
 	length -= b->length;
       }
+    }
+  }
+}
+
+void BlueStore::BufferSpace::finish_write(uint64_t seq)
+{
+  auto i = writing.begin();
+  while (i != writing.end()) {
+    Buffer *b = &*i;
+    dout(20) << __func__ << " " << *b << dendl;
+    assert(b->is_writing());
+    if (b->seq <= seq) {
+      if (b->flags & Buffer::FLAG_NOCACHE) {
+	++i;
+	_rm_buffer(b);
+      } else {
+	b->state = Buffer::STATE_CLEAN;
+	writing.erase(i++);
+      }
+    } else {
+      ++i;
     }
   }
 }
@@ -5849,7 +5873,7 @@ int BlueStore::_do_write(
     wctx.comp_blob_size = comp_min_blob_size;
 
   // write in buffer cache
-  o->bc.write(txc->seq, offset, bl);
+  o->bc.write(txc->seq, offset, bl, wctx.buffered ? 0 : Buffer::FLAG_NOCACHE);
 
   bufferlist::iterator p = bl.begin();
   if (offset / min_alloc_size == (end - 1) / min_alloc_size &&
