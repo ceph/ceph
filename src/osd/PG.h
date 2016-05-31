@@ -2706,12 +2706,6 @@ protected:
 
 
   // abstract bits
-  virtual void do_op(OpRequestRef& op) = 0;
-  virtual void do_scan(
-    OpRequestRef op,
-    ThreadPool::TPHandle &handle
-  ) = 0;
-  virtual void do_backfill(OpRequestRef op) = 0;
 
   virtual void on_role_change() = 0;
   virtual void on_pool_change() = 0;

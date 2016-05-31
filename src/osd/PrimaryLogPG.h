@@ -1394,14 +1394,16 @@ public:
   void do_request(
     OpRequestRef& op,
     ThreadPool::TPHandle &handle) override;
-  void do_op(OpRequestRef& op) override;
+  void do_op(OpRequestRef& op);
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
   void do_pg_op(OpRequestRef op);
+  void do_sub_op(OpRequestRef op);
+  void do_sub_op_reply(OpRequestRef op);
   void do_scan(
     OpRequestRef op,
-    ThreadPool::TPHandle &handle) override;
-  void do_backfill(OpRequestRef op) override;
+    ThreadPool::TPHandle &handle);
+  void do_backfill(OpRequestRef op);
   void do_backfill_remove(OpRequestRef op);
 
   void handle_backoff(OpRequestRef& op);
