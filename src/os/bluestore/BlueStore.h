@@ -125,6 +125,7 @@ public:
     bufferlist data;
 
     boost::intrusive::list_member_hook<> lru_item;
+    boost::intrusive::list_member_hook<> state_item;
 
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint64_t l)
       : space(space), state(s), seq(q), offset(o), length(l) {}
@@ -181,8 +182,16 @@ public:
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+        Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::state_item> > state_list_t;
+
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     BufferCache *cache;
+    state_list_t writing;
 
     BufferSpace(BufferCache *c) : cache(c) {}
 
@@ -190,10 +199,16 @@ public:
       buffer_map[b->offset].reset(b);
       cache->lru.push_front(*b);
       cache->size += b->length;
+      if (b->is_writing()) {
+	writing.push_back(*b);
+      }
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->size -= p->second->length;
       cache->lru.erase(cache->lru.iterator_to(*p->second));
+      if (p->second->is_writing()) {
+	writing.erase(writing.iterator_to(*p->second));
+      }
       buffer_map.erase(p);
     }
 
@@ -226,11 +241,14 @@ public:
       _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl));
     }
     void finish_write(uint64_t seq) {
-      // fixme: be more efficient... intrusive_list just for writing, perhaps?
-      for (auto i = buffer_map.begin(); i != buffer_map.end(); ++i) {
-	if (i->second->is_writing() &&
-	    i->second->seq <= seq) {
-	  i->second->state = Buffer::STATE_CLEAN;
+      auto i = writing.begin();
+      while (i != writing.end()) {
+	assert(i->is_writing());
+	if (i->seq <= seq) {
+	  i->state = Buffer::STATE_CLEAN;
+	  writing.erase(i++);
+	} else {
+	  ++i;
 	}
       }
     }
