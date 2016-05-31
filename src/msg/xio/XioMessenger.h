@@ -130,6 +130,7 @@ public:
 
   virtual ConnectionRef get_loopback_connection();
 
+  void unregister_xcon(XioConnection *xcon);
   virtual void mark_down(const entity_addr_t& a);
   virtual void mark_down(Connection *con);
   virtual void mark_down_all();
