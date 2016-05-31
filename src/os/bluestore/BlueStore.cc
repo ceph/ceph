@@ -5755,7 +5755,7 @@ int BlueStore::_do_alloc_write(
     b->map_bl(
       b_off, *l,
       [&](uint64_t offset, uint64_t length, bufferlist& t) {
-	bdev->aio_write(offset, t, &txc->ioc, wctx->buffered);
+	bdev->aio_write(offset, t, &txc->ioc, false);
       });
   }
   if (need > 0) {
