@@ -1754,7 +1754,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::append_zero(unsigned len)
   {
     ptr bp(len);
-    bp.zero();
+    bp.zero(false);
     append(std::move(bp));
   }
 
