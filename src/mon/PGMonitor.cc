@@ -621,17 +621,20 @@ void PGMonitor::handle_statfs(MonOpRequestRef op)
             << session->caps << dendl;
     return;
   }
-  MStatfsReply *reply;
-
-  dout(10) << "handle_statfs " << *statfs << " from " << statfs->get_orig_source() << dendl;
 
   if (statfs->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_statfs on fsid " << statfs->fsid << " != " << mon->monmap->fsid << dendl;
+    dout(0) << "handle_statfs on fsid " << statfs->fsid
+            << " != " << mon->monmap->fsid << dendl;
     return;
   }
 
+
+  dout(10) << "handle_statfs " << *statfs
+           << " from " << statfs->get_orig_source() << dendl;
+
   // fill out stfs
-  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), get_last_committed());
+  MStatfsReply *reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(),
+    get_last_committed());
 
   // these are in KB.
   reply->h.st.kb = pg_map.osd_sum.kb;
