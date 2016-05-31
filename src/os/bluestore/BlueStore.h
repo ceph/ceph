@@ -100,6 +100,7 @@ public:
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   /// cached buffer
+  struct BufferSpace;
   struct Buffer {
     enum {
       STATE_UNDEF = 0,
@@ -117,17 +118,18 @@ public:
       }
     }
 
+    BufferSpace *space;
     unsigned state;            ///< STATE_*
     uint64_t seq;
     uint64_t offset, length;
     bufferlist data;
 
-    boost::intrusive::list_member_hook<> onode_lru_item;
+    boost::intrusive::list_member_hook<> lru_item;
 
-    Buffer(unsigned s, uint64_t q, uint64_t o, uint64_t l)
-      : state(s), seq(q), offset(o), length(l) {}
-    Buffer(unsigned s, uint64_t q, uint64_t o, bufferlist& b)
-      : state(s), seq(q), offset(o), length(b.length()), data(b) {}
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, uint64_t l)
+      : space(space), state(s), seq(q), offset(o), length(l) {}
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint64_t o, bufferlist& b)
+      : space(space), state(s), seq(q), offset(o), length(b.length()), data(b) {}
 
     bool is_clean() const {
       return state == STATE_CLEAN;
@@ -162,34 +164,44 @@ public:
     }
   };
 
-  struct BufferSpace {
+  /// manage a collection of buffers (per-collection, currently)
+  struct BufferCache {
     typedef boost::intrusive::list<
       Buffer,
       boost::intrusive::member_hook<
-        Buffer,
+	Buffer,
 	boost::intrusive::list_member_hook<>,
-	&Buffer::onode_lru_item> > lru_list_t;
+	&Buffer::lru_item> > lru_list_t;
 
-    map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
     lru_list_t lru;
     uint64_t size = 0;
 
+    void trim(uint64_t keep);
+  };
+
+  /// map logical extent range (object) onto buffers
+  struct BufferSpace {
+    map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
+    BufferCache *cache;
+
+    BufferSpace(BufferCache *c) : cache(c) {}
+
     void _add_buffer(Buffer *b) {
       buffer_map[b->offset].reset(b);
-      lru.push_front(*b);
-      size += b->length;
+      cache->lru.push_front(*b);
+      cache->size += b->length;
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
-      size -= p->second->length;
-      lru.erase(lru.iterator_to(*p->second));
+      cache->size -= p->second->length;
+      cache->lru.erase(cache->lru.iterator_to(*p->second));
       buffer_map.erase(p);
     }
 
     /// move to top of lru
     void _touch_buffer(Buffer *b) {
-      lru_list_t::iterator p = lru.iterator_to(*b);
-      lru.erase(p);
-      lru.push_front(*b);
+      auto p = cache->lru.iterator_to(*b);
+      cache->lru.erase(p);
+      cache->lru.push_front(*b);
     }
 
     map<uint64_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -207,61 +219,11 @@ public:
       return buffer_map.empty();
     }
 
-    void discard(uint64_t offset, uint64_t length) {
-      auto i = _data_lower_bound(offset);
-      uint64_t end = offset + length;
-      while (i != buffer_map.end()) {
-	Buffer *b = i->second.get();
-	if (b->offset >= offset + length) {
-	  break;
-	}
-	if (b->offset < offset) {
-	  uint64_t front = offset - b->offset;
-	  if (b->offset + b->length > offset + length) {
-	    // drop middle (split)
-	    uint64_t tail = b->offset + b->length - (offset + length);
-	    if (b->data.length()) {
-	      bufferlist bl;
-	      bl.substr_of(b->data, b->length - tail, tail);
-	      _add_buffer(new Buffer(b->state, b->seq, end, bl));
-	    } else {
-	      _add_buffer(new Buffer(b->state, b->seq, end, tail));
-	    }
-	    size -= b->length - front - tail;
-	    b->truncate(front);
-	    return;
-	  } else {
-	    // drop tail
-	    size -= b->length - front;
-	    b->truncate(front);
-	    ++i;
-	    continue;
-	  }
-	}
-	if (b->end() <= end) {
-	  // drop entire buffer
-	  _rm_buffer(i++);
-	  continue;
-	}
-	// drop front
-	uint64_t keep = b->end() - end;
-	size -= b->length - keep;
-	if (b->data.length()) {
-	  bufferlist bl;
-	  bl.substr_of(b->data, b->length - keep, keep);
-	  _add_buffer(new Buffer(b->state, b->seq, end, bl));
-	  _rm_buffer(i);
-	} else {
-	  _add_buffer(new Buffer(b->state, b->seq, end, keep));
-	  _rm_buffer(i);
-	}
-	return;
-      }
-    }
+    void discard(uint64_t offset, uint64_t length);
 
     void write(uint64_t seq, uint64_t offset, bufferlist& bl) {
       discard(offset, bl.length());
-      _add_buffer(new Buffer(Buffer::STATE_WRITING, seq, offset, bl));
+      _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl));
     }
     void finish_write(uint64_t seq) {
       // fixme: be more efficient... intrusive_list just for writing, perhaps?
@@ -275,74 +237,13 @@ public:
 
     void read(uint64_t offset, uint64_t length,
 	      BlueStore::ready_regions_t& res,
-	      interval_set<uint64_t>& res_intervals) {
-      res.clear();
-      uint64_t end = offset + length;
-      for (auto i = _data_lower_bound(offset);
-	   i != buffer_map.end() && offset < end && i->first < end;
-	   ++i) {
-	Buffer *b = i->second.get();
-	assert(b->end() > offset);
-        if (b->is_writing() || b->is_clean()) {
-	  if (b->offset < offset) {
-	    uint64_t skip = offset - b->offset;
-	    uint64_t l = MIN(length, b->length - skip);
-	    res[offset].substr_of(b->data, skip, l);
-	    res_intervals.insert(offset, l);
-	    offset += l;
-	    length -= l;
-	    continue;
-	  }
-	  if (b->offset > offset) {
-	    uint64_t gap = b->offset - offset;
-	    if (length <= gap) {
-	      break;
-	    }
-	    offset += gap;
-	    length -= gap;
-	  }
-	  if (b->length > length) {
-	    uint64_t l = MIN(length, b->length);
-	    res[offset].substr_of(b->data, 0, l);
-	    res_intervals.insert(offset, l);
-	    offset += l;
-	    length -= l;
-	  } else {
-	    res[offset].append(b->data);
-	    res_intervals.insert(offset, b->length);
-	    offset += b->length;
-	    length -= b->length;
-	  }
-	}
-      }
-    }
+	      interval_set<uint64_t>& res_intervals);
 
     void truncate(uint64_t offset) {
       discard(offset, (uint64_t)-1 - offset);
     }
 
-    void trim(uint64_t keep) {
-      lru_list_t::iterator i = lru.end();
-      while (size > keep) {
-	Buffer *b = &*i;
-	if (b->is_clean()) {
-	  auto p = buffer_map.find(b->offset);
-	  if (i != lru.begin())
-	    ++i;
-	  _rm_buffer(p);
-	} else {
-	  if (i != lru.begin()) {
-	    ++i;
-	    continue;
-	  } else {
-	    break;
-	  }
-	}
-      }
-    }
-
     void dump(Formatter *f) const {
-      f->dump_unsigned("size", size);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
@@ -439,11 +340,12 @@ public:
 
     BufferSpace bc;
 
-    Onode(const ghobject_t& o, const string& k)
+    Onode(const ghobject_t& o, const string& k, BufferCache *c)
       : nref(0),
 	oid(o),
 	key(k),
-	exists(false) {
+	exists(false),
+	bc(c) {
     }
 
     bluestore_blob_t *get_blob_ptr(int64_t id) {
@@ -504,6 +406,7 @@ public:
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeHashLRU onode_map;
+    BufferCache buffer_cache;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     BnodeRef get_bnode(uint32_t hash);

@@ -436,6 +436,148 @@ static void get_wal_key(uint64_t seq, string *out)
   _key_encode_u64(seq, out);
 }
 
+// BufferCache
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.BufferCache(" << this << ") "
+
+ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
+{
+  return out << "buffer(space " << b.space << " 0x" << std::hex
+	     << b.offset << "~" << b.length << std::dec
+	     << " " << BlueStore::Buffer::get_state_name(b.state) << ")";
+}
+
+void BlueStore::BufferCache::trim(uint64_t keep)
+{
+  lru_list_t::iterator i = lru.end();
+  if (size) {
+    --i;
+  }
+  while (size > keep) {
+    Buffer *b = &*i;
+    if (b->is_clean()) {
+      auto p = b->space->buffer_map.find(b->offset);
+      if (i != lru.begin()) {
+	--i;
+      }
+      dout(20) << __func__ << " rm " << *b << dendl;
+      b->space->_rm_buffer(p);
+    } else {
+      if (i != lru.begin()) {
+	--i;
+	continue;
+      } else {
+	break;
+      }
+    }
+  }
+}
+
+// BufferSpace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.BufferSpace(" << this << ") "
+
+void BlueStore::BufferSpace::discard(uint64_t offset, uint64_t length)
+{
+  auto i = _data_lower_bound(offset);
+  uint64_t end = offset + length;
+  while (i != buffer_map.end()) {
+    Buffer *b = i->second.get();
+    if (b->offset >= offset + length) {
+      break;
+    }
+    if (b->offset < offset) {
+      uint64_t front = offset - b->offset;
+      if (b->offset + b->length > offset + length) {
+	// drop middle (split)
+	uint64_t tail = b->offset + b->length - (offset + length);
+	if (b->data.length()) {
+	  bufferlist bl;
+	  bl.substr_of(b->data, b->length - tail, tail);
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, bl));
+	} else {
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail));
+	}
+	cache->size -= length;
+	b->truncate(front);
+	return;
+      } else {
+	// drop tail
+	cache->size -= b->length - front;
+	b->truncate(front);
+	++i;
+	continue;
+      }
+    }
+    if (b->end() <= end) {
+      // drop entire buffer
+      _rm_buffer(i++);
+      continue;
+    }
+    // drop front
+    uint64_t keep = b->end() - end;
+    if (b->data.length()) {
+      bufferlist bl;
+      bl.substr_of(b->data, b->length - keep, keep);
+      _add_buffer(new Buffer(this, b->state, b->seq, end, bl));
+      _rm_buffer(i);
+    } else {
+      _add_buffer(new Buffer(this, b->state, b->seq, end, keep));
+      _rm_buffer(i);
+    }
+    return;
+  }
+}
+
+void BlueStore::BufferSpace::read(
+  uint64_t offset, uint64_t length,
+  BlueStore::ready_regions_t& res,
+  interval_set<uint64_t>& res_intervals)
+{
+  res.clear();
+  uint64_t end = offset + length;
+  for (auto i = _data_lower_bound(offset);
+       i != buffer_map.end() && offset < end && i->first < end;
+       ++i) {
+    Buffer *b = i->second.get();
+    assert(b->end() > offset);
+    if (b->is_writing() || b->is_clean()) {
+      if (b->offset < offset) {
+	uint64_t skip = offset - b->offset;
+	uint64_t l = MIN(length, b->length - skip);
+	res[offset].substr_of(b->data, skip, l);
+	res_intervals.insert(offset, l);
+	offset += l;
+	length -= l;
+	continue;
+      }
+      if (b->offset > offset) {
+	uint64_t gap = b->offset - offset;
+	if (length <= gap) {
+	  break;
+	}
+	offset += gap;
+	length -= gap;
+      }
+      if (b->length > length) {
+	uint64_t l = MIN(length, b->length);
+	res[offset].substr_of(b->data, 0, l);
+	res_intervals.insert(offset, l);
+	offset += l;
+	length -= l;
+      } else {
+	res[offset].append(b->data);
+	res_intervals.insert(offset, b->length);
+	offset += b->length;
+	length -= b->length;
+      }
+    }
+  }
+}
+
+
 // Bnode
 
 #undef dout_prefix
@@ -529,7 +671,7 @@ void BlueStore::OnodeHashLRU::rename(OnodeRef& oldo,
   OnodeRef o = po->second;
 
   // install a non-existent onode at old location
-  oldo.reset(new Onode(old_oid, o->key));
+  oldo.reset(new Onode(old_oid, o->key, o->bc.cache));
   po->second = oldo;
   lru.push_back(*po->second);
 
@@ -704,11 +846,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       return OnodeRef();
 
     // new
-    on = new Onode(oid, key);
+    on = new Onode(oid, key, &buffer_cache);
   } else {
     // loaded
     assert(r >=0);
-    on = new Onode(oid, key);
+    on = new Onode(oid, key, &buffer_cache);
     on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
@@ -4258,6 +4400,8 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
 
     if (txc->first_collection) {
       txc->first_collection->onode_map.trim();
+      txc->first_collection->buffer_cache.trim(
+	g_conf->bluestore_collection_buffer_cache_size);
     }
 
     osr->q.pop_front();
@@ -5199,8 +5343,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 		    << dendl;
   }
   if (!o->bc.empty()) {
-    dout(log_level) << __func__ << "  buffer_cache size 0x" << std::hex
-		    << o->bc.size << std::dec << dendl;
+    dout(log_level) << __func__ << "  buffer_cache" << dendl;
     for (auto& i : o->bc.buffer_map) {
       dout(log_level) << __func__ << "   0x" << std::hex << i.first << "~"
 		      << i.second->length << std::dec
