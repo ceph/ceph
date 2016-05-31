@@ -349,10 +349,16 @@ void Server::handle_client_session(MClientSession *m)
 	m->put();
 	return;
       }
+      // We are getting a seq that is higher than expected.
+      // Handle the same as any other seqn error.
+      //
       if (m->get_seq() != session->get_push_seq()) {
-	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq() 
+	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq()
 		<< ", BUGGY!" << dendl;
-	assert(0);
+	mds->clog->warn() << "incorrect push seq " << m->get_seq() << " != "
+			  << session->get_push_seq() << ", dropping" << " from client : " << session->get_human_name();
+	m->put();
+	return;
       }
       journal_close_session(session, Session::STATE_CLOSING, NULL);
     }
