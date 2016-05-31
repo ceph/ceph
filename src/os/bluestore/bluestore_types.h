@@ -260,7 +260,7 @@ struct bluestore_blob_t {
 
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   interval_set<uint32_t> unused;   ///< portion that has never been written to
-  vector<char> csum_data;          ///< opaque vector of csum data
+  bufferptr csum_data;          ///< opaque vector of csum data
 
   bluestore_blob_t(uint32_t l = 0, uint32_t f = 0)
     : length(l),
@@ -422,7 +422,7 @@ struct bluestore_blob_t {
   }
 
   bool has_csum_data() const {
-    return csum_data.size() > 0;
+    return csum_data.length() > 0;
   }
 
   uint32_t get_csum_block_size() const {
@@ -443,11 +443,11 @@ struct bluestore_blob_t {
     size_t vs = get_csum_value_size();
     if (!vs)
       return 0;
-    return csum_data.size() / vs;
+    return csum_data.length() / vs;
   }
   uint64_t get_csum_item(unsigned i) const {
     size_t cs = get_csum_value_size();
-    const char *p = &csum_data[cs * i];
+    const char *p = csum_data.c_str();
     switch (cs) {
     case 0:
       assert(0 == "no csum data, bad index");
@@ -463,17 +463,18 @@ struct bluestore_blob_t {
   }
   const char *get_csum_item_ptr(unsigned i) const {
     size_t cs = get_csum_value_size();
-    return &csum_data[cs * i];
+    return csum_data.c_str() + (cs * i);
   }
   char *get_csum_item_ptr(unsigned i) {
     size_t cs = get_csum_value_size();
-    return &csum_data[cs * i];
+    return csum_data.c_str() + (cs * i);
   }
 
   void init_csum(unsigned type, unsigned order, unsigned len) {
     csum_type = type;
     csum_block_order = order;
-    csum_data.resize(get_csum_value_size() * len / get_csum_block_size());
+    csum_data = buffer::create(get_csum_value_size() * len / get_csum_block_size());
+    csum_data.zero();
   }
 
   /// calculate csum for the buffer at the given b_off

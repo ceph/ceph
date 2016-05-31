@@ -90,7 +90,7 @@ public:
     size_t offset,
     size_t length,
     const bufferlist &bl,
-    vector<char>* csum_data
+    bufferptr* csum_data
     ) {
     assert(length % csum_block_size == 0);
     size_t blocks = length / csum_block_size;
@@ -100,11 +100,11 @@ public:
     typename Alg::state_t state;
     Alg::init(&state);
 
-    assert(csum_data->size() >= (offset + length) / csum_block_size *
+    assert(csum_data->length() >= (offset + length) / csum_block_size *
 	   sizeof(typename Alg::value_t));
 
     typename Alg::value_t *pv =
-      reinterpret_cast<typename Alg::value_t*>(&(*csum_data)[0]);
+      reinterpret_cast<typename Alg::value_t*>(csum_data->c_str());
     pv += offset / csum_block_size;
     while (blocks--) {
       *pv = Alg::calc(state, csum_block_size, p);
@@ -120,7 +120,7 @@ public:
     size_t offset,
     size_t length,
     const bufferlist &bl,
-    const vector<char>& csum_data
+    const bufferptr& csum_data
     ) {
     assert(length % csum_block_size == 0);
     bufferlist::const_iterator p = bl.begin();
@@ -130,7 +130,7 @@ public:
     Alg::init(&state);
 
     const typename Alg::value_t *pv =
-      reinterpret_cast<const typename Alg::value_t*>(&csum_data[0]);
+      reinterpret_cast<const typename Alg::value_t*>(csum_data.c_str());
     pv += offset / csum_block_size;
     size_t pos = offset;
     while (length > 0) {
