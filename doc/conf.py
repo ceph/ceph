@@ -59,6 +59,7 @@ breathe_projects_source = {
     "Ceph": (os.path.join(top_level, "src/include/rados"),
              ["rados_types.h", "librados.h"])
 }
+breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp': 'cxx'}
 pybind = os.path.join(top_level, 'src/pybind')
 if pybind not in sys.path:
     sys.path.insert(0, pybind)
