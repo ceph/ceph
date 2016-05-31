@@ -310,7 +310,7 @@ storage size in megabytes.
   the maximum number of objects. A negative value disables this setting.
   
 - **Maximum Size:** The ``--max-size`` option allows you to specify a quota
-  for the maximum number of bytes. A negative value disables this setting.
+  size in B/K/M/G/T. A negative value disables this setting.
   
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a 
@@ -327,7 +327,7 @@ For example::
 
 For example:: 
 
-	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024
+	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
 
 
 A negative value for num objects and / or max size means that the
