@@ -941,23 +941,15 @@ void PGMonitor::check_osd_map(epoch_t epoch)
     }
   }
 
-  bool propose = false;
-  if (pg_map.last_osdmap_epoch < epoch) {
-    pending_inc.osdmap_epoch = epoch;
-    propose = true;
-  }
+  assert(pg_map.last_osdmap_epoch < epoch);
+  pending_inc.osdmap_epoch = epoch;
+  map_pg_creates();
+  register_new_pgs();
 
-  if (map_pg_creates())
-    propose = true;
-  if (register_new_pgs())
-    propose = true;
+  if (need_check_down_pgs || !need_check_down_pg_osds.empty())
+    check_down_pgs();
 
-  if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
-      check_down_pgs())
-    propose = true;
-
-  if (propose)
-    propose_pending();
+  propose_pending();
 }
 
 void PGMonitor::register_pg(OSDMap *osdmap,
@@ -1043,7 +1035,7 @@ void PGMonitor::register_pg(OSDMap *osdmap,
   }
 }
 
-bool PGMonitor::register_new_pgs()
+void PGMonitor::register_new_pgs()
 {
   // iterate over crush mapspace
   OSDMap *osdmap = &mon->osdmon()->osdmap;
@@ -1125,10 +1117,9 @@ bool PGMonitor::register_new_pgs()
 
   dout(10) << "register_new_pgs registered " << created << " new pgs, removed "
            << removed << " uncreated pgs" << dendl;
-  return (created || removed);
 }
 
-bool PGMonitor::map_pg_creates()
+void PGMonitor::map_pg_creates()
 {
   OSDMap *osdmap = &mon->osdmon()->osdmap;
 
@@ -1196,9 +1187,7 @@ bool PGMonitor::map_pg_creates()
   }
   if (changed) {
     dout(10) << __func__ << " " << changed << " pgs changed primary" << dendl;
-    return true;
   }
-  return false;
 }
 
 void PGMonitor::send_pg_creates()
@@ -1304,12 +1293,12 @@ void PGMonitor::_try_mark_pg_stale(
   }
 }
 
-bool PGMonitor::check_down_pgs()
+void PGMonitor::check_down_pgs()
 {
   dout(10) << "check_down_pgs last_osdmap_epoch "
 	   << pg_map.last_osdmap_epoch << dendl;
   if (pg_map.last_osdmap_epoch == 0)
-    return false;
+    return;
 
   // use the OSDMap that matches the one pg_map has consumed.
   std::unique_ptr<OSDMap> osdmap;
@@ -1318,8 +1307,6 @@ bool PGMonitor::check_down_pgs()
   assert(err == 0);
   osdmap.reset(new OSDMap);
   osdmap->decode(bl);
-
-  bool ret = false;
 
   // if a large number of osds changed state, just iterate over the whole
   // pg map.
@@ -1333,7 +1320,6 @@ bool PGMonitor::check_down_pgs()
           p.second.acting_primary != -1 &&
           osdmap->is_down(p.second.acting_primary)) {
 	_try_mark_pg_stale(osdmap.get(), p.first, p.second);
-	ret = true;
       }
     }
   } else {
@@ -1344,7 +1330,6 @@ bool PGMonitor::check_down_pgs()
 	  assert(stat.acting_primary == osd);
 	  if ((stat.state & PG_STATE_STALE) == 0) {
 	    _try_mark_pg_stale(osdmap.get(), pgid, stat);
-	    ret = true;
 	  }
 	}
       }
@@ -1352,8 +1337,6 @@ bool PGMonitor::check_down_pgs()
   }
   need_check_down_pgs = false;
   need_check_down_pg_osds.clear();
-
-  return ret;
 }
 
 inline string percentify(const float& a) {
