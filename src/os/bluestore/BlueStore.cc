@@ -2514,6 +2514,10 @@ int BlueStore::fsck()
 	  string key;
 	  bufferlist val;
 	  get_overlay_key(o->onode.nid, v.second.key, &key);
+	  if (overlay_keys.count(key)) {
+	    derr << " " << oid << " dup overlay key " << key << dendl;
+	    ++errors;
+	  }
 	  overlay_keys.insert(key);
 	  int r = db->get(PREFIX_OVERLAY, key, &val);
 	  if (r < 0) {
