@@ -1287,13 +1287,6 @@ private:
   void _do_read_all_overlays(bluestore_wal_op_t& wo);
   void _pad_zeros(bufferlist *bl, uint64_t *offset, uint64_t *length,
 		  uint64_t chunk_size);
-  void _pad_zeros_head(OnodeRef o, bufferlist *bl,
-		       uint64_t *offset, uint64_t *length,
-		       uint64_t chunk_size);
-  void _pad_zeros_tail(TransContext *txc,
-		       OnodeRef o, bufferlist *bl,
-		       uint64_t offset, uint64_t *length,
-		       uint64_t chunk_size);
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
