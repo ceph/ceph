@@ -942,21 +942,37 @@ namespace librbd {
                       const std::string &start, uint64_t max_return,
                       map<string, bufferlist> *pairs)
     {
-      assert(pairs);
-      bufferlist in, out;
-      ::encode(start, in);
-      ::encode(max_return, in);
-      int r = ioctx->exec(oid, "rbd", "metadata_list", in, out);
-      if (r < 0)
-        return r;
+      librados::ObjectReadOperation op;
+      metadata_list_start(&op, start, max_return);
 
-      bufferlist::iterator iter = out.begin();
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return metadata_list_finish(&it, pairs);
+    }
+
+    void metadata_list_start(librados::ObjectReadOperation *op,
+                             const std::string &start, uint64_t max_return)
+    {
+      bufferlist in_bl;
+      ::encode(start, in_bl);
+      ::encode(max_return, in_bl);
+      op->exec("rbd", "metadata_list", in_bl);
+    }
+
+    int metadata_list_finish(bufferlist::iterator *it,
+                             std::map<std::string, bufferlist> *pairs)
+    {
+      assert(pairs);
       try {
-        ::decode(*pairs, iter);
+        ::decode(*pairs, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
-
       return 0;
     }
 
