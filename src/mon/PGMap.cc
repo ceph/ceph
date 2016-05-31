@@ -978,18 +978,18 @@ void PGMap::dump_osd_stats(ostream& ss) const
        p != osd_stat.end();
        ++p) {
     tab << p->first
-        << prettybyte_t(p->second.kb_used << 10)
-        << prettybyte_t(p->second.kb_avail << 10)
-        << prettybyte_t(p->second.kb << 10)
+        << si_t(p->second.kb_used << 10)
+        << si_t(p->second.kb_avail << 10)
+        << si_t(p->second.kb << 10)
         << p->second.hb_in
         << get_num_pg_by_osd(p->first)
         << TextTable::endrow;
   }
 
   tab << "sum"
-      << prettybyte_t(osd_sum.kb_used << 10)
-      << prettybyte_t(osd_sum.kb_avail << 10)
-      << prettybyte_t(osd_sum.kb << 10)
+      << si_t(osd_sum.kb_used << 10)
+      << si_t(osd_sum.kb_avail << 10)
+      << si_t(osd_sum.kb << 10)
       << TextTable::endrow;
 
   ss << tab;
@@ -1005,9 +1005,9 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
 
   tab << "sum"
-      << prettybyte_t(osd_sum.kb_used << 10)
-      << prettybyte_t(osd_sum.kb_avail << 10)
-      << prettybyte_t(osd_sum.kb << 10)
+      << si_t(osd_sum.kb_used << 10)
+      << si_t(osd_sum.kb_avail << 10)
+      << si_t(osd_sum.kb << 10)
       << TextTable::endrow;
 
   ss << tab;
