@@ -36,4 +36,4 @@ add_dependencies(dmc_sim dmclock)
 target_link_libraries(ssched_sim PUBLIC pthread)
 target_link_libraries(dmc_sim PUBLIC pthread $<TARGET_FILE:dmclock>)
 
-add_custom_target(sims DEPENDS ssched_sim dmc_sim)
+add_custom_target(dmclock-sims DEPENDS ssched_sim dmc_sim)

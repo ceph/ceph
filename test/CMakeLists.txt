@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-include_directories(${GTEST_INCLUDE_DIR})
+# TO REMOVE include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src)
 include_directories(../support/src)
 include_directories(../sim)
@@ -18,20 +18,30 @@ set_source_files_properties(${core_srcs} ${test_srcs}
   COMPILE_FLAGS "${local_flags}"
   )
 
-add_executable(tests EXCLUDE_FROM_ALL ${test_srcs} ${support_srcs})
+add_executable(dmclock-tests EXCLUDE_FROM_ALL ${test_srcs} ${support_srcs})
 
-target_link_libraries(tests
-  PUBLIC $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+if (TARGET gtest AND TARGET gtest_main)
+  add_dependencies(dmclock-tests gtest gtest_main)
+  target_link_libraries(dmclock-tests
+    PUBLIC $<TARGET_FILE:dmclock>
+    pthread
+    $<TARGET_FILE:gtest>
+    $<TARGET_FILE:gtest_main>)
+else(GTEST_LIBRARY AND GTEST_MAIN_LIBRARY)
+  target_link_libraries(dmclock-tests
+    PUBLIC $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
+endif()
+  
 
-add_dependencies(tests dmclock)
+add_dependencies(dmclock-tests dmclock)
 
 # for every argument, adds a test with that name, using it as a gtest filter
-function(make_tests)
+function(dmclock_make_tests)
   foreach(targ ${ARGN})
-    add_test(NAME ${targ} COMMAND tests --gtest_filter=${targ}.*)
+    add_test(NAME ${targ} COMMAND dmclock-tests --gtest_filter=${targ}.*)
   endforeach()
 endfunction()
 
-make_tests(dmclock_server dmclock_server_pull dmclock_client test_client)
+dmclock_make_tests(dmclock_server dmclock_server_pull dmclock_client test_client)
 
-add_dependencies(check tests)
+add_dependencies(dmclock-check dmclock-tests)
