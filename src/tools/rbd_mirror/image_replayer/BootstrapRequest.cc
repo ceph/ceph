@@ -32,6 +32,7 @@ namespace image_replayer {
 
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_ack_callback;
+using librbd::util::unique_lock_name;
 
 template <typename I>
 BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
@@ -48,24 +49,39 @@ BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
                                       MirrorPeerClientMeta *client_meta,
                                       Context *on_finish,
 				      rbd::mirror::ProgressContext *progress_ctx)
-  : m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
+  : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
+		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
+    m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
     m_local_image_ctx(local_image_ctx), m_local_image_name(local_image_name),
     m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
     m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
-    m_client_meta(client_meta), m_on_finish(on_finish),
-    m_progress_ctx(progress_ctx) {
+    m_client_meta(client_meta), m_progress_ctx(progress_ctx),
+    m_lock(unique_lock_name("BootstrapRequest::m_lock", this)) {
 }
 
 template <typename I>
 BootstrapRequest<I>::~BootstrapRequest() {
+  assert(m_image_sync_request == nullptr);
   assert(m_remote_image_ctx == nullptr);
 }
 
 template <typename I>
 void BootstrapRequest<I>::send() {
   get_local_image_id();
+}
+
+template <typename I>
+void BootstrapRequest<I>::cancel() {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+  m_canceled = true;
+
+  if (m_image_sync_request) {
+    m_image_sync_request->cancel();
+  }
 }
 
 template <typename I>
@@ -406,6 +422,13 @@ void BootstrapRequest<I>::handle_update_client(int r) {
     return;
   }
 
+  if (m_canceled) {
+    dout(10) << ": request canceled" << dendl;
+    m_ret_val = -ECANCELED;
+    close_local_image();
+    return;
+  }
+
   m_client_meta->image_id = m_local_image_id;
   get_remote_tags();
 }
@@ -437,6 +460,13 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
   if (r < 0) {
     derr << ": failed to retrieve remote tags: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
+    close_local_image();
+    return;
+  }
+
+  if (m_canceled) {
+    dout(10) << ": request canceled" << dendl;
+    m_ret_val = -ECANCELED;
     close_local_image();
     return;
   }
@@ -517,12 +547,29 @@ void BootstrapRequest<I>::image_sync() {
                                                m_local_mirror_uuid, m_journaler,
                                                m_client_meta, m_work_queue, ctx,
 					       m_progress_ctx);
-  request->start();
+  {
+    Mutex::Locker locker(m_lock);
+    request->get();
+    m_image_sync_request = request;
+  }
+
+  request->send();
 }
 
 template <typename I>
 void BootstrapRequest<I>::handle_image_sync(int r) {
   dout(20) << ": r=" << r << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_image_sync_request->put();
+    m_image_sync_request = nullptr;
+  }
+
+  if (m_canceled) {
+    dout(10) << ": request canceled" << dendl;
+    m_ret_val = -ECANCELED;
+  }
 
   if (r < 0) {
     derr << ": failed to sync remote image: " << cpp_strerror(r) << dendl;
@@ -585,14 +632,6 @@ void BootstrapRequest<I>::handle_close_remote_image(int r) {
 }
 
 template <typename I>
-void BootstrapRequest<I>::finish(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
-}
-
-template <typename I>
 bool BootstrapRequest<I>::decode_client_meta() {
   dout(20) << dendl;
 
@@ -617,7 +656,8 @@ bool BootstrapRequest<I>::decode_client_meta() {
 
   *m_client_meta = *client_meta;
 
-  dout(20) << ": client found: image_id=" << m_local_image_id << dendl;
+  dout(20) << ": client found: image_id=" << m_local_image_id
+	   << ", client_meta=" << *m_client_meta << dendl;
   return true;
 }
 

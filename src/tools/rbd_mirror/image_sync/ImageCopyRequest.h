@@ -9,6 +9,7 @@
 #include "common/Mutex.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/BaseRequest.h"
 #include <map>
 #include <vector>
 
@@ -25,7 +26,7 @@ class ProgressContext;
 namespace image_sync {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class ImageCopyRequest {
+class ImageCopyRequest : public BaseRequest {
 public:
   typedef std::vector<librados::snap_t> SnapIds;
   typedef std::map<librados::snap_t, SnapIds> SnapMap;
@@ -87,7 +88,6 @@ private:
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
   MirrorPeerSyncPoint *m_sync_point;
-  Context *m_on_finish;
   ProgressContext *m_progress_ctx;
 
   SnapMap m_snap_map;
@@ -111,8 +111,6 @@ private:
 
   void send_flush_sync_point();
   void handle_flush_sync_point(int r);
-
-  void finish(int r);
 
   int compute_snap_map();
 

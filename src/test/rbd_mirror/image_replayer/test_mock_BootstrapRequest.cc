@@ -58,7 +58,14 @@ struct ImageSync<librbd::MockTestImageCtx> {
     s_instance = this;
   }
 
-  MOCK_METHOD0(start, void());
+  void put() {
+  }
+
+  void get() {
+  }
+
+  MOCK_METHOD0(send, void());
+  MOCK_METHOD0(cancel, void());
 };
 
 ImageSync<librbd::MockTestImageCtx>* ImageSync<librbd::MockTestImageCtx>::s_instance = nullptr;

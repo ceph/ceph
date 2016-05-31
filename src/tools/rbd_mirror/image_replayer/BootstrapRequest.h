@@ -6,8 +6,10 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
+#include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/BaseRequest.h"
 #include <list>
 #include <string>
 
@@ -22,12 +24,13 @@ namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 namespace rbd {
 namespace mirror {
 
+template <typename> class ImageSync;
 class ProgressContext;
 
 namespace image_replayer {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class BootstrapRequest {
+class BootstrapRequest : public BaseRequest {
 public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;
@@ -70,6 +73,7 @@ public:
   ~BootstrapRequest();
 
   void send();
+  void cancel();
 
 private:
   /**
@@ -142,8 +146,10 @@ private:
   std::string m_remote_mirror_uuid;
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
-  Context *m_on_finish;
   ProgressContext *m_progress_ctx;
+  Mutex m_lock;
+  ImageSync<ImageCtxT> *m_image_sync_request = nullptr;
+  bool m_canceled = false;
 
   Tags m_remote_tags;
   cls::journal::Client m_client;
@@ -192,8 +198,6 @@ private:
 
   void close_remote_image();
   void handle_close_remote_image(int r);
-
-  void finish(int r);
 
   bool decode_client_meta();
 
