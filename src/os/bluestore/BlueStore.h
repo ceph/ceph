@@ -1128,14 +1128,13 @@ private:
 
   // --------------------------------------------------------
   // read processing internal methods
-  int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool buffered, bufferlist* result);
+  int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result);
   int _read_extent_sparse(
     const bluestore_blob_t* blob,
     const bluestore_pextent_t* extent,
     regions2read_t::const_iterator cur,
     regions2read_t::const_iterator end,
     OnodeRef o,
-    bool buffered,
     ready_regions_t* result);
 
   int _blob2read_to_extents2read(

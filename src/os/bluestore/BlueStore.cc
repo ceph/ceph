@@ -3070,7 +3070,7 @@ int BlueStore::_do_read(
     if (bptr->has_flag(bluestore_blob_t::FLAG_COMPRESSED)) {
       bufferlist compressed_bl, raw_bl;
 
-      int r = _read_whole_blob(bptr, o, buffered, &compressed_bl);
+      int r = _read_whole_blob(bptr, o, &compressed_bl);
       if (r < 0)
 	return r;
       if (bptr->csum_type != bluestore_blob_t::CSUM_NONE) {
@@ -3100,7 +3100,7 @@ int BlueStore::_do_read(
 
       extents2read_t::const_iterator it = e2r.cbegin();
       while (it != e2r.cend()) {
-	int r = _read_extent_sparse(bptr, it->first, it->second.cbegin(), it->second.cend(), o, buffered, &ready_regions);
+	int r = _read_extent_sparse(bptr, it->first, it->second.cbegin(), it->second.cend(), o, &ready_regions);
 	if (r < 0)
 	  return r;
 	++it;
@@ -3166,7 +3166,7 @@ int BlueStore::_do_read(
   return r;
 }
 
-int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool buffered, bufferlist* result)
+int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result)
 {
   IOContext ioc(NULL);   // FIXME?
 
@@ -3180,7 +3180,7 @@ int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bool b
     uint32_t x_len = ROUND_UP_TO(r_len, block_size);
 
     bufferlist bl;
-    int r = bdev->read(it->offset, x_len, &bl, &ioc, buffered);
+    int r = bdev->read(it->offset, x_len, &bl, &ioc, false);
     if (r < 0) {
       return r;
     }
@@ -3206,7 +3206,6 @@ int BlueStore::_read_extent_sparse(
   BlueStore::regions2read_t::const_iterator cur,
   BlueStore::regions2read_t::const_iterator end,
   OnodeRef o,
-  bool buffered,
   BlueStore::ready_regions_t* result)
 {
   // FIXME: this is a trivial implementation that reads each region
@@ -3229,7 +3228,7 @@ int BlueStore::_read_extent_sparse(
     uint64_t r_len = ROUND_UP_TO(x_len + front_extra, chunk_size);
 
     bufferlist bl;
-    int r = bdev->read(r_off + extent->offset, r_len, &bl, &ioc, buffered);
+    int r = bdev->read(r_off + extent->offset, r_len, &bl, &ioc, false);
     if (r < 0) {
       return r;
     }
