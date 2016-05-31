@@ -2320,22 +2320,23 @@ int BlueStore::umount()
   return 0;
 }
 
-int BlueStore::_verify_bnode_shared(
-  BnodeRef bnode,
+int BlueStore::_fsck_verify_blob_map(
+  string what,
+  const bluestore_blob_map_t& blob_map,
   map<int64_t,bluestore_extent_ref_map_t>& v,
   interval_set<uint64_t> &used_blocks)
 {
   int errors = 0;
-  dout(10) << __func__ << " hash " << bnode->hash << " " << v << dendl;
-  for (auto& b : bnode->blob_map) {
+  dout(20) << __func__ << " " << what << " " << v << dendl;
+  for (auto& b : blob_map) {
     auto pv = v.find(b.first);
     if (pv == v.end()) {
-      derr << " hash " << bnode->hash << " blob " << b.first
-	   << " exists in bnode but has no refs" << dendl;
+      derr << " " << what << " blob " << b.first
+	   << " has no lextent refs" << dendl;
       ++errors;
     }
     if (pv->second != b.second.ref_map) {
-      derr << " hash " << bnode->hash << " blob " << b.first
+      derr << " " << what << " blob " << b.first
 	   << " ref_map " << b.second.ref_map
 	   << " != expected " << pv->second << dendl;
       ++errors;
@@ -2347,16 +2348,21 @@ int BlueStore::_verify_bnode_shared(
       e.insert(p.offset, p.length);
       i.intersection_of(e, used_blocks);
       if (!i.empty()) {
-	derr << " hash " << bnode->hash << " extent(s) " << i
+	derr << " " << what << " extent(s) " << i
 	     << " already allocated" << dendl;
 	++errors;
       } else {
 	used_blocks.insert(p.offset, p.length);
+	if (p.end() > bdev->get_size()) {
+	  derr << " " << what << " blob " << b.first << " extent " << e
+	       << " past end of block device" << dendl;
+	  ++errors;
+	}
       }
     }
   }
   for (auto& p : v) {
-    derr << " hash " << bnode->hash << " blob " << p.first
+    derr << " " << what << " blob " << p.first
 	 << " dne, has extent refs " << p.second << dendl;
     ++errors;
   }
@@ -2453,7 +2459,11 @@ int BlueStore::fsck()
 	}
 	if (!bnode || bnode->hash != o->oid.hobj.get_hash()) {
 	  if (bnode)
-	    errors += _verify_bnode_shared(bnode, hash_shared, used_blocks);
+	    errors += _fsck_verify_blob_map(
+	      "hash " + stringify(bnode->hash),
+	      bnode->blob_map,
+	      hash_shared,
+	      used_blocks);
 	  bnode = c->get_bnode(o->oid.hobj.get_hash());
 	  hash_shared.clear();
 	}
@@ -2469,7 +2479,7 @@ int BlueStore::fsck()
 	  used_nids.insert(o->onode.nid);
 	}
 	// lextents
-	map<uint64_t,bluestore_extent_ref_map_t> local_blobs;
+	map<int64_t,bluestore_extent_ref_map_t> local_blobs;
 	for (auto& l : o->onode.extent_map) {
 	  if (l.second.blob >= 0) {
 	    local_blobs[l.second.blob].get(l.second.offset, l.second.length);
@@ -2478,36 +2488,11 @@ int BlueStore::fsck()
 	  }
 	}
 	// blobs
-	for (auto& b : o->onode.blob_map) {
-	  for (auto& e : b.second.extents) {
-	    if (used_blocks.intersects(e.offset, e.length)) {
-	      derr << " " << oid << " blob " << b.first << " extent " << e
-		   << " already allocated" << dendl;
-	      ++errors;
-	      continue;
-	    }
-	    used_blocks.insert(e.offset, e.length);
-	    if (e.end() > bdev->get_size()) {
-	      derr << " " << oid << " blob " << b.first << " extent " << e
-		   << " past end of block device" << dendl;
-	      ++errors;
-	    }
-	  }
-	  auto bp = local_blobs.find(b.first);
-	  if (bp != local_blobs.end()) {
-	    if (bp->second != b.second.ref_map) {
-	      derr << " " << oid << " blob " << b.first << " ref_map should be "
-		   << bp->second << " but is " << b.second.ref_map
-		   << dendl;
-	      ++errors;
-	    }
-	    local_blobs.erase(b.first);
-	  } else {
-	    derr << " " << oid << " blob " << b.first << " has no lextent refs"
-		 << dendl;
-	    ++errors;
-	  }
-	}
+	errors += _fsck_verify_blob_map(
+	  "object " + stringify(oid),
+	  o->onode.blob_map,
+	  local_blobs,
+	  used_blocks);
 	// overlays
 	set<string> overlay_keys;
 	map<uint64_t,int> refs;
@@ -2619,7 +2604,11 @@ int BlueStore::fsck()
     }
   }
   if (bnode) {
-    errors += _verify_bnode_shared(bnode, hash_shared, used_blocks);
+    errors += _fsck_verify_blob_map(
+      "hash " + stringify(bnode->hash),
+      bnode->blob_map,
+      hash_shared,
+      used_blocks);
     hash_shared.clear();
     bnode.reset();
   }
