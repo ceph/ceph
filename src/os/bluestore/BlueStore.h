@@ -252,6 +252,10 @@ public:
 	}
       }
     }
+    void did_read(uint64_t offset, bufferlist& bl) {
+      discard(offset, bl.length());
+      _add_buffer(new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl));
+    }
 
     void read(uint64_t offset, uint64_t length,
 	      BlueStore::ready_regions_t& res,

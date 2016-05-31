@@ -3144,6 +3144,9 @@ int BlueStore::_do_read(
 	       << std::dec << dendl;
       bufferlist tmp;
       tmp.substr_of(pr->second, r_off, r_len);
+      if (buffered) {
+	o->bc.did_read(pos, tmp);
+      }
       bl.claim_append(tmp);
       pos += r_len;
       continue;
