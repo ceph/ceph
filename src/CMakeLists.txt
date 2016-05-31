@@ -1118,6 +1118,18 @@ endif(BUILD_SHARED_LIBS)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
   endif(HAVE_LIBFUSE)
+
+  if(JNI_FOUND)
+      set(libcephfs_jni_srcs
+        java/native/libcephfs_jni.cc
+        java/native/JniConstants.cpp)
+    add_library(cephfs_jni ${CEPH_SHARED} ${libcephfs_jni_srcs})
+      target_link_libraries(cephfs_jni cephfs)
+      target_include_directories(cephfs_jni PUBLIC "${JNI_INCLUDE_DIRS}")
+      set_target_properties(cephfs_jni PROPERTIES OUTPUT_NAME cephfs_jni VERSION 1.0.0
+        SOVERSION 1)
+      install(TARGETS cephfs_jni DESTINATION lib)
+  endif(JNI_FOUND)
 endif(WITH_LIBCEPHFS)
 
 set(journal_srcs

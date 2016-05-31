@@ -187,6 +187,8 @@ find_package(fuse)
 set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif(${WITH_FUSE})
 
+find_package(JNI)
+
 option(WITH_XFS "XFS is here" ON)
 if(${WITH_XFS})
 find_package(xfs)
