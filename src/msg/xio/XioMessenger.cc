@@ -534,22 +534,7 @@ int XioMessenger::session_event(struct xio_session *session,
     ldout(cct,2) << xio_session_event_str(event_data->event)
       << " xcon " << xcon << " session " << session  << dendl;
     if (likely(!!xcon)) {
-      Spinlock::Locker lckr(conns_sp);
-      XioConnection::EntitySet::iterator conn_iter =
-	conns_entity_map.find(xcon->peer, XioConnection::EntityComp());
-      if (conn_iter != conns_entity_map.end()) {
-	XioConnection *xcon2 = &(*conn_iter);
-	if (xcon == xcon2) {
-	  conns_entity_map.erase(conn_iter);
-	}
-      }
-      /* check if citer on conn_list */
-      if (xcon->conns_hook.is_linked()) {
-        /* now find xcon on conns_list and erase */
-        XioConnection::ConnList::iterator citer =
-            XioConnection::ConnList::s_iterator_to(*xcon);
-        conns_list.erase(citer);
-      }
+      unregister_xcon(xcon);
       xcon->on_disconnect_event();
     }
     break;
@@ -557,6 +542,11 @@ int XioMessenger::session_event(struct xio_session *session,
     xcon = static_cast<XioConnection*>(event_data->conn_user_context);
     ldout(cct,2) << xio_session_event_str(event_data->event)
       << " xcon " << xcon << " session " << session << dendl;
+    /*
+     * There are flows where Accelio sends teardown event without going
+     * through disconnect event. so we make sure we cleaned the connection.
+     */
+    unregister_xcon(xcon);
     xcon->on_teardown_event();
     break;
   case XIO_SESSION_TEARDOWN_EVENT:
@@ -1042,6 +1032,28 @@ ConnectionRef XioMessenger::get_loopback_connection()
 {
   return (loop_con.get());
 } /* get_loopback_connection */
+
+void XioMessenger::unregister_xcon(XioConnection *xcon)
+{
+  Spinlock::Locker lckr(conns_sp);
+
+  XioConnection::EntitySet::iterator conn_iter =
+	conns_entity_map.find(xcon->peer, XioConnection::EntityComp());
+  if (conn_iter != conns_entity_map.end()) {
+	XioConnection *xcon2 = &(*conn_iter);
+	if (xcon == xcon2) {
+	  conns_entity_map.erase(conn_iter);
+	}
+  }
+
+  /* check if citer on conn_list */
+  if (xcon->conns_hook.is_linked()) {
+    /* now find xcon on conns_list and erase */
+    XioConnection::ConnList::iterator citer =
+        XioConnection::ConnList::s_iterator_to(*xcon);
+    conns_list.erase(citer);
+  }
+}
 
 void XioMessenger::mark_down(const entity_addr_t& addr)
 {
