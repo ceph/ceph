@@ -607,7 +607,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   supplied_etag = s->info.env->get("HTTP_ETAG");
 
-  if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
+  if (s->generic_attrs.find(RGW_ATTR_CONTENT_TYPE) == s->generic_attrs.end()) {
     ldout(s->cct, 5) << "content type wasn't provided, trying to guess" << dendl;
     const char *suffix = strrchr(s->object.name.c_str(), '.');
     if (suffix) {

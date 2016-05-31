@@ -104,7 +104,7 @@ bool RGWPolicyEnv::match_policy_vars(map<string, bool, ltstr_nocase>& policy_var
     const string& var = iter->first;
     if (strncasecmp(ignore_prefix.c_str(), var.c_str(), ignore_prefix.size()) == 0)
       continue;
-    if (policy_vars.count(var) == 0) {
+    if (policy_vars.find(var) == policy_vars.end()) {
       err_msg = "Policy missing condition: ";
       err_msg.append(iter->first);
       dout(1) << "env var missing in policy: " << iter->first << dendl;

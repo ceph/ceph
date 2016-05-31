@@ -120,7 +120,8 @@ int rgw_store_user_info(RGWRados *store,
 
   map<string, RGWAccessKey>::iterator iter;
   for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
-    if (old_info && old_info->swift_keys.count(iter->first) != 0)
+    if (old_info &&
+	old_info->swift_keys.find(iter->first) != old_info->swift_keys.end())
       continue;
     RGWAccessKey& k = iter->second;
     /* check if swift mapping exists */
@@ -139,7 +140,8 @@ int rgw_store_user_info(RGWRados *store,
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) != 0)
+      if (old_info &&
+	  old_info->access_keys.find(iter->first) != old_info->access_keys.end())
         continue;
       int r = rgw_get_user_info_by_access_key(store, k.id, inf);
       if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
@@ -180,7 +182,8 @@ int rgw_store_user_info(RGWRados *store,
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) != 0)
+      if (old_info &&
+	  old_info->access_keys.find(iter->first) != old_info->access_keys.end())
 	continue;
 
       ret = rgw_put_system_obj(store, store->get_zone_params().user_keys_pool, k.id,
@@ -194,7 +197,8 @@ int rgw_store_user_info(RGWRados *store,
   map<string, RGWAccessKey>::iterator siter;
   for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
     RGWAccessKey& k = siter->second;
-    if (old_info && old_info->swift_keys.count(siter->first) != 0)
+    if (old_info &&
+	old_info->swift_keys.find(siter->first) != old_info->swift_keys.end())
       continue;
 
     ret = rgw_put_system_obj(store, store->get_zone_params().user_swift_pool, k.id,
