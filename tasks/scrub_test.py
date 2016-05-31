@@ -283,7 +283,6 @@ class InconsistentObjChecker:
     def data_digest_mismatch(self, inc):
         assert 'data_digest_mismatch' in inc['errors']
         self._check_attrs(inc, 'data_digest')
-        self._check_errors(inc, 'data_digest_mismatch')
 
     def missing(self, inc):
         assert 'missing' in inc['errors']
@@ -292,12 +291,10 @@ class InconsistentObjChecker:
     def size_mismatch(self, inc):
         assert 'size_mismatch' in inc['errors']
         self._check_attrs(inc, 'size')
-        self._check_errors(inc, 'size_mismatch')
 
     def omap_digest_mismatch(self, inc):
         assert 'omap_digest_mismatch' in inc['errors']
         self._check_attrs(inc, 'omap_digest')
-        self._check_errors(inc, 'omap_digest_mismatch')
 
 
 def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
