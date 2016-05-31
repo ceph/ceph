@@ -52,7 +52,7 @@ public:
   ~JournalMetadata();
 
   void init(Context *on_init);
-  void shut_down();
+  void shut_down(Context *on_finish);
 
   bool is_initialized() const { return m_initialized; }
 
@@ -140,6 +140,9 @@ public:
 
   uint64_t allocate_commit_tid(uint64_t object_num, uint64_t tag_tid,
                                uint64_t entry_tid);
+  void overflow_commit_tid(uint64_t commit_tid, uint64_t object_num);
+  void get_commit_entry(uint64_t commit_tid, uint64_t *object_num,
+                        uint64_t *tag_tid, uint64_t *entry_tid);
   void committed(uint64_t commit_tid, const CreateContext &create_context);
 
   void notify_update();

@@ -139,3 +139,38 @@ TEST_F(TestJournalRecorder, Flush) {
   ASSERT_TRUE(future2.is_complete());
 }
 
+TEST_F(TestJournalRecorder, OverflowCommitObjectNumber) {
+  std::string oid = get_temp_oid();
+  ASSERT_EQ(0, create(oid, 12, 2));
+  ASSERT_EQ(0, client_register(oid));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+  ASSERT_EQ(0U, metadata->get_active_set());
+
+  journal::JournalRecorder *recorder = create_recorder(oid, metadata);
+
+  recorder->append(123, create_payload(std::string(metadata->get_object_size() -
+                                                   journal::Entry::get_fixed_size(), '1')));
+  journal::Future future2 = recorder->append(124, create_payload(std::string(1, '2')));
+
+  C_SaferCond cond;
+  future2.flush(&cond);
+  ASSERT_EQ(0, cond.wait());
+
+  ASSERT_EQ(1U, metadata->get_active_set());
+
+  uint64_t object_num;
+  uint64_t tag_tid;
+  uint64_t entry_tid;
+  metadata->get_commit_entry(1, &object_num, &tag_tid, &entry_tid);
+  ASSERT_EQ(0U, object_num);
+  ASSERT_EQ(123U, tag_tid);
+  ASSERT_EQ(0U, entry_tid);
+
+  metadata->get_commit_entry(2, &object_num, &tag_tid, &entry_tid);
+  ASSERT_EQ(2U, object_num);
+  ASSERT_EQ(124U, tag_tid);
+  ASSERT_EQ(0U, entry_tid);
+}
+

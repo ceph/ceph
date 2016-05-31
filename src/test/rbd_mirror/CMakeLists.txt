@@ -66,3 +66,12 @@ target_link_libraries(ceph_test_rbd_mirror
   ${UNITTEST_LIBS}
   )
 
+add_executable(ceph_test_rbd_mirror_random_write
+  random_write.cc
+  $<TARGET_OBJECTS:parse_secret_objs>)
+set_target_properties(ceph_test_rbd_mirror_random_write PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rbd_mirror_random_write
+  librbd librados global keyutils
+  )
+
