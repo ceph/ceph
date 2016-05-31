@@ -1218,6 +1218,19 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return l;
   }
 
+  template<bool is_const>
+  uint32_t buffer::list::iterator_impl<is_const>::crc32c(
+    size_t length, uint32_t crc)
+  {
+    while (length > 0) {
+      const char *p;
+      size_t l = get_ptr_and_advance(length, &p);
+      crc = ceph_crc32c(crc, (unsigned char*)p, l);
+      length -= l;
+    }
+    return crc;
+  }
+
   // explicitly instantiate only the iterator types we need, so we can hide the
   // details in this compilation unit without introducing unnecessary link time
   // dependencies.
