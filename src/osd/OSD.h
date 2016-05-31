@@ -1349,8 +1349,11 @@ public:
       session_dispatch_lock("Session::session_dispatch_lock"), 
       last_sent_epoch(0), received_map_epoch(0)
     {}
-
-
+    void maybe_reset_osdmap() {
+      if (waiting_for_pg.empty()) {
+	osdmap.reset();
+      }
+    }
   };
   void update_waiting_for_pg(Session *session, OSDMapRef osdmap);
   void session_notify_pg_create(Session *session, OSDMapRef osdmap, spg_t pgid);
@@ -1449,6 +1452,7 @@ public:
      */
     session->waiting_on_map.clear();
     session->waiting_for_pg.clear();
+    session->osdmap.reset();
   }
   void register_session_waiting_on_pg(Session *session, spg_t pgid) {
     Mutex::Locker l(session_waiting_lock);
@@ -1880,6 +1884,7 @@ private:
   void wait_for_new_map(OpRequestRef op);
   void handle_osd_map(class MOSDMap *m);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
+  void trim_maps(epoch_t oldest, int nreceived, bool skip_maps);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   friend class C_OnMapCommit;
