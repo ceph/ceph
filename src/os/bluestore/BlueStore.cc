@@ -5177,7 +5177,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
   for (auto& b : o->onode.blob_map) {
     dout(log_level) << __func__ << "  " << b.first << ": " << b.second
 		    << dendl;
-    if (b.second.csum_data.size()) {
+    if (b.second.has_csum_data()) {
       vector<uint64_t> v;
       unsigned n = b.second.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
@@ -5221,7 +5221,7 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
   dout(log_level) << __func__ << " " << std::hex << b->hash << std::dec << dendl;
   for (auto &p : b->blob_map) {
     dout(log_level) << __func__ << "  " << p.first << ": " << p.second << dendl;
-    if (p.second.csum_data.size()) {
+    if (p.second.has_csum_data()) {
       vector<uint64_t> v;
       unsigned n = p.second.get_csum_count();
       for (unsigned i = 0; i < n; ++i)

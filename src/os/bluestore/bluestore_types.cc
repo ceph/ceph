@@ -513,7 +513,7 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
   ls.back()->csum_type = CSUM_XXHASH32;
   ls.back()->csum_block_order = 16;
-  ls.back()->csum_data = vector<char>{1, 2, 3, 4};  // one uint32_t
+  ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->ref_map.get(3, 5);
   ls.back()->add_unused(0, 3);
   ls.back()->add_unused(8, 8);
