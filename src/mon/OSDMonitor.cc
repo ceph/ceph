@@ -466,7 +466,7 @@ struct Sorter {
 
     double average_util; 
 
-    Sorter(const average_util_)
+    Sorter(const double average_util_)
      : average_util(average_util_)
     {}
 
@@ -1494,6 +1494,13 @@ void OSDMonitor::check_failures(utime_t now)
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
+  // already pending failure?
+  if (pending_inc.new_state.count(target_osd) &&
+      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
+    dout(10) << " already pending failure" << dendl;
+    return true;
+  }
+
   utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
@@ -1536,13 +1543,6 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	   << fi.num_reports << " reports, "
 	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
-
-  // already pending failure?
-  if (pending_inc.new_state.count(target_osd) &&
-      pending_inc.new_state[target_osd] & CEPH_OSD_UP) {
-    dout(10) << " already pending failure" << dendl;
-    return true;
-  }
 
   if (failed_for >= grace &&
       ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters) &&
