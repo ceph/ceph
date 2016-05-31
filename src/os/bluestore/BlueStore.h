@@ -927,9 +927,11 @@ private:
   int _wal_replay();
 
   // for fsck
-  int _verify_bnode_shared(BnodeRef bnode,
-			   map<int64_t,bluestore_extent_ref_map_t>& v,
-			   interval_set<uint64_t> &used_blocks);
+  int _fsck_verify_blob_map(
+    string what,
+    const bluestore_blob_map_t& blob_map,
+    map<int64_t,bluestore_extent_ref_map_t>& v,
+    interval_set<uint64_t> &used_blocks);
 
 public:
   BlueStore(CephContext *cct, const string& path);
