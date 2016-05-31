@@ -89,11 +89,18 @@ function setup() {
 
 function teardown() {
     kill_daemons
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ x`uname`x != xFreeBSDx ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]
+    then
         rm -fr $DIR/*/*db
         teardown_btrfs $DIR
     fi
-    grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
+   
+    MOUNTS="/proc/mounts"
+    if [ x`uname`x = xFreeBSDx ]; then
+        MOUNTS="/compat/linux/"$MOUNTS
+    fi
+    grep " $(pwd)/$DIR/" < $MOUNTS | while read mounted rest ; do
         umount $mounted
     done
     rm -fr $DIR

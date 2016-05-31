@@ -4,6 +4,9 @@
 #include "MemoryModel.h"
 #include "common/config.h"
 #include "debug.h"
+
+#include <stdlib.h>
+
 #if defined(__linux__)
 #include <malloc.h>
 #endif

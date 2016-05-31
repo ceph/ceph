@@ -743,7 +743,11 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with file('/proc/mounts', 'rb') as proc_mounts:
+    proc_prefix = ''
+    if platform.system() == "FreeBSD":
+        # Use the Linux compatability tree
+        proc_prefix = '/compat/linux'
+    with file(proc_prefix + '/proc/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:

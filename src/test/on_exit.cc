@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 
   // shared mem for exit tests
   shared_val = (int*)mmap(NULL, sizeof(int),
-      PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, 0, 0);
+      PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
   assert(shared_val != MAP_FAILED);
 
   // test normal exit returning from main
