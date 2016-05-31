@@ -5228,8 +5228,6 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
 }
 
 void BlueStore::_pad_zeros(
-  TransContext *txc,
-  OnodeRef o,
   bufferlist *bl, uint64_t *offset, uint64_t *length,
   uint64_t chunk_size)
 {
@@ -5546,7 +5544,7 @@ void BlueStore::_do_write_small(
   b->length = min_alloc_size;
   uint64_t b_off = offset % min_alloc_size;
   uint64_t b_len = length;
-  _pad_zeros(txc, o, &bl, &b_off, &b_len, block_size);
+  _pad_zeros(&bl, &b_off, &b_len, block_size);
   if (b_off)
     b->add_unused(0, b_off);
   if (b_off + b_len < b->length)
