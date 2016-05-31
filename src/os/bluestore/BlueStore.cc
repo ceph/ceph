@@ -4649,8 +4649,6 @@ int BlueStore::_wal_finish(TransContext *txc)
 
 int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
 {
-  bool buffered = false;
-
   // read all the overlay data first for apply
   _do_read_all_overlays(wo);
 
@@ -4662,7 +4660,7 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
       for (auto& e : wo.extents) {
 	bufferlist bl;
 	p.copy(e.length, bl);
-	int r = bdev->aio_write(e.offset, bl, &txc->ioc, buffered);
+	int r = bdev->aio_write(e.offset, bl, &txc->ioc, false);
 	assert(r == 0);
       }
     }
