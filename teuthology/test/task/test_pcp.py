@@ -1,7 +1,8 @@
 import os
+import requests
 import urlparse
 
-from mock import patch, DEFAULT, Mock, MagicMock
+from mock import patch, DEFAULT, Mock, MagicMock, call
 from pytest import raises
 
 from teuthology.config import config, FakeNamespace
@@ -353,11 +354,27 @@ class TestPCPTask(TestTask):
     @patch('teuthology.task.pcp.GrafanaGrapher')
     @patch('teuthology.task.pcp.GraphiteGrapher')
     def test_end(self, m_grafana, m_graphite, m_makedirs):
-        with self.klass(self.ctx, self.task_config) as task:
-            pass
-        assert isinstance(task.stop_time, int)
-        return
-        self.task_config['graphite'] = True
         self.ctx.archive = '/fake/path'
         with self.klass(self.ctx, self.task_config) as task:
+            # begin() should have called write_html() once by now, with no args
             task.graphite.write_html.assert_called_once_with()
+        # end() should have called write_html() a second time by now, with
+        # mode=static
+        second_call = task.graphite.write_html.call_args_list[1]
+        assert second_call[1]['mode'] == 'static'
+        assert isinstance(task.stop_time, int)
+
+    @patch('os.makedirs')
+    @patch('teuthology.task.pcp.GrafanaGrapher')
+    @patch('teuthology.task.pcp.GraphiteGrapher')
+    def test_end_16049(self, m_grafana, m_graphite, m_makedirs):
+        # http://tracker.ceph.com/issues/16049
+        # Jobs were failing if graph downloading failed. We don't want that.
+        self.ctx.archive = '/fake/path'
+        with self.klass(self.ctx, self.task_config) as task:
+            task.graphite.download_graphs.side_effect = \
+                requests.ConnectionError
+        # Even though downloading graphs failed, we should have called
+        # write_html() a second time, again with no args
+        assert task.graphite.write_html.call_args_list == [call(), call()]
+        assert isinstance(task.stop_time, int)
