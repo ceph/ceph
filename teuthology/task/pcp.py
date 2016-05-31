@@ -310,8 +310,12 @@ class PCP(Task):
             if hasattr(self.ctx, 'summary'):
                 self.ctx.summary['pcp_grafana_url'] = grafana_url
         if self.use_graphite:
-            self.graphite.download_graphs()
-            self.graphite.write_html(mode='static')
+            try:
+                self.graphite.download_graphs()
+                self.graphite.write_html(mode='static')
+            except requests.ConnectionError:
+                log.exception("Downloading graphs failed!")
+                self.graphite.write_html()
         if self.fetch_archives:
             for remote in self.cluster.remotes.keys():
                 log.info("Copying PCP data into archive...")
