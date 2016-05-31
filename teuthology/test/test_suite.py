@@ -1,7 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 
-from mock import patch, Mock, DEFAULT
+from mock import patch, Mock, DEFAULT, MagicMock
 
 from fake_fs import make_fake_fstools
 from teuthology import suite
@@ -436,6 +436,37 @@ class TestDistroDefaults(object):
 
 
 class TestBuildMatrix(object):
+
+    patchpoints = [
+        'os.path.exists',
+        'os.listdir',
+        'os.path.isfile',
+        'os.path.isdir',
+        '__builtin__.open',
+    ]
+
+    def setup(self):
+        self.mocks = dict()
+        self.patchers = dict()
+        for ppoint in self.__class__.patchpoints:
+            self.mocks[ppoint] = MagicMock()
+            self.patchers[ppoint] = patch(ppoint, self.mocks[ppoint])
+
+    def start_patchers(self, fake_fs):
+        fake_fns = make_fake_fstools(fake_fs)
+        # relies on fake_fns being in same order as patchpoints
+        for ppoint, fn in zip(self.__class__.patchpoints, fake_fns):
+            self.mocks[ppoint].side_effect = fn
+        for patcher in self.patchers.values():
+            patcher.start()
+
+    def stop_patchers(self):
+        for patcher in self.patchers.values():
+            patcher.stop()
+
+    def teardown(self):
+        self.stop_patchers()
+
     def fragment_occurences(self, jobs, fragment):
         # What fraction of jobs contain fragment?
         count = 0
@@ -463,9 +494,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
-                                    fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('d0_0')
         assert len(result) == 1
 
     def test_convolve_2x2(self):
@@ -482,9 +512,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
-                                    fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('d0_0')
         assert len(result) == 4
         assert self.fragment_occurences(result, 'd1_1_1.yaml') == 0.5
 
@@ -506,9 +535,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
-                                    fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('d0_0')
         assert len(result) == 8
         assert self.fragment_occurences(result, 'd1_2_0.yaml') == 0.5
 
@@ -531,9 +559,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
-                                    fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('d0_0')
         assert len(result) == 8
         assert self.fragment_occurences(result, 'd1_2_2.yaml') == 0.25
 
@@ -557,9 +584,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('d0_0', fake_isfile, fake_isdir,
-                                    fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('d0_0')
         assert len(result) == 2
         for i in result:
             assert 'd0_0/d1_2/d1_2_0.yaml' in i[1]
@@ -594,9 +620,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
-                                    fake_isdir, fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph')
         assert len(result) == 11
         assert self.fragment_occurences(result, 'vps.yaml') == 1 / 11.0
 
@@ -627,9 +652,10 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
-                                    fake_isdir, fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph')
+        self.stop_patchers()
+
         fake_fs2 = {
             'teuthology': {
                 'no-ceph': {
@@ -658,9 +684,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir2, fake_isfile2, fake_isdir2, _ = make_fake_fstools(fake_fs2)
-        result2 = suite.build_matrix('teuthology/no-ceph', fake_isfile2,
-                                     fake_isdir2, fake_listdir2)
+        self.start_patchers(fake_fs2)
+        result2 = suite.build_matrix('teuthology/no-ceph')
         assert len(result) == 11
         assert len(result2) == len(result)
 
@@ -691,9 +716,10 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('teuthology/no-ceph', fake_isfile,
-                                    fake_isdir, fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('teuthology/no-ceph')
+        self.stop_patchers()
+
         fake_fs2 = {
             'teuthology': {
                 'no-ceph': {
@@ -728,9 +754,8 @@ class TestBuildMatrix(object):
                 },
             },
         }
-        fake_listdir2, fake_isfile2, fake_isdir2, _ = make_fake_fstools(fake_fs2)
-        result2 = suite.build_matrix('teuthology/no-ceph', fake_isfile2,
-                                     fake_isdir2, fake_listdir2)
+        self.start_patchers(fake_fs2)
+        result2 = suite.build_matrix('teuthology/no-ceph')
         assert len(result) == 11
         assert len(result2) == len(result)
 
@@ -750,9 +775,8 @@ class TestBuildMatrix(object):
                 'tasks': {'cfuse_workunit_suites_fsstress.yaml': None},
             },
         }
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(fake_fs)
-        result = suite.build_matrix('thrash', fake_isfile,
-                                    fake_isdir, fake_listdir)
+        self.start_patchers(fake_fs)
+        result = suite.build_matrix('thrash')
         assert len(result) == 1
         assert self.fragment_occurences(result, 'base.yaml') == 1
         fragments = result[0][1]
@@ -760,6 +784,35 @@ class TestBuildMatrix(object):
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
 class TestSubset(object):
+    patchpoints = [
+        'os.path.exists',
+        'os.listdir',
+        'os.path.isfile',
+        'os.path.isdir',
+        '__builtin__.open',
+    ]
+
+    def setup(self):
+        self.mocks = dict()
+        self.patchers = dict()
+        for ppoint in self.__class__.patchpoints:
+            self.mocks[ppoint] = MagicMock()
+            self.patchers[ppoint] = patch(ppoint, self.mocks[ppoint])
+
+    def start_patchers(self, fake_fs):
+        fake_fns = make_fake_fstools(fake_fs)
+        # relies on fake_fns being in same order as patchpoints
+        for ppoint, fn in zip(self.__class__.patchpoints, fake_fns):
+            self.mocks[ppoint].side_effect = fn
+        for patcher in self.patchers.values():
+            patcher.start()
+
+    def stop_patchers(self):
+        for patcher in self.patchers.values():
+            patcher.stop()
+
+    # test_random() manages start/stop patchers on its own; no teardown
+
     MAX_FACETS = 10
     MAX_FANOUT = 3
     MAX_DEPTH = 3
@@ -810,10 +863,8 @@ class TestSubset(object):
 
     @staticmethod
     def generate_description_list(tree, subset):
-        fake_listdir, fake_isfile, fake_isdir, _ = make_fake_fstools(tree)
         mat, first, matlimit = suite._get_matrix(
-            'root', _isfile=fake_isfile, _isdir=fake_isdir,
-            _listdir=fake_listdir, subset=subset)
+            'root', subset=subset)
         return [i[0] for i in suite.generate_combinations(
             'root', mat, first, matlimit)], mat, first, matlimit
 
@@ -868,8 +919,10 @@ class TestSubset(object):
                 self.MAX_FANOUT,
                 self.MAX_DEPTH)
             subset = self.generate_subset(self.MAX_SUBSET)
+            self.start_patchers(tree)
             dlist, mat, first, matlimit = self.generate_description_list(tree, subset)
             self.verify_facets(tree, dlist, subset, mat, first, matlimit)
+            self.stop_patchers()
 
 @patch('subprocess.check_output')
 def test_git_branch_exists(m_check_output):
