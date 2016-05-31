@@ -10,10 +10,6 @@ LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i --setuser ceph --setgroup ceph
-PrivateDevices=yes
-ProtectHome=true
-ProtectSystem=full
-PrivateTmp=true
 Restart=on-failure
 StartLimitInterval=30s
 StartLimitBurst=5
