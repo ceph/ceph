@@ -353,11 +353,12 @@ class TestPCPTask(TestTask):
     @patch('teuthology.task.pcp.GrafanaGrapher')
     @patch('teuthology.task.pcp.GraphiteGrapher')
     def test_end(self, m_grafana, m_graphite, m_makedirs):
-        with self.klass(self.ctx, self.task_config) as task:
-            pass
-        assert isinstance(task.stop_time, int)
-        return
-        self.task_config['graphite'] = True
         self.ctx.archive = '/fake/path'
         with self.klass(self.ctx, self.task_config) as task:
+            # begin() should have called write_html() once by now, with no args
             task.graphite.write_html.assert_called_once_with()
+        # end() should have called write_html() a second time by now, with
+        # mode=static
+        second_call = task.graphite.write_html.call_args_list[1]
+        assert second_call[1]['mode'] == 'static'
+        assert isinstance(task.stop_time, int)
