@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.11)
 
-project(Ceph)
+project(ceph)
 set(VERSION "10.2.1")
 
 if (NOT (CMAKE_MAJOR_VERSION LESS 3))

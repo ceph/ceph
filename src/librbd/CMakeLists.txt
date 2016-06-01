@@ -65,7 +65,7 @@ set(librbd_internal_srcs
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC ${librbd_internal_srcs})
 if(WITH_LTTNG)
-  add_dependencies(rbd_internal librbd-tp)
+  add_dependencies(rbd_internal rbd-tp)
 endif()
 
 add_library(librbd
