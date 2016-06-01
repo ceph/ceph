@@ -11,6 +11,13 @@ if test $? != 0; then
 	exit 0
 fi
 
+expect_failure() {
+	if [ `"$@"` -e 0 ]; then
+		return 1
+	fi
+	return 0
+}
+
 set -e
 c=0
 while [ $c -lt 100  ]
@@ -29,6 +36,18 @@ do
 	fi
 done
 
+mkdir d1
+
+# The ACL xattr only contains ACL header. ACL should be removed
+# in this case.
+setfattr -n system.posix_acl_access -v 0x02000000 d1
+setfattr -n system.posix_acl_default -v 0x02000000 .
+
+expect_failure getfattr -n system.posix_acl_access d1
+expect_failure getfattr -n system.posix_acl_default .
+
+
+rmdir d1
 cd ..
 rmdir testdir
 echo OK
