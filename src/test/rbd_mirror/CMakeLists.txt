@@ -2,6 +2,7 @@ set(rbd_mirror_test_srcs
   test_ClusterWatcher.cc
   test_PoolWatcher.cc
   test_ImageReplayer.cc
+  test_ImageDeleter.cc
   test_ImageSync.cc
   test_fixture.cc
   )
@@ -63,5 +64,14 @@ target_link_libraries(ceph_test_rbd_mirror
   global
   radostest
   ${UNITTEST_LIBS}
+  )
+
+add_executable(ceph_test_rbd_mirror_random_write
+  random_write.cc
+  $<TARGET_OBJECTS:parse_secret_objs>)
+set_target_properties(ceph_test_rbd_mirror_random_write PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rbd_mirror_random_write
+  librbd librados global keyutils
   )
 

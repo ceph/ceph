@@ -68,4 +68,6 @@ public:
   SafeTimer *m_timer;
 
   Listener m_listener;
+
+  std::list<journal::JournalMetadataPtr> m_metadatas;
 };

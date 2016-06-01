@@ -91,6 +91,7 @@ struct MockJournaler {
 
   MOCK_METHOD1(init, void(Context *));
   MOCK_METHOD0(shut_down, void());
+  MOCK_METHOD1(shut_down, void(Context *));
   MOCK_CONST_METHOD0(is_initialized, bool());
 
   MOCK_METHOD3(get_metadata, void(uint8_t *order, uint8_t *splay_width,
@@ -113,6 +114,7 @@ struct MockJournaler {
   MOCK_METHOD1(try_pop_front, bool(MockReplayEntryProxy *));
   MOCK_METHOD2(try_pop_front, bool(MockReplayEntryProxy *, uint64_t *));
   MOCK_METHOD0(stop_replay, void());
+  MOCK_METHOD1(stop_replay, void(Context *on_finish));
 
   MOCK_METHOD3(start_append, void(int flush_interval, uint64_t flush_bytes,
                                   double flush_age));
@@ -163,6 +165,9 @@ struct MockJournalerProxy {
   }
   void shut_down() {
     MockJournaler::get_instance().shut_down();
+  }
+  void shut_down(Context *on_finish) {
+    MockJournaler::get_instance().shut_down(on_finish);
   }
   bool is_initialized() const {
     return MockJournaler::get_instance().is_initialized();
@@ -224,6 +229,9 @@ struct MockJournalerProxy {
 
   void stop_replay() {
     MockJournaler::get_instance().stop_replay();
+  }
+  void stop_replay(Context *on_finish) {
+    MockJournaler::get_instance().stop_replay(on_finish);
   }
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age) { 

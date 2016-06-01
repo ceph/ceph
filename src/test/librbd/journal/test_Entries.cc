@@ -57,6 +57,7 @@ public:
          it != m_journalers.end(); ++it) {
       journal::Journaler *journaler = *it;
       journaler->stop_replay();
+      journaler->shut_down();
       delete journaler;
     }
 

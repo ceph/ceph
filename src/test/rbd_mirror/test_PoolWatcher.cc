@@ -42,7 +42,6 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
   {
     m_cluster = std::make_shared<librados::Rados>();
     EXPECT_EQ("", connect_cluster_pp(*m_cluster));
-    m_pool_watcher.reset(new PoolWatcher(m_cluster, 30, m_lock, m_cond));
   }
 
   ~TestPoolWatcher() {
@@ -59,9 +58,12 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
     int64_t pool_id = m_cluster->pool_lookup(pool_name.c_str());
     ASSERT_GE(pool_id, 0);
     m_pools.insert(pool_name);
+
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
+
+    m_pool_watcher.reset(new PoolWatcher(ioctx, 30, m_lock, m_cond));
     if (enable_mirroring) {
-      librados::IoCtx ioctx;
-      ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
       ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
       std::string uuid;
       ASSERT_EQ(0, librbd::mirror_peer_add(ioctx, &uuid,
@@ -71,50 +73,6 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
     if (name != nullptr) {
       *name = pool_name;
     }
-  }
-
-  void delete_pool(const string &name, const peer_t &peer) {
-    int64_t pool_id = m_cluster->pool_lookup(name.c_str());
-    ASSERT_GE(pool_id, 0);
-    m_pools.erase(name);
-    ASSERT_EQ(0, m_cluster->pool_delete(name.c_str()));
-    m_mirrored_images.erase(pool_id);
-  }
-
-  void create_cache_pool(const string &base_pool, string *cache_pool_name) {
-    bufferlist inbl;
-    *cache_pool_name = get_temp_pool_name("test-rbd-mirror-");
-    ASSERT_EQ(0, m_cluster->pool_create(cache_pool_name->c_str()));
-
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool +
-      "\", \"tierpool\": \"" + *cache_pool_name +
-      "\", \"force_nonempty\": \"--force-nonempty\" }",
-      inbl, NULL, NULL));
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool +
-      "\", \"overlaypool\": \"" + *cache_pool_name + "\"}",
-      inbl, NULL, NULL));
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + *cache_pool_name +
-      "\", \"mode\": \"writeback\"}",
-      inbl, NULL, NULL));
-    m_cluster->wait_for_latest_osdmap();
-  }
-
-  void remove_cache_pool(const string &base_pool, const string &cache_pool) {
-    bufferlist inbl;
-    // tear down tiers
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool +
-      "\"}",
-      inbl, NULL, NULL));
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool +
-      "\", \"tierpool\": \"" + cache_pool + "\"}",
-      inbl, NULL, NULL));
-    m_cluster->wait_for_latest_osdmap();
-    m_cluster->pool_delete(cache_pool.c_str());
   }
 
   string get_image_id(librados::IoCtx *ioctx, const string &image_name) {
@@ -148,8 +106,8 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
                                                sizeof(mirror_image_info)));
       image.close();
 
-      m_mirrored_images[ioctx.get_id()].insert(PoolWatcher::ImageIds(
-        get_image_id(&ioctx, name), mirror_image_info.global_id));
+      m_mirrored_images.insert(PoolWatcher::ImageId(
+        get_image_id(&ioctx, name), name, mirror_image_info.global_id));
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -193,8 +151,8 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
                                                sizeof(mirror_image_info)));
       image.close();
 
-      m_mirrored_images[cioctx.get_id()].insert(PoolWatcher::ImageIds(
-        get_image_id(&cioctx, name), mirror_image_info.global_id));
+      m_mirrored_images.insert(PoolWatcher::ImageId(
+        get_image_id(&cioctx, name), name, mirror_image_info.global_id));
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -212,23 +170,23 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
   unique_ptr<PoolWatcher> m_pool_watcher;
 
   set<string> m_pools;
-  PoolWatcher::PoolImageIds m_mirrored_images;
+  PoolWatcher::ImageIds m_mirrored_images;
 
   uint64_t m_image_number;
   uint64_t m_snap_number;
 };
 
-TEST_F(TestPoolWatcher, NoPools) {
+TEST_F(TestPoolWatcher, EmptyPool) {
+  string uuid1 = "00000000-0000-0000-0000-000000000001";
+  peer_t site1(uuid1, "site1", "mirror1");
+  create_pool(true, site1);
   check_images();
 }
 
 TEST_F(TestPoolWatcher, ReplicatedPools) {
   string uuid1 = "00000000-0000-0000-0000-000000000001";
-  string uuid2 = "20000000-2222-2222-2222-000000000002";
   peer_t site1(uuid1, "site1", "mirror1");
-  peer_t site2(uuid2, "site2", "mirror2");
   string first_pool, local_pool, last_pool;
-  check_images();
   create_pool(true, site1, &first_pool);
   check_images();
   create_image(first_pool);
@@ -241,51 +199,5 @@ TEST_F(TestPoolWatcher, ReplicatedPools) {
   clone_image(first_pool, parent_image, first_pool, true, &parent_image2);
   check_images();
   create_image(first_pool, false);
-  check_images();
-
-  create_pool(false, peer_t(), &local_pool);
-  check_images();
-  create_image(local_pool, false);
-  check_images();
-  clone_image(first_pool, parent_image2, local_pool, false);
-  check_images();
-  create_pool(true, site2);
-  check_images();
-
-  create_pool(true, site2, &last_pool);
-  check_images();
-  clone_image(first_pool, parent_image2, last_pool);
-  check_images();
-  create_image(last_pool);
-  check_images();
-  delete_pool(last_pool, site2);
-  check_images();
-  delete_pool(first_pool, site1);
-  check_images();
-}
-
-TEST_F(TestPoolWatcher, CachePools) {
-  peer_t site1("11111111-1111-1111-1111-111111111111", "site1", "mirror1");
-  string base1, base2, cache1, cache2;
-  create_pool(true, site1, &base1);
-  check_images();
-
-  create_cache_pool(base1, &cache1);
-  BOOST_SCOPE_EXIT( base1, cache1, this_ ) {
-    this_->remove_cache_pool(base1, cache1);
-  } BOOST_SCOPE_EXIT_END;
-  check_images();
-  create_image(base1);
-  check_images();
-  create_image(base1, false);
-  check_images();
-
-  create_pool(false, peer_t(), &base2);
-  create_cache_pool(base2, &cache2);
-  BOOST_SCOPE_EXIT( base2, cache2, this_ ) {
-    this_->remove_cache_pool(base2, cache2);
-  } BOOST_SCOPE_EXIT_END;
-  check_images();
-  create_image(base2, false);
   check_images();
 }

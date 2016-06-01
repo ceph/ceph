@@ -63,6 +63,7 @@
 CLUSTER1=cluster1
 CLUSTER2=cluster2
 POOL=mirror
+PARENT_POOL=mirror_parent
 SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
 
@@ -134,12 +135,18 @@ setup()
 
     ceph --cluster ${CLUSTER1} osd pool create ${POOL} 64 64
     ceph --cluster ${CLUSTER2} osd pool create ${POOL} 64 64
+    ceph --cluster ${CLUSTER1} osd pool create ${PARENT_POOL} 64 64
+    ceph --cluster ${CLUSTER2} osd pool create ${PARENT_POOL} 64 64
 
     rbd --cluster ${CLUSTER1} mirror pool enable ${POOL} pool
     rbd --cluster ${CLUSTER2} mirror pool enable ${POOL} pool
+    rbd --cluster ${CLUSTER1} mirror pool enable ${PARENT_POOL} image
+    rbd --cluster ${CLUSTER2} mirror pool enable ${PARENT_POOL} image
 
     rbd --cluster ${CLUSTER1} mirror pool peer add ${POOL} ${CLUSTER2}
     rbd --cluster ${CLUSTER2} mirror pool peer add ${POOL} ${CLUSTER1}
+    rbd --cluster ${CLUSTER1} mirror pool peer add ${PARENT_POOL} ${CLUSTER2}
+    rbd --cluster ${CLUSTER2} mirror pool peer add ${PARENT_POOL} ${CLUSTER1}
 }
 
 cleanup()
@@ -158,6 +165,8 @@ cleanup()
     else
         ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
         ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+        ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+        ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
     fi
     rm -Rf ${TEMPDIR}
 }
@@ -462,6 +471,58 @@ promote_image()
     rbd --cluster=${cluster} mirror image promote ${POOL}/${image}
 }
 
+set_pool_mirror_mode()
+{
+    local cluster=$1
+    local mode=$2
+
+    rbd --cluster=${cluster} -p ${POOL} mirror pool enable ${mode}
+}
+
+disable_mirror()
+{
+    local cluster=$1
+    local image=$2
+
+    rbd --cluster=${cluster} mirror image disable ${POOL}/${image}
+}
+
+enable_mirror()
+{
+    local cluster=$1
+    local image=$2
+
+    rbd --cluster=${cluster} mirror image enable ${POOL}/${image}
+}
+
+test_image_present()
+{
+    local cluster=$1
+    local image=$2
+    local test_state=$3
+    local current_state=deleted
+
+    rbd --cluster=${cluster} -p ${POOL} ls | grep "^${image}$" &&
+    current_state=present
+
+    test "${test_state}" = "${current_state}"
+}
+
+wait_for_image_present()
+{
+    local cluster=$1
+    local image=$2
+    local state=$3
+    local s
+
+    # TODO: add a way to force rbd-mirror to update replayers
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+	sleep ${s}
+	test_image_present "${cluster}" "${image}" "${state}" && return 0
+    done
+    return 1
+}
+
 #
 # Main
 #
@@ -538,7 +599,7 @@ admin_daemon ${CLUSTER1} rbd mirror restart
 wait_for_image_replay_started ${CLUSTER1} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 
-admin_daemon ${CLUSTER1} rbd mirror stop ${CLUSTER2}
+admin_daemon ${CLUSTER1} rbd mirror stop ${POOL} ${CLUSTER2}
 wait_for_image_replay_stopped ${CLUSTER1} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${image1}
 
@@ -548,12 +609,12 @@ wait_for_image_replay_started ${CLUSTER1} ${image}
 admin_daemon ${CLUSTER1} rbd mirror start
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 
-admin_daemon ${CLUSTER1} rbd mirror start ${CLUSTER2}
+admin_daemon ${CLUSTER1} rbd mirror start ${POOL} ${CLUSTER2}
 
 admin_daemon ${CLUSTER1} rbd mirror restart ${POOL}/${image}
 wait_for_image_replay_started ${CLUSTER1} ${image}
 
-admin_daemon ${CLUSTER1} rbd mirror restart ${CLUSTER2}
+admin_daemon ${CLUSTER1} rbd mirror restart ${POOL} ${CLUSTER2}
 wait_for_image_replay_started ${CLUSTER1} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${image1}
 
@@ -587,5 +648,26 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${image}
 test_status_in_pool_dir ${CLUSTER1} ${image} 'up+replaying' 'master_position'
 test_status_in_pool_dir ${CLUSTER2} ${image} 'up+stopped'
 compare_images ${image}
+
+testlog "TEST: disable mirroring / delete non-primary image"
+test_image_present ${CLUSTER1} ${image} 'present'
+set_pool_mirror_mode ${CLUSTER2} 'image'
+disable_mirror ${CLUSTER2} ${image}
+wait_for_image_present ${CLUSTER1} ${image} 'deleted'
+set_pool_mirror_mode ${CLUSTER2} 'pool'
+wait_for_image_present ${CLUSTER1} ${image} 'present'
+wait_for_image_replay_started ${CLUSTER1} ${image}
+
+testlog "TEST: disable mirror while daemon is stopped"
+stop_mirror ${CLUSTER1}
+stop_mirror ${CLUSTER2}
+set_pool_mirror_mode ${CLUSTER2} 'image'
+disable_mirror ${CLUSTER2} ${image}
+test_image_present ${CLUSTER1} ${image} 'present'
+start_mirror ${CLUSTER1}
+wait_for_image_present ${CLUSTER1} ${image} 'deleted'
+set_pool_mirror_mode ${CLUSTER2} 'pool'
+wait_for_image_present ${CLUSTER1} ${image} 'present'
+wait_for_image_replay_started ${CLUSTER1} ${image}
 
 echo OK

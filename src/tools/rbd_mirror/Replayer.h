@@ -18,6 +18,7 @@
 #include "ClusterWatcher.h"
 #include "ImageReplayer.h"
 #include "PoolWatcher.h"
+#include "ImageDeleter.h"
 #include "types.h"
 
 namespace rbd {
@@ -32,8 +33,9 @@ class MirrorStatusWatchCtx;
  */
 class Replayer {
 public:
-  Replayer(Threads *threads, RadosRef local_cluster, const peer_t &peer,
-	   const std::vector<const char*> &args);
+  Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+           RadosRef local_cluster, int64_t local_pool_id, const peer_t &peer,
+           const std::vector<const char*> &args);
   ~Replayer();
   Replayer(const Replayer&) = delete;
   Replayer& operator=(const Replayer&) = delete;
@@ -48,18 +50,21 @@ public:
   void flush();
 
 private:
+  typedef PoolWatcher::ImageId ImageId;
   typedef PoolWatcher::ImageIds ImageIds;
-  typedef PoolWatcher::PoolImageIds PoolImageIds;
 
-  void set_sources(const PoolImageIds &pool_image_ids);
+  void init_local_mirroring_images();
+  void set_sources(const ImageIds &image_ids);
 
-  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
+  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                            const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
-  int mirror_image_status_init(int64_t pool_id, librados::IoCtx& ioctx);
-  void mirror_image_status_shut_down(int64_t pool_id);
+  int mirror_image_status_init();
+  void mirror_image_status_shut_down();
 
   Threads *m_threads;
+  std::shared_ptr<ImageDeleter> m_image_deleter;
   Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;
@@ -67,14 +72,41 @@ private:
 
   peer_t m_peer;
   std::vector<const char*> m_args;
-  RadosRef m_local, m_remote;
+  RadosRef m_local;
+  RadosRef m_remote;
+
+  librados::IoCtx m_local_io_ctx;
+  librados::IoCtx m_remote_io_ctx;
+
+  int64_t m_local_pool_id = -1;
+  int64_t m_remote_pool_id = -1;
+
   std::unique_ptr<PoolWatcher> m_pool_watcher;
-  // index by pool so it's easy to tell what is affected
-  // when a pool's configuration changes
-  std::map<int64_t, std::map<std::string,
-			     std::unique_ptr<ImageReplayer<> > > > m_images;
-  std::map<int64_t, std::unique_ptr<MirrorStatusWatchCtx> > m_status_watchers;
+  std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
+  std::unique_ptr<MirrorStatusWatchCtx> m_status_watcher;
+
+  std::string m_asok_hook_name;
   ReplayerAdminSocketHook *m_asok_hook;
+
+  struct InitImageInfo {
+    std::string global_id;
+    std::string id;
+    std::string name;
+
+    InitImageInfo(const std::string& global_id, const std::string &id = "",
+                  const std::string &name = "")
+      : global_id(global_id), id(id), name(name) {
+    }
+
+    inline bool operator==(const InitImageInfo &rhs) const {
+      return (global_id == rhs.global_id && id == rhs.id && name == rhs.name);
+    }
+    inline bool operator<(const InitImageInfo &rhs) const {
+      return global_id < rhs.global_id;
+    }
+  };
+
+  std::set<InitImageInfo> m_init_images;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;

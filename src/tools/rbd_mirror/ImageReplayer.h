@@ -89,6 +89,27 @@ public:
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
 
+  inline int64_t get_local_pool_id() const {
+    return m_local_pool_id;
+  }
+  inline int64_t get_remote_pool_id() const {
+    return m_remote_pool_id;
+  }
+  inline const std::string& get_global_image_id() const {
+    return m_global_image_id;
+  }
+  inline const std::string& get_remote_image_id() const {
+    return m_remote_image_id;
+  }
+  inline std::string get_local_image_id() {
+    Mutex::Locker locker(m_lock);
+    return m_local_image_id;
+  }
+  inline std::string get_local_image_name() {
+    Mutex::Locker locker(m_lock);
+    return m_local_image_name;
+  }
+
   void start(Context *on_finish = nullptr,
 	     const BootstrapParams *bootstrap_params = nullptr,
 	     bool manual = false);
@@ -101,15 +122,6 @@ public:
   virtual void handle_replay_ready();
   virtual void handle_replay_complete(int r, const std::string &error_desc);
 
-  inline const std::string get_global_image_id() const {
-    return m_global_image_id;
-  }
-  inline int64_t get_remote_pool_id() const {
-    return m_remote_pool_id;
-  }
-  inline const std::string get_remote_image_id() const {
-    return m_remote_image_id;
-  }
 protected:
   /**
    * @verbatim
@@ -172,14 +184,10 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail_start(int r, const std::string &desc = "");
-  virtual void on_start_fail_finish(int r);
+  virtual void on_start_fail(int r, const std::string &desc = "");
   virtual bool on_start_interrupted();
 
-  virtual void on_stop_journal_replay_shut_down_start();
-  virtual void on_stop_journal_replay_shut_down_finish(int r);
-  virtual void on_stop_local_image_close_start();
-  virtual void on_stop_local_image_close_finish(int r);
+  virtual void on_stop_journal_replay();
 
   virtual void on_flush_local_replay_flush_start(Context *on_flush);
   virtual void on_flush_local_replay_flush_finish(Context *on_flush, int r);
@@ -276,8 +284,6 @@ private:
     return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
   }
 
-  void shut_down_journal_replay(bool cancel_ops);
-
   bool update_mirror_image_status(bool force, const OptionalState &state);
   bool start_mirror_image_status_update(bool force, bool restarting);
   void finish_mirror_image_status_update();
@@ -286,7 +292,8 @@ private:
   void handle_mirror_status_update(int r);
   void reschedule_update_status_task(int new_interval = 0);
 
-  void handle_stop(int r, Context *on_start, Context *on_stop);
+  void shut_down(int r, Context *on_start);
+  void handle_shut_down(int r, Context *on_start);
 
   void bootstrap();
   void handle_bootstrap(int r);

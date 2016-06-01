@@ -36,7 +36,7 @@ public:
 
   void prefetch();
   void prefetch_and_watch(double interval);
-  void unwatch();
+  void shut_down(Context *on_finish);
 
   bool try_pop_front(Entry *entry, uint64_t *commit_tid);
 
@@ -79,6 +79,10 @@ private:
     uint64_t object_num;
     C_Watch(JournalPlayer *player, uint64_t object_num)
       : player(player), object_num(object_num) {
+      player->m_async_op_tracker.start_op();
+    }
+    virtual ~C_Watch() {
+      player->m_async_op_tracker.finish_op();
     }
 
     virtual void finish(int r) override {
@@ -105,6 +109,7 @@ private:
   WatchStep m_watch_step = WATCH_STEP_FETCH_CURRENT;
   bool m_watch_prune_active_tag = false;
 
+  bool m_shut_down = false;
   bool m_handler_notified = false;
 
   ObjectNumbers m_fetch_object_numbers;
@@ -113,14 +118,16 @@ private:
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
   SplayedObjectPositions m_commit_positions;
+
   boost::optional<uint64_t> m_active_tag_tid = boost::none;
+  boost::optional<uint64_t> m_prune_tag_tid = boost::none;
 
   void advance_splay_object();
 
   bool is_object_set_ready() const;
   bool verify_playback_ready();
-  bool prune_tag(uint64_t tag_tid);
-  bool prune_active_tag();
+  void prune_tag(uint64_t tag_tid);
+  void prune_active_tag(const boost::optional<uint64_t>& tag_tid);
 
   const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;

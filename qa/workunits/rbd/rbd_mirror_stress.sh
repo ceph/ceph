@@ -324,8 +324,10 @@ write_image()
     local image=$2
     local duration=$(($RANDOM % 35 + 15))
 
-    timeout ${duration}s rbd --cluster ${cluster} -p ${POOL} bench-write \
-	${image} --io-size 4096 --io-threads 8 --io-total 10G --io-pattern rand || true
+    timeout ${duration}s ceph_test_rbd_mirror_random_write \
+	--cluster ${cluster} ${POOL} ${image} \
+	--debug-rbd=20 --debug-journaler=20 \
+	2> ${TEMPDIR}/rbd-mirror-random-write.log || true
 }
 
 create_snap()
@@ -334,7 +336,8 @@ create_snap()
     local image=$2
     local snap_name=$3
 
-    rbd --cluster ${cluster} -p ${POOL} snap create ${image}@${snap_name}
+    rbd --cluster ${cluster} -p ${POOL} snap create ${image}@${snap_name} \
+	--debug-rbd=20 --debug-journaler=20 2> ${TEMPDIR}/rbd-snap-create.log
 }
 
 wait_for_snap()
@@ -344,7 +347,7 @@ wait_for_snap()
     local snap_name=$3
     local s
 
-    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32; do
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
 	sleep ${s}
         rbd --cluster ${cluster} -p ${POOL} info ${image}@${snap_name} || continue
         return 0
