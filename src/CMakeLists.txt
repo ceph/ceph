@@ -2,10 +2,19 @@ include(GetGitRevisionDescription)
 
 enable_language(C ASM)
 include(GNUInstallDirs)
+# for erasure and compressor plugins
+set(CMAKE_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
+# to be compatible with configure_files shared with autoconfig
+set(bindir ${CMAKE_INSTALL_BINDIR})
+set(sbindir ${CMAKE_INSTALL_SBINDIR})
+set(libdir ${CMAKE_INSTALL_LIBDIR})
+set(sysconfdir ${CMAKE_INSTALL_SYSCONFDIR})
+set(pkgdatadir ${CMAKE_INSTALL_DATADIR})
+set(datadir ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 set(prefix ${CMAKE_INSTALL_PREFIX})
 
 add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"")
-add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"")
+add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_PKGLIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
@@ -203,6 +212,7 @@ find_package(PythonInterp 2 QUIET)
 if(NOT PYTHONINTERP_FOUND)
   message(FATAL_ERROR "Python 2 interpreter not found.")
 endif(NOT PYTHONINTERP_FOUND)
+find_package(PythonLibs REQUIRED)
 
 # if CMAKE_INSTALL_PREFIX is an empty string, must replace
 # it with "/" to make PYTHON_INSTALL_TEMPLATE an absolute path to be
@@ -528,7 +538,7 @@ add_library(librados ${librados_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
-  add_dependencies(librados librados-tp)
+  add_dependencies(librados rados-tp)
 endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
@@ -577,6 +587,9 @@ install(TARGETS ceph-osdomap-tool DESTINATION bin)
 add_executable(ceph-monstore-tool tools/ceph_monstore_tool.cc)
 target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
 install(TARGETS ceph-monstore-tool DESTINATION bin)
+install(PROGRAMS
+  tools/ceph-monstore-update-crush.sh
+  DESTINATION lib/ceph)
 
 add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
@@ -593,7 +606,7 @@ set(rados_srcs
   tools/rados/PoolDump.cc
   common/obj_bencher.cc)
 add_executable(rados ${rados_srcs})
-target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} libradosstriper)
+target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} radosstriper)
 
 if (WITH_CEPHFS)
   set(cephfs_journal_tool_srcs
@@ -626,8 +639,14 @@ if (WITH_CEPHFS)
     tools/cephfs/MDSUtility.cc)
   add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
   target_link_libraries(cephfs-data-scan librados mds osdc global
-                        cls_cephfs_client
-                        ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+    cls_cephfs_client
+    ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+
+  install(TARGETS
+    cephfs-journal-tool
+    cephfs-table-tool
+    cephfs-data-scan
+    DESTINATION bin)
 endif (WITH_CEPHFS)
 
 set(librados_config_srcs
@@ -851,9 +870,17 @@ if(WITH_SPDK)
     ${PCIACCESS_INCLUDE_DIR})
 endif(WITH_SPDK)
 if(WITH_LTTNG)
-  add_dependencies(os objectstore-tp)
+  add_dependencies(os os-tp)
 endif()
 target_link_libraries(os kv)
+if(HAVE_LIBAIO)
+  add_executable(ceph-bluefs-tool
+    os/bluestore/bluefs_tool.cc)
+  target_link_libraries(ceph-bluefs-tool
+    os global)
+  install(TARGETS ceph-bluefs-tool
+    DESTINATION bin)
+endif()
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
@@ -882,7 +909,6 @@ set(osd_srcs
   osd/ScrubStore.cc
   osd/osd_types.cc
   osd/ECUtil.cc
-  objclass/class_api.cc
   ${osdc_osd_srcs})
 set(osd_mon_files
   mon/Monitor.cc)
@@ -899,8 +925,7 @@ if(WITH_LTTNG)
 endif()
 
 set(ceph_osd_srcs
-  ceph_osd.cc
-  objclass/class_api.cc)
+  ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(ceph-osd erasure_code_plugins)
@@ -1009,9 +1034,9 @@ install(TARGETS osdmaptool DESTINATION bin)
 
 set(ceph_psim_srcs
   tools/psim.cc)
-add_executable(ceph-psim ${ceph_psim_srcs})
-target_link_libraries(ceph-psim global)
-install(TARGETS ceph-psim DESTINATION bin)
+add_executable(ceph_psim ${ceph_psim_srcs})
+target_link_libraries(ceph_psim global)
+install(TARGETS ceph_psim DESTINATION bin)
 
 set(ceph_authtool_srcs
   tools/ceph_authtool.cc)
@@ -1034,16 +1059,30 @@ configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
+configure_file(ceph-post-file.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
+
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
+install(PROGRAMS
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
+  DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d
+  RENAME ceph)
+
+install(FILES
+  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com
+  ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com.pub
+  ${CMAKE_SOURCE_DIR}/share/known_hosts_drop.ceph.com
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/ceph)
 
 install(FILES
   ${CMAKE_SOURCE_DIR}/doc/start/ceph.conf
@@ -1117,6 +1156,7 @@ endif(BUILD_SHARED_LIBS)
     target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
+    install(PROGRAMS mount.fuse.ceph DESTINATION /sbin)
   endif(HAVE_LIBFUSE)
 endif(WITH_LIBCEPHFS)
 
@@ -1428,13 +1468,24 @@ if(${WITH_RADOSGW})
     cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv)
   install(TARGETS radosgw-object-expirer DESTINATION bin)
+  add_subdirectory(rgw)
 endif(${WITH_RADOSGW})
+
+install(FILES
+  sample.ceph.conf
+  DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(FILES
+  fetch_config
+  DESTINATION ${CMAKE_INSTALL_DOCDIR}
+  RENAME sample.fetch_config)
 
 # Now create a useable config.h
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
   ${CMAKE_BINARY_DIR}/include/acconfig.h
 )
+
+add_subdirectory(brag)
 
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart DEPENDS

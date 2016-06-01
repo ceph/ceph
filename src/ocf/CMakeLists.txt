@@ -3,9 +3,8 @@
 # not "lib64" (even on 64-bit platforms).
 set(ocf_dir ${CMAKE_INSTALL_PREFIX}/lib/ocf)
 
-string(TOLOWER ${PROJECT_NAME} lower_project_name)
 # The ceph provider directory
-set(ra_dir ${ocf_dir}/resource.d/${lower_project_name})
+set(ra_dir ${ocf_dir}/resource.d/${PROJECT_NAME})
 
 foreach(agent ceph rbd)
   configure_file(${agent}.in

@@ -5,6 +5,8 @@ add_executable(ceph_perf_objectstore
 set_target_properties(ceph_perf_objectstore PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_perf_objectstore os osdc global ${UNITTEST_LIBS})
+install(TARGETS ceph_perf_objectstore
+  DESTINATION bin)
 
 #ceph_test_objectstore
 add_executable(ceph_test_objectstore

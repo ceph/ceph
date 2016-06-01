@@ -356,13 +356,13 @@ set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
   ${PERF_LOCAL_FLAGS})
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
 
-# ceph_test_xattr_bench
-add_executable(ceph_test_xattr_bench
+# ceph_xattr_bench
+add_executable(ceph_xattr_bench
   xattr_bench.cc
   )
-set_target_properties(ceph_test_xattr_bench PROPERTIES COMPILE_FLAGS
+set_target_properties(ceph_xattr_bench PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_xattr_bench
+target_link_libraries(ceph_xattr_bench
   os
   common
   ${UNITTEST_LIBS}
@@ -371,6 +371,16 @@ target_link_libraries(ceph_test_xattr_bench
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   )
+
+install(TARGETS
+  ceph_bench_log
+  ceph_kvstorebench
+  ceph_multi_stress_watch
+  ceph_objectstore_bench
+  ceph_omapbench
+  ceph_perf_local
+  ceph_xattr_bench
+  DESTINATION bin)
 
 # ceph_test_filejournal
 add_executable(ceph_test_filejournal

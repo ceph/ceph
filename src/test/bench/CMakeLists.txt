@@ -73,3 +73,10 @@ add_executable(ceph_tpbench
 target_link_libraries(ceph_tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
+install(TARGETS
+  ceph_smalliobench
+  ceph_smalliobenchrbd
+  ceph_smalliobenchfs
+  ceph_smalliobenchdumb
+  ceph_tpbench
+  DESTINATION bin)
