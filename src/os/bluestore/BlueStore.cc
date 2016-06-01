@@ -4189,46 +4189,54 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     bufferlist bl;
     bl.claim(wo.data);
     uint64_t offset = wo.extent.offset;
-    bufferlist first;
-    uint64_t first_len = offset & ~block_mask;
-    if (first_len) {
-      uint64_t src_offset;
-      if (wo.src_rmw_head)
-	src_offset = wo.src_rmw_head & block_mask;
-      else
-	src_offset = wo.extent.offset & block_mask;
-      offset = offset & block_mask;
-      dout(20) << __func__ << "  reading initial partial block "
-	       << src_offset << "~" << block_size << dendl;
-      r = bdev->read(src_offset, block_size, &first, ioc, true);
-      assert(r == 0);
-      bufferlist t;
-      t.substr_of(first, 0, first_len);
-      t.claim_append(bl);
-      bl.swap(t);
-    }
-    if (wo.extent.end() & ~block_mask) {
-      uint64_t last_offset;
-      if (wo.src_rmw_tail)
-	last_offset = wo.src_rmw_tail & block_mask;
-      else
-	last_offset = wo.extent.end() & block_mask;
-      bufferlist last;
-      if (last_offset == offset && first.length()) {
-	last.claim(first);   // same block we read above
-      } else {
-	dout(20) << __func__ << "  reading trailing partial block "
-		 << last_offset << "~" << block_size << dendl;
-	r = bdev->read(last_offset, block_size, &last, ioc, true);
-        assert(r == 0);
+#if defined(HAVE_PMEM)
+    if (bdev->get_type() == "pmem") {
+      //pmem don't need aligned w/ blocksize.
+      r = bdev->aio_write(offset, bl, ioc, true);
+    } else 
+#endif
+    {
+      bufferlist first;
+      uint64_t first_len = offset & ~block_mask;
+      if (first_len) {
+	uint64_t src_offset;
+	if (wo.src_rmw_head)
+	  src_offset = wo.src_rmw_head & block_mask;
+	else
+	  src_offset = wo.extent.offset & block_mask;
+	offset = offset & block_mask;
+	dout(20) << __func__ << "  reading initial partial block "
+	  << src_offset << "~" << block_size << dendl;
+	r = bdev->read(src_offset, block_size, &first, ioc, true);
+	assert(r == 0);
+	bufferlist t;
+	t.substr_of(first, 0, first_len);
+	t.claim_append(bl);
+	bl.swap(t);
       }
-      bufferlist t;
-      uint64_t endoff = wo.extent.end() & ~block_mask;
-      t.substr_of(last, endoff, block_size - endoff);
-      bl.claim_append(t);
+      if (wo.extent.end() & ~block_mask) {
+	uint64_t last_offset;
+	if (wo.src_rmw_tail)
+	  last_offset = wo.src_rmw_tail & block_mask;
+	else
+	  last_offset = wo.extent.end() & block_mask;
+	bufferlist last;
+	if (last_offset == offset && first.length()) {
+	  last.claim(first);   // same block we read above
+	} else {
+	  dout(20) << __func__ << "  reading trailing partial block "
+	    << last_offset << "~" << block_size << dendl;
+	  r = bdev->read(last_offset, block_size, &last, ioc, true);
+	  assert(r == 0);
+	}
+	bufferlist t;
+	uint64_t endoff = wo.extent.end() & ~block_mask;
+	t.substr_of(last, endoff, block_size - endoff);
+	bl.claim_append(t);
+      }
+      assert((bl.length() & ~block_mask) == 0);
+      r = bdev->aio_write(offset, bl, ioc, true);
     }
-    assert((bl.length() & ~block_mask) == 0);
-    r = bdev->aio_write(offset, bl, ioc, true);
     assert(r == 0);
   }
   break;
@@ -4241,12 +4249,19 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     assert((wo.extent.length & ~block_mask) == 0);
     assert(wo.extent.length == wo.src_extent.length);
     assert((wo.src_extent.offset & ~block_mask) == 0);
-    bufferlist bl;
-    r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
-		       true);
-    assert(r == 0);
-    assert(bl.length() == wo.extent.length);
-    r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
+#if defined(HAVE_PMEM)
+    if (bdev->get_type() == "pmem") {
+      r = bdev->copy(wo.src_extent.offset, wo.extent.offset, wo.src_extent.length);
+    } else
+#endif
+    {
+      bufferlist bl;
+      r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
+	  true);
+      assert(r == 0);
+      assert(bl.length() == wo.extent.length);
+      r = bdev->aio_write(wo.extent.offset, bl, ioc, true);
+    }
     assert(r == 0);
   }
   break;
@@ -4256,41 +4271,49 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
     dout(20) << __func__ << " zero " << wo.extent << dendl;
     uint64_t offset = wo.extent.offset;
     uint64_t length = wo.extent.length;
-    bufferlist first;
-    uint64_t first_len = offset & ~block_mask;
-    if (first_len) {
-      uint64_t first_offset = offset & block_mask;
-      dout(20) << __func__ << "  reading initial partial block "
-	       << first_offset << "~" << block_size << dendl;
-      r = bdev->read(first_offset, block_size, &first, ioc, true);
-      assert(r == 0);
-      size_t z_len = MIN(block_size - first_len, length);
-      memset(first.c_str() + first_len, 0, z_len);
-      r = bdev->aio_write(first_offset, first, ioc, true);
-      assert(r == 0);
-      offset += block_size - first_len;
-      length -= z_len;
-    }
-    assert(offset % block_size == 0);
-    if (length >= block_size) {
-      uint64_t middle_len = length & block_mask;
-      dout(20) << __func__ << "  zero " << offset << "~" << length << dendl;
-      r = bdev->aio_zero(offset, middle_len, ioc);
-      assert(r == 0);
-      offset += middle_len;
-      length -= middle_len;
-    }
-    assert(offset % block_size == 0);
-    if (length > 0) {
-      assert(length < block_size);
-      bufferlist last;
-      dout(20) << __func__ << "  reading trailing partial block "
-	       << offset << "~" << block_size << dendl;
-      r = bdev->read(offset, block_size, &last, ioc, true);
-      assert(r == 0);
-      memset(last.c_str(), 0, length);
-      r = bdev->aio_write(offset, last, ioc, true);
-      assert(r == 0);
+#if defined(HAVE_PMEM)
+    if (bdev->get_type() == "pmem") {
+      //pmem don't need align w/ block_size
+      r = bdev->aio_zero(offset, length, ioc);
+    } else
+#endif
+    {
+      bufferlist first;
+      uint64_t first_len = offset & ~block_mask;
+      if (first_len) {
+	uint64_t first_offset = offset & block_mask;
+	dout(20) << __func__ << "  reading initial partial block "
+	  << first_offset << "~" << block_size << dendl;
+	r = bdev->read(first_offset, block_size, &first, ioc, true);
+	assert(r == 0);
+	size_t z_len = MIN(block_size - first_len, length);
+	memset(first.c_str() + first_len, 0, z_len);
+	r = bdev->aio_write(first_offset, first, ioc, true);
+	assert(r == 0);
+	offset += block_size - first_len;
+	length -= z_len;
+      }
+      assert(offset % block_size == 0);
+      if (length >= block_size) {
+	uint64_t middle_len = length & block_mask;
+	dout(20) << __func__ << "  zero " << offset << "~" << length << dendl;
+	r = bdev->aio_zero(offset, middle_len, ioc);
+	assert(r == 0);
+	offset += middle_len;
+	length -= middle_len;
+      }
+      assert(offset % block_size == 0);
+      if (length > 0) {
+	assert(length < block_size);
+	bufferlist last;
+	dout(20) << __func__ << "  reading trailing partial block "
+	  << offset << "~" << block_size << dendl;
+	r = bdev->read(offset, block_size, &last, ioc, true);
+	assert(r == 0);
+	memset(last.c_str(), 0, length);
+	r = bdev->aio_write(offset, last, ioc, true);
+	assert(r == 0);
+      }
     }
   }
   break;

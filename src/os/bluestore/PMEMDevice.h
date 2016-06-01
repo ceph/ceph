@@ -12,50 +12,26 @@
  *
  */
 
-#ifndef CEPH_OS_BLUESTORE_KERNELDEVICE_H
-#define CEPH_OS_BLUESTORE_KERNELDEVICE_H
+#ifndef CEPH_OS_BLUESTORE_PMEMDEVICE_H
+#define CEPH_OS_BLUESTORE_PMEMDEVICE_H
 
 #include <atomic>
 
-#include "os/fs/FS.h"
 #include "include/interval_set.h"
 
 #include "BlockDevice.h"
 
-class KernelDevice : public BlockDevice {
-  int fd_direct, fd_buffered;
+class PMEMDevice : public BlockDevice {
+  int fd;
+  char *addr; //the address of mmap
   uint64_t size;
   uint64_t block_size;
   string path;
-  FS *fs;
-  bool aio, dio;
-  bufferptr zeros;
 
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
 
-  Mutex flush_lock;
-  atomic_t io_since_flush;
-
-  FS::aio_queue_t aio_queue;
-  aio_callback_t aio_callback;
-  void *aio_callback_priv;
-  bool aio_stop;
-
-  struct AioCompletionThread : public Thread {
-    KernelDevice *bdev;
-    explicit AioCompletionThread(KernelDevice *b) : bdev(b) {}
-    void *entry() {
-      bdev->_aio_thread();
-      return NULL;
-    }
-  } aio_thread;
-
   std::atomic_int injecting_crash;
-
-  void _aio_thread();
-  int _aio_start();
-  void _aio_stop();
 
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
@@ -63,7 +39,7 @@ class KernelDevice : public BlockDevice {
   int _lock();
 
 public:
-  KernelDevice(aio_callback_t cb, void *cbpriv);
+  PMEMDevice(aio_callback_t cb, void *cbpriv);
 
   void aio_submit(IOContext *ioc) override;
 

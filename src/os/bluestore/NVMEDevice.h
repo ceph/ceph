@@ -237,6 +237,9 @@ class NVMEDevice : public BlockDevice {
   int invalidate_cache(uint64_t off, uint64_t len) override;
   int open(string path) override;
   void close() override;
+
+  string get_type() override;
+  int copy(uint64_t dest, uint64_t src, uint64_t len) override;
 };
 
 #endif
