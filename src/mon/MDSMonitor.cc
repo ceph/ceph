@@ -2091,7 +2091,6 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       string err;
       poolid = strict_strtol(poolname.c_str(), 10, &err);
       if (err.length()) {
-	poolid = -1;
 	ss << "pool '" << poolname << "' does not exist";
         return -ENOENT;
       } else if (poolid < 0) {
@@ -2103,7 +2102,6 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
     assert(poolid >= 0);  // Checked by parsing code above
 
     if (fs->mds_map.get_first_data_pool() == poolid) {
-      poolid = -1;
       ss << "cannot remove default data pool";
       return -EINVAL;
     }
