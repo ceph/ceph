@@ -819,6 +819,8 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::MODIFY;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -842,6 +844,8 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::CLONE;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_clone());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -865,6 +869,8 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::MODIFY;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -889,6 +895,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::MODIFY;
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -906,6 +914,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::BACKLOG;
     EXPECT_TRUE(e.is_backlog());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     EXPECT_DEATH(missing.add_next_event(e), "");
   }
@@ -917,6 +927,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::MODIFY;
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -935,9 +947,12 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::ERROR;
     e.return_code = -ENOENT;
     EXPECT_FALSE(e.is_update());
+    EXPECT_FALSE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_FALSE(missing.is_missing(oid));
+    EXPECT_FALSE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
   }
 
