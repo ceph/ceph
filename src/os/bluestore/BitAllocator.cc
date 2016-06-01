@@ -128,7 +128,7 @@ bmap_t BmapEntry::bit_mask(int bit)
 }
 bool BmapEntry::check_bit(int bit)
 {
-  return (m_bits & bit_mask(bit));
+  return (atomic_fetch() & bit_mask(bit));
 }
 
 bmap_t BmapEntry::atomic_fetch()
@@ -163,10 +163,12 @@ void BmapEntry::clear_bits(int offset, int num_bits)
 
 void BmapEntry::set_bits(int offset, int num_bits)
 {
-  for (int i = 0; i < num_bits; i++) {
-    bmap_t bmask = bit_mask(i + offset);
-    (void) std::atomic_fetch_or(&m_bits, bmask);
+  if (num_bits == 0) {
+    return;
   }
+
+  bmap_t bmask = BmapEntry::align_mask(num_bits) >> offset;
+  (void) std::atomic_fetch_or(&m_bits, bmask);
 }
 
 /*
@@ -176,7 +178,7 @@ void BmapEntry::set_bits(int offset, int num_bits)
 bool BmapEntry::check_n_set_bit(int bit)
 {
   bmap_t bmask = bit_mask(bit);
-  return !(atomic_fetch_or(&m_bits, bmask) & bmask);
+  return !(std::atomic_fetch_or(&m_bits, bmask) & bmask);
 }
 
 /*
@@ -339,7 +341,7 @@ int64_t BmapList::incr_marker(int64_t add)
 
 void BmapList::set_marker(int64_t val)
 {
- atomic_store(&m_marker, val);
+  std::atomic_store(&m_marker, val);
 }
 
 int64_t BmapList::get_marker()
@@ -935,7 +937,8 @@ bool BitAllocator::is_allocated(int64_t start_block, int64_t num_blocks)
 bool BitAllocator::is_allocated(int64_t *alloc_blocks, int64_t num_blocks)
 {
   for (int64_t i = 0; i < num_blocks; i++) {
-    return is_allocated(alloc_blocks[i], 1);
+    if (!is_allocated(alloc_blocks[i], 1))
+      return false;
   }
 
   return true;
