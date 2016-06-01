@@ -48,6 +48,7 @@
       mirror image enable         Enable RBD mirroring for an image.
       mirror image promote        Promote an image to primary for RBD mirroring.
       mirror image resync         Force resync to primary image for RBD mirroring.
+      mirror image status         Show RDB mirroring status for an image.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
       mirror pool info            Show information about the pool mirroring
@@ -55,9 +56,11 @@
       mirror pool peer add        Add a mirroring peer to a pool.
       mirror pool peer remove     Remove a mirroring peer from a pool.
       mirror pool peer set        Update mirroring peer settings.
+      mirror pool status          Show status for all mirrored images in the pool.
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
       nbd unmap                   Unmap a nbd device.
+      object-map check            Verify the object map is correct.
       object-map rebuild          Rebuild an invalid object map.
       remove (rm)                 Delete an image.
       rename (mv)                 Rename image within pool.
@@ -282,6 +285,7 @@
   rbd help disk-usage
   usage: rbd disk-usage [--pool <pool>] [--image <image>] [--snap <snap>] 
                         [--format <format>] [--pretty-format] 
+                        [--from-snap <from-snap>] 
                         <image-or-snap-spec> 
   
   Show disk usage stats for pool, image or snapshot
@@ -296,6 +300,7 @@
     --snap arg            snapshot name
     --format arg          output format [plain, json, or xml]
     --pretty-format       pretty formatting (json and xml)
+    --from-snap arg       snapshot starting point
   
   rbd help export
   usage: rbd export [--pool <pool>] [--image <image>] [--snap <snap>] 
@@ -824,6 +829,23 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
   
+  rbd help mirror image status
+  usage: rbd mirror image status [--pool <pool>] [--image <image>] 
+                                 [--format <format>] [--pretty-format] 
+                                 <image-spec> 
+  
+  Show RDB mirroring status for an image.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
   rbd help mirror pool disable
   usage: rbd mirror pool disable [--pool <pool>] 
                                  <pool-name> 
@@ -910,6 +932,22 @@
   Optional arguments
     -p [ --pool ] arg    pool name
   
+  rbd help mirror pool status
+  usage: rbd mirror pool status [--pool <pool>] [--format <format>] 
+                                [--pretty-format] [--verbose] 
+                                <pool-name> 
+  
+  Show status for all mirrored images in the pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+    --verbose            be verbose
+  
   rbd help nbd list
   usage: rbd nbd list 
   
@@ -941,6 +979,23 @@
   
   Positional arguments
     <device-spec>        specify nbd device
+  
+  rbd help object-map check
+  usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
+                              [--no-progress] 
+                              <image-or-snap-spec> 
+  
+  Verify the object map is correct.
+  
+  Positional arguments
+    <image-or-snap-spec>  image or snapshot specification
+                          (example: [<pool-name>/]<image-name>[@<snap-name>])
+  
+  Optional arguments
+    -p [ --pool ] arg     pool name
+    --image arg           image name
+    --snap arg            snapshot name
+    --no-progress         disable progress output
   
   rbd help object-map rebuild
   usage: rbd object-map rebuild [--pool <pool>] [--image <image>] 

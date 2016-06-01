@@ -28,7 +28,7 @@
 
 ``journal prezero periods``
 
-:Description: How mnay stripe periods to zero ahead of write position
+:Description: How many stripe periods to zero ahead of write position
 :Type: Integer
 :Required: No
 :Default: ``10``

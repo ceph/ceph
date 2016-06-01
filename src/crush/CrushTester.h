@@ -18,6 +18,7 @@ class CrushTester {
   int ruleset;
   int min_x, max_x;
   int min_rep, max_rep;
+  int64_t pool_id;
 
   int num_batches;
   bool use_crush;
@@ -172,6 +173,7 @@ public:
       ruleset(-1),
       min_x(-1), max_x(-1),
       min_rep(-1), max_rep(-1),
+      pool_id(-1),
       num_batches(1),
       use_crush(true),
       mark_down_device_ratio(0.0),
@@ -302,6 +304,11 @@ public:
   void set_min_x(int x) {
     min_x = x;
   }
+
+  void set_pool_id(int64_t x){
+    pool_id = x;
+  }
+
   int get_min_x() const {
     return min_x;
   }

@@ -68,6 +68,10 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
+    librbd::mirror_image_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -93,9 +97,28 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
+    librbd::mirror_image_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+  }
+
+  void check_mirroring_status(size_t *images_count) {
+    std::map<std::string, librbd::mirror_image_status_t> images;
+    ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, "", 4096, &images));
+
+    std::map<librbd::mirror_image_status_state_t, int> states;
+    ASSERT_EQ(0, m_rbd.mirror_image_status_summary(m_ioctx, &states));
+    size_t states_count = 0;
+    for (auto &s : states) {
+      states_count += s.second;
+    }
+    ASSERT_EQ(images.size(), states_count);
+
+    *images_count = images.size();
   }
 
   void check_mirroring_on_create(uint64_t features,
@@ -103,6 +126,9 @@ public:
                                  rbd_mirror_image_state_t mirror_state) {
 
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, mirror_mode));
+
+    size_t mirror_images_count = 0;
+    check_mirroring_status(&mirror_images_count);
 
     int order = 20;
     ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features, &order));
@@ -113,9 +139,25 @@ public:
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
 
+    librbd::mirror_image_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
+
+    size_t mirror_images_new_count = 0;
+    check_mirroring_status(&mirror_images_new_count);
+    if (mirror_mode == RBD_MIRROR_MODE_POOL &&
+	mirror_state == RBD_MIRROR_IMAGE_ENABLED) {
+      ASSERT_EQ(mirror_images_new_count, mirror_images_count + 1);
+    } else {
+      ASSERT_EQ(mirror_images_new_count, mirror_images_count);
+    }
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
+
+    check_mirroring_status(&mirror_images_new_count);
+    ASSERT_EQ(mirror_images_new_count, mirror_images_count);
   }
 
   void check_mirroring_on_update_features(uint64_t init_features,
@@ -140,6 +182,10 @@ public:
     librbd::mirror_image_info_t mirror_image;
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
     ASSERT_EQ(mirror_state, mirror_image.state);
+
+    librbd::mirror_image_status_t status;
+    ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
+    ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
@@ -179,6 +225,10 @@ public:
       librbd::mirror_image_info_t mirror_image;
       ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
       ASSERT_EQ(mirror_state, mirror_image.state);
+
+      librbd::mirror_image_status_t status;
+      ASSERT_EQ(0, image.mirror_image_get_status(&status, sizeof(status)));
+      ASSERT_EQ(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, status.state);
 
       ASSERT_EQ(0, image.close());
       ASSERT_EQ(0, m_rbd.remove(m_ioctx, img_name_str.c_str()));
@@ -460,3 +510,28 @@ TEST_F(TestMirroring, RemoveImage_With_ImageWithoutJournal) {
                      false);
 }
 
+TEST_F(TestMirroring, MirrorStatusList) {
+  std::vector<uint64_t>
+      features_vec(5, RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING);
+  setup_images_with_mirror_mode(RBD_MIRROR_MODE_POOL, features_vec);
+
+  std::string last_read = "";
+  std::map<std::string, librbd::mirror_image_status_t> images;
+  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 2, &images));
+  ASSERT_EQ(2U, images.size());
+
+  last_read = images.rbegin()->first;
+  images.clear();
+  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 2, &images));
+  ASSERT_EQ(2U, images.size());
+
+  last_read = images.rbegin()->first;
+  images.clear();
+  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 4096, &images));
+  ASSERT_EQ(1U, images.size());
+
+  last_read = images.rbegin()->first;
+  images.clear();
+  ASSERT_EQ(0, m_rbd.mirror_image_status_list(m_ioctx, last_read, 4096, &images));
+  ASSERT_EQ(0U, images.size());
+}

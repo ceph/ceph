@@ -2186,13 +2186,17 @@ void KStore::_txc_state_proc(TransContext *txc)
       if (!g_conf->kstore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
 	if (g_conf->kstore_sync_submit_transaction) {
-	  db->submit_transaction(txc->t);
+          int r = db->submit_transaction(txc->t);
+	  assert(r == 0);
 	}
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
 	return;
       }
-      db->submit_transaction_sync(txc->t);
+      {
+	int r = db->submit_transaction_sync(txc->t);
+	assert(r == 0);
+      }
       break;
 
     case TransContext::STATE_KV_QUEUED:
@@ -2220,7 +2224,7 @@ void KStore::_txc_state_proc(TransContext *txc)
   }
 }
 
-int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+void KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 {
   dout(20) << __func__ << " osr " << osr << " txc " << txc
 	   << " onodes " << txc->onodes << dendl;
@@ -2237,8 +2241,6 @@ int KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
   }
-
-  return 0;
 }
 
 void KStore::_txc_finish_kv(TransContext *txc)
@@ -2355,10 +2357,12 @@ void KStore::_kv_sync_thread()
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
-	  db->submit_transaction((*it)->t);
+	  int r = db->submit_transaction((*it)->t);
+	  assert(r == 0);
 	}
       }
-      db->submit_transaction_sync(t);
+      int r = db->submit_transaction_sync(t);
+      assert(r == 0);
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
@@ -2393,7 +2397,6 @@ int KStore::queue_transactions(
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
-  int r;
 
   // set up the sequencer
   OpSequencer *osr;
@@ -2421,8 +2424,7 @@ int KStore::queue_transactions(
     _txc_add_transaction(txc, &(*p));
   }
 
-  r = _txc_finalize(osr, txc);
-  assert(r == 0);
+  _txc_finalize(osr, txc);
 
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
@@ -2739,9 +2741,11 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
+	uint32_t flags = op->alloc_hint_flags;
 	r = _setallochint(txc, c, o,
 			  expected_object_size,
-			  expected_write_size);
+			  expected_write_size,
+			  flags);
       }
       break;
 
@@ -3344,15 +3348,19 @@ int KStore::_setallochint(TransContext *txc,
 			  CollectionRef& c,
 			  OnodeRef& o,
 			  uint64_t expected_object_size,
-			  uint64_t expected_write_size)
+			  uint64_t expected_write_size,
+			  uint32_t flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
+	   << " flags " << flags
 	   << dendl;
   int r = 0;
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
+  o->onode.alloc_hint_flags = flags;
+
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size

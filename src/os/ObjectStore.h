@@ -426,7 +426,14 @@ public:
       __le32 dest_cid;
       __le32 dest_oid;                  //OP_CLONE, OP_CLONERANGE
       __le64 dest_off;                  //OP_CLONERANGE
-      __le32 hint_type;                 //OP_COLL_HINT
+      union {
+	struct {
+	  __le32 hint_type;             //OP_COLL_HINT
+	};
+	struct {
+	  __le32 alloc_hint_flags;      //OP_SETALLOCHINT
+	};
+      };
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
       __le32 split_bits;                //OP_SPLIT_COLLECTION2
@@ -1473,73 +1480,6 @@ public:
       data.ops++;
     }
 
-    // NOTE: Collection attr operations are all DEPRECATED.  new
-    // backends need not implement these at all.
-
-    /// Set an xattr on a collection
-    void collection_setattr(const coll_t& cid, const string& name,
-			    bufferlist& val) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTR;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(name, tbl);
-        ::encode(val, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTR;
-        _op->cid = _get_coll_id(cid);
-        ::encode(name, data_bl);
-        ::encode(val, data_bl);
-      }
-      data.ops++;
-    }
-
-    /// Remove an xattr from a collection
-    void collection_rmattr(const coll_t& cid, const string& name) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_RMATTR;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(name, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_RMATTR;
-        _op->cid = _get_coll_id(cid);
-        ::encode(name, data_bl);
-      }
-      data.ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(const coll_t& cid, map<string,bufferptr>& aset) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTRS;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(aset, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTRS;
-        _op->cid = _get_coll_id(cid);
-        ::encode(aset, data_bl);
-      }
-      data.ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(const coll_t& cid, map<string,bufferlist>& aset) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTRS;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(aset, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTRS;
-        _op->cid = _get_coll_id(cid);
-        ::encode(aset, data_bl);
-      }
-      data.ops++;
-    }
     /// Remove omap from oid
     void omap_clear(
       coll_t cid,           ///< [in] Collection containing oid
@@ -1722,7 +1662,8 @@ public:
       coll_t cid,
       const ghobject_t &oid,
       uint64_t expected_object_size,
-      uint64_t expected_write_size
+      uint64_t expected_write_size,
+      uint32_t flags
     ) {
       if (use_tbl) {
         __u32 op = OP_SETALLOCHINT;
@@ -1738,6 +1679,7 @@ public:
         _op->oid = _get_object_id(oid);
         _op->expected_object_size = expected_object_size;
         _op->expected_write_size = expected_write_size;
+	_op->alloc_hint_flags = flags;
       }
       data.ops++;
     }
@@ -2202,10 +2144,6 @@ public:
    */
   virtual int list_collections(vector<coll_t>& ls) = 0;
 
-  virtual int collection_version_current(const coll_t& c, uint32_t *version) {
-    *version = 0;
-    return 1;
-  }
   /**
    * does a collection exist?
    *
@@ -2213,44 +2151,6 @@ public:
    * @returns true if it exists, false otherwise
    */
   virtual bool collection_exists(const coll_t& c) = 0;
-  /**
-   * collection_getattr - get an xattr of a collection
-   *
-   * @param cid collection name
-   * @param name xattr name
-   * @param value pointer of buffer to receive value
-   * @param size size of buffer to receive value
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattr(const coll_t& cid, const char *name,
-	                         void *value, size_t size) {
-    return -EOPNOTSUPP;
-  }
-
-  /**
-   * collection_getattr - get an xattr of a collection
-   *
-   * @param cid collection name
-   * @param name xattr name
-   * @param bl buffer to receive value
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattr(const coll_t& cid, const char *name,
-				 bufferlist& bl) {
-    return -EOPNOTSUPP;
-  }
-
-  /**
-   * collection_getattrs - get all xattrs of a collection
-   *
-   * @param cid collection name
-   * @param aset map of keys and buffers that contain the values
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattrs(const coll_t& cid,
-				  map<string,bufferptr> &aset) {
-    return -EOPNOTSUPP;
-  }
 
   /**
    * is a collection empty?
@@ -2405,6 +2305,12 @@ public:
    */
   virtual void set_fsid(uuid_d u) = 0;
   virtual uuid_d get_fsid() = 0;
+
+  /**
+  * Estimates additional disk space used by the specified amount of objects and caused by file allocation granularity and metadata store
+  * - num objects - total (including witeouts) object count to measure used space for.
+  */
+  virtual uint64_t estimate_objects_overhead(uint64_t num_objects) = 0;
 
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}

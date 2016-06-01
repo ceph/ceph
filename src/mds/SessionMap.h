@@ -86,7 +86,7 @@ private:
   void _update_human_name();
   std::string human_name;
 
-  // Versions in this this session was projected: used to verify
+  // Versions in this session was projected: used to verify
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
 

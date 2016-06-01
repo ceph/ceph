@@ -35,6 +35,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#if defined(__FreeBSD__)
+/* FreeBSD/Clang requires basename() whereas Linux preffers the version in <string.h> */
+#include <libgen.h>
+#endif
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
@@ -994,7 +998,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       return 0;
     case OPT_U32: {
       std::string err;
-      int f = strict_si_cast<int>(val, &err);
+      int f = strict_si_cast<uint32_t>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->conf_ptr(this) = f;

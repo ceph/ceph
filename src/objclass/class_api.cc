@@ -6,6 +6,7 @@
 
 #include "objclass/objclass.h"
 #include "osd/ReplicatedPG.h"
+#include "osd/osd_types.h"
 
 #include "osd/ClassHandler.h"
 
@@ -119,6 +120,8 @@ int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
   op.indata.append(method, op.op.cls.method_len);
   op.indata.append(indata, datalen);
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
+  if (r < 0)
+    return r;
 
   *outdata = (char *)malloc(op.outdata.length());
   if (!*outdata)
@@ -142,6 +145,8 @@ int cls_getxattr(cls_method_context_t hctx, const char *name,
   op.indata.append(name);
   op.op.xattr.name_len = strlen(name);
   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
+  if (r < 0)
+    return r;
 
   *outdata = (char *)malloc(op.outdata.length());
   if (!*outdata)
@@ -180,15 +185,14 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
   int r = (*pctx)->pg->do_osd_ops(*pctx, ops);
+  if (r < 0)
+    return r;
 
   *outdata = (char *)malloc(ops[0].outdata.length());
   if (!*outdata)
     return -ENOMEM;
   memcpy(*outdata, ops[0].outdata.c_str(), ops[0].outdata.length());
   *outdatalen = ops[0].outdata.length();
-
-  if (r < 0)
-    return r;
 
   return *outdatalen;
 }
@@ -604,6 +608,28 @@ int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
   op.op.op = CEPH_OSD_OP_OMAPRMKEYS;
 
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
+int cls_cxx_list_watchers(cls_method_context_t hctx,
+			  obj_list_watch_response_t *watchers)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  vector<OSDOp> nops(1);
+  OSDOp& op = nops[0];
+  int r;
+
+  op.op.op = CEPH_OSD_OP_LIST_WATCHERS;
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops);
+  if (r < 0)
+    return r;
+
+  bufferlist::iterator iter = op.outdata.begin();
+  try {
+    ::decode(*watchers, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
 }
 
 int cls_gen_random_bytes(char *buf, int size)

@@ -86,43 +86,12 @@ struct ObjectOperation {
     ops.rbegin()->op.flags = flags;
   }
 
-  /**
-   * This is a more limited form of C_Contexts, but that requires
-   * a ceph_context which we don't have here.
-   */
-  class C_TwoContexts : public Context {
-    Context *first;
-    Context *second;
-  public:
-    C_TwoContexts(Context *first, Context *second) : first(first),
-						     second(second) {}
-    void finish(int r) {
-      first->complete(r);
-      second->complete(r);
-      first = NULL;
-      second = NULL;
-    }
-
-    virtual ~C_TwoContexts() {
-      delete first;
-      delete second;
-    }
-  };
-
+  class C_TwoContexts;
   /**
    * Add a callback to run when this operation completes,
    * after any other callbacks for it.
    */
-  void add_handler(Context *extra) {
-    size_t last = out_handler.size() - 1;
-    Context *orig = out_handler[last];
-    if (orig) {
-      Context *wrapper = new C_TwoContexts(orig, extra);
-      out_handler[last] = wrapper;
-    } else {
-      out_handler[last] = extra;
-    }
-  }
+  void add_handler(Context *extra);
 
   OSDOp& add_op(int op) {
     int s = ops.size();
@@ -140,6 +109,14 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(op);
     osd_op.op.extent.offset = off;
     osd_op.op.extent.length = len;
+    osd_op.indata.claim_append(bl);
+  }
+  void add_writesame(int op, uint64_t off, uint64_t write_len,
+		     bufferlist& bl) {
+    OSDOp& osd_op = add_op(op);
+    osd_op.op.writesame.offset = off;
+    osd_op.op.writesame.length = write_len;
+    osd_op.op.writesame.data_length = bl.length();
     osd_op.indata.claim_append(bl);
   }
   void add_clone_range(int op, uint64_t off, uint64_t len,
@@ -207,10 +184,12 @@ struct ObjectOperation {
     ::encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
-		      uint64_t expected_write_size) {
+                      uint64_t expected_write_size,
+		      uint32_t flags) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.alloc_hint.expected_object_size = expected_object_size;
     osd_op.op.alloc_hint.expected_write_size = expected_write_size;
+    osd_op.op.alloc_hint.flags = flags;
   }
 
   // ------
@@ -369,6 +348,9 @@ struct ObjectOperation {
   }
   void write_full(bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
+  }
+  void writesame(uint64_t off, uint64_t write_len, bufferlist& bl) {
+    add_writesame(CEPH_OSD_OP_WRITESAME, off, write_len, bl);
   }
   void append(bufferlist& bl) {
     add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
@@ -1078,9 +1060,10 @@ struct ObjectOperation {
   }
 
   void set_alloc_hint(uint64_t expected_object_size,
-		      uint64_t expected_write_size ) {
+                      uint64_t expected_write_size,
+		      uint32_t flags) {
     add_alloc_hint(CEPH_OSD_OP_SETALLOCHINT, expected_object_size,
-		   expected_write_size);
+		   expected_write_size, flags);
 
     // CEPH_OSD_OP_SETALLOCHINT op is advisory and therefore deemed
     // not worth a feature bit.  Set FAILOK per-op flag to make
@@ -2594,6 +2577,44 @@ public:
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_write_full_op(oid, oloc, snapc, bl, mtime, flags,
 				  onack, oncommit, objver, extra_ops, op_flags);
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
+  }
+  Op *prepare_writesame_op(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t write_len, uint64_t off,
+    const SnapContext& snapc, const bufferlist &bl,
+    ceph::real_time mtime, int flags, Context *onack,
+    Context *oncommit, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+
+    vector<OSDOp> ops;
+    int i = init_ops(ops, 1, extra_ops);
+    ops[i].op.op = CEPH_OSD_OP_WRITESAME;
+    ops[i].op.writesame.offset = off;
+    ops[i].op.writesame.length = write_len;
+    ops[i].op.writesame.data_length = bl.length();
+    ops[i].indata = bl;
+    ops[i].op.flags = op_flags;
+    Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
+		   CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return o;
+  }
+  ceph_tid_t writesame(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t write_len, uint64_t off,
+    const SnapContext& snapc, const bufferlist &bl,
+    ceph::real_time mtime, int flags, Context *onack,
+    Context *oncommit, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+
+    Op *o = prepare_writesame_op(oid, oloc, write_len, off, snapc, bl,
+				 mtime, flags, onack, oncommit, objver,
+				 extra_ops, op_flags);
+
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;

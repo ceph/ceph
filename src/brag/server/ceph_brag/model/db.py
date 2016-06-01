@@ -132,7 +132,7 @@ class brag(object):
     self.ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
     if self.ci is not None:
       self.vi = Session.query(version_info).filter_by(cluster_id=self.ci.index, version_number=version_number).first()
-    
+
     if self.ci is not None and self.vi is not None:
       self.comps = Session.query(components_info).filter_by(vid=self.vi.index).first()
       self.crush = Session.query(crush_types).filter_by(vid=self.vi.index).all()
@@ -145,7 +145,7 @@ def put_new_version(data):
     ci = Session.query(cluster_info).filter_by(uuid=info['uuid']).first()
     if ci is None:
       dt = datetime.strptime(info['cluster_creation_date'], "%Y-%m-%d %H:%M:%S.%f")
-      ci = cluster_info(uuid=info['uuid'], 
+      ci = cluster_info(uuid=info['uuid'],
                         organization=info['ownership']['organization'],
                         contact_email=info['ownership']['email'],
                         cluster_name=info['ownership']['name'],
@@ -155,12 +155,12 @@ def put_new_version(data):
       Session.add(ci)
       Session.commit()
     else:
-      ci.num_versions += 1 
+      ci.num_versions += 1
 
     return ci
- 
+
   def add_version_info(ci):
-    vi = version_info(cluster_id=ci.index, 
+    vi = version_info(cluster_id=ci.index,
                       version_number=ci.num_versions,
                       version_date=datetime.now())
     Session.add(vi)
@@ -181,7 +181,7 @@ def put_new_version(data):
 
   def add_crush_types(vi):
     for c in info['crush_types']:
-      Session.add(crush_types(vid=vi.index, 
+      Session.add(crush_types(vid=vi.index,
                             crush_type=c['type'],
                             crush_count=c['count']))
 
@@ -199,7 +199,7 @@ def put_new_version(data):
       k,v = si.popitem()
       if k == 'os_info':
         for o in v:
-          Session.add(os_info(vid=vi.index, 
+          Session.add(os_info(vid=vi.index,
                               os=o['os'],
                               count=o['count']))
       elif k == 'kernel_versions':
@@ -235,13 +235,13 @@ def put_new_version(data):
 
   ci = add_cluster_info()
   add_version_info(ci)
-  vi = Session.query(version_info).filter_by(cluster_id=ci.index, 
+  vi = Session.query(version_info).filter_by(cluster_id=ci.index,
                                              version_number=ci.num_versions).first()
   add_components_info(vi)
   add_crush_types(vi)
   add_pools_info(vi)
   add_sys_info(vi)
- 
+
 def delete_uuid(uuid):
   ci = Session.query(cluster_info).filter_by(uuid=uuid).first()
   if ci is None:

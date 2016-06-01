@@ -89,7 +89,6 @@ public:
     // States of an MDS rank, and of any MDS daemon holding that rank
     // ==============================================================
     STATE_STOPPED  =   CEPH_MDS_STATE_STOPPED,        // down, once existed, but no subtrees. empty log.  may not be held by a daemon.
-    STATE_ONESHOT_REPLAY = CEPH_MDS_STATE_REPLAYONCE, // up, replaying active node journal to verify it, then shutting down
 
     STATE_CREATING  =  CEPH_MDS_STATE_CREATING,       // up, creating MDS instance (new journal, idalloc..).
     STATE_STARTING  =  CEPH_MDS_STATE_STARTING,       // up, starting prior stopped MDS instance.
@@ -119,16 +118,6 @@ public:
      */
   } DaemonState;
 
-  // indicate startup standby preferences for MDS
-  // of course, if they have a specific rank to follow, they just set that!
-  static const mds_rank_t MDS_NO_STANDBY_PREF; // doesn't have instructions to do anything
-  static const mds_rank_t MDS_STANDBY_ANY;     // is instructed to be standby-replay, may
-                                               // or may not have specific name to follow
-  static const mds_rank_t MDS_STANDBY_NAME;    // standby for a named MDS
-  static const mds_rank_t MDS_MATCHED_ACTIVE;  // has a matched standby, which if up
-                                               // it should follow, but otherwise should
-                                               // be assigned a rank
-
   struct mds_info_t {
     mds_gid_t global_id;
     std::string name;
@@ -141,12 +130,15 @@ public:
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
     fs_cluster_id_t standby_for_fscid;
+    bool standby_replay;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features;
 
-    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
-		   standby_for_rank(MDS_NO_STANDBY_PREF),
-                   standby_for_fscid(FS_CLUSTER_ID_NONE)
+    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
+                   state(STATE_STANDBY), state_seq(0),
+                   standby_for_rank(MDS_RANK_NONE),
+                   standby_for_fscid(FS_CLUSTER_ID_NONE),
+                   standby_replay(false)
     { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }
@@ -203,14 +195,14 @@ protected:
   mds_rank_t max_mds; /* The maximum number of active MDSes. Also, the maximum rank. */
 
   std::set<mds_rank_t> in;              // currently defined cluster
-  std::map<mds_rank_t,int32_t> inc;     // most recent incarnation.
+
   // which ranks are failed, stopped, damaged (i.e. not held by a daemon)
   std::set<mds_rank_t> failed, stopped, damaged;
   std::map<mds_rank_t, mds_gid_t> up;        // who is in those roles
   std::map<mds_gid_t, mds_info_t> mds_info;
 
-  bool ever_allowed_snaps; //< the cluster has ever allowed snap creation
-  bool explicitly_allowed_snaps; //< the user has explicitly enabled snap creation
+  uint8_t ever_allowed_features; //< bitmap of features the cluster has allowed
+  uint8_t explicitly_allowed_features; //< bitmap of features explicitly enabled 
 
   bool inline_data_enabled;
 
@@ -235,8 +227,8 @@ public:
       cas_pool(-1),
       metadata_pool(0),
       max_mds(0),
-      ever_allowed_snaps(false),
-      explicitly_allowed_snaps(false),
+      ever_allowed_features(0),
+      explicitly_allowed_features(0),
       inline_data_enabled(false),
       cached_up_features(0)
   { }
@@ -259,11 +251,27 @@ public:
 
   void set_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
-    ever_allowed_snaps = true;
-    explicitly_allowed_snaps = true;
+    ever_allowed_features |= CEPH_MDSMAP_ALLOW_SNAPS;
+    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_SNAPS;
   }
-  bool allows_snaps() { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
+  bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
+
+  void set_multimds_allowed() {
+    set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS);
+    ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
+    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
+  }
+  void clear_multimds_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
+  bool allows_multimds() const { return test_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
+
+  void set_dirfrags_allowed() {
+    set_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS);
+    ever_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
+    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
+  }
+  void clear_dirfrags_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
+  bool allows_dirfrags() const { return test_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }

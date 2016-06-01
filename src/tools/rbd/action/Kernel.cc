@@ -49,7 +49,7 @@ static std::string map_option_ip_cb(const char *value_char)
     return "";
   }
 
-  return stringify(a.addr);
+  return stringify(a.get_sockaddr());
 }
 
 static std::string map_option_int_cb(const char *value_char)
@@ -153,6 +153,45 @@ static int do_kernel_showmapped(Formatter *f)
   return r;
 }
 
+/*
+ * hint user to check syslog for krbd related messages and provide suggestions
+ * based on errno return by krbd_map(). also note that even if some librbd calls
+ * fail, we atleast dump the "try dmesg..." message to aid debugging.
+ */
+static void print_error_description(const char *poolname, const char *imgname,
+				    const char *snapname, int maperrno)
+{
+  int r;
+  uint8_t oldformat;
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  librbd::Image image;
+
+  if (maperrno == -ENOENT)
+    goto done;
+
+  r = utils::init_and_open_image(poolname, imgname, snapname,
+				 true, &rados, &ioctx, &image);
+  if (r < 0)
+    goto done;
+
+  r = image.old_format(&oldformat);
+  if (r < 0)
+    goto done;
+
+  /*
+   * kernel returns -ENXIO when mapping a V2 image due to unsupported feature
+   * set - so, hint about that too...
+   */
+  if (!oldformat && (maperrno == -ENXIO)) {
+    std::cout << "RBD image feature set mismatch. You can disable features unsupported by the "
+	      << "kernel with \"rbd feature disable\"." << std::endl;
+  }
+
+ done:
+  std::cout << "In some cases useful info is found in syslog - try \"dmesg | tail\" or so." << std::endl;
+}
+
 static int do_kernel_map(const char *poolname, const char *imgname,
                          const char *snapname)
 {
@@ -181,8 +220,10 @@ static int do_kernel_map(const char *poolname, const char *imgname,
   }
 
   r = krbd_map(krbd, poolname, imgname, snapname, oss.str().c_str(), &devnode);
-  if (r < 0)
+  if (r < 0) {
+    print_error_description(poolname, imgname, snapname, r);
     goto out;
+  }
 
   std::cout << devnode << std::endl;
 
@@ -249,7 +290,8 @@ int execute_map(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED);
+    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -318,7 +360,7 @@ int execute_unmap(const po::variables_map &vm) {
     r = utils::get_pool_image_snapshot_names(
       vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
       &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-      false);
+      utils::SPEC_VALIDATION_NONE, false);
     if (r < 0) {
       return r;
     }

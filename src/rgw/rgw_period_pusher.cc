@@ -144,6 +144,7 @@ class RGWPeriodPusher::CRThread {
   {
     push_all.reset();
     coroutines.stop();
+    http.stop();
     if (thread.joinable())
       thread.join();
   }

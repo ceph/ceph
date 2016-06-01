@@ -8,14 +8,14 @@
 
 #include <pthread.h>
 
-#include "Entry.h"
 #include "EntryQueue.h"
-#include "SubsystemMap.h"
 
 namespace ceph {
 namespace log {
 
 class Graylog;
+class SubsystemMap;
+class Entry;
 
 class Log : private Thread
 {

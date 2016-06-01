@@ -12,7 +12,7 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  param_list_t params;
+  param_vec_t params;
   T *result;
 
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
@@ -25,6 +25,10 @@ public:
       path(_path), params(make_param_list(params)), result(_result)
   {}
 
+  ~RGWReadRESTResourceCR() {
+    request_cleanup();
+  }
+
   int send_request() {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
         new RGWRESTReadResource(conn, path, params, NULL, http_manager));
@@ -35,6 +39,7 @@ public:
     if (ret < 0) {
       log_error() << "failed to send http operation: " << op->to_str()
           << " ret=" << ret << std::endl;
+      op->put();
       return ret;
     }
     std::swap(http_op, op); // store reference in http_op on success
@@ -47,9 +52,18 @@ public:
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()
           << " status=" << op->get_http_status() << std::endl;
+      op->put();
       return ret;
     }
+    op->put();
     return 0;
+  }
+
+  void request_cleanup() {
+    if (http_op) {
+      http_op->put();
+      http_op = NULL;
+    }
   }
 };
 
@@ -58,7 +72,7 @@ class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  param_list_t params;
+  param_vec_t params;
   T *result;
   S input;
 
@@ -72,6 +86,10 @@ public:
       path(_path), params(make_param_list(_params)), result(_result),
       input(_input)
   {}
+
+  ~RGWPostRESTResourceCR() {
+    request_cleanup();
+  }
 
   int send_request() {
     auto op = boost::intrusive_ptr<RGWRESTPostResource>(
@@ -89,6 +107,7 @@ public:
     int ret = op->aio_send(bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send post request" << dendl;
+      op->put();
       return ret;
     }
     std::swap(http_op, op); // store reference in http_op on success
@@ -109,9 +128,18 @@ public:
           << " status=" << op->get_http_status() << std::endl;
       lsubdout(cct, rgw, 0) << "ERROR: failed to wait for op, ret=" << ret
           << ": " << op->to_str() << dendl;
+      op->put();
       return ret;
     }
+    op->put();
     return 0;
+  }
+
+  void request_cleanup() {
+    if (http_op) {
+      http_op->put();
+      http_op = NULL;
+    }
   }
 };
 

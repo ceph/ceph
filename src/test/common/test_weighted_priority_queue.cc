@@ -114,6 +114,13 @@ protected:
         // in the strict queue.
         LQ::reverse_iterator ri = strictq.rbegin();
         EXPECT_EQ(std::get<0>(r), ri->first);
+        // Check that if there are multiple classes in a priority
+        // that it is not dequeueing the same class each time.
+        LastKlass::iterator si = last_strict.find(std::get<0>(r));
+        if (strictq[std::get<0>(r)].size() > 1 && si != last_strict.end()) {
+	  EXPECT_NE(std::get<1>(r), si->second);
+	}
+        last_strict[std::get<0>(r)] = std::get<1>(r);
 
 	Item t = strictq[std::get<0>(r)][std::get<1>(r)].front().second;
         EXPECT_EQ(std::get<2>(r), std::get<2>(t));
@@ -125,6 +132,14 @@ protected:
 	  strictq.erase(std::get<0>(r));
 	}
       } else {
+        // Check that if there are multiple classes in a priority
+        // that it is not dequeueing the same class each time.
+        LastKlass::iterator si = last_norm.find(std::get<0>(r));
+        if (normq[std::get<0>(r)].size() > 1 && si != last_norm.end()) {
+	  EXPECT_NE(std::get<1>(r), si->second);
+	}
+        last_norm[std::get<0>(r)] = std::get<1>(r);
+
 	Item t = normq[std::get<0>(r)][std::get<1>(r)].front().second;
         EXPECT_EQ(std::get<2>(r), std::get<2>(t));
         normq[std::get<0>(r)][std::get<1>(r)].pop_front();
@@ -185,18 +200,37 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_random) {
 template <typename T>
 struct Greater {
   const T rhs;
-  Greater(const T &v) : rhs(v) {}
-  bool operator()(const T &lhs) const {
-    return std::get<2>(lhs) > std::get<2>(rhs);
+  std::list<T> *removed;
+  Greater(const T &v, std::list<T> *removed) : rhs(v), removed(removed) {}
+  bool operator()(const T &lhs) {
+    if (std::get<2>(lhs) > std::get<2>(rhs)) {
+      if (removed)
+	removed->push_back(lhs);
+      return true;
+    } else {
+      return false;
+    }
   }
 };
+
+TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter_null) {
+  WQ wq(0, 0);
+  LQ strictq, normq;
+  unsigned num_items = 100;
+  fill_queue(wq, strictq, normq, num_items);
+  // Pick a value that we didn't enqueue
+  Removed wq_removed;
+  Greater<Item> pred(std::make_tuple(0, 0, 1 << 17), &wq_removed);
+  wq.remove_by_filter(pred);
+  EXPECT_EQ(0u, wq_removed.size());
+}
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
   WQ wq(0, 0);
   LQ strictq, normq;
   unsigned num_items = 1000;
   fill_queue(wq, strictq, normq, num_items);
-  const Greater<Item> pred(std::make_tuple(0, 0, (1 << 16) - (1 << 16)/10));
+  Greater<Item> pred2(std::make_tuple(0, 0, (1 << 16) - (1 << 16)/10), nullptr);
   Removed r_strictq, r_normq;
   unsigned num_to_remove = 0;
   // Figure out from what has been queued what we
@@ -207,7 +241,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
 	 ki != pi->second.end(); ++ki) {
       for (ItemList::iterator li = ki->second.begin();
 	   li != ki->second.end(); ++li) {
-	if (pred(li->second)) {
+	if (pred2(li->second)) {
 	  ++num_to_remove;
 	}
       }
@@ -219,18 +253,21 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
 	 ki != pi->second.end(); ++ki) {
       for (ItemList::iterator li = ki->second.begin();
 	   li != ki->second.end(); ++li) {
-	if (pred(li->second)) {
+	if (pred2(li->second)) {
 	  ++num_to_remove;
 	}
       }
     }
   }
   Removed wq_removed;
-  wq.remove_by_filter(pred, &wq_removed);
+  Greater<Item> pred(
+    std::make_tuple(0, 0, (1 << 16) - (1 << 16)/10),
+    &wq_removed);
+  wq.remove_by_filter(pred);
   // Check that what was removed was correct
   for (Removed::iterator it = wq_removed.begin();
        it != wq_removed.end(); ++it) {
-    EXPECT_TRUE(pred(*it));
+    EXPECT_TRUE(pred2(*it));
   }
   EXPECT_EQ(num_to_remove, wq_removed.size());
   EXPECT_EQ(num_items - num_to_remove, wq.length());
@@ -238,6 +275,17 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_filter) {
   while (!(wq.empty())) {
     EXPECT_FALSE(pred(wq.dequeue()));
   }
+}
+
+TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class_null) {
+  WQ wq(0, 0);
+  LQ strictq, normq;
+  unsigned num_items = 10;
+  fill_queue(wq, strictq, normq, num_items);
+  Removed wq_removed;
+  // Pick a klass that was not enqueued
+  wq.remove_by_class(klasses + 1, &wq_removed);
+  EXPECT_EQ(0u, wq_removed.size());
 }
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class) {

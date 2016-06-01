@@ -59,8 +59,12 @@ struct AioWriteEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_WRITE;
 
   uint64_t offset;
-  size_t length;
+  uint64_t length;
   bufferlist data;
+
+  static uint32_t get_fixed_size() {
+    return 30; /// version encoding, type, offset, length
+  }
 
   AioWriteEvent() : offset(0), length(0) {
   }

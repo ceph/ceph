@@ -403,6 +403,11 @@ void ImageWatcher::schedule_request_lock(bool use_timer, int timer_delay) {
 void ImageWatcher::notify_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+
+  // ExclusiveLock state machine can be dynamically disabled
+  if (m_image_ctx.exclusive_lock == nullptr) {
+    return;
+  }
   assert(!m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 10) << this << " notify request lock" << dendl;
@@ -417,8 +422,11 @@ void ImageWatcher::handle_request_lock(int r) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
 
-  // ExclusiveLock state machine cannot transition
-  assert(!m_image_ctx.exclusive_lock->is_lock_owner());
+  // ExclusiveLock state machine cannot transition -- but can be
+  // dynamically disabled
+  if (m_image_ctx.exclusive_lock == nullptr) {
+    return;
+  }
 
   if (r == -ETIMEDOUT) {
     ldout(m_image_ctx.cct, 5) << this << " timed out requesting lock: retrying"
@@ -459,6 +467,9 @@ Context *ImageWatcher::remove_async_request(const AsyncRequestId &id) {
 }
 
 void ImageWatcher::schedule_async_request_timed_out(const AsyncRequestId &id) {
+  ldout(m_image_ctx.cct, 20) << "scheduling async request time out: " << id
+                             << dendl;
+
   Context *ctx = new FunctionContext(boost::bind(
     &ImageWatcher::async_request_timed_out, this, id));
 
@@ -703,7 +714,7 @@ bool ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 
     m_image_ctx.operations->execute_snap_create(payload.snap_name.c_str(),
                                                 new C_ResponseMessage(ack_ctx),
-                                                0);
+                                                0, false);
     return false;
   }
   return true;
@@ -896,6 +907,11 @@ void ImageWatcher::reregister_watch() {
   int r;
   if (releasing_lock) {
     r = release_lock_ctx.wait();
+    if (r == -EBLACKLISTED) {
+      lderr(m_image_ctx.cct) << this << " client blacklisted" << dendl;
+      return;
+    }
+
     assert(r == 0);
   }
 

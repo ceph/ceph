@@ -16,10 +16,12 @@ Build-Depends: autoconf,
 	       cryptsetup-bin | cryptsetup,
                cython,
                debhelper (>= 6.0.7~),
+	       dh-systemd,
                default-jdk,
                git,
 	       gdisk,
                javahelper,
+	       jq,
                junit4,
                libaio-dev,
                libatomic-ops-dev,
@@ -101,7 +103,8 @@ Recommends: btrfs-tools,
             ceph-mds (= ${binary:Version}),
             librados2 (= ${binary:Version}),
             libradosstriper1 (= ${binary:Version}),
-            librbd1 (= ${binary:Version})
+            librbd1 (= ${binary:Version}),
+            ntp | time-daemon
 Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.92-1223),
 	  ceph-test (<< 0.94-1322), ceph (<< 10)
 Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322), 
@@ -596,10 +599,10 @@ Package: radosgw
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
          mime-support,
-         python-flask,
          librgw2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
+Recommends: ntp | time-daemon
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the

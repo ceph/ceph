@@ -17,6 +17,7 @@
 #ifndef CEPH_MSG_ASYNCCONNECTION_H
 #define CEPH_MSG_ASYNCCONNECTION_H
 
+#include <atomic>
 #include <pthread.h>
 #include <signal.h>
 #include <climits>
@@ -51,14 +52,14 @@ class AsyncConnection : public Connection {
   void suppress_sigpipe();
   void restore_sigpipe();
   ssize_t do_sendmsg(struct msghdr &msg, unsigned len, bool more);
-  ssize_t try_send(bufferlist &bl, bool send=true, bool more=false) {
+  ssize_t try_send(bufferlist &bl, bool more=false) {
     Mutex::Locker l(write_lock);
     outcoming_bl.claim_append(bl);
-    return _try_send(send, more);
+    return _try_send(more);
   }
   // if "send" is false, it will only append bl to send buffer
   // the main usage is avoid error happen outside messenger threads
-  ssize_t _try_send(bool send=true, bool more=false);
+  ssize_t _try_send(bool more=false);
   ssize_t _send(Message *m);
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
   ssize_t read_until(unsigned needed, char *p);
@@ -76,6 +77,7 @@ class AsyncConnection : public Connection {
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl, bool more);
+  void inject_delay();
   ssize_t _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist &authorizer_reply) {
     bufferlist reply_bl;
@@ -87,8 +89,10 @@ class AsyncConnection : public Connection {
       reply_bl.append(authorizer_reply.c_str(), authorizer_reply.length());
     }
     ssize_t r = try_send(reply_bl);
-    if (r < 0)
+    if (r < 0) {
+      inject_delay();
       return -1;
+    }
 
     state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
     return 0;
@@ -123,15 +127,56 @@ class AsyncConnection : public Connection {
     return !out_q.empty();
   }
 
+   /**
+   * The DelayedDelivery is for injecting delays into Message delivery off
+   * the socket. It is only enabled if delays are requested, and if they
+   * are then it pulls Messages off the DelayQueue and puts them into the
+   * AsyncMessenger event queue.
+   */
+  class DelayedDelivery : public EventCallback {
+    std::set<uint64_t> register_time_events; // need to delete it if stop
+    std::deque<std::pair<utime_t, Message*> > delay_queue;
+    Mutex delay_lock;
+    AsyncMessenger *msgr;
+    EventCenter *center;
+
+   public:
+    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c)
+      : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
+        msgr(omsgr), center(c) { }
+    ~DelayedDelivery() {
+      assert(register_time_events.empty());
+      assert(delay_queue.empty());
+    }
+    void do_request(int id) override;
+    void queue(double delay_period, utime_t release, Message *m) {
+      Mutex::Locker l(delay_lock);
+      delay_queue.push_back(std::make_pair(release, m));
+      register_time_events.insert(center->create_time_event(delay_period*1000000, this));
+    }
+    void discard() {
+      Mutex::Locker l(delay_lock);
+      while (!delay_queue.empty()) {
+        Message *m = delay_queue.front().second;
+        m->put();
+        delay_queue.pop_front();
+      }
+      for (auto i : register_time_events)
+        center->delete_time_event(i);
+      register_time_events.clear();
+    }
+    void flush();
+  } *delay_state;
+
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
   ~AsyncConnection();
+  void maybe_start_delay_thread();
 
   ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() override {
-    Mutex::Locker l(lock);
-    return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
+    return can_write.load() == WriteStatus::CANWRITE;
   }
 
   // Only call when AsyncConnection first construct
@@ -151,6 +196,8 @@ class AsyncConnection : public Connection {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
+  
+  void release_worker();
 
  private:
   enum {
@@ -240,11 +287,12 @@ class AsyncConnection : public Connection {
   Messenger::Policy policy;
 
   Mutex write_lock;
-  enum {
+  enum class WriteStatus {
     NOWRITE,
     CANWRITE,
     CLOSED
-  } can_write;
+  };
+  std::atomic<WriteStatus> can_write;
   bool open_write;
   map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
   list<Message*> sent; // the first bufferlist need to inject seq
@@ -330,6 +378,10 @@ class AsyncConnection : public Connection {
     delete connect_handler;
     delete local_deliver_handler;
     delete wakeup_handler;
+    if (delay_state) {
+      delete delay_state;
+      delay_state = NULL;
+    }
   }
   PerfCounters *get_perf_counter() {
     return logger;

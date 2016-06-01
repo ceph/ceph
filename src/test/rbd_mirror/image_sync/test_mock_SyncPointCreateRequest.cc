@@ -4,10 +4,22 @@
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
+#include "test/journal/mock/MockJournaler.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "test/rbd_mirror/mock/MockJournaler.h"
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
+
+namespace librbd {
+namespace journal {
+
+template <>
+struct TypeTraits<librbd::MockImageCtx> {
+  typedef ::journal::MockJournaler Journaler;
+};
+
+} // namespace journal
+} // namespace librbd
 
 // template definitions
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc"

@@ -16,7 +16,7 @@
 #
 
 # run from the ceph-disk directory or from its parent
-: ${CEPH_DISK_VIRTUALENV:=ceph-disk-virtualenv}
+: ${CEPH_DISK_VIRTUALENV:=/tmp/ceph-disk-virtualenv}
 test -d ceph-disk && cd ceph-disk
 source ${CEPH_DISK_VIRTUALENV}/bin/activate
 tox > ${CEPH_DISK_VIRTUALENV}/tox.out 2>&1

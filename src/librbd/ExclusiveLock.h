@@ -32,6 +32,9 @@ public:
   bool is_lock_owner() const;
   bool accept_requests() const;
 
+  void block_requests();
+  void unblock_requests();
+
   void init(uint64_t features, Context *on_init);
   void shut_down(Context *on_shutdown);
 
@@ -67,7 +70,7 @@ private:
    *    |
    *    |
    *    v
-   * SHUTTING_DOWN ---> SHUTDOWN ---> <finish>
+   * PRE_SHUTTING_DOWN ---> SHUTTING_DOWN ---> SHUTDOWN ---> <finish>
    */
   enum State {
     STATE_UNINITIALIZED,
@@ -79,6 +82,7 @@ private:
     STATE_WAITING_FOR_PEER,
     STATE_PRE_RELEASING,
     STATE_RELEASING,
+    STATE_PRE_SHUTTING_DOWN,
     STATE_SHUTTING_DOWN,
     STATE_SHUTDOWN,
   };
@@ -126,6 +130,8 @@ private:
 
   ActionsContexts m_actions_contexts;
 
+  uint32_t m_request_blockers = 0;
+
   std::string encode_lock_cookie() const;
 
   bool is_transition_state() const;
@@ -151,6 +157,8 @@ private:
 
   void send_shutdown();
   void send_shutdown_release();
+  void handle_shutdown_releasing(int r);
+  void handle_shutdown_released(int r);
   void handle_shutdown(int r);
   void complete_shutdown(int r);
 };

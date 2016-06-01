@@ -57,10 +57,7 @@ WRITE_CLASS_ENCODER(bluestore_cnode_t)
 /// extent: a byte extent back by the block device
 struct bluestore_extent_t {
   enum {
-    FLAG_UNWRITTEN = 1,   ///< extent is unwritten (and defined to be zero)
     FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
-    FLAG_COW_HEAD = 4,    ///< extent has pending wal OP_COPY for head
-    FLAG_COW_TAIL = 8,    ///< extent has pending wal OP_COPY for tail
   };
   static string get_flags_string(unsigned flags);
 
@@ -192,6 +189,7 @@ struct bluestore_onode_t {
 
   uint32_t expected_object_size;
   uint32_t expected_write_size;
+  uint32_t alloc_hint_flags;
 
   bluestore_onode_t()
     : nid(0),
@@ -199,7 +197,8 @@ struct bluestore_onode_t {
       last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
-      expected_write_size(0) {}
+      expected_write_size(0),
+      alloc_hint_flags(0) {}
 
   map<uint64_t,bluestore_extent_t>::iterator find_extent(uint64_t offset) {
     map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(Ceph)
-set(VERSION "0.90")
+set(VERSION "10.2.1")
 
 if (NOT (CMAKE_MAJOR_VERSION LESS 3))
   # Tweak policies (this one disables "missing" dependency warning)
@@ -25,11 +25,23 @@ if(WITH_CCACHE)
   if(CCACHE_FOUND)
     message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    # ccache does not accelerate link (ld), but let it handle it. by passing it
+    # along with cc to python's distutils, we are able to workaround
+    # https://bugs.python.org/issue8027.
     set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
   else(CCACHE_FOUND)
     message(FATAL_ERROR "Can't find ccache. Is it installed?")
   endif(CCACHE_FOUND)
 endif(WITH_CCACHE)
+
+option(WITH_MANPAGE "Build man pages." ON)
+if(WITH_MANPAGE)
+  find_program(SPHINX_BUILD
+    sphinx-build)
+  if(NOT SPHINX_BUILD)
+    message(FATAL_ERROR "Can't find sphinx-build.")
+  endif(NOT SPHINX_BUILD)
+endif(WITH_MANPAGE)
 
 include_directories(
   ${PROJECT_BINARY_DIR}/src/include
@@ -43,6 +55,11 @@ link_directories(
   ${LEVELDB_PREFIX}/lib
 )
 
+#put all the libs and binaries in one place
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 #Check Includes
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
@@ -53,6 +70,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+
 CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
 CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
@@ -60,73 +78,79 @@ CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
 CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
-CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
-CHECK_INCLUDE_FILES("boost/random/discrete_distribution.hpp" HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION)
+CHECK_FUNCTION_EXISTS(splice CEPH_HAVE_SPLICE)
+CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
+CHECK_FUNCTION_EXISTS(fdatasync HAVE_FDATASYNC)
+CHECK_FUNCTION_EXISTS(strerror_r HAVE_STRERROR_R)
+CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
+CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
+set(CMAKE_REQUIRED_LIBRARIES pthread)
+CHECK_FUNCTION_EXISTS(pthread_spin_init HAVE_PTHREAD_SPINLOCK)
+CHECK_FUNCTION_EXISTS(eventfd HAVE_EVENTFD)
+
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
-CHECK_INCLUDE_FILES("dirent.h" HAVE_DIRENT_H)
-CHECK_INCLUDE_FILES("dlfcn.h" HAVE_DLFCN_H)
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
-CHECK_INCLUDE_FILES("memory.h" HAVE_MEMORY_H)
-CHECK_INCLUDE_FILES("ndir.h" HAVE_NDIR_H)
-CHECK_INCLUDE_FILES("netdb.h" HAVE_NETDB_H)
-CHECK_INCLUDE_FILES("netinet/in.h" HAVE_NETINET_IN_H)
+CHECK_INCLUDE_FILES("linux/version.h" HAVE_LINUX_VERSION_H)
 CHECK_INCLUDE_FILES("stdint.h" HAVE_STDINT_H)
-CHECK_INCLUDE_FILES("stdlib.h" HAVE_STDLIB_H)
-CHECK_INCLUDE_FILES("arpa/inet.h" HAVE_ARPA_INET_H)
-CHECK_INCLUDE_FILES("strings.h" HAVE_STRINGS_H)
-CHECK_INCLUDE_FILES("string.h" HAVE_STRING_H)
-CHECK_INCLUDE_FILES("syslog.h" HAVE_SYSLOG_H)
-CHECK_INCLUDE_FILES("sys/dir.h" HAVE_SYS_DIR_H)
-CHECK_INCLUDE_FILES("sys/file.h" HAVE_SYS_FILE_H)
-CHECK_INCLUDE_FILES("sys/ioctl.h" HAVE_SYS_IOCTL_H)
+CHECK_INCLUDE_FILES("arpa/nameser_compat.h" HAVE_ARPA_NAMESER_COMPAT_H)
 CHECK_INCLUDE_FILES("sys/mount.h" HAVE_SYS_MOUNT_H)
-CHECK_INCLUDE_FILES("sys/ndir.h" HAVE_SYS_NDIR_H)
 CHECK_INCLUDE_FILES("sys/param.h" HAVE_SYS_PARAM_H)
-CHECK_INCLUDE_FILES("sys/socket.h" HAVE_SYS_SOCKET_H)
-CHECK_INCLUDE_FILES("sys/statvfs.h" HAVE_SYS_STATVFS_H)
-CHECK_INCLUDE_FILES("sys/stat.h" HAVE_SYS_STAT_H)
-CHECK_INCLUDE_FILES("sys/time.h" HAVE_SYS_TIME_H)
 CHECK_INCLUDE_FILES("sys/types.h" HAVE_SYS_TYPES_H)
 CHECK_INCLUDE_FILES("sys/vfs.h" HAVE_SYS_VFS_H)
-CHECK_INCLUDE_FILES("sys/wait.h" HAVE_SYS_WAIT_H)
-CHECK_INCLUDE_FILES("sys/xattr.h" HAVE_SYS_XATTR_H)
-CHECK_INCLUDE_FILES("unistd.h" HAVE_UNISTD_H)
-CHECK_INCLUDE_FILES("utime.h" HAVE_UTIME_H)
-CHECK_INCLUDE_FILES("${CMAKE_SOURCE_DIR}/src/include/fiemap.h" HAVE_FIEMAP_H)
-CHECK_INCLUDE_FILES("fuse/fuse_lowlevel.h" HAVE_FUSE_LOWLEVEL_H)
-CHECK_INCLUDE_FILES("fuse/fuse.h" HAVE_FUSE_H)
-CHECK_INCLUDE_FILES("fcgi_config.h"  HAVE_FASTCGI_CONFIG_H)
-CHECK_INCLUDE_FILES("fastcgi.h" HAVE_FASTCGI_H)
-CHECK_INCLUDE_FILES("fcgiapp.h" FASTCGI_FASTCGI_APP_DIR)
-CHECK_INCLUDE_FILES("fcgimisc.h" HAVE_FASTCGI_MISC_H)
-CHECK_INCLUDE_FILES("fcgio.h" HAVE_FASTCGIO_H)
-CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
-CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
-CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
+CHECK_INCLUDE_FILES("sys/prctl.h" HAVE_SYS_PRCTL_H)
 CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
+CHECK_INCLUDE_FILES("sched.h" HAVE_SCHED)
+CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
+
+include(CheckTypeSize)
+set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h")
+CHECK_TYPE_SIZE(__be16 __BE16) 
+CHECK_TYPE_SIZE(__be32 __BE32) 
+CHECK_TYPE_SIZE(__be64 __BE64) 
+CHECK_TYPE_SIZE(__le16 __LE16) 
+CHECK_TYPE_SIZE(__le32 __LE32) 
+CHECK_TYPE_SIZE(__le64 __LE64) 
+CHECK_TYPE_SIZE(__u8 __U8) 
+CHECK_TYPE_SIZE(__u16 __U16) 
+CHECK_TYPE_SIZE(__u32 __U32) 
+CHECK_TYPE_SIZE(__u64 __U64) 
+CHECK_TYPE_SIZE(__s8 __S8) 
+CHECK_TYPE_SIZE(__s16 __S16) 
+CHECK_TYPE_SIZE(__s32 __S32) 
+CHECK_TYPE_SIZE(__s64 __S64) 
+unset(CMAKE_EXTRA_INCLUDE_FILES)
 
 include(CheckSymbolExists)
-CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
-CHECK_SYMBOL_EXISTS(__u64 "sys/types.h;linux/types.h" HAVE___U64)
-CHECK_SYMBOL_EXISTS(__s64 "sys/types.h;linux/types.h" HAVE___S64)
-
 CHECK_SYMBOL_EXISTS(res_nquery "resolv.h" HAVE_RES_NQUERY)
+CHECK_SYMBOL_EXISTS(F_SETPIPE_SZ "linux/fcntl.h" CEPH_HAVE_SETPIPE_SZ)
+CHECK_SYMBOL_EXISTS(__func__ "" HAVE_FUNC)
+CHECK_SYMBOL_EXISTS(__PRETTY_FUNCTION__ "" HAVE_PRETTY_FUNC)
 
 include(CheckCXXSourceCompiles)
 CHECK_CXX_SOURCE_COMPILES("
   #include <string.h>
   int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
   " STRERROR_R_CHAR_P)
+CHECK_CXX_SOURCE_COMPILES("
+  #include <sys/stat.h>
+  #include <stdio.h>
+  int main() { struct stat foo = {}; foo.st_mtim.tv_nsec = 0;
+  return 0; } 
+  " HAVE_STAT_ST_MTIM_TV_NSEC)
+CHECK_CXX_SOURCE_COMPILES("
+  #include <sys/stat.h>
+  #include <stdio.h>
+  int main() { struct stat foo = {}; foo.st_mtimespec.tv_nsec = 0;
+  return 0; } 
+  " HAVE_STAT_ST_MTIMESPEC_TV_NSEC)
+CHECK_CXX_SOURCE_COMPILES("
+  int main() { float f = 12.3; int n = static_cast<int>(f); return 0; }
+  " HAVE_STATIC_CAST)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
-option(ENABLE_SHARED "build shared libraries" ON)
-if(${ENABLE_SHARED})
- set(CEPH_SHARED SHARED)
-else(${ENABLE_SHARED})
- set(CEPH_SHARED STATIC)
-endif(${ENABLE_SHARED})
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 find_package(execinfo)
 
@@ -161,13 +185,12 @@ option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
 find_package(fuse)
 set(HAVE_LIBFUSE ${FUSE_FOUND})
-CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
 option(WITH_XFS "XFS is here" ON)
 if(${WITH_XFS})
 find_package(xfs)
-set(HAVE_XFS ${XFS_FOUND})
+set(HAVE_LIBXFS ${XFS_FOUND})
 endif(${WITH_XFS})
 
 option(WITH_SPDK "Enable SPDK" OFF)
@@ -178,13 +201,11 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 find_package(blkid REQUIRED)
-set(HAVE_LIBBLKID ${BLKID_FOUND})
 
 # probably fuse etc need this -- how to check? XXX
 option(WITH_MDS "MDS is here" ON)
 
 # needs mds and? XXX
-option(WITH_CLIENT "Client is here" ON)
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
 # key-value store
@@ -196,22 +217,22 @@ option(WITH_RBD "Remote block storage is here" ON)
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(${WITH_LEVELDB})
 find_package(leveldb REQUIRED)
-set(HAVE_LIBLEVELDB ${LEVELDB_FOUND})
 find_file(HAVE_LEVELDB_FILTER_POLICY filter_policy.h PATHS /usr/include/leveldb)
 endif(${WITH_LEVELDB})
 
 option(WITH_EXPAT "EXPAT is here" ON)
 if(${WITH_EXPAT})
 find_package(expat REQUIRED)
-set(HAVE_EXPAT ${EXPAT_FOUND})
 endif(${WITH_EXPAT})
 
 find_package(Cython REQUIRED)
 find_package(fcgi REQUIRED)
 
 find_package(atomic_ops REQUIRED)
-set(HAVE_ATOMIC_OPS ${ATOMIC_OPS_FOUND})
 message(STATUS "${ATOMIC_OPS_LIBRARIES}")
+if(NOT ${ATOMIC_OPS_FOUND})
+  set(NO_ATOMIC_OPS 1)
+endif(NOT ${ATOMIC_OPS_FOUND})
 
 option(WITH_GPERFTOOLS "gperftools is here" ON)
 if(${WITH_GPERFTOOLS})
@@ -233,11 +254,15 @@ if(ALLOCATOR)
     set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
+    set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
   endif()
 else(ALLOCATOR)
   find_package(tcmalloc)
   set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-  find_package(JeMalloc)
+  if(NOT ${Tcmalloc_FOUND})
+    find_package(JeMalloc)
+    set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
+  endif(NOT ${Tcmalloc_FOUND})
   if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
     message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
     set(ALLOCATOR "libc")
@@ -274,7 +299,7 @@ endif(CRYPTOPP_FOUND)
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
   find_package(xio REQUIRED)
-set(HAVE_XIO ${Xio_FOUND})
+set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
 #option for RGW
@@ -302,8 +327,7 @@ find_package(ZLIB REQUIRED)
 #currently off by default because lttng-gen-tp run unconditionally and forces a rebuild
 option(WITH_LTTNG "LTTng tracing is enabled" OFF)
 if(${WITH_LTTNG})
-  find_package(lttng-ust)
-  set(WITH_LTTNG ${LTTNG_FOUND})
+  find_package(lttng-ust REQUIRED)
 endif(${WITH_LTTNG})
 
 #option for Babeltrace
@@ -313,28 +337,38 @@ if(${HAVE_BABELTRACE})
   set(WITH_BABELTRACE ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_CTF_ITERATOR_H ${BABELTRACE_FOUND})
 endif(${HAVE_BABELTRACE})
 
-# Now create a useable config.h
-configure_file(
-  ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake
-  ${PROJECT_BINARY_DIR}/include/acconfig.h
-)
-include_directories(${PROJECT_BINARY_DIR}/include)
+option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
+option(HAVE_LIBZFS "LibZFS is enabled" OFF)
+option(ENABLE_COVERAGE "Coverage is enabled" OFF)
+option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 add_definitions(-D__linux__)
 
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set(Boost_USE_STATIC_LIBS   OFF)
-else(${ENABLE_SHARED})
+else(BUILD_SHARED_LIBS)
   set(Boost_USE_STATIC_LIBS   ON)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 set(Boost_USE_MULTITHREADED ON)
 find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
+include_directories(${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
+
+option(WITH_SELINUX "build SELinux policy" OFF)
+if(WITH_SELINUX)
+  find_file(SELINUX_MAKEFILE selinux/devel/include/Makefile
+    PATH /usr/share)
+  if(NOT SELINUX_MAKEFILE)
+    message(FATAL_ERROR "Can't find selinux's Makefile")
+  endif()
+  add_subdirectory(selinux)
+endif(WITH_SELINUX)
 
 # find out which platform we are building on
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
@@ -350,10 +384,12 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # enables testing and creates Make check command
 enable_testing()
-set(CMAKE_CTEST_COMMAND ctest -V)
+set(CMAKE_CTEST_COMMAND ctest)
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 add_subdirectory(src)
 
-# man pages must be preprocessed, not supported yet
-#add_subdirectory(man)
+add_subdirectory(doc)
+if(WITH_MANPAGE)
+  add_subdirectory(man)
+endif(WITH_MANPAGE)

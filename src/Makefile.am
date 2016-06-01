@@ -177,6 +177,12 @@ if WITH_LTTNG
 TESTS_ENVIRONMENT = LD_PRELOAD=liblttng-ust-fork.so; export LD_PRELOAD; echo "LD_PRELOAD=$${LD_PRELOAD}";
 endif
 
+AM_TESTS_ENVIRONMENT = export CEPH_ROOT="$(abs_top_srcdir)";
+AM_TESTS_ENVIRONMENT += export CEPH_BUILD_DIR="$(abs_srcdir)";
+AM_TESTS_ENVIRONMENT += export CEPH_BIN="$(abs_srcdir)";
+AM_TESTS_ENVIRONMENT += export CEPH_LIB="$(abs_srcdir)/.libs";
+AM_TESTS_ENVIRONMENT += export PATH="$(abs_srcdir):$$PATH";
+
 # base targets
 
 core-daemons: ceph-mon ceph-osd ceph-mds radosgw
@@ -310,7 +316,7 @@ endif
 
 # local targets
 
-all-local: $(LOCAL_ALL)
-clean-local: $(LOCAL_CLEAN)
-install-exec-local: $(LOCAL_INSTALLEXEC)
-install-data-local: $(LOCAL_INSTALLDATA)
+all-local:: $(LOCAL_ALL)
+clean-local:: $(LOCAL_CLEAN)
+install-exec-local:: $(LOCAL_INSTALLEXEC)
+install-data-local:: $(LOCAL_INSTALLDATA)

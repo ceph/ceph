@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/ceph_context.h"
 #include "include/util.h"
 #include "gtest/gtest.h"
 
@@ -29,4 +30,18 @@ TEST(util, unit_to_bytesize)
   ASSERT_EQ(1152921504606846976ll, unit_to_bytesize("1E", &cerr));
 
   ASSERT_EQ(65536ll, unit_to_bytesize(" 64K", &cerr));
+}
+
+TEST(util, collect_sys_info)
+{
+  map<string, string> sys_info;
+
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  collect_sys_info(&sys_info, cct);
+
+  ASSERT_TRUE(sys_info.find("distro") != sys_info.end());
+  ASSERT_TRUE(sys_info.find("distro_version") != sys_info.end());
+  ASSERT_TRUE(sys_info.find("distro_description") != sys_info.end());
+
+  cct->put();
 }

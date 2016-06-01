@@ -20,6 +20,9 @@ public:
 
     for (std::list<journal::JournalTrimmer*>::iterator it = m_trimmers.begin();
          it != m_trimmers.end(); ++it) {
+      C_SaferCond ctx;
+      (*it)->shut_down(&ctx);
+      ASSERT_EQ(0, ctx.wait());
       delete *it;
     }
     RadosTestFixture::TearDown();
@@ -72,7 +75,7 @@ TEST_F(TestJournalTrimmer, Committed) {
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
-  metadata->set_active_set(10);
+  ASSERT_EQ(0, metadata->set_active_set(10));
   ASSERT_TRUE(wait_for_update(metadata));
 
   uint64_t commit_tid1;
@@ -115,7 +118,7 @@ TEST_F(TestJournalTrimmer, CommittedWithOtherClient) {
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
-  metadata->set_active_set(10);
+  ASSERT_EQ(0, metadata->set_active_set(10));
   ASSERT_TRUE(wait_for_update(metadata));
 
   uint64_t commit_tid1;
@@ -150,7 +153,7 @@ TEST_F(TestJournalTrimmer, RemoveObjects) {
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
-  metadata->set_active_set(10);
+  ASSERT_EQ(0, metadata->set_active_set(10));
   ASSERT_TRUE(wait_for_update(metadata));
 
   ASSERT_EQ(0, append(oid + ".0", create_payload("payload")));

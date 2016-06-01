@@ -35,7 +35,7 @@ function teardown_btrfs() {
 
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-export PATH=..:.:$PATH # make sure program from sources are prefered
+export PATH=..:.:$PATH # make sure program from sources are preferred
 export PATH=../ceph-detect-init/virtualenv/bin:$PATH
 export PATH=virtualenv/bin:$PATH
 DIR=test-ceph-disk
@@ -64,6 +64,8 @@ CEPH_ARGS+=" --debug-mon=20"
 CEPH_ARGS+=" --debug-osd=20"
 CEPH_ARGS+=" --debug-bdev=20"
 CEPH_ARGS+=" --debug-bluestore=20"
+CEPH_ARGS+=" --osd-max-object-name-len=460"
+CEPH_ARGS+=" --osd-max-object-namespace-len=64"
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"

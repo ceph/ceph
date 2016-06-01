@@ -153,6 +153,40 @@ static const char *config_keys[] = {
   NULL
 };
 
+/**
+ * This is a more limited form of C_Contexts, but that requires
+ * a ceph_context which we don't have here.
+ */
+class ObjectOperation::C_TwoContexts : public Context {
+  Context *first;
+  Context *second;
+public:
+  C_TwoContexts(Context *first, Context *second) :
+    first(first), second(second) {}
+  void finish(int r) {
+    first->complete(r);
+    second->complete(r);
+    first = NULL;
+    second = NULL;
+  }
+
+  virtual ~C_TwoContexts() {
+    delete first;
+    delete second;
+  }
+};
+
+void ObjectOperation::add_handler(Context *extra) {
+  size_t last = out_handler.size() - 1;
+  Context *orig = out_handler[last];
+  if (orig) {
+    Context *wrapper = new C_TwoContexts(orig, extra);
+    out_handler[last] = wrapper;
+  } else {
+    out_handler[last] = extra;
+  }
+}
+
 Objecter::OSDSession::unique_completion_lock Objecter::OSDSession::get_lock(
   object_t& oid)
 {
@@ -184,16 +218,7 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 void Objecter::update_crush_location()
 {
   unique_lock wl(rwlock);
-  std::multimap<string,string> new_crush_location;
-  vector<string> lvec;
-  get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
-  int r = CrushWrapper::parse_loc_multimap(lvec, &new_crush_location);
-  if (r < 0) {
-    lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
-	       << "' does not parse, leave origin crush_location untouched." << dendl;
-    return;
-  }
-  crush_location = new_crush_location;
+  crush_location = cct->crush_location.get_location();
 }
 
 // messages ------------------------------
@@ -706,7 +731,9 @@ int Objecter::linger_check(LingerOp *info)
 		 << " age " << age << dendl;
   if (info->last_error)
     return info->last_error;
-  return std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
+  // return a safe upper bound (we are truncating to ms)
+  return
+    1 + std::chrono::duration_cast<std::chrono::milliseconds>(age).count();
 }
 
 void Objecter::linger_cancel(LingerOp *info)
@@ -3319,9 +3346,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   /* get it before we call _finish_op() */
-  auto completion_lock =
-    (op->target.base_oid.name.size() ? s->get_lock(op->target.base_oid) :
-     OSDSession::unique_completion_lock());
+  auto completion_lock = s->get_lock(op->target.base_oid);
 
   // done with this tid?
   if (!op->onack && !op->oncommit && !op->oncommit_sync) {
@@ -3410,19 +3435,19 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     return;
   }
   int pg_num = pool->get_pg_num();
+  bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   rl.unlock();
 
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
-    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+    list_context->sort_bitwise = sort_bitwise;
     ldout(cct, 20) << pg_num << " placement groups" << dendl;
   }
-  if (list_context->sort_bitwise !=
-      osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+  if (list_context->sort_bitwise != sort_bitwise) {
     ldout(cct, 10) << " hobject sort order changed, restarting this pg"
 		   << dendl;
     list_context->cookie = collection_list_handle_t();
-    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+    list_context->sort_bitwise = sort_bitwise;
   }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
@@ -3566,19 +3591,19 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     return;
   }
   int pg_num = pool->get_pg_num();
+  bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   rl.unlock();
 
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
-    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+    list_context->sort_bitwise = sort_bitwise;
     ldout(cct, 20) << pg_num << " placement groups" << dendl;
   }
-  if (list_context->sort_bitwise !=
-      osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+  if (list_context->sort_bitwise != sort_bitwise) {
     ldout(cct, 10) << " hobject sort order changed, restarting this pg"
 		   << dendl;
     list_context->cookie = collection_list_handle_t();
-    list_context->sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
+    list_context->sort_bitwise = sort_bitwise;
   }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed

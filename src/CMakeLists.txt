@@ -1,20 +1,28 @@
 include(GetGitRevisionDescription)
 
 enable_language(C ASM)
-set(bindir ${CMAKE_INSTALL_PREFIX}/bin)
-set(sbindir ${CMAKE_INSTALL_PREFIX}/sbin)
-set(libdir ${CMAKE_INSTALL_PREFIX}/lib)
-set(sysconfdir ${CMAKE_INSTALL_PREFIX}/etc)
-set(pkgdatadir ${CMAKE_INSTALL_PREFIX}/share)
+include(GNUInstallDirs)
 set(prefix ${CMAKE_INSTALL_PREFIX})
 
-add_definitions("-DCEPH_LIBDIR=\"${libdir}\"")
-add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
+add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"")
+add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
+
+include(CheckCCompilerFlag)
+CHECK_C_COMPILER_FLAG("-Wp,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(HAS_FORTIFY_SOURCE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-D_FORTIFY_SOURCE=2")
+endif()
+endif()
+CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
+if (HAS_STACK_PROTECT)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-protector-strong")
+endif()
 
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
@@ -43,7 +51,6 @@ else(no_yasm)
     if(not_arch_x32)
       message(STATUS " we are not x32")
       set(HAVE_GOOD_YASM_ELF64 1)
-      add_definitions("-DHAVE_GOOD_YASM_ELF64")
       execute_process(COMMAND yasm -f elf64 -i
         ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
         ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
@@ -52,7 +59,6 @@ else(no_yasm)
         OUTPUT_QUIET)
       if(NOT rc)
         set(HAVE_BETTER_YASM_ELF64 1)
-        add_definitions("-DHAVE_BETTER_YASM_ELF64")
         message(STATUS " yasm can also build the isa-l stuff")
       endif(NOT rc)
     else(not_arch_x32)
@@ -75,12 +81,93 @@ else()
   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
 endif()
 
+## detect sse support
+
+# create a tmp file with an empty main()
+set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
+file(WRITE ${sse_srcs} "void main() {}")
+
+# try each -msse flag
+try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse")
+try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse2")
+try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse3")
+try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-mssse3")
+try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse4.1")
+try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse4.2")
+try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-mfpu=neon")
+try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-march=armv8-a+simd")
+try_compile(ARM_CRC ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-march=armv8-a+crc")
+
+# clean up tmp file
+file(REMOVE ${sse_srcs})
+
+if(ARM_CRC)
+  set(HAVE_ARMV8_CRC 1)
+  set(ARM_CRC_FLAGS "-march=armv8-a+crc -DARCH_AARCH64")
+endif(ARM_CRC)
+
+if(ARM_NEON OR ARM_NEON2)
+  set(HAVE_NEON 1)
+  if(ARM_NEON)
+    set(ARM_NEON_FLAGS "-mfpu=neon -DARM_NEON")
+  else(ARM_NEON)
+    set(ARM_NEON_FLAGS "-march=armv8-a+simd -DARCH_AARCH64 -DARM_NEON")
+  endif(ARM_NEON)
+else(ARM_NEON OR ARM_NEON2)
+  message(STATUS "Skipping target ec_jerasure_neon & ec_shec_neon: Architecture not ARM")
+endif(ARM_NEON OR ARM_NEON2)
+
+if(INTEL_SSE)
+  set(HAVE_SSE 1)
+  set(SSE3_FLAGS "-msse")
+  if (INTEL_SSE2)
+    set(HAVE_SSE2 1)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -msse2")
+  endif (INTEL_SSE2)
+  if (INTEL_SSE3)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -msse3")
+  endif (INTEL_SSE3)
+  if (INTEL_SSSE3)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -mssse3")
+  endif (INTEL_SSSE3)
+else(INTEL_SSE)
+  message(STATUS "Skipping target ec_jerasure_sse3 & ec_shec_sse3: -msse not supported")
+endif(INTEL_SSE)
+
+if(INTEL_SSE4_1)
+  set(SSE4_FLAGS "${SSE3_FLAGS} -msse4.1")
+  if (INTEL_SSE4_2)
+    set(SSE4_FLAGS "${SSE4_FLAGS} -msse4.2")
+  endif (INTEL_SSE4_2)
+else(INTEL_SSE4_1)
+  message(STATUS "Skipping target ec_jerasure_sse4 & ec_shec_sse4: -msse4.1 not supported")
+endif(INTEL_SSE4_1)
+
 
 set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
 endif(${WITH_PROFILER})
+
+if(${ENABLE_COVERAGE})
+  find_program(HAVE_GCOV gcov)
+  if(NOT HAVE_GCOV)
+    message(FATAL_ERROR "Coverage Enabled but gcov Not Found")
+  endif(NOT HAVE_GCOV)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -O0")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
+  list(APPEND EXTRALIBS gcov)
+endif(${ENABLE_COVERAGE})
 
 if(USE_NSS)
   if(NSS_FOUND)
@@ -100,6 +187,16 @@ else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
 endif(${ENABLE_GIT_VERSION})
+
+option(WITH_OCF "build OCF-compliant cluster resource agent" OFF)
+if(WITH_OCF)
+  add_subdirectory(ocf)
+endif()
+
+option(WITH_CEPHFS_JAVA "build libcephfs Java bindings" OFF)
+if(WITH_CEPHFS_JAVA)
+  add_subdirectory(java)
+endif()
 
 # Python stuff
 find_package(PythonInterp 2 QUIET)
@@ -123,8 +220,8 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if(HAVE_XIO)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${Xio_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${Xio_LIBRARY} ibverbs rdmacm pthread rt)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
+  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
 endif(HAVE_XIO)
 
 # sort out which allocator to use
@@ -184,7 +281,8 @@ set(crush_srcs
   crush/hash.c
   crush/CrushWrapper.cc
   crush/CrushCompiler.cc
-  crush/CrushTester.cc)
+  crush/CrushTester.cc
+  crush/CrushLocation.cc)
 
 add_library(crush STATIC ${crush_srcs})
 
@@ -208,6 +306,9 @@ if(HAVE_GOOD_YASM_ELF64)
     common/crc32c_intel_fast_asm.S
     common/crc32c_intel_fast_zero_asm.S)
 endif(HAVE_GOOD_YASM_ELF64)
+
+add_library(common_texttable_obj OBJECT
+  common/TextTable.cc)
 
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
@@ -255,7 +356,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
-  common/TextTable.cc
+  $<TARGET_OBJECTS:common_texttable_obj>
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -327,6 +428,7 @@ set(libcommon_files
   common/fs_types.cc
   ${arch_files}
   ${auth_files}
+  $<TARGET_OBJECTS:compressor_objs>
   ${mds_files})
 set(mon_common_files
   auth/AuthSessionHandler.cc
@@ -349,14 +451,15 @@ else()
     perfglue/disabled_stubs.cc)
 endif(${HAVE_GPERFTOOLS})
 
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   list(APPEND libcommon_files
     $<TARGET_OBJECTS:global_common_objs>)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
+target_link_libraries(common ${CMAKE_DL_LIBS})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -366,6 +469,12 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
 if(${HAVE_GPERFTOOLS})
   target_link_libraries(common profiler)
 endif(${HAVE_GPERFTOOLS})
+
+if(${HAVE_ARMV8_CRC})
+  add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
+  set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARM_CRC_FLAGS}")
+  target_link_libraries(common common_crc_aarch64)
+endif(${HAVE_ARMV8_CRC})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
@@ -389,10 +498,10 @@ target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
 if(${WITH_LTTNG})
   target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(global PROPERTIES
     OUTPUT_NAME ceph-global VERSION "1.0.0" SOVERSION "1")
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 # rados object classes
 add_subdirectory(cls)
@@ -414,17 +523,20 @@ set(librados_srcs
   librados/snap_set_diff.cc
   librados/RadosXattrIter.cc
   )
-add_library(librados ${CEPH_SHARED} ${librados_srcs}
+add_library(librados ${librados_srcs}
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
+if(WITH_LTTNG)
+  add_dependencies(librados librados-tp)
+endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
 
 add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
 
@@ -434,24 +546,29 @@ install(FILES include/rados/librados.h
   include/rados/librados.hpp
   include/buffer.h
   include/buffer_fwd.h
+  include/memory.h
   include/page.h
   include/crc32c.h
   DESTINATION include/rados)
 install(TARGETS librados DESTINATION lib)
 
 add_subdirectory(libradosstriper)
+install(FILES
+  include/radosstriper/libradosstriper.h
+  include/radosstriper/libradosstriper.hpp
+  DESTINATION include/radosstriper)
 
 add_executable(ceph_scratchtool tools/scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)
-install(TARGETS ceph_scratchtool DESTINATION bin/debug)
+install(TARGETS ceph_scratchtool DESTINATION bin)
 
 add_executable(ceph_scratchtoolpp tools/scratchtoolpp.cc)
 target_link_libraries(ceph_scratchtoolpp librados global)
-install(TARGETS ceph_scratchtoolpp DESTINATION bin/debug)
+install(TARGETS ceph_scratchtoolpp DESTINATION bin)
 
 add_executable(ceph_radosacl tools/radosacl.cc)
 target_link_libraries(ceph_radosacl librados global)
-install(TARGETS ceph_radosacl DESTINATION bin/debug)
+install(TARGETS ceph_radosacl DESTINATION bin)
 
 add_executable(ceph-osdomap-tool tools/ceph_osdomap_tool.cc)
 target_link_libraries(ceph-osdomap-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
@@ -524,14 +641,22 @@ install(TARGETS rados librados-config DESTINATION bin)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
   DESTINATION ${PYTHON_INSTDIR})
 
+# virtualenv base directory for ceph-disk and ceph-detect-init
+set(CEPH_BUILD_VIRTUALENV $ENV{TMPDIR})
+if(NOT CEPH_BUILD_VIRTUALENV)
+  set(CEPH_BUILD_VIRTUALENV /tmp)
+endif()
+
 add_subdirectory(pybind)
+add_subdirectory(ceph-disk)
+add_subdirectory(ceph-detect-init)
 
 ## dencoder
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
-  krbd.cc
-  common/secret.c
-  common/TextTable.cc
+  $<TARGET_OBJECTS:krbd_objs>
+  $<TARGET_OBJECTS:parse_secret_objs>
+  $<TARGET_OBJECTS:common_texttable_obj>
   )
 if(${WITH_RADOSGW})
   list(APPEND dencoder_srcs
@@ -585,6 +710,7 @@ target_link_libraries(ceph-dencoder
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS ceph-dencoder DESTINATION bin)
 
 # Monitor
 set(lib_mon_srcs
@@ -615,20 +741,20 @@ add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
 target_link_libraries(mon ${ALLOC_LIBS})
 
 set(ceph_mon_srcs
-  ceph_mon.cc
-  common/TextTable.cc)
-add_executable(ceph-mon ${ceph_mon_srcs})
+  ceph_mon.cc)
+add_executable(ceph-mon ${ceph_mon_srcs}
+  $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
       target_link_libraries(ceph-mon mon common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD
-if(${HAVE_XFS})
+if(${HAVE_LIBXFS})
   set(libos_xfs_srcs
     os/filestore/XfsFileStoreBackend.cc
     os/fs/XFS.cc)
-endif(${HAVE_XFS})
+endif(${HAVE_LIBXFS})
 set(libos_srcs
   os/ObjectStore.cc
   os/Transaction.cc
@@ -650,15 +776,19 @@ set(libos_srcs
   os/kstore/kstore_types.cc
   os/bluestore/kv.cc
   os/bluestore/Allocator.cc
+  os/bluestore/BitmapFreelistManager.cc
   os/bluestore/BlockDevice.cc
   os/bluestore/BlueFS.cc
   os/bluestore/bluefs_types.cc
   os/bluestore/BlueRocksEnv.cc
   os/bluestore/BlueStore.cc
   os/bluestore/bluestore_types.cc
+  os/bluestore/ExtentFreelistManager.cc
   os/bluestore/FreelistManager.cc
   os/bluestore/KernelDevice.cc
   os/bluestore/StupidAllocator.cc
+  os/bluestore/BitMapAllocator.cc
+  os/bluestore/BitAllocator.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
 if(${HAVE_LIBFUSE})
@@ -720,6 +850,9 @@ if(WITH_SPDK)
     ${DPDK_INCLUDE_DIR}
     ${PCIACCESS_INCLUDE_DIR})
 endif(WITH_SPDK)
+if(WITH_LTTNG)
+  add_dependencies(os objectstore-tp)
+endif()
 target_link_libraries(os kv)
 
 set(cls_references_files objclass/class_api.cc)
@@ -741,11 +874,9 @@ set(osd_srcs
   osd/ECBackend.cc
   osd/ECTransaction.cc
   osd/PGBackend.cc
-  osd/OSD.cc
   osd/OSDCap.cc
   osd/Watch.cc
   osd/ClassHandler.cc
-  osd/OpRequest.cc
   common/TrackedOp.cc
   osd/SnapMapper.cc
   osd/ScrubStore.cc
@@ -756,9 +887,16 @@ set(osd_srcs
 set(osd_mon_files
   mon/Monitor.cc)
 add_library(osd_mon_objs OBJECT ${osd_mon_files})
-add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
-  $<TARGET_OBJECTS:cls_references_objs> $<TARGET_OBJECTS:heap_profiler_objs>)
+add_library(osd STATIC ${osd_srcs}
+  $<TARGET_OBJECTS:osd_mon_objs>
+  $<TARGET_OBJECTS:cls_references_objs>
+  $<TARGET_OBJECTS:global_common_objs>
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(osd dl leveldb ${ALLOC_LIBS})
+if(WITH_LTTNG)
+  add_dependencies(osd osd-tp)
+endif()
 
 set(ceph_osd_srcs
   ceph_osd.cc
@@ -812,13 +950,14 @@ if(${WITH_MDS})
     ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
   add_library(mds ${mds_srcs}
-    $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_link_libraries(mds ${ALLOC_LIBS})
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    $<TARGET_OBJECTS:common_util_obj>)
+  target_link_libraries(mds ${ALLOC_LIBS} osdc common)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs}
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(ceph-mds mds osdc ${CMAKE_DL_LIBS} global
+  target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
     ${Boost_THREAD_LIBRARY})
   install(TARGETS ceph-mds DESTINATION bin)
 endif(${WITH_MDS})
@@ -840,15 +979,11 @@ target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
 
-set(compressor_srcs
-  compressor/Compressor.cc
-  compressor/AsyncCompressor.cc)
-add_library(compressor STATIC ${compressor_srcs})
-target_link_libraries(compressor common snappy)
+add_subdirectory(compressor)
 
 add_executable(ceph-client-debug tools/ceph-client-debug.cc)
 target_link_libraries(ceph-client-debug cephfs librados global common)
-install(TARGETS ceph-client-debug DESTINATION bin/debug)
+install(TARGETS ceph-client-debug DESTINATION bin)
 
 add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
@@ -885,19 +1020,19 @@ target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-debugpack.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
-    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
@@ -905,16 +1040,18 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph
   ${CMAKE_SOURCE_DIR}/src/ceph-run
+  ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
 
 install(FILES
   ${CMAKE_SOURCE_DIR}/doc/start/ceph.conf
-  DESTINATION ${sysconfdir}/ceph/ RENAME ceph.conf.example)
+  DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/ceph/ RENAME ceph.conf.example)
 
 install(PROGRAMS
-  ${CMAKE_SOURCE_DIR}/src/ceph_common.sh
+  ceph_common.sh
+  ceph-osd-prestart.sh
   DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/ceph)
 
 install(PROGRAMS
@@ -922,6 +1059,8 @@ install(PROGRAMS
 #  ${CMAKE_SOURCE_DIR}/src/ceph-disk
   ${CMAKE_SOURCE_DIR}/src/ceph-disk-udev
   DESTINATION sbin)
+
+add_subdirectory(bash_completion)
 
 set(parse_secret_files
   common/secret.c)
@@ -937,19 +1076,19 @@ if(WITH_LIBCEPHFS)
     client/MetaSession.cc
     client/Trace.cc
     client/posix_acl.cc)
-  add_library(client ${libclient_srcs})
+  add_library(client STATIC ${libclient_srcs})
   target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
+  add_library(cephfs ${libcephfs_srcs}
     $<TARGET_OBJECTS:cls_references_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common cls_lock_client
+  target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
-if(${ENABLE_SHARED})
+if(BUILD_SHARED_LIBS)
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
-endif(${ENABLE_SHARED})
+endif(BUILD_SHARED_LIBS)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
@@ -968,7 +1107,7 @@ endif(${ENABLE_SHARED})
   target_link_libraries(mount.ceph keyutils)
 
   install(TARGETS ceph-syn DESTINATION bin)
-  install(TARGETS mount.ceph DESTINATION sbin)
+  install(TARGETS mount.ceph DESTINATION /sbin)
 
   if(HAVE_LIBFUSE)
     set(ceph_fuse_srcs
@@ -994,83 +1133,69 @@ set(journal_srcs
   journal/ObjectPlayer.cc
   journal/ObjectRecorder.cc
   journal/Utils.cc)
-add_library(journal ${journal_srcs})
+add_library(journal STATIC ${journal_srcs})
+
+add_library(krbd_objs OBJECT krbd.cc)
 
 if(${WITH_RBD})
-  set(librbd_srcs
-    krbd.cc
-    common/ContextCompletion.cc
-    librbd/AioCompletion.cc
-    librbd/AioImageRequest.cc
-    librbd/AioImageRequestWQ.cc
-    librbd/AioObjectRequest.cc
-    librbd/AsyncObjectThrottle.cc
-    librbd/AsyncOperation.cc
-    librbd/AsyncRequest.cc
-    librbd/CopyupRequest.cc
-    librbd/DiffIterate.cc
-    librbd/ExclusiveLock.cc
-    librbd/ImageCtx.cc
-    librbd/ImageState.cc
-    librbd/ImageWatcher.cc
-    librbd/internal.cc
-    librbd/Journal.cc
-    librbd/librbd.cc
-    librbd/LibrbdAdminSocketHook.cc
-    librbd/LibrbdWriteback.cc
-    librbd/MirroringWatcher.cc
-    librbd/ObjectMap.cc
-    librbd/ObjectWatcher.cc
-    librbd/Operations.cc
-    librbd/Utils.cc
-    librbd/exclusive_lock/AcquireRequest.cc
-    librbd/exclusive_lock/ReleaseRequest.cc
-    librbd/exclusive_lock/StandardPolicy.cc
-    librbd/image/CloseRequest.cc
-    librbd/image/OpenRequest.cc
-    librbd/image/RefreshParentRequest.cc
-    librbd/image/RefreshRequest.cc
-    librbd/image/SetSnapRequest.cc
-    librbd/image_watcher/Notifier.cc
-    librbd/image_watcher/NotifyLockOwner.cc
-    librbd/journal/Replay.cc
-    librbd/journal/StandardPolicy.cc
-    librbd/journal/Types.cc
-    librbd/mirroring_watcher/Types.cc
-    librbd/object_map/InvalidateRequest.cc
-    librbd/object_map/LockRequest.cc
-    librbd/object_map/Request.cc
-    librbd/object_map/RefreshRequest.cc
-    librbd/object_map/ResizeRequest.cc
-    librbd/object_map/SnapshotCreateRequest.cc
-    librbd/object_map/SnapshotRemoveRequest.cc
-    librbd/object_map/SnapshotRollbackRequest.cc
-    librbd/object_map/UnlockRequest.cc
-    librbd/object_map/UpdateRequest.cc
-    librbd/operation/FlattenRequest.cc
-    librbd/operation/RebuildObjectMapRequest.cc
-    librbd/operation/RenameRequest.cc
-    librbd/operation/Request.cc
-    librbd/operation/ResizeRequest.cc
-    librbd/operation/SnapshotCreateRequest.cc
-    librbd/operation/SnapshotProtectRequest.cc
-    librbd/operation/SnapshotRemoveRequest.cc
-    librbd/operation/SnapshotRenameRequest.cc
-    librbd/operation/SnapshotRollbackRequest.cc
-    librbd/operation/SnapshotUnprotectRequest.cc
-    librbd/operation/TrimRequest.cc
-    librbd/WatchNotifyTypes.cc)
-  add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
-    $<TARGET_OBJECTS:osdc_rbd_objs>
-    $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(librbd LINK_PRIVATE librados common journal
-    cls_lock_client cls_rbd_client cls_journal_client udev
-    ${CMAKE_DL_LIBS})
-  if(${ENABLE_SHARED})
-    set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
-      OUTPUT_NAME rbd)
-  endif(${ENABLE_SHARED})
-  install(TARGETS librados librbd DESTINATION lib)
+  add_subdirectory(librbd)
+  install(FILES
+    include/rbd/features.h
+    include/rbd/librbd.h
+    include/rbd/librbd.hpp
+    DESTINATION include/rbd)
+
+  add_executable(rbd-nbd tools/rbd_nbd/rbd-nbd.cc
+    $<TARGET_OBJECTS:parse_secret_objs>)
+  target_link_libraries(rbd-nbd librbd librados global keyutils
+    ${Boost_REGEX_LIBRARY})
+
+  set(rbd_mirror_internal
+    tools/rbd_mirror/ClusterWatcher.cc 
+    tools/rbd_mirror/ImageReplayer.cc
+    tools/rbd_mirror/ImageDeleter.cc
+    tools/rbd_mirror/ImageSync.cc
+    tools/rbd_mirror/Mirror.cc 
+    tools/rbd_mirror/PoolWatcher.cc 
+    tools/rbd_mirror/Replayer.cc 
+    tools/rbd_mirror/Threads.cc
+    tools/rbd_mirror/types.cc
+    tools/rbd_mirror/image_replayer/BootstrapRequest.cc
+    tools/rbd_mirror/image_replayer/CloseImageRequest.cc
+    tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc
+    tools/rbd_mirror/image_replayer/ReplayStatusFormatter.cc
+    tools/rbd_mirror/image_sync/ImageCopyRequest.cc
+    tools/rbd_mirror/image_sync/ObjectCopyRequest.cc
+    tools/rbd_mirror/image_sync/SnapshotCopyRequest.cc
+    tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc
+    tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
+    tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
+  add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
+
+  if(WITH_FUSE)
+    add_executable(rbd-fuse
+      rbd_fuse/rbd-fuse.cc)
+    target_link_libraries(rbd-fuse
+      librbd librados ${FUSE_LIBRARIES})
+    install(TARGETS rbd-fuse DESTINATION bin)
+  endif()
+
+  add_executable(rbd-mirror
+    tools/rbd_mirror/main.cc
+    common/ContextCompletion.cc)
+  target_link_libraries(rbd-mirror
+    rbd_mirror_internal
+    rbd_internal
+    rbd_api
+    rbd_types
+    journal
+    librados
+    osdc
+    cls_rbd_client
+    cls_lock_client
+    cls_journal_client
+    global)
+
   set(rbd_srcs
     tools/rbd/rbd.cc
     tools/rbd/ArgumentTypes.cc
@@ -1107,15 +1232,16 @@ if(${WITH_RBD})
     tools/rbd/action/Resize.cc
     tools/rbd/action/Snap.cc
     tools/rbd/action/Status.cc
-    tools/rbd/action/Watch.cc
-    common/TextTable.cc)
-  add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
-    $<TARGET_OBJECTS:parse_secret_objs>)
+    tools/rbd/action/Watch.cc)
+  add_executable(rbd ${rbd_srcs}
+    $<TARGET_OBJECTS:common_util_obj>
+    $<TARGET_OBJECTS:parse_secret_objs>
+    $<TARGET_OBJECTS:common_texttable_obj>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-  install(TARGETS rbd DESTINATION bin)
+  install(TARGETS rbd rbd-nbd rbd-mirror DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/rbdmap DESTINATION bin)
   add_subdirectory(rbd_replay)
@@ -1223,10 +1349,6 @@ if(${WITH_RADOSGW})
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
     cls_replica_log_client cls_user_client curl global expat)
 
-  if(HAVE_BOOST_ASIO_COROUTINE)
-    target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
-  endif()
-
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
     rgw/rgw_loadgen_process.cc
@@ -1306,6 +1428,12 @@ if(${WITH_RADOSGW})
   install(TARGETS radosgw-object-expirer DESTINATION bin)
 endif(${WITH_RADOSGW})
 
+# Now create a useable config.h
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
+  ${CMAKE_BINARY_DIR}/include/acconfig.h
+)
+
 # Everything you need to spin up a cluster with vstart.sh
 add_custom_target(vstart DEPENDS
     ceph-osd
@@ -1314,7 +1442,8 @@ add_custom_target(vstart DEPENDS
     ceph-authtool
     ceph-conf
     monmaptool
-    crushtool)
+    crushtool
+    cython_rados)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
@@ -1328,3 +1457,11 @@ add_custom_target(cephfs_testing DEPENDS
     cephfs-journal-tool
     cephfs-data-scan
     cephfs-table-tool)
+
+if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
+  add_custom_target(
+    git-update
+    COMMAND git submodule sync
+    COMMAND git submodule update --force --init --recursive
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+endif()

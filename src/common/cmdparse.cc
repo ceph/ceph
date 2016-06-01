@@ -155,16 +155,35 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
       case json_spirit::array_type:
 	{
 	  // array is a vector of values.  Unpack it to a vector
-	  // of strings, the only type we handle.
-	  vector<json_spirit::mValue> spvals = it->second.get_array();
-	  vector<string> outv;
-	  for (vector<json_spirit::mValue>::iterator sv = spvals.begin();
-	       sv != spvals.end(); ++sv) {
-	    if (sv->type() != json_spirit::str_type)
-	      throw(runtime_error("Can't handle arrays of non-strings"));
-	    outv.push_back(sv->get_str());
+	  // of strings or int64_t, the only types we handle.
+	  const vector<json_spirit::mValue>& spvals = it->second.get_array();
+	  if (spvals.empty()) {
+	    // if an empty array is acceptable, the caller should always check for
+	    // vector<string> if the expected value of "vector<int64_t>" in the
+	    // cmdmap is missing.
+	    (*mapp)[it->first] = std::move(vector<string>());
+	  } else if (spvals.front().type() == json_spirit::str_type) {
+	    vector<string> outv;
+	    for (const auto& sv : spvals) {
+	      if (sv.type() != json_spirit::str_type) {
+		throw(runtime_error("Can't handle arrays of multiple types"));
+	      }
+	      outv.push_back(sv.get_str());
+	    }
+	    (*mapp)[it->first] = std::move(outv);
+	  } else if (spvals.front().type() == json_spirit::int_type) {
+	    vector<int64_t> outv;
+	    for (const auto& sv : spvals) {
+	      if (spvals.front().type() != json_spirit::int_type) {
+		throw(runtime_error("Can't handle arrays of multiple types"));
+	      }
+	      outv.push_back(sv.get_int64());
+	    }
+	    (*mapp)[it->first] = std::move(outv);
+	  } else {
+	    throw(runtime_error("Can't handle arrays of types other than "
+				"int or string"));
 	  }
-	  (*mapp)[it->first] = outv;
 	}
 	break;
       case json_spirit::str_type:

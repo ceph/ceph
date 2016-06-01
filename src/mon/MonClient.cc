@@ -12,7 +12,6 @@
  * 
  */
 
-#include "msg/Messenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -26,8 +25,6 @@
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
-#include "common/ConfUtils.h"
-#include "common/ceph_argparse.h"
 #include "common/errno.h"
 #include "common/LogClient.h"
 
@@ -37,11 +34,7 @@
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 #include "auth/AuthMethodList.h"
-
-#include "include/str_list.h"
-#include "include/addr_parsing.h"
-
-#include "common/config.h"
+#include "auth/RotatingKeyRing.h"
 
 
 #define dout_subsys ceph_subsys_monc

@@ -44,6 +44,7 @@ class VolumePath(object):
         self.group_id = group_id
         self.volume_id = volume_id
         assert self.group_id != NO_GROUP_NAME
+        assert self.volume_id != "" and self.volume_id is not None
 
     def __str__(self):
         return "{0}/{1}".format(self.group_id, self.volume_id)
@@ -202,27 +203,36 @@ class CephFSVolumeClient(object):
     """
 
     # Where shall we create our volumes?
-    VOLUME_PREFIX = "/volumes"
     POOL_PREFIX = "fsvolume_"
+    DEFAULT_VOL_PREFIX = "/volumes"
+    DEFAULT_NS_PREFIX = "fsvolumens_"
 
-    def __init__(self, auth_id, conf_path, cluster_name):
+    def __init__(self, auth_id, conf_path, cluster_name, volume_prefix=None, pool_ns_prefix=None):
         self.fs = None
         self.rados = None
         self.connected = False
         self.conf_path = conf_path
         self.cluster_name = cluster_name
         self.auth_id = auth_id
+        self.volume_prefix = volume_prefix if volume_prefix else self.DEFAULT_VOL_PREFIX
+        self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else self.DEFAULT_NS_PREFIX
 
-    def evict(self, auth_id, timeout=30):
+    def evict(self, auth_id, timeout=30, volume_path=None):
         """
-        Evict all clients using this authorization ID. Assumes that the
-        authorisation key has been revoked prior to calling this function.
+        Evict all clients based on the authorization ID and optionally based on
+        the volume path mounted.  Assumes that the authorization key has been
+        revoked prior to calling this function.
 
         This operation can throw an exception if the mon cluster is unresponsive, or
         any individual MDS daemon is unresponsive for longer than the timeout passed in.
         """
 
-        log.info("evict: {0}".format(auth_id))
+        client_spec = ["auth_name={0}".format(auth_id), ]
+        if volume_path:
+            client_spec.append("client_metadata.root={0}".
+                               format(self._get_path(volume_path)))
+
+        log.info("evict clients with {0}".format(', '.join(client_spec)))
 
         mds_map = self._rados_command("mds dump", {})
 
@@ -237,7 +247,8 @@ class CephFSVolumeClient(object):
         # the latter doesn't give us per-mds output
         threads = []
         for rank, gid in up.items():
-            thread = RankEvicter(self, ["auth_name={0}".format(auth_id)], rank, gid, mds_map, timeout)
+            thread = RankEvicter(self, client_spec, rank, gid, mds_map,
+                                 timeout)
             thread.start()
             threads.append(thread)
 
@@ -248,9 +259,9 @@ class CephFSVolumeClient(object):
 
         for t in threads:
             if not t.success:
-                msg = "Failed to evict client {0} from mds {1}/{2}: {3}".format(
-                    auth_id, t.rank, t.gid, t.exception
-                )
+                msg = ("Failed to evict client with {0} from mds {1}/{2}: {3}".
+                       format(', '.join(client_spec), t.rank, t.gid, t.exception)
+                      )
                 log.error(msg)
                 raise EvictionError(msg)
 
@@ -260,7 +271,7 @@ class CephFSVolumeClient(object):
         :return: absolute path (string)
         """
         return os.path.join(
-            self.VOLUME_PREFIX,
+            self.volume_prefix,
             volume_path.group_id if volume_path.group_id is not None else NO_GROUP_NAME,
             volume_path.volume_id)
 
@@ -269,7 +280,7 @@ class CephFSVolumeClient(object):
             raise ValueError("group_id may not be None")
 
         return os.path.join(
-            self.VOLUME_PREFIX,
+            self.volume_prefix,
             group_id
         )
 
@@ -400,7 +411,7 @@ class CephFSVolumeClient(object):
     def destroy_group(self, group_id):
         path = self._get_group_path(group_id)
         try:
-            self.fs.stat(self.VOLUME_PREFIX)
+            self.fs.stat(self.volume_prefix)
         except cephfs.ObjectNotFound:
             pass
         else:
@@ -443,8 +454,10 @@ class CephFSVolumeClient(object):
         if size is not None:
             self.fs.setxattr(path, 'ceph.quota.max_bytes', size.__str__(), 0)
 
+        # data_isolated means create a seperate pool for this volume
         if data_isolated:
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
+            log.info("create_volume: {0}, create pool {1} as data_isolated =True.".format(volume_path, pool_name))
             pool_id = self._create_volume_pool(pool_name)
             mds_map = self._rados_command("mds dump", {})
             if pool_id not in mds_map['data_pools']:
@@ -452,6 +465,11 @@ class CephFSVolumeClient(object):
                     'pool': pool_name
                 })
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
+
+        # enforce security isolation, use seperate namespace for this volume
+        namespace = "{0}{1}".format(self.pool_ns_prefix, volume_path.volume_id)
+        log.info("create_volume: {0}, using rados namespace {1} to isolate data.".format(volume_path, namespace))
+        self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace', namespace, 0)
 
         return {
             'mount_path': path
@@ -470,7 +488,7 @@ class CephFSVolumeClient(object):
         log.info("delete_volume: {0}".format(volume_path))
 
         # Create the trash folder if it doesn't already exist
-        trash = os.path.join(self.VOLUME_PREFIX, "_deleting")
+        trash = os.path.join(self.volume_prefix, "_deleting")
         self._mkdir_p(trash)
 
         # We'll move it to here
@@ -492,7 +510,7 @@ class CephFSVolumeClient(object):
         function is idempotent.
         """
 
-        trash = os.path.join(self.VOLUME_PREFIX, "_deleting")
+        trash = os.path.join(self.volume_prefix, "_deleting")
         trashed_volume = os.path.join(trash, volume_path.volume_id)
 
         try:
@@ -508,7 +526,10 @@ class CephFSVolumeClient(object):
             d = self.fs.readdir(dir_handle)
             while d:
                 if d.d_name not in [".", ".."]:
-                    d_full = os.path.join(root_path, d.d_name)
+                    # Do not use os.path.join because it is sensitive
+                    # to string encoding, we just pass through dnames
+                    # as byte arrays
+                    d_full = "{0}/{1}".format(root_path, d.d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:
@@ -555,12 +576,13 @@ class CephFSVolumeClient(object):
             else:
                 return self._get_ancestor_xattr(os.path.split(path)[0], attr)
 
-    def authorize(self, volume_path, auth_id):
+    def authorize(self, volume_path, auth_id, readonly=False):
         """
         Get-or-create a Ceph auth identity for `auth_id` and grant them access
         to
         :param volume_path:
         :param auth_id:
+        :param readonly:
         :return:
         """
 
@@ -568,12 +590,16 @@ class CephFSVolumeClient(object):
         # read the layout
         path = self._get_path(volume_path)
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+        namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
 
         # Now construct auth capabilities that give the guest just enough
         # permissions to access the share
         client_entity = "client.{0}".format(auth_id)
-        want_mds_cap = 'allow rw path={0}'.format(path)
-        want_osd_cap = 'allow rw pool={0}'.format(pool_name)
+        want_access_level = 'r' if readonly else 'rw'
+        want_mds_cap = 'allow {0} path={1}'.format(want_access_level, path)
+        want_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
+            want_access_level, pool_name, namespace)
+
         try:
             existing = self._rados_command(
                 'auth get',
@@ -593,18 +619,30 @@ class CephFSVolumeClient(object):
                         'mon', 'allow r']
                 })
         else:
-            # entity exists, extend it
+            # entity exists, update it
             cap = existing[0]
 
-            def cap_extend(orig, want):
-                cap_tokens = orig.split(",")
-                if want not in cap_tokens:
-                    cap_tokens.append(want)
+            # Construct auth caps that if present might conflict with the desired
+            # auth caps.
+            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
+            unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
+            unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
+                unwanted_access_level, pool_name, namespace)
+
+            def cap_update(orig, want, unwanted):
+                # Updates the existing auth caps such that there is a single
+                # occurrence of wanted auth caps and no occurrence of
+                # conflicting auth caps.
+
+                cap_tokens = set(orig.split(","))
+
+                cap_tokens.discard(unwanted)
+                cap_tokens.add(want)
 
                 return ",".join(cap_tokens)
 
-            osd_cap_str = cap_extend(cap['caps'].get('osd', ""), want_osd_cap)
-            mds_cap_str = cap_extend(cap['caps'].get('mds', ""), want_mds_cap)
+            osd_cap_str = cap_update(cap['caps'].get('osd', ""), want_osd_cap, unwanted_osd_cap)
+            mds_cap_str = cap_update(cap['caps'].get('mds', ""), want_mds_cap, unwanted_mds_cap)
 
             caps = self._rados_command(
                 'auth caps',
@@ -648,9 +686,16 @@ class CephFSVolumeClient(object):
         client_entity = "client.{0}".format(auth_id)
         path = self._get_path(volume_path)
         pool_name = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+        namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace")
 
-        want_mds_cap = 'allow rw path={0}'.format(path)
-        want_osd_cap = 'allow rw pool={0}'.format(pool_name)
+        # The auth_id might have read-only or read-write mount access for the
+        # volume path.
+        access_levels = ('r', 'rw')
+        want_mds_caps = {'allow {0} path={1}'.format(access_level, path)
+                         for access_level in access_levels}
+        want_osd_caps = {'allow {0} pool={1} namespace={2}'.format(
+                         access_level, pool_name, namespace)
+                         for access_level in access_levels}
 
         try:
             existing = self._rados_command(
@@ -661,15 +706,12 @@ class CephFSVolumeClient(object):
             )
 
             def cap_remove(orig, want):
-                cap_tokens = orig.split(",")
-                if want in cap_tokens:
-                    cap_tokens.remove(want)
-
-                return ",".join(cap_tokens)
+                cap_tokens = set(orig.split(","))
+                return ",".join(cap_tokens.difference(want))
 
             cap = existing[0]
-            osd_cap_str = cap_remove(cap['caps'].get('osd', ""), want_osd_cap)
-            mds_cap_str = cap_remove(cap['caps'].get('mds', ""), want_mds_cap)
+            osd_cap_str = cap_remove(cap['caps'].get('osd', ""), want_osd_caps)
+            mds_cap_str = cap_remove(cap['caps'].get('mds', ""), want_mds_caps)
             if (not osd_cap_str) and (not mds_cap_str):
                 self._rados_command('auth del', {'entity': client_entity}, decode=False)
             else:

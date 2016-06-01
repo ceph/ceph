@@ -120,8 +120,6 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
   tick_event(0),
-  standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
-  standby_type(MDSMap::STATE_NULL),
   asok_hook(NULL)
 {
   orig_argc = 0;
@@ -337,11 +335,19 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("dump_blocked_ops");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
+  admin_socket->unregister_command("tag path");
   admin_socket->unregister_command("flush_path");
+  admin_socket->unregister_command("export dir");
+  admin_socket->unregister_command("dump cache");
   admin_socket->unregister_command("session evict");
+  admin_socket->unregister_command("osdmap barrier");
   admin_socket->unregister_command("session ls");
   admin_socket->unregister_command("flush journal");
   admin_socket->unregister_command("force_readonly");
+  admin_socket->unregister_command("get subtrees");
+  admin_socket->unregister_command("dirfrag split");
+  admin_socket->unregister_command("dirfrag merge");
+  admin_socket->unregister_command("dirfrag ls");
   delete asok_hook;
   asok_hook = NULL;
 }
@@ -430,7 +436,7 @@ void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
 }
 
 
-int MDSDaemon::init(MDSMap::DaemonState wanted_state)
+int MDSDaemon::init()
 {
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
@@ -474,8 +480,21 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
     mds_lock.Unlock();
     return r;
   }
+
+  int rotating_auth_attempts = 0;
+  const int max_rotating_auth_attempts = 10;
+
   while (monc->wait_auth_rotating(30.0) < 0) {
-    derr << "unable to obtain rotating service keys; retrying" << dendl;
+    if (++rotating_auth_attempts <= max_rotating_auth_attempts) {
+      derr << "unable to obtain rotating service keys; retrying" << dendl;
+      continue;
+    }
+    derr << "ERROR: failed to refresh rotating keys, "
+         << "maximum retry time reached." << dendl;
+    mds_lock.Lock();
+    suicide();
+    mds_lock.Unlock();
+    return -ETIMEDOUT;
   }
 
   objecter->start();
@@ -520,48 +539,14 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
   mds_lock.Lock();
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
+    dout(4) << __func__ << ": terminated already, dropping out" << dendl;
+    mds_lock.Unlock();
+    return 0; 
   }
 
   timer.init();
 
-  if (wanted_state==MDSMap::STATE_BOOT && g_conf->mds_standby_replay) {
-    wanted_state = MDSMap::STATE_STANDBY_REPLAY;
-  }
-
-  // starting beacon.  this will induce an MDSMap from the monitor
-  if (wanted_state==MDSMap::STATE_STANDBY_REPLAY ||
-      wanted_state==MDSMap::STATE_ONESHOT_REPLAY) {
-    g_conf->set_val_or_die("mds_standby_replay", "true");
-    g_conf->apply_changes(NULL);
-    if ( wanted_state == MDSMap::STATE_ONESHOT_REPLAY &&
-        (g_conf->mds_standby_for_rank == -1) &&
-        g_conf->mds_standby_for_name.empty()) {
-      // uh-oh, must specify one or the other!
-      dout(0) << "Specified oneshot replay mode but not an MDS!" << dendl;
-      suicide();
-    }
-    standby_type = wanted_state;
-    wanted_state = MDSMap::STATE_BOOT;
-  }
-
-  standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
-  standby_for_name.assign(g_conf->mds_standby_for_name);
-
-  if (standby_type == MDSMap::STATE_STANDBY_REPLAY &&
-      standby_for_rank == -1) {
-    if (standby_for_name.empty())
-      standby_for_rank = MDSMap::MDS_STANDBY_ANY;
-    else
-      standby_for_rank = MDSMap::MDS_STANDBY_NAME;
-  } else if (standby_type == MDSMap::STATE_NULL && !standby_for_name.empty())
-    standby_for_rank = MDSMap::MDS_MATCHED_ACTIVE;
-
-  if (wanted_state == MDSMap::STATE_NULL) {
-    wanted_state = MDSMap::STATE_BOOT;
-  }
-  beacon.init(mdsmap, wanted_state,
-    standby_for_rank, standby_for_name,
-    fs_cluster_id_t(g_conf->mds_standby_for_fscid));
+  beacon.init(mdsmap);
   messenger->set_myname(entity_name_t::MDS(MDS_RANK_NONE));
 
   // schedule tick
@@ -787,7 +772,7 @@ int MDSDaemon::_handle_command(
     string args = argsvec.front();
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
-    cct->_conf->injectargs(args, &ss);
+    r = cct->_conf->injectargs(args, &ss);
   } else if (prefix == "exit") {
     // We will send response before executing
     ss << "Exiting...";
@@ -801,6 +786,7 @@ int MDSDaemon::_handle_command(
     if (mds_rank == NULL) {
       r = -EINVAL;
       ss << "MDS not active";
+      goto out;
     }
     // FIXME harmonize `session kill` with admin socket session evict
     int64_t session_id = 0;
@@ -952,19 +938,8 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     }
   }
 
-  // If I was put into standby replay, but I am configured for a different standby
-  // type, ignore the map's state and request my standby type (only used
-  // for oneshot replay?)
-  if (new_state == MDSMap::STATE_STANDBY_REPLAY) {
-    if (standby_type != MDSMap::STATE_NULL && standby_type != MDSMap::STATE_STANDBY_REPLAY) {
-      beacon.set_want_state(mdsmap, standby_type);
-      beacon.send();
-      goto out;
-    }
-  }
-
-  if (whoami == MDS_RANK_NONE && (
-      new_state == MDSMap::STATE_STANDBY_REPLAY || new_state == MDSMap::STATE_ONESHOT_REPLAY)) {
+  if (whoami == MDS_RANK_NONE && 
+      new_state == MDSMap::STATE_STANDBY_REPLAY) {
     whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
   }
 
@@ -988,6 +963,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
             // has taken our ID, we don't want to keep restarting and
             // fighting them for the ID.
             suicide();
+            m->put();
             return;
           }
         }
@@ -1043,10 +1019,6 @@ void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
     beacon.set_want_state(mdsmap, new_state);
     dout(1) << "handle_mds_map standby" << dendl;
 
-    if (standby_type != MDSMap::STATE_NULL) {// we want to be in standby_replay or oneshot_replay!
-      beacon.set_want_state(mdsmap, standby_type);
-      beacon.send();
-    }
     return;
   }
 
@@ -1080,6 +1052,10 @@ void MDSDaemon::handle_signal(int signum)
 void MDSDaemon::suicide()
 {
   assert(mds_lock.is_locked());
+  
+  // make sure we don't suicide twice
+  assert(stopping == false);
+  stopping = true;
 
   dout(1) << "suicide.  wanted state "
           << ceph_mds_state_name(beacon.get_want_state()) << dendl;
@@ -1244,6 +1220,7 @@ bool MDSDaemon::handle_core_message(Message *m)
     if (mds_rank) {
       mds_rank->handle_osd_map();
     }
+    m->put();
     break;
 
   default:

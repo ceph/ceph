@@ -17,7 +17,8 @@
 # GNU Library Public License for more details.
 #
 
-source ../qa/workunits/ceph-helpers.sh
+source $(dirname $0)/../detect-build-env-vars.sh
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -44,19 +45,19 @@ function TEST_copy_from() {
     run_osd $dir 1 || return 1
 
     # success
-    ./rados -p rbd put foo rados
-    ./rados -p rbd cp foo foo2
-    ./rados -p rbd stat foo2
+    rados -p rbd put foo rados
+    rados -p rbd cp foo foo2
+    rados -p rbd stat foo2
 
     # failure
-    ./ceph tell osd.\* injectargs -- --osd-debug-inject-copyfrom-error
-    ! ./rados -p rbd cp foo foo3
-    ! ./rados -p rbd stat foo3
+    ceph tell osd.\* injectargs -- --osd-debug-inject-copyfrom-error
+    ! rados -p rbd cp foo foo3
+    ! rados -p rbd stat foo3
 
     # success again
-    ./ceph tell osd.\* injectargs -- --no-osd-debug-inject-copyfrom-error
-    ! ./rados -p rbd cp foo foo3
-    ./rados -p rbd stat foo3
+    ceph tell osd.\* injectargs -- --no-osd-debug-inject-copyfrom-error
+    ! rados -p rbd cp foo foo3
+    rados -p rbd stat foo3
 }
 
 main osd-copy-from "$@"

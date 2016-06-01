@@ -31,22 +31,13 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "osd_types.h"
-#include "include/buffer_fwd.h"
 #include "include/xlist.h"
 #include "include/atomic.h"
 #include "SnapMapper.h"
 
 #include "PGLog.h"
-#include "OpRequest.h"
 #include "OSDMap.h"
-#include "os/ObjectStore.h"
-#include "msg/Messenger.h"
-#include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
-#include "common/cmdparse.h"
-#include "common/tracked_int_ptr.hpp"
-#include "common/WorkQueue.h"
-#include "common/ceph_context.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
 
@@ -55,8 +46,8 @@
 #include <string>
 using namespace std;
 
-#include "include/unordered_map.h"
-#include "include/unordered_set.h"
+// #include "include/unordered_map.h"
+// #include "include/unordered_set.h"
 
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
@@ -71,6 +62,10 @@ class MOSDPGBackfill;
 class MOSDPGInfo;
 
 class PG;
+struct OpRequest;
+typedef OpRequest::Ref OpRequestRef;
+class MOSDPGLog;
+class CephContext;
 
 namespace Scrub {
   class Store;
@@ -80,6 +75,7 @@ void intrusive_ptr_add_ref(PG *pg);
 void intrusive_ptr_release(PG *pg);
 
 #ifdef PG_DEBUG_REFS
+#include "common/tracked_int_ptr.hpp"
   uint64_t get_with_id(PG *pg);
   void put_with_id(PG *pg, uint64_t id);
   typedef TrackedIntPtr<PG> PGRef;
@@ -434,7 +430,6 @@ public:
       const map<pg_shard_t, pg_info_t> &pinfo) {
       recovered(hoid);
       boost::optional<pg_missing_t::item> item;
-      set<pg_shard_t> have;
       auto miter = missing.missing.find(hoid);
       if (miter != missing.missing.end()) {
 	item = miter->second;
@@ -489,9 +484,10 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, stat_queue_item;
+  xlist<PG*>::item stat_queue_item;
   bool snap_trim_queued;
   bool scrub_queued;
+  bool recovery_queued;
 
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
@@ -1099,8 +1095,9 @@ public:
    * @returns true if any useful work was accomplished; false otherwise
    */
   virtual bool start_recovery_ops(
-    int max, ThreadPool::TPHandle &handle,
-    int *ops_begun) = 0;
+    uint64_t max,
+    ThreadPool::TPHandle &handle,
+    uint64_t *ops_begun) = 0;
 
   void purge_strays();
 
@@ -1324,7 +1321,6 @@ public:
   void sub_op_scrub_reserve(OpRequestRef op);
   void sub_op_scrub_reserve_reply(OpRequestRef op);
   void sub_op_scrub_unreserve(OpRequestRef op);
-  void sub_op_scrub_stop(OpRequestRef op);
 
   void reject_reservation();
   void schedule_backfill_full_retry();
@@ -1482,7 +1478,6 @@ public:
   TrivialEvent(Load)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
-  TrivialEvent(CheckRepops)
   TrivialEvent(NullEvt)
   TrivialEvent(FlushedEvt)
   TrivialEvent(Backfilled)
@@ -2261,6 +2256,7 @@ public:
 
   void queue_snap_trim();
   bool requeue_scrub();
+  void queue_recovery(bool front = false);
   bool queue_scrub();
   unsigned get_scrub_priority();
 

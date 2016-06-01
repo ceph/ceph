@@ -35,7 +35,7 @@
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
-//#define MDS_VERIFY_FRAGSTAT    // do do (slow) sanity checking on frags
+//#define MDS_VERIFY_FRAGSTAT    // do (slow) sanity checking on frags
 
 #define MDS_PORT_CACHE   0x200
 #define MDS_PORT_LOCKER  0x300

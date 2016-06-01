@@ -13,8 +13,6 @@
  */
 
 #include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "common/config.h"
 #include "common/debug.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
@@ -179,7 +177,7 @@ struct SignalHandler : public Thread {
   };
 
   /// all handlers
-  safe_handler *handlers[32];
+  safe_handler *handlers[32] = {nullptr};
 
   /// to protect the handlers array
   Mutex lock;
@@ -187,9 +185,6 @@ struct SignalHandler : public Thread {
   SignalHandler()
     : stop(false), lock("SignalHandler::lock")
   {
-    for (unsigned i = 0; i < 32; i++)
-      handlers[i] = NULL;
-
     // create signal pipe
     int r = pipe(pipefd);
     assert(r == 0);
@@ -197,7 +192,7 @@ struct SignalHandler : public Thread {
     assert(r == 0);
 
     // create thread
-    create("sginal_handler");
+    create("signal_handler");
   }
 
   ~SignalHandler() {

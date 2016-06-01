@@ -259,7 +259,7 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
     boost::lambda::bind(boost::lambda::new_ptr<C_ScanPoolChildren<I> >(),
       boost::lambda::_1, &image_ctx, pspec, pools, boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
-    this, image_ctx, context_factory, ctx, NULL, 0, pools.size());
+    nullptr, image_ctx, context_factory, ctx, NULL, 0, pools.size());
   throttle->start_ops(image_ctx.concurrent_management_ops);
 }
 

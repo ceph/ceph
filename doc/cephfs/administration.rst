@@ -79,9 +79,13 @@ Global settings
 
 ::
 
-    fs flag set <flag name> <flag val>
+    fs flag set <flag name> <flag val> [<confirmation string>]
 
     flag name must be one of ['enable_multiple']
+
+    some flags require you to confirm your intentions with "--yes-i-really-mean-it"
+    or a similar string they will prompt you with. Consider these actions carefully
+    before proceeding; they are placed on especially dangerous activities.
 
 Advanced
 --------

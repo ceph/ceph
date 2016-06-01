@@ -74,6 +74,7 @@ public:
   TestImageReplayer() : m_watch_handle(0)
   {
     EXPECT_EQ("", connect_cluster_pp(m_local_cluster));
+    EXPECT_EQ(0, m_local_cluster.conf_set("rbd_cache", "false"));
 
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_local_cluster.pool_create(m_local_pool_name.c_str()));
@@ -81,6 +82,7 @@ public:
 					      m_local_ioctx));
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
+    EXPECT_EQ(0, m_remote_cluster.conf_set("rbd_cache", "false"));
 
     m_remote_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_remote_cluster.pool_create(m_remote_pool_name.c_str()));
@@ -534,78 +536,3 @@ TEST_F(TestImageReplayer, NextTag)
 
   stop();
 }
-
-class ImageReplayer : public rbd::mirror::ImageReplayer<> {
-public:
-  ImageReplayer(rbd::mirror::Threads *threads,
-		rbd::mirror::RadosRef local, rbd::mirror::RadosRef remote,
-		const std::string &local_mirror_uuid,
-                const std::string &remote_mirror_uuid,
-                int64_t local_pool_id,
-		int64_t remote_pool_id,	const std::string &remote_image_id,
-                const std::string &global_image_id)
-    : rbd::mirror::ImageReplayer<>(threads, local, remote, local_mirror_uuid,
-				   remote_mirror_uuid, local_pool_id,
-                                   remote_pool_id, remote_image_id,
-                                   global_image_id)
-    {}
-
-  void set_error(const std::string &state, int r) {
-    m_errors[state] = r;
-  }
-
-  int get_error(const std::string &state) const {
-    std::map<std::string, int>::const_iterator i = m_errors.find(state);
-    return i == m_errors.end() ? 0 : i->second;
-  }
-
-protected:
-  virtual void on_stop_journal_replay_shut_down_finish(int r) {
-    ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer<>::on_stop_journal_replay_shut_down_finish(
-      get_error("on_stop_journal_replay_shut_down"));
-  }
-
-  virtual void on_stop_local_image_close_finish(int r) {
-    ASSERT_EQ(0, r);
-    rbd::mirror::ImageReplayer<>::on_stop_local_image_close_finish(
-      get_error("on_stop_local_image_close"));
-  }
-
-private:
-  std::map<std::string, int> m_errors;
-};
-
-#define TEST_ON_START_ERROR(state) \
-TEST_F(TestImageReplayer, Error_on_start_##state)			\
-{									\
-  create_replayer<ImageReplayer>();					\
-  reinterpret_cast<ImageReplayer *>(m_replayer)->			\
-    set_error("on_start_" #state, -1);					\
-  rbd::mirror::ImageReplayer<>::BootstrapParams				\
-    bootstap_params(m_image_name);			                \
-  C_SaferCond cond;							\
-  m_replayer->start(&cond, &bootstap_params);				\
-  ASSERT_EQ(-1, cond.wait());						\
-}
-
-#define TEST_ON_STOP_ERROR(state) \
-TEST_F(TestImageReplayer, Error_on_stop_##state)			\
-{									\
-  create_replayer<ImageReplayer>();					\
-  reinterpret_cast<ImageReplayer *>(m_replayer)->			\
-    set_error("on_stop_" #state, -1);					\
-  rbd::mirror::ImageReplayer<>::BootstrapParams				\
-    bootstap_params(m_image_name);			                \
-  start(&bootstap_params);						\
-  /* TODO: investigate: without wait below I observe: */		\
-  /* librbd/journal/Replay.cc: 70: FAILED assert(m_op_events.empty()) */\
-  wait_for_replay_complete();						\
-  C_SaferCond cond;							\
-  m_replayer->stop(&cond);						\
-  ASSERT_EQ(0, cond.wait());						\
-}
-
-TEST_ON_STOP_ERROR(journal_replay_shut_down);
-TEST_ON_STOP_ERROR(no_error);
-

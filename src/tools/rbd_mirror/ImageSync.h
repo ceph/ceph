@@ -20,6 +20,8 @@ namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 namespace rbd {
 namespace mirror {
 
+class ProgressContext;
+
 namespace image_sync { template <typename> class ImageCopyRequest; }
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -34,15 +36,17 @@ public:
                            Mutex *timer_lock, const std::string &mirror_uuid,
                            Journaler *journaler,
                            MirrorPeerClientMeta *client_meta,
-                           Context *on_finish) {
+                           Context *on_finish,
+			   ProgressContext *progress_ctx = nullptr) {
     return new ImageSync(local_image_ctx, remote_image_ctx, timer, timer_lock,
-                         mirror_uuid, journaler, client_meta, on_finish);
+                         mirror_uuid, journaler, client_meta, on_finish,
+			 progress_ctx);
   }
 
   ImageSync(ImageCtxT *local_image_ctx, ImageCtxT *remote_image_ctx,
             SafeTimer *timer, Mutex *timer_lock, const std::string &mirror_uuid,
             Journaler *journaler, MirrorPeerClientMeta *client_meta,
-            Context *on_finish);
+            Context *on_finish, ProgressContext *progress_ctx = nullptr);
 
   void start();
   void cancel();
@@ -91,6 +95,7 @@ private:
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
   Context *m_on_finish;
+  ProgressContext *m_progress_ctx;
 
   SnapMap m_snap_map;
 
@@ -122,6 +127,8 @@ private:
   void handle_prune_sync_points(int r);
 
   void finish(int r);
+
+  void update_progress(const std::string &description);
 };
 
 } // namespace mirror

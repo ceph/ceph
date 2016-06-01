@@ -288,8 +288,8 @@ write throughput can bottleneck if other processes share the drive, including
 journals, operating systems, monitors, other OSDs and non-Ceph processes.
 
 Ceph acknowledges writes *after* journaling, so fast SSDs are an attractive
-option to accelerate the response time--particularly when using the ``ext4`` or
-XFS filesystems. By contrast, the ``btrfs`` filesystem can write and journal
+option to accelerate the response time--particularly when using the ``XFS`` or
+``ext4`` filesystems. By contrast, the ``btrfs`` filesystem can write and journal
 simultaneously.
 
 .. note:: Partitioning a drive does not change its total throughput or
@@ -365,9 +365,14 @@ might not have a recent enough version of ``glibc`` to support ``syncfs(2)``.
 Filesystem Issues
 -----------------
 
-Currently, we recommend deploying clusters with XFS or ext4. The btrfs
+Currently, we recommend deploying clusters with XFS. The btrfs
 filesystem has many attractive features, but bugs in the filesystem may
-lead to performance issues.
+lead to performance issues.  We do not recommend ext4 because xattr size
+limitations break our support for long object names (needed for RGW).
+
+For more information, see `Filesystem Recommendations`_.
+
+.. _Filesystem Recommendations: ../configuration/filesystem-recommendations
 
 
 Insufficient RAM

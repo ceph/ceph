@@ -6038,6 +6038,11 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
     CInode *in = p->second;
     if (!in->is_auth())
       continue;
+
+    // Only normal files need file size recovery
+    if (!in->is_file()) {
+      continue;
+    }
     
     bool recover = false;
     for (map<client_t,client_writeable_range_t>::iterator p = in->inode.client_ranges.begin();
@@ -6439,8 +6444,13 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
     null_dentry = true;
   }
 
-  // notify dentry authority?
-  if (!dn->is_auth()) {
+  if (dn->is_auth()) {
+    if (dn->state_test(CDentry::STATE_PURGING)) {
+      stray_manager.notify_stray_trimmed(dn);
+    }
+  } else {
+    // notify dentry authority.
+
     // If null replica dentry is not readable, it's likely we will
     // receive a MDentryLink message soon. MDentryLink message only
     // replicates an inode, so we should avoid trimming the inode's
@@ -6564,13 +6574,10 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<mds_rank_t, MCa
   // INODE
   if (in->is_auth()) {
     // eval stray after closing dirfrags
-    if (dn) {
+    if (dn && !dn->state_test(CDentry::STATE_PURGING)) {
       maybe_eval_stray(in);
-      if (dn->get_num_ref() > 0) {
-        // Independent of whether we passed this on to the purge queue,
-        // if it still has refs then don't count it as trimmed
+      if (dn->state_test(CDentry::STATE_PURGING) || dn->get_num_ref() > 0)
 	return true;
-      }
     }
   } else {
     mds_authority_t auth = in->authority();
@@ -9251,8 +9258,8 @@ void MDCache::scan_stray_dir(dirfrag_t next)
     for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); ++q) {
       CDentry *dn = q->second;
       dn->state_set(CDentry::STATE_STRAY);
-      CDentry::linkage_t *dnl = dn->get_projected_linkage();
       stray_manager.notify_stray_created();
+      CDentry::linkage_t *dnl = dn->get_projected_linkage();
       if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
 	if (in->inode.nlink == 0)

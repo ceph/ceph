@@ -62,6 +62,13 @@ public:
     *invalid_ranges = m_invalid_ranges;
   }
 
+  inline bool refetch_required() const {
+    return m_refetch_required;
+  }
+  inline void clear_refetch_required() {
+    m_refetch_required = false;
+  }
+
 private:
   typedef std::pair<uint64_t, uint64_t> EntryKey;
   typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;
@@ -110,14 +117,15 @@ private:
   EntryKeys m_entry_keys;
   InvalidRanges m_invalid_ranges;
 
-  Context *m_watch_ctx;
-  Cond m_watch_in_progress_cond;
-  bool m_watch_in_progress;
+  Context *m_watch_ctx = nullptr;
+
+  bool m_unwatched = false;
+  bool m_refetch_required = true;
 
   int handle_fetch_complete(int r, const bufferlist &bl);
 
   void schedule_watch();
-  void cancel_watch();
+  bool cancel_watch();
   void handle_watch_task();
   void handle_watch_fetched(int r);
 };

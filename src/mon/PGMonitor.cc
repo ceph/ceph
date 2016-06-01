@@ -17,7 +17,6 @@
 #include "common/debug.h"               // undo damage
 #include "PGMonitor.h"
 #include "Monitor.h"
-#include "MDSMonitor.h"
 #include "OSDMonitor.h"
 #include "MonitorDBStore.h"
 
@@ -32,11 +31,9 @@
 #include "messages/MMonCommand.h"
 #include "messages/MOSDScrub.h"
 
-#include "common/Timer.h"
 #include "common/Formatter.h"
-#include "common/ceph_argparse.h"
-#include "common/perf_counters.h"
 #include "common/TextTable.h"
+#include "common/config.h"
 
 #include "include/stringify.h"
 
@@ -47,8 +44,6 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include <sstream>
-#include <boost/variant.hpp>
-#include "common/cmdparse.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -1804,7 +1799,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
       ss << "failed";  
     else 
       ss << "ok";
-    r = 0;
   } else if (prefix == "pg map") {
     pg_t pgid;
     string pgidstr;
@@ -2124,7 +2118,7 @@ namespace {
 	cct->_conf->mon_warn_not_scrubbed + cct->_conf->mon_scrub_interval;
 
       const int mon_warn_not_deep_scrubbed =
-	cct->_conf->mon_warn_not_deep_scrubbed + cct->_conf->mon_scrub_interval;
+	cct->_conf->mon_warn_not_deep_scrubbed + cct->_conf->osd_deep_scrub_interval;
 
       bool not_scrubbed = (time_since_ls >= mon_warn_not_scrubbed &&
 			   cct->_conf->mon_warn_not_scrubbed != 0);
@@ -2137,7 +2131,8 @@ namespace {
 	  print_unscrubbed_detailed(pg_entry,
 				    detail,
 				    scrubbed_or_deepscrubbed_t::SCRUBBED);
-	} else if (not_deep_scrubbed) {
+	}
+        if (not_deep_scrubbed) {
 	  print_unscrubbed_detailed(pg_entry,
 				    detail,
 				    scrubbed_or_deepscrubbed_t::DEEPSCRUBBED);

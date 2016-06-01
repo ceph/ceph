@@ -24,10 +24,10 @@ by using a method of storing XATTRs that is extrinsic to the underlying filesyst
 
 Ceph XATTRs are stored as ``inline xattr``, using the XATTRs provided
 by the underlying file system, if it does not impose a size limit. If
-there is a size limit ( 4KB total on ext4, for instance ), some Ceph
-XATTRs will be stored in an key/value database ( aka ``omap`` ) when
-the ``filestore max inline xattr size`` or ``filestore max inline
-xattrs`` threshold are reached.
+there is a size limit (4KB total on ext4, for instance), some Ceph
+XATTRs will be stored in an key/value database when either the
+``filestore max inline xattr size`` or ``filestore max inline
+xattrs`` threshold is reached.
 
 
 ``filestore max inline xattr size``

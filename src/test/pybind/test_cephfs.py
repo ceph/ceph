@@ -49,6 +49,17 @@ def test_syncfs():
     stat = cephfs.sync_fs()
 
 @with_setup(setup_test)
+def test_fsync():
+    fd = cephfs.open('file-1', 'w', 0755)
+    cephfs.write(fd, "asdf", 0)
+    stat = cephfs.fsync(fd, 0)
+    cephfs.write(fd, "qwer", 0)
+    stat = cephfs.fsync(fd, 1)
+    cephfs.close(fd)
+    #sync on non-existing fd (assume fd 12345 is not exists)
+    assert_raises(libcephfs.Error, cephfs.fsync, 12345, 0)
+
+@with_setup(setup_test)
 def test_directory():
     cephfs.mkdir("/temp-directory", 0755)
     cephfs.mkdirs("/temp-directory/foo/bar", 0755)
@@ -123,6 +134,23 @@ def test_open():
     cephfs.close(fd)
     assert_raises(libcephfs.OperationNotSupported, cephfs.open, 'file-1', 'a')
     cephfs.unlink('file-1')
+
+@with_setup(setup_test)
+def test_link():
+    fd = cephfs.open('file-1', 'w', 0755)
+    cephfs.write(fd, "1111", 0)
+    cephfs.close(fd)
+    cephfs.link('file-1', 'file-2')
+    fd = cephfs.open('file-2', 'r', 0755)
+    assert_equal(cephfs.read(fd, 0, 4), "1111")
+    cephfs.close(fd)
+    fd = cephfs.open('file-2', 'r+', 0755)
+    cephfs.write(fd, "2222", 4)
+    cephfs.close(fd)
+    fd = cephfs.open('file-1', 'r', 0755)
+    assert_equal(cephfs.read(fd, 0, 8), "11112222")
+    cephfs.close(fd)
+    cephfs.unlink('file-2')
 
 @with_setup(setup_test)
 def test_symlink():

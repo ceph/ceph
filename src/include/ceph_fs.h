@@ -234,6 +234,11 @@ struct ceph_mon_subscribe_ack {
  */
 #define CEPH_MDSMAP_DOWN    (1<<0)  /* cluster deliberately down */
 #define CEPH_MDSMAP_ALLOW_SNAPS   (1<<1)  /* cluster allowed to create snapshots */
+#define CEPH_MDSMAP_ALLOW_MULTIMDS (1<<2) /* cluster allowed to have >1 active MDS */
+#define CEPH_MDSMAP_ALLOW_DIRFRAGS (1<<3) /* cluster allowed to fragment directories */
+
+#define CEPH_MDSMAP_ALLOW_CLASSICS (CEPH_MDSMAP_ALLOW_SNAPS | CEPH_MDSMAP_ALLOW_MULTIMDS | \
+				    CEPH_MDSMAP_ALLOW_DIRFRAGS)
 
 /*
  * mds states
@@ -248,7 +253,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDS_STATE_CREATING    -6  /* up, creating MDS instance. */
 #define CEPH_MDS_STATE_STARTING    -7  /* up, starting previously stopped mds */
 #define CEPH_MDS_STATE_STANDBY_REPLAY -8 /* up, tailing active node's journal */
-#define CEPH_MDS_STATE_REPLAYONCE   -9 /* up, replaying an active node's journal */
+#define CEPH_MDS_STATE_REPLAYONCE   -9 /* Legacy, unused */
 #define CEPH_MDS_STATE_NULL         -10
 
 #define CEPH_MDS_STATE_REPLAY       8  /* up, replaying journal. */

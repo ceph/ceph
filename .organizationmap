@@ -49,6 +49,7 @@ CERN <contact@cern.ch> Sebastien Ponce <sebastien.ponce@cern.ch>
 Choopa, LLC <contact@choopa.com> Adam Twardowski <adam.twardowski@gmail.com>
 CISCO <contact@cisco.com> Johnu George <johnugeo@cisco.com>
 CISCO <contact@cisco.com> Kai Zhang <zakir.exe@gmail.com>
+CISCO <contact@cisco.com> Roland Mechler <rmechler@cisco.com>
 Cloudwatt <libre.licensing@cloudwatt.com> Christophe Courtaut <christophe.courtaut@gmail.com>
 Cloudwatt <libre.licensing@cloudwatt.com> Florent Flament <florent.flament@cloudwatt.com>
 Cloudwatt <libre.licensing@cloudwatt.com> Loic Dachary <loic@dachary.org>
@@ -163,7 +164,7 @@ Hihuron <contact@huron.com> Tao Chang <changtao@hihuron.com>
 Hostplex Hosting <contact@hostplex.net> Andras Elso <elso.andras@gmail.com>
 HP <contact@hp.com> Blaine Gardner <blaine.gardner@hp.com>
 HP <contact@hp.com> Joe Handzik <joseph.t.handzik@hp.com>
-Huazhong University of Science and Technology <contact@hust.edu.cn> runsisi <runsisi@hust.edu.cn>
+Huazhong University of Science and Technology <contact@hust.edu.cn> Luo Runbing <runsisi@hust.edu.cn>
 ICT <contact@ict.ac.cn> Zhang Huan <zhanghuan@ict.ac.cn>
 Igalia <contact@igalia.com> Javier M. Mellid <jmunhoz@igalia.com>
 Igalia <contact@igalia.com> Juan A. Suarez Romero <jasuarez@igalia.com>
@@ -232,6 +233,7 @@ LETV <contact@letv.com> Wu Xingyi <wuxingyi@letv.com>
 Linaro <contact@linaro.org> Steve Capper <steve.capper@linaro.org>
 Linaro <contact@linaro.org> Yazen Ghannam <yazen.ghannam@linaro.org>
 Los Alamos National Laboratory <contact@lanl.gov> Esteban Molina-Estolano <eestolan@lanl.gov>
+Locator Technologies <contact@locatortechnologies.com> Kris Jurka <kjurka@locatortechnologies.com>
 Mellanox <contact@mellanox.com> Avner BenHanoch <avnerb@mellanox.com>
 Mellanox <contact@mellanox.com> Vu Pham <vu@mellanox.com>
 Mellanox <contact@mellanox.com> Roi Dayan <roid@mellanox.com>
@@ -251,6 +253,7 @@ Nebula <info@nebula.com> Anton Aksola <anton.aksola@nebula.fi>
 Nebula <info@nebula.com> Chris Holcombe <chris.holcombe@nebula.com>
 Ocado <contact@ocado.com> Luis Periquito <luis.periquito@ocado.com>
 Opower <contact@opower.com> Derrick Schneider <derrick.schneider@opower.com>
+OVH <contact@corp.ovh.com> Etienne Menguy <etienne.menguy@corp.ovh.com>
 Pacific Northwest National Laboratory <contact@pnl.gov> Brown, David M JR <david.brown@pnl.gov>
 Pacific Northwest National Laboratory <contact@pnl.gov> Erwin, Brock A <Brock.Erwin@pnl.gov>
 Pacific Northwest National Laboratory <contact@pnl.gov> Evan Felix <evan.felix@pnnl.gov>
@@ -338,6 +341,7 @@ Roald van Loon Consultancy <roald@roaldvanloon.nl> Roald J. van Loon <roald@roal
 Ruijie Networks <contact@ruijie.com.cn> Ning Yao <yaoning@ruijie.com.cn>
 Sandia National Laboratories <contact@sandia.gov> Jim Schutt <jaschut@sandia.gov>
 Samsung <contact@samsung.com> James Liu <james.liu@ssi.samsung.com>
+Samsung <contact@samsung.com> Jianjian Huo <jianjian.huo@ssi.samsung.com>
 Samsung <contact@samsung.com> Subramanyam Varanasi <s.varanasi@ssi.samsung.com>
 SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
 SanDisk <contact@sandisk.com> Anand Bhat <anand.bhat@sandisk.com>
@@ -420,6 +424,7 @@ Unaffiliated <no@organization.net> Dunrong Huang <riegamaths@gmail.com>
 Unaffiliated <no@organization.net> Eric Cook <llua@gmx.com>
 Unaffiliated <no@organization.net> Erik Logtenberg <erik@logtenberg.eu>
 Unaffiliated <no@organization.net> Fabio Alessandro Locati <fabiolocati@gmail.com>
+Unaffiliated <no@organization.net> Fangchen Sun <sunspot0105@gmail.com>
 Unaffiliated <no@organization.net> fangdong <yp.fangdong@gmail.com>
 Unaffiliated <no@organization.net> Federico Gimenez <fgimenez@coit.es>
 Unaffiliated <no@organization.net> Feng He <fenglife@hotmail.com>
@@ -454,7 +459,6 @@ Unaffiliated <no@organization.net> Jiang Heng <jiangheng0511@gmail.com>
 Unaffiliated <no@organization.net> Jianhui Yuan <zuiwanyuan@gmail.com>
 Unaffiliated <no@organization.net> Jiantao He <hejiantao5@gmail.com>
 Unaffiliated <no@organization.net> Jian Wen <wenjian@letv.com>
-Unaffiliated <no@organization.net> Jianjian Huo <samuel.huo@gmail.com>
 Unaffiliated <no@organization.net> Jiaying Ren <mikulely@gmail.com>
 Unaffiliated <no@organization.net> John Coyle <dx9err@gmail.com>
 Unaffiliated <no@organization.net> Jon Bernard <jbernard@tuxion.com>
@@ -507,7 +511,6 @@ Unaffiliated <no@organization.net> Shawn Edwards <lesser.evil@gmail.com>
 Unaffiliated <no@organization.net> Simon Guinot <simon.guinot@sequanux.org>
 Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
 Unaffiliated <no@organization.net> Steve Stock <steve@technolope.org>
-Unaffiliated <no@organization.net> sunspot <sunspot0105@gmail.com>
 Unaffiliated <no@organization.net> Thomas Johnson <ntmatter@gmail.com>
 Unaffiliated <no@organization.net> Thomas Laumondais <thomas.laumondais@gmail.com>
 Unaffiliated <no@organization.net> Tim Freund <tim@freunds.net>
@@ -581,9 +584,11 @@ YouScribe <contact@youscribe.fr> Guilhem Lettron <guilhem@lettron.fr>
 ZTE <contact@zte.com.cn> Chuanhong Wang <wang.chuanhong@zte.com.cn>
 ZTE <contact@zte.com.cn> Luo Kexue <luo.kexue@zte.com.cn>
 ZTE <contact@zte.com.cn> Ren Huanwen <ren.huanwen@zte.com.cn>
+ZTE <contact@zte.com.cn> Luo Runbing <runsisi@zte.com.cn>
 ZTE <contact@zte.com.cn> Xie Xingguo <xie.xingguo@zte.com.cn>
 ZTE <contact@zte.com.cn> Shun Song <song.shun3@zte.com.cn>
 ZTE <contact@zte.com.cn> Song Baisen <song.baisen@zte.com.cn>
+ZTE <contact@zte.com.cn> Wei Qiaomiao <wei.qiaomiao@zte.com.cn>
 ZTE <contact@zte.com.cn> Yan Jun <yan.jun8@zte.com.cn>
 #
 # Local Variables:

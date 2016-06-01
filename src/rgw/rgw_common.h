@@ -95,10 +95,13 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
+/* RGW File Attributes */
+#define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
+#define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
+
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_MAX_PENDING_CHUNKS  16
-#define RGW_MIN_MULTIPART_SIZE (5ULL*1024*1024)
 
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
@@ -180,6 +183,7 @@ using ceph::crypto::MD5;
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
+#define ERR_SERVICE_UNAVAILABLE  2202
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -1256,7 +1260,7 @@ struct req_state {
 
   /* aws4 auth support */
   bool aws4_auth_needs_complete;
-  rgw_aws4_auth *aws4_auth;
+  unique_ptr<rgw_aws4_auth> aws4_auth;
 
   string canned_acl;
   bool has_acl_header;
@@ -1732,11 +1736,6 @@ struct rgw_cache_entry_info {
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_object();
-}
-
-static inline bool str_startswith(const string& str, const string& prefix)
-{
-  return (str.compare(0, prefix.size(), prefix) == 0);
 }
 
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)

@@ -127,6 +127,8 @@ struct librados::IoCtxImpl {
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(const object_t& oid, bufferlist& bl, size_t len);
   int write_full(const object_t& oid, bufferlist& bl);
+  int writesame(const object_t& oid, bufferlist& bl,
+		size_t write_len, uint64_t offset);
   int clone_range(const object_t& dst_oid, uint64_t dst_offset,
                   const object_t& src_oid, uint64_t src_offset, uint64_t len);
   int read(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
@@ -201,6 +203,8 @@ struct librados::IoCtxImpl {
 		 const bufferlist& bl, size_t len);
   int aio_write_full(const object_t &oid, AioCompletionImpl *c,
 		     const bufferlist& bl);
+  int aio_writesame(const object_t &oid, AioCompletionImpl *c,
+		    const bufferlist& bl, size_t write_len, uint64_t off);
   int aio_remove(const object_t &oid, AioCompletionImpl *c);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);
@@ -232,9 +236,10 @@ struct librados::IoCtxImpl {
 
   void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
-	    librados::WatchCtx2 *ctx2);
+	    librados::WatchCtx2 *ctx2, bool internal = false);
   int aio_watch(const object_t& oid, AioCompletionImpl *c, uint64_t *cookie,
-                librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
+                librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2,
+                bool internal = false);
   int watch_check(uint64_t cookie);
   int unwatch(uint64_t cookie);
   int aio_unwatch(uint64_t cookie, AioCompletionImpl *c);
@@ -248,7 +253,8 @@ struct librados::IoCtxImpl {
 
   int set_alloc_hint(const object_t& oid,
                      uint64_t expected_object_size,
-                     uint64_t expected_write_size);
+                     uint64_t expected_write_size,
+		     uint32_t flags);
 
   version_t last_version();
   void set_assert_version(uint64_t ver);

@@ -637,6 +637,18 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   if (!rule)
     return false;
 
+  /*
+   * Set the Allowed-Origin header to a asterisk if this is allowed in the rule
+   * and no Authorization was send by the client
+   *
+   * The origin parameter specifies a URI that may access the resource.  The browser must enforce this.
+   * For requests without credentials, the server may specify "*" as a wildcard,
+   * thereby allowing any origin to access the resource.
+   */
+  const char *authorization = s->info.env->get("HTTP_AUTHORIZATION");
+  if (!authorization && rule->has_wildcard_origin())
+    origin = "*";
+
   /* CORS 6.2.3. */
   const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
   if (!req_meth) {
@@ -1015,13 +1027,26 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   for (const auto& entry : slo_info.entries) {
     const string& path = entry.path;
-    const size_t pos = path.find('/', 1); /* skip first / */
-    if (pos == string::npos) {
+
+    /* If the path starts with slashes, strip them all. */
+    const size_t pos_init = path.find_first_not_of('/');
+    /* According to the documentation of std::string::find following check
+     * is not necessary as we should get the std::string::npos propagation
+     * here. This might be true with the accuracy to implementation's bugs.
+     * See following question on SO:
+     * http://stackoverflow.com/questions/1011790/why-does-stdstring-findtext-stdstringnpos-not-return-npos
+     */
+    if (pos_init == string::npos) {
       return -EINVAL;
     }
 
-    string bucket_name = path.substr(1, pos - 1);
-    string obj_name = path.substr(pos + 1);
+    const size_t pos_sep = path.find('/', pos_init);
+    if (pos_sep == string::npos) {
+      return -EINVAL;
+    }
+
+    string bucket_name = path.substr(pos_init, pos_sep - pos_init);
+    string obj_name = path.substr(pos_sep + 1);
 
     rgw_bucket bucket;
     RGWAccessControlPolicy *bucket_policy;
@@ -1225,6 +1250,7 @@ void RGWGetObj::execute()
     if (op_ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret="
 		       << op_ret << dendl;
+      goto done_err;
     }
     return;
   }
@@ -1363,8 +1389,6 @@ void RGWListBuckets::execute()
       buckets_size += bucket.size;
       buckets_size_rounded += bucket.size_rounded;
       buckets_objcount += bucket.count;
-
-      marker = iter->first;
     }
     buckets_count += m.size();
     total_count += m.size();
@@ -1838,6 +1862,14 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
   }
 }
 
+/* Fuse resource metadata basing on original attributes in @orig_attrs, set
+ * of _custom_ attribute names to remove in @rmattr_names and attributes in
+ * @out_attrs. Place results in @out_attrs.
+ *
+ * NOTE: it's supposed that all special attrs already present in @out_attrs
+ * will be preserved without any change. Special attributes are those which
+ * names start with RGW_ATTR_META_PREFIX. They're complement to custom ones
+ * used for X-Account-Meta-*, X-Container-Meta-*, X-Amz-Meta and so on.  */
 static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
                                   const set<string>& rmattr_names,
                                   map<string, bufferlist>& out_attrs)
@@ -1856,6 +1888,10 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
         if (aiter != std::end(out_attrs)) {
           out_attrs.erase(aiter);
         }
+      } else {
+        /* emplace() won't alter the map if the key is already present.
+         * This behaviour is fully intensional here. */
+        out_attrs.emplace(kv);
       }
     } else if (out_attrs.find(name) == std::end(out_attrs)) {
       out_attrs[name] = kv.second;
@@ -1879,9 +1915,8 @@ static void populate_with_generic_attrs(const req_state * const s,
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
-  map<string, bufferlist> attrs;
-  bufferlist aclbl;
-  bufferlist corsbl;
+  buffer::list aclbl;
+  buffer::list corsbl;
   bool existed;
   string bucket_name;
   rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_name);
@@ -1928,8 +1963,9 @@ void RGWCreateBucket::execute()
   if (!store->is_meta_master()) {
     JSONParser jp;
     op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
-    if (op_ret < 0)
+    if (op_ret < 0) {
       return;
+    }
 
     JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
     JSONDecoder::decode_json("object_ver", objv, &jp);
@@ -1967,24 +2003,30 @@ void RGWCreateBucket::execute()
     }
   }
 
+  /* Encode special metadata first as we're using std::map::emplace under
+   * the hood. This method will add the new items only if the map doesn't
+   * contain such keys yet. */
+  policy.encode(aclbl);
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
+
+  if (has_cors) {
+    cors_config.encode(corsbl);
+    emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
+  }
+
   if (need_metadata_upload()) {
+    /* It's supposed that following functions WILL NOT change any special
+     * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
     rgw_get_request_metadata(s->cct, s->info, attrs, false);
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
   }
 
-  policy.encode(aclbl);
-  attrs[RGW_ATTR_ACL] = aclbl;
-
-  if (has_cors) {
-    cors_config.encode(corsbl);
-    attrs[RGW_ATTR_CORS] = corsbl;
-  }
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
-  op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id, placement_rule,
-                                swift_ver_location,
-				attrs, info, pobjv, &ep_objv, creation_time,
+  op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
+				placement_rule, swift_ver_location, attrs,
+				info, pobjv, &ep_objv, creation_time,
 				pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
@@ -2114,6 +2156,20 @@ void RGWDeleteBucket::execute()
      ldout(s->cct, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
 
+  if (!store->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
+				       NULL);
+    if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        /* adjust error, we want to return with NoSuchBucket and not
+	 * NoSuchKey */
+        op_ret = -ERR_NO_SUCH_BUCKET;
+      }
+      return;
+    }
+  }
+
   op_ret = store->delete_bucket(s->bucket, ot);
   if (op_ret == 0) {
     op_ret = rgw_unlink_bucket(store, s->user->user_id, s->bucket.tenant,
@@ -2128,19 +2184,6 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-  if (!store->is_meta_master()) {
-    bufferlist in_data;
-    op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				       NULL);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        /* adjust error, we want to return with NoSuchBucket and not
-	 * NoSuchKey */
-        op_ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return;
-    }
-  }
 
 }
 
@@ -2332,13 +2375,11 @@ void RGWPutObj::execute()
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   bufferlist bl, aclbl;
-  map<string, bufferlist> attrs;
   int len;
   map<string, string>::iterator iter;
   bool multipart;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
-
 
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;
@@ -2519,8 +2560,7 @@ void RGWPutObj::execute()
   }
 
   policy.encode(aclbl);
-
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (dlo_manifest) {
     op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
@@ -2535,7 +2575,7 @@ void RGWPutObj::execute()
   if (slo_info) {
     bufferlist manifest_bl;
     ::encode(*slo_info, manifest_bl);
-    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+    emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
     hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
     complete_etag(hash, &etag);
@@ -2547,7 +2587,7 @@ void RGWPutObj::execute()
     goto done;
   }
   bl.append(etag.c_str(), etag.size() + 1);
-  attrs[RGW_ATTR_ETAG] = bl;
+  emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
        ++iter) {
@@ -2565,11 +2605,11 @@ void RGWPutObj::execute()
   if (slo_info) {
     bufferlist slo_userindicator_bl;
     ::encode("True", slo_userindicator_bl);
-    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+    emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
-  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at, if_match,
-			       if_nomatch);
+  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
+			      if_match, if_nomatch);
 
 done:
   dispose_processor(processor);
@@ -2609,7 +2649,7 @@ void RGWPostObj::execute()
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  bufferlist bl, aclbl;
+  buffer::list bl, aclbl;
   int len = 0;
 
   // read in the data from the POST form
@@ -2677,17 +2717,17 @@ void RGWPostObj::execute()
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
-  policy.encode(aclbl);
   etag = calc_md5;
-
   bl.append(etag.c_str(), etag.size() + 1);
-  attrs[RGW_ATTR_ETAG] = bl;
-  attrs[RGW_ATTR_ACL] = aclbl;
+  emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+
+  policy.encode(aclbl);
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
   if (content_type.size()) {
     bufferlist ct_bl;
     ct_bl.append(content_type.c_str(), content_type.size() + 1);
-    attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
+    emplace_attr(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
   }
 
   op_ret = processor->complete(etag, NULL, real_time(), attrs, delete_at);
@@ -2776,10 +2816,22 @@ void RGWPutMetadataAccount::execute()
     return;
   }
 
+  op_ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, orig_attrs,
+                                     &acct_op_tracker);
+  if (op_ret < 0) {
+    return;
+  }
+
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
-  RGWUserInfo orig_uinfo;
-  rgw_get_user_info_by_uid(store, s->user->user_id, orig_uinfo, &acct_op_tracker);
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
+
+  RGWUserInfo orig_uinfo;
+  op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, orig_uinfo,
+                                    &acct_op_tracker);
+  if (op_ret < 0) {
+    return;
+  }
 
   /* Handle the TempURL-related stuff. */
   map<int, string> temp_url_keys;
@@ -2822,8 +2874,6 @@ void RGWPutMetadataBucket::pre_exec()
 
 void RGWPutMetadataBucket::execute()
 {
-  map<string, bufferlist> attrs, orig_attrs;
-
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -2837,26 +2887,31 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  orig_attrs = s->bucket_attrs;
-  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
-  populate_with_generic_attrs(s, attrs);
-
+  /* Encode special metadata first as we're using std::map::emplace under
+   * the hood. This method will add the new items only if the map doesn't
+   * contain such keys yet. */
   if (has_policy) {
-    bufferlist bl;
+    buffer::list bl;
     policy.encode(bl);
-    attrs[RGW_ATTR_ACL] = bl;
+    emplace_attr(RGW_ATTR_ACL, std::move(bl));
   }
 
   if (has_cors) {
-    bufferlist bl;
+    buffer::list bl;
     cors_config.encode(bl);
-    attrs[RGW_ATTR_CORS] = bl;
+    emplace_attr(RGW_ATTR_CORS, std::move(bl));
   }
+
+  /* It's supposed that following functions WILL NOT change any special
+   * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
+  prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+  populate_with_generic_attrs(s, attrs);
 
   s->bucket_info.swift_ver_location = swift_ver_location;
   s->bucket_info.swift_versioning = (!swift_ver_location.empty());
 
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				&s->bucket_info.objv_tracker);
 }
 
 int RGWPutMetadataObject::verify_permission()
@@ -3221,8 +3276,8 @@ int RGWCopyObj::init_common()
 
   bufferlist aclbl;
   dest_policy.encode(aclbl);
+  emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  attrs[RGW_ATTR_ACL] = aclbl;
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   map<string, string>::iterator iter;
@@ -3400,7 +3455,7 @@ void RGWPutACLs::execute()
   }
 
   if (!parser.parse(data, len, 1)) {
-    op_ret = -EACCES;
+    op_ret = -EINVAL;
     return;
   }
   policy = static_cast<RGWAccessControlPolicy_S3 *>(parser.find_first("AccessControlPolicy"));
@@ -4354,7 +4409,6 @@ error:
 
 bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
                                                map<string, bufferlist>& battrs,
-                                               rgw_obj& obj,
                                                ACLOwner& bucket_owner /* out */)
 {
   RGWAccessControlPolicy bacl(store->ctx());
@@ -4364,26 +4418,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  RGWAccessControlPolicy oacl(s->cct);
-  ret = read_policy(store, s, binfo, battrs, &oacl, binfo.bucket, s->object);
-  if (ret < 0) {
-    return false;
-  }
-
   bucket_owner = bacl.get_owner();
-
-  return verify_object_permission(s, &bacl, &oacl, RGW_PERM_WRITE);
-}
-
-bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
-                                               map<string, bufferlist>& battrs)
-{
-  RGWAccessControlPolicy bacl(store->ctx());
-  rgw_obj_key no_obj;
-  int ret = read_policy(store, s, binfo, battrs, &bacl, binfo.bucket, no_obj);
-  if (ret < 0) {
-    return false;
-  }
 
   return verify_bucket_permission(s, &bacl, RGW_PERM_WRITE);
 }
@@ -4394,10 +4429,18 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
   RGWBucketInfo binfo;
   map<string, bufferlist> battrs;
+  ACLOwner bowner;
+
   int ret = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
-				  path.bucket_name, binfo, NULL, &battrs);
+                                   path.bucket_name, binfo, nullptr,
+                                   &battrs);
   if (ret < 0) {
     goto binfo_fail;
+  }
+
+  if (!verify_permission(binfo, battrs, bowner)) {
+    ret = -EACCES;
+    goto auth_fail;
   }
 
   if (!path.obj_key.empty()) {
@@ -4407,15 +4450,9 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     RGWRados::Object del_target(store, binfo, obj_ctx, obj);
     RGWRados::Object::Delete del_op(&del_target);
 
-    ACLOwner owner;
-    if (!verify_permission(binfo, battrs, obj, owner)) {
-      ret = -EACCES;
-      goto auth_fail;
-    }
-
     del_op.params.bucket_owner = binfo.owner;
     del_op.params.versioning_status = binfo.versioning_status();
-    del_op.params.obj_owner = owner;
+    del_op.params.obj_owner = bowner;
 
     ret = del_op.delete_obj();
     if (ret < 0) {
@@ -4425,18 +4462,13 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     RGWObjVersionTracker ot;
     ot.read_version = binfo.ep_objv;
 
-    if (!verify_permission(binfo, battrs)) {
-      ret = -EACCES;
-      goto auth_fail;
-    }
-
     ret = store->delete_bucket(binfo.bucket, ot);
     if (0 == ret) {
       ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.tenant,
-			      binfo.bucket.name, false);
+                              binfo.bucket.name, false);
       if (ret < 0) {
         ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret
-			 << dendl;
+                         << dendl;
       }
     }
     if (ret < 0) {
@@ -4446,11 +4478,11 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
     if (!store->get_zonegroup().is_master) {
       bufferlist in_data;
       ret = forward_request_to_master(s, &ot.read_version, store, in_data,
-				      NULL);
+                                      nullptr);
       if (ret < 0) {
         if (ret == -ENOENT) {
           /* adjust error, we want to return with NoSuchBucket and not
-	   * NoSuchKey */
+           * NoSuchKey */
           ret = -ERR_NO_SUCH_BUCKET;
         }
         goto delop_fail;
@@ -4468,7 +4500,7 @@ binfo_fail:
       num_unfound++;
     } else {
       ldout(store->ctx(), 20) << "cannot get bucket info, ret = " << ret
-			      << dendl;
+                              << dendl;
 
       fail_desc_t failed_item = {
         .err  = ret,

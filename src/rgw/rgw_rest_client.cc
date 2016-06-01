@@ -200,7 +200,7 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
   for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
     append_param(dest, miter->first, miter->second);
   }
-  list<pair<string, string> >::iterator iter;
+  param_vec_t::iterator iter;
   for (iter = params.begin(); iter != params.end(); ++iter) {
     append_param(dest, iter->first, iter->second);
   }
@@ -292,8 +292,13 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   }
 
   int r = process(new_info.method, new_url.c_str());
-  if (r < 0)
+  if (r < 0){
+    if (r == -EINVAL){
+      // curl_easy has errored, generally means the service is not available
+      r = -ERR_SERVICE_UNAVAILABLE;
+    }
     return r;
+  }
 
   response.append((char)0); /* NULL terminate response */
 
@@ -631,7 +636,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   get_params_str(args, params_str);
 
   /* merge params with extra args so that we can sign correctly */
-  for (list<pair<string, string> >::iterator iter = params.begin(); iter != params.end(); ++iter) {
+  for (param_vec_t::iterator iter = params.begin(); iter != params.end(); ++iter) {
     new_info.args.append(iter->first, iter->second);
   }
 
@@ -692,7 +697,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
 int RGWRESTStreamRWRequest::complete(string& etag, real_time *mtime, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
-  if (status > 0 && mtime) {
+  if (status >= 0 && mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
     if (!mtime_str.empty()) {

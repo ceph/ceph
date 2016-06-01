@@ -25,7 +25,7 @@ class BlueRocksEnv : public rocksdb::EnvWrapper {
 public:
   // Create a brand new sequentially-readable file with the specified name.
   // On success, stores a pointer to the new file in *result and returns OK.
-  // On failure stores nullptr in *result and returns non-OK.  If the file does
+  // On failure, stores nullptr in *result and returns non-OK.  If the file does
   // not exist, returns a non-OK status.
   //
   // The returned file will only be accessed by one thread at a time.
@@ -36,7 +36,7 @@ public:
 
   // Create a brand new random access read-only file with the
   // specified name.  On success, stores a pointer to the new file in
-  // *result and returns OK.  On failure stores nullptr in *result and
+  // *result and returns OK.  On failure, stores nullptr in *result and
   // returns non-OK.  If the file does not exist, returns a non-OK
   // status.
   //
@@ -49,7 +49,7 @@ public:
   // Create an object that writes to a new file with the specified
   // name.  Deletes any existing file with the same name and creates a
   // new file.  On success, stores a pointer to the new file in
-  // *result and returns OK.  On failure stores nullptr in *result and
+  // *result and returns OK.  On failure, stores nullptr in *result and
   // returns non-OK.
   //
   // The returned file will only be accessed by one thread at a time.
@@ -95,7 +95,7 @@ public:
   // Create the specified directory. Returns error if directory exists.
   rocksdb::Status CreateDir(const std::string& dirname);
 
-  // Creates directory if missing. Return Ok if it exists, or successful in
+  // Create directory if missing. Return Ok if it exists, or successful in
   // Creating.
   rocksdb::Status CreateDirIfMissing(const std::string& dirname);
 
@@ -136,7 +136,7 @@ public:
   rocksdb::Status UnlockFile(rocksdb::FileLock* lock);
 
   // *path is set to a temporary directory that can be used for testing. It may
-  // or many not have just been created. The directory may or may not differ
+  // or may not have just been created. The directory may or may not differ
   // between runs of the same process, but subsequent calls will return the
   // same directory.
   rocksdb::Status GetTestDirectory(std::string* path);

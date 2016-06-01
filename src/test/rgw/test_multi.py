@@ -124,7 +124,7 @@ class RGWCluster:
         mstop(self.cluster_id, 'radosgw')
 
     def rgw_admin(self, cmd, check_retcode = True):
-        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd))
+        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd), check_retcode)
         return (s, retcode)
 
     def rgw_admin_ro(self, cmd, check_retcode = True):
@@ -155,7 +155,6 @@ class RGWRealm:
         self.credentials = credentials
         self.clusters = clusters
         self.zones = {}
-        self.total_zones = 0
 
     def init_zone(self, cluster, zg, zone_name, first_zone_port):
         is_master = (first_zone_port == cluster.port)
@@ -172,25 +171,20 @@ class RGWRealm:
 
     def add_zone(self, cluster, zg, zone_name, is_master):
         zone = RGWZone(self.realm, cluster, zg, zone_name)
-        self.zones[self.total_zones] = zone
-        self.total_zones += 1
+        self.zones[zone_name] = zone
 
         if is_master:
             self.master_zone = zone
 
+    def remove_zone(self, zone_name):
+        del self.zones[zone_name]
 
-    def get_zone(self, num):
-        if num >= self.total_zones:
-            return None
-        return self.zones[num]
+    def get_zone(self, zone_name):
+        return self.zones[zone_name]
 
     def get_zones(self):
         for (k, zone) in self.zones.iteritems():
             yield zone
-
-
-    def num_zones(self):
-        return self.total_zones
 
     def meta_sync_status(self, zone):
         if zone.zone_name == self.master_zone.zone_name:
@@ -205,7 +199,7 @@ class RGWRealm:
 
         log(20, 'current meta sync status=', meta_sync_status_json)
         sync_status = json.loads(meta_sync_status_json)
-        
+
         global_sync_status=sync_status['sync_status']['info']['status']
         num_shards=sync_status['sync_status']['info']['num_shards']
 
@@ -290,7 +284,7 @@ class RGWRealm:
 
         log(20, 'current data sync status=', data_sync_status_json)
         sync_status = json.loads(data_sync_status_json)
-        
+
         global_sync_status=sync_status['sync_status']['info']['status']
         num_shards=sync_status['sync_status']['info']['num_shards']
 
@@ -323,7 +317,10 @@ class RGWRealm:
         markers={}
         for entry in sync_status:
             val = entry['val']
-            pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
+            if val['status'] == 'incremental-sync':
+                pos = val['inc_marker']['position'].split('#')[-1] # get rid of shard id; e.g., 6#00000000002.132.3 -> 00000000002.132.3
+            else:
+                pos = ''
             markers[entry['key']] = pos
 
         return markers
@@ -510,8 +507,6 @@ class RGWMulti:
         user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret())
         realm.create_user(user)
 
-        realm.meta_checkpoint()
-
 def check_all_buckets_exist(zone, buckets):
     conn = zone.get_connection(user)
 
@@ -620,7 +615,7 @@ def check_object_eq(k1, k2, check_extra = True):
     eq(k1.content_disposition, k2.content_disposition)
     eq(k1.content_language, k2.content_language)
     eq(k1.etag, k2.etag)
-    # eq(k1.last_modified, k2.last_modified)
+    eq(k1.last_modified, k2.last_modified)
     if check_extra:
         eq(k1.owner.id, k2.owner.id)
         eq(k1.owner.display_name, k2.owner.display_name)
@@ -744,11 +739,11 @@ def test_multi_period_incremental_sync():
     realm.meta_checkpoint()
 
     # kill zone 3 gateway to freeze sync status to incremental in first period
-    z3 = realm.get_zone(2)
+    z3 = realm.get_zone('us-3')
     z3.cluster.stop_rgw()
 
     # change master to zone 2 -> period 2
-    realm.set_master_zone(realm.get_zone(1))
+    realm.set_master_zone(realm.get_zone('us-2'))
 
     for zone, bucket_name in zone_bucket.iteritems():
         if zone == z3:
@@ -758,10 +753,10 @@ def test_multi_period_incremental_sync():
             k.set_contents_from_string('qweqwe')
 
     # wait for zone 1 to sync
-    realm.zone_meta_checkpoint(realm.get_zone(0))
+    realm.zone_meta_checkpoint(realm.get_zone('us-1'))
 
     # change master back to zone 1 -> period 3
-    realm.set_master_zone(realm.get_zone(0))
+    realm.set_master_zone(realm.get_zone('us-1'))
 
     for zone, bucket_name in zone_bucket.iteritems():
         if zone == z3:
@@ -784,6 +779,25 @@ def test_multi_period_incremental_sync():
 
             check_bucket_eq(source_zone, target_zone, bucket)
 
+# TODO: test this in isolation, so it doesn't have side effects on other tests
+def test_zonegroup_remove():
+    z1 = realm.get_zone('us-1')
+
+    # try to 'zone delete' us-2 from cluster 1
+    # must fail with ENOENT because the zone is local to cluster 2
+    (_, retcode) = z1.cluster.rgw_admin('zone delete --rgw-zone=us-2', False)
+    assert(retcode == 2) # ENOENT
+
+    # use 'zonegroup remove', expecting success
+    z1.cluster.rgw_admin('zonegroup remove --rgw-zone=us-2', True)
+
+    # another 'zonegroup remove' should fail with ENOENT
+    (_, retcode) = z1.cluster.rgw_admin('zonegroup remove --rgw-zone=us-2', False)
+    assert(retcode == 2) # ENOENT
+
+    # validate the resulting period
+    z1.cluster.rgw_admin('period update --commit', True)
+    realm.remove_zone('us-2')
 
 def init(parse_args):
     cfg = ConfigParser.RawConfigParser({

@@ -786,6 +786,12 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
       if (hardlink) {
 	struct stat st;
 	r = ::stat(candidate_path.c_str(), &st);
+        if (r < 0) {
+          if (errno == ENOENT)
+            *hardlink = 0;
+          else
+            return -errno;
+        }
 	*hardlink = st.st_nlink;
       }
       return 0;
@@ -1041,13 +1047,13 @@ static int parse_object(const char *s, ghobject_t& o)
 
 int LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t *out)
 {
-  bool r = parse_object(long_name.c_str(), *out);
+  int r = parse_object(long_name.c_str(), *out);
   int64_t pool = -1;
   spg_t pg;
   if (coll().is_pg_prefix(&pg))
     pool = (int64_t)pg.pgid.pool();
   out->hobj.pool = pool;
-  if (!r) return r;
+  if (!r) return -EINVAL;
   string temp = lfn_generate_object_name(*out);
   return r ? 0 : -EINVAL;
 }

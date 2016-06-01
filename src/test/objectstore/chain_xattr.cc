@@ -220,6 +220,35 @@ TEST(chain_xattr, chunk_aligned) {
   ::unlink(file);
 }
 
+void get_vector_from_xattr(vector<string> &xattrs, char* xattr, int size) {
+  char *end = xattr + size;
+  while (xattr < end) {
+    if (*xattr == '\0' )
+      break;
+    xattrs.push_back(xattr);
+    xattr += strlen(xattr) + 1;
+  }
+}
+
+bool listxattr_cmp(char* xattr1, char* xattr2, int size) {
+  vector<string> xattrs1;
+  vector<string> xattrs2;
+  get_vector_from_xattr(xattrs1, xattr1, size);
+  get_vector_from_xattr(xattrs2, xattr2, size);
+
+  if (xattrs1.size() != xattrs2.size())
+    return false;
+
+  std::sort(xattrs1.begin(), xattrs1.end());
+  std::sort(xattrs2.begin(), xattrs2.end());
+  std::vector<string> diff;
+  std::set_difference(xattrs1.begin(), xattrs1.end(),
+			  xattrs2.begin(), xattrs2.end(),
+			  diff.begin());
+
+  return diff.empty();
+}
+
 TEST(chain_xattr, listxattr) {
   const char* file = FILENAME;
   ::unlink(file);
@@ -230,19 +259,41 @@ TEST(chain_xattr, listxattr) {
   const string x(LARGE_BLOCK_LEN, 'X');
   const int y = 1234;
 
+  int orig_size = chain_listxattr(file, NULL, 0);
+  char *orig_buffer = NULL;
+  string orig_str;
+  if (orig_size) {
+    orig_buffer = (char*)malloc(orig_size);
+    chain_flistxattr(fd, orig_buffer, orig_size);
+    orig_str = string(orig_buffer);
+    orig_size = orig_str.size();
+  }
+
   ASSERT_EQ(LARGE_BLOCK_LEN, chain_setxattr(file, name1.c_str(), x.c_str(), LARGE_BLOCK_LEN));
   ASSERT_EQ((int)sizeof(y), chain_setxattr(file, name2.c_str(), &y, sizeof(y)));
 
-  int buffer_size = name1.size() + sizeof(char) + name2.size() + sizeof(char);
+  int buffer_size = 0;
+  if (orig_size)
+    buffer_size += orig_size + sizeof(char);
+  buffer_size += name1.size() + sizeof(char) + name2.size() + sizeof(char);
+
+  int index = 0;
   char* expected = (char*)malloc(buffer_size);
-  ::strcpy(expected, name1.c_str());
-  ::strcpy(expected + name1.size() + 1, name2.c_str());
-  char* actual = (char*)calloc(1, buffer_size);
+  ::memset(expected, '\0', buffer_size);
+  if (orig_size) {
+    ::strcpy(expected, orig_str.c_str());
+    index = orig_size + 1;
+  }
+  ::strcpy(expected + index, name1.c_str());
+  ::strcpy(expected + index + name1.size() + 1, name2.c_str());
+  char* actual = (char*)malloc(buffer_size);
+  ::memset(actual, '\0', buffer_size);
   ASSERT_LT(buffer_size, chain_listxattr(file, NULL, 0)); // size evaluation is conservative
   chain_listxattr(file, actual, buffer_size);
+  ASSERT_TRUE(listxattr_cmp(expected, actual, buffer_size));
   ::memset(actual, '\0', buffer_size);
   chain_flistxattr(fd, actual, buffer_size);
-  ASSERT_EQ(0, ::memcmp(expected, actual, buffer_size));
+  ASSERT_TRUE(listxattr_cmp(expected, actual, buffer_size));
 
   int unlikely_to_be_a_valid_fd = 400;
   ASSERT_GT(0, chain_listxattr("UNLIKELY_TO_EXIST", actual, 0));
@@ -255,6 +306,8 @@ TEST(chain_xattr, listxattr) {
   ASSERT_EQ(0, chain_removexattr(file, name1.c_str()));
   ASSERT_EQ(0, chain_removexattr(file, name2.c_str()));
 
+  free(orig_buffer);
+  free(actual);
   free(expected);
   ::unlink(file);
 }
@@ -298,30 +351,30 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
   memset(buf, sizeof(buf), 0x1F);
   // set chunked without either
   {
-    int r = chain_fsetxattr(fd, name, buf, sizeof(buf));
+    std::size_t r = chain_fsetxattr(fd, name, buf, sizeof(buf));
     ASSERT_EQ(r, sizeof(buf));
-    ASSERT_GT(get_xattrs(fd).size(), 1);
+    ASSERT_GT(get_xattrs(fd).size(), 1UL);
   }
 
   // verify
   {
     char buf2[sizeof(buf)*2];
-    int r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
+    std::size_t r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
     ASSERT_EQ(r, sizeof(buf));
     ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
   }
 
   // overwrite
   {
-    int r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
-    ASSERT_EQ(r, sizeof (buf));
-    ASSERT_EQ(get_xattrs(fd).size(), 1);
+    std::size_t r = chain_fsetxattr<false, true>(fd, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(get_xattrs(fd).size(), 1UL);
   }
 
   // verify
   {
     char buf2[sizeof(buf)*2];
-    int r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
+    std::size_t r = chain_fgetxattr(fd, name, buf2, sizeof(buf2));
     ASSERT_EQ(r, sizeof(buf));
     ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
   }
@@ -342,30 +395,30 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   memset(buf, sizeof(buf), 0x1F);
   // set chunked without either
   {
-    int r = chain_setxattr(file, name, buf, sizeof(buf));
+    std::size_t r = chain_setxattr(file, name, buf, sizeof(buf));
     ASSERT_EQ(r, sizeof(buf));
-    ASSERT_GT(get_xattrs(file).size(), 1);
+    ASSERT_GT(get_xattrs(file).size(), 1UL);
   }
 
   // verify
   {
     char buf2[sizeof(buf)*2];
-    int r = chain_getxattr(file, name, buf2, sizeof(buf2));
+    std::size_t r = chain_getxattr(file, name, buf2, sizeof(buf2));
     ASSERT_EQ(r, sizeof(buf));
     ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
   }
 
   // overwrite
   {
-    int r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
-    ASSERT_EQ(r, sizeof (buf));
-    ASSERT_EQ(get_xattrs(file).size(), 1);
+    std::size_t r = chain_setxattr<false, true>(file, name, buf, sizeof(buf));
+    ASSERT_EQ(r, sizeof(buf));
+    ASSERT_EQ(get_xattrs(file).size(), 1UL);
   }
 
   // verify
   {
     char buf2[sizeof(buf)*2];
-    int r = chain_getxattr(file, name, buf2, sizeof(buf2));
+    std::size_t r = chain_getxattr(file, name, buf2, sizeof(buf2));
     ASSERT_EQ(r, sizeof(buf));
     ASSERT_EQ(memcmp(buf, buf2, sizeof(buf)), 0);
   }

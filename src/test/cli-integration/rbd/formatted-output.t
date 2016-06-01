@@ -26,7 +26,6 @@ snapshot
   $ rbd resize -s 2G --no-progress quuy
   $ rbd snap create bar@snap2
   $ rbd snap create foo@snap
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
 
 clone
 =====
@@ -42,7 +41,6 @@ clone
 lock
 ====
   $ rbd lock add quux id
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   $ rbd lock add baz id1 --shared tag
   $ rbd lock add baz id2 --shared tag
   $ rbd lock add baz id3 --shared tag
@@ -50,21 +48,18 @@ lock
 test formatting
 ===============
   $ rbd children foo@snap
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   $ rbd children bar@snap
   rbd_other/child
   $ rbd children bar@snap2
 TODO: figure out why .* does not match the block_name_prefix line in rbd info.
 For now, use a more inclusive regex.
   $ rbd info foo
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   rbd image 'foo':
   \tsize 1024 MB in 256 objects (esc)
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -77,7 +72,6 @@ For now, use a more inclusive regex.
 The version of xml_pp included in ubuntu precise always prints a 'warning'
 whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <image>
     <name>foo</name>
     <size>1073741824</size>
@@ -88,7 +82,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>1</format>
   </image>
   $ rbd info foo@snap
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   rbd image 'foo':
   \tsize 1024 MB in 256 objects (esc)
   \torder 22 (4096 kB objects) (esc)
@@ -96,7 +89,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \tformat: 1 (esc)
   \tprotected: False (esc)
   $ rbd info foo@snap --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -108,7 +100,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1073741824
   }
   $ rbd info foo@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <image>
     <name>foo</name>
     <size>1073741824</size>
@@ -294,14 +285,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <flags></flags>
   </image>
   $ rbd info quux
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   rbd image 'quux':
   \tsize 1024 kB in 1 objects (esc)
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info quux --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "block_name_prefix": "rb.0.*",  (glob)
       "format": 1, 
@@ -312,7 +301,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "size": 1048576
   }
   $ rbd info quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <image>
     <name>quux</name>
     <size>1048576</size>
@@ -537,8 +525,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   NAME       SIZE PARENT FMT PROT LOCK 
   foo       1024M          1           
   foo@snap  1024M          1           
@@ -549,8 +535,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   baz       2048M          2      shr  
   quuy      2048M          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   [
       {
           "format": 1, 
@@ -602,8 +586,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       }
   ]
   $ rbd list -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <images>
     <image>
       <image>foo</image>
@@ -738,20 +720,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </images>
   $ rbd lock list foo
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   $ rbd lock list foo --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {}
   $ rbd lock list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <locks></locks>
   $ rbd lock list quux
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   There is 1 exclusive lock on this image.
   Locker*ID*Address* (glob)
   client.* id * (glob)
   $ rbd lock list quux --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   {
       "id": {
           "address": "*",  (glob)
@@ -759,7 +736,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       }
   }
   $ rbd lock list quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <locks>
     <id>
       <locker>client.*</locker> (glob)
@@ -804,11 +780,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </id*> (glob)
   </locks>
   $ rbd snap list foo
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   SNAPID NAME    SIZE 
       *snap*1024*MB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   [
       {
           "id": *,  (glob)
@@ -817,7 +791,6 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       }
   ]
   $ rbd snap list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
-  *RBD image format 1 is deprecated. Please copy this image to image format 2. (glob)
   <snapshots>
     <snapshot>
       <id>*</id> (glob)

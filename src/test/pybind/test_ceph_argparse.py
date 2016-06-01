@@ -25,7 +25,10 @@ import re
 import json
 
 def get_command_descriptions(what):
-    return os.popen("./get_command_descriptions " + "--" + what).read()
+    CEPH_BIN = os.environ['CEPH_BIN']
+    if CEPH_BIN == "":
+        CEPH_BIN = "."
+    return os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what).read()
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
@@ -490,6 +493,11 @@ class TestFS(TestArgparse):
     def test_fs_ls(self):
         self.assert_valid_command(['fs', 'ls'])
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
+
+    def test_fs_set_default(self):
+        self.assert_valid_command(['fs', 'set_default', 'cephfs'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'set_default']))
+        assert_equal({}, validate_command(sigdict, ['fs', 'set_default', 'cephfs', 'toomany']))
 
 class TestMon(TestArgparse):
 

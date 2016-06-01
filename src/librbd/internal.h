@@ -13,6 +13,7 @@
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
+#include "librbd/parent_types.h"
 
 enum {
   l_librbd_first = 26000,
@@ -81,11 +82,16 @@ namespace librbd {
 			std::string* optval);
   int image_options_get(rbd_image_options_t opts, int optname,
 			uint64_t* optval);
+  int image_options_is_set(rbd_image_options_t opts, int optname,
+                           bool* is_set);
   int image_options_unset(rbd_image_options_t opts, int optname);
   void image_options_clear(rbd_image_options_t opts);
   bool image_options_is_empty(rbd_image_options_t opts);
 
   int snap_set(ImageCtx *ictx, const char *snap_name);
+
+  int list_images_v2(librados::IoCtx& io_ctx,
+      std::map<std::string, std::string>& images);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
@@ -123,7 +129,7 @@ namespace librbd {
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
 
   int remove(librados::IoCtx& io_ctx, const char *imgname,
-	     ProgressContext& prog_ctx);
+	     ProgressContext& prog_ctx, bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
@@ -189,6 +195,10 @@ namespace librbd {
                              const std::string &client_name);
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
+  int mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, mirror_image_status_t> *images);
+  int mirror_image_status_summary(IoCtx& io_ctx,
+      std::map<mirror_image_status_state_t, int> *states);
 
   int mirror_image_enable(ImageCtx *ictx);
   int mirror_image_disable(ImageCtx *ictx, bool force);
@@ -197,6 +207,8 @@ namespace librbd {
   int mirror_image_resync(ImageCtx *ictx);
   int mirror_image_get_info(ImageCtx *ictx, mirror_image_info_t *mirror_image_info,
                             size_t info_size);
+  int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
+			      size_t status_size);
 }
 
 #endif

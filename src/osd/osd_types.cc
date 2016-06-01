@@ -816,8 +816,6 @@ std::string pg_state_string(int state)
     oss << "scrubbing+";
   if (state & PG_STATE_DEEP_SCRUB)
     oss << "deep+";
-  if (state & PG_STATE_SCRUBQ)
-    oss << "scrubq+";
   if (state & PG_STATE_INCONSISTENT)
     oss << "inconsistent+";
   if (state & PG_STATE_PEERING)
@@ -858,8 +856,6 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_SPLITTING;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
-  else if (state == "scrubq")
-    type = PG_STATE_SCRUBQ;
   else if (state == "degraded")
     type = PG_STATE_DEGRADED;
   else if (state == "inconsistent")
@@ -5454,6 +5450,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 	  << " cookie " << op.op.watch.cookie;
       if (op.op.watch.gen)
 	out << " gen " << op.op.watch.gen;
+      break;
+    case CEPH_OSD_OP_NOTIFY:
+      out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:

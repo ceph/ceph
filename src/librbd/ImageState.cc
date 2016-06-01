@@ -109,7 +109,7 @@ void ImageState<I>::refresh(Context *on_finish) {
   m_lock.Lock();
   if (is_closed()) {
     m_lock.Unlock();
-    on_finish->complete(0);
+    on_finish->complete(-ESHUTDOWN);
     return;
   }
 
@@ -123,9 +123,12 @@ int ImageState<I>::refresh_if_required() {
   C_SaferCond ctx;
   {
     m_lock.Lock();
-    if (m_last_refresh == m_refresh_seq || is_closed()) {
+    if (m_last_refresh == m_refresh_seq) {
       m_lock.Unlock();
       return 0;
+    } else if (is_closed()) {
+      m_lock.Unlock();
+      return -ESHUTDOWN;
     }
 
     Action action(ACTION_TYPE_REFRESH);

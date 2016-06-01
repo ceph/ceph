@@ -49,20 +49,25 @@ private:
    *          .   |                         |                             |
    *    . . . .   |                         |                             |
    *    .         v                         v                             |
-   *    .     OPEN_OBJECT_MAP             GET_WATCHERS . . .              |
-   *    .         |                         |              .              |
+   *    .     OPEN_OBJECT_MAP (skip if    GET_WATCHERS . . .              |
+   *    .         |            disabled)    |              .              |
    *    .         v                         v              .              |
-   *    . . > OPEN_JOURNAL * * * * * *    BLACKLIST        . (blacklist   |
-   *    .         |                  *      |              .  disabled)   |
-   *    .         v                  *      v              .              |
-   *    .     ALLOCATE_JOURNAL_TAG   *    BREAK_LOCK < . . .              |
-   *    .         |            *     *      |                             |
-   *    .         |            *     *      \-----------------------------/
-   *    .         |            v     v
+   *    . . > OPEN_JOURNAL (skip if       BLACKLIST        . (blacklist   |
+   *    .         |   *     disabled)       |              .  disabled)   |
+   *    .         |   *                     v              .              |
+   *    .         |   * * * * * * * *     BREAK_LOCK < . . .              |
+   *    .         v                 *       |                             |
+   *    .     ALLOCATE_JOURNAL_TAG  *       \-----------------------------/
+   *    .         |            *    *
+   *    .         |            *    *
+   *    .         |            v    v
    *    .         |         CLOSE_JOURNAL
    *    .         |               |
    *    .         |               v
    *    .         |         CLOSE_OBJECT_MAP
+   *    .         |               |
+   *    .         |               v
+   *    .         |         UNLOCK_IMAGE
    *    .         |               |
    *    .         v               |
    *    . . > <finish> <----------/
@@ -105,14 +110,17 @@ private:
   void send_allocate_journal_tag();
   Context *handle_allocate_journal_tag(int *ret_val);
 
-  void send_close_journal();
-  Context *handle_close_journal(int *ret_val);
-
   Context *send_open_object_map();
   Context *handle_open_object_map(int *ret_val);
 
-  Context *send_close_object_map(int *ret_val);
+  void send_close_journal();
+  Context *handle_close_journal(int *ret_val);
+
+  void send_close_object_map();
   Context *handle_close_object_map(int *ret_val);
+
+  void send_unlock();
+  Context *handle_unlock(int *ret_val);
 
   void send_get_lockers();
   Context *handle_get_lockers(int *ret_val);

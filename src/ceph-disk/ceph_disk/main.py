@@ -406,7 +406,7 @@ def command(arguments, **kwargs):
     executable exists and raising a helpful error message
     if it does not.
 
-    .. note:: This should be the prefered way of calling ``subprocess.Popen``
+    .. note:: This should be the preferred way of calling ``subprocess.Popen``
     since it provides the caller with the safety net of making sure that
     executables *will* be found and will error nicely otherwise.
 
@@ -429,7 +429,7 @@ def command_check_call(arguments):
     Safely execute a ``subprocess.check_call`` call making sure that the
     executable exists and raising a helpful error message if it does not.
 
-    .. note:: This should be the prefered way of calling
+    .. note:: This should be the preferred way of calling
     ``subprocess.check_call`` since it provides the caller with the safety net
     of making sure that executables *will* be found and will error nicely
     otherwise.

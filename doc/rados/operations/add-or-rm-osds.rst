@@ -221,7 +221,7 @@ that your cluster is not at its ``near full`` ratio.
    or exceed its ``full ratio``.
    
 
-Take the OSD ``out`` of the Cluster
+Take the OSD out of the Cluster
 -----------------------------------
 
 Before you remove an OSD, it is usually ``up`` and ``in``.  You need to take it

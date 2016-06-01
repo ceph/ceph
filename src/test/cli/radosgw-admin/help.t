@@ -53,8 +53,9 @@
     zonegroup default          set default zone group
     zonegroup delete           delete a zone group info
     zonegroup get              show zone group info
-    zonegroup modify           set/clear zonegroup master status
+    zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
+    zonegroup remove           remove a zone from a zonegroup
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup-map get          show zonegroup-map
@@ -62,7 +63,7 @@
     zone create                create a new zone
     zone delete                delete a zone
     zone get                   show zone cluster params
-    zone modify                set/clear zone master status
+    zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
@@ -77,8 +78,6 @@
     log rm                     remove log object
     usage show                 show usage (by user, date range)
     usage trim                 trim usage (by user, date range)
-    temp remove                remove temporary objects that were created up to
-                               specified date (and optional time)
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
     gc process                 manually process garbage
@@ -105,6 +104,7 @@
     replicalog delete          delete replica metadata log entry
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
+    orphans list-jobs          list the current job-ids for orphans search
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -135,7 +135,7 @@
                                  replica mdlog get/delete
                                  replica datalog get/delete
      --metadata-key=<key>      key to retrieve metadata from with metadata get
-     --remote=<remote>         remote to pull period
+     --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
@@ -147,7 +147,8 @@
      --realm-id=<realm id>     realm id
      --realm-new-name=<realm new name> realm new name
      --rgw-zonegroup=<zonegroup>   zonegroup name
-     --rgw-zone=<zone>         zone in which radosgw is running
+     --zonegroup-id=<zonegroup id> zonegroup id
+     --rgw-zone=<zone>         name of zone in which radosgw is running
      --zone-id=<zone id>       zone id
      --zone-new-name=<zone>    zone new name
      --source-zone             specify the source zone (for data sync)
@@ -185,7 +186,7 @@
   Quota options:
      --bucket                  specified bucket for quota command
      --max-objects             specify max objects (negative value to disable)
-     --max-size                specify max size (in bytes, negative value to disable)
+     --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
   Orphans search options:
@@ -193,6 +194,9 @@
      --num-shards              num of shards to use for keeping the temporary scan info
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
+  
+  Orphans list-jobs options:
+     --extra-info              provide extra info in job list
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name

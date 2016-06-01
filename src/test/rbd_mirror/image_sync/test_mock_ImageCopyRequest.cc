@@ -6,13 +6,25 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
+#include "librbd/journal/TypeTraits.h"
+#include "test/journal/mock/MockJournaler.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "test/rbd_mirror/mock/MockJournaler.h"
 #include "tools/rbd_mirror/image_sync/ImageCopyRequest.h"
 #include "tools/rbd_mirror/image_sync/ObjectCopyRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 #include <boost/scope_exit.hpp>
+
+namespace librbd {
+namespace journal {
+
+template <>
+struct TypeTraits<librbd::MockImageCtx> {
+  typedef ::journal::MockJournaler Journaler;
+};
+
+} // namespace journal
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -346,10 +358,10 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartPartialSync) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   std::string max_ops_str;
-  ASSERT_EQ(0, _rados.conf_get("rbd_concurrent_management_ops", max_ops_str));
-  ASSERT_EQ(0, _rados.conf_set("rbd_concurrent_management_ops", "1"));
+  ASSERT_EQ(0, _rados->conf_get("rbd_concurrent_management_ops", max_ops_str));
+  ASSERT_EQ(0, _rados->conf_set("rbd_concurrent_management_ops", "1"));
   BOOST_SCOPE_EXIT( (max_ops_str) ) {
-    ASSERT_EQ(0, _rados.conf_set("rbd_concurrent_management_ops", max_ops_str.c_str()));
+    ASSERT_EQ(0, _rados->conf_set("rbd_concurrent_management_ops", max_ops_str.c_str()));
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, create_snap("snap1"));

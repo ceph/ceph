@@ -587,17 +587,15 @@ bool RGWListRemoteMDLogCR::spawn_next() {
 
 class RGWInitSyncStatusCoroutine : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
-  RGWObjectCtx& obj_ctx;
 
   rgw_meta_sync_info status;
   vector<RGWMetadataLogInfo> shards_info;
   RGWContinuousLeaseCR *lease_cr;
 public:
   RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
-                             RGWObjectCtx& _obj_ctx,
                              const rgw_meta_sync_info &status)
     : RGWCoroutine(_sync_env->store->ctx()), sync_env(_sync_env),
-      obj_ctx(_obj_ctx), status(status), shards_info(status.num_shards),
+      status(status), shards_info(status.num_shards),
       lease_cr(NULL) {}
 
   ~RGWInitSyncStatusCoroutine() {
@@ -689,19 +687,16 @@ public:
 
 class RGWReadSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_meta_sync_info> {
   RGWMetaSyncEnv *sync_env;
-  RGWObjectCtx& obj_ctx;
 
   rgw_meta_sync_status *sync_status;
 
 public:
   RGWReadSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
-		      RGWObjectCtx& _obj_ctx,
-		      rgw_meta_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store, _obj_ctx,
+		      rgw_meta_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store,
 									    _sync_env->store->get_zone_params().log_pool,
 									    _sync_env->status_oid(),
 									    &_status->sync_info),
                                                                             sync_env(_sync_env),
-                                                                            obj_ctx(_obj_ctx),
 									    sync_status(_status) {
 
   }
@@ -718,7 +713,7 @@ int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
   RGWRados *store = sync_env->store;
   map<uint32_t, rgw_meta_sync_marker>& markers = sync_status->sync_markers;
   for (int i = 0; i < (int)data.num_shards; i++) {
-    spawn(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+    spawn(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
 				                    sync_env->shard_obj_name(i), &markers[i]), true);
   }
   return 0;
@@ -1636,8 +1631,6 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
   rgw_meta_sync_marker sync_marker;
   const std::string period_marker;
 
-  RGWObjectCtx obj_ctx;
-
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env, const rgw_bucket& _pool,
                             const std::string& period, RGWMetadataLog* mdlog,
@@ -1645,8 +1638,7 @@ public:
                             std::string&& period_marker)
     : RGWBackoffControlCR(_sync_env->cct, true), sync_env(_sync_env),
       pool(_pool), period(period), mdlog(mdlog), shard_id(_shard_id),
-      sync_marker(_marker), period_marker(std::move(period_marker)),
-      obj_ctx(sync_env->store) {}
+      sync_marker(_marker), period_marker(std::move(period_marker)) {}
 
   RGWCoroutine *alloc_cr() {
     return new RGWMetaSyncShardCR(sync_env, pool, period, mdlog, shard_id,
@@ -1655,7 +1647,7 @@ public:
 
   RGWCoroutine *alloc_finisher_cr() {
     RGWRados *store = sync_env->store;
-    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, obj_ctx, pool,
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, pool,
                                                                sync_env->shard_obj_name(shard_id), &sync_marker);
   }
 };
@@ -1784,8 +1776,7 @@ int RGWRemoteMetaLog::read_sync_status()
     return 0;
   }
 
-  RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
+  return run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
 }
 
 int RGWRemoteMetaLog::init_sync_status()
@@ -1810,8 +1801,7 @@ int RGWRemoteMetaLog::init_sync_status()
     }
   }
 
-  RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, sync_info));
+  return run(new RGWInitSyncStatusCoroutine(&sync_env, sync_info));
 }
 
 int RGWRemoteMetaLog::store_sync_info()
@@ -1867,7 +1857,6 @@ int RGWRemoteMetaLog::run_sync()
     return 0;
   }
 
-  RGWObjectCtx obj_ctx(store, NULL);
   int r = 0;
 
   // get shard count and oldest log period from master
@@ -1897,7 +1886,7 @@ int RGWRemoteMetaLog::run_sync()
       ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
-    r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
+    r = run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
       return r;
@@ -1922,8 +1911,7 @@ int RGWRemoteMetaLog::run_sync()
         sync_status.sync_info.period = cursor.get_period().get_id();
         sync_status.sync_info.realm_epoch = cursor.get_epoch();
       }
-      r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
-                                             sync_status.sync_info));
+      r = run(new RGWInitSyncStatusCoroutine(&sync_env, sync_status.sync_info));
       if (r == -EBUSY) {
         backoff.backoff_sleep();
         continue;
@@ -1944,7 +1932,7 @@ int RGWRemoteMetaLog::run_sync()
 
   RGWPeriodHistory::Cursor cursor;
   do {
-    r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
+    r = run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
       return r;

@@ -222,7 +222,10 @@ Context *SnapshotRollbackRequest<I>::handle_rollback_objects(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result == -ERESTART) {
+    ldout(cct, 5) << "snapshot rollback operation interrupted" << dendl;
+    return this->create_context_finisher();
+  } else if (*result < 0) {
     lderr(cct) << "failed to rollback objects: " << cpp_strerror(*result)
                << dendl;
     return this->create_context_finisher();

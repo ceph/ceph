@@ -400,6 +400,14 @@ void librados::ObjectWriteOperation::write_full(const bufferlist& bl)
   o->write_full(c);
 }
 
+void librados::ObjectWriteOperation::writesame(uint64_t off, uint64_t write_len,
+					       const bufferlist& bl)
+{
+  ::ObjectOperation *o = &impl->o;
+  bufferlist c = bl;
+  o->writesame(off, write_len, c);
+}
+
 void librados::ObjectWriteOperation::append(const bufferlist& bl)
 {
   ::ObjectOperation *o = &impl->o;
@@ -545,7 +553,15 @@ void librados::ObjectWriteOperation::set_alloc_hint(
                                             uint64_t expected_write_size)
 {
   ::ObjectOperation *o = &impl->o;
-  o->set_alloc_hint(expected_object_size, expected_write_size);
+  o->set_alloc_hint(expected_object_size, expected_write_size, 0);
+}
+void librados::ObjectWriteOperation::set_alloc_hint2(
+                                            uint64_t expected_object_size,
+                                            uint64_t expected_write_size,
+					    uint32_t flags)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->set_alloc_hint(expected_object_size, expected_write_size, flags);
 }
 
 void librados::ObjectWriteOperation::cache_pin()
@@ -1184,6 +1200,13 @@ int librados::IoCtx::write_full(const std::string& oid, bufferlist& bl)
   return io_ctx_impl->write_full(obj, bl);
 }
 
+int librados::IoCtx::writesame(const std::string& oid, bufferlist& bl,
+			       size_t write_len, uint64_t off)
+{
+  object_t obj(oid);
+  return io_ctx_impl->writesame(obj, bl, write_len, off);
+}
+
 int librados::IoCtx::clone_range(const std::string& dst_oid, uint64_t dst_off,
 				 const std::string& src_oid, uint64_t src_off,
 				 size_t len)
@@ -1415,27 +1438,27 @@ static int translate_flags(int flags)
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->operate(obj, (::ObjectOperation*)o->impl, (ceph::real_time *)o->impl->prt);
+  return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt);
 }
 
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectReadOperation *o, bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->operate_read(obj, (::ObjectOperation*)o->impl, pbl);
+  return io_ctx_impl->operate_read(obj, &o->impl->o, pbl);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc, 0);
 }
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 ObjectWriteOperation *o, int flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  io_ctx_impl->snapc,
 				  translate_flags(flags));
 }
@@ -1450,7 +1473,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   for (size_t i = 0; i < snaps.size(); ++i)
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
-  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
 				  snapc, 0);
 }
 
@@ -1459,7 +1482,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
 				       0, pbl);
 }
 
@@ -1478,7 +1501,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   if (flags & OPERATION_ORDER_READS_WRITES)
     op_flags |= CEPH_OSD_FLAG_RWORDERED;
 
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
 				       op_flags, pbl);
 }
 
@@ -1487,7 +1510,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 int flags, bufferlist *pbl)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+  return io_ctx_impl->aio_operate_read(obj, &o->impl->o, c->pc,
 				       translate_flags(flags), pbl);
 }
 
@@ -1796,6 +1819,14 @@ int librados::IoCtx::aio_write_full(const std::string& oid, librados::AioComplet
   return io_ctx_impl->aio_write_full(obj, c->pc, bl);
 }
 
+int librados::IoCtx::aio_writesame(const std::string& oid, librados::AioCompletion *c,
+				   const bufferlist& bl, size_t write_len,
+				   uint64_t off)
+{
+  return io_ctx_impl->aio_writesame(oid, c->pc, bl, write_len, off);
+}
+
+
 int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion *c)
 {
   return io_ctx_impl->aio_remove(oid, c->pc);
@@ -1938,7 +1969,17 @@ int librados::IoCtx::set_alloc_hint(const std::string& o,
 {
   object_t oid(o);
   return io_ctx_impl->set_alloc_hint(oid, expected_object_size,
-                                     expected_write_size);
+                                     expected_write_size, 0);
+}
+
+int librados::IoCtx::set_alloc_hint2(const std::string& o,
+				     uint64_t expected_object_size,
+				     uint64_t expected_write_size,
+				     uint32_t flags)
+{
+  object_t oid(o);
+  return io_ctx_impl->set_alloc_hint(oid, expected_object_size,
+                                     expected_write_size, flags);
 }
 
 void librados::IoCtx::set_assert_version(uint64_t ver)
@@ -2323,6 +2364,11 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
 				    std::map<string, stats_map>& result)
 {
   return -EOPNOTSUPP;
+}
+
+bool librados::Rados::get_pool_is_selfmanaged_snaps_mode(const std::string& pool)
+{
+  return client->get_pool_is_selfmanaged_snaps_mode(pool);
 }
 
 int librados::Rados::cluster_stat(cluster_stat_t& result)
@@ -2966,7 +3012,7 @@ extern "C" int rados_ping_monitor(rados_t cluster, const char *mon_id,
   }
 
   int ret = client->ping_monitor(mon_id, &str);
-  if (ret == 0 && !str.empty() && outstr && outstrlen) {
+  if (ret == 0) {
     do_out_buffer(str, outstr, outstrlen);
   }
   tracepoint(librados, rados_ping_monitor_exit, ret, ret < 0 ? NULL : outstr, ret < 0 ? NULL : outstrlen);
@@ -3276,6 +3322,23 @@ extern "C" int rados_write_full(rados_ioctx_t io, const char *o, const char *buf
   bl.append(buf, len);
   int retval = ctx->write_full(oid, bl);
   tracepoint(librados, rados_write_full_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_writesame(rados_ioctx_t io,
+				const char *o,
+				const char *buf,
+				size_t data_len,
+				size_t write_len,
+				uint64_t off)
+{
+  tracepoint(librados, rados_writesame_enter, io, o, buf, data_len, write_len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, data_len);
+  int retval = ctx->writesame(oid, bl, write_len, off);
+  tracepoint(librados, rados_writesame_exit, retval);
   return retval;
 }
 
@@ -4338,6 +4401,23 @@ extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
   return retval;
 }
 
+extern "C" int rados_aio_writesame(rados_ioctx_t io, const char *o,
+				   rados_completion_t completion,
+				   const char *buf, size_t data_len,
+				   size_t write_len, uint64_t off)
+{
+  tracepoint(librados, rados_aio_writesame_enter, io, o, completion, buf,
+						data_len, write_len, off);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, data_len);
+  int retval = ctx->aio_writesame(o, (librados::AioCompletionImpl*)completion,
+				  bl, write_len, off);
+  tracepoint(librados, rados_aio_writesame_exit, retval);
+  return retval;
+}
+
 extern "C" int rados_aio_remove(rados_ioctx_t io, const char *o,
 				rados_completion_t completion)
 {
@@ -4405,7 +4485,7 @@ extern "C" int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   C_WatchCB *wc = new C_WatchCB(watchcb, arg);
-  int retval = ctx->watch(oid, cookie, wc, NULL);
+  int retval = ctx->watch(oid, cookie, wc, NULL, true);
   tracepoint(librados, rados_watch_exit, retval, *handle);
   return retval;
 }
@@ -4443,7 +4523,7 @@ extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
     librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
     object_t oid(o);
     C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
-    ret = ctx->watch(oid, cookie, NULL, wc);
+    ret = ctx->watch(oid, cookie, NULL, wc, true);
   }
   tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);
   return ret;
@@ -4466,7 +4546,7 @@ extern "C" int rados_aio_watch(rados_ioctx_t io, const char *o,
     librados::AioCompletionImpl *c =
       reinterpret_cast<librados::AioCompletionImpl*>(completion);
     C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
-    ret = ctx->aio_watch(oid, c, cookie, NULL, wc);
+    ret = ctx->aio_watch(oid, c, cookie, NULL, wc, true);
   }
   tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);
   return ret;
@@ -4619,8 +4699,23 @@ extern "C" int rados_set_alloc_hint(rados_ioctx_t io, const char *o,
   tracepoint(librados, rados_set_alloc_hint_enter, io, o, expected_object_size, expected_write_size);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
-  int retval = ctx->set_alloc_hint(oid, expected_object_size, expected_write_size);
+  int retval = ctx->set_alloc_hint(oid, expected_object_size,
+				   expected_write_size, 0);
   tracepoint(librados, rados_set_alloc_hint_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_set_alloc_hint2(rados_ioctx_t io, const char *o,
+				     uint64_t expected_object_size,
+				     uint64_t expected_write_size,
+				     uint32_t flags)
+{
+  tracepoint(librados, rados_set_alloc_hint2_enter, io, o, expected_object_size, expected_write_size, flags);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->set_alloc_hint(oid, expected_object_size,
+				   expected_write_size, flags);
+  tracepoint(librados, rados_set_alloc_hint2_exit, retval);
   return retval;
 }
 
@@ -4876,6 +4971,19 @@ extern "C" void rados_write_op_write_full(rados_write_op_t write_op,
   tracepoint(librados, rados_write_op_write_full_exit);
 }
 
+extern "C" void rados_write_op_writesame(rados_write_op_t write_op,
+				         const char *buffer,
+				         size_t data_len,
+				         size_t write_len,
+					 uint64_t offset)
+{
+  tracepoint(librados, rados_write_op_writesame_enter, write_op, buffer, data_len, write_len, offset);
+  bufferlist bl;
+  bl.append(buffer, data_len);
+  ((::ObjectOperation *)write_op)->writesame(offset, write_len, bl);
+  tracepoint(librados, rados_write_op_writesame_exit);
+}
+
 extern "C" void rados_write_op_append(rados_write_op_t write_op,
 				      const char *buffer,
 				      size_t len)
@@ -4969,8 +5077,20 @@ extern "C" void rados_write_op_set_alloc_hint(rados_write_op_t write_op,
 {
   tracepoint(librados, rados_write_op_set_alloc_hint_enter, write_op, expected_object_size, expected_write_size);
   ((::ObjectOperation *)write_op)->set_alloc_hint(expected_object_size,
-                                                  expected_write_size);
+                                                  expected_write_size, 0);
   tracepoint(librados, rados_write_op_set_alloc_hint_exit);
+}
+
+extern "C" void rados_write_op_set_alloc_hint2(rados_write_op_t write_op,
+					       uint64_t expected_object_size,
+					       uint64_t expected_write_size,
+					       uint32_t flags)
+{
+  tracepoint(librados, rados_write_op_set_alloc_hint2_enter, write_op, expected_object_size, expected_write_size, flags);
+  ((::ObjectOperation *)write_op)->set_alloc_hint(expected_object_size,
+                                                  expected_write_size,
+						  flags);
+  tracepoint(librados, rados_write_op_set_alloc_hint2_exit);
 }
 
 extern "C" int rados_write_op_operate(rados_write_op_t write_op,

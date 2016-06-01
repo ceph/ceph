@@ -627,7 +627,7 @@ Rados object in state %s." % self.state)
             char *_path = opt_str(path)
         with nogil:
             ret = rados_conf_read_file(self.cluster, _path)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error calling conf_read_file")
 
     def conf_parse_argv(self, args):
@@ -678,7 +678,7 @@ Rados object in state %s." % self.state)
             char *_var = var
         with nogil:
             ret = rados_conf_parse_env(self.cluster, _var)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error calling conf_parse_env")
 
     @requires(('option', str_type))
@@ -704,11 +704,11 @@ Rados object in state %s." % self.state)
                 ret_buf = <char *>realloc_chk(ret_buf, length)
                 with nogil:
                     ret = rados_conf_get(self.cluster, _option, ret_buf, length)
-                if (ret == 0):
+                if ret == 0:
                     return decode_cstr(ret_buf)
-                elif (ret == -errno.ENAMETOOLONG):
+                elif ret == -errno.ENAMETOOLONG:
                     length = length * 2
-                elif (ret == -errno.ENOENT):
+                elif ret == -errno.ENOENT:
                     return None
                 else:
                     raise make_ex(ret, "error calling conf_get")
@@ -736,7 +736,7 @@ Rados object in state %s." % self.state)
 
         with nogil:
             ret = rados_conf_set(self.cluster, _option, _val)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error calling conf_set")
 
     def ping_monitor(self, mon_id):
@@ -781,7 +781,7 @@ Rados object in state %s." % self.state)
         # for now and remove it later
         with nogil:
             ret = rados_connect(self.cluster)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error connecting to the cluster")
         self.state = "connected"
 
@@ -837,9 +837,9 @@ Rados object in state %s." % self.state)
 
         with nogil:
             ret = rados_pool_lookup(self.cluster, _pool_name)
-        if (ret >= 0):
+        if ret >= 0:
             return True
-        elif (ret == -errno.ENOENT):
+        elif ret == -errno.ENOENT:
             return False
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
@@ -862,9 +862,9 @@ Rados object in state %s." % self.state)
 
         with nogil:
             ret = rados_pool_lookup(self.cluster, _pool_name)
-        if (ret >= 0):
+        if ret >= 0:
             return int(ret)
-        elif (ret == -errno.ENOENT):
+        elif ret == -errno.ENOENT:
             return None
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
@@ -1013,7 +1013,7 @@ Rados object in state %s." % self.state)
                 with nogil:
                     ret = rados_inconsistent_pg_list(self.cluster, pool,
                                                      pgs, size)
-                if ret > size:
+                if ret > <int>size:
                     size *= 2
                 elif ret >= 0:
                     break
@@ -1039,7 +1039,7 @@ Rados object in state %s." % self.state)
                 c_names = <char *>realloc_chk(c_names, size)
                 with nogil:
                     ret = rados_pool_list(self.cluster, c_names, size)
-                if ret > size:
+                if ret > <int>size:
                     size *= 2
                 elif ret >= 0:
                     break
@@ -1068,7 +1068,7 @@ Rados object in state %s." % self.state)
                 ret = rados_cluster_fsid(self.cluster, ret_buf, buf_len)
             if ret < 0:
                 raise make_ex(ret, "error getting cluster fsid")
-            if ret != buf_len:
+            if ret != <int>buf_len:
                 _PyBytes_Resize(&ret_s, ret)
             return <object>ret_s
         finally:
@@ -1329,7 +1329,7 @@ cdef class OmapIterator(object):
         with nogil:
             ret = rados_omap_get_next(self.ctx, &key_, &val_, &len_)
 
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error iterating over the omap")
         if key_ == NULL:
             raise StopIteration()
@@ -1427,7 +1427,7 @@ cdef class XattrIterator(object):
 
         with nogil:
             ret = rados_getxattrs_next(self.it, &name_, &val_, &len_)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "error iterating over the extended attributes \
 in '%s'" % self.oid)
         if name_ == NULL:
@@ -1462,10 +1462,10 @@ cdef class SnapIterator(object):
 
             with nogil:
                 ret = rados_ioctx_snap_list(ioctx.io, self.snaps, num_snaps)
-            if (ret >= 0):
+            if ret >= 0:
                 self.max_snap = ret
                 break
-            elif (ret != -errno.ERANGE):
+            elif ret != -errno.ERANGE:
                 raise make_ex(ret, "error calling rados_snap_list for \
 ioctx '%s'" % self.ioctx.name)
             num_snaps = num_snaps * 2
@@ -1481,7 +1481,7 @@ ioctx '%s'" % self.ioctx.name)
         :raises: :class:`Error`, StopIteration
         :returns: Snap - next snapshot
         """
-        if (self.cur_snap >= self.max_snap):
+        if self.cur_snap >= self.max_snap:
             raise StopIteration
 
         cdef:
@@ -1494,9 +1494,9 @@ ioctx '%s'" % self.ioctx.name)
                 name = <char *>realloc_chk(name, name_len)
                 with nogil:
                     ret = rados_ioctx_snap_get_name(self.ioctx.io, snap_id, name, name_len)
-                if (ret == 0):
+                if ret == 0:
                     break
-                elif (ret != -errno.ERANGE):
+                elif ret != -errno.ERANGE:
                     raise make_ex(ret, "rados_snap_get_name error")
                 else:
                     name_len = name_len * 2
@@ -1537,7 +1537,7 @@ cdef class Snap(object):
 
         with nogil:
             ret = rados_ioctx_snap_get_stamp(self.ioctx.io, self.snap_id, &snap_time)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "rados_ioctx_snap_get_stamp error")
         return datetime.fromtimestamp(snap_time)
 
@@ -1750,7 +1750,7 @@ cdef class Ioctx(object):
         self.close()
         return False
 
-    def __del__(self):
+    def __dealloc__(self):
         self.close()
 
     def __track_completion(self, completion_obj):
@@ -2507,7 +2507,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 ret_buf = <char *>realloc_chk(ret_buf, ret_length)
                 with nogil:
                     ret = rados_getxattr(self.io, _key, _xattr_name, ret_buf, ret_length)
-                if (ret == -errno.ERANGE):
+                if ret == -errno.ERANGE:
                     ret_length *= 2
                 elif ret < 0:
                     raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
@@ -2629,7 +2629,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             ret = rados_ioctx_snap_create(self.io, _snap_name)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "Failed to create snap %s" % snap_name)
 
     @requires(('snap_name', str_type))
@@ -2649,7 +2649,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             ret = rados_ioctx_snap_remove(self.io, _snap_name)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "Failed to remove snap %s" % snap_name)
 
     @requires(('snap_name', str_type))
@@ -2672,7 +2672,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             ret = rados_ioctx_snap_lookup(self.io, _snap_name, &snap_id)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
         return Snap(self, snap_name, int(snap_id))
 
@@ -2698,7 +2698,7 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         with nogil:
             ret = rados_ioctx_snap_rollback(self.io, _oid, _snap_name)
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, "Failed to rollback %s" % oid)
 
     def get_last_version(self):
@@ -2799,7 +2799,9 @@ returned %d, but should return zero on success." % (self.name, ret))
             int _flags = flags
 
         with nogil:
-            rados_write_op_operate(_write_op.write_op, self.io, _oid, &_mtime, _flags)
+            ret = rados_write_op_operate(_write_op.write_op, self.io, _oid, &_mtime, _flags)
+        if ret != 0:
+            raise make_ex(ret, "Failed to operate write op for oid %s" % oid)
 
     @requires(('read_op', ReadOp), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=LIBRADOS_OPERATION_NOFLAG):
@@ -2819,7 +2821,9 @@ returned %d, but should return zero on success." % (self.name, ret))
             int _flag = flag
 
         with nogil:
-            rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
+            ret = rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
+        if ret != 0:
+            raise make_ex(ret, "Failed to operate read op for oid %s" % oid)
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
     def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):
@@ -2833,7 +2837,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type filter_prefix: str
         :para max_return: list no more than max_return key/value pairs
         :type max_return: int
-        :returns: an iterator over the the requested omap values, return value from this action
+        :returns: an iterator over the requested omap values, return value from this action
         """
 
         start_after = cstr(start_after, 'start_after') if start_after else None
@@ -2863,7 +2867,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type start_after: str
         :para max_return: list no more than max_return key/value pairs
         :type max_return: int
-        :returns: an iterator over the the requested omap values, return value from this action
+        :returns: an iterator over the requested omap values, return value from this action
         """
         start_after = cstr(start_after, 'start_after') if start_after else None
         cdef:
@@ -2871,7 +2875,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return
-            int prval
+            int prval = 0
 
         with nogil:
             rados_read_op_omap_get_keys(_read_op.read_op, _start_after,
@@ -2888,7 +2892,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type read_op: ReadOp
         :para keys: input key tuple
         :type keys: tuple
-        :returns: an iterator over the the requested omap values, return value from this action
+        :returns: an iterator over the requested omap values, return value from this action
         """
         keys = cstr_list(keys, 'keys')
         cdef:
@@ -2896,7 +2900,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             rados_omap_iter_t iter_addr
             char **_keys = to_bytes_array(keys)
             size_t key_num = len(keys)
-            int prval
+            int prval = 0
 
         try:
             with nogil:

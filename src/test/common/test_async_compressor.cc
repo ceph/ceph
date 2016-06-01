@@ -210,6 +210,21 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
+  const char* env = getenv("CEPH_LIB");
+  string directory(env ? env : ".libs");
+
+  // copy libceph_snappy.so into $plugin_dir/compressor for PluginRegistry
+  // TODO: just build the compressor plugins in this subdir
+  string mkdir_compressor = "mkdir -p " + directory + "/compressor";
+  int r = system(mkdir_compressor.c_str());
+  (void)r;
+
+  string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
+  r = system(cp_libceph_snappy.c_str());
+  (void)r;
+
+  g_conf->set_val("plugin_dir", directory, false, false);
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

@@ -20,7 +20,7 @@ namespace object_map {
 
 bool Request::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << &m_image_ctx << " should_complete: r=" << r << dendl;
+  ldout(cct, 20) << this << " should_complete: r=" << r << dendl;
 
   switch (m_state)
   {

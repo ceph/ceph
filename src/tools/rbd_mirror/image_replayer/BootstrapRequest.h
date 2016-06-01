@@ -21,6 +21,9 @@ namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
 namespace rbd {
 namespace mirror {
+
+class ProgressContext;
+
 namespace image_replayer {
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -29,6 +32,7 @@ public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
+  typedef rbd::mirror::ProgressContext ProgressContext;
 
   static BootstrapRequest* create(librados::IoCtx &local_io_ctx,
                                   librados::IoCtx &remote_io_ctx,
@@ -42,12 +46,14 @@ public:
                                   const std::string &remote_mirror_uuid,
                                   Journaler *journaler,
                                   MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish) {
+                                  Context *on_finish,
+				  ProgressContext *progress_ctx = nullptr) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx, local_image_ctx,
                                 local_image_name, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
-                                journaler, client_meta, on_finish);
+                                journaler, client_meta, on_finish,
+				progress_ctx);
   }
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
@@ -59,7 +65,8 @@ public:
                    SafeTimer *timer, Mutex *timer_lock,
                    const std::string &local_mirror_uuid,
                    const std::string &remote_mirror_uuid, Journaler *journaler,
-                   MirrorPeerClientMeta *client_meta, Context *on_finish);
+                   MirrorPeerClientMeta *client_meta, Context *on_finish,
+		   ProgressContext *progress_ctx = nullptr);
   ~BootstrapRequest();
 
   void send();
@@ -136,6 +143,7 @@ private:
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
   Context *m_on_finish;
+  ProgressContext *m_progress_ctx;
 
   Tags m_remote_tags;
   cls::journal::Client m_client;
@@ -188,6 +196,8 @@ private:
   void finish(int r);
 
   bool decode_client_meta();
+
+  void update_progress(const std::string &description);
 };
 
 } // namespace image_replayer

@@ -141,6 +141,8 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
     "*");
+  g_ceph_context->_conf->set_val("debug_bdev", "0/20");
+  g_ceph_context->_conf->set_val("debug_bluefs", "0/20");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);

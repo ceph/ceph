@@ -207,7 +207,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 
     // OK, so now I can... fire off a validate on the dir inode, and
     // when it completes, come through here again, noticing that we've
-    // set a flag to indicate the the validate happened, and 
+    // set a flag to indicate the validate happened, and 
     scrub_dir_inode_final(in);
   }
 

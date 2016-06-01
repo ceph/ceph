@@ -41,17 +41,10 @@
 
 #include <sys/statvfs.h>
 
-#include <iostream>
-using namespace std;
-
 #include "common/config.h"
-
 #include "common/version.h"
 
 // ceph stuff
-
-#include "messages/MMonMap.h"
-
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -63,9 +56,7 @@ using namespace std;
 #include "messages/MCommandReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MClientQuota.h"
-
-#include "messages/MGenericMessage.h"
-
+#include "messages/MClientCapRelease.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 
@@ -73,10 +64,7 @@ using namespace std;
 
 #include "mds/flock.h"
 #include "osd/OSDMap.h"
-#include "mon/MonMap.h"
-
 #include "osdc/Filer.h"
-#include "osdc/WritebackHandler.h"
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -490,9 +478,9 @@ int Client::init()
   int r = monclient->init();
   if (r < 0) {
     // need to do cleanup because we're in an intermediate init state
-    objecter->shutdown();
     timer.shutdown();
     client_lock.Unlock();
+    objecter->shutdown();
     objectcacher->stop();
     monclient->shutdown();
     return r;
@@ -4807,7 +4795,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   if (m->get_op() == CEPH_CAP_OP_IMPORT && m->get_wanted() != wanted)
     check = true;
 
-  check_cap_issue(in, cap, issued);
+  check_cap_issue(in, cap, new_caps);
 
   // update caps
   if (old_caps & ~new_caps) { 
@@ -8752,19 +8740,11 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   tout(cct) << "statfs" << std::endl;
 
   ceph_statfs stats;
-
-  Mutex lock("Client::statfs::lock");
-  Cond cond;
-  bool done;
-  int rval;
-
-  objecter->get_fs_stats(stats, new C_SafeCond(&lock, &cond, &done, &rval));
+  C_SaferCond cond;
+  objecter->get_fs_stats(stats, &cond);
 
   client_lock.Unlock();
-  lock.Lock();
-  while (!done)
-    cond.Wait(lock);
-  lock.Unlock();
+  int rval = cond.wait();
   client_lock.Lock();
 
   memset(stbuf, 0, sizeof(*stbuf));
@@ -8779,15 +8759,43 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   const int CEPH_BLOCK_SHIFT = 22;
   stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
-  stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
-  stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
-  stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   stbuf->f_files = stats.num_objects;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = NAME_MAX;
+
+  // Usually quota_root will == root_ancestor, but if the mount root has no
+  // quota but we can see a parent of it that does have a quota, we'll
+  // respect that one instead.
+  assert(root != nullptr);
+  Inode *quota_root = get_quota_root(root);
+
+  // get_quota_root should always give us something if client quotas are
+  // enabled
+  assert(cct->_conf->client_quota == false || quota_root != nullptr);
+
+  if (quota_root && cct->_conf->client_quota_df && quota_root->quota.max_bytes) {
+    // Special case: if there is a size quota set on the Inode acting
+    // as the root for this client mount, then report the quota status
+    // as the filesystem statistics.
+    const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
+    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
+    const fsblkcnt_t free = total - used;
+
+
+    stbuf->f_blocks = total;
+    stbuf->f_bfree = free;
+    stbuf->f_bavail = free;
+  } else {
+    // General case: report the overall RADOS cluster's statistics.  Because
+    // multiple pools may be used without one filesystem namespace via
+    // layouts, this is the most correct thing we can do.
+    stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+  }
 
   return rval;
 }
@@ -12099,10 +12107,12 @@ int Client::check_pool_perm(Inode *in, int need)
   if (!cct->_conf->client_check_pool_perm)
     return 0;
 
-  int64_t pool = in->layout.pool_id;
+  int64_t pool_id = in->layout.pool_id;
+  std::string pool_ns = in->layout.pool_ns;
+  std::pair<int64_t, std::string> perm_key(pool_id, pool_ns);
   int have = 0;
   while (true) {
-    std::map<int64_t, int>::iterator it = pool_perms.find(pool);
+    auto it = pool_perms.find(perm_key);
     if (it == pool_perms.end())
       break;
     if (it->second == POOL_CHECKING) {
@@ -12123,7 +12133,7 @@ int Client::check_pool_perm(Inode *in, int need)
       return 0;
     }
 
-    pool_perms[pool] = POOL_CHECKING;
+    pool_perms[perm_key] = POOL_CHECKING;
 
     char oid_buf[32];
     snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (unsigned long long)in->ino);
@@ -12155,7 +12165,7 @@ int Client::check_pool_perm(Inode *in, int need)
     if (rd_ret == 0 || rd_ret == -ENOENT)
       have |= POOL_READ;
     else if (rd_ret != -EPERM) {
-      ldout(cct, 10) << "check_pool_perm on pool " << pool
+      ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
       errored = true;
     }
@@ -12163,7 +12173,7 @@ int Client::check_pool_perm(Inode *in, int need)
     if (wr_ret == 0 || wr_ret == -EEXIST)
       have |= POOL_WRITE;
     else if (wr_ret != -EPERM) {
-      ldout(cct, 10) << "check_pool_perm on pool " << pool
+      ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
       errored = true;
     }
@@ -12172,22 +12182,22 @@ int Client::check_pool_perm(Inode *in, int need)
       // Indeterminate: erase CHECKING state so that subsequent calls re-check.
       // Raise EIO because actual error code might be misleading for
       // userspace filesystem user.
-      pool_perms.erase(pool);
+      pool_perms.erase(perm_key);
       signal_cond_list(waiting_for_pool_perm);
       return -EIO;
     }
 
-    pool_perms[pool] = have | POOL_CHECKED;
+    pool_perms[perm_key] = have | POOL_CHECKED;
     signal_cond_list(waiting_for_pool_perm);
   }
 
   if ((need & CEPH_CAP_FILE_RD) && !(have & POOL_READ)) {
-    ldout(cct, 10) << "check_pool_perm on pool " << pool
+    ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		   << " need " << ccap_string(need) << ", but no read perm" << dendl;
     return -EPERM;
   }
   if ((need & CEPH_CAP_FILE_WR) && !(have & POOL_WRITE)) {
-    ldout(cct, 10) << "check_pool_perm on pool " << pool
+    ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
 		   << " need " << ccap_string(need) << ", but no write perm" << dendl;
     return -EPERM;
   }

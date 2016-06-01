@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OPERATIONS_H
 
 #include "include/int_types.h"
+#include "librbd/operation/ObjectMapIterate.h"
 #include <atomic>
 #include <string>
 #include <boost/function.hpp>
@@ -28,6 +29,13 @@ public:
   void execute_rebuild_object_map(ProgressContext &prog_ctx,
                                   Context *on_finish);
 
+  int check_object_map(ProgressContext &prog_ctx);
+  void check_object_map(ProgressContext &prog_ctx, Context *on_finish);
+
+  void object_map_iterate(ProgressContext &prog_ctx,
+			  operation::ObjectIterateWork<ImageCtxT> handle_mismatch,
+			  Context* on_finish);
+
   int rename(const char *dstname);
   void execute_rename(const char *dstname, Context *on_finish);
 
@@ -38,7 +46,7 @@ public:
   int snap_create(const char *snap_name);
   void snap_create(const char *snap_name, Context *on_finish);
   void execute_snap_create(const char *snap_name, Context *on_finish,
-                           uint64_t journal_op_tid);
+                           uint64_t journal_op_tid, bool skip_object_map);
 
   int snap_rollback(const char *snap_name, ProgressContext& prog_ctx);
   void execute_snap_rollback(const char *snap_name, ProgressContext& prog_ctx,

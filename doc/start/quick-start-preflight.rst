@@ -34,8 +34,7 @@ For Debian and Ubuntu distributions, perform the following steps:
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
 #. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
-   with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``,
-   ``emperor``, ``firefly``, etc.).
+   with a stable Ceph release (e.g., ``hammer``, ``jewel``, etc.)
    For example::
 
 	echo deb http://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
@@ -51,14 +50,14 @@ For Debian and Ubuntu distributions, perform the following steps:
 Red Hat Package Manager (RPM)
 -----------------------------
 
-For Red Hat(rhel6, rhel7), CentOS (el6, el7), and Fedora 19-20 (f19-f20) perform the
-following steps:
+For CentOS 7, perform the following steps:
 
 #. On Red Hat Enterprise Linux 7, register the target machine with ``subscription-manager``, verify your subscriptions, and enable the "Extras" repoistory for package dependencies. For example::
 
         sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
 
-#. On Red Hat Enterprise Linux 6, install and enable the Extra Packages for Enterprise Linux (EPEL) repository. Please see the `EPEL wiki`_ page for more information.
+#. Install and enable the Extra Packages for Enterprise Linux (EPEL)
+   repository. Please see the `EPEL wiki`_ page for more information.
 
 #. On CentOS, you can execute the following command chain::
 
@@ -71,11 +70,9 @@ following steps:
 	sudo vim /etc/yum.repos.d/ceph.repo
 
    Paste the following example code. Replace ``{ceph-release}`` with
-   the recent major release of Ceph (e.g., ``firefly``). Replace ``{distro}``
-   with your Linux distribution (e.g., ``el6`` for CentOS 6,
-   ``el7`` for CentOS 7, ``rhel6`` for
-   Red Hat 6.5, ``rhel7`` for Red Hat 7, and ``fc19`` or ``fc20`` for Fedora 19
-   or Fedora 20. Finally, save the contents to the
+   the recent major release of Ceph (e.g., ``jewel``). Replace ``{distro}``
+   with your Linux distribution (e.g., ``el7`` for CentOS 7). Finally, save the
+   contents to the
    ``/etc/yum.repos.d/ceph.repo`` file. ::
 
 	[ceph-noarch]

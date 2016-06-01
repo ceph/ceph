@@ -38,19 +38,19 @@ private:
    * <start>
    *    |
    *    | (open required)
-   *    |----------------> OPEN_PARENT * * * * * * * *
-   *    |                     |                      *
-   *    |                     v                      * (on error)
-   *    |                  SET_PARENT_SNAP * * * * * *
-   *    |                     |                      *
-   *    |                     v                      *
-   *    \----------------> <apply>                   *
-   *                          |                      *
-   *                          | (close required)     v
-   *                          |-----------------> CLOSE_PARENT
-   *                          |                      |
-   *                          |                      v
-   *                          \-----------------> <finish>
+   *    |----------------> OPEN_PARENT * * * * * * * * * * * * * * *
+   *    |                     |                                    *
+   *    |                     v                                    *
+   *    |                  SET_PARENT_SNAP * * * * * *             *
+   *    |                     |                      *             *
+   *    |                     v                      * (on error)  *
+   *    \----------------> <apply>                   *             *
+   *                          |                      *             *
+   *                          | (close required)     v             *
+   *                          |-----------------> CLOSE_PARENT     *
+   *                          |                      |             *
+   *                          |                      v             *
+   *                          \-----------------> <finish> < * * * *
    *
    * @endverbatim
    */

@@ -942,21 +942,37 @@ namespace librbd {
                       const std::string &start, uint64_t max_return,
                       map<string, bufferlist> *pairs)
     {
-      assert(pairs);
-      bufferlist in, out;
-      ::encode(start, in);
-      ::encode(max_return, in);
-      int r = ioctx->exec(oid, "rbd", "metadata_list", in, out);
-      if (r < 0)
-        return r;
+      librados::ObjectReadOperation op;
+      metadata_list_start(&op, start, max_return);
 
-      bufferlist::iterator iter = out.begin();
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return metadata_list_finish(&it, pairs);
+    }
+
+    void metadata_list_start(librados::ObjectReadOperation *op,
+                             const std::string &start, uint64_t max_return)
+    {
+      bufferlist in_bl;
+      ::encode(start, in_bl);
+      ::encode(max_return, in_bl);
+      op->exec("rbd", "metadata_list", in_bl);
+    }
+
+    int metadata_list_finish(bufferlist::iterator *it,
+                             std::map<std::string, bufferlist> *pairs)
+    {
+      assert(pairs);
       try {
-        ::decode(*pairs, iter);
+        ::decode(*pairs, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
-
       return 0;
     }
 
@@ -1234,6 +1250,164 @@ namespace librbd {
         return r;
       }
       return 0;
+    }
+
+    int mirror_image_status_set(librados::IoCtx *ioctx,
+				const std::string &global_image_id,
+				const cls::rbd::MirrorImageStatus &status) {
+      librados::ObjectWriteOperation op;
+      mirror_image_status_set(&op, global_image_id, status);
+      return ioctx->operate(RBD_MIRRORING, &op);
+    }
+
+    void mirror_image_status_set(librados::ObjectWriteOperation *op,
+				 const std::string &global_image_id,
+				 const cls::rbd::MirrorImageStatus &status) {
+      bufferlist bl;
+      ::encode(global_image_id, bl);
+      ::encode(status, bl);
+      op->exec("rbd", "mirror_image_status_set", bl);
+    }
+
+    int mirror_image_status_remove(librados::IoCtx *ioctx,
+				   const std::string &global_image_id) {
+      librados::ObjectWriteOperation op;
+      mirror_image_status_remove(&op, global_image_id);
+      return ioctx->operate(RBD_MIRRORING, &op);
+    }
+
+    void mirror_image_status_remove(librados::ObjectWriteOperation *op,
+				    const std::string &global_image_id) {
+      bufferlist bl;
+      ::encode(global_image_id, bl);
+      op->exec("rbd", "mirror_image_status_remove", bl);
+    }
+
+    int mirror_image_status_get(librados::IoCtx *ioctx,
+				const std::string &global_image_id,
+				cls::rbd::MirrorImageStatus *status) {
+      librados::ObjectReadOperation op;
+      mirror_image_status_get_start(&op, global_image_id);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      r = mirror_image_status_get_finish(&iter, status);
+      if (r < 0) {
+	return r;
+      }
+      return 0;
+    }
+
+    void mirror_image_status_get_start(librados::ObjectReadOperation *op,
+				       const std::string &global_image_id) {
+      bufferlist bl;
+      ::encode(global_image_id, bl);
+      op->exec("rbd", "mirror_image_status_get", bl);
+    }
+
+    int mirror_image_status_get_finish(bufferlist::iterator *iter,
+				       cls::rbd::MirrorImageStatus *status) {
+      try {
+	::decode(*status, *iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_image_status_list(librados::IoCtx *ioctx,
+	const std::string &start, uint64_t max_return,
+	std::map<std::string, cls::rbd::MirrorImage> *images,
+	std::map<std::string, cls::rbd::MirrorImageStatus> *statuses) {
+      librados::ObjectReadOperation op;
+      mirror_image_status_list_start(&op, start, max_return);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      r = mirror_image_status_list_finish(&iter, images, statuses);
+      if (r < 0) {
+	return r;
+      }
+      return 0;
+    }
+
+    void mirror_image_status_list_start(librados::ObjectReadOperation *op,
+					const std::string &start,
+					uint64_t max_return) {
+      bufferlist bl;
+      ::encode(start, bl);
+      ::encode(max_return, bl);
+      op->exec("rbd", "mirror_image_status_list", bl);
+    }
+
+    int mirror_image_status_list_finish(bufferlist::iterator *iter,
+	std::map<std::string, cls::rbd::MirrorImage> *images,
+	std::map<std::string, cls::rbd::MirrorImageStatus> *statuses) {
+      images->clear();
+      statuses->clear();
+      try {
+	::decode(*images, *iter);
+	::decode(*statuses, *iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_image_status_get_summary(librados::IoCtx *ioctx,
+	std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+      librados::ObjectReadOperation op;
+      mirror_image_status_get_summary_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      r = mirror_image_status_get_summary_finish(&iter, states);
+      if (r < 0) {
+	return r;
+      }
+      return 0;
+    }
+
+    void mirror_image_status_get_summary_start(
+      librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "mirror_image_status_get_summary", bl);
+    }
+
+    int mirror_image_status_get_summary_finish(bufferlist::iterator *iter,
+	std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+      try {
+	::decode(*states, *iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_image_status_remove_down(librados::IoCtx *ioctx) {
+      librados::ObjectWriteOperation op;
+      mirror_image_status_remove_down(&op);
+      return ioctx->operate(RBD_MIRRORING, &op);
+    }
+
+    void mirror_image_status_remove_down(librados::ObjectWriteOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "mirror_image_status_remove_down", bl);
     }
 
   } // namespace cls_client

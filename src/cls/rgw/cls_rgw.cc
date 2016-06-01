@@ -870,6 +870,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   entry.ver = op.ver;
   switch ((int)op.op) {
   case CLS_RGW_OP_DEL:
+    entry.meta = op.meta;
     if (ondisk) {
       if (!entry.pending_map.size()) {
 	int ret = cls_cxx_map_remove_key(hctx, idx);

@@ -115,9 +115,13 @@ int KernelDevice::open(string p)
     if (r < 0) {
       goto out_fail;
     }
+
+    rotational = block_device_is_rotational(path.c_str());
     size = s;
   } else {
     size = st.st_size;
+    //regular file is rotational device
+    rotational = true;
   }
 
   // Operate as though the block size is 4 KB.  The backing file
@@ -142,6 +146,7 @@ int KernelDevice::open(string p)
 	  << " (" << pretty_si_t(size) << "B)"
 	  << " block_size " << block_size
 	  << " (" << pretty_si_t(block_size) << "B)"
+	  << " " << (rotational ? "rotational" : "non-rotational")
 	  << dendl;
   return 0;
 
@@ -176,15 +181,12 @@ void KernelDevice::close()
 
 int KernelDevice::flush()
 {
-  // serialize flushers, so that we can avoid weird io_since_flush
-  // races (w/ multipler flushers).
-  Mutex::Locker l(flush_lock);
-  if (io_since_flush.read() == 0) {
+  bool ret = io_since_flush.compare_and_swap(1, 0);
+  if (!ret) {
     dout(10) << __func__ << " no-op (no ios since last flush)" << dendl;
     return 0;
   }
   dout(10) << __func__ << " start" << dendl;
-  io_since_flush.set(0);
   if (g_conf->bdev_inject_crash) {
     ++injecting_crash;
     // sleep for a moment to give other threads a chance to submit or
@@ -202,6 +204,7 @@ int KernelDevice::flush()
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fdatasync got: " << cpp_strerror(r) << dendl;
+    assert(0);
   }
   dout(5) << __func__ << " in " << dur << dendl;;
   return r;
@@ -375,9 +378,8 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!bl.is_n_align_sized(block_size) || !bl.is_aligned(block_size)) {
+  if (!buffered && bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
-    bl.rebuild_aligned(block_size);
   }
 
   dout(40) << "data: ";
@@ -424,6 +426,8 @@ int KernelDevice::aio_write(
     bl.prepare_iov(&iov);
     int r = ::pwritev(buffered ? fd_buffered : fd_direct,
 		      &iov[0], iov.size(), off);
+    _aio_log_finish(ioc, off, bl.length());
+
     if (r < 0) {
       r = -errno;
       derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
@@ -440,7 +444,6 @@ int KernelDevice::aio_write(
     }
   }
 
-  _aio_log_finish(ioc, off, bl.length());
   io_since_flush.set(1);
   return 0;
 }

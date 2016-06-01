@@ -16,18 +16,18 @@
  */
 
 #include "OSDMap.h"
-
+#include <algorithm>
 #include "common/config.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include "include/ceph_features.h"
 #include "include/str_map.h"
-#include "include/stringify.h"
 
 #include "common/code_environment.h"
 
 #include "crush/CrushTreeDumper.h"
-
+#include "common/Clock.h"
+ 
 #define dout_subsys ceph_subsys_osd
 
 // ----------------------------------
@@ -905,10 +905,7 @@ bool OSDMap::is_blacklisted(const entity_addr_t& a) const
 
 void OSDMap::get_blacklist(list<pair<entity_addr_t,utime_t> > *bl) const
 {
-  for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator it = blacklist.begin() ;
-			 it != blacklist.end(); ++it) {
-    bl->push_back(*it);
-  }
+   std::copy(blacklist.begin(), blacklist.end(), std::back_inserter(*bl));
 }
 
 void OSDMap::set_max_osd(int m)
@@ -1178,59 +1175,10 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
     n->osd_uuid = o->osd_uuid;
 }
 
-void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap,
-					  OSDMap::Incremental *pending_inc)
+void OSDMap::clean_temps(CephContext *cct,
+			 const OSDMap& osdmap, Incremental *pending_inc)
 {
-  ldout(cct, 10) << "remove_redundant_temporaries" << dendl;
-
-  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
-       p != osdmap.pg_temp->end();
-       ++p) {
-
-    // if pool does not exist, remove any existing pg_temps associated with
-    // it.  we don't care about pg_temps on the pending_inc either; if there
-    // are new_pg_temp entries on the pending, clear them out just as well.
-    if (!osdmap.have_pg_pool(p->first.pool())) {
-      ldout(cct, 10) << " removing pg_temp " << p->first
-        << " for inexistent pool " << p->first.pool() << dendl;
-      pending_inc->new_pg_temp[p->first].clear();
-
-    } else if (pending_inc->new_pg_temp.count(p->first) == 0) {
-      vector<int> raw_up;
-      int primary;
-      osdmap.pg_to_raw_up(p->first, &raw_up, &primary);
-      if (raw_up == p->second) {
-        ldout(cct, 10) << " removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
-        pending_inc->new_pg_temp[p->first].clear();
-      }
-    }
-  }
-  if (!osdmap.primary_temp->empty()) {
-    OSDMap templess;
-    templess.deepish_copy_from(osdmap);
-    templess.primary_temp->clear();
-    for (map<pg_t,int32_t>::iterator p = osdmap.primary_temp->begin();
-        p != osdmap.primary_temp->end();
-        ++p) {
-      if (pending_inc->new_primary_temp.count(p->first) == 0) {
-        vector<int> real_up, templess_up;
-        int real_primary, templess_primary;
-        osdmap.pg_to_acting_osds(p->first, &real_up, &real_primary);
-        templess.pg_to_acting_osds(p->first, &templess_up, &templess_primary);
-        if (real_primary == templess_primary){
-          ldout(cct, 10) << " removing unnecessary primary_temp "
-                         << p->first << " -> " << p->second << dendl;
-          pending_inc->new_primary_temp[p->first] = -1;
-        }
-      }
-    }
-  }
-}
-
-void OSDMap::remove_down_temps(CephContext *cct,
-                               const OSDMap& osdmap, Incremental *pending_inc)
-{
-  ldout(cct, 10) << "remove_down_pg_temp" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   OSDMap tmpmap;
   tmpmap.deepish_copy_from(osdmap);
   tmpmap.apply_incremental(*pending_inc);
@@ -1238,21 +1186,67 @@ void OSDMap::remove_down_temps(CephContext *cct,
   for (map<pg_t,vector<int32_t> >::iterator p = tmpmap.pg_temp->begin();
        p != tmpmap.pg_temp->end();
        ++p) {
-    unsigned num_up = 0;
-    for (vector<int32_t>::iterator i = p->second.begin();
-	 i != p->second.end();
-	 ++i) {
-      if (!tmpmap.is_down(*i))
-	++num_up;
-    }
-    if (num_up == 0)
+    // if pool does not exist, remove any existing pg_temps associated with
+    // it.  we don't care about pg_temps on the pending_inc either; if there
+    // are new_pg_temp entries on the pending, clear them out just as well.
+    if (!osdmap.have_pg_pool(p->first.pool())) {
+      ldout(cct, 10) << __func__ << " removing pg_temp " << p->first
+		     << " for nonexistent pool " << p->first.pool() << dendl;
       pending_inc->new_pg_temp[p->first].clear();
+      continue;
+    }
+    // all osds down?
+    unsigned num_up = 0;
+    for (auto o : p->second) {
+      if (!tmpmap.is_down(o)) {
+	++num_up;
+	break;
+      }
+    }
+    if (num_up == 0) {
+      ldout(cct, 10) << __func__ << "  removing pg_temp " << p->first
+		     << " with all down osds" << p->second << dendl;
+      pending_inc->new_pg_temp[p->first].clear();
+      continue;
+    }
+    // redundant pg_temp?
+    vector<int> raw_up;
+    int primary;
+    tmpmap.pg_to_raw_up(p->first, &raw_up, &primary);
+    if (raw_up == p->second) {
+      ldout(cct, 10) << __func__ << "  removing pg_temp " << p->first << " "
+		     << p->second << " that matches raw_up mapping" << dendl;
+      if (osdmap.pg_temp->count(p->first))
+	pending_inc->new_pg_temp[p->first].clear();
+      else
+	pending_inc->new_pg_temp.erase(p->first);
+    }
   }
   for (map<pg_t,int32_t>::iterator p = tmpmap.primary_temp->begin();
-      p != tmpmap.primary_temp->end();
-      ++p) {
-    if (tmpmap.is_down(p->second))
+       p != tmpmap.primary_temp->end();
+       ++p) {
+    // primary down?
+    if (tmpmap.is_down(p->second)) {
+      ldout(cct, 10) << __func__ << "  removing primary_temp " << p->first
+		     << " to down " << p->second << dendl;
       pending_inc->new_primary_temp[p->first] = -1;
+      continue;
+    }
+    // redundant primary_temp?
+    vector<int> real_up, templess_up;
+    int real_primary, templess_primary;
+    pg_t pgid = p->first;
+    tmpmap.pg_to_acting_osds(pgid, &real_up, &real_primary);
+    tmpmap.pg_to_raw_up(pgid, &templess_up, &templess_primary);
+    if (real_primary == templess_primary){
+      ldout(cct, 10) << __func__ << "  removing primary_temp "
+		     << pgid << " -> " << real_primary
+		     << " (unnecessary/redundant)" << dendl;
+      if (osdmap.primary_temp->count(pgid))
+	pending_inc->new_primary_temp[pgid] = -1;
+      else
+	pending_inc->new_primary_temp.erase(pgid);
+    }
   }
 }
 
@@ -2494,7 +2488,7 @@ public:
 
     Parent::dump(tbl);
 
-    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+    for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
     }
@@ -2546,7 +2540,7 @@ public:
     Parent::dump(f);
     f->close_section();
     f->open_array_section("stray");
-    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+    for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
     }
@@ -2953,12 +2947,12 @@ int OSDMap::summarize_mapping_stats(
       base_stddev += base_diff * base_diff;
       float new_diff = (float)new_by_osd[osd] - avg_pg;
       new_stddev += new_diff * new_diff;
-      if (min < 0 || min_base_pg < base_by_osd[osd]) {
+      if (min < 0 || base_by_osd[osd] < min_base_pg) {
 	min = osd;
 	min_base_pg = base_by_osd[osd];
 	min_new_pg = new_by_osd[osd];
       }
-      if (max < 0 || max_base_pg > base_by_osd[osd]) {
+      if (max < 0 || base_by_osd[osd] > max_base_pg) {
 	max = osd;
 	max_base_pg = base_by_osd[osd];
 	max_new_pg = new_by_osd[osd];

@@ -93,6 +93,7 @@ OPTION(xio_mp_max_1k, OPT_INT, 8192) // max 1K chunks
 OPTION(xio_mp_max_page, OPT_INT, 4096) // max 1K chunks
 OPTION(xio_mp_max_hint, OPT_INT, 4096) // max size-hint chunks
 OPTION(xio_portal_threads, OPT_INT, 2) // xio portal threads per messenger
+OPTION(xio_max_conns_per_portal, OPT_INT, 32) // max xio_connections per portal/ctx
 OPTION(xio_transport_type, OPT_STR, "rdma") // xio transport type: {rdma or tcp}
 OPTION(xio_max_send_inline, OPT_INT, 512) // xio maximum threshold to send inline
 
@@ -195,7 +196,8 @@ OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
 OPTION(ms_dump_on_send, OPT_BOOL, false)           // hexdump msg to log on send
 OPTION(ms_dump_corrupt_message_level, OPT_INT, 1)  // debug level to hexdump undecodeable messages at
-OPTION(ms_async_op_threads, OPT_INT, 3)
+OPTION(ms_async_op_threads, OPT_INT, 3)            // number of worker processing threads for async messenger created on init
+OPTION(ms_async_max_op_threads, OPT_INT, 5)        // max number of worker processing threads for async messenger
 OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // example: ms_async_affinity_cores = 0,1
 // The number of coreset is expected to equal to ms_async_op_threads, otherwise
@@ -381,6 +383,7 @@ OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
 OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
 OPTION(client_quota, OPT_BOOL, false)
+OPTION(client_quota_df, OPT_BOOL, true) // use quota for df on subdir mounts
 OPTION(client_oc, OPT_BOOL, true)
 OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
 OPTION(client_oc_max_dirty, OPT_INT, 1024*1024* 100)    // MB * n  (dirty OR tx.. bigish)
@@ -416,6 +419,8 @@ OPTION(client_use_faked_inos, OPT_BOOL, false)
 OPTION(client_mds_namespace, OPT_INT, -1)
 
 OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
+OPTION(crush_location_hook, OPT_STR, "")
+OPTION(crush_location_hook_timeout, OPT_INT, 10)
 
 OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_timeout, OPT_DOUBLE, 10.0)    // before we ask for a map
@@ -556,6 +561,9 @@ OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous 
 // Maximum number of damaged frags/dentries before whole MDS rank goes damaged
 OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
 
+// verify backend can support configured max object name length
+OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL, true)
+
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
@@ -606,9 +614,9 @@ OPTION(osd_pg_op_threshold_ratio, OPT_U64, 2)             // the expected maximu
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
-// This parameter is not consumed by ceph C code but the upstart scripts.
-// OPTION(osd_crush_initial_weight, OPT_DOUBLE, 0) // the initial weight is for newly added osds.
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL, true) // try to use gmt for hitset archive names if all osds in cluster support it.
+OPTION(osd_crush_update_on_start, OPT_BOOL, true)
+OPTION(osd_crush_initial_weight, OPT_DOUBLE, -1) // if >=0, the initial weight is for newly added osds.
 OPTION(osd_pool_default_crush_rule, OPT_INT, -1) // deprecated for osd_pool_default_crush_replicated_ruleset
 OPTION(osd_pool_default_crush_replicated_ruleset, OPT_INT, CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
 OPTION(osd_pool_erasure_code_stripe_width, OPT_U32, OSD_POOL_ERASURE_CODE_STRIPE_WIDTH) // in bytes
@@ -655,8 +663,8 @@ OPTION(osd_hit_set_max_size, OPT_INT, 100000)  // max target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
 
 // conservative default throttling values
-OPTION(osd_tier_promote_max_objects_sec, OPT_U64, 5 * 1024*1024)
-OPTION(osd_tier_promote_max_bytes_sec, OPT_U64, 25)
+OPTION(osd_tier_promote_max_objects_sec, OPT_U64, 25)
+OPTION(osd_tier_promote_max_bytes_sec, OPT_U64, 5 * 1024*1024)
 
 OPTION(osd_tier_default_cache_mode, OPT_STR, "writeback")
 OPTION(osd_tier_default_cache_hit_set_count, OPT_INT, 4)
@@ -739,8 +747,8 @@ OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
-OPTION(osd_recovery_max_active, OPT_INT, 3)
-OPTION(osd_recovery_max_single_start, OPT_INT, 1)
+OPTION(osd_recovery_max_active, OPT_U64, 3)
+OPTION(osd_recovery_max_single_start, OPT_U64, 1)
 OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
 OPTION(osd_copyfrom_max_chunk, OPT_U64, 8<<20)   // max size of a COPYFROM chunk
 OPTION(osd_push_per_object_cost, OPT_U64, 1000)  // push cost per object
@@ -839,7 +847,7 @@ OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
-OPTION(mon_rocksdb_options, OPT_STR, "cache_size=536870912,write_buffer_size=33554432,block_size=65536,compression=kNoCompression")
+OPTION(mon_rocksdb_options, OPT_STR, "write_buffer_size=33554432,compression=kNoCompression")
 
 /**
  * osd_*_priority adjust the relative priority of client io, recovery io,
@@ -858,6 +866,10 @@ OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
 OPTION(osd_scrub_priority, OPT_U32, 5)
 // set default cost equal to 50MB io
 OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+
+OPTION(osd_recovery_priority, OPT_U32, 5)
+// set default cost equal to 20MB io
+OPTION(osd_recovery_cost, OPT_U32, 20<<20)
 
 /**
  * osd_recovery_op_warn_multiple scales the normal warning threshhold,
@@ -885,6 +897,8 @@ OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
 OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
 OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
+
+OPTION(osd_discard_disconnected_ops, OPT_BOOL, true)
 
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
 OPTION(memstore_page_set, OPT_BOOL, true)
@@ -934,16 +948,17 @@ OPTION(bluestore_block_db_create, OPT_BOOL, false)
 OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL, false)
-OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
+OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate space if block/db_path/wal_path is file rather that block device.
 OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
+OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
+OPTION(bluestore_freelist_type, OPT_STR, "bitmap")
+OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
-OPTION(bluestore_fail_eio, OPT_BOOL, true)
-OPTION(bluestore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
@@ -954,12 +969,9 @@ OPTION(bluestore_max_ops, OPT_U64, 512)
 OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_wal_max_ops, OPT_U64, 512)
 OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
-OPTION(bluestore_fid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
-OPTION(bluestore_open_by_handle, OPT_BOOL, true)
-OPTION(bluestore_o_direct, OPT_BOOL, true)
 OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
 OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
@@ -983,6 +995,7 @@ OPTION(kstore_cache_tails, OPT_BOOL, true)
 OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
+OPTION(filestore_omap_backend_path, OPT_STR, "")
 
 OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 
@@ -1165,6 +1178,7 @@ OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a ra
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
+OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be validated
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1405,6 +1419,8 @@ OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retryi
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
+
+OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

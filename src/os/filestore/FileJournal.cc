@@ -106,9 +106,16 @@ int FileJournal::_open(bool forwrite, bool create)
     aio_ctx = 0;
     ret = io_setup(128, &aio_ctx);
     if (ret < 0) {
-      ret = errno;
-      derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
-      ret = -ret;
+      switch (ret) {
+	// Contrary to naive expectations -EAGIAN means ...
+	case -EAGAIN:
+	  derr << "FileJournal::_open: user's limit of aio events exceeded. "
+	       << "Try increasing /proc/sys/fs/aio-max-nr" << dendl;
+	  break;
+	default:
+	  derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(-ret) << dendl;
+	  break;
+      }
       goto out_fd;
     }
   }
@@ -1058,8 +1065,7 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
 void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
-  if (directio && (!bl.is_aligned(block_size) ||
-		   !bl.is_n_align_sized(CEPH_DIRECTIO_ALIGNMENT))) {
+  if (directio && !bl.is_aligned_size_and_memory(block_size, CEPH_DIRECTIO_ALIGNMENT)) {
     assert((bl.length() & (CEPH_DIRECTIO_ALIGNMENT - 1)) == 0);
     assert((pos & (CEPH_DIRECTIO_ALIGNMENT - 1)) == 0);
     assert(0 == "bl was not aligned");
@@ -1537,7 +1543,7 @@ void FileJournal::write_finish_thread_entry()
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
 	  derr << "aio to " << ai->off << "~" << ai->len
-	       << " wrote " << event[i].res << dendl;
+	       << " returned: " << (int)event[i].res << dendl;
 	  assert(0 == "unexpected aio error");
 	}
 	dout(10) << "write_finish_thread_entry aio " << ai->off
@@ -1604,13 +1610,12 @@ void FileJournal::check_aio_completion()
 
 int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) {
   dout(10) << "prepare_entry " << tls << dendl;
-  unsigned data_len = 0;
+  int data_len = g_conf->journal_align_min_size - 1;
   int data_align = -1; // -1 indicates that we don't care about the alignment
   bufferlist bl;
   for (vector<ObjectStore::Transaction>::iterator p = tls.begin();
       p != tls.end(); ++p) {
-   if ((*p).get_data_length() > data_len &&
-     (int)(*p).get_data_length() >= g_conf->journal_align_min_size) {
+   if ((int)(*p).get_data_length() > data_len) {
      data_len = (*p).get_data_length();
      data_align = ((*p).get_data_alignment() - bl.length()) & ~CEPH_PAGE_MASK;
     }

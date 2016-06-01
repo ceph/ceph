@@ -15,8 +15,6 @@
 #ifndef CEPH_COMPATSET_H
 #define CEPH_COMPATSET_H
 #include "include/buffer.h"
-#include <vector>
-
 #include "common/Formatter.h"
 
 struct CompatSet {
@@ -25,7 +23,6 @@ struct CompatSet {
     uint64_t id;
     string name;
 
-    Feature(uint64_t _id, const char *_name) : id(_id), name(_name) {}
     Feature(uint64_t _id, const string& _name) : id(_id), name(_name) {}
   };
 

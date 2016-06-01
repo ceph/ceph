@@ -83,10 +83,7 @@
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 #define CEPHX_CRYPT_ERR			1
 
-#include "../Auth.h"
-#include "../RotatingKeyRing.h"
-#include "common/debug.h"
-
+#include "auth/Auth.h"
 #include <errno.h>
 #include <sstream>
 

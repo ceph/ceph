@@ -81,7 +81,7 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
 			     const entity_inst_t& _peer) :
   Connection(m->cct, m),
   xio_conn_type(_type),
-  portal(m->default_portal()),
+  portal(m->get_portal()),
   connected(false),
   peer(_peer),
   session(NULL),
@@ -149,6 +149,66 @@ int XioConnection::send_message(Message *m)
   return ms->_send_message(m, this);
 }
 
+void XioConnection::send_keepalive_or_ack(bool ack, const utime_t *tp)
+{
+  /* If con is not in READY state, we need to queue the request */
+  if (cstate.session_state.read() != XioConnection::UP) {
+    pthread_spin_lock(&sp);
+    if (cstate.session_state.read() != XioConnection::UP) {
+      if (ack) {
+	outgoing.ack = true;
+	outgoing.ack_time = *tp;
+      }
+      else {
+	outgoing.keepalive = true;
+      }
+      pthread_spin_unlock(&sp);
+      return;
+    }
+    pthread_spin_unlock(&sp);
+  }
+
+  send_keepalive_or_ack_internal(ack, tp);
+}
+
+void XioConnection::send_keepalive_or_ack_internal(bool ack, const utime_t *tp)
+{
+  XioCommand *xcmd = pool_alloc_xio_command(this);
+  if (! xcmd) {
+    /* could happen if Accelio has been shutdown */
+    return;
+  }
+
+  struct ceph_timespec ts;
+  if (ack) {
+    assert(tp);
+    tp->encode_timeval(&ts);
+    xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
+    xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
+  } else if (has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
+    utime_t t = ceph_clock_now(msgr->cct);
+    t.encode_timeval(&ts);
+    xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE2);
+    xcmd->get_bl_ref().append((char*)&ts, sizeof(ts));
+  } else {
+    xcmd->get_bl_ref().append(CEPH_MSGR_TAG_KEEPALIVE);
+  }
+
+  const std::list<buffer::ptr>& header = xcmd->get_bl_ref().buffers();
+  assert(header.size() == 1);  /* accelio header must be without scatter gather */
+  list<bufferptr>::const_iterator pb = header.begin();
+  assert(pb->length() < XioMsgHdr::get_max_encoded_length());
+  struct xio_msg * msg = xcmd->get_xio_msg();
+  msg->out.header.iov_base = (char*) pb->c_str();
+  msg->out.header.iov_len = pb->length();
+
+  ldout(msgr->cct,8) << __func__ << " sending command with tag " << (int)(*(char*)msg->out.header.iov_base)
+       << " len " << msg->out.header.iov_len << dendl;
+
+  portal->enqueue(this, xcmd);
+}
+
+
 int XioConnection::passive_setup()
 {
   /* XXX passive setup is a placeholder for (potentially active-side
@@ -196,40 +256,41 @@ static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   return xhook;
 }
 
-int XioConnection::on_msg_req(struct xio_session *session,
-			      struct xio_msg *req,
+int XioConnection::handle_data_msg(struct xio_session *session,
+			      struct xio_msg *msg,
 			      int more_in_batch,
 			      void *cb_user_context)
 {
-  struct xio_msg *treq = req;
+  struct xio_msg *tmsg = msg;
 
   /* XXX Accelio guarantees message ordering at
    * xio_session */
 
   if (! in_seq.p()) {
-    if (!treq->in.header.iov_len) {
+    if (!tmsg->in.header.iov_len) {
 	ldout(msgr->cct,0) << __func__ << " empty header: packet out of sequence?" << dendl;
-	xio_release_msg(req);
+	xio_release_msg(msg);
 	return 0;
     }
+    const size_t sizeof_tag = 1;
     XioMsgCnt msg_cnt(
-      buffer::create_static(treq->in.header.iov_len,
-			    (char*) treq->in.header.iov_base));
-    ldout(msgr->cct,10) << __func__ << " receive req " << "treq " << treq
+      buffer::create_static(tmsg->in.header.iov_len-sizeof_tag,
+			    ((char*) tmsg->in.header.iov_base)+sizeof_tag));
+    ldout(msgr->cct,10) << __func__ << " receive msg " << "tmsg " << tmsg
       << " msg_cnt " << msg_cnt.msg_cnt
-      << " iov_base " << treq->in.header.iov_base
-      << " iov_len " << (int) treq->in.header.iov_len
-      << " nents " << treq->in.pdata_iov.nents
+      << " iov_base " << tmsg->in.header.iov_base
+      << " iov_len " << (int) tmsg->in.header.iov_len
+      << " nents " << tmsg->in.pdata_iov.nents
       << " conn " << conn << " sess " << session
-      << " sn " << treq->sn << dendl;
+      << " sn " << tmsg->sn << dendl;
     assert(session == this->session);
     in_seq.set_count(msg_cnt.msg_cnt);
   } else {
     /* XXX major sequence error */
-    assert(! treq->in.header.iov_len);
+    assert(! tmsg->in.header.iov_len);
   }
 
-  in_seq.append(req);
+  in_seq.append(msg);
   if (in_seq.count() > 0) {
     return 0;
   }
@@ -250,14 +311,14 @@ int XioConnection::on_msg_req(struct xio_session *session,
     dendl;
 
   struct xio_msg* msg_iter = msg_seq.begin();
-  treq = msg_iter;
+  tmsg = msg_iter;
   XioMsgHdr hdr(header, footer,
-		buffer::create_static(treq->in.header.iov_len,
-				      (char*) treq->in.header.iov_base));
+		buffer::create_static(tmsg->in.header.iov_len,
+				      (char*) tmsg->in.header.iov_base));
 
   if (magic & (MSG_MAGIC_TRACE_XCON)) {
     if (hdr.hdr->type == 43) {
-      print_xio_msg_hdr(msgr->cct, "on_msg_req", hdr, NULL);
+      print_xio_msg_hdr(msgr->cct, "on_msg", hdr, NULL);
     }
   }
 
@@ -270,9 +331,9 @@ int XioConnection::on_msg_req(struct xio_session *session,
   blen = header.front_len;
 
   while (blen && (msg_iter != msg_seq.end())) {
-    treq = msg_iter;
-    iov_len = vmsg_sglist_nents(&treq->in);
-    iovs = vmsg_sglist(&treq->in);
+    tmsg = msg_iter;
+    iov_len = vmsg_sglist_nents(&tmsg->in);
+    iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
 
@@ -317,9 +378,9 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   while (blen && (msg_iter != msg_seq.end())) {
-    treq = msg_iter;
-    iov_len = vmsg_sglist_nents(&treq->in);
-    iovs = vmsg_sglist(&treq->in);
+    tmsg = msg_iter;
+    iov_len = vmsg_sglist_nents(&tmsg->in);
+    iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
       take_len = MIN(blen, msg_iov->iov_len);
@@ -349,9 +410,9 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   while (blen && (msg_iter != msg_seq.end())) {
-    treq = msg_iter;
-    iov_len = vmsg_sglist_nents(&treq->in);
-    iovs = vmsg_sglist(&treq->in);
+    tmsg = msg_iter;
+    iov_len = vmsg_sglist_nents(&tmsg->in);
+    iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
       data.append(
@@ -366,7 +427,7 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   /* update connection timestamp */
-  recv.set(treq->timestamp);
+  recv.set(tmsg->timestamp);
 
   Message *m =
     decode_message(msgr->cct, msgr->crcflags, header, footer, payload, middle,
@@ -422,6 +483,69 @@ int XioConnection::on_msg_req(struct xio_session *session,
   return 0;
 }
 
+int XioConnection::on_msg(struct xio_session *session,
+			      struct xio_msg *msg,
+			      int more_in_batch,
+			      void *cb_user_context)
+{
+  char tag = CEPH_MSGR_TAG_MSG;
+  if (msg->in.header.iov_len)
+    tag = *(char*)msg->in.header.iov_base;
+
+  ldout(msgr->cct,8) << __func__ << " receive msg with iov_len "
+    << (int) msg->in.header.iov_len << " tag " << (int)tag << dendl;
+
+  //header_len_without_tag is only meaningful in case we have tag
+  size_t header_len_without_tag = msg->in.header.iov_len - sizeof(tag);
+
+  switch(tag) {
+  case CEPH_MSGR_TAG_MSG:
+    ldout(msgr->cct, 20) << __func__ << " got data message" << dendl;
+    return handle_data_msg(session, msg, more_in_batch, cb_user_context);
+
+  case CEPH_MSGR_TAG_KEEPALIVE:
+    ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE" << dendl;
+    set_last_keepalive(ceph_clock_now(nullptr));
+    break;
+
+  case CEPH_MSGR_TAG_KEEPALIVE2:
+    if (header_len_without_tag < sizeof(ceph_timespec)) {
+      lderr(msgr->cct) << __func__ << " too few data for KEEPALIVE2: got " << header_len_without_tag <<
+         " bytes instead of " << sizeof(ceph_timespec) << " bytes" << dendl;
+    }
+    else {
+      ceph_timespec *t = (ceph_timespec *) ((char*)msg->in.header.iov_base + sizeof(tag));
+      utime_t kp_t = utime_t(*t);
+      ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE2 with timestamp" << kp_t << dendl;
+      send_keepalive_or_ack(true, &kp_t);
+      set_last_keepalive(ceph_clock_now(nullptr));
+    }
+
+    break;
+
+  case CEPH_MSGR_TAG_KEEPALIVE2_ACK:
+    if (header_len_without_tag < sizeof(ceph_timespec)) {
+      lderr(msgr->cct) << __func__ << " too few data for KEEPALIVE2_ACK: got " << header_len_without_tag <<
+         " bytes instead of " << sizeof(ceph_timespec) << " bytes" << dendl;
+    }
+    else {
+      ceph_timespec *t = (ceph_timespec *) ((char*)msg->in.header.iov_base + sizeof(tag));
+      utime_t kp_t(*t);
+      ldout(msgr->cct, 20) << __func__ << " got KEEPALIVE2_ACK with timestamp" << kp_t << dendl;
+      set_last_keepalive_ack(kp_t);
+    }
+    break;
+
+  default:
+    lderr(msgr->cct) << __func__ << " unsupported message tag " << (int) tag << dendl;
+    assert(! "unsupported message tag");
+  }
+
+  xio_release_msg(msg);
+  return 0;
+}
+
+
 int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
 					   struct xio_msg *req,
 					   void *conn_user_context)
@@ -429,17 +553,22 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
   /* requester send complete (one-way) */
   uint64_t rc = ++scount;
 
-  XioMsg* xmsg = static_cast<XioMsg*>(req->user_context);
+  XioSend* xsend = static_cast<XioSend*>(req->user_context);
   if (unlikely(magic & MSG_MAGIC_TRACE_CTR)) {
     if (unlikely((rc % 1000000) == 0)) {
       std::cout << "xio finished " << rc << " " << time(0) << std::endl;
     }
   } /* trace ctr */
 
-  ldout(msgr->cct,11) << "on_msg_delivered xcon: " << xmsg->xcon <<
-    " session: " << session << " msg: " << req << " sn: " << req->sn <<
-    " type: " << xmsg->m->get_type() << " tid: " << xmsg->m->get_tid() <<
-    " seq: " << xmsg->m->get_seq() << dendl;
+  ldout(msgr->cct,11) << "on_msg_delivered xcon: " << xsend->xcon <<
+    " session: " << session << " msg: " << req << " sn: " << req->sn << dendl;
+
+  XioMsg *xmsg = dynamic_cast<XioMsg*>(xsend);
+  if (xmsg) {
+    ldout(msgr->cct,11) << "on_msg_delivered xcon: " <<
+      " type: " << xmsg->m->get_type() << " tid: " << xmsg->m->get_tid() <<
+      " seq: " << xmsg->m->get_seq() << dendl;
+  }
 
   --send_ctr; /* atomic, because portal thread */
 
@@ -449,36 +578,46 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
     if ((send_ctr <= uint32_t(xio_qdepth_low_mark())) &&
 	(1 /* XXX memory <= memory low-water mark */))  {
       cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
-      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xmsg->xcon <<
+      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xsend->xcon <<
         " session: " << session << " up_ready from flow_controlled" << dendl;
     }
   }
 
-  xmsg->put();
+  xsend->put();
 
   return 0;
 }  /* on_msg_delivered */
 
-void XioConnection::msg_send_fail(XioMsg *xmsg, int code)
+void XioConnection::msg_send_fail(XioSend *xsend, int code)
 {
   ldout(msgr->cct,2) << "xio_send_msg FAILED xcon: " << this <<
-    " xmsg: " << &xmsg->req_0.msg << " code=" << code <<
+    " msg: " << xsend->get_xio_msg() << " code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
   /* return refs taken for each xio_msg */
-  xmsg->put_msg_refs();
+  xsend->put_msg_refs();
 } /* msg_send_fail */
 
 void XioConnection::msg_release_fail(struct xio_msg *msg, int code)
 {
   ldout(msgr->cct,2) << "xio_release_msg FAILED xcon: " << this <<
-    " xmsg: " << msg <<  "code=" << code <<
+    " msg: " << msg <<  "code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
 } /* msg_release_fail */
 
-int XioConnection::flush_input_queue(uint32_t flags) {
+int XioConnection::flush_out_queues(uint32_t flags) {
   XioMessenger* msgr = static_cast<XioMessenger*>(get_messenger());
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_lock(&sp);
+
+  if (outgoing.keepalive) {
+    outgoing.keepalive = false;
+    send_keepalive_or_ack_internal();
+  }
+
+  if (outgoing.ack) {
+    outgoing.ack = false;
+    send_keepalive_or_ack_internal(true, &outgoing.ack_time);
+  }
 
   // send deferred 1 (direct backpresssure)
   if (outgoing.requeue.size() > 0)
@@ -497,7 +636,7 @@ int XioConnection::flush_input_queue(uint32_t flags) {
   return 0;
 }
 
-int XioConnection::discard_input_queue(uint32_t flags)
+int XioConnection::discard_out_queues(uint32_t flags)
 {
   Message::Queue disc_q;
   XioSubmit::Queue deferred_q;
@@ -507,13 +646,15 @@ int XioConnection::discard_input_queue(uint32_t flags)
 
   /* the two send queues contain different objects:
    * - anything on the mqueue is a Message
-   * - anything on the requeue is an XioMsg
+   * - anything on the requeue is an XioSend
    */
   Message::Queue::const_iterator i1 = disc_q.end();
   disc_q.splice(i1, outgoing.mqueue);
 
   XioSubmit::Queue::const_iterator i2 = deferred_q.end();
   deferred_q.splice(i2, outgoing.requeue);
+
+  outgoing.keepalive = outgoing.ack = false;
 
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_unlock(&sp);
@@ -530,17 +671,17 @@ int XioConnection::discard_input_queue(uint32_t flags)
   while (!deferred_q.empty()) {
     XioSubmit::Queue::iterator q_iter = deferred_q.begin();
     XioSubmit* xs = &(*q_iter);
-    XioMsg* xmsg;
+    XioSend* xsend;
     switch (xs->type) {
       case XioSubmit::OUTGOING_MSG:
-	xmsg = static_cast<XioMsg*>(xs);
+	xsend = static_cast<XioSend*>(xs);
 	deferred_q.erase(q_iter);
 	// release once for each chained xio_msg
-	xmsg->put(xmsg->hdr.msg_cnt);
+	xsend->put(xsend->get_msg_count());
 	break;
       case XioSubmit::INCOMING_MSG_RELEASE:
 	deferred_q.erase(q_iter);
-	portal->release_xio_rsp(static_cast<XioRsp*>(xs));
+	portal->release_xio_msg(static_cast<XioCompletion*>(xs));
 	break;
       default:
 	ldout(msgr->cct,0) << __func__ << ": Unknown Msg type " << xs->type << dendl;
@@ -580,9 +721,9 @@ int XioConnection::on_msg_error(struct xio_session *session,
 				struct xio_msg  *msg,
 				void *conn_user_context)
 {
-  XioMsg *xmsg = static_cast<XioMsg*>(msg->user_context);
-  if (xmsg)
-    xmsg->put();
+  XioSend *xsend = static_cast<XioSend*>(msg->user_context);
+  if (xsend)
+    xsend->put();
 
   --send_ctr; /* atomic, because portal thread */
   return 0;
@@ -607,7 +748,7 @@ int XioConnection::_mark_down(uint32_t flags)
 
   /* XXX this will almost certainly be called again from
    * on_disconnect_event() */
-  discard_input_queue(flags|CState::OP_FLAG_LOCKED);
+  discard_out_queues(flags|CState::OP_FLAG_LOCKED);
 
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_unlock(&sp);
@@ -638,7 +779,7 @@ int XioConnection::CState::state_up_ready(uint32_t flags)
   if (! (flags & CState::OP_FLAG_LOCKED))
     pthread_spin_lock(&xcon->sp);
 
-  xcon->flush_input_queue(flags|CState::OP_FLAG_LOCKED);
+  xcon->flush_out_queues(flags|CState::OP_FLAG_LOCKED);
 
   session_state.set(UP);
   startup_state.set(READY);
@@ -679,7 +820,7 @@ int XioConnection::CState::state_fail(Message* m, uint32_t flags)
   session_state.set(DISCONNECTED);
   startup_state.set(FAIL);
 
-  xcon->discard_input_queue(flags|OP_FLAG_LOCKED);
+  xcon->discard_out_queues(flags|OP_FLAG_LOCKED);
   xcon->adjust_clru(flags|OP_FLAG_LOCKED|OP_FLAG_LRU);
 
   xcon->disconnect();
@@ -704,4 +845,11 @@ int XioLoopbackConnection::send_message(Message *m)
   m->set_src(ms->get_myinst().name);
   ms->ds_dispatch(m);
   return 0;
+}
+
+void XioLoopbackConnection::send_keepalive()
+{
+  utime_t t = ceph_clock_now(nullptr);
+  set_last_keepalive(t);
+  set_last_keepalive_ack(t);
 }

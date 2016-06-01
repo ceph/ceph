@@ -1143,13 +1143,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
 
   auth_pin(this);
 
-  int64_t pool;
-  if (is_dir()) {
-    pool = mdcache->mds->mdsmap->get_metadata_pool();
-  } else {
-    pool = inode.layout.pool_id;
-  }
-
+  const int64_t pool = get_backtrace_pool();
   inode_backtrace_t bt;
   build_backtrace(pool, bt);
   bufferlist parent_bl;
@@ -1212,8 +1206,10 @@ void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
   if (r < 0) {
     dout(1) << "store backtrace error " << r << " v " << v << dendl;
-    mdcache->mds->clog->error() << "failed to store backtrace on dir ino "
-				<< ino() << " object, errno " << r << "\n";
+    mdcache->mds->clog->error() << "failed to store backtrace on ino "
+				<< ino() << " object"
+                                << ", pool " << get_backtrace_pool()
+                                << ", errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
     return;
   }
@@ -1229,13 +1225,7 @@ void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 
 void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
 {
-  int64_t pool;
-  if (is_dir())
-    pool = mdcache->mds->mdsmap->get_metadata_pool();
-  else
-    pool = inode.layout.pool_id;
-
-  mdcache->fetch_backtrace(inode.ino, pool, *backtrace, fin);
+  mdcache->fetch_backtrace(inode.ino, get_backtrace_pool(), *backtrace, fin);
 }
 
 void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
@@ -3725,12 +3715,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     void fetch_backtrace_and_tag(CInode *in, std::string tag,
                                  Context *fin, int *bt_r, bufferlist *bt)
     {
-      int64_t pool;
-      if (in->is_dir())
-        pool = in->mdcache->mds->mdsmap->get_metadata_pool();
-      else
-        pool = in->inode.layout.pool_id;
-
+      const int64_t pool = in->get_backtrace_pool();
       object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
 
       ObjectOperation fetch;
@@ -3788,11 +3773,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       results->performed_validation = true; // at least, some of it!
       results->backtrace.checked = true;
 
-      int64_t pool;
-      if (in->is_dir())
-        pool = in->mdcache->mds->mdsmap->get_metadata_pool();
-      else
-        pool = in->inode.layout.pool_id;
+      const int64_t pool = in->get_backtrace_pool();
       inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
       in->build_backtrace(pool, memory_backtrace);
       bool equivalent, divergent;
@@ -4300,5 +4281,17 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
     clog->info() << "scrub complete with tag '" << scrub_infop->header->tag << "'";
+  }
+}
+
+int64_t CInode::get_backtrace_pool() const
+{
+  if (is_dir()) {
+    return mdcache->mds->mdsmap->get_metadata_pool();
+  } else {
+    // Files are required to have an explicit layout that specifies
+    // a pool
+    assert(inode.layout.pool_id != -1);
+    return inode.layout.pool_id;
   }
 }

@@ -2187,6 +2187,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 				  utime_t new_mtime)
 {
   assert(in->is_auth());
+  assert(in->is_file());
 
   inode_t *latest = in->get_projected_inode();
   map<client_t, client_writeable_range_t> new_ranges;

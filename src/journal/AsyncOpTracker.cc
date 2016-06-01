@@ -22,10 +22,18 @@ void AsyncOpTracker::start_op() {
 }
 
 void AsyncOpTracker::finish_op() {
-  Mutex::Locker locker(m_lock);
-  assert(m_pending_ops > 0);
-  if (--m_pending_ops == 0) {
-    m_cond.Signal();
+  Context *on_finish = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_pending_ops > 0);
+    if (--m_pending_ops == 0) {
+      m_cond.Signal();
+      std::swap(on_finish, m_on_finish);
+    }
+  }
+
+  if (on_finish != nullptr) {
+    on_finish->complete(0);
   }
 }
 
@@ -34,6 +42,23 @@ void AsyncOpTracker::wait_for_ops() {
   while (m_pending_ops > 0) {
     m_cond.Wait(m_lock);
   }
+}
+
+void AsyncOpTracker::wait_for_ops(Context *on_finish) {
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_on_finish == nullptr);
+    if (m_pending_ops > 0) {
+      m_on_finish = on_finish;
+      return;
+    }
+  }
+  on_finish->complete(0);
+}
+
+bool AsyncOpTracker::empty() {
+  Mutex::Locker locker(m_lock);
+  return (m_pending_ops == 0);
 }
 
 } // namespace journal

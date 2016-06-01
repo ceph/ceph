@@ -23,23 +23,27 @@ namespace mirror {
  */
 class ClusterWatcher {
 public:
+  typedef std::set<peer_t> Peers;
+  typedef std::map<int64_t, Peers>  PoolPeers;
+  typedef std::set<std::string> PoolNames;
+
   ClusterWatcher(RadosRef cluster, Mutex &lock);
   ~ClusterWatcher() = default;
   ClusterWatcher(const ClusterWatcher&) = delete;
   ClusterWatcher& operator=(const ClusterWatcher&) = delete;
+
   // Caller controls frequency of calls
   void refresh_pools();
-  const std::map<peer_t, std::set<int64_t> >& get_peer_configs() const;
-  const std::set<std::string>& get_pool_names() const;
+  const PoolPeers& get_pool_peers() const;
+  const PoolNames& get_pool_names() const;
 
 private:
-  void read_configs(std::map<peer_t, std::set<int64_t> > *peer_configs,
-		    std::set<std::string> *pool_names);
-
   Mutex &m_lock;
   RadosRef m_cluster;
-  std::map<peer_t, std::set<int64_t> > m_peer_configs;
-  std::set<std::string> m_pool_names;
+  PoolPeers m_pool_peers;
+  PoolNames m_pool_names;
+
+  void read_pool_peers(PoolPeers *pool_peers, PoolNames *pool_names);
 };
 
 } // namespace mirror

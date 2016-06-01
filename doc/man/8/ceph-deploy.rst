@@ -135,14 +135,11 @@ it runs ``gatherkeys`` to get the keyring. It then creates a mds on the desired
 host under the path ``/var/lib/ceph/mds/`` in ``/var/lib/ceph/mds/{cluster}-{name}``
 format and a bootstrap keyring under ``/var/lib/ceph/bootstrap-mds/`` in
 ``/var/lib/ceph/bootstrap-mds/{cluster}.keyring`` format. It then runs appropriate
-commands based on ``distro.init`` to start the ``mds``. To remove the mds,
-subcommand ``destroy`` is used.
+commands based on ``distro.init`` to start the ``mds``.
 
 Usage::
 
 	ceph-deploy mds create [HOST[:DAEMON-NAME]] [HOST[:DAEMON-NAME]...]
-
-	ceph-deploy mds destroy [HOST[:DAEMON-NAME]] [HOST[:DAEMON-NAME]...]
 
 The [DAEMON-NAME] is optional.
 
@@ -367,9 +364,9 @@ the configuration file under ``/etc/ceph`` directory of remote host to admin nod
 
 Usage::
 
-	ceph-deploy push [HOST] [HOST...]
+	ceph-deploy config push [HOST] [HOST...]
 
-	ceph-deploy pull [HOST] [HOST...]
+	ceph-deploy config pull [HOST] [HOST...]
 
 Here, [HOST] is the hostname of the node where config file will be pushed to or
 pulled from.
@@ -569,7 +566,7 @@ Options
 
 .. option:: --fs-type
 
-	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.
+	Filesystem to use to format disk (e.g., ``xfs``, ``btrfs``).
 
 .. option:: --dmcrypt
 

@@ -31,7 +31,7 @@
 
 /**
  * LFNIndex also encapsulates logic for manipulating
- * subdirectories of of a collection as well as the long filename
+ * subdirectories of a collection as well as the long filename
  * logic.
  *
  * The protected methods provide machinery for derived classes to

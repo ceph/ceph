@@ -9,6 +9,9 @@
 #include "include/atomic.h"
 #include "rgw_common.h"
 
+using param_pair_t = pair<string, string>;
+using param_vec_t = vector<param_pair_t>;
+
 struct rgw_http_req_data;
 
 class RGWHTTPClient
@@ -29,10 +32,12 @@ class RGWHTTPClient
   string last_url;
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
+  atomic_t stopped;
+
 protected:
   CephContext *cct;
 
-  list<pair<string, string> > headers;
+  param_vec_t headers;
   int init_request(const char *method, const char *url, rgw_http_req_data *req_data);
 public:
 
@@ -62,9 +67,15 @@ public:
     headers.push_back(pair<string, string>(name, val));
   }
 
-  virtual int receive_header(void *ptr, size_t len) = 0;
-  virtual int receive_data(void *ptr, size_t len) = 0;
-  virtual int send_data(void *ptr, size_t len) = 0;
+  virtual int receive_header(void *ptr, size_t len) {
+    return 0;
+  }
+  virtual int receive_data(void *ptr, size_t len) {
+    return 0;
+  }
+  virtual int send_data(void *ptr, size_t len) {
+    return 0;
+  }
 
   void set_send_length(size_t len) {
     send_len = len;
@@ -99,9 +110,11 @@ class RGWHTTPManager {
   void *multi_handle;
   bool is_threaded;
   atomic_t going_down;
+  atomic_t is_stopped;
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
+  list<rgw_http_req_data *> unregistered_reqs;
   map<uint64_t, rgw_http_req_data *> complete_reqs;
   int64_t num_reqs;
   int64_t max_threaded_req;
@@ -110,11 +123,14 @@ class RGWHTTPManager {
   void register_request(rgw_http_req_data *req_data);
   void complete_request(rgw_http_req_data *req_data);
   void _complete_request(rgw_http_req_data *req_data);
+  void unregister_request(rgw_http_req_data *req_data);
+  void _unlink_request(rgw_http_req_data *req_data);
+  void unlink_request(rgw_http_req_data *req_data);
   void finish_request(rgw_http_req_data *req_data, int r);
   void _finish_request(rgw_http_req_data *req_data, int r);
   int link_request(rgw_http_req_data *req_data);
 
-  void link_pending_requests();
+  void manage_pending_requests();
 
   class ReqsThread : public Thread {
     RGWHTTPManager *manager;
@@ -138,6 +154,7 @@ public:
   void stop();
 
   int add_request(RGWHTTPClient *client, const char *method, const char *url);
+  int remove_request(RGWHTTPClient *client);
 
   /* only for non threaded case */
   int process_requests(bool wait_for_data, bool *done);

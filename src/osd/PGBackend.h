@@ -18,8 +18,6 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "OSDMap.h"
-#include "PGLog.h"
 #include "osd_types.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
@@ -31,6 +29,11 @@ namespace Scrub {
   class Store;
 }
 struct shard_info_wrapper;
+
+//forward declaration
+class OSDMap;
+class PGLog;
+typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
   * PGBackend
@@ -400,7 +403,8 @@ struct shard_info_wrapper;
      virtual void set_alloc_hint(
        const hobject_t &hoid,
        uint64_t expected_object_size,
-       uint64_t expected_write_size
+       uint64_t expected_write_size,
+       uint32_t flags
        ) = 0;
 
      /// Optional, not supported on ec-pool

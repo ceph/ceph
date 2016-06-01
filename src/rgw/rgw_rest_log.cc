@@ -163,9 +163,14 @@ void RGWOp_MDLog_ShardInfo::execute() {
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id" << dendl;
-    http_ret = -EINVAL;
-    return;
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id" << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
   }
   RGWMetadataLog meta_log{s->cct, store, period};
 
@@ -217,9 +222,14 @@ void RGWOp_MDLog_Delete::execute() {
   }
 
   if (period.empty()) {
-    ldout(s->cct, 5) << "Missing period id" << dendl;
-    http_ret = -EINVAL;
-    return;
+    ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+    period = store->get_current_period_id();
+
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id" << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
   }
   RGWMetadataLog meta_log{s->cct, store, period};
 

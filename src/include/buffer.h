@@ -57,10 +57,8 @@
 
 #if __GNUC__ >= 4
   #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
-  #define CEPH_BUFFER_DETAILS __attribute__ ((visibility ("hidden")))
 #else
   #define CEPH_BUFFER_API
-  #define CEPH_BUFFER_DETAILS
 #endif
 
 #if defined(HAVE_XIO)
@@ -270,7 +268,7 @@ namespace buffer CEPH_BUFFER_API {
 
   private:
     template <bool is_const>
-    class CEPH_BUFFER_DETAILS iterator_impl
+    class CEPH_BUFFER_API iterator_impl
       : public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,
@@ -438,6 +436,8 @@ namespace buffer CEPH_BUFFER_API {
     bool is_page_aligned() const;
     bool is_n_align_sized(unsigned align) const;
     bool is_n_page_sized() const;
+    bool is_aligned_size_and_memory(unsigned align_size,
+				    unsigned align_memory) const;
 
     bool is_zero() const;
 
@@ -485,10 +485,10 @@ namespace buffer CEPH_BUFFER_API {
     bool is_contiguous() const;
     void rebuild();
     void rebuild(ptr& nb);
-    void rebuild_aligned(unsigned align);
-    void rebuild_aligned_size_and_memory(unsigned align_size,
+    bool rebuild_aligned(unsigned align);
+    bool rebuild_aligned_size_and_memory(unsigned align_size,
 					 unsigned align_memory);
-    void rebuild_page_aligned();
+    bool rebuild_page_aligned();
 
     // assignment-op with move semantics
     const static unsigned int CLAIM_DEFAULT = 0;
@@ -558,6 +558,8 @@ namespace buffer CEPH_BUFFER_API {
      */
     const char& operator[](unsigned n) const;
     char *c_str();
+    std::string to_str() const;
+
     void substr_of(const list& other, unsigned off, unsigned len);
 
     /// return a pointer to a contiguous extent of the buffer,

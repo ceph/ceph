@@ -4,6 +4,7 @@
 #define CEPH_LIBRBD_OBJECT_MAP_H
 
 #include "include/int_types.h"
+#include "include/fs_types.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/object_map_types.h"
 #include "common/bit_vector.hpp"
@@ -23,6 +24,8 @@ public:
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static std::string object_map_name(const std::string &image_id,
 				     uint64_t snap_id);
+
+  static bool is_compatible(const file_layout_t& layout, uint64_t size);
 
   ceph::BitVector<2u>::Reference operator[](uint64_t object_no);
   uint8_t operator[](uint64_t object_no) const;

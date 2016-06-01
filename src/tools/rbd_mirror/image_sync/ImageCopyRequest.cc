@@ -3,9 +3,11 @@
 
 #include "ImageCopyRequest.h"
 #include "ObjectCopyRequest.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/Utils.h"
+#include "tools/rbd_mirror/ProgressContext.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -25,11 +27,12 @@ ImageCopyRequest<I>::ImageCopyRequest(I *local_image_ctx, I *remote_image_ctx,
                                       Journaler *journaler,
                                       MirrorPeerClientMeta *client_meta,
                                       MirrorPeerSyncPoint *sync_point,
-                                      Context *on_finish)
+                                      Context *on_finish,
+				      ProgressContext *progress_ctx)
   : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_journaler(journaler),
     m_client_meta(client_meta), m_sync_point(sync_point),
-    m_on_finish(on_finish),
+    m_on_finish(on_finish), m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)),
     m_client_meta_copy(*client_meta) {
   assert(!m_client_meta_copy.sync_points.empty());
@@ -73,6 +76,8 @@ void ImageCopyRequest<I>::send_update_max_object_count() {
     send_object_copies();
     return;
   }
+
+  update_progress("UPDATE_MAX_OBJECT_COUNT");
 
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": sync_object_count=" << max_objects << dendl;
@@ -121,6 +126,8 @@ void ImageCopyRequest<I>::send_object_copies() {
   dout(20) << ": start_object=" << m_object_no << ", "
            << "end_object=" << m_end_object_no << dendl;
 
+  update_progress("COPY_OBJECT");
+
   bool complete;
   {
     Mutex::Locker locker(m_lock);
@@ -165,11 +172,13 @@ void ImageCopyRequest<I>::handle_object_copy(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
 
+  int percent;
   bool complete;
   {
     Mutex::Locker locker(m_lock);
     assert(m_current_ops > 0);
     --m_current_ops;
+    percent = 100 * m_object_no / m_end_object_no;
 
     if (r < 0) {
       lderr(cct) << ": object copy failed: " << cpp_strerror(r) << dendl;
@@ -182,6 +191,8 @@ void ImageCopyRequest<I>::handle_object_copy(int r) {
     complete = (m_current_ops == 0);
   }
 
+  update_progress("COPY_OBJECT " + stringify(percent) + "%", false);
+
   if (complete) {
     send_flush_sync_point();
   }
@@ -193,6 +204,8 @@ void ImageCopyRequest<I>::send_flush_sync_point() {
     finish(m_ret_val);
     return;
   }
+
+  update_progress("FLUSH_SYNC_POINT");
 
   m_client_meta_copy = *m_client_meta;
   if (m_object_no > 0) {
@@ -285,6 +298,16 @@ int ImageCopyRequest<I>::compute_snap_map() {
   }
 
   return 0;
+}
+
+template <typename I>
+void ImageCopyRequest<I>::update_progress(const std::string &description,
+					  bool flush) {
+  dout(20) << ": " << description << dendl;
+
+  if (m_progress_ctx) {
+    m_progress_ctx->update_progress("IMAGE_COPY/" + description, flush);
+  }
 }
 
 } // namespace image_sync

@@ -56,12 +56,10 @@ Release Cycle
 
 Four times a year, the development roadmap is discussed online during
 the `Ceph Developer Summit <http://wiki.ceph.com/Planning/CDS/>`_. A
-new stable release (argonaut, cuttlefish, dumpling, emperor, firefly,
-giant, hammer, infernalis ...) is published at the same frequency. 
-Every other release (dumpling, firefly, hammer, ...) is a `Long Term Stable (LTS) <../../releases>`_.
-See `Understanding the release cycle
-<../../releases#understanding-the-release-cycle>`_ for more
-information.
+new stable release (hammer, infernalis, jewel ...) is published at the same
+frequency.  Every other release (firefly, hammer, jewel...) is a `Long Term
+Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
+<../../releases#understanding-the-release-cycle>`_ for more information.
 
 Merging bug fixes or features
 =============================
@@ -102,9 +100,9 @@ follows:
 Each ``team`` is responsible for a project:
 
 * rgw lead is Yehuda Sadeh
-* CephFS lead is Gregory Farnum
+* CephFS lead is John Spray
 * rados lead is Samuel Just
-* rbd lead is Josh Durgin
+* rbd lead is Jason Dillaman
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:

@@ -105,7 +105,7 @@ void rbd_bencher_completion(void *vc, void *pc)
   int ret = c->get_return_value();
   if (ret != 0) {
     cout << "write error: " << cpp_strerror(ret) << std::endl;
-    assert(0 == ret);
+    exit(ret < 0 ? -ret : ret);
   }
   b->lock.Lock();
   b->in_flight--;
@@ -251,7 +251,7 @@ int execute(const po::variables_map &vm) {
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }

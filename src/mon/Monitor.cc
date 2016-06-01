@@ -27,8 +27,6 @@
 
 #include "MonitorDBStore.h"
 
-#include "msg/Messenger.h"
-
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
@@ -62,13 +60,12 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
-
 #include "global/signal_handler.h"
-
+#include "common/Formatter.h"
+#include "include/stringify.h"
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
-#include "include/str_map.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -79,13 +76,11 @@
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
-
-#include "auth/AuthMethodList.h"
-#include "auth/KeyRing.h"
-
 #include "common/config.h"
 #include "common/cmdparse.h"
 #include "include/assert.h"
+#include "include/compat.h"
+#include "perfglue/heap_profiler.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -464,6 +459,7 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
+    "host",
     "fsid",
     // periodic health to clog
     "mon_health_to_clog",
@@ -1914,7 +1910,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     do_health_to_clog_interval();
     scrub_event_start();
   }
-  collect_sys_info(&metadata[rank], g_ceph_context);
+
+  Metadata my_meta;
+  collect_sys_info(&my_meta, g_ceph_context);
+  update_mon_metadata(rank, std::move(my_meta));
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -2923,7 +2922,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
 
     ostringstream ss2;
-    ss2 << "report " << rdata.crc32c(6789);
+    ss2 << "report " << rdata.crc32c(CEPH_MON_PORT);
     rs = ss2.str();
     r = 0;
   } else if (prefix == "node ls") {
@@ -2949,19 +2948,46 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "";
     r = 0;
   } else if (prefix == "mon metadata") {
-    string name;
-    cmd_getval(g_ceph_context, cmdmap, "id", name);
-    int mon = monmap->get_rank(name);
-    if (mon < 0) {
-      rs = "requested mon not found";
-      r = -ENOENT;
-      goto out;
-    }
     if (!f)
       f.reset(Formatter::create("json-pretty"));
-    f->open_object_section("mon_metadata");
-    r = get_mon_metadata(mon, f.get(), ds);
-    f->close_section();
+
+    string name;
+    bool all = !cmd_getval(g_ceph_context, cmdmap, "id", name);
+    if (!all) {
+      // Dump a single mon's metadata
+      int mon = monmap->get_rank(name);
+      if (mon < 0) {
+        rs = "requested mon not found";
+        r = -ENOENT;
+        goto out;
+      }
+      f->open_object_section("mon_metadata");
+      r = get_mon_metadata(mon, f.get(), ds);
+      f->close_section();
+    } else {
+      // Dump all mons' metadata
+      r = 0;
+      f->open_array_section("mon_metadata");
+      for (unsigned int rank = 0; rank < monmap->size(); ++rank) {
+        std::ostringstream get_err;
+        f->open_object_section("mon");
+        f->dump_string("name", monmap->get_name(rank));
+        r = get_mon_metadata(rank, f.get(), get_err);
+        f->close_section();
+        if (r == -ENOENT || r == -EINVAL) {
+          dout(1) << get_err.str() << dendl;
+          // Drop error, list what metadata we do have
+          r = 0;
+        } else if (r != 0) {
+          derr << "Unexpected error from get_mon_metadata: "
+               << cpp_strerror(r) << dendl;
+          ds << get_err.str();
+          break;
+        }
+      }
+      f->close_section();
+    }
+
     f->flush(ds);
     rdata.append(ds);
     rs = "";
@@ -3686,8 +3712,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       {
         op->set_type_paxos();
         MMonPaxos *pm = static_cast<MMonPaxos*>(op->get_req());
-        if (!op->is_src_mon() ||
-            !op->get_session()->is_capable("mon", MON_CAP_X)) {
+        if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
           //can't send these!
           break;
         }
@@ -3760,14 +3785,14 @@ void Monitor::handle_ping(MonOpRequestRef op)
   MPing *reply = new MPing;
   entity_inst_t inst = m->get_source_inst();
   bufferlist payload;
-  Formatter *f = new JSONFormatter(true);
+  boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
   list<string> health_str;
-  get_health(health_str, NULL, f);
+  get_health(health_str, NULL, f.get());
   {
     stringstream ss;
-    get_mon_status(f, ss);
+    get_mon_status(f.get(), ss);
   }
 
   f->close_section();
@@ -4402,13 +4427,13 @@ void Monitor::handle_mon_metadata(MonOpRequestRef op)
   MMonMetadata *m = static_cast<MMonMetadata*>(op->get_req());
   if (is_leader()) {
     dout(10) << __func__ << dendl;
-    update_mon_metadata(m->get_source().num(), m->data);
+    update_mon_metadata(m->get_source().num(), std::move(m->data));
   }
 }
 
-void Monitor::update_mon_metadata(int from, const Metadata& m)
+void Monitor::update_mon_metadata(int from, Metadata&& m)
 {
-  metadata[from] = m;
+  pending_metadata.insert(make_pair(from, std::move(m)));
 
   bufferlist bl;
   int err = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
@@ -4416,12 +4441,12 @@ void Monitor::update_mon_metadata(int from, const Metadata& m)
   if (!err) {
     bufferlist::iterator iter = bl.begin();
     ::decode(last_metadata, iter);
-    metadata.insert(last_metadata.begin(), last_metadata.end());
+    pending_metadata.insert(last_metadata.begin(), last_metadata.end());
   }
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   bl.clear();
-  ::encode(metadata, bl);
+  ::encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
@@ -5017,7 +5042,7 @@ int Monitor::write_default_keyring(bufferlist& bl)
   err = bl.write_fd(fd);
   if (!err)
     ::fsync(fd);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 
   return err;
 }

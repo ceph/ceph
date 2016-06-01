@@ -763,7 +763,7 @@ TEST(BufferPtr, copy_out_bench) {
     }
     utime_t end = ceph_clock_now(NULL);
     cout << count << " fills of buffer len " << buflen
-	 << " with " << s << " byte copy_in in "
+	 << " with " << s << " byte copy_out in"
 	 << (end - start) << std::endl;
   }
 }
@@ -1388,6 +1388,24 @@ TEST(BufferList, buffers) {
   ASSERT_EQ((unsigned)0, bl.get_num_buffers());
   bl.append('A');
   ASSERT_EQ((unsigned)1, bl.get_num_buffers());
+}
+
+TEST(BufferList, to_str) {
+  {
+    bufferlist bl;
+    bl.append("foo");
+    ASSERT_EQ(bl.to_str(), string("foo"));
+  }
+  {
+    bufferptr a("foobarbaz", 9);
+    bufferptr b("123456789", 9);
+    bufferptr c("ABCDEFGHI", 9);
+    bufferlist bl;
+    bl.append(a);
+    bl.append(b);
+    bl.append(c);
+    ASSERT_EQ(bl.to_str(), string("foobarbaz123456789ABCDEFGHI"));
+  }
 }
 
 TEST(BufferList, get_contiguous) {

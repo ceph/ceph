@@ -905,7 +905,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 //#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
 #define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
-#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
+//#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
 #define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
 #define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
 #define PG_STATE_PEERING      (1<<12) // pg is (re)peering
@@ -2664,42 +2664,6 @@ struct pg_log_t {
     return head.version - tail.version;
   }
 
-  list<pg_log_entry_t>::const_iterator find_entry(eversion_t v) const {
-    int fromhead = head.version - v.version;
-    int fromtail = v.version - tail.version;
-    list<pg_log_entry_t>::const_iterator p;
-    if (fromhead < fromtail) {
-      p = log.end();
-      --p;
-      while (p->version > v)
-	--p;
-      return p;
-    } else {
-      p = log.begin();
-      while (p->version < v)
-	++p;
-      return p;
-    }      
-  }
-
-  list<pg_log_entry_t>::iterator find_entry(eversion_t v) {
-    int fromhead = head.version - v.version;
-    int fromtail = v.version - tail.version;
-    list<pg_log_entry_t>::iterator p;
-    if (fromhead < fromtail) {
-      p = log.end();
-      --p;
-      while (p->version > v)
-	--p;
-      return p;
-    } else {
-      p = log.begin();
-      while (p->version < v)
-	++p;
-      return p;
-    }      
-  }
-
   static void filter_log(spg_t import_pgid, const OSDMap &curmap,
     const string &hit_set_namespace, const pg_log_t &in,
     pg_log_t &out, pg_log_t &reject);
@@ -2725,7 +2689,7 @@ struct pg_log_t {
    * copy up to N entries
    *
    * @param other source log
-   * @param max max number of entreis to copy
+   * @param max max number of entries to copy
    */
   void copy_up_to(const pg_log_t &other, int max);
 

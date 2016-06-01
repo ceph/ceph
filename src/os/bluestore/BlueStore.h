@@ -369,14 +369,12 @@ public:
     Sequencer *parent;
 
     std::mutex wal_apply_mutex;
-    std::unique_lock<std::mutex> wal_apply_lock;
 
     uint64_t last_seq = 0;
 
     OpSequencer()
-	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
-      : parent(NULL),
-	wal_apply_lock(wal_apply_mutex, std::defer_lock) {
+	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
+      : parent(NULL) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -482,12 +480,12 @@ public:
 
       // preserve wal ordering for this sequencer by taking the lock
       // while still holding the queue lock
-      i->osr->wal_apply_lock.lock();
+      i->osr->wal_apply_mutex.lock();
       return i;
     }
     void _process(TransContext *i, ThreadPool::TPHandle &) override {
       store->_wal_apply(i);
-      i->osr->wal_apply_lock.unlock();
+      i->osr->wal_apply_mutex.unlock();
     }
     void _clear() {
       assert(wal_queue.empty());
@@ -520,6 +518,7 @@ private:
   unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
   BlockDevice *bdev;
+  std::string freelist_type;
   FreelistManager *fm;
   Allocator *alloc;
   uuid_d fsid;
@@ -576,6 +575,8 @@ private:
   void _close_bdev();
   int _open_db(bool create);
   void _close_db();
+  int _open_fm(bool create);
+  void _close_fm();
   int _open_alloc();
   void _close_alloc();
   int _open_collections(int *errors=0);
@@ -602,14 +603,14 @@ private:
 
   void _assign_nid(TransContext *txc, OnodeRef o);
 
-  void _dump_onode(OnodeRef o, int log_leverl=30);
+  void _dump_onode(OnodeRef o, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_release(TransContext *txc, CollectionRef& c, OnodeRef& onode,
 		    uint64_t offset, uint64_t length,
 		    bool shared);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
-  int _txc_finalize(OpSequencer *osr, TransContext *txc);
+  void _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
   void _txc_update_fm(TransContext *txc);
@@ -830,6 +831,10 @@ public:
     return fsid;
   }
 
+  uint64_t estimate_objects_overhead(uint64_t num_objects) override {
+    return num_objects * 300; //assuming per-object overhead is 300 bytes
+  }
+
   objectstore_perf_stat_t get_cur_stats() override {
     return objectstore_perf_stat_t();
   }
@@ -883,6 +888,10 @@ private:
 		   uint64_t offset, uint64_t length,
 		   uint32_t fadvise_flags,
 		   bool allow_overlay,
+		   uint64_t *alloc_offset,
+		   uint64_t *alloc_length,
+		   uint64_t *cow_head_extent,
+		   uint64_t *cow_tail_extent,
 		   uint64_t *rmw_cow_head,
 		   uint64_t *rmw_cow_tail);
   int _do_write(TransContext *txc,
@@ -965,7 +974,8 @@ private:
 		    CollectionRef& c,
 		    OnodeRef& o,
 		    uint64_t expected_object_size,
-		    uint64_t expected_write_size);
+		    uint64_t expected_write_size,
+		    uint32_t flags);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& oldo,

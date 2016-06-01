@@ -162,7 +162,7 @@ The procedure is as follows:
 #. Generate an administrator keyring, generate a ``client.admin`` user and add
    the user to the keyring. :: 
 
-	ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow'
+	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --set-uid=0 --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow'
 
 
 #. Add the ``client.admin`` key to the ``ceph.mon.keyring``. :: 
@@ -192,11 +192,11 @@ The procedure is as follows:
 
 #. Populate the monitor daemon(s) with the monitor map and keyring. ::
 
-	ceph-mon [--cluster {cluster-name}] --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+	sudo -u ceph ceph-mon [--cluster {cluster-name}] --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
    For example::
 
-	ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+	sudo -u ceph ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
 
 #. Consider settings for a Ceph configuration file. Common settings include 
@@ -340,9 +340,9 @@ on  ``node2`` and ``node3``:
 Long Form
 ---------
 
-Without the benefit of any helper utilities, creating an OSD and adding it to
-the cluster and CRUSH map the following procedure. To create the first two 
-OSDs with the long form procedure, execute the following on ``node2`` and 
+Without the benefit of any helper utilities, create an OSD and add it to the
+cluster and CRUSH map with the following procedure. To create the first two
+OSDs with the long form procedure, execute the following on ``node2`` and
 ``node3``:
 
 #. Connect to the OSD host. :: 

@@ -349,10 +349,16 @@ void Server::handle_client_session(MClientSession *m)
 	m->put();
 	return;
       }
+      // We are getting a seq that is higher than expected.
+      // Handle the same as any other seqn error.
+      //
       if (m->get_seq() != session->get_push_seq()) {
-	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq() 
+	dout(0) << "old push seq " << m->get_seq() << " != " << session->get_push_seq()
 		<< ", BUGGY!" << dendl;
-	assert(0);
+	mds->clog->warn() << "incorrect push seq " << m->get_seq() << " != "
+			  << session->get_push_seq() << ", dropping" << " from client : " << session->get_human_name();
+	m->put();
+	return;
       }
       journal_close_session(session, Session::STATE_CLOSING, NULL);
     }
@@ -2893,9 +2899,13 @@ void Server::handle_client_open(MDRequestRef& mdr)
     return;
   }
 
-  // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir())
+  if (!cur->inode.is_file()) {
+    // can only open non-regular inode with mode FILE_MODE_PIN, at least for now.
     cmode = CEPH_FILE_MODE_PIN;
+    // the inode is symlink and client wants to follow it, ignore the O_TRUNC flag.
+    if (cur->inode.is_symlink() && !(flags & O_NOFOLLOW))
+      flags &= ~O_TRUNC;
+  }
 
   dout(10) << "open flags = " << flags
 	   << ", filemode = " << cmode
@@ -2908,9 +2918,16 @@ void Server::handle_client_open(MDRequestRef& mdr)
     respond_to_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
     }*/
-  if ((flags & O_DIRECTORY) && !cur->inode.is_dir()) {
+  if ((flags & O_DIRECTORY) && !cur->inode.is_dir() && !cur->inode.is_symlink()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  if ((flags & O_TRUNC) && !cur->inode.is_file()) {
+    dout(7) << "specified O_TRUNC on !(file|symlink) " << *cur << dendl;
+    // we should return -EISDIR for directory, return -EINVAL for other non-regular
+    respond_to_request(mdr, cur->inode.is_dir() ? EISDIR : -EINVAL);
     return;
   }
 
@@ -5569,8 +5586,9 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   // removing a new dn?
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
-  // clean up?
-  if (straydn) {
+  // clean up ?
+  // respond_to_request() drops locks. So stray reintegration can race with us.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
     // Tip off the MDCache that this dentry is a stray that
     // might be elegible for purge.
     mdcache->notify_stray(straydn);
@@ -6417,7 +6435,8 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) {
+  // respond_to_request() drops locks. So stray reintegration can race with us.
+  if (straydn && !straydn->get_projected_linkage()->is_null()) {
     mdcache->notify_stray(straydn);
   }
 }

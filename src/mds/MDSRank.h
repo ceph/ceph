@@ -191,9 +191,7 @@ class MDSRank {
     bool is_clientreplay() const { return state == MDSMap::STATE_CLIENTREPLAY; }
     bool is_active() const { return state == MDSMap::STATE_ACTIVE; }
     bool is_stopping() const { return state == MDSMap::STATE_STOPPING; }
-    bool is_oneshot_replay() const { return state == MDSMap::STATE_ONESHOT_REPLAY; }
-    bool is_any_replay() const { return (is_replay() || is_standby_replay() ||
-        is_oneshot_replay()); }
+    bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
 
     void handle_write_error(int err);

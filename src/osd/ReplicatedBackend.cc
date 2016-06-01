@@ -473,10 +473,11 @@ public:
   void set_alloc_hint(
     const hobject_t &hoid,
     uint64_t expected_object_size,
-    uint64_t expected_write_size
+    uint64_t expected_write_size,
+    uint32_t flags
     ) {
     t.set_alloc_hint(get_coll(hoid), ghobject_t(hoid), expected_object_size,
-                      expected_write_size);
+		     expected_write_size, flags);
   }
 
   using PGBackend::PGTransaction::append;
@@ -805,7 +806,8 @@ void ReplicatedBackend::be_deep_scrub(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
   uint64_t keys_scanned = 0;
-  for (iter->seek_to_first(); iter->valid() ; iter->next(false)) {
+  for (iter->seek_to_first(); iter->status() == 0 && iter->valid();
+    iter->next(false)) {
     if (cct->_conf->osd_scan_list_ping_tp_interval &&
 	(keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
       handle.reset_tp_timeout();
@@ -821,12 +823,14 @@ void ReplicatedBackend::be_deep_scrub(
     oh << bl;
     bl.clear();
   }
-  if (iter->status() == -EIO) {
-    dout(25) << __func__ << "  " << poid << " got "
-	     << r << " on omap scan, read_error" << dendl;
+
+  if (iter->status() < 0) {
+    dout(25) << __func__ << "  " << poid
+             << " on omap scan, db status error" << dendl;
     o.read_error = true;
     return;
   }
+
   //Store final calculated CRC32 of omap header & key/values
   o.omap_digest = oh.digest();
   o.omap_digest_present = true;
@@ -839,6 +843,8 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
+
+  op->mark_started();
 
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t;
@@ -896,6 +902,8 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
+
+  op->mark_started();
 
   vector<PullOp> replies(1);
   ObjectStore::Transaction t;
@@ -1904,7 +1912,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
 	pushes += 1;
 	msg->pushes.push_back(*j);
       }
-      msg->compute_cost(cct);
+      msg->set_cost(cost);
       get_parent()->send_message_osd_cluster(msg, con);
     }
   }

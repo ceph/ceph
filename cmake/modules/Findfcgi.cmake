@@ -39,4 +39,4 @@ ENDIF (FCGI_FOUND)
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(fcgi DEFAULT_MSG FCGI_LIBRARY FCGI_INCLUDE_DIR)
 
-mark_as_advanced(UUID_LIBRARIES UUID_INCLUDE_DIR)
+mark_as_advanced(FCGI_LIBRARY FCGI_INCLUDE_DIR)

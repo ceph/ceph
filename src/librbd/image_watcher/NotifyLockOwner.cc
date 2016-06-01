@@ -78,7 +78,7 @@ void NotifyLockOwner::handle_notify(int r) {
   }
 
   if (!lock_owner_responded) {
-    lderr(cct) << ": no lock owners detected" << dendl;
+    ldout(cct, 1) << ": no lock owners detected" << dendl;
     finish(-ETIMEDOUT);
     return;
   }

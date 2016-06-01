@@ -102,25 +102,10 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
 string bluestore_extent_t::get_flags_string(unsigned flags)
 {
   string s;
-  if (flags & FLAG_UNWRITTEN) {
-    if (s.length())
-      s += '+';
-    s += "unwritten";
-  }
   if (flags & FLAG_SHARED) {
     if (s.length())
       s += '+';
     s += "shared";
-  }
-  if (flags & FLAG_COW_HEAD) {
-    if (s.length())
-      s += '+';
-    s += "cow_head";
-  }
-  if (flags & FLAG_COW_TAIL) {
-    if (s.length())
-      s += '+';
-    s += "cow_tail";
   }
   return s;
 }
@@ -409,6 +394,7 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
+  ::encode(alloc_hint_flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -425,6 +411,7 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
+  ::decode(alloc_hint_flags, p);
   DECODE_FINISH(p);
 }
 
@@ -472,6 +459,7 @@ void bluestore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
+  f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
 }
 
 void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
@@ -582,6 +570,15 @@ void bluestore_wal_transaction_t::dump(Formatter *f) const
   f->open_array_section("ops");
   for (list<bluestore_wal_op_t>::const_iterator p = ops.begin(); p != ops.end(); ++p) {
     f->dump_object("op", *p);
+  }
+  f->close_section();
+
+  f->open_array_section("released extents");
+  for (interval_set<uint64_t>::const_iterator p = released.begin(); p != released.end(); ++p) {
+    f->open_object_section("extent");
+    f->dump_unsigned("offset", p.get_start());
+    f->dump_unsigned("length", p.get_len());
+    f->close_section();
   }
   f->close_section();
 }

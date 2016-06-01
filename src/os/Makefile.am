@@ -38,12 +38,16 @@ if WITH_LIBAIO
 libos_a_SOURCES += \
 	os/bluestore/kv.cc \
 	os/bluestore/Allocator.cc \
+	os/bluestore/BitmapFreelistManager.cc \
 	os/bluestore/BlockDevice.cc \
 	os/bluestore/BlueFS.cc \
 	os/bluestore/BlueRocksEnv.cc \
 	os/bluestore/BlueStore.cc \
+	os/bluestore/ExtentFreelistManager.cc \
 	os/bluestore/FreelistManager.cc \
 	os/bluestore/KernelDevice.cc \
+	os/bluestore/BitMapAllocator.cc \
+	os/bluestore/BitAllocator.cc \
 	os/bluestore/StupidAllocator.cc
 endif
 
@@ -106,12 +110,16 @@ noinst_HEADERS += \
 	os/bluestore/bluestore_types.h \
 	os/bluestore/kv.h \
 	os/bluestore/Allocator.h \
+	os/bluestore/BitmapFreelistManager.h \
 	os/bluestore/BlockDevice.h \
 	os/bluestore/BlueFS.h \
 	os/bluestore/BlueRocksEnv.h \
 	os/bluestore/BlueStore.h \
 	os/bluestore/KernelDevice.h \
+	os/bluestore/ExtentFreelistManager.h \
 	os/bluestore/FreelistManager.h \
+	os/bluestore/BitMapAllocator.h \
+	os/bluestore/BitAllocator.h \
 	os/bluestore/StupidAllocator.h
 endif
 

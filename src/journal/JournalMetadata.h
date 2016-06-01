@@ -52,7 +52,7 @@ public:
   ~JournalMetadata();
 
   void init(Context *on_init);
-  void shut_down();
+  void shut_down(Context *on_finish);
 
   bool is_initialized() const { return m_initialized; }
 
@@ -83,6 +83,9 @@ public:
   inline uint8_t get_order() const {
     return m_order;
   }
+  inline uint64_t get_object_size() const {
+    return 1 << m_order;
+  }
   inline uint8_t get_splay_width() const {
     return m_splay_width;
   }
@@ -107,11 +110,14 @@ public:
     return m_minimum_set;
   }
 
-  void set_active_set(uint64_t object_set);
+  int set_active_set(uint64_t object_set);
+  void set_active_set(uint64_t object_set, Context *on_finish);
   inline uint64_t get_active_set() const {
     Mutex::Locker locker(m_lock);
     return m_active_set;
   }
+
+  void assert_active_tag(uint64_t tag_tid, Context *on_finish);
 
   void flush_commit_position();
   void flush_commit_position(Context *on_safe);
@@ -134,6 +140,9 @@ public:
 
   uint64_t allocate_commit_tid(uint64_t object_num, uint64_t tag_tid,
                                uint64_t entry_tid);
+  void overflow_commit_tid(uint64_t commit_tid, uint64_t object_num);
+  void get_commit_entry(uint64_t commit_tid, uint64_t *object_num,
+                        uint64_t *tag_tid, uint64_t *entry_tid);
   void committed(uint64_t commit_tid, const CreateContext &create_context);
 
   void notify_update();

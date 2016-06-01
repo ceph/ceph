@@ -29,8 +29,11 @@ int EventOutput::binary() const
   // Binary output, files
   int r = ::mkdir(path.c_str(), 0755);
   if (r != 0) {
-    std::cerr << "Error creating output directory: " << cpp_strerror(r) << std::endl;
-    return r;
+    r = -errno;
+    if (r != -EEXIST) {
+      std::cerr << "Error creating output directory: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
   }
 
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {

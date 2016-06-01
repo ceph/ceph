@@ -33,29 +33,16 @@
 #include "Paxos.h"
 #include "Session.h"
 
-#include "osd/OSDMap.h"
-
 #include "common/LogClient.h"
-#include "common/SimpleRNG.h"
-#include "common/cmdparse.h"
-
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
-
-#include "perfglue/heap_profiler.h"
-
 #include "messages/MMonCommand.h"
-#include "messages/MPing.h"
 #include "mon/MonitorDBStore.h"
-
-#include <memory>
 #include "include/memory.h"
-#include "include/str_map.h"
 #include <errno.h>
 #include <cmath>
 
-#include "common/TrackedOp.h"
 #include "mon/MonOpRequest.h"
 
 
@@ -717,7 +704,9 @@ public:
   void handle_mon_metadata(MonOpRequestRef op);
   int get_mon_metadata(int mon, Formatter *f, ostream& err);
   int print_nodes(Formatter *f, ostream& err);
-  map<int, Metadata> metadata;
+
+  // Accumulate metadata across calls to update_mon_metadata
+  map<int, Metadata> pending_metadata;
 
   /**
    *
@@ -917,7 +906,7 @@ public:
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);
 
-  void update_mon_metadata(int from, const Metadata& m);
+  void update_mon_metadata(int from, Metadata&& m);
   int load_metadata(map<int, Metadata>& m);
 
   // features

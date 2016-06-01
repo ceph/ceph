@@ -25,6 +25,7 @@
 #include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/Spinlock.h"
+#include "crush/CrushLocation.h"
 #include <boost/noncopyable.hpp>
 
 class AdminSocket;
@@ -84,6 +85,7 @@ public:
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
 
+  void set_init_flags(int flags);
   int get_init_flags() const;
 
   /* Get the PerfCountersCollection of this CephContext */
@@ -245,6 +247,10 @@ private:
   PluginRegistry *_plugin_registry;
 
   md_config_obs_t *_lockdep_obs;
+
+public:
+  CrushLocation crush_location;
+private:
 
   enum {
     l_cct_first,

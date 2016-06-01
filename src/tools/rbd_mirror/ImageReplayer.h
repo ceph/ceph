@@ -8,14 +8,18 @@
 #include <string>
 #include <vector>
 
+#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "journal/ReplayEntry.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "ProgressContext.h"
 #include "types.h"
+#include <boost/optional.hpp>
 
 class AdminSocketHook;
 
@@ -38,6 +42,9 @@ namespace mirror {
 
 struct Threads;
 
+namespace image_replayer { template <typename> class BootstrapRequest; }
+namespace image_replayer { template <typename> class ReplayStatusFormatter; }
+
 /**
  * Replays changes from a remote cluster for a single image.
  */
@@ -47,7 +54,7 @@ public:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::ReplayEntry ReplayEntry;
 
   enum State {
-    STATE_UNINITIALIZED,
+    STATE_UNKNOWN,
     STATE_STARTING,
     STATE_REPLAYING,
     STATE_STOPPING,
@@ -80,23 +87,41 @@ public:
   bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
+  void set_state_description(int r, const std::string &desc);
+
+  inline int64_t get_local_pool_id() const {
+    return m_local_pool_id;
+  }
+  inline int64_t get_remote_pool_id() const {
+    return m_remote_pool_id;
+  }
+  inline const std::string& get_global_image_id() const {
+    return m_global_image_id;
+  }
+  inline const std::string& get_remote_image_id() const {
+    return m_remote_image_id;
+  }
+  inline std::string get_local_image_id() {
+    Mutex::Locker locker(m_lock);
+    return m_local_image_id;
+  }
+  inline std::string get_local_image_name() {
+    Mutex::Locker locker(m_lock);
+    return m_local_image_name;
+  }
 
   void start(Context *on_finish = nullptr,
-	     const BootstrapParams *bootstrap_params = nullptr);
-  void stop(Context *on_finish = nullptr);
+	     const BootstrapParams *bootstrap_params = nullptr,
+	     bool manual = false);
+  void stop(Context *on_finish = nullptr, bool manual = false);
+  void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
 
   void print_status(Formatter *f, stringstream *ss);
 
   virtual void handle_replay_ready();
-  virtual void handle_replay_complete(int r);
+  virtual void handle_replay_complete(int r, const std::string &error_desc);
 
-  inline int64_t get_remote_pool_id() const {
-    return m_remote_pool_id;
-  }
-  inline const std::string get_remote_image_id() const {
-    return m_remote_image_id;
-  }
 protected:
   /**
    * @verbatim
@@ -159,14 +184,10 @@ protected:
    * @endverbatim
    */
 
-  virtual void on_start_fail_start(int r);
-  virtual void on_start_fail_finish(int r);
+  virtual void on_start_fail(int r, const std::string &desc = "");
   virtual bool on_start_interrupted();
 
-  virtual void on_stop_journal_replay_shut_down_start();
-  virtual void on_stop_journal_replay_shut_down_finish(int r);
-  virtual void on_stop_local_image_close_start();
-  virtual void on_stop_local_image_close_finish(int r);
+  virtual void on_stop_journal_replay();
 
   virtual void on_flush_local_replay_flush_start(Context *on_flush);
   virtual void on_flush_local_replay_flush_finish(Context *on_flush, int r);
@@ -179,6 +200,19 @@ protected:
 
 private:
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
+  typedef boost::optional<State> OptionalState;
+
+  class BootstrapProgressContext : public ProgressContext {
+  public:
+    BootstrapProgressContext(ImageReplayer<ImageCtxT> *replayer) :
+      replayer(replayer) {
+    }
+
+    virtual void update_progress(const std::string &description,
+				 bool flush = true);
+  private:
+    ImageReplayer<ImageCtxT> *replayer;
+  };
 
   Threads *m_threads;
   RadosRef m_local, m_remote;
@@ -189,18 +223,33 @@ private:
   std::string m_local_image_name;
   std::string m_name;
   Mutex m_lock;
-  State m_state;
+  State m_state = STATE_STOPPED;
+  int m_last_r = 0;
+  std::string m_state_desc;
+  BootstrapProgressContext m_progress_cxt;
+  image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
+    nullptr;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
-  ImageCtxT *m_local_image_ctx;
-  librbd::journal::Replay<ImageCtxT> *m_local_replay;
-  Journaler* m_remote_journaler;
-  ::journal::ReplayHandler *m_replay_handler;
+  ImageCtxT *m_local_image_ctx = nullptr;
+  librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
+  Journaler* m_remote_journaler = nullptr;
+  ::journal::ReplayHandler *m_replay_handler = nullptr;
 
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;
+  Context *m_update_status_task = nullptr;
+  int m_update_status_interval = 0;
+  librados::AioCompletion *m_update_status_comp = nullptr;
   bool m_stop_requested = false;
+  bool m_manual_stop = false;
 
-  AdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook = nullptr;
+
+  image_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
+
+  uint32_t m_in_flight_status_updates = 0;
+  bool m_update_status_requested = false;
+  Context *m_on_update_status_finish = nullptr;
 
   librbd::journal::MirrorPeerClientMeta m_client_meta;
 
@@ -225,12 +274,26 @@ private:
 
   static std::string to_string(const State state);
 
-  State get_state_() const { return m_state; }
-  bool is_stopped_() const { return m_state == STATE_UNINITIALIZED ||
-                                    m_state == STATE_STOPPED; }
-  bool is_running_() const { return !is_stopped_() && m_state != STATE_STOPPING; }
+  State get_state_() const {
+    return m_state;
+  }
+  bool is_stopped_() const {
+    return m_state == STATE_STOPPED;
+  }
+  bool is_running_() const {
+    return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
+  }
 
-  void shut_down_journal_replay(bool cancel_ops);
+  bool update_mirror_image_status(bool force, const OptionalState &state);
+  bool start_mirror_image_status_update(bool force, bool restarting);
+  void finish_mirror_image_status_update();
+  void queue_mirror_image_status_update(const OptionalState &state);
+  void send_mirror_status_update(const OptionalState &state);
+  void handle_mirror_status_update(int r);
+  void reschedule_update_status_task(int new_interval = 0);
+
+  void shut_down(int r, Context *on_start);
+  void handle_shut_down(int r, Context *on_start);
 
   void bootstrap();
   void handle_bootstrap(int r);

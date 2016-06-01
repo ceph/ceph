@@ -1,7 +1,7 @@
 [Unit]
 Description=Ceph rados gateway
-After=network-online.target local-fs.target
-Wants=network-online.target local-fs.target
+After=network-online.target local-fs.target time-sync.target
+Wants=network-online.target local-fs.target time-sync.target
 PartOf=ceph-radosgw.target
 
 [Service]
@@ -15,6 +15,9 @@ ProtectHome=true
 ProtectSystem=full
 PrivateTmp=true
 TasksMax=infinity
+Restart=on-failure
+StartLimitInterval=30s
+StartLimitBurst=5
 
 [Install]
 WantedBy=ceph-radosgw.target

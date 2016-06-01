@@ -660,7 +660,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   public:
     struct xio_reg_mem *mp;
     xio_mempool(struct xio_reg_mem *_mp, unsigned l) :
-      raw((char*)mp->addr, l), mp(_mp)
+      raw((char*)_mp->addr, l), mp(_mp)
     { }
     ~xio_mempool() {}
     raw* clone_empty() {
@@ -1422,6 +1422,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return true;
   }
 
+  bool buffer::list::is_aligned_size_and_memory(unsigned align_size,
+						  unsigned align_memory) const
+  {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 ++it) {
+      if (!it->is_aligned(align_memory) || !it->is_n_align_sized(align_size))
+	return false;
+    }
+    return true;
+  }
+
   bool buffer::list::is_zero() const {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
@@ -1519,14 +1531,15 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     last_p = begin();
   }
 
-  void buffer::list::rebuild_aligned(unsigned align)
+  bool buffer::list::rebuild_aligned(unsigned align)
   {
-    rebuild_aligned_size_and_memory(align, align);
+    return rebuild_aligned_size_and_memory(align, align);
   }
   
-  void buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
+  bool buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
   						   unsigned align_memory)
   {
+    unsigned old_memcopy_count = _memcopy_count;
     std::list<ptr>::iterator p = _buffers.begin();
     while (p != _buffers.end()) {
       // keep anything that's already align and sized aligned
@@ -1565,11 +1578,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       _buffers.insert(p, unaligned._buffers.front());
     }
     last_p = begin();
+
+    return  (old_memcopy_count != _memcopy_count);
   }
   
-  void buffer::list::rebuild_page_aligned()
+  bool buffer::list::rebuild_page_aligned()
   {
-    rebuild_aligned(CEPH_PAGE_SIZE);
+   return  rebuild_aligned(CEPH_PAGE_SIZE);
   }
 
   // sort-of-like-assignment-op
@@ -1778,6 +1793,19 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (iter != _buffers.end())
       rebuild();
     return _buffers.front().c_str();  // good, we're already contiguous.
+  }
+
+  string buffer::list::to_str() const {
+    string s;
+    s.reserve(length());
+    for (std::list<ptr>::const_iterator p = _buffers.begin();
+	 p != _buffers.end();
+	 ++p) {
+      if (p->length()) {
+	s.append(p->c_str(), p->length());
+      }
+    }
+    return s;
   }
 
   char *buffer::list::get_contiguous(unsigned orig_off, unsigned len)

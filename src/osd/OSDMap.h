@@ -24,19 +24,11 @@
  *   disks, disk groups, total # osds,
  *
  */
-#include "common/config.h"
 #include "include/types.h"
 #include "osd_types.h"
-#include "msg/Message.h"
-#include "common/Mutex.h"
-#include "common/Clock.h"
 
-#include "include/ceph_features.h"
-
+//#include "include/ceph_features.h"
 #include "crush/CrushWrapper.h"
-
-#include "include/interval_set.h"
-
 #include <vector>
 #include <list>
 #include <set>
@@ -44,8 +36,9 @@
 #include "include/memory.h"
 using namespace std;
 
-#include "include/unordered_set.h"
-
+//forward declaration
+class CephContext;
+class CrushWrapper;
 /*
  * we track up to two intervals during which the osd was alive and
  * healthy.  the most recent is [up_from,up_thru), where up_thru is
@@ -455,7 +448,7 @@ public:
   }
 
   /**
-   * check if an entire crush subtre is down
+   * check if an entire crush subtree is down
    */
   bool subtree_is_down(int id, set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, set<int> *down_cache) const;
@@ -532,13 +525,6 @@ public:
     return osd_xinfo[osd];
   }
   
-  int get_any_up_osd() const {
-    for (int i=0; i<max_osd; i++)
-      if (is_up(i))
-	return i;
-    return -1;
-  }
-
   int get_next_up_osd_after(int n) const {
     for (int i = n + 1; i != n; ++i) {
       if (i >= get_max_osd())
@@ -582,10 +568,8 @@ public:
   /// try to re-use/reference addrs in oldmap from newmap
   static void dedup(const OSDMap *oldmap, OSDMap *newmap);
 
-  static void remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap,
-					   Incremental *pending_inc);
-  static void remove_down_temps(CephContext *cct, const OSDMap& osdmap,
-                                Incremental *pending_inc);
+  static void clean_temps(CephContext *cct, const OSDMap& osdmap,
+			  Incremental *pending_inc);
 
   // serialize, unserialize
 private:
@@ -731,6 +715,9 @@ public:
   const map<int64_t,pg_pool_t>& get_pools() const {
     return pools;
   }
+  map<int64_t,pg_pool_t>& get_pools() {
+    return pools;
+  }
   const string& get_pool_name(int64_t p) const {
     map<int64_t, string>::const_iterator i = pool_name.find(p);
     assert(i != pool_name.end());
@@ -771,13 +758,7 @@ public:
       return group[0];
     return -1;  // we fail!
   }
-  int get_pg_acting_tail(pg_t pg) const {
-    vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    if (nrep > 0)
-      return group[group.size()-1];
-    return -1;  // we fail!
-  }
+
   bool is_acting_osd_shard(pg_t pg, int osd, shard_id_t shard) const {
     vector<int> acting;
     int nrep = pg_to_acting_osds(pg, acting);

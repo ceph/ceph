@@ -46,7 +46,7 @@ private:
     struct Lane
     {
       uint32_t size;
-      XioMsg::Queue q;
+      XioSubmit::Queue q;
       pthread_spinlock_t sp;
       CACHE_PAD(0);
     };
@@ -118,7 +118,6 @@ private:
   struct xio_server *server;
   SubmitQueue submit_q;
   pthread_spinlock_t sp;
-  pthread_mutex_t mtx;
   void *ev_loop;
   string xio_uri;
   char *portal_id;
@@ -131,51 +130,50 @@ private:
   friend class XioMessenger;
 
 public:
-  explicit XioPortal(Messenger *_msgr) :
-  msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
-  portal_id(NULL), _shutdown(false), drained(false),
-  magic(0),
-  special_handling(0)
-    {
-      pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
-      pthread_mutex_init(&mtx, NULL);
+  explicit XioPortal(Messenger *_msgr, int max_conns) :
+    msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
+    portal_id(NULL), _shutdown(false), drained(false),
+    magic(0),
+    special_handling(0)
+  {
+    pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
 
-      /* a portal is an xio_context and event loop */
-      ctx = xio_context_create(NULL, 0 /* poll timeout */, -1 /* cpu hint */);
+    struct xio_context_params ctx_params;
+    memset(&ctx_params, 0, sizeof(ctx_params));
+    ctx_params.user_context = this;
+    /*
+     * hint to Accelio the total number of connections that will share
+     * this context's resources: internal primary task pool...
+     */
+    ctx_params.max_conns_per_ctx = max_conns;
 
-      /* associate this XioPortal object with the xio_context handle */
-      struct xio_context_attr xca;
-      xca.user_context = this;
-      xio_modify_context(ctx, &xca, XIO_CONTEXT_ATTR_USER_CTX);
-
-      if (magic & (MSG_MAGIC_XIO)) {
-	printf("XioPortal %p created ev_loop %p ctx %p\n",
-	       this, ev_loop, ctx);
-      }
-    }
+    /* a portal is an xio_context and event loop */
+    ctx = xio_context_create(&ctx_params, 0 /* poll timeout */, -1 /* cpu hint */);
+    assert(ctx && "Whoops, failed to create portal/ctx");
+  }
 
   int bind(struct xio_session_ops *ops, const string &base_uri,
 	   uint16_t port, uint16_t *assigned_port);
 
-  inline void release_xio_rsp(XioRsp* xrsp) {
-    struct xio_msg *msg = xrsp->dequeue();
+  inline void release_xio_msg(XioCompletion* xcmp) {
+    struct xio_msg *msg = xcmp->dequeue();
     struct xio_msg *next_msg = NULL;
     int code;
-    if (unlikely(!xrsp->xcon->conn)) {
+    if (unlikely(!xcmp->xcon->conn)) {
       // NOTE: msg is not safe to dereference if the connection was torn down
-      xrsp->xcon->msg_release_fail(msg, ENOTCONN);
+      xcmp->xcon->msg_release_fail(msg, ENOTCONN);
     }
     else while (msg) {
       next_msg = static_cast<struct xio_msg *>(msg->user_context);
       code = xio_release_msg(msg);
       if (unlikely(code)) /* very unlikely, so log it */
-	xrsp->xcon->msg_release_fail(msg, code);
+	xcmp->xcon->msg_release_fail(msg, code);
       msg = next_msg;
     }
-    xrsp->finalize(); /* unconditional finalize */
+    xcmp->finalize(); /* unconditional finalize */
   }
 
-  void enqueue_for_send(XioConnection *xcon, XioSubmit *xs)
+  void enqueue(XioConnection *xcon, XioSubmit *xs)
     {
       if (! _shutdown) {
 	submit_q.enq(xcon, xs);
@@ -187,13 +185,13 @@ public:
       switch(xs->type) {
       case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
       {
-	XioMsg* xmsg = static_cast<XioMsg*>(xs);
-	xs->xcon->msg_send_fail(xmsg, -EINVAL);
+	XioSend* xsend = static_cast<XioSend*>(xs);
+	xs->xcon->msg_send_fail(xsend, -EINVAL);
       }
 	break;
       default:
 	/* INCOMING_MSG_RELEASE */
-	release_xio_rsp(static_cast<XioRsp*>(xs));
+	release_xio_msg(static_cast<XioCompletion*>(xs));
       break;
       };
     }
@@ -209,7 +207,6 @@ public:
     // and push them in FIFO order to front of the input queue,
     // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
-    XioMsg *xmsg;
 
     while (q_iter != send_q.end()) {
       XioSubmit *xs = &(*q_iter);
@@ -218,9 +215,8 @@ public:
 	q_iter++;
 	continue;
       }
-      xmsg = static_cast<XioMsg*>(xs);
       q_iter = send_q.erase(q_iter);
-      requeue_q.push_back(*xmsg);
+      requeue_q.push_back(*xs);
     }
     pthread_spin_lock(&xcon->sp);
     XioSubmit::Queue::const_iterator i1 = xcon->outgoing.requeue.begin();
@@ -238,7 +234,7 @@ public:
       struct xio_msg *msg = NULL;
       XioConnection *xcon;
       XioSubmit *xs;
-      XioMsg *xmsg;
+      XioSend *xsend;
 
       do {
 	submit_q.deq(send_q);
@@ -250,7 +246,7 @@ public:
 	size = send_q.size();
 
 	if (_shutdown) {
-	  // XXX XioMsg queues for flow-controlled connections may require
+	  // XXX XioSend queues for flow-controlled connections may require
 	  // cleanup
 	  drained = true;
 	}
@@ -263,7 +259,7 @@ public:
 
 	    switch (xs->type) {
 	    case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
-	      xmsg = static_cast<XioMsg*>(xs);
+	      xsend = static_cast<XioSend*>(xs);
 	      if (unlikely(!xcon->conn || !xcon->is_connected()))
 		code = ENOTCONN;
 	      else {
@@ -271,18 +267,17 @@ public:
 		 * on Accelio's check on below, but this assures that
 		 * all chained xio_msg are accounted) */
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
-		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
+		if (unlikely((xcon->send_ctr + xsend->get_msg_count()) >
 			     xio_qdepth_high)) {
 		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 
-		msg = &xmsg->req_0.msg;
+		msg = xsend->get_xio_msg();
 		code = xio_send_msg(xcon->conn, msg);
 		/* header trace moved here to capture xio serial# */
 		if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
-		  print_xio_msg_hdr(msgr->cct, "xio_send_msg", xmsg->hdr, msg);
-		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
+		  xsend->print_debug(msgr->cct, "xio_send_msg");
 		}
 		/* get the right Accelio's errno code */
 		if (unlikely(code)) {
@@ -309,19 +304,19 @@ public:
 		  break;
 		default:
 		  q_iter = send_q.erase(q_iter);
-		  xcon->msg_send_fail(xmsg, code);
+		  xcon->msg_send_fail(xsend, code);
 		  continue;
 		  break;
 		};
 	      } else {
 		xcon->send.set(msg->timestamp); // need atomic?
-		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
+		xcon->send_ctr += xsend->get_msg_count(); // only inc if cb promised
 	      }
 	      break;
 	    default:
 	      /* INCOMING_MSG_RELEASE */
 	      q_iter = send_q.erase(q_iter);
-	      release_xio_rsp(static_cast<XioRsp*>(xs));
+	      release_xio_msg(static_cast<XioCompletion*>(xs));
 	      continue;
 	    } /* switch (xs->type) */
 	    q_iter = send_q.erase(q_iter);
@@ -355,21 +350,20 @@ private:
   vector<XioPortal*> portals;
   char **p_vec;
   int n;
-  int last_use;
+  int last_unused;
 
 public:
-  XioPortals(Messenger *msgr, int _n) : p_vec(NULL)
+  XioPortals(Messenger *msgr, int _n, int nconns) : p_vec(NULL), last_unused(0)
   {
-    /* portal0 */
-    portals.push_back(new XioPortal(msgr));
-    last_use = 0;
+    n = max(_n, 1);
 
-    /* enforce at least two portals if bind */
-    if (_n < 2)
-      _n = 2;
-    n = _n;
-
-    /* additional portals allocated on bind() */
+    portals.resize(n);
+    for (int i = 0; i < n; i++) {
+      if (!portals[i]) {
+        portals[i] = new XioPortal(msgr, nconns);
+        assert(portals[i] != nullptr);
+      }
+    }
   }
 
   vector<XioPortal*>& get() { return portals; }
@@ -384,17 +378,18 @@ public:
     return n;
   }
 
-  int get_last_use()
+  int get_last_unused()
   {
-    int pix = last_use;
-    if (++last_use >= get_portals_len() - 1)
-      last_use = 0;
+    int pix = last_unused;
+    if (++last_unused >= get_portals_len())
+      last_unused = 0;
     return pix;
   }
 
-  XioPortal* get_portal0()
+  XioPortal* get_next_portal()
   {
-    return portals[0];
+    int pix = get_last_unused();
+    return portals[pix];
   }
 
   int bind(struct xio_session_ops *ops, const string& base_uri,
@@ -405,11 +400,15 @@ public:
 	     void *cb_user_context)
   {
     const char **portals_vec = get_vec();
-    int pix = get_last_use();
+    int pix = get_last_unused();
 
-    return xio_accept(session,
-		      (const char **)&(portals_vec[pix]),
-		      1, NULL, 0);
+    if (pix == 0) {
+      return xio_accept(session, NULL, 0, NULL, 0);
+    } else {
+      return xio_accept(session,
+			(const char **)&(portals_vec[pix]),
+			1, NULL, 0);
+    }
   }
 
   void start()
@@ -417,14 +416,10 @@ public:
     XioPortal *portal;
     int p_ix, nportals = portals.size();
 
-    /* portal_0 is the new-session handler, portal_1+ terminate
-     * active sessions */
-
-    p_vec = new char*[(nportals-1)];
-    for (p_ix = 1; p_ix < nportals; ++p_ix) {
+    p_vec = new char*[nportals];
+    for (p_ix = 0; p_ix < nportals; ++p_ix) {
       portal = portals[p_ix];
-      /* shift left */
-      p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
+      p_vec[p_ix] = (char*) /* portal->xio_uri.c_str() */
 			portal->portal_id;
     }
 

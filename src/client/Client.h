@@ -19,30 +19,21 @@
 #include "include/types.h"
 
 // stl
-#include <functional>
 #include <string>
 #include <memory>
 #include <set>
 #include <map>
 #include <fstream>
-#include <exception>
 using std::set;
 using std::map;
 using std::fstream;
 
 #include "include/unordered_set.h"
 #include "include/unordered_map.h"
-
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
-
-//#include "barrier.h"
-
 #include "mds/mdstypes.h"
-#include "mds/MDSMap.h"
-
-#include "msg/Message.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
@@ -79,6 +70,8 @@ class Objecter;
 class WritebackHandler;
 
 class PerfCounters;
+class MDSMap;
+class Message;
 
 enum {
   l_c_first = 20000,
@@ -541,7 +534,7 @@ protected:
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
   bool is_quota_bytes_approaching(Inode *in);
 
-  std::map<int64_t, int> pool_perms;
+  std::map<std::pair<int64_t,std::string>, int> pool_perms;
   list<Cond*> waiting_for_pool_perm;
   int check_pool_perm(Inode *in, int need);
 

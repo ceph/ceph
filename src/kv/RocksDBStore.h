@@ -147,13 +147,20 @@ public:
     void set(
       const string &prefix,
       const string &k,
-      const bufferlist &bl);
+      const bufferlist &bl) override;
     void rmkey(
       const string &prefix,
-      const string &k);
+      const string &k) override;
+    void rm_single_key(
+      const string &prefix,
+      const string &k) override;
     void rmkeys_by_prefix(
       const string &prefix
-      );
+      ) override;
+    void merge(
+      const string& prefix,
+      const string& k,
+      const bufferlist &bl) override;
   };
 
   KeyValueDB::Transaction get_transaction() {
@@ -216,6 +223,12 @@ public:
   static int split_key(rocksdb::Slice in, string *prefix, string *key);
   static bufferlist to_bufferlist(rocksdb::Slice in);
   static string past_prefix(const string &prefix);
+
+  class MergeOperatorRouter;
+  friend class MergeOperatorRouter;
+  virtual int set_merge_operator(const std::string& prefix,
+				 std::shared_ptr<KeyValueDB::MergeOperator> mop);
+  string assoc_name; ///< Name of associative operator
 
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {
     DIR *store_dir = opendir(path.c_str());
@@ -290,5 +303,7 @@ protected:
   WholeSpaceIterator _get_snapshot_iterator();
 
 };
+
+
 
 #endif

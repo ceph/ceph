@@ -14,13 +14,11 @@
 #ifndef CEPH_WATCH_H
 #define CEPH_WATCH_H
 
-#include <boost/intrusive_ptr.hpp>
 #include "include/memory.h"
 #include <set>
 
 #include "msg/Messenger.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
 
 enum WatcherState {
   WATCHER_PENDING,
@@ -202,6 +200,9 @@ public:
   bool is_connected() {
     return conn.get() != NULL;
   }
+  bool is_connected(Connection *con) {
+    return conn.get() == con;
+  }
 
   /// NOTE: must be called with pg lock held
   ~Watch();
@@ -290,7 +291,7 @@ public:
     );
 
   /// Called on session reset, disconnects watchers
-  void reset();
+  void reset(Connection *con);
 };
 
 #endif

@@ -42,7 +42,7 @@ if(INTEL_SSE)
     $<TARGET_OBJECTS:jerasure_objs>
     $<TARGET_OBJECTS:shec_objs>)
   add_dependencies(ec_shec_sse3 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-  target_link_libraries(ec_shec_sse3 ${EXTRALIBS})
+  target_link_libraries(ec_shec_sse3 crush ${EXTRALIBS})
   set_target_properties(ec_shec_sse3 PROPERTIES VERSION 2.0.0 SOVERSION 2
     COMPILE_FLAGS ${SSE3_FLAGS})
   install(TARGETS ec_shec_sse3 DESTINATION lib/erasure-code)
@@ -54,7 +54,7 @@ if(INTEL_SSE4_1)
     $<TARGET_OBJECTS:jerasure_objs>
     $<TARGET_OBJECTS:shec_objs>)
   add_dependencies(ec_shec_sse4 ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
-  target_link_libraries(ec_shec_sse4 ${EXTRALIBS})
+  target_link_libraries(ec_shec_sse4 crush ${EXTRALIBS})
   set_target_properties(ec_shec_sse4 PROPERTIES VERSION 2.0.0 SOVERSION 2
     COMPILE_FLAGS ${SSE4_FLAGS})
   install(TARGETS ec_shec_sse4 DESTINATION lib/erasure-code)

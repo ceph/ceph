@@ -15,8 +15,10 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+source $(dirname $0)/detect-build-env-vars.sh
+
 CEPH_CLI_TEST_DUP_COMMAND=1 \
-MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7201 test/vstart_wrapper.sh \
-    ../qa/workunits/cephtool/test.sh \
+MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7201 $CEPH_ROOT/src/test/vstart_wrapper.sh \
+    $CEPH_ROOT/qa/workunits/cephtool/test.sh \
     --test-osd \
     --asok-does-not-need-root

@@ -16,8 +16,13 @@ namespace journal {
 namespace {
 
 const uint32_t HEADER_FIXED_SIZE = 25; /// preamble, version, entry tid, tag id
+const uint32_t REMAINDER_FIXED_SIZE = 8; /// data size, crc
 
 } // anonymous namespace
+
+uint32_t Entry::get_fixed_size() {
+  return HEADER_FIXED_SIZE + REMAINDER_FIXED_SIZE;
+}
 
 void Entry::encode(bufferlist &bl) const {
   bufferlist data_bl;
@@ -25,13 +30,13 @@ void Entry::encode(bufferlist &bl) const {
   ::encode(static_cast<uint8_t>(1), data_bl);
   ::encode(m_entry_tid, data_bl);
   ::encode(m_tag_tid, data_bl);
-  assert(HEADER_FIXED_SIZE == data_bl.length());
-
   ::encode(m_data, data_bl);
 
   uint32_t crc = data_bl.crc32c(0);
+  uint32_t bl_offset = bl.length();
   bl.claim_append(data_bl);
   ::encode(crc, bl);
+  assert(get_fixed_size() + m_data.length() + bl_offset == bl.length());
 }
 
 void Entry::decode(bufferlist::iterator &iter) {

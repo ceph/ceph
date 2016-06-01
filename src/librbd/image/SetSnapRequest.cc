@@ -60,8 +60,8 @@ void SetSnapRequest<I>::send_init_exclusive_lock() {
     int r = 0;
     if (send_refresh_parent(&r) != nullptr) {
       send_complete();
-      return;
     }
+    return;
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -272,8 +272,12 @@ Context *SetSnapRequest<I>::handle_open_object_map(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
 
-  // object map should never report errors
-  assert(*result == 0);
+  if (*result < 0) {
+    lderr(cct) << "failed to open object map: " << cpp_strerror(*result)
+               << dendl;
+    delete m_object_map;
+    m_object_map = nullptr;
+  }
 
   *result = apply();
   if (*result < 0) {

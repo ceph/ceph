@@ -143,14 +143,12 @@ private:
   bool _need_temp_object_collection(const coll_t& cid, const ghobject_t& oid) {
     // - normal temp case: cid is pg, object is temp (pool < -1)
     // - hammer temp case: cid is pg (or already temp), object pool is -1
-    return (cid.is_pg() && (oid.hobj.pool < -1 ||
-			oid.hobj.pool == -1));
+    return cid.is_pg() && oid.hobj.pool <= -1;
   }
   void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
     // - normal temp case: cid is pg, object is temp (pool < -1)
     // - hammer temp case: cid is pg (or already temp), object pool is -1
-    if (cid.is_pg() && (oid.hobj.pool < -1 ||
-			oid.hobj.pool == -1))
+    if (cid.is_pg() && oid.hobj.pool <= -1)
       cid = cid.get_temp();
   }
   void init_temp_collections();
@@ -587,6 +585,8 @@ public:
     fsid = u;
   }
   uuid_d get_fsid() { return fsid; }
+  
+  uint64_t estimate_objects_overhead(uint64_t num_objects);
 
   // DEBUG read error injection, an object is removed from both on delete()
   Mutex read_error_lock;
@@ -613,13 +613,6 @@ public:
   int _rmattrs(const coll_t& cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
-  int collection_getattr(const coll_t& c, const char *name, void *value, size_t size);
-  int collection_getattr(const coll_t& c, const char *name, bufferlist& bl);
-  int collection_getattrs(const coll_t& cid, map<string,bufferptr> &aset);
-
-  int _collection_setattr(const coll_t& c, const char *name, const void *value, size_t size);
-  int _collection_rmattr(const coll_t& c, const char *name);
-  int _collection_setattrs(const coll_t& cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 
@@ -630,7 +623,6 @@ public:
 		      vector<ghobject_t> *ls, ghobject_t *next);
   int list_collections(vector<coll_t>& ls);
   int list_collections(vector<coll_t>& ls, bool include_temp);
-  int collection_version_current(const coll_t& c, uint32_t *version);
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c);
   bool collection_empty(const coll_t& c);

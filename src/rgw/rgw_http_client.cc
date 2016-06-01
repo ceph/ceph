@@ -14,7 +14,68 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+struct rgw_http_req_data : public RefCountedObject {
+  CURL *easy_handle;
+  curl_slist *h;
+  uint64_t id;
+  int ret;
+  atomic_t done;
+  RGWHTTPClient *client;
+  void *user_info;
+  bool registered;
+  RGWHTTPManager *mgr;
+  char error_buf[CURL_ERROR_SIZE];
+
+  Mutex lock;
+  Cond cond;
+
+  rgw_http_req_data() : easy_handle(NULL), h(NULL), id(-1), ret(0),
+                        client(nullptr), user_info(nullptr), registered(false),
+                        mgr(NULL), lock("rgw_http_req_data::lock") {
+    memset(error_buf, 0, sizeof(error_buf));
+  }
+
+  int wait() {
+    Mutex::Locker l(lock);
+    cond.Wait(lock);
+    return ret;
+  }
+
+
+  void finish(int r) {
+    Mutex::Locker l(lock);
+    ret = r;
+    if (easy_handle)
+      curl_easy_cleanup(easy_handle);
+
+    if (h)
+      curl_slist_free_all(h);
+
+    easy_handle = NULL;
+    h = NULL;
+    done.set(1);
+    cond.Signal();
+  }
+
+  bool is_done() {
+    return done.read() != 0;
+  }
+
+  int get_retcode() {
+    Mutex::Locker l(lock);
+    return ret;
+  }
+
+  RGWHTTPManager *get_manager() {
+    Mutex::Locker l(lock);
+    return mgr;
+  }
+};
+
+/*
+ * the simple set of callbacks will be called on RGWHTTPClient::process()
+ */
+static size_t simple_receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   size_t len = size * nmemb;
@@ -26,7 +87,7 @@ static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_i
   return len;
 }
 
-static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+static size_t simple_receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   size_t len = size * nmemb;
@@ -38,7 +99,7 @@ static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_inf
   return len;
 }
 
-static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+static size_t simple_send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
@@ -49,11 +110,71 @@ static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
   return ret;
 }
 
-static curl_slist *headers_to_slist(list<pair<string, string> >& headers)
+/*
+ * the following set of callbacks will be called either on RGWHTTPManager::process(),
+ * or via the RGWHTTPManager async processing.
+ */
+static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+{
+  rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
+  size_t len = size * nmemb;
+
+  Mutex::Locker l(req_data->lock);
+  
+  if (!req_data->registered) {
+    return len;
+  }
+
+  int ret = req_data->client->receive_header(ptr, size * nmemb);
+  if (ret < 0) {
+    dout(0) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+  }
+
+  return len;
+}
+
+static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+{
+  rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
+  size_t len = size * nmemb;
+
+  Mutex::Locker l(req_data->lock);
+  
+  if (!req_data->registered) {
+    return len;
+  }
+  
+  int ret = req_data->client->receive_data(ptr, size * nmemb);
+  if (ret < 0) {
+    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+  }
+
+  return len;
+}
+
+static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+{
+  rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
+
+  Mutex::Locker l(req_data->lock);
+  
+  if (!req_data->registered) {
+    return 0;
+  }
+
+  int ret = req_data->client->send_data(ptr, size * nmemb);
+  if (ret < 0) {
+    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+  }
+
+  return ret;
+}
+
+static curl_slist *headers_to_slist(param_vec_t& headers)
 {
   curl_slist *h = NULL;
 
-  list<pair<string, string> >::iterator iter;
+  param_vec_t::iterator iter;
   for (iter = headers.begin(); iter != headers.end(); ++iter) {
     pair<string, string>& p = *iter;
     string val = p.first;
@@ -79,6 +200,10 @@ static curl_slist *headers_to_slist(list<pair<string, string> >& headers)
   return h;
 }
 
+/*
+ * process a single simple one off request, not going through RGWHTTPManager. Not using
+ * req_data.
+ */
 int RGWHTTPClient::process(const char *method, const char *url)
 {
   int ret = 0;
@@ -99,15 +224,15 @@ int RGWHTTPClient::process(const char *method, const char *url)
   curl_easy_setopt(curl_handle, CURLOPT_URL, url);
   curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, receive_http_header);
+  curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, simple_receive_http_header);
   curl_easy_setopt(curl_handle, CURLOPT_WRITEHEADER, (void *)this);
-  curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, receive_http_data);
+  curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, simple_receive_http_data);
   curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)this);
   curl_easy_setopt(curl_handle, CURLOPT_ERRORBUFFER, (void *)error_buf);
   if (h) {
     curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
-  curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, send_http_data);
+  curl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, simple_send_http_data);
   curl_easy_setopt(curl_handle, CURLOPT_READDATA, (void *)this);
   curl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L); 
   if (has_send_len) {
@@ -121,7 +246,7 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
   CURLcode status = curl_easy_perform(curl_handle);
   if (status) {
-    dout(0) << "curl_easy_perform returned error: " << error_buf << dendl;
+    dout(0) << "curl_easy_perform returned status " << status << " error: " << error_buf << dendl;
     ret = -EINVAL;
   }
   curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
@@ -130,55 +255,6 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
   return ret;
 }
-
-struct rgw_http_req_data : public RefCountedObject {
-  CURL *easy_handle;
-  curl_slist *h;
-  uint64_t id;
-  int ret;
-  atomic_t done;
-  RGWHTTPClient *client;
-  RGWHTTPManager *mgr;
-  char error_buf[CURL_ERROR_SIZE];
-
-  Mutex lock;
-  Cond cond;
-
-  rgw_http_req_data() : easy_handle(NULL), h(NULL), id(-1), ret(0), client(NULL),
-                        mgr(NULL), lock("rgw_http_req_data::lock") {
-    memset(error_buf, 0, sizeof(error_buf));
-  }
-
-  int wait() {
-    Mutex::Locker l(lock);
-    cond.Wait(lock);
-    return ret;
-  }
-
-  void finish(int r) {
-    Mutex::Locker l(lock);
-    ret = r;
-    cond.Signal();
-    done.set(1);
-    if (easy_handle)
-      curl_easy_cleanup(easy_handle);
-
-    if (h)
-      curl_slist_free_all(h);
-
-    easy_handle = NULL;
-    h = NULL;
-  }
-
-  bool is_done() {
-    return done.read() != 0;
-  }
-
-  int get_retcode() {
-    Mutex::Locker l(lock);
-    return ret;
-  }
-};
 
 string RGWHTTPClient::to_str()
 {
@@ -196,6 +272,9 @@ int RGWHTTPClient::get_req_retcode()
   return req_data->get_retcode();
 }
 
+/*
+ * init request, will be used later with RGWHTTPManager
+ */
 int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_req_data *_req_data)
 {
   assert(!req_data);
@@ -222,15 +301,15 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   curl_easy_setopt(easy_handle, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(easy_handle, CURLOPT_HEADERFUNCTION, receive_http_header);
-  curl_easy_setopt(easy_handle, CURLOPT_WRITEHEADER, (void *)this);
+  curl_easy_setopt(easy_handle, CURLOPT_WRITEHEADER, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, receive_http_data);
-  curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, (void *)this);
+  curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
   curl_easy_setopt(easy_handle, CURLOPT_READFUNCTION, send_http_data);
-  curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)this);
+  curl_easy_setopt(easy_handle, CURLOPT_READDATA, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_UPLOAD, 1L); 
   if (has_send_len) {
     curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, (void *)send_len); 
@@ -240,6 +319,9 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   return 0;
 }
 
+/*
+ * wait for async request to complete
+ */
 int RGWHTTPClient::wait()
 {
   if (!req_data->is_done()) {
@@ -252,6 +334,11 @@ int RGWHTTPClient::wait()
 RGWHTTPClient::~RGWHTTPClient()
 {
   if (req_data) {
+    RGWHTTPManager *http_manager = req_data->get_manager();
+    if (http_manager) {
+      http_manager->remove_request(this);
+    }
+
     req_data->put();
   }
 }
@@ -347,6 +434,9 @@ void *RGWHTTPManager::ReqsThread::entry()
   return NULL;
 }
 
+/*
+ * RGWHTTPManager has two modes of operation: threaded and non-threaded.
+ */
 RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : cct(_cct),
                                                     completion_mgr(_cm), is_threaded(false),
                                                     reqs_lock("RGWHTTPManager::reqs_lock"), num_reqs(0), max_threaded_req(0),
@@ -367,8 +457,18 @@ void RGWHTTPManager::register_request(rgw_http_req_data *req_data)
 {
   RWLock::WLocker rl(reqs_lock);
   req_data->id = num_reqs;
+  req_data->registered = true;
   reqs[num_reqs] = req_data;
   num_reqs++;
+  ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
+}
+
+void RGWHTTPManager::unregister_request(rgw_http_req_data *req_data)
+{
+  RWLock::WLocker rl(reqs_lock);
+  req_data->get();
+  req_data->registered = false;
+  unregistered_reqs.push_back(req_data);
   ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
 }
 
@@ -384,9 +484,14 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
   if (iter != reqs.end()) {
     reqs.erase(iter);
   }
-  if (completion_mgr) {
-    completion_mgr->complete(NULL, req_data->client->get_user_info());
+  {
+    Mutex::Locker l(req_data->lock);
+    req_data->mgr = nullptr;
   }
+  if (completion_mgr) {
+    completion_mgr->complete(NULL, req_data->user_info);
+  }
+
   req_data->put();
 }
 
@@ -402,6 +507,9 @@ void RGWHTTPManager::_finish_request(rgw_http_req_data *req_data, int ret)
   _complete_request(req_data);
 }
 
+/*
+ * hook request to the curl multi handle
+ */
 int RGWHTTPManager::link_request(rgw_http_req_data *req_data)
 {
   ldout(cct, 20) << __func__ << " req_data=" << req_data << " req_data->id=" << req_data->id << ", easy_handle=" << req_data->easy_handle << dendl;
@@ -413,16 +521,45 @@ int RGWHTTPManager::link_request(rgw_http_req_data *req_data)
   return 0;
 }
 
-void RGWHTTPManager::link_pending_requests()
+/*
+ * unhook request from the curl multi handle, and finish request if it wasn't finished yet as
+ * there will be no more processing on this request
+ */
+void RGWHTTPManager::_unlink_request(rgw_http_req_data *req_data)
+{
+  if (req_data->easy_handle) {
+    curl_multi_remove_handle((CURLM *)multi_handle, req_data->easy_handle);
+  }
+  if (!req_data->is_done()) {
+    _finish_request(req_data, -ECANCELED);
+  }
+}
+
+void RGWHTTPManager::unlink_request(rgw_http_req_data *req_data)
+{
+  RWLock::WLocker wl(reqs_lock);
+  _unlink_request(req_data);
+}
+
+void RGWHTTPManager::manage_pending_requests()
 {
   reqs_lock.get_read();
-  if (max_threaded_req == num_reqs) {
+  if (max_threaded_req == num_reqs && unregistered_reqs.empty()) {
     reqs_lock.unlock();
     return;
   }
   reqs_lock.unlock();
 
   RWLock::WLocker wl(reqs_lock);
+
+  if (!unregistered_reqs.empty()) {
+    for (auto& r : unregistered_reqs) {
+      _unlink_request(r);
+      r->put();
+    }
+
+    unregistered_reqs.clear();
+  }
 
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(max_threaded_req);
 
@@ -454,16 +591,22 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
   int ret = client->init_request(method, url, req_data);
   if (ret < 0) {
     req_data->put();
+    req_data = NULL;
     return ret;
   }
 
   req_data->mgr = this;
   req_data->client = client;
+  req_data->user_info = client->get_user_info();
 
   register_request(req_data);
 
   if (!is_threaded) {
     ret = link_request(req_data);
+    if (ret < 0) {
+      req_data->put();
+      req_data = NULL;
+    }
     return ret;
   }
   ret = signal_thread();
@@ -474,6 +617,26 @@ int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const
   return ret;
 }
 
+int RGWHTTPManager::remove_request(RGWHTTPClient *client)
+{
+  rgw_http_req_data *req_data = client->get_req_data();
+
+  if (!is_threaded) {
+    unlink_request(req_data);
+    return 0;
+  }
+  unregister_request(req_data);
+  int ret = signal_thread();
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+/*
+ * the synchronous, non-threaded request processing method.
+ */
 int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
 {
   assert(!is_threaded);
@@ -528,6 +691,9 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
   return 0;
 }
 
+/*
+ * the synchronous, non-threaded request processing completion method.
+ */
 int RGWHTTPManager::complete_requests()
 {
   bool done;
@@ -541,26 +707,34 @@ int RGWHTTPManager::complete_requests()
 
 int RGWHTTPManager::set_threaded()
 {
-  is_threaded = true;
-  reqs_thread = new ReqsThread(this);
-  reqs_thread->create("http_manager");
-
   int r = pipe(thread_pipe);
   if (r < 0) {
     r = -errno;
     ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
     return r;
   }
+
+  is_threaded = true;
+  reqs_thread = new ReqsThread(this);
+  reqs_thread->create("http_manager");
   return 0;
 }
 
 void RGWHTTPManager::stop()
 {
+  if (is_stopped.read()) {
+    return;
+  }
+
+  is_stopped.set(1);
+
   if (is_threaded) {
     going_down.set(1);
     signal_thread();
     reqs_thread->join();
     delete reqs_thread;
+    TEMP_FAILURE_RETRY(::close(thread_pipe[1]));
+    TEMP_FAILURE_RETRY(::close(thread_pipe[0]));
   }
 }
 
@@ -590,7 +764,7 @@ void *RGWHTTPManager::reqs_thread_entry()
       return NULL;
     }
 
-    link_pending_requests();
+    manage_pending_requests();
 
     mstatus = curl_multi_perform((CURLM *)multi_handle, &still_running);
     switch (mstatus) {
@@ -631,7 +805,14 @@ void *RGWHTTPManager::reqs_thread_entry()
     }
   }
 
+
   RWLock::WLocker rl(reqs_lock);
+  for (auto r : unregistered_reqs) {
+    _finish_request(r, -ECANCELED);
+  }
+
+  unregistered_reqs.clear();
+
   auto all_reqs = std::move(reqs);
   for (auto iter : all_reqs) {
     _finish_request(iter.second, -ECANCELED);

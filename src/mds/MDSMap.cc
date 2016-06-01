@@ -19,11 +19,6 @@
 using std::stringstream;
 
 
-const mds_rank_t MDSMap::MDS_NO_STANDBY_PREF(-1);
-const mds_rank_t MDSMap::MDS_STANDBY_ANY(-2);
-const mds_rank_t MDSMap::MDS_STANDBY_NAME(-3);
-const mds_rank_t MDSMap::MDS_MATCHED_ACTIVE(-4);
-
 // features
 CompatSet get_mdsmap_compat_set_all() {
   CompatSet::FeatureSet feature_compat;
@@ -83,6 +78,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_int("standby_for_rank", standby_for_rank);
   f->dump_int("standby_for_fscid", standby_for_fscid);
   f->dump_string("standby_for_name", standby_for_name);
+  f->dump_bool("standby_replay", standby_replay);
   f->open_array_section("export_targets");
   for (set<mds_rank_t>::iterator p = export_targets.begin();
        p != export_targets.end(); ++p) {
@@ -134,6 +130,8 @@ void MDSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
   f->dump_unsigned("flags", flags);
+  f->dump_unsigned("ever_allowed_features", ever_allowed_features);
+  f->dump_unsigned("explicitly_allowed_features", explicitly_allowed_features);
   f->dump_stream("created") << created;
   f->dump_stream("modified") << modified;
   f->dump_int("tableserver", tableserver);
@@ -265,7 +263,7 @@ void MDSMap::print_summary(Formatter *f, ostream *out) const
     if (p.second.laggy())
       s += "(laggy or crashed)";
 
-    if (p.second.rank >= 0) {
+    if (p.second.rank >= 0 && p.second.state != MDSMap::STATE_STANDBY_REPLAY) {
       if (f) {
 	f->open_object_section("mds");
 	f->dump_unsigned("rank", p.second.rank);
@@ -406,7 +404,7 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(7, 4, bl);
   ::encode(global_id, bl);
   ::encode(name, bl);
   ::encode(rank, bl);
@@ -420,6 +418,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   ::encode(export_targets, bl);
   ::encode(mds_features, bl);
   ::encode(standby_for_fscid, bl);
+  ::encode(standby_replay, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -442,7 +441,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
   ::decode(global_id, bl);
   ::decode(name, bl);
   ::decode(rank, bl);
@@ -460,6 +459,9 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 6) {
     ::decode(standby_for_fscid, bl);
   }
+  if (struct_v >= 7) {
+    ::decode(standby_replay, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -467,6 +469,13 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
 
 void MDSMap::encode(bufferlist& bl, uint64_t features) const
 {
+  std::map<mds_rank_t,int32_t> inc;  // Legacy field, fake it so that
+                                     // old-mon peers have something sane
+                                     // during upgrade
+  for (const auto rank : in) {
+    inc.insert(std::make_pair(rank, epoch));
+  }
+
   if ((features & CEPH_FEATURE_PGID64) == 0) {
     __u16 v = 2;
     ::encode(v, bl);
@@ -547,7 +556,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 9;
+  __u16 ev = 10;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -560,8 +569,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(failed, bl);
   ::encode(stopped, bl);
   ::encode(last_failure_osd_epoch, bl);
-  ::encode(ever_allowed_snaps, bl);
-  ::encode(explicitly_allowed_snaps, bl);
+  ::encode(ever_allowed_features, bl);
+  ::encode(explicitly_allowed_features, bl);
   ::encode(inline_data_enabled, bl);
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
@@ -571,6 +580,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
 
 void MDSMap::decode(bufferlist::iterator& p)
 {
+  std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
+
   cached_up_features = 0;
   DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
   ::decode(epoch, p);
@@ -624,11 +635,27 @@ void MDSMap::decode(bufferlist::iterator& p)
   if (ev >= 4)
     ::decode(last_failure_osd_epoch, p);
   if (ev >= 6) {
-    ::decode(ever_allowed_snaps, p);
-    ::decode(explicitly_allowed_snaps, p);
+    if (ev < 10) {
+      // previously this was a bool about snaps, not a flag map
+      bool flag;
+      ::decode(flag, p);
+      ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+      ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS|CEPH_MDSMAP_ALLOW_DIRFRAGS;
+      ::decode(flag, p);
+      explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
+      if (max_mds > 1) {
+	set_multimds_allowed();
+      }
+    } else {
+      ::decode(ever_allowed_features, p);
+      ::decode(explicitly_allowed_features, p);
+    }
   } else {
-    ever_allowed_snaps = true;
-    explicitly_allowed_snaps = false;
+    ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
+    explicitly_allowed_features = 0;
+    if (max_mds > 1) {
+      set_multimds_allowed();
+    }
   }
   if (ev >= 7)
     ::decode(inline_data_enabled, p);

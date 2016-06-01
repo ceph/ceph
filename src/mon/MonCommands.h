@@ -141,21 +141,21 @@ COMMAND("pg dump_stuck " \
 	"pg", "r", "cli,rest")
 COMMAND("pg ls-by-pool " \
         "name=poolstr,type=CephString " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with pool = [poolname | poolid]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-primary " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with primary = [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls-by-osd " \
         "name=osd,type=CephOsdName " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg on osd [osd]", "pg", "r", "cli,rest")
 COMMAND("pg ls " \
         "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
@@ -292,7 +292,7 @@ COMMAND_WITH_FLAG("mon sync force " \
     "force sync of and clear monitor store", \
     "mon", "rw", "cli,rest", \
     FLAG(NOFORWARD))
-COMMAND("mon metadata name=id,type=CephString",
+COMMAND("mon metadata name=id,type=CephString,req=false",
 	"fetch metadata for mon <id>",
 	"mon", "r", "cli,rest")
 
@@ -312,7 +312,7 @@ COMMAND("fs dump "
 COMMAND("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
-COMMAND("mds metadata name=who,type=CephString",
+COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
 	"mds", "r", "cli,rest")
 COMMAND("mds tell " \
@@ -329,7 +329,8 @@ COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest")
 COMMAND("mds set " \
-	"name=var,type=CephChoices,strings=max_mds|max_file_size|allow_new_snaps|inline_data " \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size"
+	"|allow_new_snaps|inline_data|allow_multimds|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
@@ -397,12 +398,13 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down " \
+        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
-        "name=val,type=CephString", \
+        "name=val,type=CephString " \
+	"name=confirm,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"Set a global CephFS flag", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs add_data_pool name=fs_name,type=CephString " \
@@ -411,6 +413,9 @@ COMMAND("fs add_data_pool name=fs_name,type=CephString " \
 COMMAND("fs rm_data_pool name=fs_name,type=CephString " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest")
+COMMAND("fs set_default name=fs_name,type=CephString", \
+	"set the default to the named filesystem", \
+	"fs", "rw", "cli,rest")
 
 /*
  * Monmap commands
@@ -463,11 +468,11 @@ COMMAND("osd blocked-by", \
 	"osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
-	"name=id,type=CephInt,range=0", \
+	"name=id,type=CephOsdName", \
 	"find osd <id> in the CRUSH map and show its location", \
 	"osd", "r", "cli,rest")
 COMMAND("osd metadata " \
-	"name=id,type=CephInt,range=0,req=false", \
+	"name=id,type=CephOsdName,req=false", \
 	"fetch metadata for osd {id} (default all)", \
 	"osd", "r", "cli,rest")
 COMMAND("osd map " \
@@ -643,17 +648,17 @@ COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
 	"remove osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
 COMMAND("osd reweight " \
-	"name=id,type=CephInt,range=0 " \
+	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
 COMMAND("osd pg-temp " \
 	"name=pgid,type=CephPgid " \
-	"name=id,type=CephString,n=N,req=false", \
+	"name=id,type=CephOsdName,n=N,req=false", \
 	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-temp " \
 	"name=pgid,type=CephPgid " \
-	"name=id,type=CephString", \
+	"name=id,type=CephOsdName", \
         "set primary_temp mapping pgid:<id>|-1 (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-affinity " \
@@ -662,13 +667,13 @@ COMMAND("osd primary-affinity " \
 	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd lost " \
-	"name=id,type=CephInt,range=0 " \
+	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
-	"name=id,type=CephInt,range=0,req=false", \
+	"name=id,type=CephOsdName,req=false", \
 	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \

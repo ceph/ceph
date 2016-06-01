@@ -220,6 +220,10 @@ threshold it will use that percentage instead. ::
 
 	ceph osd reweight-by-utilization [threshold]
 
+Describes what reweight-by-utilization would do. ::
+
+    ceph osd test-reweight-by-utilization
+
 Adds/removes the address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
 it will default to 1 hour. A blacklisted address is prevented from
