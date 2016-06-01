@@ -3208,6 +3208,8 @@ static void aws4_uri_encode(const string& src, string& dst)
   }
 }
 
+static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "SignedHeaders", "Signature" };
+
 /*
  * handle v4 signatures (rados auth only)
  */
@@ -3216,8 +3218,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   string::size_type pos;
   bool using_qs;
 
-  time_t now, now_req=0;
-  time(&now);
+  uint64_t now_req = 0;
+  uint64_t now = ceph_clock_now(s->cct);
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
@@ -3260,7 +3262,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
         return -EPERM;
       }
       /* handle expiration in epoch time */
-      now_req = mktime(&date_t);
+      now_req = (uint64_t)timegm(&date_t);
       if (now >= now_req + exp) {
         dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
         return -EPERM;
@@ -3291,72 +3293,42 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* ------------------------- handle Credential header */
 
     using_qs = false;
-    s->aws4_auth->credential = s->http_auth;
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(17, s->aws4_auth->credential.length());
+    string auth_str = s->http_auth;
 
-    pos = s->aws4_auth->credential.find("Credential");
-    if (pos == std::string::npos) {
+#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
+#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
+    uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
+    if (auth_str.length() < min_len) {
+      ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
       return -EINVAL;
     }
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos, s->aws4_auth->credential.find(","));
+    list<string> auth_list;
+    get_str_list(auth_str.substr(min_len), ",", auth_list);
 
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
+    map<string, string> kv;
 
-    pos = s->aws4_auth->credential.find("=");
-
-    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
-
-    /* ------------------------- handle SignedHeaders header */
-
-    s->aws4_auth->signedheaders = s->http_auth;
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(17, s->aws4_auth->signedheaders.length());
-
-    pos = s->aws4_auth->signedheaders.find("SignedHeaders");
-    if (pos == std::string::npos) {
-      return -EINVAL;
+    for (string& s : auth_list) {
+      string key, val;
+      int ret = parse_key_value(s, key, val);
+      if (ret < 0) {
+        ldout(store->ctx(), 10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
+        return -EINVAL;
+      }
+      kv[key] = std::move(val);
     }
 
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos, s->aws4_auth->signedheaders.length());
-
-    pos = s->aws4_auth->signedheaders.find(",");
-    if (pos == std::string::npos) {
-      return -EINVAL;
+    for (string& k : aws4_presigned_required_keys) {
+      if (kv.find(k) == kv.end()) {
+        ldout(store->ctx(), 10) << "NOTICE: auth header missing key: " << k << dendl;
+        return -EINVAL;
+      }
     }
 
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(0, pos);
-
-    pos = s->aws4_auth->signedheaders.find("=");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos + 1, s->aws4_auth->signedheaders.length());
-
-    /* host;user-agent;x-amz-content-sha256;x-amz-date */
-    dout(10) << "v4 signedheaders format = " << s->aws4_auth->signedheaders << dendl;
-
-    /* ------------------------- handle Signature header */
-
-    s->aws4_auth->signature = s->http_auth;
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(17, s->aws4_auth->signature.length());
-
-    pos = s->aws4_auth->signature.find("Signature");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos, s->aws4_auth->signature.length());
-
-    pos = s->aws4_auth->signature.find("=");
-    if (pos == std::string::npos) {
-      return -EINVAL;
-    }
-
-    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos + 1, s->aws4_auth->signature.length());
+    s->aws4_auth->credential = std::move(kv["Credential"]);
+    s->aws4_auth->signedheaders = std::move(kv["SignedHeaders"]);
+    s->aws4_auth->signature = std::move(kv["Signature"]);
 
     /* sig hex str */
     dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
@@ -3489,7 +3461,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   map<string, string> canonical_hdrs_map;
   istringstream sh(s->aws4_auth->signedheaders);
   string token;
-  string port = s->info.env->get("SERVER_PORT");
+  string port = s->info.env->get("SERVER_PORT", "");
+  string secure_port = s->info.env->get("SERVER_PORT_SECURE", "");
 
   while (getline(sh, token, ';')) {
     string token_env = "HTTP_" + token;
@@ -3515,8 +3488,13 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       }
     }
     string token_value = string(t);
-    if (using_qs && (token == "host"))
-      token_value = token_value + ":" + port;
+    if (using_qs && (token == "host")) {
+      if (!port.empty() && port != "80") {
+        token_value = token_value + ":" + port;
+      } else if (!secure_port.empty() && secure_port != "443") {
+        token_value = token_value + ":" + secure_port;
+      }
+    }
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
