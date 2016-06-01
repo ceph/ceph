@@ -2617,7 +2617,15 @@ struct pg_log_entry_t {
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
   }
-      
+
+  // Errors are only used for dup detection, whereas
+  // the index by objects is used by recovery, copy_get,
+  // and other facilities that don't expect or need to
+  // be aware of error entries.
+  bool object_is_indexed() const {
+    return !is_error();
+  }
+
   bool reqid_is_indexed() const {
     return reqid != osd_reqid_t() &&
       (op == MODIFY || op == DELETE || op == ERROR);
