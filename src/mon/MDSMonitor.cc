@@ -138,7 +138,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 
   dout(10) << __func__ << " version " << version
 	   << ", my e " << fsmap.epoch << dendl;
-  assert(version >= fsmap.epoch);
+  assert(version > fsmap.epoch);
 
   // read and decode
   fsmap_bl.clear();
