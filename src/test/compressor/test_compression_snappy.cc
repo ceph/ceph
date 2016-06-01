@@ -26,7 +26,7 @@
 TEST(SnappyCompressor, compress_decompress)
 {
   SnappyCompressor sp;
-  EXPECT_EQ(sp.get_method_name(), "snappy");
+  EXPECT_EQ(sp.get_type(), "snappy");
   const char* test = "This is test text";
   int len = strlen(test);
   bufferlist in, out;
@@ -36,6 +36,13 @@ TEST(SnappyCompressor, compress_decompress)
   bufferlist after;
   res = sp.decompress(out, after);
   EXPECT_EQ(res, 0);
+
+  after.clear();
+  size_t compressed_len = out.length();
+  out.append_zero(12);
+  auto it = out.begin();
+  res = sp.decompress(it, compressed_len, after);
+  EXPECT_EQ(res, 0);
 }
 
 TEST(SnappyCompressor, sharded_input_decompress)
@@ -43,7 +50,7 @@ TEST(SnappyCompressor, sharded_input_decompress)
   const size_t small_prefix_size=3;
 
   SnappyCompressor sp;
-  EXPECT_EQ(sp.get_method_name(), "snappy");
+  EXPECT_EQ(sp.get_type(), "snappy");
   string test(128*1024,0);
   int len = test.size();
   bufferlist in, out;

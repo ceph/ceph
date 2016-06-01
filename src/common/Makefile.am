@@ -179,6 +179,7 @@ noinst_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
 	common/BackTrace.h \
+	common/Checksummer.h \
 	common/RefCountedObj.h \
 	common/HeartbeatMap.h \
 	common/LogClient.h \

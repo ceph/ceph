@@ -3,6 +3,7 @@ if WITH_OSD
 
 
 libceph_example_la_SOURCES = \
+	common/buffer.cc \
 	compressor/Compressor.cc \
 	test/compressor/compressor_plugin_example.cc
 noinst_HEADERS += test/compressor/compressor_example.h

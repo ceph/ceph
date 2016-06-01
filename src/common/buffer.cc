@@ -1198,6 +1198,26 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
 
+  template<bool is_const>
+  size_t buffer::list::iterator_impl<is_const>::get_ptr_and_advance(
+    size_t want, const char **data)
+  {
+    if (p == ls->end()) {
+      seek(off);
+      if (p == ls->end()) {
+	return 0;
+      }
+    }
+    *data = p->c_str() + p_off;
+    size_t l = MIN(p->length() - p_off, want);
+    p_off += l;
+    if (p_off == p->length()) {
+      ++p;
+      p_off = 0;
+    }
+    return l;
+  }
+
   // explicitly instantiate only the iterator types we need, so we can hide the
   // details in this compilation unit without introducing unnecessary link time
   // dependencies.
@@ -2319,7 +2339,7 @@ void buffer::list::write_stream(std::ostream &out) const
 }
 
 
-void buffer::list::hexdump(std::ostream &out) const
+void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
 {
   if (!length())
     return;
@@ -2357,7 +2377,8 @@ void buffer::list::hexdump(std::ostream &out) const
 	did_star = false;
       }
     }
-
+    if (o)
+      out << "\n";
     out << std::hex << std::setw(8) << o << " ";
 
     unsigned i;
@@ -2380,9 +2401,12 @@ void buffer::list::hexdump(std::ostream &out) const
       else
 	out << '.';
     }
-    out << '|' << std::dec << std::endl;
+    out << '|' << std::dec;
   }
-  out << std::hex << std::setw(8) << length() << "\n";
+  if (trailing_newline) {
+    out << "\n" << std::hex << std::setw(8) << length();
+    out << "\n";
+  }
 
   out.flags(original_flags);
 }
