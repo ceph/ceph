@@ -414,7 +414,8 @@ CephContext::CephContext(uint32_t module_type_)
   ceph_spin_init(&_associated_objs_lock);
   ceph_spin_init(&_feature_lock);
 
-  _log = new ceph::log::Log(&_conf->subsys);
+  void *p = aligned_alloc (64,sizeof (ceph::log::Log));
+  _log = new (p) ceph::log::Log(&_conf->subsys);
   _log->start();
 
   _log_obs = new LogObs(_log);

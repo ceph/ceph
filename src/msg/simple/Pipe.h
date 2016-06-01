@@ -186,8 +186,9 @@ class DispatchQueue;
     entity_addr_t peer_addr;
     Messenger::Policy policy;
     
-    Mutex pipe_lock;
-    int state;
+    // put pipe_lock in own cacheline, by itself to avoid false sharing.
+    Mutex pipe_lock __attribute__((aligned (64)));
+    int state __attribute__((aligned (64)));
     atomic_t state_closed; // non-zero iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
