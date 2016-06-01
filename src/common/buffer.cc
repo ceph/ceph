@@ -757,9 +757,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     r->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
+  buffer::ptr::ptr(unsigned l, const bool page_aligned) : _off(0), _len(l)
   {
-    _raw = create(l);
+    if (page_aligned)
+      _raw = create_page_aligned(l);
+    else
+      _raw = create(l);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
@@ -1751,9 +1754,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
   
-  void buffer::list::append_zero(unsigned len)
+  void buffer::list::append_zero(unsigned len, const bool page_aligned)
   {
-    ptr bp(len);
+    ptr bp(len, page_aligned);
     bp.zero();
     append(std::move(bp));
   }

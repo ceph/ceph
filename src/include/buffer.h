@@ -170,7 +170,7 @@ namespace buffer CEPH_BUFFER_API {
     // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
     // cppcheck-suppress noExplicitConstructor
-    ptr(unsigned l);
+    ptr(unsigned l, const bool page_aligned = false);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
     ptr(ptr&& p);
@@ -551,7 +551,7 @@ namespace buffer CEPH_BUFFER_API {
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
-    void append_zero(unsigned len);
+    void append_zero(unsigned len, const bool page_aligned = false);
     
     /*
      * get a char
