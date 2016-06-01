@@ -974,7 +974,7 @@ if(${WITH_MDS})
     mds/MDLog.cc
     ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
-  add_library(mds ${mds_srcs}
+  add_library(mds STATIC ${mds_srcs}
     $<TARGET_OBJECTS:heap_profiler_objs>
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(mds ${ALLOC_LIBS} osdc common)
