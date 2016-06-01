@@ -28,9 +28,11 @@ namespace ceph {
 extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
 extern ostream& operator<<(ostream& out, const sockaddr *sa);
 
+typedef uint8_t entity_type_t;
+
 class entity_name_t {
 public:
-  __u8 _type;
+  entity_type_t _type;
   int64_t _num;
 
 public:
