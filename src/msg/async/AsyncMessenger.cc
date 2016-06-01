@@ -471,6 +471,7 @@ AsyncMessenger::~AsyncMessenger()
   delete reap_handler;
   assert(!did_bind); // either we didn't bind or we shut down the Processor
   local_connection->mark_down();
+  ceph_spin_destroy(&global_seq_lock);
 }
 
 void AsyncMessenger::ready()
