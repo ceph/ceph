@@ -1214,6 +1214,13 @@ def restart(ctx, config):
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
             wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
+    manager = ctx.managers['ceph']
+    for dmon in daemons:
+        if '.' in dmon:
+            dm_parts = dmon.split('.')
+            if dm_parts[1].isdigit():
+                if dm_parts[0] == 'osd':
+                    manager.mark_down_osd(int(dm_parts[1]))
     yield
 
 
