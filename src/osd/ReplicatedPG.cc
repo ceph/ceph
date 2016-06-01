@@ -159,6 +159,52 @@ public:
   }
 };
 
+struct ReplicatedPG::C_OSD_OndiskWriteUnlock : public Context {
+  ObjectContextRef obc, obc2, obc3;
+  C_OSD_OndiskWriteUnlock(
+    ObjectContextRef o,
+    ObjectContextRef o2 = ObjectContextRef(),
+    ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
+  void finish(int r) {
+    obc->ondisk_write_unlock();
+    if (obc2)
+      obc2->ondisk_write_unlock();
+    if (obc3)
+      obc3->ondisk_write_unlock();
+  }
+};
+
+struct ReplicatedPG::C_OSD_AppliedRecoveredObject : public Context {
+  ReplicatedPGRef pg;
+  ObjectContextRef obc;
+  C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContextRef o) :
+    pg(p), obc(o) {}
+  void finish(int r) {
+    pg->_applied_recovered_object(obc);
+  }
+};
+
+struct ReplicatedPG::C_OSD_CommittedPushedObject : public Context {
+  ReplicatedPGRef pg;
+  epoch_t epoch;
+  eversion_t last_complete;
+  C_OSD_CommittedPushedObject(
+    ReplicatedPG *p, epoch_t epoch, eversion_t lc) :
+    pg(p), epoch(epoch), last_complete(lc) {
+  }
+  void finish(int r) {
+    pg->_committed_pushed_object(epoch, last_complete);
+  }
+};
+
+struct ReplicatedPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
+  ReplicatedPGRef pg;
+  explicit C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
+    pg(p) {}
+  void finish(int r) {
+    pg->_applied_recovered_object_replica();
+  }
+};
 // ======================
 // PGBackend::Listener
 
