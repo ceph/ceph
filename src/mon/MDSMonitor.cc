@@ -1500,7 +1500,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_features() && CEPH_FEATURE_SERVER_JEWEL;
+      bool jewel = mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL;
       if (flag_bool && !jewel) {
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
