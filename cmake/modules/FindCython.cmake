@@ -48,32 +48,35 @@ ENDIF (Cython_FOUND)
 # 2) to compile assembly.pyx and something.cpp to assembly.so:
 #   CYTHON_ADD_MODULE(assembly something.cpp)
 
-if(NOT CYTHON_INCLUDE_DIRECTORIES)
-    set(CYTHON_INCLUDE_DIRECTORIES .)
-endif(NOT CYTHON_INCLUDE_DIRECTORIES)
-
 # Cythonizes the .pyx files into .cpp file (but doesn't compile it)
 macro(CYTHON_ADD_MODULE_PYX name)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pxd)
-        set(DEPENDS ${name}.pyx ${name}.pxd)
-    else(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pxd)
-        set(DEPENDS ${name}.pyx)
-    endif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pxd)
-    # Allow the user to specify dependencies as optional arguments
-    set(DEPENDS ${DEPENDS} ${ARGN})
-    add_custom_command(
-        OUTPUT ${name}.cpp
-        COMMAND ${CYTHON_BIN}
-        ARGS ${CYTHON_FLAGS} -I ${CYTHON_INCLUDE_DIRECTORIES} -o ${name}.cpp ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pyx
-        DEPENDS ${DEPENDS}
-        COMMENT "Cythonizing ${name}.pyx")
+  set(depends ${name}.pyx)
+  if(CYTHON_INCLUDE_DIRECTORIES)
+    foreach(dir ${CYTHON_INCLUDE_DIRECTORIES})
+      file(GLOB pxd_srcs ${CYTHON_INCLUDE_DIRECTORIES}/*.pxd)
+      list(APPEND depends ${pxd_srcs})
+    endforeach()
+  elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pxd)
+    list(APPEND depends ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pxd)
+    set(CYTHON_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
+  # Allow the user to specify dependencies as optional arguments
+  list(APPEND depends ${ARGN})
+  add_custom_command(
+    OUTPUT ${name}.cpp
+    COMMAND ${CYTHON_BIN}
+    ARGS ${CYTHON_FLAGS} -I ${CYTHON_INCLUDE_DIRECTORIES} -o ${name}.cpp ${CMAKE_CURRENT_SOURCE_DIR}/${name}.pyx
+    DEPENDS ${depends}
+    COMMENT "Cythonizing ${name}.pyx")
 endmacro(CYTHON_ADD_MODULE_PYX)
 
 # Cythonizes and compiles a .pyx file
-macro(CYTHON_ADD_MODULE name)
-    CYTHON_ADD_MODULE_PYX(${name})
-    # We need Python for this:
-    find_package(Python REQUIRED)
-    add_python_library(${name} ${name}.cpp ${ARGN})
+macro(CYTHON_ADD_MODULE name pyx)
+  CYTHON_ADD_MODULE_PYX(${pyx})
+  add_library(${name} MODULE ${pyx}.cpp)
+  target_include_directories(${name} PRIVATE ${PYTHON_INCLUDE_PATH})
+  target_link_libraries(${name} ${PYTHON_LIBRARIES})
+  set_target_properties(${name} PROPERTIES
+    PREFIX "${PYTHON_MODULE_PREFIX}"
+    OUTPUT_NAME ${pyx})
 endmacro(CYTHON_ADD_MODULE)
-

@@ -212,6 +212,7 @@ find_package(PythonInterp 2 QUIET)
 if(NOT PYTHONINTERP_FOUND)
   message(FATAL_ERROR "Python 2 interpreter not found.")
 endif(NOT PYTHONINTERP_FOUND)
+find_package(PythonLibs REQUIRED)
 
 # if CMAKE_INSTALL_PREFIX is an empty string, must replace
 # it with "/" to make PYTHON_INSTALL_TEMPLATE an absolute path to be
