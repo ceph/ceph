@@ -470,21 +470,27 @@ class GitbuilderProject(object):
         """
         self.arch = self.job_config.get('arch', 'x86_64')
         self.os_type = self.job_config.get("os_type")
+        self.flavor = self.job_config.get("flavor")
+        self.codename = self.job_config.get("codename")
         self.os_version = self._get_version()
+        self.ref = self.job_config.get("ref")
         self.distro = self._get_distro(
             distro=self.os_type,
             version=self.os_version,
+            codename=self.codename,
         )
         self.pkg_type = "deb" if self.os_type.lower() in (
             "ubuntu",
             "debian",
         ) else "rpm"
-        # avoiding circular imports
-        from teuthology.suite.util import get_install_task_flavor
-        # when we're initializing from a full teuthology config, not just a
-        # task config we need to make sure we're looking at the flavor for
-        # the install task
-        self.flavor = get_install_task_flavor(self.job_config)
+
+        if not getattr(self, 'flavor'):
+            # avoiding circular imports
+            from teuthology.suite.util import get_install_task_flavor
+            # when we're initializing from a full teuthology config, not just a
+            # task config we need to make sure we're looking at the flavor for
+            # the install task
+            self.flavor = get_install_task_flavor(self.job_config)
 
     @property
     def sha1(self):
@@ -648,7 +654,7 @@ class GitbuilderProject(object):
         else:
             # FIXME: Should master be the default?
             log.debug("defaulting to master branch")
-            uri = 'ref/master'
+            uri = getattr(self, 'ref', 'ref/master')
         return uri
 
     def _get_base_url(self):
