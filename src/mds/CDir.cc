@@ -302,7 +302,8 @@ CDentry *CDir::lookup(const char *name, snapid_t snap)
   if (iter == items.end())
     return 0;
   if (iter->second->name == name &&
-      iter->second->first <= snap) {
+      iter->second->first <= snap &&
+      iter->second->last >= snap) {
     dout(20) << "  hit -> " << iter->first << dendl;
     return iter->second;
   }
