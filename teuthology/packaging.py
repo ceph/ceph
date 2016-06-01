@@ -480,7 +480,7 @@ class GitbuilderProject(object):
             "debian",
         ) else "rpm"
         # avoiding circular imports
-        from teuthology.suite import get_install_task_flavor
+        from teuthology.suite.util import get_install_task_flavor
         # when we're initializing from a full teuthology config, not just a
         # task config we need to make sure we're looking at the flavor for
         # the install task

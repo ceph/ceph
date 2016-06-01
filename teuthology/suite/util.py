@@ -1,0 +1,453 @@
+import copy
+import logging
+import os
+import re
+import requests
+import smtplib
+import socket
+import subprocess
+import sys
+
+from email.mime.text import MIMEText
+
+from .. import lock
+
+from ..config import config
+from ..exceptions import BranchNotFoundError, ScheduleFailError
+from ..misc import deep_merge
+from ..repo_utils import fetch_qa_suite, fetch_teuthology
+from ..orchestra.opsys import OS
+from ..packaging import GitbuilderProject
+from ..task.install import get_flavor
+
+log = logging.getLogger(__name__)
+
+
+def fetch_repos(branch, test_name):
+    """
+    Fetch the suite repo (and also the teuthology repo) so that we can use it
+    to build jobs. Repos are stored in ~/src/.
+
+    The reason the teuthology repo is also fetched is that currently we use
+    subprocess to call teuthology-schedule to schedule jobs so we need to make
+    sure it is up-to-date. For that reason we always fetch the master branch
+    for test scheduling, regardless of what teuthology branch is requested for
+    testing.
+
+    :returns: The path to the suite repo on disk
+    """
+    try:
+        # When a user is scheduling a test run from their own copy of
+        # teuthology, let's not wreak havoc on it.
+        if config.automated_scheduling:
+            # We use teuthology's master branch in all cases right now
+            if config.teuthology_path is None:
+                fetch_teuthology('master')
+        suite_repo_path = fetch_qa_suite(branch)
+    except BranchNotFoundError as exc:
+        schedule_fail(message=str(exc), name=test_name)
+    return suite_repo_path
+
+
+def schedule_fail(message, name=''):
+    """
+    If an email address has been specified anywhere, send an alert there. Then
+    raise a ScheduleFailError.
+    """
+    email = config.results_email
+    if email:
+        subject = "Failed to schedule {name}".format(name=name)
+        msg = MIMEText(message)
+        msg['Subject'] = subject
+        msg['From'] = config.results_sending_email
+        msg['To'] = email
+        try:
+            smtp = smtplib.SMTP('localhost')
+            smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
+            smtp.quit()
+        except socket.error:
+            log.exception("Failed to connect to mail server!")
+    raise ScheduleFailError(message, name)
+
+
+def get_worker(machine_type):
+    """
+    Map a given machine_type to a beanstalkd worker. If machine_type mentions
+    multiple machine types - e.g. 'plana,mira', then this returns 'multi'.
+    Otherwise it returns what was passed.
+    """
+    if ',' in machine_type:
+        return 'multi'
+    else:
+        return machine_type
+
+
+def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
+                        machine_type='plana', distro='ubuntu'):
+    """
+    Find the hash representing the head of the project's repository via
+    querying a gitbuilder repo.
+
+    Will return None in the case of a 404 or any other HTTP error.
+    """
+    # Alternate method for github-hosted projects - left here for informational
+    # purposes
+    # resp = requests.get(
+    #     'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
+    # hash = .json()['object']['sha']
+    (arch, release, _os) = get_distro_defaults(distro, machine_type)
+    gp = GitbuilderProject(
+        project,
+        dict(
+            branch=branch,
+            flavor=flavor,
+            os_type=distro,
+            arch=arch,
+        ),
+    )
+    return gp.sha1
+
+
+def get_distro_defaults(distro, machine_type):
+    """
+    Given a distro (e.g. 'ubuntu') and machine type, return:
+        (arch, release, pkg_type)
+
+    This is used to default to:
+        ('x86_64', 'trusty', 'deb') when passed 'ubuntu' and 'plana'
+    ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
+    ('x86_64', 'wheezy', 'deb') when passed 'debian'
+    ('x86_64', 'fedora20', 'rpm') when passed 'fedora'
+    And ('x86_64', 'centos7', 'rpm') when passed anything else
+    """
+    arch = 'x86_64'
+    if distro in (None, 'None'):
+        os_type = 'centos'
+        os_version = '7'
+    elif distro in ('rhel', 'centos'):
+        os_type = 'centos'
+        os_version = '7'
+    elif distro == 'ubuntu':
+        os_type = distro
+        if machine_type == 'saya':
+            os_version = '13.10'
+            arch = 'armv7l'
+        else:
+            os_version = '14.04'
+    elif distro == 'debian':
+        os_type = distro
+        os_version = '7'
+    elif distro == 'fedora':
+        os_type = distro
+        os_version = '20'
+    else:
+        raise ValueError("Invalid distro value passed: %s", distro)
+    _os = OS(name=os_type, version=os_version)
+    release = GitbuilderProject._get_distro(
+        _os.name,
+        _os.version,
+        _os.codename,
+    )
+    template = "Defaults for machine_type {mtype} distro {distro}: " \
+        "arch={arch}, release={release}, pkg_type={pkg}"
+    log.debug(template.format(
+        mtype=machine_type,
+        distro=_os.name,
+        arch=arch,
+        release=release,
+        pkg=_os.package_type)
+    )
+    return (
+        arch,
+        release,
+        _os,
+    )
+
+
+def git_ls_remote(project, branch, project_owner='ceph'):
+    """
+    Find the latest sha1 for a given project's branch.
+
+    :returns: The sha1 if found; else None
+    """
+    url = build_git_url(project, project_owner)
+    cmd = "git ls-remote {} {}".format(url, branch)
+    result = subprocess.check_output(
+        cmd, shell=True).split()
+    sha1 = result[0] if result else None
+    log.debug("{} -> {}".format(cmd, sha1))
+    return sha1
+
+
+def git_validate_sha1(project, sha1, project_owner='ceph'):
+    '''
+    Use http to validate that project contains sha1
+    I can't find a way to do this with git, period, so
+    we have specific urls to HEAD for github and git.ceph.com/gitweb
+    for now
+    '''
+    url = build_git_url(project, project_owner)
+
+    if '/github.com/' in url:
+        url = '/'.join((url, 'commit', sha1))
+    elif '/git.ceph.com/' in url:
+        # kinda specific to knowing git.ceph.com is gitweb
+        url = ('http://git.ceph.com/?p=%s.git;a=blob_plain;f=.gitignore;hb=%s'
+               % (project, sha1))
+    else:
+        raise RuntimeError(
+            'git_validate_sha1: how do I check %s for a sha1?' % url
+        )
+
+    resp = requests.head(url)
+    if resp.ok:
+        return sha1
+    return None
+
+
+def build_git_url(project, project_owner='ceph'):
+    """
+    Return the git URL to clone the project
+    """
+    if project == 'ceph-qa-suite':
+        base = config.get_ceph_qa_suite_git_url()
+    elif project == 'ceph':
+        base = config.get_ceph_git_url()
+    else:
+        base = 'https://github.com/{project_owner}/{project}'
+    url_templ = re.sub('\.git$', '', base)
+    return url_templ.format(project_owner=project_owner, project=project)
+
+
+def git_branch_exists(project, branch, project_owner='ceph'):
+    """
+    Query the git repository to check the existence of a project's branch
+    """
+    return git_ls_remote(project, branch, project_owner) is not None
+
+
+def get_branch_info(project, branch, project_owner='ceph'):
+    """
+    NOTE: This is currently not being used because of GitHub's API rate
+    limiting. We use github_branch_exists() instead.
+
+    Use the GitHub API to query a project's branch. Returns:
+        {u'object': {u'sha': <a_sha_string>,
+                    u'type': <string>,
+                    u'url': <url_to_commit>},
+        u'ref': u'refs/heads/<branch>',
+        u'url': <url_to_branch>}
+
+    We mainly use this to check if a branch exists.
+    """
+    url_templ = 'https://api.github.com/repos/{project_owner}/{project}/git/refs/heads/{branch}'  # noqa
+    url = url_templ.format(project_owner=project_owner, project=project,
+                           branch=branch)
+    resp = requests.get(url)
+    if resp.ok:
+        return resp.json()
+
+
+def package_version_for_hash(hash, kernel_flavor='basic',
+                             distro='rhel', machine_type='plana'):
+    """
+    Does what it says on the tin. Uses gitbuilder repos.
+
+    :returns: a string.
+    """
+    (arch, release, _os) = get_distro_defaults(distro, machine_type)
+    if distro in (None, 'None'):
+        distro = _os.name
+    gp = GitbuilderProject(
+        'ceph',
+        dict(
+            flavor=kernel_flavor,
+            os_type=distro,
+            arch=arch,
+            sha1=hash,
+        ),
+    )
+    return gp.version
+
+
+def get_arch(machine_type):
+    """
+    Based on a given machine_type, return its architecture by querying the lock
+    server.
+
+    :returns: A string or None
+    """
+    result = lock.list_locks(machine_type=machine_type, count=1)
+    if not result:
+        log.warn("No machines found with machine_type %s!", machine_type)
+    else:
+        return result[0]['arch']
+
+
+def strip_fragment_path(original_path):
+    """
+    Given a path, remove the text before '/suites/'.  Part of the fix for
+    http://tracker.ceph.com/issues/15470
+    """
+    scan_after = '/suites/'
+    scan_start = original_path.find(scan_after)
+    if scan_start > 0:
+        return original_path[scan_start + len(scan_after):]
+    return original_path
+
+
+def get_install_task_flavor(job_config):
+    """
+    Pokes through the install task's configuration (including its overrides) to
+    figure out which flavor it will want to install.
+
+    Only looks at the first instance of the install task in job_config.
+    """
+    project, = job_config.get('project', 'ceph'),
+    tasks = job_config.get('tasks', dict())
+    overrides = job_config.get('overrides', dict())
+    install_overrides = overrides.get('install', dict())
+    project_overrides = install_overrides.get(project, dict())
+    first_install_config = dict()
+    for task in tasks:
+        if task.keys()[0] == 'install':
+            first_install_config = task.values()[0] or dict()
+            break
+    first_install_config = copy.deepcopy(first_install_config)
+    deep_merge(first_install_config, install_overrides)
+    deep_merge(first_install_config, project_overrides)
+    return get_flavor(first_install_config)
+
+
+def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
+    """
+    Will retrieve the package versions for the given sha1, os_type and
+    kernel_flavor from gitbuilder.
+
+    Optionally, a package_versions dict can be provided
+    from previous calls to this function to avoid calling gitbuilder for
+    information we've already retrieved.
+
+    The package_versions dict will be in the following format::
+
+        {
+            "sha1": {
+                "ubuntu": {
+                    "basic": "version",
+                    }
+                "rhel": {
+                    "basic": "version",
+                    }
+            },
+            "another-sha1": {
+                "ubuntu": {
+                    "basic": "version",
+                    }
+            }
+        }
+
+    :param sha1:             The sha1 hash of the ceph version.
+    :param os_type:          The distro we want to get packages for, given
+                             the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
+    :param kernel_flavor:    The kernel flavor
+    :param package_versions: Use this optionally to use cached results of
+                             previous calls to gitbuilder.
+    :returns:                A dict of package versions. Will return versions
+                             for all hashs and distros, not just for the given
+                             hash and distro.
+    """
+    if not package_versions:
+        package_versions = dict()
+
+    os_type = str(os_type)
+
+    os_types = package_versions.get(sha1, dict())
+    package_versions_for_flavor = os_types.get(os_type, dict())
+    if kernel_flavor not in package_versions_for_flavor:
+        package_version = package_version_for_hash(
+            sha1,
+            kernel_flavor,
+            distro=os_type
+        )
+        package_versions_for_flavor[kernel_flavor] = package_version
+        os_types[os_type] = package_versions_for_flavor
+        package_versions[sha1] = os_types
+
+    return package_versions
+
+
+def has_packages_for_distro(sha1, os_type, kernel_flavor,
+                            package_versions=None):
+    """
+    Checks to see if gitbuilder has packages for the given sha1, os_type and
+    kernel_flavor.
+
+    Optionally, a package_versions dict can be provided
+    from previous calls to this function to avoid calling gitbuilder for
+    information we've already retrieved.
+
+    The package_versions dict will be in the following format::
+
+        {
+            "sha1": {
+                "ubuntu": {
+                    "basic": "version",
+                    }
+                "rhel": {
+                    "basic": "version",
+                    }
+            },
+            "another-sha1": {
+                "ubuntu": {
+                    "basic": "version",
+                    }
+            }
+        }
+
+    :param sha1:             The sha1 hash of the ceph version.
+    :param os_type:          The distro we want to get packages for, given
+                             the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
+    :param kernel_flavor:    The kernel flavor
+    :param package_versions: Use this optionally to use cached results of
+                             previous calls to gitbuilder.
+    :returns:                True, if packages are found. False otherwise.
+    """
+    os_type = str(os_type)
+    if not package_versions:
+        package_versions = get_package_versions(sha1, os_type, kernel_flavor)
+
+    package_versions_for_hash = package_versions.get(sha1, dict()).get(
+        os_type, dict())
+    # we want to return a boolean here, not the actual package versions
+    return bool(package_versions_for_hash.get(kernel_flavor, None))
+
+
+def teuthology_schedule(args, verbose, dry_run, log_prefix=''):
+    """
+    Run teuthology-schedule to schedule individual jobs.
+
+    If --dry-run has been passed but --verbose has been passed just once, don't
+    actually run the command - only print what would be executed.
+
+    If --dry-run has been passed and --verbose has been passed multiple times,
+    do both.
+    """
+    exec_path = os.path.join(
+        os.path.dirname(sys.argv[0]),
+        'teuthology-schedule')
+    args.insert(0, exec_path)
+    if dry_run:
+        # Quote any individual args so that individual commands can be copied
+        # and pasted in order to execute them individually.
+        printable_args = []
+        for item in args:
+            if ' ' in item:
+                printable_args.append("'%s'" % item)
+            else:
+                printable_args.append(item)
+        log.info('{0}{1}'.format(
+            log_prefix,
+            ' '.join(printable_args),
+        ))
+    if not dry_run or (dry_run and verbose > 1):
+        subprocess.check_call(args=args)
