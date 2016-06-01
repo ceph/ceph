@@ -27,14 +27,16 @@ BlueFS::BlueFS()
 
 BlueFS::~BlueFS()
 {
+  for (auto p : ioc) {
+    if (p)
+      p->aio_wait();
+    delete p;
+  }
   for (auto p : bdev) {
     if (p) {
       p->close();
       delete p;
     }
-  }
-  for (auto p : ioc) {
-    delete p;
   }
 }
 
