@@ -1151,17 +1151,19 @@ if(${WITH_RBD})
     ${Boost_REGEX_LIBRARY})
 
   set(rbd_mirror_internal
-    tools/rbd_mirror/ClusterWatcher.cc 
+    tools/rbd_mirror/ClusterWatcher.cc
     tools/rbd_mirror/ImageReplayer.cc
     tools/rbd_mirror/ImageDeleter.cc
     tools/rbd_mirror/ImageSync.cc
-    tools/rbd_mirror/Mirror.cc 
-    tools/rbd_mirror/PoolWatcher.cc 
-    tools/rbd_mirror/Replayer.cc 
+    tools/rbd_mirror/Mirror.cc
+    tools/rbd_mirror/PoolWatcher.cc
+    tools/rbd_mirror/Replayer.cc
     tools/rbd_mirror/Threads.cc
     tools/rbd_mirror/types.cc
     tools/rbd_mirror/image_replayer/BootstrapRequest.cc
     tools/rbd_mirror/image_replayer/CloseImageRequest.cc
+    tools/rbd_mirror/image_replayer/CreateImageRequest.cc
+    tools/rbd_mirror/image_replayer/OpenImageRequest.cc
     tools/rbd_mirror/image_replayer/OpenLocalImageRequest.cc
     tools/rbd_mirror/image_replayer/ReplayStatusFormatter.cc
     tools/rbd_mirror/image_sync/ImageCopyRequest.cc

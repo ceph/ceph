@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/parent_types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <map>
 #include <set>
@@ -25,14 +26,18 @@ class SnapshotCreateRequest {
 public:
   static SnapshotCreateRequest* create(ImageCtxT *local_image_ctx,
                                        const std::string &snap_name,
-                                       uint64_t size, Context *on_finish) {
+                                       uint64_t size,
+                                       const librbd::parent_spec &parent_spec,
+                                       uint64_t parent_overlap,
+                                       Context *on_finish) {
     return new SnapshotCreateRequest(local_image_ctx, snap_name, size,
-                                     on_finish);
+                                     parent_spec, parent_overlap, on_finish);
   }
 
   SnapshotCreateRequest(ImageCtxT *local_image_ctx,
                         const std::string &snap_name, uint64_t size,
-                        Context *on_finish);
+                        const librbd::parent_spec &parent_spec,
+                        uint64_t parent_overlap, Context *on_finish);
 
   void send();
 
@@ -66,6 +71,8 @@ private:
   ImageCtxT *m_local_image_ctx;
   std::string m_snap_name;
   uint64_t m_size;
+  librbd::parent_spec m_parent_spec;
+  uint64_t m_parent_overlap;
   Context *m_on_finish;
 
   void send_set_size();
