@@ -3306,7 +3306,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
         ldout(store->ctx(), 10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
         return -EINVAL;
       }
-      kv[key] = val;
+      kv[key] = std::move(val);
     }
 
     for (string& k : aws4_presigned_required_keys) {
@@ -3316,9 +3316,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       }
     }
 
-    s->aws4_auth->credential = kv["Credential"];
-    s->aws4_auth->signedheaders = kv["SignedHeaders"];
-    s->aws4_auth->signature = kv["Signature"];
+    s->aws4_auth->credential = std::move(kv["Credential"]);
+    s->aws4_auth->signedheaders = std::move(kv["SignedHeaders"]);
+    s->aws4_auth->signature = std::move(kv["Signature"]);
 
     /* sig hex str */
     dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
