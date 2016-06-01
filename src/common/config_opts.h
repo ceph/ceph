@@ -949,8 +949,19 @@ OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 96 * 1024*1024) // rocksdb wal
 OPTION(bluestore_block_wal_create, OPT_BOOL, false)
 OPTION(bluestore_block_preallocate_file, OPT_BOOL, false) //whether preallocate space if block/db_path/wal_path is file rather that block device.
-OPTION(bluestore_min_alloc_size, OPT_U32, 64*1024)
+OPTION(bluestore_csum, OPT_BOOL, true)
+OPTION(bluestore_csum_type, OPT_STR, "crc32c")
+OPTION(bluestore_min_csum_block, OPT_U32, 4096)
+OPTION(bluestore_max_csum_block, OPT_U32, 64*1024)
+OPTION(bluestore_min_alloc_size, OPT_U32, 0)
+OPTION(bluestore_min_alloc_size_hdd, OPT_U32, 64*1024)
+OPTION(bluestore_min_alloc_size_ssd, OPT_U32, 4*1024)
+OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
+OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
+OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
+OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(bluestore_collection_buffer_cache_size, OPT_U32, 16*1024*1024) // per collection!!
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
@@ -972,7 +983,7 @@ OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
-OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
+OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
 OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)

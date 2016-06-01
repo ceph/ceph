@@ -324,6 +324,11 @@ namespace buffer CEPH_BUFFER_API {
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
 
+      // get a pointer to the currenet iterator position, return the
+      // number of bytes we can read from that position (up to want),
+      // and advance the iterator by that amount.
+      size_t get_ptr_and_advance(size_t want, const char **p);
+
       friend bool operator==(const iterator_impl& lhs,
 			     const iterator_impl& rhs) {
 	return &lhs.get_bl() == &rhs.get_bl() && lhs.get_off() == rhs.get_off();
@@ -575,7 +580,7 @@ namespace buffer CEPH_BUFFER_API {
     void decode_base64(list& o);
 
     void write_stream(std::ostream &out) const;
-    void hexdump(std::ostream &out) const;
+    void hexdump(std::ostream &out, bool trailing_newline = true) const;
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
     int read_fd_zero_copy(int fd, size_t len);

@@ -29,6 +29,7 @@
 
 class CompressorExample : public Compressor {
 public:
+  CompressorExample() : Compressor("example") {}
   virtual ~CompressorExample() {}
 
   virtual int compress(const bufferlist &in, bufferlist &out)
@@ -42,12 +43,11 @@ public:
     out = in;
     return 0;
   }
-
-  virtual const char* get_method_name()
+  virtual int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out)
   {
-    return "example";
+    p.copy(MIN(p.get_remaining(), compressed_len), out);
+    return 0;
   }
-
 };
 
 #endif
