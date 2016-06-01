@@ -265,18 +265,18 @@ int LevelDBStore::get(
 
 int LevelDBStore::get(const string &prefix, 
 		  const string &key,
-		  bufferlist *value)
+		  bufferlist *out)
 {
-  assert(value && (value->length() == 0));
+  assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
-  leveldb::ReadOptions options;
-  std::string value;
-  std::string bound = combine_strings(prefix, key);
-  auto status = db->Get(options, bound, &value);
-  if (status.ok()) {
-    value->append(value);
-  } else if (!status.IsNotFound()) {
+  string value, k;
+  leveldb::Status s;
+  k = combine_strings(prefix, key);
+  s = db->Get(leveldb::ReadOptions(), leveldb::Slice(k), &value);
+  if (s.ok()) {
+    out->append(value);
+  } else {
     r = -ENOENT;
   }
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
