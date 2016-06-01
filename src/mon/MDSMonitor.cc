@@ -1806,8 +1806,15 @@ public:
     if (var == "max_mds") {
       // NOTE: see also "mds set_max_mds", which can modify the same field.
       if (interr.length()) {
+        ss << interr;
 	return -EINVAL;
       }
+
+      if (n <= 0) {
+        ss << "You must specify at least one MDS";
+        return -EINVAL;
+      }
+
       if (!fs->mds_map.allows_multimds() && n > fs->mds_map.get_max_mds() &&
 	  n > 1) {
 	ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
@@ -2385,7 +2392,7 @@ int MDSMonitor::legacy_filesystem_command(
   if (prefix == "mds set_max_mds") {
     // NOTE: deprecated by "fs set max_mds"
     int64_t maxmds;
-    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds <= 0) {
       return -EINVAL;
     }
 
