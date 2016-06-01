@@ -15,22 +15,26 @@
 namespace ceph {
 namespace log {
 
-class Log : private Thread
+//
+// Place the class and the hot pthread members
+// on cacheline aligned boundaries.
+//
+class __attribute  ((aligned(64))) Log : private Thread
 {
   Log **m_indirect_this;
-
   SubsystemMap *m_subs;
-  
-  pthread_mutex_t m_queue_mutex;
-  pthread_mutex_t m_flush_mutex;
-  pthread_cond_t m_cond_loggers;
-  pthread_cond_t m_cond_flusher;
 
-  pthread_t m_queue_mutex_holder;
-  pthread_t m_flush_mutex_holder;
+  pthread_mutex_t m_queue_mutex __attribute__((aligned (64)));
+  pthread_t m_queue_mutex_holder __attribute__((aligned (64)));
 
-  EntryQueue m_new;    ///< new entries
-  EntryQueue m_recent; ///< recent (less new) entries we've already written at low detail
+  pthread_mutex_t m_flush_mutex __attribute__((aligned (64)));
+  pthread_t m_flush_mutex_holder __attribute__((aligned (64)));
+
+  pthread_cond_t m_cond_loggers __attribute__((aligned (64)));
+  pthread_cond_t m_cond_flusher __attribute__((aligned (64)));
+
+  EntryQueue m_new    __attribute__((aligned (64)));   ///< new entries
+  EntryQueue m_recent __attribute__((aligned (64))); ///< recent (less new) entries we've already written at low detail
 
   std::string m_log_file;
   int m_fd;

@@ -278,6 +278,11 @@ void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 {
   if (!tracking_enabled)
     return;
+ 
+  //
+  // POC hack to demonstrate 12% speedup from skipping the _mark_event method
+  return;
+  
   return _mark_event(op, dest, time);
 }
 
