@@ -1151,7 +1151,7 @@ endif(BUILD_SHARED_LIBS)
   target_link_libraries(mount.ceph keyutils)
 
   install(TARGETS ceph-syn DESTINATION bin)
-  install(TARGETS mount.ceph DESTINATION /sbin)
+  install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
   if(HAVE_LIBFUSE)
     set(ceph_fuse_srcs
@@ -1161,7 +1161,7 @@ endif(BUILD_SHARED_LIBS)
     target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-    install(PROGRAMS mount.fuse.ceph DESTINATION /sbin)
+    install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
   endif(HAVE_LIBFUSE)
 endif(WITH_LIBCEPHFS)
 
