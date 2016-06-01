@@ -25,7 +25,7 @@ if [ x`uname`x = x"FreeBSD"x ]; then
 
     CFLAGS="-g -I/usr/local/include ${CWARN} ${CLANGWARN}"
     CXXFLAGS="-g -DGTEST_USE_OWN_TR1_TUPLE=1 -I/usr/local/include ${CWARN} ${CLANGWARN}"
-    LDFLAGS="-g ${LDFLAGS} -L/usr/local/lib -export-dynamic -luuid"
+    LDFLAGS="-g ${LDFLAGS} -L/usr/local/lib -export-dynamic " # should be in Boost? -luuid
     FREEBSD_CONFIGURE_FLAGS="
       --disable-silent-rules
       --disable-gitversion
