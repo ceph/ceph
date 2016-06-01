@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015, 2016 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -153,7 +153,7 @@ function tweak_path() {
     command_fixture ceph-conf || return 1
     command_fixture ceph-osd || return 1
 
-    test_activate_dir
+    test_activate_dir || return 1
 
     [ ! -f $DIR/used-ceph-conf ] || return 1
     [ ! -f $DIR/used-ceph-osd ] || return 1
@@ -357,6 +357,31 @@ function test_keyring_path() {
     grep --quiet "keyring $DIR/bootstrap-osd/ceph.keyring" $DIR/test_keyring || return 1
 }
 
+# http://tracker.ceph.com/issues/13522
+function ceph_osd_fail_once_fixture() {
+    local command=ceph-osd
+    local fpath=`readlink -f $(which $command)`
+    [ "$fpath" = `readlink -f ../$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
+
+    cat > $DIR/$command <<EOF
+#!/bin/bash
+if echo "\$@" | grep -e --mkfs && ! test -f $DIR/used-$command ; then
+   touch $DIR/used-$command
+   # sleep longer than the first CEPH_OSD_MKFS_DELAYS value (5) below
+   sleep 600
+else
+   exec ../$command "\$@"
+fi
+EOF
+    chmod +x $DIR/$command
+}
+
+function test_ceph_osd_mkfs() {
+    ceph_osd_fail_once_fixture || return 1
+    CEPH_OSD_MKFS_DELAYS='5 300 300' use_path test_activate_dir || return 1
+    [ -f $DIR/used-ceph-osd ] || return 1
+}
+
 function run() {
     local default_actions
     default_actions+="test_path "
@@ -369,6 +394,7 @@ function run() {
     default_actions+="test_mark_init "
     default_actions+="test_zap "
     default_actions+="test_activate_dir_bluestore "
+    default_actions+="test_ceph_osd_mkfs "
     local actions=${@:-$default_actions}
     local status
     for action in $actions  ; do
