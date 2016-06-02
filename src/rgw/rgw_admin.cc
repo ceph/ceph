@@ -2000,6 +2000,7 @@ int main(int argc, char **argv)
   int remove_bad = false;
   int check_head_obj_locator = false;
   int max_buckets = -1;
+  bool max_buckets_specified = false;
   map<string, bool> categories;
   string caps;
   int check_objects = false;
@@ -2138,6 +2139,7 @@ int main(int argc, char **argv)
         cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
         return EINVAL;
       }
+      max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -3633,7 +3635,7 @@ int main(int argc, char **argv)
   if (gen_secret_key)
     user_op.set_gen_secret(); // assume that a key pair should be created
 
-  if (max_buckets >= 0)
+  if (max_buckets_specified)
     user_op.set_max_buckets(max_buckets);
 
   if (system_specified)

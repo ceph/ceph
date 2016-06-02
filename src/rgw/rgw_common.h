@@ -535,7 +535,7 @@ struct RGWUserInfo
   map<string, RGWAccessKey> swift_keys;
   map<string, RGWSubUser> subusers;
   __u8 suspended;
-  uint32_t max_buckets;
+  int32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
   __u8 system;
