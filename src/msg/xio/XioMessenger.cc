@@ -209,11 +209,11 @@ static string xio_uri_from_entity(const string &type,
 
   switch(addr.get_family()) {
   case AF_INET:
-    host = inet_ntop(AF_INET, &addr.u.sin.sin_addr, addr_buf,
+    host = inet_ntop(AF_INET, &addr.in4_addr().sin_addr, addr_buf,
 		     INET_ADDRSTRLEN);
     break;
   case AF_INET6:
-    host = inet_ntop(AF_INET6, &addr.u.sin6.sin6_addr, addr_buf,
+    host = inet_ntop(AF_INET6, &addr.in6_addr().sin6_addr, addr_buf,
 		     INET6_ADDRSTRLEN);
     break;
   default:
@@ -424,7 +424,7 @@ void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
     t.set_port(my_inst.addr.get_port());
-    my_inst.addr.u = t.u;
+    my_inst.addr.set_sockaddr(t.get_sockaddr());
     ldout(cct,2) << "learned my addr " << my_inst.addr << dendl;
     need_addr = false;
     // init_local_connection();

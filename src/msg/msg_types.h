@@ -229,14 +229,19 @@ struct entity_addr_t {
   void set_family(int f) {
     u.sa.sa_family = f;
   }
-  
+
   sockaddr_in &in4_addr() {
     return u.sin;
   }
-  sockaddr_in6 &in6_addr() {
+  const sockaddr_in &in4_addr() const{
+    return u.sin;
+  }
+  sockaddr_in6 &in6_addr(){
     return u.sin6;
   }
-
+  const sockaddr_in6 &in6_addr() const{
+    return u.sin6;
+  }
   const sockaddr *get_sockaddr() const {
     return &u.sa;
   }
