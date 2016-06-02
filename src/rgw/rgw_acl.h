@@ -357,6 +357,7 @@ public:
   void set_name(const string& name) { display_name = name; }
 
   rgw_user& get_id() { return id; }
+  const rgw_user& get_id() const { return id; }
   string& get_display_name() { return display_name; }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
