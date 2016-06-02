@@ -2258,13 +2258,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t features = src->features;
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    }
-    if (features & ~RBD_FEATURES_ALL) {
-      lderr(cct) << "librbd does not support requested features" << dendl;
-      return -ENOSYS;
-    }
     uint64_t format = src->old_format ? 1 : 2;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
       opts.set(RBD_IMAGE_OPTION_FORMAT, format);
@@ -2272,14 +2265,25 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t stripe_unit = src->stripe_unit;
     if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
       opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+    } else {
+      features |= RBD_FEATURE_STRIPINGV2;
     }
     uint64_t stripe_count = src->stripe_count;
     if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
       opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+    } else {
+      features |= RBD_FEATURE_STRIPINGV2;
     }
     uint64_t order = src->order;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
       opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    }
+    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+    }
+    if (features & ~RBD_FEATURES_ALL) {
+      lderr(cct) << "librbd does not support requested features" << dendl;
+      return -ENOSYS;
     }
 
     int r = create(dest_md_ctx, destname, src_size, opts, "", "");
