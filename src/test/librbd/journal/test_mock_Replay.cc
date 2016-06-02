@@ -18,6 +18,10 @@ namespace {
 struct MockReplayImageCtx : public MockImageCtx {
   MockReplayImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
   }
+
+  explicit operator ImageCtx&() {
+    return *image_ctx;
+  }
 };
 
 } // anonymous namespace
