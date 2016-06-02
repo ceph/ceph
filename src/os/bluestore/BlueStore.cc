@@ -454,7 +454,7 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 void BlueStore::BufferCache::trim(uint64_t keep)
 {
   audit_lru();
-  lru_list_t::iterator i = lru.end();
+  auto i = lru.end();
   if (size) {
     assert(i != lru.begin());
     --i;
@@ -663,7 +663,7 @@ void BlueStore::Onode::flush()
 
 void BlueStore::OnodeHashLRU::_touch(OnodeRef o)
 {
-  lru_list_t::iterator p = lru.iterator_to(*o);
+  auto p = lru.iterator_to(*o);
   lru.erase(p);
   lru.push_front(*o);
 }
@@ -714,7 +714,7 @@ void BlueStore::OnodeHashLRU::rename(OnodeRef& oldo,
   assert(po != onode_map.end());
   if (pn != onode_map.end()) {
     dout(30) << __func__ << "  removing target " << pn->second << dendl;
-    lru_list_t::iterator p = lru.iterator_to(*pn->second);
+    auto p = lru.iterator_to(*pn->second);
     lru.erase(p);
     onode_map.erase(pn);
   }
@@ -752,7 +752,7 @@ bool BlueStore::OnodeHashLRU::get_next(
 
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(after);
   assert(p != onode_map.end()); // for now
-  lru_list_t::iterator pi = lru.iterator_to(*p->second);
+  auto pi = lru.iterator_to(*p->second);
   ++pi;
   if (pi == lru.end()) {
     return false;
@@ -779,7 +779,7 @@ int BlueStore::OnodeHashLRU::_trim(int max)
   if (onode_map.size() == 0 || num <= 0)
     return 0; // don't even try
   
-  lru_list_t::iterator p = lru.end();
+  auto p = lru.end();
   if (num)
     --p;
   while (num > 0) {

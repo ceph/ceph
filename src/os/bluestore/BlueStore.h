@@ -188,9 +188,9 @@ public:
       boost::intrusive::member_hook<
 	Buffer,
 	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > lru_list_t;
+	&Buffer::lru_item> > buffer_lru_list_t;
 
-    lru_list_t lru;
+    buffer_lru_list_t lru;
     uint64_t size = 0;
 
     void trim(uint64_t keep);
@@ -413,11 +413,11 @@ public:
       boost::intrusive::member_hook<
         Onode,
 	boost::intrusive::list_member_hook<>,
-	&Onode::lru_item> > lru_list_t;
+	&Onode::lru_item> > onode_lru_list_t;
 
     std::mutex lock;
     ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
-    lru_list_t lru;                                      ///< lru
+    onode_lru_list_t lru;                                ///< lru
     size_t max_size;
 
     OnodeHashLRU(size_t s) : max_size(s) {}
