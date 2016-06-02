@@ -669,7 +669,7 @@ class RBD(object):
             raise make_ex(ret, 'error creating image')
 
     def clone(self, p_ioctx, p_name, p_snapname, c_ioctx, c_name,
-              features=None, order=None, stripe_unit=0, stripe_count=0):
+              features=None, order=None, stripe_unit=None, stripe_count=None):
         """
         Clone a parent rbd snapshot into a COW sparse child.
 
@@ -687,7 +687,7 @@ class RBD(object):
         :type features: int
         :param order: the image is split into (2**order) byte objects
         :type order: int
-        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
         :type stripe_unit: int
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
@@ -707,20 +707,21 @@ class RBD(object):
             char *_p_snapname = p_snapname
             char *_c_name = c_name
             rbd_image_options_t opts
-        if order is None:
-            order = 0
 
         rbd_image_options_create(&opts)
         try:
             if features is not None:
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
                                              features)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
-                                         order)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
-                                         stripe_unit)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
-                                         stripe_count)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
             with nogil:
                 ret = rbd_clone3(_p_ioctx, _p_name, _p_snapname,
                                  _c_ioctx, _c_name, opts)
