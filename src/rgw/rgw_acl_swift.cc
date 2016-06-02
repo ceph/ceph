@@ -301,6 +301,8 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
         continue;
       }
       id = SWIFT_GROUP_ALL_USERS;
+    } else if (owner.get_id() == id) {
+      continue;
     }
 
     if (SWIFT_PERM_ADMIN == (perm & SWIFT_PERM_ADMIN)) {
