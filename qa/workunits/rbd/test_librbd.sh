@@ -2,7 +2,7 @@
 
 if [ -n "${VALGRIND}" ]; then
   valgrind --tool=${VALGRIND} --suppressions=${TESTDIR}/valgrind.supp \
-    ceph_test_librbd
+    --error-limit=no --error-exitcode=140 ${VALGRIND_ARGUMENTS} ceph_test_librbd
 else
   ceph_test_librbd
 fi
