@@ -100,6 +100,10 @@ private:
   uint64_t m_current_ops = 0;
   int m_ret_val = 0;
 
+  bool m_updating_sync_point;
+  Context *m_update_sync_ctx;
+  double m_update_sync_point_interval;
+
   MirrorPeerClientMeta m_client_meta_copy;
 
   void send_update_max_object_count();
@@ -108,6 +112,9 @@ private:
   void send_object_copies();
   void send_next_object_copy();
   void handle_object_copy(int r);
+
+  void send_update_sync_point();
+  void handle_update_sync_point(int r);
 
   void send_flush_sync_point();
   void handle_flush_sync_point(int r);
