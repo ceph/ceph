@@ -267,7 +267,7 @@ class DispatchQueue;
     static const Pipe& Server(int s);
     static const Pipe& Client(const entity_addr_t& pi);
 
-    __u32 get_out_seq() { return out_seq; }
+    uint64_t get_out_seq() { return out_seq; }
 
     bool is_queued() { return !out_q.empty() || send_keepalive || send_keepalive_ack; }
 
