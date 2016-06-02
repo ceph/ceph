@@ -1431,16 +1431,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
-    bool use_p_features = true;
-    uint64_t features;
-    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) == 0) {
-      if (features & ~RBD_FEATURES_ALL) {
-	lderr(cct) << "librbd does not support requested features" << dendl;
-	return -ENOSYS;
-      }
-      use_p_features = false;
-    }
-
     // make sure child doesn't already exist, in either format
     int r = detect_format(c_ioctx, c_name, NULL, NULL);
     if (r != -ENOENT) {
@@ -1470,6 +1460,36 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
     p_imctx->snap_lock.put_read();
 
+    bool features_set;
+    c_opts.is_set(RBD_IMAGE_OPTION_FEATURES, &features_set);
+    if (!features_set) 
+      c_opts.set(RBD_IMAGE_OPTION_FEATURES, p_features);
+     
+    uint64_t features;
+    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) == 0) {
+      if (features & ~RBD_FEATURES_ALL) {
+	lderr(cct) << "librbd does not support requested features" << dendl;
+	return -ENOSYS;
+      }
+     
+      if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+        return -EINVAL;
+      }
+      uint64_t stripe_unit, stripe_count;
+      c_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
+      c_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+      if (!features_set && ((stripe_unit > 0) && (stripe_count > 0)) &&\
+	((features & RBD_FEATURE_STRIPINGV2) != 0))
+        features |= RBD_FEATURE_STRIPINGV2;
+      if ((stripe_unit == 0) && (stripe_count == 0))
+        features &= ~RBD_FEATURE_STRIPINGV2;
+      bool shared;
+      c_opts.is_set(RBD_IMAGE_OPTION_SHARED, &shared);
+      if (shared)
+        features &= ~RBD_FEATURES_SINGLE_CLIENT;
+    }
+
+
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
       return -ENOSYS;
@@ -1486,9 +1506,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
-    if (use_p_features) {
-      c_opts.set(RBD_IMAGE_OPTION_FEATURES, p_features);
-    }
+    c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+    
 
     order = p_imctx->order;
     if (c_opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {

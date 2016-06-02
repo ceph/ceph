@@ -19,14 +19,6 @@ int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
              const char *p_name, const char *p_snapname,
              librados::IoCtx &c_ioctx, const char *c_name,
              librbd::ImageOptions& opts) {
-  uint64_t features;
-  int r = opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
-  assert(r == 0);
-
-  if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
-    return -EINVAL;
-  }
-
   return rbd.clone3(p_ioctx, p_name, p_snapname, c_ioctx, c_name, opts);
 }
 
