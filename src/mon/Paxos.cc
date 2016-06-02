@@ -698,6 +698,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
   // set state.
   state = STATE_UPDATING;
   lease_expire = utime_t();  // cancel lease
+  cancel_events(); // cancel lease timeout event
 
   // yes.
   version_t v = last_committed+1;
