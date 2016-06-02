@@ -2,36 +2,43 @@
 #
 #  GTEST_INCLUDE_DIRS   - where to find mcas/mcas.h, etc.
 #  GTEST_LIBRARIES      - List of libraries when using mcas.
-#  GTEST                - True if mcas found.
+#  GTEST_FOUND          - True if mcas found.
+#
+#  GMOCK_INCLUDE_DIRS   - where to find mcas/mcas.h, etc.
+#  GMOCK_LIBRARIES      - List of libraries when using mcas.
+#  GMOCK_FOUND          - True if mcas found.
 
-find_path(GTEST_INCLUDE_DIR NAMES gtest/gtest.h gmock/gmock.h
-    PATHS /usr/include /usr/local/include $ENV{HOME}/develop/usr/local/include)
 
-find_library(GTEST_LIBRARY
-  NAMES gtest
-  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
+## GTEST
 
-find_library(GTEST_MAIN_LIBRARY
-  NAMES gtest_main
-  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
+find_path(GTEST_INCLUDE_DIRS NAMES gtest/gtest.h
+    PATHS /usr/include /usr/local/include)
 
-find_library(GMOCK_LIBRARY
-  NAMES gmock
-  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
-
-find_library(GMOCK_MAIN_LIBRARY
-  NAMES gmock_main
-  PATHS /usr/local/lib /usr/lib64 $ENV{HOME}/develop/usr/local/lib)
-
+find_library(GTEST_LIBRARIES
+  NAMES gtest gtest_main
+  PATHS /usr/local/lib /usr/lib64)
 
 include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(gtest
-  REQUIRED_VARS GTEST_LIBRARY GTEST_MAIN_LIBRARY GTEST_INCLUDE_DIR)
+  REQUIRED_VARS GTEST_LIBRARIES GTEST_INCLUDE_DIRS)
 
 if(gtest_FOUND)
   set(GTEST_FOUND 1)
 endif()
-if(GTEST_FOUND)
-  set(GTEST_LIBRARIES ${GTEST_LIBRARY})
-  set(GTEST_INCLUDES ${GTEST_INCLUDE_DIR})
+
+## GMOCK
+
+find_path(GMOCK_INCLUDE_DIRS NAMES gmock/gmock.h
+    PATHS /usr/include /usr/local/include)
+
+find_library(GMOCK_LIBRARIES
+  NAMES gmock gmock_main
+  PATHS /usr/local/lib /usr/lib64)
+
+include(FindPackageHandleStandardArgs)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(gmock
+  REQUIRED_VARS GMOCK_LIBRARIES GMOCK_INCLUDE_DIRS)
+
+if(gmock_FOUND)
+  set(GMOCK_FOUND 1)
 endif()
