@@ -319,23 +319,24 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   auto putter = [&]() {
     std::unique_lock<std::mutex> g(l);
     while (!stop) {
-      while (in_queue.empty())
+      if (in_queue.empty()) {
 	c.wait(g);
+      } else {
+	uint64_t c = in_queue.front();
 
-      uint64_t c = in_queue.front();
+	total_observed_total += total;
+	total_observations++;
+	in_queue.pop_front();
+	assert(total <= max);
 
-      total_observed_total += total;
-      total_observations++;
-      in_queue.pop_front();
-      assert(total <= max);
+	g.unlock();
+	std::this_thread::sleep_for(
+	  c * std::chrono::duration<double>(put_delay_per_count*putters));
+	g.lock();
 
-      g.unlock();
-      std::this_thread::sleep_for(
-	c * std::chrono::duration<double>(put_delay_per_count*putters));
-      g.lock();
-
-      total -= c;
-      throttle.put(c);
+	total -= c;
+	throttle.put(c);
+      }
     }
   };
 
@@ -352,6 +353,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   }
   for (auto &&i: gts) i.join();
   gts.clear();
+  c.notify_all();
   for (auto &&i: pts) i.join();
   pts.clear();
 
