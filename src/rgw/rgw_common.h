@@ -1774,7 +1774,7 @@ static inline int hex_to_buf(const char *hex, char *buf, int len)
       return -EINVAL;
     d = hexdigit(*p);
     if (d < 0)
-      return -d;
+      return d;
     buf[i] += d;
     i++;
     p++;
