@@ -412,15 +412,13 @@ int RocksDBStore::get(
     std::map<string, bufferlist> *out)
 {
   utime_t start = ceph_clock_now(g_ceph_context);
-  KeyValueDB::Iterator it = get_iterator(prefix);
   for (std::set<string>::const_iterator i = keys.begin();
-       i != keys.end();
-       ++i) {
-    it->lower_bound(*i);
-    if (it->valid() && it->key() == *i) {
-      out->insert(make_pair(*i, it->value()));
-    } else if (!it->valid())
-      break;
+       i != keys.end(); ++i) {
+    std::string value;
+    std::string bound = combine_strings(prefix, *i);
+    auto status = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(bound), &value);
+    if (status.ok())
+      (*out)[*i].append(value);
   }
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_gets);
