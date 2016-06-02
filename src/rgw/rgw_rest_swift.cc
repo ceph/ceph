@@ -1515,7 +1515,7 @@ int RGWHandler_REST_SWIFT::authorize()
   RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &aplfact);
   RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &aplfact);
   RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &aplfact);
-  RGWAnonymousAuthEngine anoneng(s->cct,                    &aplfact);
+  RGWAnonymousAuthEngine anoneng(s->cct,        token_extr, &aplfact);
 
   /* Pipeline. */
   constexpr size_t ENGINES_NUM = 5;
