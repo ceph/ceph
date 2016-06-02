@@ -287,6 +287,11 @@ namespace librbd {
                                          ceph_tid_t new_journal_tid) {
     typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
+    ldout(m_ictx->cct, 20) << __func__ << ": " << oid << " "
+                           << off << "~" << len << " "
+                           << "journal_tid=" << original_journal_tid << ", "
+                           << "new_journal_tid=" << new_journal_tid << dendl;
+
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
