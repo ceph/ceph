@@ -47,6 +47,8 @@ namespace librbd {
 			     parent_info *parent);
 
     // low-level interface (mainly for testing)
+    void create_image(librados::ObjectWriteOperation *op, uint64_t size, uint8_t order,
+		      uint64_t features, const std::string &object_prefix);
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix);
@@ -136,6 +138,8 @@ namespace librbd {
     int get_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t *stripe_unit, uint64_t *stripe_count);
 
+    void set_stripe_unit_count(librados::ObjectWriteOperation *op,
+			       uint64_t stripe_unit, uint64_t stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
@@ -157,6 +161,7 @@ namespace librbd {
     int get_id_finish(bufferlist::iterator *it, std::string *id);
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
 
+    void set_id(librados::ObjectWriteOperation *op, std::string id);
     int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id);
 
     // operations on rbd_directory objects
@@ -170,10 +175,14 @@ namespace librbd {
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		 const std::string &start, uint64_t max_return,
 		 map<string, string> *images);
+    void dir_add_image(librados::ObjectWriteOperation *op,
+		       const std::string &name, const std::string &id);
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::string &name, const std::string &id);
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
+    void dir_remove_image(librados::ObjectWriteOperation *op,
+			  const std::string &name, const std::string &id);
     // atomic remove and add
     void dir_rename_image(librados::ObjectWriteOperation *op,
 			  const std::string &src, const std::string &dest,
@@ -219,6 +228,9 @@ namespace librbd {
     // operations on the rbd_mirroring object
     int mirror_uuid_get(librados::IoCtx *ioctx, std::string *uuid);
     int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid);
+    void mirror_mode_get_start(librados::ObjectReadOperation *op);
+    int mirror_mode_get_finish(bufferlist::iterator *it,
+			       cls::rbd::MirrorMode *mirror_mode);
     int mirror_mode_get(librados::IoCtx *ioctx,
                         cls::rbd::MirrorMode *mirror_mode);
     int mirror_mode_set(librados::IoCtx *ioctx,
@@ -253,8 +265,13 @@ namespace librbd {
                                 const std::string &image_id);
     int mirror_image_get_finish(bufferlist::iterator *iter,
 			        cls::rbd::MirrorImage *mirror_image);
+    void mirror_image_set(librados::ObjectWriteOperation *op,
+			  const std::string &image_id,
+			  const cls::rbd::MirrorImage &mirror_image);
     int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
 			 const cls::rbd::MirrorImage &mirror_image);
+    void mirror_image_remove(librados::ObjectWriteOperation *op,
+			     const std::string &image_id);
     int mirror_image_remove(librados::IoCtx *ioctx,
 			    const std::string &image_id);
     int mirror_image_status_set(librados::IoCtx *ioctx,

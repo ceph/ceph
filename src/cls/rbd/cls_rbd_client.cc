@@ -149,6 +149,18 @@ namespace librbd {
                                          parent);
     }
 
+    void create_image(librados::ObjectWriteOperation *op, uint64_t size, uint8_t order,
+                      uint64_t features, const std::string &object_prefix)
+    {
+      bufferlist bl;
+      ::encode(size, bl);
+      ::encode(order, bl);
+      ::encode(features, bl);
+      ::encode(object_prefix, (bl));
+
+      op->exec("rbd", "create", bl);
+    }
+
     int create_image(librados::IoCtx *ioctx, const std::string &oid,
 		     uint64_t size, uint8_t order, uint64_t features,
 		     const std::string &object_prefix)
@@ -723,6 +735,16 @@ namespace librbd {
       return get_stripe_unit_count_finish(&it, stripe_unit, stripe_count);
     }
 
+    void set_stripe_unit_count(librados::ObjectWriteOperation *op,
+			       uint64_t stripe_unit, uint64_t stripe_count)
+    {
+      bufferlist bl;
+      ::encode(stripe_unit, bl);
+      ::encode(stripe_count, bl);
+
+      op->exec("rbd", "set_stripe_unit_count", bl);
+    }
+
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count)
     {
@@ -731,7 +753,6 @@ namespace librbd {
       ::encode(stripe_count, in);
       return ioctx->exec(oid, "rbd", "set_stripe_unit_count", in, out);
     }
-
 
     /************************ rbd_id object methods ************************/
 
@@ -762,6 +783,13 @@ namespace librbd {
 
       bufferlist::iterator it = out_bl.begin();
       return get_id_finish(&it, id);
+    }
+
+    void set_id(librados::ObjectWriteOperation *op, const std::string id)
+    {
+      bufferlist bl;
+      ::encode(id, bl);
+      op->exec("rbd", "set_id", bl);
     }
 
     int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id)
@@ -844,6 +872,15 @@ namespace librbd {
       return 0;
     }
 
+    void dir_add_image(librados::ObjectWriteOperation *op,
+		       const std::string &name, const std::string &id)
+    {
+      bufferlist bl;
+      ::encode(name, bl);
+      ::encode(id, bl);
+      op->exec("rbd", "dir_add_image", bl);
+    }
+
     int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::string &name, const std::string &id)
     {
@@ -860,6 +897,16 @@ namespace librbd {
       ::encode(name, in);
       ::encode(id, in);
       return ioctx->exec(oid, "rbd", "dir_remove_image", in, out);
+    }
+
+    void dir_remove_image(librados::ObjectWriteOperation *op,
+			  const std::string &name, const std::string &id)
+    {
+      bufferlist bl;
+      ::encode(name, bl);
+      ::encode(id, bl);
+
+      op->exec("rbd", "dir_remove_image", bl);
     }
 
     void dir_rename_image(librados::ObjectWriteOperation *op,
@@ -1058,6 +1105,24 @@ namespace librbd {
       if (r < 0) {
         return r;
       }
+      return 0;
+    }
+
+    void mirror_mode_get_start(librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "mirror_mode_get", bl);
+    }
+
+    int mirror_mode_get_finish(bufferlist::iterator *it,
+			       cls::rbd::MirrorMode *mirror_mode) {
+      try {
+	uint32_t mirror_mode_decode;
+	::decode(mirror_mode_decode, *it);
+	*mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode_decode);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
       return 0;
     }
 
@@ -1274,6 +1339,16 @@ namespace librbd {
       return 0;
     }
 
+    void mirror_image_set(librados::ObjectWriteOperation *op,
+			  const std::string &image_id,
+			  const cls::rbd::MirrorImage &mirror_image) {
+      bufferlist bl;
+      ::encode(image_id, bl);
+      ::encode(mirror_image, bl);
+
+      op->exec("rbd", "mirror_image_set", bl);
+    }
+
     int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
 			 const cls::rbd::MirrorImage &mirror_image) {
       bufferlist in_bl;
@@ -1287,6 +1362,14 @@ namespace librbd {
         return r;
       }
       return 0;
+    }
+
+    void mirror_image_remove(librados::ObjectWriteOperation *op,
+			     const std::string &image_id) {
+      bufferlist bl;
+      ::encode(image_id, bl);
+
+      op->exec("rbd", "mirror_image_remove", bl);
     }
 
     int mirror_image_remove(librados::IoCtx *ioctx, const std::string &image_id) {

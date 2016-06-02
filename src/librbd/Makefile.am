@@ -35,6 +35,7 @@ librbd_internal_la_SOURCES = \
 	librbd/exclusive_lock/ReleaseRequest.cc \
 	librbd/exclusive_lock/StandardPolicy.cc \
 	librbd/image/CloseRequest.cc \
+	librbd/image/CreateRequest.cc \
 	librbd/image/OpenRequest.cc \
 	librbd/image/RefreshParentRequest.cc \
 	librbd/image/RefreshRequest.cc \
@@ -125,6 +126,7 @@ noinst_HEADERS += \
 	librbd/exclusive_lock/ReleaseRequest.h \
 	librbd/exclusive_lock/StandardPolicy.h \
 	librbd/image/CloseRequest.h \
+	librbd/image/CreateRequest.h \
 	librbd/image/OpenRequest.h \
 	librbd/image/RefreshParentRequest.h \
 	librbd/image/RefreshRequest.h \
