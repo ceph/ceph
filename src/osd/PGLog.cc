@@ -567,7 +567,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   dirty_big_info = true;
 }
 
-void PGLog::append_log_entries_update_missing(
+bool PGLog::append_log_entries_update_missing(
   const hobject_t &last_backfill,
   bool last_backfill_bitwise,
   const list<pg_log_entry_t> &entries,
@@ -576,6 +576,7 @@ void PGLog::append_log_entries_update_missing(
   LogEntryHandler *rollbacker,
   const DoutPrefixProvider *dpp)
 {
+  bool invalidate_stats = false;
   if (log && !entries.empty()) {
     assert(log->head < entries.begin()->version);
     log->head = entries.rbegin()->version;
@@ -583,6 +584,7 @@ void PGLog::append_log_entries_update_missing(
   for (list<pg_log_entry_t>::const_iterator p = entries.begin();
        p != entries.end();
        ++p) {
+    invalidate_stats = invalidate_stats || !p->is_error();
     if (log) {
       log->log.push_back(*p);
       pg_log_entry_t &ne = log->log.back();
@@ -604,6 +606,7 @@ void PGLog::append_log_entries_update_missing(
   }
   if (log)
     log->reset_rollback_info_trimmed_to_riter();
+  return invalidate_stats;
 }
 
 void PGLog::merge_log(ObjectStore::Transaction& t,

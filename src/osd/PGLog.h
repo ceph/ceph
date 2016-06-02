@@ -779,7 +779,7 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
-  static void append_log_entries_update_missing(
+  static bool append_log_entries_update_missing(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
     const list<pg_log_entry_t> &entries,
@@ -787,12 +787,12 @@ public:
     pg_missing_t &missing,
     LogEntryHandler *rollbacker,
     const DoutPrefixProvider *dpp);
-  void append_new_log_entries(
+  bool append_new_log_entries(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
     const list<pg_log_entry_t> &entries,
     LogEntryHandler *rollbacker) {
-    append_log_entries_update_missing(
+    bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
       last_backfill_bitwise,
       entries,
@@ -803,6 +803,7 @@ public:
     if (!entries.empty()) {
       mark_writeout_from(entries.begin()->version);
     }
+    return invalidate_stats;
   }
 
   void write_log(ObjectStore::Transaction& t,
