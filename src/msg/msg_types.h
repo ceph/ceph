@@ -200,8 +200,16 @@ WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 struct entity_addr_t {
   typedef enum {
     TYPE_NONE = 0,
-    TYPE_LEGACY = 1,
+    TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
   } type_t;
+  static const type_t TYPE_DEFAULT = TYPE_LEGACY;
+  static const char *get_type_name(int t) {
+    switch (t) {
+    case TYPE_NONE: return "none";
+    case TYPE_LEGACY: return "legacy";
+    default: return "???";
+    }
+  };
 
   __u32 type;
   __u32 nonce;
@@ -445,10 +453,7 @@ struct entity_addr_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
-inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
-{
-  return out << addr.get_sockaddr() << '/' << addr.nonce;
-}
+ostream& operator<<(ostream& out, const entity_addr_t &addr);
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }

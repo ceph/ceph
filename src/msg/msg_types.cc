@@ -144,6 +144,18 @@ bool entity_addr_t::parse(const char *s, const char **end)
   return true;
 }
 
+ostream& operator<<(ostream& out, const entity_addr_t &addr)
+{
+  if (addr.type == entity_addr_t::TYPE_NONE) {
+    return out << "-";
+  }
+  if (addr.type != entity_addr_t::TYPE_DEFAULT) {
+    out << entity_addr_t::get_type_name(addr.type) << ":";
+  }
+  out << addr.get_sockaddr() << '/' << addr.nonce;
+  return out;
+}
+
 // entity_addrvec_t
 
 void entity_addrvec_t::encode(bufferlist& bl, uint64_t features) const
