@@ -1283,7 +1283,8 @@ if(${WITH_RBD})
   add_executable(rbd ${rbd_srcs}
     $<TARGET_OBJECTS:common_util_obj>
     $<TARGET_OBJECTS:parse_secret_objs>
-    $<TARGET_OBJECTS:common_texttable_obj>)
+    $<TARGET_OBJECTS:common_texttable_obj>
+    $<TARGET_OBJECTS:krbd_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
