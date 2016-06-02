@@ -903,7 +903,9 @@ protected:
 
   /**
    * Merge entries atomically into all actingbackfill osds
-   * adjusting missing and recovery state as necessary
+   * adjusting missing and recovery state as necessary.
+   *
+   * Also used to store error log entries for dup detection.
    */
   void submit_log_entries(
     const list<pg_log_entry_t> &entries,

@@ -4545,7 +4545,7 @@ void PG::share_pg_info()
   }
 }
 
-void PG::append_log_entries_update_missing(
+bool PG::append_log_entries_update_missing(
   const list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t)
 {
@@ -4553,11 +4553,11 @@ void PG::append_log_entries_update_missing(
   assert(entries.begin()->version > info.last_update);
 
   PGLogEntryHandler rollbacker;
-  pg_log.append_new_log_entries(
-    info.last_backfill,
-    info.last_backfill_bitwise,
-    entries,
-    &rollbacker);
+  bool invalidate_stats =
+    pg_log.append_new_log_entries(info.last_backfill,
+				  info.last_backfill_bitwise,
+				  entries,
+				  &rollbacker);
   rollbacker.apply(this, &t);
   info.last_update = pg_log.get_head();
 
@@ -4566,9 +4566,10 @@ void PG::append_log_entries_update_missing(
     info.last_complete = info.last_update;
   }
 
-  info.stats.stats_invalid = true;
+  info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
   dirty_info = true;
   write_if_dirty(t);
+  return invalidate_stats;
 }
 
 
@@ -4579,7 +4580,7 @@ void PG::merge_new_log_entries(
   dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
-  append_log_entries_update_missing(entries, t);
+  bool rebuild_missing = append_log_entries_update_missing(entries, t);
   for (set<pg_shard_t>::const_iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -4589,7 +4590,7 @@ void PG::merge_new_log_entries(
     assert(peer_info.count(peer));
     pg_missing_t& pmissing(peer_missing[peer]);
     pg_info_t& pinfo(peer_info[peer]);
-    PGLog::append_log_entries_update_missing(
+    bool invalidate_stats = PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
       info.last_backfill_bitwise,
       entries,
@@ -4598,8 +4599,14 @@ void PG::merge_new_log_entries(
       NULL,
       this);
     pinfo.last_update = info.last_update;
-    pinfo.stats.stats_invalid = true;
+    pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;
+    rebuild_missing = rebuild_missing || invalidate_stats;
   }
+
+  if (!rebuild_missing) {
+    return;
+  }
+
   for (auto &&i: entries) {
     missing_loc.rebuild(
       i.soid,
