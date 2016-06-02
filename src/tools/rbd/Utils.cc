@@ -517,7 +517,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
         return -EINVAL;
       } else {
         format = 2;
-        format_specified = 2;
+        format_specified = true;
       }
     }
 
