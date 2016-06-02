@@ -1232,7 +1232,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
     assert(r == 0);
 
-    r = create(io_ctx, imgname, size, opts);
+    r = create(io_ctx, imgname, size, opts, "", "");
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
     assert(r1 == 0);
@@ -1242,7 +1242,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   }
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     ImageOptions& opts)
+	     ImageOptions& opts,
+             const std::string &non_primary_global_image_id,
+             const std::string &primary_mirror_uuid)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 10) << __func__ << " name=" << imgname << ", "
@@ -1337,7 +1339,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
       r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
 		    stripe_count, journal_order, journal_splay_width,
-                    journal_pool, "", "");
+                    journal_pool, non_primary_global_image_id,
+                    primary_mirror_uuid);
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1372,9 +1375,48 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
   {
     CephContext *cct = (CephContext *)p_ioctx.cct();
-    ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
-		   << p_snap_name << " to child " << &c_ioctx << " name "
-		   << c_name << " opts = " << c_opts << dendl;
+    if (p_snap_name == NULL) {
+      lderr(cct) << "image to be cloned must be a snapshot" << dendl;
+      return -EINVAL;
+    }
+
+    // make sure parent snapshot exists
+    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
+    int r = p_imctx->state->open();
+    if (r < 0) {
+      lderr(cct) << "error opening parent image: "
+		 << cpp_strerror(-r) << dendl;
+      delete p_imctx;
+      return r;
+    }
+
+    r = clone(p_imctx, c_ioctx, c_name, c_opts, "", "");
+
+    int close_r = p_imctx->state->close();
+    if (r == 0 && close_r < 0) {
+      r = close_r;
+    }
+
+    if (r < 0) {
+      return r;
+    }
+    return 0;
+  }
+
+  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const char *c_name,
+            ImageOptions& c_opts,
+            const std::string &non_primary_global_image_id,
+            const std::string &primary_mirror_uuid)
+  {
+    CephContext *cct = p_imctx->cct;
+    if (p_imctx->snap_id == CEPH_NOSNAP) {
+      lderr(cct) << "image to be cloned must be a snapshot" << dendl;
+      return -EINVAL;
+    }
+
+    ldout(cct, 20) << "clone " << &p_imctx->md_ctx << " name " << p_imctx->name
+                   << " snap " << p_imctx->snap_name << " to child " << &c_ioctx
+                   << " name " << c_name << " opts = " << c_opts << dendl;
 
     bool default_format_set;
     c_opts.is_set(RBD_IMAGE_OPTION_FORMAT, &default_format_set);
@@ -1404,12 +1446,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EEXIST;
     }
 
-    if (p_snap_name == NULL) {
-      lderr(cct) << "image to be cloned must be a snapshot" << dendl;
-      return -EINVAL;
-    }
-
     bool snap_protected;
+
     uint64_t order;
     uint64_t size;
     uint64_t p_features;
@@ -1417,23 +1455,11 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
     map<string, bufferlist> pairs;
-    // make sure parent snapshot exists
-    ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
-    r = p_imctx->state->open();
-    if (r < 0) {
-      lderr(cct) << "error opening parent image: "
-		 << cpp_strerror(-r) << dendl;
-      delete p_imctx;
-      return r;
-    }
-
-    parent_spec pspec(p_ioctx.get_id(), p_imctx->id,
-				  p_imctx->snap_id);
+    parent_spec pspec(p_imctx->md_ctx.get_id(), p_imctx->id, p_imctx->snap_id);
 
     if (p_imctx->old_format) {
       lderr(cct) << "parent image must be in new format" << dendl;
-      r = -EINVAL;
-      goto err_close_parent;
+      return -EINVAL;
     }
 
     p_imctx->snap_lock.get_read();
@@ -1444,20 +1470,18 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
-      r = -ENOSYS;
-      goto err_close_parent;
+      return -ENOSYS;
     }
     
     if (r < 0) {
       // we lost the race with snap removal?
       lderr(cct) << "unable to locate parent's snapshot" << dendl;
-      goto err_close_parent;
+      return r;
     }
 
     if (!snap_protected) {
       lderr(cct) << "parent snapshot must be protected" << dendl;
-      r = -EINVAL;
-      goto err_close_parent;
+      return -EINVAL;
     }
 
     order = p_imctx->order;
@@ -1465,10 +1489,11 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
     }
 
-    r = create(c_ioctx, c_name, size, c_opts);
+    r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
+               primary_mirror_uuid);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
-      goto err_close_parent;
+      return r;
     }
 
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
@@ -1503,7 +1528,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       goto err_remove_child;
     }
 
-    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
+    r = cls_client::metadata_list(&p_imctx->md_ctx, p_imctx->header_oid, "", 0,
+                                  &pairs);
     if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
       lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
       goto err_remove_child;
@@ -1517,11 +1543,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     ldout(cct, 2) << "done." << dendl;
     r = c_imctx->state->close();
-    partial_r = p_imctx->state->close();
-
-    if (r == 0 && partial_r < 0) {
-      r = partial_r;
-    }
     return r;
 
   err_remove_child:
@@ -1539,8 +1560,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       lderr(cct) << "Error removing failed clone: "
 		 << cpp_strerror(partial_r) << dendl;
     }
-  err_close_parent:
-    p_imctx->state->close();
     return r;
   }
 
@@ -2220,7 +2239,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       opts.set(RBD_IMAGE_OPTION_ORDER, order);
     }
 
-    int r = create(dest_md_ctx, destname, src_size, opts);
+    int r = create(dest_md_ctx, destname, src_size, opts, "", "");
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;

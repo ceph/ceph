@@ -25,8 +25,11 @@ template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I *local_image_ctx,
                                                 const std::string &snap_name,
                                                 uint64_t size,
+                                                const librbd::parent_spec &spec,
+                                                uint64_t parent_overlap,
                                                 Context *on_finish)
   : m_local_image_ctx(local_image_ctx), m_snap_name(snap_name), m_size(size),
+    m_parent_spec(spec), m_parent_overlap(parent_overlap),
     m_on_finish(on_finish) {
 }
 
@@ -87,15 +90,28 @@ void SnapshotCreateRequest<I>::handle_set_size(int r) {
 
 template <typename I>
 void SnapshotCreateRequest<I>::send_remove_parent() {
-  // TODO: issue #14937 needs to add support for cloned images
-  if (true) {
-    send_snap_create();
+  m_local_image_ctx->parent_lock.get_read();
+  if (m_local_image_ctx->parent_md.spec.pool_id == -1 ||
+      m_local_image_ctx->parent_md.spec == m_parent_spec) {
+    m_local_image_ctx->parent_lock.put_read();
+    send_set_parent();
     return;
   }
+  m_local_image_ctx->parent_lock.put_read();
 
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::remove_parent(&op);
+
+  librados::AioCompletion *comp = create_rados_safe_callback<
+    SnapshotCreateRequest<I>,
+    &SnapshotCreateRequest<I>::handle_remove_parent>(this);
+  int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
+                                                comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
 template <typename I>
@@ -103,15 +119,47 @@ void SnapshotCreateRequest<I>::handle_remove_parent(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
 
-  // TODO: issue #14937 needs to add support for cloned images
+  if (r < 0) {
+    lderr(cct) << ": failed to remove parent '" << m_snap_name << "': "
+               << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  {
+    // adjust in-memory parent now that it's updated on disk
+    RWLock::WLocker parent_locker(m_local_image_ctx->parent_lock);
+    m_local_image_ctx->parent_md.spec = {};
+    m_local_image_ctx->parent_md.overlap = 0;
+  }
+
+  send_set_parent();
 }
 
 template <typename I>
 void SnapshotCreateRequest<I>::send_set_parent() {
+  m_local_image_ctx->parent_lock.get_read();
+  if (m_local_image_ctx->parent_md.spec == m_parent_spec &&
+      m_local_image_ctx->parent_md.overlap == m_parent_overlap) {
+    m_local_image_ctx->parent_lock.put_read();
+    send_snap_create();
+    return;
+  }
+  m_local_image_ctx->parent_lock.put_read();
+
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  // TODO: issue #14937 needs to add support for cloned images
+  librados::ObjectWriteOperation op;
+  librbd::cls_client::set_parent(&op, m_parent_spec, m_parent_overlap);
+
+  librados::AioCompletion *comp = create_rados_safe_callback<
+    SnapshotCreateRequest<I>,
+    &SnapshotCreateRequest<I>::handle_set_parent>(this);
+  int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
+                                                comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
 template <typename I>
@@ -119,7 +167,21 @@ void SnapshotCreateRequest<I>::handle_set_parent(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
 
-  // TODO: issue #14937 needs to add support for cloned images
+  if (r < 0) {
+    lderr(cct) << ": failed to set parent '" << m_snap_name << "': "
+               << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  {
+    // adjust in-memory parent now that it's updated on disk
+    RWLock::WLocker parent_locker(m_local_image_ctx->parent_lock);
+    m_local_image_ctx->parent_md.spec = m_parent_spec;
+    m_local_image_ctx->parent_md.overlap = m_parent_overlap;
+  }
+
+  send_snap_create();
 }
 
 template <typename I>

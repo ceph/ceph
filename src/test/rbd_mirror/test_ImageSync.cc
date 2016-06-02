@@ -88,7 +88,7 @@ public:
     return new ImageSync<>(m_local_image_ctx, m_remote_image_ctx,
                            m_threads->timer, &m_threads->timer_lock,
                            "mirror-uuid", m_remote_journaler, &m_client_meta,
-                           ctx);
+                           m_threads->work_queue, ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;

@@ -12,6 +12,7 @@
 #include <vector>
 
 class Context;
+class ContextWQ;
 class Mutex;
 class SafeTimer;
 namespace journal { class Journaler; }
@@ -36,17 +37,18 @@ public:
                            Mutex *timer_lock, const std::string &mirror_uuid,
                            Journaler *journaler,
                            MirrorPeerClientMeta *client_meta,
-                           Context *on_finish,
+                           ContextWQ *work_queue, Context *on_finish,
 			   ProgressContext *progress_ctx = nullptr) {
     return new ImageSync(local_image_ctx, remote_image_ctx, timer, timer_lock,
-                         mirror_uuid, journaler, client_meta, on_finish,
-			 progress_ctx);
+                         mirror_uuid, journaler, client_meta, work_queue,
+                         on_finish, progress_ctx);
   }
 
   ImageSync(ImageCtxT *local_image_ctx, ImageCtxT *remote_image_ctx,
             SafeTimer *timer, Mutex *timer_lock, const std::string &mirror_uuid,
             Journaler *journaler, MirrorPeerClientMeta *client_meta,
-            Context *on_finish, ProgressContext *progress_ctx = nullptr);
+            ContextWQ *work_queue, Context *on_finish,
+            ProgressContext *progress_ctx = nullptr);
 
   void start();
   void cancel();
@@ -94,6 +96,7 @@ private:
   std::string m_mirror_uuid;
   Journaler *m_journaler;
   MirrorPeerClientMeta *m_client_meta;
+  ContextWQ *m_work_queue;
   Context *m_on_finish;
   ProgressContext *m_progress_ctx;
 

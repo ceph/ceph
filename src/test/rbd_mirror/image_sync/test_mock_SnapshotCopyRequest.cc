@@ -34,7 +34,10 @@ struct SnapshotCreateRequest<librbd::MockImageCtx> {
   static SnapshotCreateRequest* s_instance;
   static SnapshotCreateRequest* create(librbd::MockImageCtx* image_ctx,
                                        const std::string &snap_name,
-                                       uint64_t size, Context *on_finish) {
+                                       uint64_t size,
+                                       const librbd::parent_spec &parent_spec,
+                                       uint64_t parent_overlap,
+                                       Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -157,7 +160,7 @@ public:
     return new MockSnapshotCopyRequest(&mock_local_image_ctx,
                                        &mock_remote_image_ctx, &m_snap_map,
                                        &mock_journaler, &m_client_meta,
-                                       on_finish);
+                                       m_threads->work_queue, on_finish);
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,

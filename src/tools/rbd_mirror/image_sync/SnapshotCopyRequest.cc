@@ -4,6 +4,7 @@
 #include "SnapshotCopyRequest.h"
 #include "SnapshotCreateRequest.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
@@ -42,10 +43,12 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
                                             SnapMap *snap_map,
                                             Journaler *journaler,
                                             librbd::journal::MirrorPeerClientMeta *meta,
+                                            ContextWQ *work_queue,
                                             Context *on_finish)
   : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_snap_map(snap_map), m_journaler(journaler), m_client_meta(meta),
-    m_on_finish(on_finish), m_snap_seqs(meta->snap_seqs) {
+    m_work_queue(work_queue), m_on_finish(on_finish),
+    m_snap_seqs(meta->snap_seqs) {
   m_snap_map->clear();
 
   // snap ids ordered from oldest to newest
@@ -57,27 +60,27 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
 
 template <typename I>
 void SnapshotCopyRequest<I>::send() {
+  librbd::parent_spec remote_parent_spec;
+  int r = validate_parent(m_remote_image_ctx, &remote_parent_spec);
+  if (r < 0) {
+    derr << ": remote image parent spec mismatch" << dendl;
+    error(r);
+    return;
+  }
+
+  r = validate_parent(m_local_image_ctx, &m_local_parent_spec);
+  if (r < 0) {
+    derr << ": local image parent spec mismatch" << dendl;
+    error(r);
+    return;
+  }
+
   send_snap_unprotect();
 }
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_snap_unprotect() {
   CephContext *cct = m_local_image_ctx->cct;
-
-  // TODO: issue #14937 needs to add support for cloned images
-  m_remote_image_ctx->snap_lock.get_read();
-  if (m_remote_image_ctx->parent_md.spec.pool_id != -1 ||
-      std::find_if(m_remote_image_ctx->snap_info.begin(),
-                   m_remote_image_ctx->snap_info.end(),
-                   [](const std::pair<librados::snap_t, librbd::SnapInfo>& pair) {
-          return pair.second.parent.spec.pool_id != -1;
-        }) != m_remote_image_ctx->snap_info.end()) {
-    lderr(cct) << ": cloned images are not currently supported" << dendl;
-    m_remote_image_ctx->snap_lock.put_read();
-    finish(-EINVAL);
-    return;
-  }
-  m_remote_image_ctx->snap_lock.put_read();
 
   SnapIdSet::iterator snap_id_it = m_local_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
@@ -271,19 +274,32 @@ void SnapshotCopyRequest<I>::send_snap_create() {
     finish(-ENOENT);
     return;
   }
+
   uint64_t size = snap_info_it->second.size;
+  librbd::parent_spec parent_spec;
+  uint64_t parent_overlap = 0;
+  if (snap_info_it->second.parent.spec.pool_id != -1) {
+    parent_spec = m_local_parent_spec;
+    parent_overlap = snap_info_it->second.parent.overlap;
+  }
   m_remote_image_ctx->snap_lock.put_read();
+
 
   ldout(cct, 20) << ": "
                  << "snap_name=" << m_snap_name << ", "
                  << "snap_id=" << m_prev_snap_id << ", "
-                 << "size=" << size << dendl;
+                 << "size=" << size << ", "
+                 << "parent_info=["
+                 << "pool_id=" << parent_spec.pool_id << ", "
+                 << "image_id=" << parent_spec.image_id << ", "
+                 << "snap_id=" << parent_spec.snap_id << ", "
+                 << "overlap=" << parent_overlap << "]" << dendl;
 
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
       this);
   SnapshotCreateRequest<I> *req = SnapshotCreateRequest<I>::create(
-    m_local_image_ctx, m_snap_name, size, ctx);
+    m_local_image_ctx, m_snap_name, size, parent_spec, parent_overlap, ctx);
   req->send();
 }
 
@@ -438,6 +454,14 @@ void SnapshotCopyRequest<I>::handle_update_client(int r) {
 }
 
 template <typename I>
+void SnapshotCopyRequest<I>::error(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  m_work_queue->queue(create_context_callback<
+    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::finish>(this), r);
+}
+
+template <typename I>
 void SnapshotCopyRequest<I>::finish(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
@@ -458,6 +482,30 @@ void SnapshotCopyRequest<I>::compute_snap_map() {
     local_snap_ids.insert(local_snap_ids.begin(), pair.second);
     m_snap_map->insert(std::make_pair(pair.first, local_snap_ids));
   }
+}
+
+template <typename I>
+int SnapshotCopyRequest<I>::validate_parent(I *image_ctx,
+                                            librbd::parent_spec *spec) {
+  RWLock::RLocker owner_locker(image_ctx->owner_lock);
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+
+  // ensure remote image's parent specs are still consistent
+  *spec = image_ctx->parent_md.spec;
+  for (auto &snap_info_pair : image_ctx->snap_info) {
+    auto &parent_spec = snap_info_pair.second.parent.spec;
+    if (parent_spec.pool_id == -1) {
+      continue;
+    } else if (spec->pool_id == -1) {
+      *spec = parent_spec;
+      continue;
+    }
+
+    if (*spec != parent_spec) {
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 } // namespace image_sync
