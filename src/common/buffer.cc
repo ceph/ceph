@@ -1215,6 +1215,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       ++p;
       p_off = 0;
     }
+    off += l;
     return l;
   }
 

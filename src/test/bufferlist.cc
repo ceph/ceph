@@ -1049,6 +1049,7 @@ TEST(BufferListIterator, get_ptr_and_advance)
   const char *ptr;
   bufferlist::iterator p = bl.begin();
   ASSERT_EQ(3u, p.get_ptr_and_advance(11, &ptr));
+  ASSERT_EQ(bl.length() - 3u, p.get_remaining());
   ASSERT_EQ(0, memcmp(ptr, "one", 3));
   ASSERT_EQ(2u, p.get_ptr_and_advance(2, &ptr));
   ASSERT_EQ(0, memcmp(ptr, "tw", 2));
@@ -1056,6 +1057,7 @@ TEST(BufferListIterator, get_ptr_and_advance)
   ASSERT_EQ(0, memcmp(ptr, "o", 1));
   ASSERT_EQ(5u, p.get_ptr_and_advance(5, &ptr));
   ASSERT_EQ(0, memcmp(ptr, "three", 5));
+  ASSERT_EQ(0u, p.get_remaining());
 }
 
 TEST(BufferListIterator, seek) {
