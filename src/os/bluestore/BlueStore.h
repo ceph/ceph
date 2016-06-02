@@ -40,6 +40,8 @@ class Allocator;
 class FreelistManager;
 class BlueFS;
 
+//#define DEBUG_CACHE
+
 enum {
   l_bluestore_first = 732430,
   l_bluestore_state_prepare_lat,
@@ -192,6 +194,12 @@ public:
     uint64_t size = 0;
 
     void trim(uint64_t keep);
+
+#ifdef DEBUG_CACHE
+    void audit_lru();
+#else
+    void audit_lru() { /* no-op */ }
+#endif
   };
 
   /// map logical extent range (object) onto buffers
@@ -216,6 +224,7 @@ public:
       if (b->is_writing()) {
 	writing.push_back(*b);
       }
+      cache->audit_lru();
     }
     void _rm_buffer(Buffer *b) {
       _rm_buffer(buffer_map.find(b->offset));
@@ -227,6 +236,7 @@ public:
 	writing.erase(writing.iterator_to(*p->second));
       }
       buffer_map.erase(p);
+      cache->audit_lru();
     }
 
     /// move to top of lru

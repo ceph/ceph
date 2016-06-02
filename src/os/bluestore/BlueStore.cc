@@ -453,6 +453,7 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 
 void BlueStore::BufferCache::trim(uint64_t keep)
 {
+  audit_lru();
   lru_list_t::iterator i = lru.end();
   if (size) {
     assert(i != lru.begin());
@@ -478,6 +479,26 @@ void BlueStore::BufferCache::trim(uint64_t keep)
   }
 }
 
+#ifdef DEBUG_CACHE
+void BlueStore::BufferCache::audit_lru()
+{
+  if (true) {
+    uint64_t s = 0;
+    for (auto i = lru.begin(); i != lru.end(); ++i) {
+      s += i->length;
+    }
+    if (s != size) {
+      derr << __func__ << " size " << size << " actual " << s << dendl;
+      for (auto i = lru.begin(); i != lru.end(); ++i) {
+	derr << __func__ << " " << *i << dendl;
+      }
+      assert(s == size);
+    }
+    dout(20) << __func__ << " size " << size << " ok" << dendl;
+  }
+}
+#endif
+
 // BufferSpace
 
 #undef dout_prefix
@@ -485,6 +506,7 @@ void BlueStore::BufferCache::trim(uint64_t keep)
 
 void BlueStore::BufferSpace::discard(uint64_t offset, uint64_t length)
 {
+  cache->audit_lru();
   auto i = _data_lower_bound(offset);
   uint64_t end = offset + length;
   while (i != buffer_map.end()) {
@@ -506,6 +528,7 @@ void BlueStore::BufferSpace::discard(uint64_t offset, uint64_t length)
 	}
 	cache->size -= b->length - front;
 	b->truncate(front);
+	cache->audit_lru();
 	return;
       } else {
 	// drop tail
@@ -531,6 +554,7 @@ void BlueStore::BufferSpace::discard(uint64_t offset, uint64_t length)
       _add_buffer(new Buffer(this, b->state, b->seq, end, keep));
       _rm_buffer(i);
     }
+    cache->audit_lru();
     return;
   }
 }
@@ -600,6 +624,7 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
       ++i;
     }
   }
+  cache->audit_lru();
 }
 
 
