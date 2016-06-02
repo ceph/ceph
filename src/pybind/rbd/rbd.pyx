@@ -598,7 +598,7 @@ class RBD(object):
         return (major, minor, extra)
 
     def create(self, ioctx, name, size, order=None, old_format=True,
-               features=None, stripe_unit=0, stripe_count=0):
+               features=None, stripe_unit=None, stripe_count=None):
         """
         Create an rbd image.
 
@@ -616,7 +616,7 @@ class RBD(object):
         :type old_format: bool
         :param features: bitmask of features to enable
         :type features: int
-        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
         :type stripe_unit: int
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
@@ -635,7 +635,9 @@ class RBD(object):
         if order is not None:
             _order = order
         if old_format:
-            if features or stripe_unit != 0 or stripe_count != 0:
+            if (features or
+                ((stripe_unit is not None) and stripe_unit != 0) or
+                ((stripe_count is not None) and stripe_count != 0)):
                 raise InvalidArgument('format 1 images do not support feature'
                                       ' masks or non-default striping')
             with nogil:
@@ -649,13 +651,16 @@ class RBD(object):
                     rbd_image_options_set_uint64(opts,
                                                  RBD_IMAGE_OPTION_FEATURES,
                                                  features)
-                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
-                                             _order)
-                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
-                                             stripe_unit)
-                rbd_image_options_set_uint64(opts,
-                                             RBD_IMAGE_OPTION_STRIPE_COUNT,
-                                             stripe_count)
+                if order is not None:
+                    rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                                 _order)
+                if stripe_unit is not None:
+                    rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                                 stripe_unit)
+                if stripe_count is not None:
+                    rbd_image_options_set_uint64(opts,
+                                                 RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                                 stripe_count)
                 with nogil:
                     ret = rbd_create4(_ioctx, _name, _size, opts)
             finally:
