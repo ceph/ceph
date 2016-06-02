@@ -4444,6 +4444,7 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
     }
 
     if (txc->first_collection) {
+      RWLock::WLocker l(txc->first_collection->lock);
       txc->first_collection->onode_map.trim();
       txc->first_collection->buffer_cache.trim(
 	g_conf->bluestore_collection_buffer_cache_size);
