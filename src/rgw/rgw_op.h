@@ -1458,11 +1458,19 @@ static inline void rgw_get_request_metadata(CephContext *cct,
 					    map<string, bufferlist>& attrs,
 					    const bool allow_empty_attrs = true)
 {
+  static const std::set<std::string> blacklisted_headers = {
+      "x-amz-server-side-encryption-customer-algorithm",
+      "x-amz-server-side-encryption-customer-key",
+      "x-amz-server-side-encryption-customer-key-md5"
+  };
   map<string, string>::iterator iter;
   for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
-
+    if (blacklisted_headers.count(name) == 1) {
+      lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
+      continue;
+    }
     if (allow_empty_attrs || !xattr.empty()) {
       lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);
