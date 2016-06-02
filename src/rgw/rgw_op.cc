@@ -1793,6 +1793,9 @@ int RGWCreateBucket::verify_permission()
       << dendl;
     return -EACCES;
   }
+  if (s->user->max_buckets < 0) {
+    return -EPERM;
+  }
 
   if (s->user->max_buckets) {
     RGWUserBuckets buckets;
