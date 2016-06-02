@@ -201,12 +201,14 @@ struct entity_addr_t {
   typedef enum {
     TYPE_NONE = 0,
     TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
+    TYPE_MSGR2 = 2,   ///< msgr2 protocol (new in ceph kraken)
   } type_t;
   static const type_t TYPE_DEFAULT = TYPE_LEGACY;
   static const char *get_type_name(int t) {
     switch (t) {
     case TYPE_NONE: return "none";
     case TYPE_LEGACY: return "legacy";
+    case TYPE_MSGR2: return "msgr2";
     default: return "???";
     }
   };
