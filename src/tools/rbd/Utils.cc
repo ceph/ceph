@@ -453,29 +453,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
     stripe_specified = true;
   }
 
-  if ((stripe_unit != 0 && stripe_count == 0) ||
-      (stripe_unit == 0 && stripe_count != 0)) {
-    std::cerr << "must specify both (or neither) of stripe-unit and stripe-count"
-              << std::endl;
-    return -EINVAL;
-  } else if (stripe_unit || stripe_count) {
-    if ((1ull << order) % stripe_unit || stripe_unit >= (1ull << order)) {
-      std::cerr << "stripe unit is not a factor of the object size" << std::endl;
-      return -EINVAL;
-    }
-    if (stripe_count == 1) {
-      std::cerr << "stripe count not allowed to be 1" << std::endl;
-      return -EINVAL;
-    }
-    features |= RBD_FEATURE_STRIPINGV2;
-  } else {
-    if (features_specified && ((features & RBD_FEATURE_STRIPINGV2) != 0)) {
-      std::cerr << "must specify both of stripe-unit and stripe-count when specify striping features" << std::endl;
-      return -EINVAL;
-    }
-    features &= ~RBD_FEATURE_STRIPINGV2;
-  }
-
   if (vm.count(at::IMAGE_SHARED) && vm[at::IMAGE_SHARED].as<bool>()) {
     features &= ~RBD_FEATURES_SINGLE_CLIENT;
     features_specified = true;
