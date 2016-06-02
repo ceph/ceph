@@ -278,8 +278,8 @@ class AsyncConnection : public Connection {
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  atomic_t out_seq;
-  atomic_t ack_left, in_seq;
+  atomic64_t out_seq;
+  atomic64_t ack_left, in_seq;
   int state;
   int state_after_send;
   int sd;
