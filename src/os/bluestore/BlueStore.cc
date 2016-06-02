@@ -4330,13 +4330,13 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
        p != txc->bnodes.end();
        ++p) {
     if ((*p)->blob_map.empty()) {
-      dout(20) << "  bnode " << std::hex << (*p)->hash << " " << (*p)->key << std::dec
+      dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
 	       << " blob_map is empty" << dendl;
       t->rmkey(PREFIX_OBJ, (*p)->key);
     } else {
       bufferlist bl;
       ::encode((*p)->blob_map, bl);
-      dout(20) << "  bnode " << std::hex << (*p)->hash << " " << (*p)->key << std::dec
+      dout(20) << "  bnode " << std::hex << (*p)->hash << std::dec
 	       << " blob_map is " << bl.length() << dendl;
       t->set(PREFIX_OBJ, (*p)->key, bl);
     }
