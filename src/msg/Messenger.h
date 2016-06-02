@@ -717,6 +717,13 @@ public:
   /**
    * @} // Dispatcher Interfacing
    */
+   
+  bool is_iface_connected() {
+    if ((!my_inst.addr.is_ip()) ||
+          (my_inst.addr.is_blank_ip()))
+      return true;
+    return my_inst.addr.is_iface_connected();
+  }
 };
 
 

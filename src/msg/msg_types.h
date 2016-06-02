@@ -357,7 +357,8 @@ struct entity_addr_t {
       return false;
     }
   }
-
+  std::string get_iface_name();
+  bool is_iface_connected();
   bool parse(const char *s, const char **end = 0);
 
   // Right now, these only deal with sockaddr_storage that have only family and content.
