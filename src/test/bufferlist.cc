@@ -1060,6 +1060,42 @@ TEST(BufferListIterator, get_ptr_and_advance)
   ASSERT_EQ(0u, p.get_remaining());
 }
 
+TEST(BufferListIterator, iterator_crc32c) {
+  bufferlist bl1;
+  bufferlist bl2;
+  bufferlist bl3;
+
+  string s1(100, 'a');
+  string s2(50, 'b');
+  string s3(7, 'c');
+  string s;
+  bl1.append(s1);
+  bl1.append(s2);
+  bl1.append(s3);
+  s = s1 + s2 + s3;
+  bl2.append(s);
+
+  bufferlist::iterator it = bl2.begin();
+  ASSERT_EQ(bl1.crc32c(0), it.crc32c(it.get_remaining(), 0));
+  ASSERT_EQ(0u, it.get_remaining());
+
+  it = bl1.begin();
+  ASSERT_EQ(bl2.crc32c(0), it.crc32c(it.get_remaining(), 0));
+
+  bl3.append(s.substr(98, 55));
+  it = bl1.begin();
+  it.advance(98);
+  ASSERT_EQ(bl3.crc32c(0), it.crc32c(55, 0));
+  ASSERT_EQ(4u, it.get_remaining());
+
+  bl3.clear();
+  bl3.append(s.substr(98 + 55));
+  it = bl1.begin();
+  it.advance(98 + 55);
+  ASSERT_EQ(bl3.crc32c(0), it.crc32c(10, 0));
+  ASSERT_EQ(0u, it.get_remaining());
+}
+
 TEST(BufferListIterator, seek) {
   bufferlist bl;
   bl.append("ABC", 3);
