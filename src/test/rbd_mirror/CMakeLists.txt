@@ -33,8 +33,9 @@ target_link_libraries(unittest_rbd_mirror
   rbd_mirror_internal
   rbd_internal
   rbd_api
+  rbd_test_mock
   journal
-  journal_test
+  journal_test_mock
   cls_rbd_client
   cls_lock_client
   cls_journal_client
