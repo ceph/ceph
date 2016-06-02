@@ -8805,8 +8805,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
 }
 
 void OSD::ShardedOpWQ::_enqueue(pair<PGRef, PGQueueable> item) {
-
-  uint32_t shard_index = (((item.first)->get_pgid().ps())% shard_list.size());
+  uint32_t shard_index =
+    (item.first)->get_pgid().hash_to_shard(shard_list.size());
 
   ShardData* sdata = shard_list[shard_index];
   assert (NULL != sdata);
