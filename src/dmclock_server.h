@@ -104,12 +104,13 @@ namespace crimson {
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
 		 const ReqParams& req_params,
-		 const Time& time) :
-	reservation(tag_calc(time,
-			     prev_tag.reservation,
-			     client.reservation_inv,
-			     req_params.rho,
-			     true)),
+		 const Time& time,
+		 const double cost = 0.0) :
+	reservation(cost + tag_calc(time,
+				    prev_tag.reservation,
+				    client.reservation_inv,
+				    req_params.rho,
+				    true)),
 	proportion(tag_calc(time,
 			    prev_tag.proportion,
 			    client.weight_inv,
@@ -150,12 +151,12 @@ namespace crimson {
 			     double increment,
 			     uint32_t dist_req_val,
 			     bool extreme_is_high) {
-	if (0 != dist_req_val) {
-	  increment *= dist_req_val;
-	}
 	if (0.0 == increment) {
 	  return extreme_is_high ? max_tag : min_tag;
 	} else {
+	  if (0 != dist_req_val) {
+	    increment *= dist_req_val;
+	  }
 	  return std::max(time, prev + increment);
 	}
       }
@@ -491,7 +492,8 @@ namespace crimson {
       void do_add_request(RequestRef&&     request,
 			  const C&         client_id,
 			  const ReqParams& req_params,
-			  const Time       time) {
+			  const Time       time,
+			  const double     cost = 0.0) {
 	++tick;
 
 	// this pointer will help us create a reference to a shared
@@ -553,7 +555,7 @@ namespace crimson {
 	  client.idle = false;
 	} // if this client was idle
 
-	RequestTag tag(client.get_req_tag(), client.info, req_params, time);
+	RequestTag tag(client.get_req_tag(), client.info, req_params, time, cost);
 	client.add_request(tag, client.client, std::move(request));
 
 	// copy tag to previous tag for client
