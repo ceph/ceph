@@ -101,8 +101,9 @@ public:
   typedef map<const bluestore_pextent_t*, regions2read_t> extents2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
-  /// cached buffer
   struct BufferSpace;
+
+  /// cached buffer
   struct Buffer {
     enum {
       STATE_UNDEF = 0,
@@ -181,26 +182,7 @@ public:
     }
   };
 
-  /// manage a collection of buffers (per-collection, currently)
-  struct BufferCache {
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_lru_list_t;
-
-    buffer_lru_list_t lru;
-    uint64_t size = 0;
-
-    void trim(uint64_t keep);
-
-#ifdef DEBUG_CACHE
-    void audit_lru();
-#else
-    void audit_lru() { /* no-op */ }
-#endif
-  };
+  struct Cache;
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
@@ -212,38 +194,33 @@ public:
 	&Buffer::state_item> > state_list_t;
 
     map<uint64_t,std::unique_ptr<Buffer>> buffer_map;
-    BufferCache *cache;
+    Cache *cache;
     state_list_t writing;
 
-    BufferSpace(BufferCache *c) : cache(c) {}
+    BufferSpace(Cache *c) : cache(c) {}
 
     void _add_buffer(Buffer *b) {
+      cache->_audit_lru();
       buffer_map[b->offset].reset(b);
-      cache->lru.push_front(*b);
-      cache->size += b->length;
+      cache->buffer_lru.push_front(*b);
+      cache->buffer_size += b->length;
       if (b->is_writing()) {
 	writing.push_back(*b);
       }
-      cache->audit_lru();
+      cache->_audit_lru();
     }
     void _rm_buffer(Buffer *b) {
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
-      cache->size -= p->second->length;
-      cache->lru.erase(cache->lru.iterator_to(*p->second));
+      cache->_audit_lru();
+      cache->buffer_size -= p->second->length;
+      cache->buffer_lru.erase(cache->buffer_lru.iterator_to(*p->second));
       if (p->second->is_writing()) {
 	writing.erase(writing.iterator_to(*p->second));
       }
       buffer_map.erase(p);
-      cache->audit_lru();
-    }
-
-    /// move to top of lru
-    void _touch_buffer(Buffer *b) {
-      auto p = cache->lru.iterator_to(*b);
-      cache->lru.erase(p);
-      cache->lru.push_front(*b);
+      cache->_audit_lru();
     }
 
     map<uint64_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -261,16 +238,24 @@ public:
       return buffer_map.empty();
     }
 
-    void discard(uint64_t offset, uint64_t length);
+    void _clear();
+
+    void discard(uint64_t offset, uint64_t length) {
+      std::lock_guard<std::mutex> l(cache->lock);
+      _discard(offset, length);
+    }
+    void _discard(uint64_t offset, uint64_t length);
 
     void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
-      discard(offset, bl.length());
+      std::lock_guard<std::mutex> l(cache->lock);
+      _discard(offset, bl.length());
       _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags));
     }
     void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {
-      discard(offset, bl.length());
+      std::lock_guard<std::mutex> l(cache->lock);
+      _discard(offset, bl.length());
       _add_buffer(new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl));
     }
 
@@ -283,6 +268,7 @@ public:
     }
 
     void dump(Formatter *f) const {
+      std::lock_guard<std::mutex> l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
@@ -294,9 +280,9 @@ public:
     }
   };
 
-  /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
   struct BnodeSet;
 
+  /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
   struct Bnode : public boost::intrusive::unordered_set_base_hook<> {
     std::atomic_int nref;        ///< reference count
     uint32_t hash;
@@ -360,12 +346,16 @@ public:
     }
   };
 
+  struct OnodeSpace;
+
   /// an in-memory object
   struct Onode {
     std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
+
+    OnodeSpace *space;    ///< containing OnodeSpace
     boost::intrusive::list_member_hook<> lru_item;
 
     BnodeRef bnode;  ///< ref to Bnode [optional]
@@ -379,10 +369,11 @@ public:
 
     BufferSpace bc;
 
-    Onode(const ghobject_t& o, const string& k, BufferCache *c)
+    Onode(OnodeSpace *s, const ghobject_t& o, const string& k, Cache *c)
       : nref(0),
 	oid(o),
 	key(k),
+	space(s),
 	exists(false),
 	bc(c) {
     }
@@ -407,7 +398,14 @@ public:
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
-  struct OnodeHashLRU {
+  /// a cache (shard) of onodes and buffers
+  struct Cache {
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+	Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::lru_item> > buffer_lru_list_t;
     typedef boost::intrusive::list<
       Onode,
       boost::intrusive::member_hook<
@@ -415,21 +413,43 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Onode::lru_item> > onode_lru_list_t;
 
-    std::mutex lock;
-    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
-    onode_lru_list_t lru;                                ///< lru
-    size_t max_size;
+    std::mutex lock;                ///< protect lru and other structures
+    buffer_lru_list_t buffer_lru;
+    uint64_t buffer_size = 0;
+    onode_lru_list_t onode_lru;
 
-    OnodeHashLRU(size_t s) : max_size(s) {}
+    void _touch_onode(OnodeRef& o);
+
+    void _touch_buffer(Buffer *b) {
+      auto p = buffer_lru.iterator_to(*b);
+      buffer_lru.erase(p);
+      buffer_lru.push_front(*b);
+      _audit_lru();
+    }
+
+    void trim(uint64_t onode_max, uint64_t buffer_max);
+
+#ifdef DEBUG_CACHE
+    void _audit_lru();
+#else
+    void _audit_lru() { /* no-op */ }
+#endif
+  };
+
+  struct OnodeSpace {
+    Cache *cache;
+    ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
+
+    OnodeSpace(Cache *c) : cache(c) {}
+    ~OnodeSpace() {
+      clear();
+    }
 
     void add(const ghobject_t& oid, OnodeRef o);
-    void _touch(OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
     void clear();
     bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
-    int trim(int max=-1);
-    int _trim(int max);
   };
 
   struct Collection : public CollectionImpl {
@@ -444,8 +464,8 @@ public:
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
-    OnodeHashLRU onode_map;
-    BufferCache buffer_cache;
+    OnodeSpace onode_map;
+    Cache cache;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     BnodeRef get_bnode(uint32_t hash);
@@ -563,8 +583,6 @@ public:
     interval_set<uint64_t> allocated, released;
 
     IOContext ioc;
-
-    CollectionRef first_collection;  ///< first referenced collection
 
     uint64_t seq = 0;
     utime_t start;
@@ -795,6 +813,8 @@ private:
 
   RWLock coll_lock;    ///< rwlock to protect coll_map
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
+
+  Cache cache;
 
   std::mutex nid_lock;
   uint64_t nid_last;
