@@ -338,22 +338,22 @@ int main(int argc, const char **argv)
   }
 
   // S3 website mode is a specialization of S3
-  bool s3website_enabled = apis_map.count("s3website") > 0;
-  if (apis_map.count("s3") > 0 || s3website_enabled)
+  bool s3website_enabled = (apis_map.find("s3website") != apis_map.end());
+  if (apis_map.find("s3") != apis_map.end() || s3website_enabled)
     rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
 
-  if (apis_map.count("swift") > 0) {
+  if (apis_map.find("swift") != apis_map.end()) {
     do_swift = true;
     swift_init(g_ceph_context);
     rest.register_resource(g_conf->rgw_swift_url_prefix,
 			   set_logging(new RGWRESTMgr_SWIFT));
   }
 
-  if (apis_map.count("swift_auth") > 0)
+  if (apis_map.find("swift_auth") != apis_map.end())
     rest.register_resource(g_conf->rgw_swift_auth_entry,
 			   set_logging(new RGWRESTMgr_SWIFT_Auth));
 
-  if (apis_map.count("admin") > 0) {
+  if (apis_map.find("admin") != apis_map.end()) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);

@@ -232,7 +232,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       const char *name = iter->first.c_str();
       map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
       if (aiter != rgw_to_http_attrs.end()) {
-        if (response_attrs.count(aiter->second) == 0) {
+        if (response_attrs.find(aiter->second) == response_attrs.end()) {
           /* Was not already overridden by a response param. */
           response_attrs[aiter->second] = iter->second.c_str();
         }
@@ -1773,7 +1773,7 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
 
 void RGWPostObj_ObjStore_S3::send_response()
 {
-  if (op_ret == 0 && parts.count("success_action_redirect")) {
+  if (op_ret == 0 && parts.find("success_action_redirect") != parts.end()) {
     string redirect;
 
     part_str("success_action_redirect", &redirect);
@@ -1822,7 +1822,7 @@ void RGWPostObj_ObjStore_S3::send_response()
     }
     dump_redirect(s, redirect);
     op_ret = STATUS_REDIRECT;
-  } else if (op_ret == 0 && parts.count("success_action_status")) {
+  } else if (op_ret == 0 && parts.find("success_action_status") != parts.end()) {
     string status_string;
     uint32_t status_int;
 

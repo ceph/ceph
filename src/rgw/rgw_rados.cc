@@ -243,7 +243,7 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
   auto& zone_name = zone_params.get_name();
 
   // check for duplicate zone name on insert
-  if (!zones.count(zone_id)) {
+  if (zones.find(zone_id) == zones.end()) {
     for (const auto& zone : zones) {
       if (zone.second.name == zone_name) {
         ldout(cct, 0) << "ERROR: found existing zone name " << zone_name
