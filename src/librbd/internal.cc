@@ -1250,8 +1250,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     ldout(cct, 10) << __func__ << " name=" << imgname << ", "
                    << "size=" << size << ", opts=" << opts << dendl;
 
-    uint64_t format = cct->_conf->rbd_default_format;
-    opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+    uint64_t format;
+    if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
+      format = cct->_conf->rbd_default_format;
     bool old_format = format == 1;
 
     uint64_t features;
@@ -1260,11 +1261,16 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     }
     uint64_t stripe_unit = 0;
     uint64_t stripe_count = 0;
-    opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+    if (!old_format) {
+      if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0 || stripe_unit == 0)
+	stripe_unit = cct->_conf->rbd_default_stripe_unit;
+      if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0 || stripe_count == 0)
+	stripe_count = cct->_conf->rbd_default_stripe_count;
+    }
 
     uint64_t order = 0;
-    opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+    if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0 || order == 0)
+      order = cct->_conf->rbd_default_order;
 
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
@@ -1289,9 +1295,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EEXIST;
     }
 
-    if (!order)
-      order = cct->_conf->rbd_default_order;
-
     if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
@@ -1300,26 +1303,23 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     Rados rados(io_ctx);
     uint64_t bid = rados.get_instance_id();
 
-    // if striping is enabled, use possibly custom defaults
-    if (!old_format && (features & RBD_FEATURE_STRIPINGV2) &&
-	!stripe_unit && !stripe_count) {
-      stripe_unit = cct->_conf->rbd_default_stripe_unit;
-      stripe_count = cct->_conf->rbd_default_stripe_count;
-    }
-
-    // normalize for default striping
-    if (stripe_unit == (1ull << order) && stripe_count == 1) {
-      stripe_unit = 0;
-      stripe_count = 0;
-    }
-    if ((stripe_unit || stripe_count) &&
-	(features & RBD_FEATURE_STRIPINGV2) == 0) {
+    if ((features & RBD_FEATURE_STRIPINGV2) == 0 &&
+	((stripe_unit && stripe_unit != (1ull << order)) ||
+	 (stripe_count && stripe_count != 1))) {
       lderr(cct) << "STRIPINGV2 and format 2 or later required for non-default striping" << dendl;
       return -EINVAL;
     }
+
     if ((stripe_unit && !stripe_count) ||
-	(!stripe_unit && stripe_count))
+	(!stripe_unit && stripe_count)) {
+      lderr(cct) << "must specify both (or neither) of stripe-unit and stripe-count" << dendl;
       return -EINVAL;
+    } else if (stripe_unit || stripe_count) {
+      if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
+	lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
+	return -EINVAL;
+      }
+    }
 
     if (old_format) {
       if (stripe_unit && stripe_unit != (1ull << order))
