@@ -469,7 +469,7 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 	   << " buffers " << buffer_size << " / " << buffer_max
 	   << dendl;
 
-  _audit_lru();
+  _audit_lru("trim start");
 
   // buffers
   auto i = buffer_lru.end();
@@ -528,9 +528,10 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 }
 
 #ifdef DEBUG_CACHE
-void BlueStore::Cache::_audit_lru()
+void BlueStore::Cache::_audit_lru(const char *when)
 {
   if (true) {
+    dout(10) << __func__ << " " << when << " start" << dendl;
     uint64_t s = 0;
     for (auto i = buffer_lru.begin(); i != buffer_lru.end(); ++i) {
       s += i->length;
@@ -543,7 +544,8 @@ void BlueStore::Cache::_audit_lru()
       }
       assert(s == buffer_size);
     }
-    dout(20) << __func__ << " buffer_size " << buffer_size << " ok" << dendl;
+    dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
+	     << " ok" << dendl;
   }
 }
 #endif
@@ -564,8 +566,7 @@ void BlueStore::BufferSpace::_clear()
 
 void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 {
-  std::lock_guard<std::mutex> l(cache->lock);
-  cache->_audit_lru();
+  cache->_audit_lru("discard start");
   auto i = _data_lower_bound(offset);
   uint64_t end = offset + length;
   while (i != buffer_map.end()) {
@@ -587,7 +588,7 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 	}
 	cache->buffer_size -= b->length - front;
 	b->truncate(front);
-	cache->_audit_lru();
+	cache->_audit_lru("discard end 1");
 	return;
       } else {
 	// drop tail
@@ -613,7 +614,7 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
       _add_buffer(new Buffer(this, b->state, b->seq, end, keep));
       _rm_buffer(i);
     }
-    cache->_audit_lru();
+    cache->_audit_lru("discard end 2");
     return;
   }
 }
@@ -687,7 +688,7 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
       ++i;
     }
   }
-  cache->_audit_lru();
+  cache->_audit_lru("finish_write end");
 }
 
 // OnodeSpace

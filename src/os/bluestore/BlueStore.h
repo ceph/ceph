@@ -200,27 +200,27 @@ public:
     BufferSpace(Cache *c) : cache(c) {}
 
     void _add_buffer(Buffer *b) {
-      cache->_audit_lru();
+      cache->_audit_lru("_add_buffer start");
       buffer_map[b->offset].reset(b);
       cache->buffer_lru.push_front(*b);
       cache->buffer_size += b->length;
       if (b->is_writing()) {
 	writing.push_back(*b);
       }
-      cache->_audit_lru();
+      cache->_audit_lru("_add_buffer end");
     }
     void _rm_buffer(Buffer *b) {
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
-      cache->_audit_lru();
+      cache->_audit_lru("_rm_buffer start");
       cache->buffer_size -= p->second->length;
       cache->buffer_lru.erase(cache->buffer_lru.iterator_to(*p->second));
       if (p->second->is_writing()) {
 	writing.erase(writing.iterator_to(*p->second));
       }
       buffer_map.erase(p);
-      cache->_audit_lru();
+      cache->_audit_lru("_rm_buffer end");
     }
 
     map<uint64_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -424,15 +424,15 @@ public:
       auto p = buffer_lru.iterator_to(*b);
       buffer_lru.erase(p);
       buffer_lru.push_front(*b);
-      _audit_lru();
+      _audit_lru("_touch_buffer end");
     }
 
     void trim(uint64_t onode_max, uint64_t buffer_max);
 
 #ifdef DEBUG_CACHE
-    void _audit_lru();
+    void _audit_lru(const char *s);
 #else
-    void _audit_lru() { /* no-op */ }
+    void _audit_lru(const char *s) { /* no-op */ }
 #endif
   };
 
