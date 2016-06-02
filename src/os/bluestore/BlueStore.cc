@@ -455,6 +455,7 @@ void BlueStore::BufferCache::trim(uint64_t keep)
 {
   lru_list_t::iterator i = lru.end();
   if (size) {
+    assert(i != lru.begin());
     --i;
   }
   while (size > keep) {
@@ -503,7 +504,7 @@ void BlueStore::BufferSpace::discard(uint64_t offset, uint64_t length)
 	} else {
 	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail));
 	}
-	cache->size -= length;
+	cache->size -= b->length - front;
 	b->truncate(front);
 	return;
       } else {
