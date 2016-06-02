@@ -318,18 +318,19 @@ public:
 
 
 /* Anonymous */
-class RGWAnonymousAuthEngine : public RGWAuthEngine {
+class RGWAnonymousAuthEngine : public RGWTokenBasedAuthEngine {
   const RGWLocalAuthApplier::Factory * const apl_factory;
 
 public:
   RGWAnonymousAuthEngine(CephContext * const cct,
+                         const Extractor& extr,
                          const RGWLocalAuthApplier::Factory * const apl_factory)
-    : RGWAuthEngine(cct),
+    : RGWTokenBasedAuthEngine(cct, extr),
       apl_factory(apl_factory) {
   }
 
   bool is_applicable() const noexcept override {
-    return true;
+    return token.empty();
   }
 
   const char* get_name() const noexcept override {
