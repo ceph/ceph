@@ -58,7 +58,7 @@ def task(ctx, config):
 
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     while len(manager.get_osd_status()['up']) < num_osds:
-        manager.sleep(10)
+        time.sleep(10)
 
     bench_proc = RecoveryBencher(
         manager,
