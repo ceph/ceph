@@ -5032,6 +5032,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
+                            const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
                             obj_version *pobjv,
@@ -5089,10 +5090,14 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
-    if (real_clock::is_zero(creation_time))
+    if (real_clock::is_zero(creation_time)) {
       creation_time = ceph::real_clock::now(cct);
-    else
+    } else {
       info.creation_time = creation_time;
+    }
+    if (pquota_info) {
+      info.quota = *pquota_info;
+    }
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
@@ -7336,16 +7341,18 @@ int RGWRados::open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index
   return 0;
 }
 
-static void accumulate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWStorageStats>& stats)
+static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
+                                 map<RGWObjCategory, RGWStorageStats>& stats)
 {
-  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
-  for (; iter != header.stats.end(); ++iter) {
-    RGWObjCategory category = (RGWObjCategory)iter->first;
+  for (const auto& pair : header.stats) {
+    const RGWObjCategory category = static_cast<RGWObjCategory>(pair.first);
+    const rgw_bucket_category_stats& header_stats = pair.second;
+
     RGWStorageStats& s = stats[category];
-    struct rgw_bucket_category_stats& header_stats = iter->second;
-    s.category = (RGWObjCategory)iter->first;
-    s.num_kb += ((header_stats.total_size + 1023) / 1024);
-    s.num_kb_rounded += ((header_stats.total_size_rounded + 1023) / 1024);
+
+    s.category = category;
+    s.size += header_stats.total_size;
+    s.size_rounded += header_stats.total_size_rounded;
     s.num_objects += header_stats.num_entries;
   }
 }
@@ -10250,14 +10257,16 @@ class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
   RGWGetUserStats_CB *cb;
 
 public:
-  explicit RGWGetUserStatsContext(RGWGetUserStats_CB *_cb) : cb(_cb) {}
+  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
+    : cb(cb) {}
+
   void handle_response(int r, cls_user_header& header) {
-    cls_user_stats& hs = header.stats;
+    const cls_user_stats& hs = header.stats;
     if (r >= 0) {
       RGWStorageStats stats;
 
-      stats.num_kb = (hs.total_bytes + 1023) / 1024;
-      stats.num_kb_rounded = (hs.total_bytes_rounded + 1023) / 1024;
+      stats.size = hs.total_bytes;
+      stats.size_rounded = hs.total_bytes_rounded;
       stats.num_objects = hs.total_entries;
 
       cb->set_response(stats);
@@ -10278,10 +10287,10 @@ int RGWRados::get_user_stats(const rgw_user& user, RGWStorageStats& stats)
   if (r < 0)
     return r;
 
-  cls_user_stats& hs = header.stats;
+  const cls_user_stats& hs = header.stats;
 
-  stats.num_kb = (hs.total_bytes + 1023) / 1024;
-  stats.num_kb_rounded = (hs.total_bytes_rounded + 1023) / 1024;
+  stats.size = hs.total_bytes;
+  stats.size_rounded = hs.total_bytes_rounded;
   stats.num_objects = hs.total_entries;
 
   return 0;
@@ -11589,8 +11598,8 @@ int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket
 {
   cls_user_bucket_entry entry;
 
-  entry.size = stats.num_kb * 1024;
-  entry.size_rounded = stats.num_kb_rounded * 1024;
+  entry.size = stats.size;
+  entry.size_rounded = stats.size_rounded;
   entry.count += stats.num_objects;
 
   list<cls_user_bucket_entry> entries;
