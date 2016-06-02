@@ -719,7 +719,6 @@ target_link_libraries(ceph-dencoder
   cls_statelog_client
   cls_version_client
   cls_replica_log_client
-  cls_kvs
   cls_user_client
   cls_journal_client
   cls_timeindex_client
