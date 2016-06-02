@@ -832,13 +832,14 @@ void BlueStore::Onode::flush()
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << ") "
 
-BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
+BlueStore::Collection::Collection(BlueStore *ns, Cache *cs, coll_t c)
   : store(ns),
+    cache(cs),
     cid(c),
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
     bnode_set(MAX(16, g_conf->bluestore_onode_cache_size / 128)),
-    onode_map(&ns->cache)
+    onode_map(cs)
 {
 }
 
@@ -915,11 +916,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       return OnodeRef();
 
     // new
-    on = new Onode(&onode_map, oid, key, &cache);
+    on = new Onode(&onode_map, oid, key, cache);
   } else {
     // loaded
     assert(r >=0);
-    on = new Onode(&onode_map, oid, key, &cache);
+    on = new Onode(&onode_map, oid, key, cache);
     on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
@@ -985,6 +986,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 {
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
+  set_cache_shards(1);
 }
 
 BlueStore::~BlueStore()
@@ -995,6 +997,10 @@ BlueStore::~BlueStore()
   assert(db == NULL);
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
+  for (auto i : cache_shards) {
+    delete i;
+  }
+  cache_shards.clear();
 }
 
 const char **BlueStore::get_tracked_conf_keys() const
@@ -1956,7 +1962,11 @@ int BlueStore::_open_collections(int *errors)
        it->next()) {
     coll_t cid;
     if (cid.parse(it->key())) {
-      CollectionRef c(new Collection(this, cid));
+      CollectionRef c(
+	new Collection(
+	  this,
+	  cache_shards[cid.hash_to_shard(cache_shards.size())],
+	  cid));
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
       try {
@@ -2211,6 +2221,17 @@ int BlueStore::mkfs()
  out_path_fd:
   _close_path();
   return r;
+}
+
+void BlueStore::set_cache_shards(unsigned num)
+{
+  dout(10) << __func__ << " " << num << dendl;
+  size_t old = cache_shards.size();
+  assert(num >= old);
+  cache_shards.resize(num);
+  for (unsigned i = old; i < num; ++i) {
+    cache_shards[i] = new Cache;
+  }
 }
 
 int BlueStore::mount()
@@ -4454,12 +4475,17 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
 {
   std::lock_guard<std::mutex> l(osr->qlock);
   dout(20) << __func__ << " osr " << osr << dendl;
+  CollectionRef c;
   while (!osr->q.empty()) {
     TransContext *txc = &osr->q.front();
     dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
 	     << dendl;
     if (txc->state != TransContext::STATE_DONE) {
       break;
+    }
+
+    if (!c && txc->first_collection) {
+      c = txc->first_collection;
     }
 
     osr->q.pop_front();
@@ -4469,9 +4495,11 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
     if (osr->q.empty())
       dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
   }
-
-  cache.trim(g_conf->bluestore_onode_cache_size,
-	     g_conf->bluestore_buffer_cache_size);
+  if (c) {
+    c->cache->trim(
+      g_conf->bluestore_onode_cache_size,
+      g_conf->bluestore_buffer_cache_size);
+  }
 }
 
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
@@ -4861,6 +4889,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
+
+    // note first collection we reference
+    if (!j && !txc->first_collection)
+      txc->first_collection = cvec[j];
   }
   vector<OnodeRef> ovec(i.objects.size());
 
@@ -6551,7 +6583,11 @@ int BlueStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
-    c->reset(new Collection(this, cid));
+    c->reset(
+      new Collection(
+	this,
+	cache_shards[cid.hash_to_shard(cache_shards.size())],
+	cid));
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
   }

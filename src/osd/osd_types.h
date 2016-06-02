@@ -674,6 +674,12 @@ public:
     return o;
   }
 
+  unsigned hash_to_shard(unsigned num_shards) const {
+    if (type == TYPE_PG)
+      return pgid.hash_to_shard(num_shards);
+    return 0;  // whatever.
+  }
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<coll_t*>& o);
 };

@@ -452,8 +452,11 @@ public:
     bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
   };
 
+  struct Cache;
+
   struct Collection : public CollectionImpl {
     BlueStore *store;
+    Cache *cache;       ///< our cache shard
     coll_t cid;
     bluestore_cnode_t cnode;
     RWLock lock;
@@ -465,7 +468,6 @@ public:
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeSpace onode_map;
-    Cache cache;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     BnodeRef get_bnode(uint32_t hash);
@@ -491,7 +493,7 @@ public:
       return false;
     }
 
-    Collection(BlueStore *ns, coll_t c);
+    Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
   typedef boost::intrusive_ptr<Collection> CollectionRef;
 
@@ -583,6 +585,8 @@ public:
     interval_set<uint64_t> allocated, released;
 
     IOContext ioc;
+
+    CollectionRef first_collection;  ///< first referenced collection
 
     uint64_t seq = 0;
     utime_t start;
@@ -814,7 +818,7 @@ private:
   RWLock coll_lock;    ///< rwlock to protect coll_map
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
 
-  Cache cache;
+  vector<Cache*> cache_shards;
 
   std::mutex nid_lock;
   uint64_t nid_last;
@@ -984,6 +988,8 @@ public:
   void _sync();
 
   int fsck() override;
+
+  void set_cache_shards(unsigned num) override;
 
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
