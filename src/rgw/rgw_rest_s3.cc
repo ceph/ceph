@@ -2741,6 +2741,55 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   }
 }
 
+int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
+{
+  int res = 0;
+  if (strcmp(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", ""), "AES256") == 0)
+  {
+    std::string key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
+    if (key_bin.size() != AES_256_CTR::AES_256_KEYSIZE) {
+      res = -ERR_INVALID_REQUEST;
+      goto done;
+    }
+    const char* keymd5 = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
+    std::string keymd5_bin = from_base64(keymd5);
+    if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
+      res = -ERR_INVALID_DIGEST;
+      goto done;
+    }
+    MD5 key_hash;
+    uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
+    key_hash.Final(key_hash_res);
+
+    if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
+      res = -ERR_INVALID_DIGEST;
+      goto done;
+    }
+    bufferlist mode;
+    ::encode("SSE-C-AES256",mode);
+    attrs.emplace(RGW_ATTR_CRYPT_MODE, std::move(mode));
+    bufferlist md5_bl;
+    ::encode(keymd5_bin, md5_bl);
+    attrs.emplace(RGW_ATTR_CRYPT_KEYMD5, std::move(md5_bl));
+    goto done;
+  }
+  if (s->cct->_conf->rgw_crypt_default_encryption_key != "")
+  {
+    bufferlist mode;
+    ::encode("RGW-AUTO",mode);
+    attrs.emplace(RGW_ATTR_CRYPT_MODE, std::move(mode));
+
+    std::string key_selector("abcdefghijabcdefghijabcdefghijab"); //todo MAKE ME RANDOM
+    bufferlist sel;
+    ::encode(key_selector,sel);
+    //emplace_attr
+    attrs.emplace(RGW_ATTR_CRYPT_KEY, std::move(sel));
+  }
+  done:
+  return res;
+}
+
 int RGWCompleteMultipart_ObjStore_S3::get_params()
 {
   int ret = RGWCompleteMultipart_ObjStore::get_params();

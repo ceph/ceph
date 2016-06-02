@@ -3821,7 +3821,7 @@ void RGWInitMultipart::execute()
 
   if (get_params() < 0)
     return;
-  op_ret = -EINVAL;
+
   if (s->object.empty())
     return;
 
@@ -3831,18 +3831,9 @@ void RGWInitMultipart::execute()
   populate_with_generic_attrs(s, attrs);
 
   /* select encryption mode */
-  if (s->cct->_conf->rgw_crypt_default_encryption_key != "")
-  {
-    bufferlist mode;
-    ::encode("RGW-AUTO",mode);
-    attrs.emplace(RGW_ATTR_CRYPT_MODE, std::move(mode));
-
-    std::string key_selector("abcdefghijabcdefghijabcdefghijab"); //todo MAKE ME RANDOM
-    bufferlist sel;
-    ::encode(key_selector,sel);
-    //emplace_attr
-    attrs.emplace(RGW_ATTR_CRYPT_KEY, std::move(sel));
-  }
+  op_ret = prepare_encryption(attrs);
+  if (op_ret != 0)
+    return;
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 

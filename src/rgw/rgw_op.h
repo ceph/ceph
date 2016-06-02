@@ -1185,6 +1185,7 @@ public:
   virtual const string name() { return "init_multipart"; }
   virtual RGWOpType get_type() { return RGW_OP_INIT_MULTIPART; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+  virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
 };
 
 class RGWCompleteMultipart : public RGWOp {

@@ -310,6 +310,7 @@ public:
 
   int get_params();
   void send_response();
+  int prepare_encryption(map<string, bufferlist>& attrs) override;
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
