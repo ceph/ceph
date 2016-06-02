@@ -163,7 +163,7 @@ class Downburst(object):
 
         file_info = {
             'disk-size': '100G',
-            'ram': '1.9G',
+            'ram': '3.8G',
             'cpus': 1,
             'networks': [
                 {'source': 'front', 'mac': mac_address}],
