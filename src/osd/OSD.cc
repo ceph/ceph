@@ -7052,13 +7052,14 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	avoid_ports.insert(hb_front_server_messenger->get_myaddr().get_port());
 
 	int r = cluster_messenger->rebind(avoid_ports);
-	if (r != 0) {
+	if (r != 0 || (!cluster_messenger->is_iface_connected())) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
+          cluster_messenger->mark_down_all();
         }
 
 	r = hb_back_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
+	if (r != 0 || (!hb_back_server_messenger->is_iface_connected())) {
 	  do_shutdown = true;  // FIXME: do_restart?
           network_error = true;
         }
