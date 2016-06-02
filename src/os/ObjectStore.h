@@ -1871,6 +1871,8 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual void set_cache_shards(unsigned num) { }
+
   /**
    * Returns 0 if the hobject is valid, -error otherwise
    *
