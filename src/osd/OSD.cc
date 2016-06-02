@@ -1482,6 +1482,8 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
+  store->set_cache_shards(g_conf->osd_op_num_shards);
+
   ret = store->mount();
   if (ret) {
     derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
@@ -2022,6 +2024,8 @@ int OSD::init()
   dout(2) << "mounting " << dev_path << " "
 	  << (journal_path.empty() ? "(no journal)" : journal_path) << dendl;
   assert(store);  // call pre_init() first!
+
+  store->set_cache_shards(g_conf->osd_op_num_shards);
 
   int r = store->mount();
   if (r < 0) {
