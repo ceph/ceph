@@ -1430,7 +1430,7 @@ cdef class Image(object):
         return owner == 1
 
     def copy(self, dest_ioctx, dest_name, features=None, order=None,
-             stripe_unit=0, stripe_count=0):
+             stripe_unit=None, stripe_count=None):
         """
         Copy the image to another location.
 
@@ -1442,7 +1442,7 @@ cdef class Image(object):
         :type features: int
         :param order: the image is split into (2**order) byte objects
         :type order: int
-        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
         :type stripe_unit: int
         :param stripe_count: objects to stripe over before looping
         :type stripe_count: int
@@ -1452,8 +1452,6 @@ cdef class Image(object):
         :raises: :class:`FunctionNotSupported`
         :raises: :class:`ArgumentOutOfRange`
         """
-        if order is None:
-            order = 0
         dest_name = cstr(dest_name, 'dest_name')
         cdef:
             rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
@@ -1465,12 +1463,15 @@ cdef class Image(object):
             if features is not None:
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
                                              features)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
-                                         order)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
-                                         stripe_unit)
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
-                                         stripe_count)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
             with nogil:
                 ret = rbd_copy3(self.image, _dest_ioctx, _dest_name, opts)
         finally:
