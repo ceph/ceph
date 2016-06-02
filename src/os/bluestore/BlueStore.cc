@@ -2629,7 +2629,7 @@ int BlueStore::fsck()
       ghobject_t oid;
       if (is_bnode_key(it->key())) {
 	if (expecting_objects) {
-	  dout(30) << __func__ << "  had bnode but no objects for "
+	  dout(30) << __func__ << "  had bnode but no objects for 0x"
 		   << std::hex << expecting_hash << std::dec << dendl;
 	  ++errors;
 	}
@@ -2646,7 +2646,7 @@ int BlueStore::fsck()
       }
       if (expecting_objects) {
 	if (oid.hobj.get_bitwise_key_u32() != expecting_hash) {
-	  dout(30) << __func__ << "  had bnode but no objects for "
+	  dout(30) << __func__ << "  had bnode but no objects for 0x"
 		   << std::hex << expecting_hash << std::dec << dendl;
 	  ++errors;
 	}
@@ -2672,7 +2672,7 @@ int BlueStore::fsck()
       }
     }
     if (expecting_objects) {
-      dout(30) << __func__ << "  had bnode but no objects for "
+      dout(30) << __func__ << "  had bnode but no objects for 0x"
 	       << std::hex << expecting_hash << std::dec << dendl;
       ++errors;
       expecting_objects = false;
