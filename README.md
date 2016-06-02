@@ -26,14 +26,14 @@ code.
 
 ### Building unit tests
 
-The `make tests` command builds unit tests.
+The `make dmclock-tests` command builds unit tests.
 
 ### Building simulations
 
-The `make sims` command builds two simulations -- *dmc_sim* and
-*ssched_sim* -- which incorporate, respectively, the dmclock priority
-queue or a very simple scheduler for comparison. Other priority queue
-implementations could be added in the future.
+The `make dmclock-sims` command builds two simulations -- *dmc_sim*
+and *ssched_sim* -- which incorporate, respectively, the dmclock
+priority queue or a very simple scheduler for comparison. Other
+priority queue implementations could be added in the future.
 
 ## Using dmclock
 
