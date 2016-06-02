@@ -1223,6 +1223,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   uint32_t buffer::list::iterator_impl<is_const>::crc32c(
     size_t length, uint32_t crc)
   {
+    length = MIN( length, get_remaining());
     while (length > 0) {
       const char *p;
       size_t l = get_ptr_and_advance(length, &p);
