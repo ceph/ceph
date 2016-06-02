@@ -3974,7 +3974,7 @@ def list_format_plain(devices):
     for device in devices:
         if device.get('partitions'):
             lines.append('%s :' % device['path'])
-            for p in sorted(device['partitions']):
+            for p in sorted(device['partitions'], key=lambda x: x['path']):
                 lines.append(list_format_dev_plain(dev=p,
                                                    prefix=' '))
         else:
