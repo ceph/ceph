@@ -1912,6 +1912,64 @@ static void populate_with_generic_attrs(const req_state * const s,
 }
 
 
+static int filter_out_quota_info(std::map<std::string, bufferlist>& add_attrs,
+                                 const std::set<std::string>& rmattr_names,
+                                 RGWQuotaInfo& quota,
+                                 bool * quota_extracted = nullptr)
+{
+  bool extracted = false;
+
+  /* Put new limit on max objects. */
+  auto iter = add_attrs.find(RGW_ATTR_QUOTA_NOBJS);
+  std::string err;
+  if (std::end(add_attrs) != iter) {
+    quota.max_objects =
+      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    add_attrs.erase(iter);
+    extracted = true;
+  }
+
+  /* Put new limit on bucket (container) size. */
+  iter = add_attrs.find(RGW_ATTR_QUOTA_MSIZE);
+  if (iter != add_attrs.end()) {
+    quota.max_size =
+      static_cast<int64_t>(strict_strtoll(iter->second.c_str(), 10, &err));
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    add_attrs.erase(iter);
+    extracted = true;
+  }
+
+  for (const auto& name : rmattr_names) {
+    /* Remove limit on max objects. */
+    if (name.compare(RGW_ATTR_QUOTA_NOBJS) == 0) {
+      quota.max_objects = -1;
+      extracted = true;
+    }
+
+    /* Remove limit on max bucket size. */
+    if (name.compare(RGW_ATTR_QUOTA_MSIZE) == 0) {
+      quota.max_size = -1;
+      extracted = true;
+    }
+  }
+
+  /* Swift requries checking on raw usage instead of the 4 KiB rounded one. */
+  quota.check_on_raw = true;
+  quota.enabled = quota.max_size > 0 || quota.max_objects > 0;
+
+  if (quota_extracted) {
+    *quota_extracted = extracted;
+  }
+
+  return 0;
+}
+
+
 void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
@@ -2014,18 +2072,28 @@ void RGWCreateBucket::execute()
     emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
   }
 
+  RGWQuotaInfo quota_info;
+  const RGWQuotaInfo * pquota_info = nullptr;
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special
      * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
     rgw_get_request_metadata(s->cct, s->info, attrs, false);
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
+
+    op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
+    if (op_ret < 0) {
+      return;
+    }
+
+    pquota_info = &quota_info;
   }
 
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
   op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
-				placement_rule, swift_ver_location, attrs,
+				placement_rule, swift_ver_location,
+				pquota_info, attrs,
 				info, pobjv, &ep_objv, creation_time,
 				pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
@@ -2094,7 +2162,12 @@ void RGWCreateBucket::execute()
       rgw_get_request_metadata(s->cct, s->info, attrs, false);
       prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
       populate_with_generic_attrs(s, attrs);
+      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
+      if (op_ret < 0) {
+        return;
+      }
 
+      /* This will also set the quota on the bucket. */
       op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
                                     &s->bucket_info.objv_tracker);
     } while (op_ret == -ECANCELED && tries++ < 20);
@@ -2730,44 +2803,6 @@ done:
   dispose_processor(processor);
 }
 
-int RGWPutMetadataAccount::handle_temp_url_update(
-  const map<int, string>& temp_url_keys) {
-  RGWUserAdminOpState user_op;
-  user_op.set_user_id(s->user->user_id);
-
-  map<int, string>::const_iterator iter;
-  for (iter = temp_url_keys.begin(); iter != temp_url_keys.end(); ++iter) {
-    user_op.set_temp_url_key(iter->second, iter->first);
-  }
-
-  RGWUser user;
-  op_ret = user.init(store, user_op);
-  if (op_ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: could not init user ret=" << op_ret
-			   << dendl;
-    return op_ret;
-  }
-
-  string err_msg;
-  op_ret = user.modify(user_op, &err_msg);
-  if (op_ret < 0) {
-    ldout(store->ctx(), 10) << "user.modify() returned " << op_ret << ": "
-			    << err_msg << dendl;
-    return op_ret;
-  }
-  return 0;
-}
-
-int RGWPutMetadataAccount::verify_permission()
-{
-  if (!rgw_user_is_authenticated(*(s->user))) {
-    return -EACCES;
-  }
-  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
-  //   return -EACCES;
-  // }
-  return 0;
-}
 
 void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                                 const set<string>& rmattr_names,
@@ -2787,10 +2822,7 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
     add_attrs.erase(iter);
   }
 
-  set<string>::const_iterator riter;
-  for(riter = rmattr_names.begin(); riter != rmattr_names.end(); ++riter) {
-    const string& name = *riter;
-
+  for (const string& name : rmattr_names) {
     if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
       temp_url_keys[0] = string();
     }
@@ -2800,56 +2832,97 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
   }
 }
 
-void RGWPutMetadataAccount::execute()
+int RGWPutMetadataAccount::init_processing()
 {
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
-  RGWObjVersionTracker acct_op_tracker;
+  /* First, go to the base class. At the time of writing the method was
+   * responsible only for initializing the quota. This isn't necessary
+   * here as we are touching metadata only. I'm putting this call only
+   * for the future. */
+  op_ret = RGWOp::init_processing();
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   op_ret = get_params();
   if (op_ret < 0) {
-    return;
+    return op_ret;
   }
 
   op_ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, orig_attrs,
                                      &acct_op_tracker);
   if (op_ret < 0) {
-    return;
+    return op_ret;
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
-  RGWUserInfo orig_uinfo;
-  op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, orig_uinfo,
+  /* Try extract the TempURL-related stuff now to allow verify_permission
+   * evaluate whether we need FULL_CONTROL or not. */
+  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
+
+  /* The same with quota except a client needs to be reseller admin. */
+  op_ret = filter_out_quota_info(attrs, rmattr_names, new_quota,
+                                 &new_quota_extracted);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  return 0;
+}
+
+int RGWPutMetadataAccount::verify_permission()
+{
+  if (!rgw_user_is_authenticated(*(s->user))) {
+    return -EACCES;
+  }
+
+  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
+  //   return -EACCES;
+  // }
+
+  /* Altering TempURL keys requires FULL_CONTROL. */
+  if (!temp_url_keys.empty() && s->perm_mask != RGW_PERM_FULL_CONTROL) {
+    return -EPERM;
+  }
+
+  /* We are failing this intensionally to allow system user/reseller admin
+   * override in rgw_process.cc. This is the way to specify a given RGWOp
+   * expect extra privileges.  */
+  if (new_quota_extracted) {
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+void RGWPutMetadataAccount::execute()
+{
+  /* Params have been extracted earlier. See init_processing(). */
+  RGWUserInfo new_uinfo;
+  op_ret = rgw_get_user_info_by_uid(store, s->user->user_id, new_uinfo,
                                     &acct_op_tracker);
   if (op_ret < 0) {
     return;
   }
 
   /* Handle the TempURL-related stuff. */
-  map<int, string> temp_url_keys;
-  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
   if (!temp_url_keys.empty()) {
-    if (s->perm_mask != RGW_PERM_FULL_CONTROL) {
-      op_ret = -EPERM;
-      return;
+    for (auto& pair : temp_url_keys) {
+      new_uinfo.temp_url_keys[pair.first] = std::move(pair.second);
     }
   }
 
-  /* XXX tenant needed? */
-  op_ret = rgw_store_user_info(store, *(s->user), &orig_uinfo,
+  /* Handle the quota extracted at the verify_permission step. */
+  if (new_quota_extracted) {
+    new_uinfo.user_quota = std::move(new_quota);
+  }
+
+  /* We are passing here the current (old) user info to allow the function
+   * optimize-out some operations. */
+  op_ret = rgw_store_user_info(store, new_uinfo, s->user,
                                &acct_op_tracker, real_time(), false, &attrs);
-  if (op_ret < 0) {
-    return;
-  }
-
-  if (!temp_url_keys.empty()) {
-    op_ret = handle_temp_url_update(temp_url_keys);
-    if (op_ret < 0) {
-      return;
-    }
-  }
 }
 
 int RGWPutMetadataBucket::verify_permission()
@@ -2901,9 +2974,20 @@ void RGWPutMetadataBucket::execute()
   prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
 
+  /* According  to the Swift's behaviour and its container_quota WSGI middleware
+   * implementation: anyone with write permissions is able to set the bucket
+   * quota. This stays in contrast to account quotas that can be set only by
+   * clients holding reseller admin privileges. */
+  op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
+  if (op_ret < 0) {
+    return;
+  }
+
   s->bucket_info.swift_ver_location = swift_ver_location;
   s->bucket_info.swift_versioning = (!swift_ver_location.empty());
 
+  /* Setting attributes also stores the provided bucket info. Due to this
+   * fact, the new quota settings can be serialized with the same call. */
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
 				&s->bucket_info.objv_tracker);
 }
