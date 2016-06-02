@@ -2799,8 +2799,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "mirror_image_enable " << ictx << dendl;
 
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
     cls::rbd::MirrorMode mirror_mode;
-    int r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
+    r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
     if (r < 0) {
       lderr(cct) << "cannot enable mirroring: failed to retrieve mirror mode: "
         << cpp_strerror(r) << dendl;
@@ -2824,8 +2829,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "mirror_image_disable " << ictx << dendl;
 
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
     cls::rbd::MirrorMode mirror_mode;
-    int r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
+    r = cls_client::mirror_mode_get(&ictx->md_ctx, &mirror_mode);
     if (r < 0) {
       lderr(cct) << "cannot disable mirroring: failed to retrieve pool "
         "mirroring mode: " << cpp_strerror(r) << dendl;
@@ -2850,7 +2860,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << ", "
                    << "force=" << force << dendl;
 
-    int r = validate_mirroring_enabled(ictx);
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
+    r = validate_mirroring_enabled(ictx);
     if (r < 0) {
       return r;
     }
@@ -2885,7 +2900,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
-    int r = validate_mirroring_enabled(ictx);
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
+    r = validate_mirroring_enabled(ictx);
     if (r < 0) {
       return r;
     }
@@ -2942,7 +2962,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << ": ictx=" << ictx << dendl;
 
-    int r = validate_mirroring_enabled(ictx);
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
+    r = validate_mirroring_enabled(ictx);
     if (r < 0) {
       return r;
     }
@@ -2976,8 +3001,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -ERANGE;
     }
 
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
     cls::rbd::MirrorImage mirror_image_internal;
-    int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+    r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
         &mirror_image_internal);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
@@ -3015,8 +3045,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -ERANGE;
     }
 
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
     mirror_image_info_t info;
-    int r = mirror_image_get_info(ictx, &info, sizeof(info));
+    r = mirror_image_get_info(ictx, &info, sizeof(info));
     if (r < 0) {
       return r;
     }
