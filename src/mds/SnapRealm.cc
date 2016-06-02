@@ -189,8 +189,8 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
       return false;
     }
     SnapRealm *parent_realm = open_past_parents[p->second.ino].first;
-    if (parent_realm->have_past_parents_open(MAX(first, p->second.first),
-					     MIN(last, p->first)))
+    if (!parent_realm->have_past_parents_open(MAX(first, p->second.first),
+					      MIN(last, p->first)))
       return false;
   }
 
