@@ -24,7 +24,7 @@ fi
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
   # Out of tree build, learn source location from CMakeCache.txt
-  CEPH_ROOT=`grep Ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  CEPH_ROOT=`grep ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
   CEPH_BUILD_DIR=`pwd`
 fi
 
