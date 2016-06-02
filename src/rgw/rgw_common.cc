@@ -836,7 +836,7 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
 string RGWHTTPArgs::sys_get(const string& name, bool * const exists)
 {
   const auto iter = sys_val_map.find(name);
-  const bool e = (iter != val_map.end());
+  const bool e = (iter != sys_val_map.end());
 
   if (exists) {
     *exists = e;
