@@ -315,6 +315,12 @@ add_subdirectory(json_spirit)
 
 include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
 
+set(GMOCK_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/gmock/include")
+set(GTEST_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/gmock/gtest/include")
+
+include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
+include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+
 set(xio_common_srcs)
 if(HAVE_XIO)
   list(APPEND xio_common_srcs
@@ -749,9 +755,6 @@ add_executable(ceph-mds ${ceph_mds_srcs}
 target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
   ${Boost_THREAD_LIBRARY})
 install(TARGETS ceph-mds DESTINATION bin)
-
-set(GMOCK_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/gmock/include")
-set(GTEST_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/src/gmock/gtest/include")
 
 add_subdirectory(erasure-code)
 

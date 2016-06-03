@@ -42,6 +42,13 @@ add_executable(unittest_prioritized_queue
 add_ceph_unittest(unittest_prioritized_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_prioritized_queue)
 target_link_libraries(unittest_prioritized_queue global ${BLKID_LIBRARIES})
 
+# unittest_prioritized_queue
+add_executable(unittest_mclock_priority_queue EXCLUDE_FROM_ALL
+  test_mclock_priority_queue.cc
+  )
+add_ceph_unittest(unittest_mclock_priority_queue ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mclock_priority_queue)
+target_link_libraries(unittest_mclock_priority_queue global ${BLKID_LIBRARIES} dmclock)
+
 # unittest_str_map
 add_executable(unittest_str_map
   test_str_map.cc
