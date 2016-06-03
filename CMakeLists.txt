@@ -20,9 +20,9 @@ endif()
 add_subdirectory(src)
 add_subdirectory(sim)
 
-if(NOT GTEST_INCLUDE_DIRS)
-  find_package(gtest REQUIRED)
-endif(NOT GTEST_INCLUDE_DIRS)
+# if(NOT GTEST_INCLUDE_DIRS)
+#   find_package(gtest REQUIRED)
+# endif(NOT GTEST_INCLUDE_DIRS)
 
 function(dmclock_config_testing)
   set(CMAKE_CTEST_COMMAND ctest -V)
