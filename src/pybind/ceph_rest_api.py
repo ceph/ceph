@@ -11,6 +11,9 @@ import xml.etree.ElementTree
 import xml.sax.saxutils
 
 import flask
+
+from flask import render_template
+
 from ceph_argparse import \
     ArgumentError, CephPgid, CephOsdName, CephChoices, CephPrefix, \
     concise_sig, descsort, parse_funcsig, parse_json_funcsigs, \
@@ -260,38 +263,54 @@ def concise_sig_for_uri(sig, flavor):
 
 
 def show_human_help(prefix):
-    '''
+    """
     Dump table showing commands matching prefix
-    '''
-    # XXX There ought to be a better discovery mechanism than an HTML table
-    s = '<html><body><table border=1><th>Possible commands:</th><th>Method</th><th>Description</th>'
-
+    """
     permmap = {'r': 'GET', 'rw': 'PUT', 'rx': 'GET', 'rwx': 'PUT'}
-    line = ''
+    data = []
     for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
-        concise = concise_sig(cmdsig['sig'])
         flavor = cmdsig.get('flavor', 'mon')
+        endpoint = concise_sig_for_uri(cmdsig['sig'], flavor)
+
+        concise = concise_sig(cmdsig['sig'])
         if flavor == 'tell':
             concise = 'tell/<target>/' + concise
-        if concise.startswith(prefix):
-            line = ['<tr><td>']
-            wrapped_sig = textwrap.wrap(
-                concise_sig_for_uri(cmdsig['sig'], flavor), 40
-            )
-            for sigline in wrapped_sig:
-                line.append(flask.escape(sigline) + '\n')
-            line.append('</td><td>')
-            line.append(permmap[cmdsig['perm']])
-            line.append('</td><td>')
-            line.append(flask.escape(cmdsig['help']))
-            line.append('</td></tr>\n')
-            s += ''.join(line)
 
-    s += '</table></body></html>'
-    if line:
-        return s
-    else:
-        return ''
+        if not concise.startswith(prefix):
+            continue
+
+        path = {
+            'module': cmdsig['module'],
+            'method': permmap[cmdsig['perm']],
+            'help': cmdsig['help'],
+            'endpoint': endpoint,
+            'header': endpoint.split('?')[0],
+            'short': concise,
+            'params': []
+        }
+
+        for each in cmdsig['sig']:
+            if each.name != 'prefix':
+                path['params'].append(
+                    {'name': each.name,
+                     'required': each.req,
+                     'n': each.N,
+                     'type_class': each.t.__name__,
+                     'type': str(each.instance)
+                     }
+                )
+
+        data.append(path)
+
+    conf = {
+        'addr': app.ceph_addr,
+        'port': app.ceph_port,
+        'baseurl': app.ceph_baseurl,
+        'version': app.ceph_baseurl.split('/')[-1],
+        'prefix': prefix or 'None (main)'
+    }
+
+    return render_template('index.html', data=data, conf=conf)
 
 
 @app.before_request
