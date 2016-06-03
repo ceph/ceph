@@ -7223,8 +7223,9 @@ void MDCache::check_memory_usage()
 
   // check client caps
   int num_inodes = inode_map.size();
-  float caps_per_inode = (float)num_caps / (float)num_inodes;
-  //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
+  float caps_per_inode = 0.0;
+  if (num_inodes)
+    caps_per_inode = (float)num_caps / (float)num_inodes;
 
   dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
