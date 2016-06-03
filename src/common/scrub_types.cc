@@ -158,18 +158,34 @@ void inconsistent_snapset_wrapper::set_headless()
 
 void inconsistent_snapset_wrapper::set_ss_attr_missing()
 {
-  errors |= inc_snapset_t::ATTR_MISSING;
+  errors |= inc_snapset_t::SNAPSET_MISSING;
+}
+
+void inconsistent_snapset_wrapper::set_oi_attr_missing()
+{
+  errors |= inc_snapset_t::OI_MISSING;
 }
 
 void inconsistent_snapset_wrapper::set_ss_attr_corrupted()
 {
-  errors |= inc_snapset_t::ATTR_CORRUPTED;
+  errors |= inc_snapset_t::SNAPSET_CORRUPTED;
+}
+
+void inconsistent_snapset_wrapper::set_oi_attr_corrupted()
+{
+  errors |= inc_snapset_t::OI_CORRUPTED;
 }
 
 void inconsistent_snapset_wrapper::set_clone_missing(snapid_t snap)
 {
   errors |= inc_snapset_t::CLONE_MISSING;
   missing.push_back(snap);
+}
+
+void inconsistent_snapset_wrapper::set_clone(snapid_t snap)
+{
+  errors |= inc_snapset_t::EXTRA_CLONES;
+  clones.push_back(snap);
 }
 
 void inconsistent_snapset_wrapper::set_snapset_mismatch()

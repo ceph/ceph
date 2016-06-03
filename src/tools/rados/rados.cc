@@ -1248,16 +1248,24 @@ static void dump_shard(const shard_info_t& shard,
 {
   f.dump_bool("missing", shard.has_shard_missing());
   if (shard.has_shard_missing()) {
+    f.dump_bool("missing", shard.has_shard_missing());
     return;
   }
-  f.dump_bool("read_error", shard.has_read_error());
-  f.dump_bool("data_digest_mismatch", shard.has_data_digest_mismatch());
-  f.dump_bool("omap_digest_mismatch", shard.has_omap_digest_mismatch());
-  f.dump_bool("size_mismatch", shard.has_size_mismatch());
+  if (shard.has_read_error())
+    f.dump_bool("read_error", shard.has_read_error());
+  if (shard.has_data_digest_mismatch())
+    f.dump_bool("data_digest_mismatch", shard.has_data_digest_mismatch());
+  if (shard.has_omap_digest_mismatch())
+    f.dump_bool("omap_digest_mismatch", shard.has_omap_digest_mismatch());
+  if (shard.has_size_mismatch())
+    f.dump_bool("size_mismatch", shard.has_size_mismatch());
   if (!shard.has_read_error()) {
-    f.dump_bool("data_digest_mismatch_oi", shard.has_data_digest_mismatch_oi());
-    f.dump_bool("omap_digest_mismatch_oi", shard.has_omap_digest_mismatch_oi());
-    f.dump_bool("size_mismatch_oi", shard.has_size_mismatch_oi());
+    if (shard.has_data_digest_mismatch_oi())
+      f.dump_bool("data_digest_mismatch_oi", shard.has_data_digest_mismatch_oi());
+    if (shard.has_omap_digest_mismatch_oi())
+      f.dump_bool("omap_digest_mismatch_oi", shard.has_omap_digest_mismatch_oi());
+    if (shard.has_size_mismatch_oi())
+      f.dump_bool("size_mismatch_oi", shard.has_size_mismatch_oi());
   }
   f.dump_unsigned("size", shard.size);
   if (shard.omap_digest_present) {
@@ -1279,6 +1287,11 @@ static void dump_shard(const shard_info_t& shard,
     }
     f.close_section();
   }
+
+  if (shard.has_attr_missing())
+    f.dump_bool("attr_missing", shard.has_attr_missing());
+  if (shard.has_attr_unexpected())
+    f.dump_bool("attr_unexpected", shard.has_attr_unexpected());
 }
 
 static void dump_object_id(const object_id_t& object,
@@ -1321,7 +1334,6 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
     f.close_section();
   }
   f.close_section();
-  f.close_section();
 }
 
 static void dump_inconsistent(const inconsistent_snapset_t& inc,
@@ -1336,20 +1348,42 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   f.dump_bool("headless", inc.headless());
   f.dump_bool("size_mismatch", inc.size_mismatch());
 
-  if (inc.clone_missing()) {
-    f.open_array_section("clones");
+  if (inc.ss_attr_missing())
+    f.dump_bool("ss_attr_missing", inc.ss_attr_missing());
+  if (inc.ss_attr_corrupted())
+    f.dump_bool("ss_attr_corrupted", inc.ss_attr_corrupted());
+  if (inc.oi_attr_missing())
+    f.dump_bool("oi_attr_missing", inc.oi_attr_missing());
+  if (inc.oi_attr_corrupted())
+    f.dump_bool("oi_attr_corrupted", inc.oi_attr_corrupted());
+  if (inc.snapset_mismatch())
+    f.dump_bool("snapset_mismatch", inc.snapset_mismatch());
+  if (inc.head_mismatch())
+    f.dump_bool("head_mismatch", inc.head_mismatch());
+  if (inc.headless())
+    f.dump_bool("headless", inc.headless());
+  if (inc.size_mismatch())
+    f.dump_bool("size_mismatch", inc.size_mismatch());
+
+  if (inc.extra_clones()) {
+    f.dump_bool("extra_clones", inc.extra_clones());
+    f.open_array_section("extra clones");
     for (auto snap : inc.clones) {
       f.dump_unsigned("snap", snap);
     }
     f.close_section();
+  }
 
+  if (inc.clone_missing()) {
+    f.open_array_section("clones");
+
+    f.dump_bool("clone_missing", inc.clone_missing());
     f.open_array_section("missing");
     for (auto snap : inc.missing) {
       f.dump_unsigned("snap", snap);
     }
     f.close_section();
   }
-  f.close_section();
 }
 
 // dispatch the call by type
@@ -1392,9 +1426,9 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     cerr << "bad pg: " << nargs[1] << std::endl;
     return ret;
   }
-
-  uint32_t interval = 0;
+  uint32_t interval = 0, first_interval = 0;
   const unsigned max_item_num = 32;
+  bool opened = false;
   for (librados::object_id_t start;;) {
     std::vector<T> items;
     auto completion = librados::Rados::aio_create_completion();
@@ -1403,16 +1437,29 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     completion->wait_for_safe();
     ret = completion->get_return_value();
     completion->release();
-    if (ret == -EAGAIN) {
-      cerr << "interval#" << interval << " expired." << std::endl;
+    if (ret < 0) {
+      if (ret == -EAGAIN)
+        cerr << "interval#" << interval << " expired." << std::endl;
+      else if (ret == -ENOENT)
+        cerr << "No scrub information available for pg " << pg << std::endl;
+      else
+        cerr << "Unknown error " << cpp_strerror(ret) << std::endl;
       break;
     }
+    // It must be the same interval every time.  EAGAIN would
+    // occur if interval changes.
+    assert(start.name.empty() || first_interval == interval);
     if (start.name.empty()) {
+      first_interval = interval;
+      formatter.open_object_section("info");
+      formatter.dump_int("epoch", interval);
       formatter.open_array_section("inconsistents");
+      opened = true;
     }
     for (auto& inc : items) {
       formatter.open_object_section("inconsistent");
       dump_inconsistent(inc, formatter);
+      formatter.close_section();
     }
     if (items.size() < max_item_num) {
       formatter.close_section();
@@ -1423,7 +1470,10 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     items.clear();
   }
-  formatter.flush(cout);
+  if (opened) {
+    formatter.close_section();
+    formatter.flush(cout);
+  }
   return ret;
 }
 
@@ -2758,6 +2808,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (!object_size)
       object_size = op_size;
+    else if (object_size < op_size)
+      op_size = object_size;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
 			    max_objects, cleanup, run_name, no_verify);
