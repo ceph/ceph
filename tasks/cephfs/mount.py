@@ -23,6 +23,7 @@ class CephFSMount(object):
         self.test_dir = test_dir
         self.client_id = client_id
         self.client_remote = client_remote
+        self.mountpoint_dir_name = 'mnt.{id}'.format(id=self.client_id)
 
         self.test_files = ['a', 'b', 'c']
 
@@ -30,7 +31,8 @@ class CephFSMount(object):
 
     @property
     def mountpoint(self):
-        return os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
+        return os.path.join(
+            self.test_dir, '{dir_name}'.format(dir_name=self.mountpoint_dir_name))
 
     def is_mounted(self):
         raise NotImplementedError()
@@ -564,3 +566,19 @@ class CephFSMount(object):
         """
         p = self.run_shell(["getfattr", "--only-values", "-n", attr, path])
         return p.stdout.getvalue()
+
+    def df(self):
+        """
+        Wrap df: return a dict of usage fields in bytes
+        """
+
+        p = self.run_shell(["df", "-B1", "."])
+        lines = p.stdout.getvalue().strip().split("\n")
+        fs, total, used, avail = lines[1].split()[:4]
+        log.warn(lines)
+
+        return {
+            "total": int(total),
+            "used": int(used),
+            "available": int(avail)
+        }

@@ -11,23 +11,27 @@ log = logging.getLogger(__name__)
 
 class TestVolumeClient(CephFSTestCase):
     # One for looking at the global filesystem, one for being
-    # the VolumeClient, one for mounting the created shares
-    CLIENTS_REQUIRED = 3
+    # the VolumeClient, two for mounting the created shares
+    CLIENTS_REQUIRED = 4
 
-    def _volume_client_python(self, client, script):
+    def _volume_client_python(self, client, script, vol_prefix=None, ns_prefix=None):
         # Can't dedent this *and* the script we pass in, because they might have different
         # levels of indentation to begin with, so leave this string zero-indented
+        if vol_prefix:
+            vol_prefix = "\"" + vol_prefix + "\""
+        if ns_prefix:
+            ns_prefix = "\"" + ns_prefix + "\""
         return client.run_python("""
 from ceph_volume_client import CephFSVolumeClient, VolumePath
 import logging
 log = logging.getLogger("ceph_volume_client")
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.DEBUG)
-vc = CephFSVolumeClient("manila", "{conf_path}", "ceph")
+vc = CephFSVolumeClient("manila", "{conf_path}", "ceph", {vol_prefix}, {ns_prefix})
 vc.connect()
 {payload}
 vc.disconnect()
-        """.format(payload=script, conf_path=client.config_path))
+        """.format(payload=script, conf_path=client.config_path, vol_prefix=vol_prefix, ns_prefix=ns_prefix))
 
     def _sudo_write_file(self, remote, path, data):
         """
@@ -64,6 +68,34 @@ vc.disconnect()
         self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
+    def test_default_prefix(self):
+        group_id = "grpid"
+        volume_id = "volid"
+        guest_entity = "guest"
+        DEFAULT_VOL_PREFIX = "volumes"
+        DEFAULT_NS_PREFIX = "fsvolumens_"
+
+        self.mount_b.umount_wait()
+        self._configure_vc_auth(self.mount_b, "manila")
+
+        #create a volume with default prefix
+        self._volume_client_python(self.mount_b, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.create_volume(vp, 10, data_isolated=True)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            guest_entity=guest_entity
+        )))
+
+        # The dir should be created
+        self.mount_a.stat(os.path.join(DEFAULT_VOL_PREFIX, group_id, volume_id))
+
+        #namespace should be set
+        ns_in_attr = self.mount_a.getfattr(os.path.join(DEFAULT_VOL_PREFIX, group_id, volume_id), "ceph.dir.layout.pool_namespace")
+        namespace = "{0}{1}".format(DEFAULT_NS_PREFIX, volume_id)
+        self.assertEqual(namespace, ns_in_attr)
+
     def test_lifecycle(self):
         """
         General smoke test for create, extend, destroy
@@ -84,16 +116,19 @@ vc.disconnect()
         group_id = "grpid"
         volume_id = "volid"
 
+        volume_prefix = "/myprefix"
+        namespace_prefix = "mynsprefix_"
+
         # Create
         mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
-            create_result = vc.create_volume(vp, 10)
+            create_result = vc.create_volume(vp, 1024*1024*100)
             print create_result['mount_path']
         """.format(
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
         # Authorize
         key = self._volume_client_python(self.mount_b, dedent("""
@@ -104,10 +139,10 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
         # The dir should be created
-        self.mount_a.stat(os.path.join("volumes", group_id, volume_id))
+        self.mount_a.stat(os.path.join("myprefix", group_id, volume_id))
 
         # The auth identity should exist
         existing_ids = [a['entity'] for a in self.auth_list()]
@@ -125,20 +160,47 @@ vc.disconnect()
         # We should be able to mount the volume
         self.mounts[2].client_id = guest_entity
         self._sudo_write_file(self.mounts[2].client_remote, self.mounts[2].get_keyring_path(), keyring_txt)
+        self.set_conf("client.{0}".format(guest_entity), "client quota", "true")
         self.set_conf("client.{0}".format(guest_entity), "debug client", "20")
         self.set_conf("client.{0}".format(guest_entity), "debug objecter", "20")
         self.set_conf("client.{0}".format(guest_entity), "keyring", self.mounts[2].get_keyring_path())
         self.mounts[2].mount(mount_path=mount_path)
-        self.mounts[2].write_n_mb("data.bin", 1)
 
-        #sync so that file data are persist to rados
+        # df granularity is 4MB block so have to write at least that much
+        data_bin_mb = 4
+        self.mounts[2].write_n_mb("data.bin", data_bin_mb)
+
+        # Write something outside volume to check this space usage is
+        # not reported in the volume's DF.
+        other_bin_mb = 6
+        self.mount_a.write_n_mb("other.bin", other_bin_mb)
+
+        # global: df should see all the writes (data + other).  This is a >
+        # rather than a == because the global spaced used includes all pools
+        self.assertGreater(self.mount_a.df()['used'],
+                           (data_bin_mb + other_bin_mb) * 1024 * 1024)
+
+        # Hack: do a metadata IO to kick rstats
+        self.mounts[2].run_shell(["touch", "foo"])
+
+        # volume: df should see the data_bin_mb consumed from quota, same
+        # as the rbytes for the volume's dir
+        self.wait_until_equal(
+                lambda: self.mounts[2].df()['used'],
+                data_bin_mb * 1024 * 1024, timeout=60)
+        self.wait_until_equal(
+                lambda: self.mount_a.getfattr(
+                    os.path.join(volume_prefix.strip("/"), group_id, volume_id),
+                    "ceph.dir.rbytes"),
+                "%s" % (data_bin_mb * 1024 * 1024), timeout=60)
+
+        # sync so that file data are persist to rados
         self.mounts[2].run_shell(["sync"])
 
         # Our data should stay in particular rados namespace
-        pool_name = self.mount_a.getfattr(os.path.join("volumes", group_id, volume_id), "ceph.dir.layout.pool")
-        NS_PREFIX = "fsvolumens_"
-        namespace = "{0}{1}".format(NS_PREFIX, volume_id)
-        ns_in_attr = self.mount_a.getfattr(os.path.join("volumes", group_id, volume_id), "ceph.dir.layout.pool_namespace")
+        pool_name = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool")
+        namespace = "{0}{1}".format(namespace_prefix, volume_id)
+        ns_in_attr = self.mount_a.getfattr(os.path.join("myprefix", group_id, volume_id), "ceph.dir.layout.pool_namespace")
         self.assertEqual(namespace, ns_in_attr)
 
         objects_in_ns = set(self.fs.rados(["ls"], pool=pool_name, namespace=namespace).split("\n"))
@@ -153,7 +215,7 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
         # Once deauthorized, the client should be unable to do any more metadata ops
         # The way that the client currently behaves here is to block (it acts like
@@ -184,7 +246,7 @@ vc.disconnect()
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity
-        )))
+        )), volume_prefix, namespace_prefix)
 
     def test_idempotency(self):
         """
@@ -309,3 +371,163 @@ vc.disconnect()
         # List the dir's contents on mount A
         self.assertListEqual(self.mount_a.ls("parent1/mydir"),
                              ["afile"])
+
+    def test_evict_client(self):
+        """
+        That a volume client can be evicted based on its auth ID and the volume
+        path it has mounted.
+        """
+
+        # mounts[1] would be used as handle for driving VolumeClient. mounts[2]
+        # and mounts[3] would be used as guests to mount the volumes/shares.
+
+        for i in range(1, 4):
+            self.mounts[i].umount_wait()
+
+        self._configure_vc_auth(self.mounts[1], "manila")
+
+        guest_entity = "guest"
+        group_id = "grpid"
+        mount_paths = []
+        volume_ids = []
+
+        # Create two volumes. Authorize 'guest' auth ID to mount the two
+        # volumes. Mount the two volumes. Write data to the volumes.
+        for i in range(2):
+            # Create volume.
+            volume_ids.append("volid_{0}".format(str(i)))
+            mount_paths.append(
+                self._volume_client_python(self.mounts[1], dedent("""
+                    vp = VolumePath("{group_id}", "{volume_id}")
+                    create_result = vc.create_volume(vp, 10)
+                    print create_result['mount_path']
+                """.format(
+                    group_id=group_id,
+                    volume_id=volume_ids[i]
+            ))))
+
+            # Authorize 'guest' auth ID to mount the volume.
+            key = self._volume_client_python(self.mounts[1], dedent("""
+                vp = VolumePath("{group_id}", "{volume_id}")
+                auth_result = vc.authorize(vp, "{guest_entity}")
+                print auth_result['auth_key']
+            """.format(
+                group_id=group_id,
+                volume_id=volume_ids[i],
+                guest_entity=guest_entity
+            )))
+
+            keyring_txt = dedent("""
+            [client.{guest_entity}]
+                key = {key}
+
+            """.format(
+                guest_entity=guest_entity,
+                key=key
+            ))
+
+            # Mount the volume.
+            self.mounts[i+2].client_id = guest_entity
+            self.mounts[i+2].mountpoint_dir_name = 'mnt.{id}.{suffix}'.format(
+                id=guest_entity, suffix=str(i))
+            self._sudo_write_file(
+                self.mounts[i+2].client_remote,
+                self.mounts[i+2].get_keyring_path(),
+                keyring_txt,
+            )
+            self.set_conf(
+                "client.{0}".format(guest_entity),
+                "keyring", self.mounts[i+2].get_keyring_path()
+            )
+            self.mounts[i+2].mount(mount_path=mount_paths[i])
+            self.mounts[i+2].write_n_mb("data.bin", 1)
+
+
+        # Evict client, mounts[2], using auth ID 'guest' and has mounted
+        # one volume.
+        self._volume_client_python(self.mount_b, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.evict("{guest_entity}", volume_path=vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_ids[0],
+            guest_entity=guest_entity
+        )))
+
+        # Evicted guest client, mounts[2], should not be able to do anymore metadata
+        # ops. It behaves as if it has lost network connection.
+        background = self.mounts[2].write_n_mb("rogue.bin", 1, wait=False)
+        # Approximate check for 'stuck' as 'still running after 10s'.
+        time.sleep(10)
+        self.assertFalse(background.finished)
+
+        # Guest client, mounts[3], using the same auth ID 'guest', but has mounted
+        # the other volume, should be able to use its volume unaffected.
+        self.mounts[3].write_n_mb("data.bin.1", 1)
+
+        # Cleanup.
+        for i in range(2):
+            self._volume_client_python(self.mounts[1], dedent("""
+                vp = VolumePath("{group_id}", "{volume_id}")
+                vc.deauthorize(vp, "{guest_entity}")
+                vc.delete_volume(vp)
+                vc.purge_volume(vp)
+            """.format(
+                group_id=group_id,
+                volume_id=volume_ids[i],
+                guest_entity=guest_entity
+            )))
+
+        # We must hard-umount the one that we evicted
+        self.mounts[2].umount_wait(force=True)
+
+    def test_purge(self):
+        """
+        Reproducer for #15266, exception trying to purge volumes that
+        contain non-ascii filenames.
+
+        Additionally test any other purge corner cases here.
+        """
+        # I'm going to leave mount_b unmounted and just use it as a handle for
+        # driving volumeclient.  It's a little hacky but we don't have a more
+        # general concept for librados/libcephfs clients as opposed to full
+        # blown mounting clients.
+        self.mount_b.umount_wait()
+        self._configure_vc_auth(self.mount_b, "manila")
+
+        group_id = "grpid"
+        # Use a unicode volume ID (like Manila), to reproduce #15266
+        volume_id = u"volid"
+
+        # Create
+        mount_path = self._volume_client_python(self.mount_b, dedent("""
+            vp = VolumePath("{group_id}", u"{volume_id}")
+            create_result = vc.create_volume(vp, 10)
+            print create_result['mount_path']
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id
+        )))
+
+        # Strip leading "/"
+        mount_path = mount_path[1:]
+
+        # A file with non-ascii characters
+        self.mount_a.run_shell(["touch", os.path.join(mount_path, u"b\u00F6b")])
+
+        # A file with no permissions to do anything
+        self.mount_a.run_shell(["touch", os.path.join(mount_path, "noperms")])
+        self.mount_a.run_shell(["chmod", "0000", os.path.join(mount_path, "noperms")])
+
+        self._volume_client_python(self.mount_b, dedent("""
+            vp = VolumePath("{group_id}", u"{volume_id}")
+            vc.delete_volume(vp)
+            vc.purge_volume(vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id
+        )))
+
+        # Check it's really gone
+        self.assertEqual(self.mount_a.ls("volumes/_deleting"), [])
+        self.assertEqual(self.mount_a.ls("volumes/"), ["_deleting", group_id])
