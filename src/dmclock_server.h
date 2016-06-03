@@ -339,6 +339,10 @@ namespace crimson {
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(C)>;
 
+      size_t size() const {
+	return resv_heap.size();
+      }
+
     protected:
 
       // The ClientCompare functor is essentially doing a precedes?
@@ -804,7 +808,6 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    // PULL version
     template<typename C, typename R>
     class PullPriorityQueue : public PriorityQueueBase<C,R> {
       using super = PriorityQueueBase<C,R>;

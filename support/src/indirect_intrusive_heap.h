@@ -143,6 +143,8 @@ namespace crimson {
 
     bool empty() const { return 0 == count; }
 
+    size_t size() const { return count; }
+
     T& top() { return *data[0]; }
 
     I& top_ind() { return data[0]; }
