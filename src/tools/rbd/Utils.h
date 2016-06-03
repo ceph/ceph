@@ -114,6 +114,9 @@ std::string mirror_image_status_state(librbd::mirror_image_status_t status);
 
 std::string timestr(time_t t);
 
+// duplicate here to not include librbd_internal lib
+uint64_t parse_rbd_default_features(CephContext* cct);
+
 } // namespace utils
 } // namespace rbd
 

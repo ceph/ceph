@@ -93,7 +93,7 @@ public:
 					       m_remote_ioctx));
 
     m_image_name = get_temp_image_name();
-    uint64_t features = g_ceph_context->_conf->rbd_default_features;
+    uint64_t features = librbd::util::parse_rbd_default_features(g_ceph_context);
     features |= RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
     int order = 0;
     EXPECT_EQ(0, librbd::create(m_remote_ioctx, m_image_name.c_str(), 1 << 22,

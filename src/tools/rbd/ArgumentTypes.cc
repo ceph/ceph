@@ -3,6 +3,7 @@
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
+#include "tools/rbd/Utils.h"
 #include "include/rbd/features.h"
 #include "common/config.h"
 #include "common/strtol.h"
@@ -17,13 +18,13 @@ namespace argument_types {
 namespace po = boost::program_options;
 
 const std::map<uint64_t, std::string> ImageFeatures::FEATURE_MAPPING = {
-  {RBD_FEATURE_LAYERING, "layering"},
-  {RBD_FEATURE_STRIPINGV2, "striping"},
-  {RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive-lock"},
-  {RBD_FEATURE_OBJECT_MAP, "object-map"},
-  {RBD_FEATURE_FAST_DIFF, "fast-diff"},
-  {RBD_FEATURE_DEEP_FLATTEN, "deep-flatten"},
-  {RBD_FEATURE_JOURNALING, "journaling"}};
+  {RBD_FEATURE_LAYERING, RBD_FEATURE_NAME_LAYERING},
+  {RBD_FEATURE_STRIPINGV2, RBD_FEATURE_NAME_STRIPINGV2},
+  {RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_NAME_EXCLUSIVE_LOCK},
+  {RBD_FEATURE_OBJECT_MAP, RBD_FEATURE_NAME_OBJECT_MAP},
+  {RBD_FEATURE_FAST_DIFF, RBD_FEATURE_NAME_FAST_DIFF},
+  {RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_NAME_DEEP_FLATTEN},
+  {RBD_FEATURE_JOURNALING, RBD_FEATURE_NAME_JOURNALING}};
 
 Format::Formatter Format::create_formatter(bool pretty) const {
   if (value == "json") {
@@ -289,7 +290,7 @@ std::string get_short_features_help(bool append_suffix) {
 
     std::string suffix;
     if (append_suffix) {
-      if ((pair.first & g_conf->rbd_default_features) != 0) {
+      if ((pair.first & rbd::utils::parse_rbd_default_features(g_ceph_context)) != 0) {
         suffix += "+";
       }
       if ((pair.first & RBD_FEATURES_MUTABLE) != 0) {

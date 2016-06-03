@@ -14,6 +14,7 @@
 #include "global/global_context.h"
 #include <iostream>
 #include <boost/regex.hpp>
+#include <boost/algorithm/string.hpp>
 
 namespace rbd {
 namespace utils {
@@ -374,7 +375,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
   } else {
-    features = g_conf->rbd_default_features;
+    features = parse_rbd_default_features(g_ceph_context);
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
@@ -713,6 +714,38 @@ std::string timestr(time_t t) {
   strftime(buf, sizeof(buf), "%F %T", &tm);
 
   return buf;
+}
+
+uint64_t parse_rbd_default_features(CephContext* cct) 
+{
+  int ret = 0;
+  uint64_t value = 0;
+  try {
+    value = std::stoi(cct->_conf->rbd_default_features, NULL, 10);
+  } catch (...) {
+    map<std::string, int> conf_vals = {{RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING}, 
+                                       {RBD_FEATURE_NAME_STRIPINGV2, RBD_FEATURE_STRIPINGV2},
+                                       {RBD_FEATURE_NAME_EXCLUSIVE_LOCK, RBD_FEATURE_EXCLUSIVE_LOCK},
+                                       {RBD_FEATURE_NAME_OBJECT_MAP, RBD_FEATURE_OBJECT_MAP},
+                                       {RBD_FEATURE_NAME_FAST_DIFF, RBD_FEATURE_FAST_DIFF},
+                                       {RBD_FEATURE_NAME_DEEP_FLATTEN, RBD_FEATURE_DEEP_FLATTEN},
+                                       {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING}};
+    std::vector<std::string> strs;
+    boost::split(strs, cct->_conf->rbd_default_features, boost::is_any_of(","));
+    for (std::vector<std::string>::const_iterator i = strs.begin(); i != strs.end(); ++i) {
+      std::string feature = *i;
+      boost::trim(feature);
+      if (conf_vals.find(feature) != conf_vals.end()) {
+        value += conf_vals[feature];
+      } else {
+        ret = -EINVAL;
+        std::cerr << "Warning: unknown rbd feature " << feature << std::endl;
+      }
+    }
+    if (value == 0 && ret == -EINVAL)
+      value = RBD_FEATURES_DEFAULT;
+  }
+  return value;
 }
 
 } // namespace utils

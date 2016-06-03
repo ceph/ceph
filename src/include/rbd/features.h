@@ -9,6 +9,20 @@
 #define RBD_FEATURE_DEEP_FLATTEN        (1<<5)
 #define RBD_FEATURE_JOURNALING          (1<<6)
 
+#define RBD_FEATURES_DEFAULT             (RBD_FEATURE_LAYERING | \
+                                         RBD_FEATURE_EXCLUSIVE_LOCK | \
+                                         RBD_FEATURE_OBJECT_MAP | \
+                                         RBD_FEATURE_FAST_DIFF | \
+                                         RBD_FEATURE_DEEP_FLATTEN)
+
+#define RBD_FEATURE_NAME_LAYERING        "layering"
+#define RBD_FEATURE_NAME_STRIPINGV2      "striping"
+#define RBD_FEATURE_NAME_EXCLUSIVE_LOCK  "exclusive-lock"
+#define RBD_FEATURE_NAME_OBJECT_MAP      "object-map"
+#define RBD_FEATURE_NAME_FAST_DIFF       "fast-diff"
+#define RBD_FEATURE_NAME_DEEP_FLATTEN    "deep-flatten"
+#define RBD_FEATURE_NAME_JOURNALING      "journaling"
+
 /// features that make an image inaccessible for read or write by
 /// clients that don't understand them
 #define RBD_FEATURES_INCOMPATIBLE 	(RBD_FEATURE_LAYERING |       \

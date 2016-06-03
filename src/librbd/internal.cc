@@ -1205,7 +1205,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     bool old_format = cct->_conf->rbd_default_format == 1;
-    uint64_t features = old_format ? 0 : cct->_conf->rbd_default_features;
+    uint64_t features = old_format ? 0 : librbd::util::parse_rbd_default_features(cct);
     return create(io_ctx, imgname, size, old_format, features, order, 0, 0);
   }
 
@@ -1256,7 +1256,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     uint64_t features;
     if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-      features = old_format ? 0 : cct->_conf->rbd_default_features;
+      features = old_format ? 0 : librbd::util::parse_rbd_default_features(cct);
     }
     uint64_t stripe_unit = 0;
     uint64_t stripe_count = 0;
