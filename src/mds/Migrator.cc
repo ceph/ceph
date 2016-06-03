@@ -145,7 +145,8 @@ void Migrator::dispatch(Message *m)
     break;
 
   default:
-    assert(0);
+    derr << "migrator unknown message " << m->get_type() << dendl;
+    assert(0 == "migrator unknown message");
   }
 }
 
