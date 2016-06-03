@@ -179,6 +179,7 @@ public:
   }
 
   bool is_max() const {
+    assert(!max || (*this == hobject_t(hobject_t::get_max())));
     return max;
   }
   bool is_min() const {
