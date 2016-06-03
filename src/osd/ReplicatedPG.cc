@@ -1662,14 +1662,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   // op to succeed despite being full).  The except is FULL_FORCE|FULL_TRY ops,
   // which there is no reason to discard because they bypass all full
   // checks anyway.
-  // FIXME: we exclude mds writes for now.
-  if (!(m->get_source().is_mds() || m->has_flag(CEPH_OSD_FLAG_FULL_FORCE|CEPH_OSD_FLAG_FULL_TRY)) &&
+  if (!(m->has_flag(CEPH_OSD_FLAG_FULL_FORCE|CEPH_OSD_FLAG_FULL_TRY)) &&
       info.history.last_epoch_marked_full > m->get_map_epoch()) {
     dout(10) << __func__ << " discarding op sent before full " << m << " "
 	     << *m << dendl;
     return;
   }
-  if (!m->get_source().is_mds() && osd->check_failsafe_full()) {
+  if (osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
     return;
@@ -6621,9 +6620,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
       (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
        get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
     MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
-    if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
-	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
-      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
+    if (m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
+      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE"
 	       << dendl;
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
