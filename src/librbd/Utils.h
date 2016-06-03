@@ -197,7 +197,10 @@ private:
   Context *m_on_finish = nullptr;
 };
 
+uint64_t parse_rbd_default_features(CephContext* cct);
+
 } // namespace util
+
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_UTILS_H
