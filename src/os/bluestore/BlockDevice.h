@@ -97,7 +97,6 @@ public:
 
   virtual int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc, bool buffered) = 0;
-  virtual int aio_zero(uint64_t off, uint64_t len, IOContext *ioc) = 0;
   virtual int flush() = 0;
 
   void queue_reap_ioc(IOContext *ioc);
