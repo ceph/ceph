@@ -98,9 +98,15 @@ endif()
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
   COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS)
 
-if(COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS AND DIAG_COLOR_ALWAYS)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
+if(DIAG_COLOR_ALWAYS)
+  if(COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
+    message(STATUS "C and C++ compilers will always show diagnostic colors")
+  else()
+    message(WARNING
+      "Unable to turn on DIAG_COLOR_ALWAYS, because this compiler does not support -fdiagnostics-color=always flag.")
+  endif()
 endif()
 
 
