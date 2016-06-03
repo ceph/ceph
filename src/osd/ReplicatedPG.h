@@ -1654,7 +1654,7 @@ public:
     bool user_only = false);
 };
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
+inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop
       << " " << repop.v
@@ -1665,7 +1665,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::ProxyWriteOpRef pwop)
+inline ostream& operator<<(ostream& out,
+			   const ReplicatedPG::ProxyWriteOpRef& pwop)
 {
   out << "proxywrite(" << &pwop
       << " " << pwop->user_version
