@@ -481,7 +481,6 @@ EXTRA_DIST += \
   rocksdb/port/port_posix.h \
   rocksdb/port/README \
   rocksdb/port/stack_trace.cc \
-  rocksdb/port/stack_trace.d \
   rocksdb/port/stack_trace.h \
   rocksdb/port/sys_time.h \
   rocksdb/port/util_logger.h \
@@ -501,19 +500,15 @@ EXTRA_DIST += \
   rocksdb/ROCKSDB_LITE.md \
   rocksdb/src.mk \
   rocksdb/table/adaptive_table_factory.cc \
-  rocksdb/table/adaptive_table_factory.d \
   rocksdb/table/adaptive_table_factory.h \
   rocksdb/table/block_based_filter_block.cc \
-  rocksdb/table/block_based_filter_block.d \
   rocksdb/table/block_based_filter_block.h \
   rocksdb/table/block_based_filter_block_test.cc \
   rocksdb/table/block_based_table_builder.cc \
   rocksdb/table/block_based_table_builder.h \
   rocksdb/table/block_based_table_factory.cc \
-  rocksdb/table/block_based_table_factory.d \
   rocksdb/table/block_based_table_factory.h \
   rocksdb/table/block_based_table_reader.cc \
-  rocksdb/table/block_based_table_reader.d \
   rocksdb/table/block_based_table_reader.h \
   rocksdb/table/block_builder.cc \
   rocksdb/table/block_builder.h \
