@@ -1574,7 +1574,8 @@ class Device(object):
                 '--mbrtogpt',
                 '--',
                 self.path,
-            ]
+            ],
+            exit=True
         )
         update_partition(self.path, 'created')
         return num
@@ -2712,12 +2713,9 @@ class PrepareData(object):
                 '--',
                 partition.get_dev(),
             ])
-            try:
-                LOG.debug('Creating %s fs on %s',
-                          self.args.fs_type, partition.get_dev())
-                command_check_call(args)
-            except subprocess.CalledProcessError as e:
-                raise Error(e)
+            LOG.debug('Creating %s fs on %s',
+                      self.args.fs_type, partition.get_dev())
+            command_check_call(args, exit=True)
 
             path = mount(dev=partition.get_dev(),
                          fstype=self.args.fs_type,
@@ -2733,18 +2731,16 @@ class PrepareData(object):
                 partition.unmap()
 
         if not is_partition(self.args.data):
-            try:
-                command_check_call(
-                    [
-                        'sgdisk',
-                        '--typecode=%d:%s' % (partition.get_partition_number(),
-                                              partition.ptype_for_name('osd')),
-                        '--',
-                        self.args.data,
-                    ],
-                )
-            except subprocess.CalledProcessError as e:
-                raise Error(e)
+            command_check_call(
+                [
+                    'sgdisk',
+                    '--typecode=%d:%s' % (partition.get_partition_number(),
+                                          partition.ptype_for_name('osd')),
+                    '--',
+                    self.args.data,
+                ],
+                exit=True,
+            )
             update_partition(self.args.data, 'prepared')
             command_check_call(['udevadm', 'trigger',
                                 '--action=add',
