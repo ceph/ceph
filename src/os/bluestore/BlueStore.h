@@ -822,6 +822,8 @@ private:
 
   uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
 
+  bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
+
   // compression options
   enum CompressionMode {
     COMP_NONE,                  ///< compress never
