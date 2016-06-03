@@ -49,7 +49,6 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 // for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
 #define BLUEFS_START  8192
 
-
 /*
  * object name key structure
  *
@@ -1007,8 +1006,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
-    min_alloc_size(0),
-    max_alloc_size(0),
     sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
 {
   _init_logger();
@@ -1276,7 +1273,6 @@ int BlueStore::_check_or_set_bdev_label(
 
 void BlueStore::_set_alloc_sizes(void)
 {
-  max_alloc_size = g_conf->bluestore_max_alloc_size;
   /*
    * Set device block size according to its media
    */
@@ -1290,9 +1286,14 @@ void BlueStore::_set_alloc_sizes(void)
       min_alloc_size = g_conf->bluestore_min_alloc_size_ssd;
     }
   }
+  min_alloc_size_order = ctz(min_alloc_size);
+  assert(min_alloc_size == 1u << min_alloc_size_order);
+
+  max_alloc_size = g_conf->bluestore_max_alloc_size;
 
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
-	   << " max_alloc_size 0x" << max_alloc_size
+	   << std::dec << " order " << min_alloc_size_order
+	   << " max_alloc_size 0x" << std::hex << max_alloc_size
 	   << std::dec << dendl;
 }
 
@@ -1315,10 +1316,8 @@ int BlueStore::_open_bdev(bool create)
   // initialize global block parameters
   block_size = bdev->get_block_size();
   block_mask = ~(block_size - 1);
-  block_size_order = 0;
-  for (uint64_t t = 1; t < block_size; t <<= 1) {
-    ++block_size_order;
-  }
+  block_size_order = ctz(block_size);
+  assert(block_size == 1u << block_size_order);
 
   _set_alloc_sizes();
   max_alloc_size = g_conf->bluestore_max_alloc_size;
