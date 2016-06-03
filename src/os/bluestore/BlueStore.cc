@@ -5815,11 +5815,12 @@ int BlueStore::_do_alloc_write(
     size_t csum_order = wctx->csum_order;
     bufferlist compressed_bl;
     CompressorRef c;
-    if (b_off == 0 &&
-	wctx->compress &&
+    if (wctx->compress &&
 	b->length > min_alloc_size &&
 	(c = compressor) != nullptr) {
       // compress
+      assert(b_off == 0);
+      assert(b->length == l->length());
       bluestore_compression_header_t chdr;
       chdr.type = c->get_type();
       // FIXME: memory alignment here is bad
