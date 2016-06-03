@@ -25,17 +25,25 @@
 
 
 struct Request {
-    char data[17];
+  double value;
 };
 
 struct Client {
-    int client_num;
+  int client_num;
+};
+
+bool operator<(const Client& r1, const Client& r2) {
+  return r1.client_num < r2.client_num;
+}
+
+bool operator==(const Client& r1, const Client& r2) {
+  return r1.client_num == r2.client_num;
 }
 
 
 TEST(mClockPriorityQueue, Create)
 {
-    ceph::mClockQueue<Request,Client> q;
+  ceph::mClockQueue<Request,Client> q;
 }
 
 

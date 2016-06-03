@@ -27,8 +27,8 @@ namespace ceph {
   template <typename T, typename K>
   class mClockQueue : public OpQueue <T, K> {
 
-    typename priority_t = unsigned;
-    typename cost_t = unsigned;
+    using priority_t = unsigned;
+    using cost_t = unsigned;
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
@@ -189,19 +189,31 @@ namespace ceph {
       }
 
       void dump(ceph::Formatter *f) const {
+#if 0
 	f->dump_int("tokens", tokens);
 	f->dump_int("max_tokens", max_tokens);
+#endif
 	f->dump_int("size", size);
 	f->dump_int("num_keys", q.size());
+#if 0
 	if (!empty()) {
 	  f->dump_int("first_item_cost", front().first);
+#endif
 	}
       }
     };
 
-    typedef std::map<priority_t, SubQueue> SubQueues;
-    SubQueues high_queue;
+    using SubQueues = std::map<priority_t, SubQueue>;
 
+    SubQueues                                high_queue;
+    crimson::dmclock::PullPriorityQueue<K,T> queue;
+    // when enqueue_front is called, rather than try to re-calc tags
+    // to put in mClock priority queue, we'll just keep a separate
+    // list from which we dequeue items first, and only when it's
+    // empty do we use queue.
+    std::list<std::pair<K,T>>                queue_front;
+
+#if 0
     SubQueue *create_queue(priority_t priority) {
       typename SubQueues::iterator p = queue.find(priority);
       if (p != queue.end()) {
@@ -220,7 +232,6 @@ namespace ceph {
       assert(total_priority >= 0);
     }
 
-#if 0
     void distribute_tokens(unsigned cost) {
       if (total_priority == 0) {
 	return;
@@ -240,6 +251,7 @@ namespace ceph {
 
     unsigned length() const override final {
       unsigned total = 0;
+      total += queue_front.size();
       for (typename SubQueues::const_iterator i = queue.begin();
 	   i != queue.end();
 	   ++i) {
