@@ -426,6 +426,7 @@ void Operations<I>::execute_rebuild_object_map(ProgressContext &prog_ctx,
     return;
   }
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+    lderr(cct) << "image must support object-map feature" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
