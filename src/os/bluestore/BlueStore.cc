@@ -547,6 +547,21 @@ void BlueStore::Cache::_audit_lru(const char *when)
     dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
 	     << " ok" << dendl;
   }
+  if (false) {
+    uint64_t lc = 0, oc = 0;
+    set<OnodeSpace*> spaces;
+    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
+      assert(i->space->onode_map.count(i->oid));
+      if (spaces.count(i->space) == 0) {
+	spaces.insert(i->space);
+	oc += i->space->onode_map.size();
+      }
+      ++lc;
+    }
+    if (lc != oc) {
+      derr << " lc " << lc << " oc " << oc << dendl;
+    }
+  }
 }
 #endif
 
@@ -6630,8 +6645,11 @@ int BlueStore::_split_collection(TransContext *txc,
   int r;
   RWLock::WLocker l(c->lock);
   RWLock::WLocker l2(d->lock);
+
+  // blow away the caches.  FIXME.
   c->onode_map.clear();
   d->onode_map.clear();
+
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
   r = 0;
