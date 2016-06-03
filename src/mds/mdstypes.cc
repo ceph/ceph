@@ -1038,6 +1038,8 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.back()->capinfo.cap_id = 1;
 }
 
+uint64_t MDSCacheObject::last_wait_seq = 0;
+
 void MDSCacheObject::dump(Formatter *f) const
 {
   f->dump_bool("is_auth", is_auth());
