@@ -162,6 +162,13 @@ public:
   int get_params();
   int get_data(bufferlist& bl);
   void send_response();
+
+  int validate_aws4_single_chunk(char *chunk_str,
+                                 char *chunk_data_str,
+                                 unsigned int chunk_data_size,
+                                 string chunk_signature);
+  int validate_and_unwrap_available_aws4_chunked_data(bufferlist& bl_in,
+                                                      bufferlist& bl_out);
 };
 
 struct post_part_field {
