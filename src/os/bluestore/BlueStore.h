@@ -449,7 +449,9 @@ public:
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
     void clear();
-    bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
+
+    /// return true if f true for any item
+    bool map_any(std::function<bool(OnodeRef)> f);
   };
 
   struct Cache;
