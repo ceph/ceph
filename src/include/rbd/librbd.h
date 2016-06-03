@@ -144,6 +144,7 @@ enum {
   RBD_IMAGE_OPTION_JOURNAL_ORDER = 5,
   RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH = 6,
   RBD_IMAGE_OPTION_JOURNAL_POOL = 7,
+  RBD_IMAGE_OPTION_SHARED = 8,
 };
 
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);

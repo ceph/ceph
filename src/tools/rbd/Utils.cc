@@ -374,7 +374,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
   } else {
-    features = g_conf->rbd_default_features;
+    features = -1;
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
@@ -403,19 +403,16 @@ int get_image_options(const boost::program_options::variables_map &vm,
       std::cerr << "stripe count not allowed to be 1" << std::endl;
       return -EINVAL;
     }
-    features |= RBD_FEATURE_STRIPINGV2;
   } else {
     if (features_specified && ((features & RBD_FEATURE_STRIPINGV2) != 0)) {
       std::cerr << "must specify both of stripe-unit and stripe-count when specify striping features" << std::endl;
       return -EINVAL;
     }
-    features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
   if (vm.count(at::IMAGE_SHARED) && vm[at::IMAGE_SHARED].as<bool>()) {
-    features &= ~RBD_FEATURES_SINGLE_CLIENT;
+    opts->set(RBD_IMAGE_OPTION_SHARED, 1);
   }
-
   if (get_format) {
     uint64_t format;
     bool format_specified = false;
@@ -451,7 +448,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
         return -EINVAL;
       } else {
         format = 2;
-        format_specified = 2;
+        format_specified = true;
       }
     }
 
@@ -463,8 +460,10 @@ int get_image_options(const boost::program_options::variables_map &vm,
     opts->set(RBD_IMAGE_OPTION_FORMAT, format);
   }
 
+  if (features_specified)
+    opts->set(RBD_IMAGE_OPTION_FEATURES, features);
+
   opts->set(RBD_IMAGE_OPTION_ORDER, order);
-  opts->set(RBD_IMAGE_OPTION_FEATURES, features);
   opts->set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
   opts->set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
 
