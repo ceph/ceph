@@ -1373,7 +1373,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
 %{_bindir}/ceph_test_*
-%{_bindir}/librgw_file*
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage
