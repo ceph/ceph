@@ -461,19 +461,34 @@ def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
-def command_check_call(arguments):
+def command_check_call(arguments, exit=False):
     """
     Safely execute a ``subprocess.check_call`` call making sure that the
     executable exists and raising a helpful error message if it does not.
 
+    When ``exit`` is set to ``True`` this helper will do a clean (sans
+    traceback) system exit.
     .. note:: This should be the preferred way of calling
     ``subprocess.check_call`` since it provides the caller with the safety net
     of making sure that executables *will* be found and will error nicely
     otherwise.
     """
     arguments = _get_command_executable(arguments)
-    LOG.info('Running command: %s', ' '.join(arguments))
-    return subprocess.check_call(arguments)
+    command = ' '.join(arguments)
+    LOG.info('Running command: %s', command)
+    try:
+        return subprocess.check_call(arguments)
+    except subprocess.CalledProcessError as error:
+        if exit:
+            if error.output:
+                LOG.error(error.output)
+            raise SystemExit(
+                "'{cmd}' failed with status code {returncode}".format(
+                    cmd=command,
+                    returncode=error.returncode,
+                )
+            )
+        raise
 
 
 def platform_distro():
