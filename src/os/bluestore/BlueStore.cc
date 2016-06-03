@@ -765,34 +765,16 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   get_object_key(new_oid, &o->key);
 }
 
-bool BlueStore::OnodeSpace::get_next(
-  const ghobject_t& after,
-  pair<ghobject_t,OnodeRef> *next)
+bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 {
   std::lock_guard<std::mutex> l(cache->lock);
-  dout(20) << __func__ << " after " << after << dendl;
-
-  if (after == ghobject_t()) {
-    if (cache->onode_lru.empty()) {
-      return false;
+  dout(20) << __func__ << dendl;
+  for (auto& i : onode_map) {
+    if (f(i.second)) {
+      return true;
     }
-    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.begin();
-    assert(p != onode_map.end());
-    next->first = p->first;
-    next->second = p->second;
-    return true;
   }
-
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(after);
-  assert(p != onode_map.end()); // for now
-  auto pi = cache->onode_lru.iterator_to(*p->second);
-  ++pi;
-  if (pi == cache->onode_lru.end()) {
-    return false;
-  }
-  next->first = pi->oid;
-  next->second = onode_map[pi->oid];
-  return true;
+  return false;
 }
 
 
@@ -2917,16 +2899,16 @@ void BlueStore::_reap_collections()
        ++p) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c->cid << dendl;
-    {
-      pair<ghobject_t,OnodeRef> next;
-      while (c->onode_map.get_next(next.first, &next)) {
-	assert(!next.second->exists);
-	if (!next.second->flush_txns.empty()) {
-	  dout(10) << __func__ << " " << c->cid << " " << next.second->oid
-		   << " flush_txns " << next.second->flush_txns << dendl;
-	  return;
-	}
-      }
+    if (c->onode_map.map_any([&](OnodeRef o) {
+	  assert(!o->exists);
+	  if (!o->flush_txns.empty()) {
+	    dout(10) << __func__ << " " << c->cid << " " << o->oid
+		     << " flush_txns " << o->flush_txns << dendl;
+	    return false;
+	  }
+	  return true;
+	})) {
+      return;
     }
     c->onode_map.clear();
     dout(10) << __func__ << " " << c->cid << " done" << dendl;
@@ -6614,14 +6596,16 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
       goto out;
     }
     assert((*c)->exists);
-    pair<ghobject_t,OnodeRef> next;
-    while ((*c)->onode_map.get_next(next.first, &next)) {
-      if (next.second->exists) {
-	dout(10) << __func__ << " " << next.first << " " << next.second
-		 << " exists in onode_map" << dendl;
-	r = -ENOTEMPTY;
-	goto out;
-      }
+    if ((*c)->onode_map.map_any([&](OnodeRef o) {
+	  if (o->exists) {
+	    dout(10) << __func__ << " " << o->oid << " " << o
+		     << " exists in onode_map" << dendl;
+	    return true;
+	  }
+	  return false;
+	})) {
+      r = -ENOTEMPTY;
+      goto out;
     }
     coll_map.erase(cid);
     txc->removed_collections.push_back(*c);
