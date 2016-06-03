@@ -1204,6 +1204,7 @@ private:
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
+    unsigned csum_order = 0;     ///< target checksum chunk order
 
     vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
 

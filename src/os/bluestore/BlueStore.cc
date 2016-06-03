@@ -5812,6 +5812,7 @@ int BlueStore::_do_alloc_write(
     bufferlist *l = &wi.bl;
     uint64_t final_length = b->length;
     uint64_t csum_length = b->length;
+    size_t csum_order = wctx->csum_order;
     bufferlist compressed_bl;
     CompressorRef c;
     if (b_off == 0 &&
@@ -5868,7 +5869,7 @@ int BlueStore::_do_alloc_write(
 
     // checksum
     if (csum_type) {
-      b->init_csum(csum_type, 12, csum_length); // FIXME adjust b size
+      b->init_csum(csum_type, csum_order, csum_length);
       b->calc_csum(b_off, *l);
     }
 
@@ -5950,6 +5951,7 @@ int BlueStore::_do_write(
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
   }
+  wctx.csum_order = block_size_order;
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
