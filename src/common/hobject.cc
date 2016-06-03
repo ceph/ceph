@@ -142,6 +142,12 @@ void hobject_t::decode(bufferlist::iterator& bl)
       pool = INT64_MIN;
       assert(is_min());
     }
+
+    // for compatibility with some earlier verisons which might encoded
+    // a non-canonical max object
+    if (max) {
+      *this = hobject_t::get_max();
+    }
   }
   DECODE_FINISH(bl);
   build_hash_cache();
