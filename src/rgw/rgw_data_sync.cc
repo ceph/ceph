@@ -2332,6 +2332,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
                                          inc_marker.position, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
+        drain_all_but(1);
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
@@ -2436,11 +2437,13 @@ int RGWBucketShardIncrementalSyncCR::operate()
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "ERROR: marker_tracker->flush() returned retcode=" << retcode << dendl;
+      drain_all_but(1);
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
     }
 
+    drain_all_but(1);
     lease_cr->go_down();
     /* wait for all operations to complete */
     drain_all();
