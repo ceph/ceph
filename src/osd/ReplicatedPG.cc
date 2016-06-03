@@ -1659,11 +1659,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   // discard due to cluster full transition?  (we discard any op that
   // originates before the cluster or pool is marked full; the client
   // will resend after the full flag is removed or if they expect the
-  // op to succeed despite being full).  The except is FULL_FORCE ops,
+  // op to succeed despite being full).  The except is FULL_FORCE|FULL_TRY ops,
   // which there is no reason to discard because they bypass all full
   // checks anyway.
   // FIXME: we exclude mds writes for now.
-  if (!(m->get_source().is_mds() || m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) &&
+  if (!(m->get_source().is_mds() || m->has_flag(CEPH_OSD_FLAG_FULL_FORCE|CEPH_OSD_FLAG_FULL_TRY)) &&
       info.history.last_epoch_marked_full > m->get_map_epoch()) {
     dout(10) << __func__ << " discarding op sent before full " << m << " "
 	     << *m << dendl;
