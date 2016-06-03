@@ -112,6 +112,7 @@ void hobject_t::encode(bufferlist& bl) const
   ::encode(max, bl);
   ::encode(nspace, bl);
   ::encode(pool, bl);
+  assert(!max || (*this == hobject_t(hobject_t::get_max())));
   ENCODE_FINISH(bl);
 }
 
