@@ -3083,6 +3083,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
   if (mds->get_state() < MDSMap::STATE_RESOLVE) {
     if (mds->get_want_state() == CEPH_MDS_STATE_RESOLVE) {
+      discard_delayed_resolve(from);
       mds->wait_for_resolve(new C_MDS_RetryMessage(mds, m));
       return;
     }
