@@ -84,7 +84,8 @@ void Graylog::log_entry(Entry const * const e)
     m_formatter->dump_string("host", m_hostname);
     m_formatter->dump_string("short_message", s);
     m_formatter->dump_string("_app", "ceph");
-    m_formatter->dump_float("timestamp", e->m_stamp.sec() + (e->m_stamp.usec() / 1000000.0));
+    auto ts = ceph::coarse_real_clock::to_timespec(e->m_stamp);
+    m_formatter->dump_float("timestamp", ts.tv_sec + (ts.tv_nsec / 1000000000.0));
     m_formatter->dump_int("_thread", e->m_thread);
     m_formatter->dump_int("_level", e->m_prio);
     if (m_subs != NULL)

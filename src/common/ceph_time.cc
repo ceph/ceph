@@ -118,4 +118,33 @@ namespace ceph {
   operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
   template std::ostream&
   operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
-}
+
+  int snprintf_time(char *out, size_t outlen, const real_time& t)
+  {
+    struct tm bdt;
+    time_t tt = ceph::real_clock::to_time_t(t);
+    localtime_r(&tt, &bdt);
+    auto usec = duration_cast<microseconds>(
+      t.time_since_epoch() % seconds(1));
+    return ::snprintf(
+      out, outlen,
+      "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
+      bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
+      bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec.count());
+  }
+
+  int snprintf_time(char *out, size_t outlen, const coarse_real_time& t)
+  {
+    struct tm bdt;
+    time_t tt = ceph::coarse_real_clock::to_time_t(t);
+    localtime_r(&tt, &bdt);
+    auto usec = duration_cast<microseconds>(
+      t.time_since_epoch() % seconds(1));
+    return ::snprintf(
+      out, outlen,
+      "%04d-%02d-%02d %02d:%02d:%02d.%03ld",
+      bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
+      bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec.count() / 1000);
+  }
+};
+

@@ -233,13 +233,14 @@ void Log::submit_entry(Entry *e)
 Entry *Log::create_entry(int level, int subsys)
 {
   if (true) {
-    return new Entry(ceph_clock_now(NULL),
-		   pthread_self(),
-		   level, subsys);
+    return new Entry(
+      ceph::coarse_real_clock::now(NULL),
+      pthread_self(),
+      level, subsys);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now(NULL);
+    e->m_stamp = ceph::coarse_real_clock::now(NULL);
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -254,13 +255,14 @@ Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
                                "Log hint");
     size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
     void *ptr = ::operator new(sizeof(Entry) + size);
-    return new(ptr) Entry(ceph_clock_now(NULL),
-       pthread_self(), level, subsys,
-       reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
+    return new(ptr) Entry(
+      ceph::coarse_real_clock::now(NULL),
+      pthread_self(), level, subsys,
+      reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now(NULL);
+    e->m_stamp = ceph::coarse_real_clock::now(NULL);
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -319,7 +321,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 
       if (crash)
 	buflen += snprintf(buf, buf_size, "%6d> ", -t->m_len);
-      buflen += e->m_stamp.sprintf(buf + buflen, buf_size-buflen);
+      buflen += ceph::snprintf_time(buf + buflen, buf_size-buflen, e->m_stamp);
       buflen += snprintf(buf + buflen, buf_size-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
