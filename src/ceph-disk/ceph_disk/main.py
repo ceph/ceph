@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 #
-# Copyright (C) 2015, 2016 Red Hat <contact@redhat.com>
+# Copyright (C) 2015-2016 Red Hat <contact@redhat.com> Authors
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd
-#
-# Author: Loic Dachary <loic@dachary.org>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Library Public License as published by
@@ -17,6 +15,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+# See the AUTHORS file for names of contributors
 
 from __future__ import print_function
 
