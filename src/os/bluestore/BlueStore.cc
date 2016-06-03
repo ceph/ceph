@@ -3018,7 +3018,7 @@ int BlueStore::collection_list(
     pnext = &static_next;
 
   if (start == ghobject_t::get_max() ||
-      start.hobj == hobject_t::get_max()) {
+      start.hobj.is_max()) {
     goto out;
   }
   get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,

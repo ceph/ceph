@@ -532,7 +532,7 @@ bool PG::MissingLoc::add_source_info(
 	       << dendl;
       continue;
     }
-    if (oinfo.last_backfill != hobject_t::get_max() &&
+    if (!oinfo.last_backfill.is_max() &&
 	oinfo.last_backfill_bitwise != sort_bitwise) {
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
@@ -1798,7 +1798,7 @@ void PG::activate(ObjectStore::Transaction& t,
       } else {
 	assert(peer_missing.count(*i));
 	missing_loc.add_active_missing(peer_missing[*i]);
-        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill == hobject_t::get_max())
+        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill.is_max())
           complete_shards.insert(*i);
       }
     }
@@ -4281,7 +4281,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  break;
 	}
 
-	if (cmp(scrubber.end, hobject_t::get_max(), get_sort_bitwise()) < 0) {
+	if (!(scrubber.end.is_max())) {
           scrubber.state = PG::Scrubber::NEW_CHUNK;
 	  requeue_scrub();
           done = true;

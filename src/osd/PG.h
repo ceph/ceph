@@ -457,7 +457,7 @@ public:
       needs_recovery_map[hoid] = *item;
       auto mliter =
 	missing_loc.insert(make_pair(hoid, set<pg_shard_t>())).first;
-      assert(info.last_backfill == hobject_t::get_max());
+      assert(info.last_backfill.is_max());
       assert(info.last_update >= item->need);
       if (!missing.is_missing(hoid))
 	mliter->second.insert(self);
