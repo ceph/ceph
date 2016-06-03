@@ -90,6 +90,20 @@ else()
   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
 endif()
 
+
+# if compiler allows it and if -DDIAG_COLOR_ALWAYS=yes is provided to
+# cmake, turn on diagnostic colors, even when compiler output does not
+# go to terminal (e.g., when piped to less)
+
+CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
+  COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS)
+
+if(COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS AND DIAG_COLOR_ALWAYS)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
+endif()
+
+
 ## detect sse support
 
 # create a tmp file with an empty main()
