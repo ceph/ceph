@@ -398,6 +398,9 @@ target_link_libraries(ceph_test_filejournal
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS}
   )
+install(TARGETS
+  ceph_test_filejournal
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_keys
 add_executable(ceph_test_keys

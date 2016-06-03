@@ -34,11 +34,13 @@ set(test_rados_delete_pools_parallel_srcs
   st_rados_delete_pool.cc
   st_rados_list_objects.cc
   )
-add_executable(test_rados_delete_pools_parallel
+add_executable(ceph_test_rados_delete_pools_parallel
   ${test_rados_delete_pools_parallel_srcs}
   )
-target_link_libraries(test_rados_delete_pools_parallel librados systest global
+target_link_libraries(ceph_test_rados_delete_pools_parallel librados systest global
   pthread rt ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
+install(TARGETS ceph_test_rados_delete_pools_parallel
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # test_rados_watch_notify
 set(test_rados_watch_notify_srcs
