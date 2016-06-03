@@ -135,7 +135,7 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
   m_objmap_name = ObjectMap::object_map_name(m_image_id, CEPH_NOSNAP);
 
   if (image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
-    m_features = m_cct->_conf->rbd_default_features;
+    m_features = util::parse_rbd_default_features(m_cct);
   }
 
   uint64_t features_clear = 0;
