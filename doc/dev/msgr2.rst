@@ -77,6 +77,7 @@ where the payload is determiend by the tag.
 
 * TAG_AUTH_DONE::
     
+    confounder (block_size bytes of random garbage)
     __le64 flags
       FLAG_ENCRYPTED  1
       FLAG_SIGNED     2
@@ -89,25 +90,35 @@ where the payload is determiend by the tag.
 Message frame format
 --------------------
 
-Each frame can take one of two forms.  If FLAG_SIGNED or
-FLAG_ENCRYPTED has been specified and we have passed the
-authentication phase (i.e., we have already sent TAG_AUTH_DONE)::
+Each frame can take one of three forms.
 
-  confounder (block_size bytes of random garbage)
-  __le32 length
-  tag byte
-  payload
-  signature (sig_size bytes)
-  more confounder padding (to pad data from start of __le32 length out to block size)
+* If neither FLAG_SIGNED or FLAG_ENCRYPTED is specified, things are simple::
 
-Note that the padding ensures that the total frame (with or without
-the leading confounder) is a multiple of the auth method's block_size.
-This is usually something like 16 bytes.
+    tag byte
+    payload
 
-If neither FLAG_SIGNED or FLAG_ENCRYPTED is specified, things are simple::
+* If FLAG_SIGNED has been specified::
 
-  tag byte
-  payload
+    tag byte
+    payload
+    padding (pad data from before tag byte out to block size)
+    signature (sig_size bytes)
+
+  Here the padding just makes life easier for the signature.  It can be
+  random data to add additional confounder.  Note also that the
+  signature input must include some state from the session key and the
+  previous message.
+
+* If FLAG_ENCRYPTED has been specified::
+
+    tag byte
+    payload
+    padding (pad data from before tag byte out to block size)
+
+  Note that the padding ensures that the total frame is a multiple of
+  the auth method's block_size so that the message can be sent out over
+  the wire without waiting for the next frame in the stream.
+
     
 Message flow handshake
 ----------------------
