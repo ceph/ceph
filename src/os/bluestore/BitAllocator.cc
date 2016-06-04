@@ -971,7 +971,7 @@ void BitMapAreaIN::set_blocks_used_int(int64_t start_block, int64_t num_blocks)
   int64_t blks = num_blocks;
   int64_t start_blk = start_block;
 
-  assert(start_block >= 0);
+  debug_assert(start_block >= 0);
 
   while (blks) {
     child = (BitMapArea *) m_child_list->get_nth_item(
