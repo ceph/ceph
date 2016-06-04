@@ -617,9 +617,6 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks, int64_t zone_blk_off, i
 
   debug_assert(check_locked());
 
-  bmap_idx = 0;
-  bit = 0;
-
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
           m_bmap_list, bmap_idx);
   while ((bmap = (BmapEntry *) iter.next())) {
