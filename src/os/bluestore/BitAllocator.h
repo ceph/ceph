@@ -97,7 +97,6 @@ public:
        */
       if (!m_end) {
         m_end = true;
-        //return m_list->get_nth_item(cur_idx);
         return &(*m_list)[cur_idx];
       }
       return NULL;
@@ -106,7 +105,7 @@ public:
 
     if (m_cur_idx == m_list->size() &&
         m_wrap) {
-      m_cur_idx %= m_list->size();
+      m_cur_idx = 0;
       m_wrapped = true;
     }
 

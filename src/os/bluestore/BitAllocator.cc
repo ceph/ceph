@@ -5,15 +5,17 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  *
  * BitMap Tree Design:
- * Storage is divided into bitmap of blocks. Each bitmap has size of unsigned long.
- * Group of bitmap creates a Zone. Zone is a unit where at a time single
- * thread can be active as well as single biggest contiguous allocation that can be requested.
+ * Storage is divided into bitmap of blocks. Each bitmap has size of
+ * unsigned long. Group of bitmap creates a Zone. Zone is a unit where
+ * at a time single thread can be active as well as single biggest
+ * contiguous allocation that can be requested.
  *
  * Rest of the nodes are classified in to three catagories:
- *   root note or Alloctor, internal nodes or BitMapAreaIN and
- *  finally nodes that contains Zones called BitMapAreaLeaf.
- * This classification is according some their own implmentation of some the interfaces define in
- * BitMapArea.
+ *   root note or Allocator
+ *   internal nodes or BitMapAreaIN
+ *   finally nodes that contains Zones called BitMapAreaLeaf
+ * This classification is according to their own implmentation of some
+ * of the interfaces defined in BitMapArea.
  */
 
 #include "BitAllocator.h"
@@ -71,7 +73,7 @@ BitMapArea* BmapEntityListIter::next()
 
   if (m_cur_idx == m_list->size() &&
       m_wrap) {
-    m_cur_idx %= m_list->size();
+    m_cur_idx = 0;
     m_wrapped = true;
   }
   if (cur_idx == m_list->size()) {
