@@ -508,10 +508,6 @@ target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
 if(${WITH_LTTNG})
   target_link_libraries(global lttng-ust dl)
 endif(${WITH_LTTNG})
-if(BUILD_SHARED_LIBS)
-  set_target_properties(global PROPERTIES
-    OUTPUT_NAME ceph-global VERSION "1.0.0" SOVERSION "1")
-endif(BUILD_SHARED_LIBS)
 
 # rados object classes
 add_subdirectory(cls)
@@ -533,7 +529,7 @@ set(librados_srcs
   librados/snap_set_diff.cc
   librados/RadosXattrIter.cc
   )
-add_library(librados ${librados_srcs}
+add_library(librados ${CEPH_SHARED} ${librados_srcs}
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
@@ -543,10 +539,10 @@ endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
-if(BUILD_SHARED_LIBS)
+if(ENABLE_SHARED)
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
-endif(BUILD_SHARED_LIBS)
+endif(ENABLE_SHARED)
 
 add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
 
@@ -706,6 +702,7 @@ target_link_libraries(ceph-dencoder
   librados
   librbd
   global
+  os
   osd
   mds
   mon
@@ -718,7 +715,6 @@ target_link_libraries(ceph-dencoder
   cls_statelog_client
   cls_version_client
   cls_replica_log_client
-  cls_kvs
   cls_user_client
   cls_journal_client
   cls_timeindex_client
@@ -996,11 +992,7 @@ target_link_libraries(crushtool global)
 install(TARGETS crushtool DESTINATION bin)
 
 # Support/Tools
-# the static gtest/gmock libraries load correctly for us
-set(BUILD_SHARED_LIBS_saved ${BUILD_SHARED_LIBS})
-set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(gmock)
-set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_saved})
 
 add_subdirectory(test)
 set(cephfs_srcs cephfs.cc)
@@ -1123,16 +1115,16 @@ if(WITH_LIBCEPHFS)
   add_library(client STATIC ${libclient_srcs})
   target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
-  add_library(cephfs ${libcephfs_srcs}
+  add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
     $<TARGET_OBJECTS:cls_references_objs>
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
-if(BUILD_SHARED_LIBS)
+if(ENABLE_SHARED)
   set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
     SOVERSION 1)
-endif(BUILD_SHARED_LIBS)
+endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
@@ -1151,7 +1143,7 @@ endif(BUILD_SHARED_LIBS)
   target_link_libraries(mount.ceph keyutils)
 
   install(TARGETS ceph-syn DESTINATION bin)
-  install(TARGETS mount.ceph DESTINATION /sbin)
+  install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
   if(HAVE_LIBFUSE)
     set(ceph_fuse_srcs
@@ -1161,7 +1153,7 @@ endif(BUILD_SHARED_LIBS)
     target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-    install(PROGRAMS mount.fuse.ceph DESTINATION /sbin)
+    install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
   endif(HAVE_LIBFUSE)
 endif(WITH_LIBCEPHFS)
 
@@ -1283,7 +1275,8 @@ if(${WITH_RBD})
   add_executable(rbd ${rbd_srcs}
     $<TARGET_OBJECTS:common_util_obj>
     $<TARGET_OBJECTS:parse_secret_objs>
-    $<TARGET_OBJECTS:common_texttable_obj>)
+    $<TARGET_OBJECTS:common_texttable_obj>
+    $<TARGET_OBJECTS:krbd_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}

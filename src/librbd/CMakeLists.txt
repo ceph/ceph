@@ -68,7 +68,7 @@ if(WITH_LTTNG)
   add_dependencies(rbd_internal rbd-tp)
 endif()
 
-add_library(librbd
+add_library(librbd ${CEPH_SHARED}
   $<TARGET_OBJECTS:osdc_rbd_objs>
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:krbd_objs>
@@ -90,8 +90,8 @@ target_link_libraries(librbd LINK_PRIVATE
   keyutils
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
-if(BUILD_SHARED_LIBS)
+if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
     OUTPUT_NAME rbd)
-endif(BUILD_SHARED_LIBS)
+endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION lib)

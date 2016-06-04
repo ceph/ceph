@@ -18,7 +18,6 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_timeindex_client
   cls_version_client
   cls_replica_log_client
-  cls_kvs
   cls_user_client
   librados
   global
@@ -46,7 +45,6 @@ target_link_libraries(ceph_test_rgw_obj
   cls_statelog_client
   cls_version_client
   cls_replica_log_client
-  cls_kvs
   cls_user_client
   librados
   global

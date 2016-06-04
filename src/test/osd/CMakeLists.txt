@@ -13,6 +13,9 @@ target_link_libraries(ceph_test_rados
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS
+  ceph_test_rados
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # scripts
 add_ceph_test(osd-bench.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-bench.sh) 
