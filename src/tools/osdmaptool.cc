@@ -310,8 +310,7 @@ int main(int argc, const char **argv)
   if (!test_map_pg.empty()) {
     pg_t pgid;
     if (!pgid.parse(test_map_pg.c_str())) {
-      cerr << me << ": failed to parse pg '" << test_map_pg
-	   << "', r = " << r << std::endl;
+      cerr << me << ": failed to parse pg '" << test_map_pg << std::endl;
       usage();
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
