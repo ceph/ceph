@@ -8,4 +8,5 @@ add_custom_target(ceph-disk
   COMMENT "ceph-disk is being created")
 
 include(Distutils)
-distutils_install_module(ceph_disk)
+distutils_install_module(ceph_disk
+  INSTALL_SCRIPT /usr/sbin)
