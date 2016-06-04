@@ -2344,7 +2344,10 @@ int RGWBucketShardIncrementalSyncCR::operate()
           continue;
         }
         auto& squash_entry = squash_map[e.object];
-        if (squash_entry.first <= e.timestamp) {
+        if (squash_entry.first == e.timestamp &&
+            e.op == CLS_RGW_OP_DEL) {
+          squash_entry.second = e.op;
+        } else if (squash_entry.first < e.timestamp) {
           squash_entry = make_pair<>(e.timestamp, e.op);
         }
       }
