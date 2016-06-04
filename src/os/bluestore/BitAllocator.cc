@@ -92,7 +92,7 @@ int64_t BmapEntityListIter::index()
 void BmapEntityListIter::decr_idx()
 {
   m_cur_idx--;
-  debug_assert(m_cur_idx > 0);
+  debug_assert(m_cur_idx >= 0);
 }
 
 /*
