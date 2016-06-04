@@ -158,14 +158,14 @@ public:
   void apply();
   void cleanup();
 
-  virtual void print(ostream &out) {
+  virtual void print(ostream &out) const {
     out << "mutation(" << this << ")";
   }
 
   virtual void dump(Formatter *f) const {}
 };
 
-inline ostream& operator<<(ostream& out, MutationImpl &mut)
+inline ostream& operator<<(ostream &out, const MutationImpl &mut)
 {
   mut.print(out);
   return out;

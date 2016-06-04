@@ -239,7 +239,7 @@ class MonMap {
 };
 WRITE_CLASS_ENCODER_FEATURES(MonMap)
 
-inline ostream& operator<<(ostream& out, MonMap& m) {
+inline ostream& operator<<(ostream &out, const MonMap &m) {
   m.print_summary(out);
   return out;
 }

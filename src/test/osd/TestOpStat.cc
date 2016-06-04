@@ -34,10 +34,10 @@ void TestOpStat::TypeStatus::export_latencies(map<double,uint64_t> &in) const
   }
 }
   
-std::ostream & operator<<(std::ostream &out, TestOpStat &rhs)
+std::ostream & operator<<(std::ostream &out, const TestOpStat &rhs)
 {
   rhs.stat_lock.Lock();
-  for (map<string,TestOpStat::TypeStatus>::iterator i = rhs.stats.begin();
+  for (auto i = rhs.stats.begin();
        i != rhs.stats.end();
        ++i) {
     map<double,uint64_t> latency;
