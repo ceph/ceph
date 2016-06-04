@@ -90,10 +90,17 @@ inline EventCenter* center() {
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
 class EventCenter {
+
   using clock_type = ceph::coarse_mono_clock;
   // should be enough;
   static const int MAX_EVENTCENTER = 24;
-  static EventCenter *centers[MAX_EVENTCENTER];
+
+  struct AssociatedCenters {
+    EventCenter *centers[MAX_EVENTCENTER];
+    AssociatedCenters(CephContext *c) {
+      memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter*));
+    }
+  };
 
   struct FileEvent {
     int mask;
@@ -125,6 +132,7 @@ class EventCenter {
   NetHandler net;
   EventCallbackRef notify_handler;
   unsigned idx = 10000;
+  AssociatedCenters *global_centers;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -194,9 +202,10 @@ class EventCenter {
 
  public:
   template <typename func>
-  static void submit_to(int i, func &&f, bool nowait = false) {
-    assert(i < MAX_EVENTCENTER);
-    EventCenter *c = centers[i];
+  void submit_to(int i, func &&f, bool nowait = false) {
+    assert(i < MAX_EVENTCENTER && global_centers);
+    EventCenter *c = global_centers->centers[i];
+    assert(c);
     if (c->in_thread()) {
       f();
       return ;
