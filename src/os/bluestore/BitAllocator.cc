@@ -703,11 +703,8 @@ void BitMapAreaIN::init(int64_t total_blocks, int64_t area_idx, bool def)
   init_common(total_blocks, area_idx, def);
   int64_t level_factor = pow(BitMapArea::get_span_size(), m_level);
 
-  num_child = total_blocks / level_factor;
+  num_child = (total_blocks + level_factor - 1) / level_factor;
   debug_assert(num_child < MAX_INT16);
-  if (total_blocks % level_factor) {
-    num_child++;
-  }
 
   m_child_size_blocks = level_factor;
 
