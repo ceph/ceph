@@ -1807,7 +1807,7 @@ int RGWCreateBucket::verify_permission()
     if (op_ret < 0)
       return op_ret;
 
-    if (buckets.count() >= s->user->max_buckets) {
+    if ((int)buckets.count() >= s->user->max_buckets) {
       return -ERR_TOO_MANY_BUCKETS;
     }
   }
