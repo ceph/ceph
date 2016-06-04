@@ -118,7 +118,7 @@ public:
   virtual EMetaBlob *get_metablob() { return NULL; }
 };
 
-inline ostream& operator<<(ostream& out, LogEvent& le) {
+inline ostream& operator<<(ostream& out, const LogEvent &le) {
   le.print(out);
   return out;
 }

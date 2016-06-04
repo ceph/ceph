@@ -56,7 +56,7 @@ public:
   XMLObjIter find(string name);
   XMLObj *find_first(string name);
 
-  friend ostream& operator<<(ostream& out, XMLObj& obj);
+  friend ostream& operator<<(ostream &out, const XMLObj &obj);
 };
 
 struct XML_ParserStruct;
