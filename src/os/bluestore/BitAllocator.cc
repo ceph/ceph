@@ -600,8 +600,8 @@ int64_t BitMapZone::alloc_blocks(int64_t num_blocks, int64_t *start_block)
 void BitMapZone::free_blocks(int64_t start_block, int64_t num_blocks)
 {
   free_blocks_int(start_block, num_blocks);
-  debug_assert(get_used_blocks() > 0);
   sub_used_blocks(num_blocks);
+  debug_assert(get_used_blocks() >= 0);
 }
 
 /*
@@ -1596,7 +1596,7 @@ void BitAllocator::free_blocks_dis(int64_t num_blocks, int64_t *block_list)
     free_blocks_int(block_list[i], 1);
   }
 
-  debug_assert(get_used_blocks() > 0);
   sub_used_blocks(num_blocks);
+  debug_assert(get_used_blocks() >= 0);
   unlock();
 }
