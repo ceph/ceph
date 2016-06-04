@@ -826,6 +826,7 @@ void BitMapAreaIN::unreserve(int64_t needed, int64_t allocated)
 }
 int64_t BitMapAreaIN::get_reserved_blocks()
 {
+  std::lock_guard<std::mutex> l(m_blocks_lock); 
   return m_reserved_blocks;
 }
 
