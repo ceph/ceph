@@ -598,6 +598,8 @@ flushjournal_out:
     return -1;
 #endif
 
+  srand(time(NULL) + getpid());
+
   osd = new OSD(g_ceph_context,
                 store,
                 whoami,

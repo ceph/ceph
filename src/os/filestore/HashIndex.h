@@ -43,14 +43,17 @@ extern string reverse_hexdigit_bits_string(string l);
  * ex: ghobject_t("object", CEPH_NO_SNAP, 0xA4CEE0D2)
  * would be located in (root)/2/D/0/
  *
- * Subdirectories are created when the number of objects in a directory
- * exceed (abs(merge_threshhold)) * 16 * split_multiplier.  The number of objects in a directory
- * is encoded as subdir_info_s in an xattr on the directory.
+ * Subdirectories are created when the number of objects in a
+ * directory exceed 16 * (abs(merge_threshhold)) * split_multiplier +
+ * split_rand_factor). The number of objects in a directory is encoded
+ * as subdir_info_s in an xattr on the directory.
  */
 class HashIndex : public LFNIndex {
 private:
   /// Attribute name for storing subdir info @see subdir_info_s
   static const string SUBDIR_ATTR;
+  /// Attribute name for storing index-wide settings
+  static const string SETTINGS_ATTR;
   /// Attribute name for storing in progress op tag
   static const string IN_PROGRESS_OP_TAG;
   /// Size (bits) in object hash
@@ -61,8 +64,12 @@ private:
   /**
    * Merges occur when the number of object drops below
    * merge_threshold and splits occur when the number of objects
-   * exceeds 16 * abs(merge_threshold) * split_multiplier.
-   * Please note if merge_threshold is less than zero, it will never do merging
+   * exceeds:
+   *
+   *   16 * (abs(merge_threshold) * split_multiplier + split_rand_factor)
+   *
+   * Please note if merge_threshold is less than zero, it will never
+   * do merging
    */
   int merge_threshold;
   int split_multiplier;
@@ -94,6 +101,23 @@ private:
       ::decode(hash_level, bl);
     }
   };
+
+  struct settings_s {
+    uint32_t split_rand_factor; ///< random factor added to split threshold (only on root of collection)
+    settings_s() : split_rand_factor(0) {}
+    void encode(bufferlist &bl) const
+    {
+      __u8 v = 1;
+      ::encode(v, bl);
+      ::encode(split_rand_factor, bl);
+    }
+    void decode(bufferlist::iterator &bl)
+    {
+      __u8 v;
+      ::decode(v, bl);
+      ::decode(split_rand_factor, bl);
+    }
+  } settings;
 
   /// Encodes in progress split or merge
   struct InProgressOp {
@@ -143,7 +167,10 @@ public:
     double retry_probability=0) ///< [in] retry probability
     : LFNIndex(cct, collection, base_path, index_version, retry_probability),
       merge_threshold(merge_at),
-      split_multiplier(split_multiple) {}
+      split_multiplier(split_multiple)
+  {}
+
+  int read_settings() override;
 
   /// @see CollectionIndex
   uint32_t collection_version() override { return index_version; }
@@ -410,6 +437,8 @@ private:
 
   /// split each dir below the given path
   int split_dirs(const vector<string> &path);
+
+  int write_settings();
 };
 
 #endif

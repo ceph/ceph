@@ -82,7 +82,10 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
 		  cct->_conf->filestore_split_multiple,
 		  version,
 		  cct->_conf->filestore_index_retry_probability);
-  return index.init();
+  r = index.init();
+  if (r < 0)
+    return r;
+  return index.read_settings();
 }
 
 int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **index) {
@@ -102,8 +105,9 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
       // Must be a HashIndex
       *index = new HashIndex(cct, c, path,
 			     cct->_conf->filestore_merge_threshold,
-			     cct->_conf->filestore_split_multiple, version);
-      return 0;
+			     cct->_conf->filestore_split_multiple,
+			     version);
+      return (*index)->read_settings();
     }
     default: ceph_abort();
     }
@@ -114,7 +118,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
 			   cct->_conf->filestore_split_multiple,
 			   CollectionIndex::HOBJECT_WITH_POOL,
 			   cct->_conf->filestore_index_retry_probability);
-    return 0;
+    return (*index)->read_settings();
   }
 }
 
