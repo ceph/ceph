@@ -687,7 +687,7 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl) const
     return Checksummer::verify<Checksummer::crc32c>(
       get_csum_block_size(), b_off, bl.length(), bl, csum_data);
   default:
-    return -EOPNOTSUPP;
+    return EOPNOTSUPP;
   }
 }
 
