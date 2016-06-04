@@ -2813,6 +2813,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
+    // is mirroring not enabled for the parent?
+    if(parent) {
+      r = cls_client::mirror_image_get(&(parent->md_ctx), parent->id, &mirror_image_internal);
+      if (r == -ENOENT) {
+        lderr(cct) << " mirroring is not enabled for the parent" << dendl;
+        return r;
+      }
+    }
+
     r = mirror_image_enable_internal(ictx);
     if (r < 0) {
       return r;
@@ -2836,6 +2845,50 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       lderr(cct) << "cannot disable mirroring in the current pool mirroring "
         "mode" << dendl;
       return -EINVAL;
+    }
+    // is mirroring  enabled for the child?
+    vector < librbd::snap_info_t > snaps;
+    r = snap_list(ictx, snaps);
+    if (r < 0)
+      return r;
+
+    for (auto &snap : snaps) {
+      set < pair < string,string > >  names;
+      ictx->snap_id = snap.id;
+
+      r = list_children(ictx, names);
+      if (r < 0)
+        return r;
+
+      if(names.empty())
+        break;
+
+      IoCtx ioctx;
+      Rados rados(ictx->md_ctx);
+      cls::rbd::MirrorImage mirror_image_internal;
+
+      for (auto &pair : names) {
+        r = rados.ioctx_create(pair.first.c_str(), ioctx);
+        if(r < 0)
+          return r;
+
+        ImageCtx *image_ctx = new ImageCtx(pair.second, "", NULL, ioctx, true);
+        r = image_ctx->state->open();
+        if (r < 0) {
+          lderr(cct) << "error opening child image: "<< pair.first << "/" \
+                     << pair.second << cpp_strerror(-r) << dendl;
+          delete image_ctx;
+          return r;
+        }
+
+        r = cls_client::mirror_image_get(&(image_ctx->md_ctx), image_ctx->id, &mirror_image_internal);
+        image_ctx->state->close();
+        if (r != -ENOENT) {
+          lderr(cct) << " mirroring is enabled for the child :" << pair.first \
+                     << "/" << pair.second << dendl;
+          return -EBUSY;
+        }
+      }
     }
 
     r = mirror_image_disable_internal(ictx, force);
