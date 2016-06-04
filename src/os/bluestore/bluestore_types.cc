@@ -104,9 +104,7 @@ string bluestore_extent_t::get_flags_string(unsigned flags)
 {
   string s;
   if (flags & FLAG_SHARED) {
-    if (s.length())
-      s += '+';
-    s += "shared";
+    s = "shared";
   }
   return s;
 }
@@ -438,9 +436,7 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
 {
   string s;
   if (flags & FLAG_MUTABLE) {
-    if (s.length())
-      s += '+';
-    s += "mutable";
+    s = "mutable";
   }
   if (flags & FLAG_COMPRESSED) {
     if (s.length())
