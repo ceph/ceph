@@ -337,6 +337,7 @@ struct bluestore_blob_t {
 	return true;
       }
       b_len -= p->length;
+      ++p;
     }
     assert(0 == "we should not get here");
   }
