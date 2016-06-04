@@ -457,31 +457,6 @@ int KernelDevice::aio_write(
   return 0;
 }
 
-int KernelDevice::aio_zero(
-  uint64_t off,
-  uint64_t len,
-  IOContext *ioc)
-{
-  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
-	  << dendl;
-  assert(off % block_size == 0);
-  assert(len % block_size == 0);
-  assert(len > 0);
-  assert(off < size);
-  assert(off + len <= size);
-
-  bufferlist bl;
-  while (len > 0) {
-    bufferlist t;
-    t.append(zeros, 0, MIN(zeros.length(), len));
-    len -= t.length();
-    bl.claim_append(t);
-  }
-  // note: this works with aio only becaues the actual buffer is
-  // this->zeros, which is page-aligned and never freed.
-  return aio_write(off, bl, ioc, false);
-}
-
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)

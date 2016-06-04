@@ -329,6 +329,9 @@ namespace buffer CEPH_BUFFER_API {
       // and advance the iterator by that amount.
       size_t get_ptr_and_advance(size_t want, const char **p);
 
+      /// calculate crc from iterator position
+      uint32_t crc32c(size_t length, uint32_t crc);
+
       friend bool operator==(const iterator_impl& lhs,
 			     const iterator_impl& rhs) {
 	return &lhs.get_bl() == &rhs.get_bl() && lhs.get_off() == rhs.get_off();

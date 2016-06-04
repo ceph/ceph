@@ -996,7 +996,12 @@ target_link_libraries(crushtool global)
 install(TARGETS crushtool DESTINATION bin)
 
 # Support/Tools
+# the static gtest/gmock libraries load correctly for us
+set(BUILD_SHARED_LIBS_saved ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(gmock)
+set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_saved})
+
 add_subdirectory(test)
 set(cephfs_srcs cephfs.cc)
 add_executable(cephfstool ${cephfs_srcs})

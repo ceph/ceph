@@ -82,8 +82,8 @@ void RGWOp_User_Create::execute()
   bool system;
   bool exclusive;
 
-  uint32_t max_buckets;
-  uint32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
+  int32_t max_buckets;
+  int32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
 
   RGWUserAdminOpState op_state;
 
@@ -98,7 +98,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_uint32(s, "max-buckets", default_max_buckets, &max_buckets);
+  RESTArgs::get_int32(s, "max-buckets", default_max_buckets, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
@@ -183,7 +183,7 @@ void RGWOp_User_Modify::execute()
   bool suspended;
   bool system;
 
-  uint32_t max_buckets;
+  int32_t max_buckets;
 
   RGWUserAdminOpState op_state;
 
@@ -197,7 +197,7 @@ void RGWOp_User_Modify::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", false, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
+  RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
   RESTArgs::get_bool(s, "system", false, &system);
@@ -891,8 +891,11 @@ void RGWOp_Quota_Set::execute()
         old_quota = &info.bucket_quota;
       }
 
+      int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
+      int64_t max_size_kb;
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
-      RESTArgs::get_int64(s, "max-size-kb", old_quota->max_size_kb, &quota.max_size_kb);
+      RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb);
+      quota.max_size = max_size_kb * 1024;
       RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
     }
 

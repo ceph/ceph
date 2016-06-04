@@ -191,14 +191,14 @@ void _usage()
   cout << "   --master-url              master url\n";
   cout << "   --master-zonegroup=<id>   master zonegroup id\n";
   cout << "   --master-zone=<id>        master zone id\n";
-  cout << "   --rgw-realm=<realm>       realm name\n";
-  cout << "   --realm-id=<realm id>     realm id\n";
-  cout << "   --realm-new-name=<realm new name> realm new name\n";
-  cout << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
-  cout << "   --zonegroup-id=<zonegroup id> zonegroup id\n";
-  cout << "   --rgw-zone=<zone>         name of zone in which radosgw is running\n";
-  cout << "   --zone-id=<zone id>       zone id\n";
-  cout << "   --zone-new-name=<zone>    zone new name\n";
+  cout << "   --rgw-realm=<name>        realm name\n";
+  cout << "   --realm-id=<id>           realm id\n";
+  cout << "   --realm-new-name=<name>   realm new name\n";
+  cout << "   --rgw-zonegroup=<name>    zonegroup name\n";
+  cout << "   --zonegroup-id=<id>       zonegroup id\n";
+  cout << "   --rgw-zone=<name>         name of zone in which radosgw is running\n";
+  cout << "   --zone-id=<id>            zone id\n";
+  cout << "   --zone-new-name=<name>    zone new name\n";
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
@@ -811,8 +811,10 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
     RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
-    formatter->dump_int("size_kb", s.num_kb);
-    formatter->dump_int("size_kb_actual", s.num_kb_rounded);
+    formatter->dump_int("size", s.size);
+    formatter->dump_int("size_actual", s.size_rounded);
+    formatter->dump_int("size_kb", rgw_rounded_kb(s.size));
+    formatter->dump_int("size_kb_actual", rgw_rounded_kb(s.size_rounded));
     formatter->dump_int("num_objects", s.num_objects);
     formatter->close_section();
     formatter->flush(cout);
@@ -1035,9 +1037,9 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
       }
       if (have_max_size) {
         if (max_size < 0) {
-          quota.max_size_kb = -1;
+          quota.max_size = -1;
         } else {
-          quota.max_size_kb = rgw_rounded_kb(max_size);
+          quota.max_size = rgw_rounded_kb(max_size) * 1024;
         }
       }
       break;
@@ -2007,6 +2009,7 @@ int main(int argc, char **argv)
   int remove_bad = false;
   int check_head_obj_locator = false;
   int max_buckets = -1;
+  bool max_buckets_specified = false;
   map<string, bool> categories;
   string caps;
   int check_objects = false;
@@ -2145,6 +2148,7 @@ int main(int argc, char **argv)
         cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
         return EINVAL;
       }
+      max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -3634,7 +3638,7 @@ int main(int argc, char **argv)
   if (gen_secret_key)
     user_op.set_gen_secret(); // assume that a key pair should be created
 
-  if (max_buckets >= 0)
+  if (max_buckets_specified)
     user_op.set_max_buckets(max_buckets);
 
   if (system_specified)

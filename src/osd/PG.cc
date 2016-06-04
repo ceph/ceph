@@ -162,7 +162,10 @@ void PGPool::update(OSDMapRef map)
   info = *pi;
   auid = pi->auid;
   name = map->get_pool_name(id);
-  if (pi->get_snap_epoch() == map->get_epoch()) {
+  bool updated = false;
+  if ((map->get_epoch() == cached_epoch + 1) &&
+      (pi->get_snap_epoch() == map->get_epoch())) {
+    updated = true;
     pi->build_removed_snaps(newly_removed_snaps);
     interval_set<snapid_t> intersection;
     intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
@@ -180,14 +183,14 @@ void PGPool::update(OSDMapRef map)
   } else {
     newly_removed_snaps.clear();
   }
+  cached_epoch = map->get_epoch();
   lgeneric_subdout(g_ceph_context, osd, 20)
     << "PGPool::update cached_removed_snaps "
     << cached_removed_snaps
     << " newly_removed_snaps "
     << newly_removed_snaps
     << " snapc " << snapc
-    << (pi->get_snap_epoch() == map->get_epoch() ?
-	" (updated)":" (no change)")
+    << (updated ? " (updated)":" (no change)")
     << dendl;
 }
 

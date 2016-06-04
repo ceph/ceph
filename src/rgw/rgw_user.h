@@ -157,7 +157,7 @@ struct RGWUserAdminOpState {
   rgw_user user_id;
   std::string user_email;
   std::string display_name;
-  uint32_t max_buckets;
+  int32_t max_buckets;
   __u8 suspended;
   __u8 system;
   __u8 exclusive;
@@ -335,7 +335,7 @@ struct RGWUserAdminOpState {
     info = user_info;
   }
 
-  void set_max_buckets(uint32_t mb) {
+  void set_max_buckets(int32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;
   }
@@ -410,7 +410,7 @@ struct RGWUserAdminOpState {
   __u8 get_suspension_status() { return suspended; }
   int32_t get_key_type() {return key_type; }
   uint32_t get_subuser_perm() { return perm_mask; }
-  uint32_t get_max_buckets() { return max_buckets; }
+  int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }

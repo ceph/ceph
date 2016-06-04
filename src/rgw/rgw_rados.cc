@@ -2549,7 +2549,7 @@ int RGWRados::unwatch(uint64_t watch_handle)
     ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
     return r;
   }
-  r = rados[0]->watch_flush();
+  r = rados[0].watch_flush();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
     return r;
@@ -3199,58 +3199,32 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
+  auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
 
-  num_rados_handles = cct->_conf->rgw_num_rados_handles;
-
-  rados = new librados::Rados *[num_rados_handles];
-  if (!rados) {
-    ret = -ENOMEM;
-    return ret;
-  }
-
-  for (uint32_t i=0; i < num_rados_handles; i++) {
-
-    rados[i] = new Rados();
-    if (!rados[i]) {
-      ret = -ENOMEM;
-      goto fail;
+  for (auto& r : handles) {
+    ret = r.init_with_context(cct);
+    if (ret < 0) {
+      return ret;
     }
 
-    ret = rados[i]->init_with_context(cct);
+    ret = r.connect();
     if (ret < 0) {
-      goto fail;
-    }
-
-    ret = rados[i]->connect();
-    if (ret < 0) {
-      goto fail;
+      return ret;
     }
   }
 
-  cr_registry = new RGWCoroutinesManagerRegistry(cct);
-  ret =  cr_registry->hook_to_admin_command("cr dump");
+  auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
+    new RGWCoroutinesManagerRegistry(cct)};
+  ret = crs->hook_to_admin_command("cr dump");
   if (ret < 0) {
-    goto fail;
+    return ret;
   }
 
   meta_mgr = new RGWMetadataManager(cct, this);
   data_log = new RGWDataChangesLog(cct, this);
+  cr_registry = crs.release();
 
-  return ret;
-
-fail:
-  for (uint32_t i=0; i < num_rados_handles; i++) {
-    if (rados[i]) {
-      delete rados[i];
-      rados[i] = NULL;
-    }
-  }
-  num_rados_handles = 0;
-  if (rados) {
-    delete[] rados;
-    rados = NULL;
-  }
-
+  std::swap(handles, rados);
   return ret;
 }
 
@@ -3993,7 +3967,7 @@ int RGWRados::init_watch()
 {
   const char *control_pool = get_zone_params().control_pool.name.c_str();
 
-  librados::Rados *rad = rados[0];
+  librados::Rados *rad = &rados[0];
   int r = rad->ioctx_create(control_pool, control_pool_ctx);
 
   if (r == -ENOENT) {
@@ -5032,6 +5006,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
+                            const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
                             obj_version *pobjv,
@@ -5089,10 +5064,14 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
-    if (real_clock::is_zero(creation_time))
+    if (real_clock::is_zero(creation_time)) {
       creation_time = ceph::real_clock::now(cct);
-    else
+    } else {
       info.creation_time = creation_time;
+    }
+    if (pquota_info) {
+      info.quota = *pquota_info;
+    }
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
@@ -7336,16 +7315,18 @@ int RGWRados::open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index
   return 0;
 }
 
-static void accumulate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWStorageStats>& stats)
+static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
+                                 map<RGWObjCategory, RGWStorageStats>& stats)
 {
-  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
-  for (; iter != header.stats.end(); ++iter) {
-    RGWObjCategory category = (RGWObjCategory)iter->first;
+  for (const auto& pair : header.stats) {
+    const RGWObjCategory category = static_cast<RGWObjCategory>(pair.first);
+    const rgw_bucket_category_stats& header_stats = pair.second;
+
     RGWStorageStats& s = stats[category];
-    struct rgw_bucket_category_stats& header_stats = iter->second;
-    s.category = (RGWObjCategory)iter->first;
-    s.num_kb += ((header_stats.total_size + 1023) / 1024);
-    s.num_kb_rounded += ((header_stats.total_size_rounded + 1023) / 1024);
+
+    s.category = category;
+    s.size += header_stats.total_size;
+    s.size_rounded += header_stats.total_size_rounded;
     s.num_objects += header_stats.num_entries;
   }
 }
@@ -10250,14 +10231,16 @@ class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
   RGWGetUserStats_CB *cb;
 
 public:
-  explicit RGWGetUserStatsContext(RGWGetUserStats_CB *_cb) : cb(_cb) {}
+  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
+    : cb(cb) {}
+
   void handle_response(int r, cls_user_header& header) {
-    cls_user_stats& hs = header.stats;
+    const cls_user_stats& hs = header.stats;
     if (r >= 0) {
       RGWStorageStats stats;
 
-      stats.num_kb = (hs.total_bytes + 1023) / 1024;
-      stats.num_kb_rounded = (hs.total_bytes_rounded + 1023) / 1024;
+      stats.size = hs.total_bytes;
+      stats.size_rounded = hs.total_bytes_rounded;
       stats.num_objects = hs.total_entries;
 
       cb->set_response(stats);
@@ -10278,10 +10261,10 @@ int RGWRados::get_user_stats(const rgw_user& user, RGWStorageStats& stats)
   if (r < 0)
     return r;
 
-  cls_user_stats& hs = header.stats;
+  const cls_user_stats& hs = header.stats;
 
-  stats.num_kb = (hs.total_bytes + 1023) / 1024;
-  stats.num_kb_rounded = (hs.total_bytes_rounded + 1023) / 1024;
+  stats.size = hs.total_bytes;
+  stats.size_rounded = hs.total_bytes_rounded;
   stats.num_objects = hs.total_entries;
 
   return 0;
@@ -11589,8 +11572,8 @@ int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket
 {
   cls_user_bucket_entry entry;
 
-  entry.size = stats.num_kb * 1024;
-  entry.size_rounded = stats.num_kb_rounded * 1024;
+  entry.size = stats.size;
+  entry.size_rounded = stats.size_rounded;
   entry.count += stats.num_objects;
 
   list<cls_user_bucket_entry> entries;
@@ -12109,8 +12092,8 @@ void RGWStoreManager::close_storage(RGWRados *store)
 
 librados::Rados* RGWRados::get_rados_handle()
 {
-  if (num_rados_handles == 1) {
-    return rados[0];
+  if (rados.size() == 1) {
+    return &rados[0];
   } else {
     handle_lock.get_read();
     pthread_t id = pthread_self();
@@ -12118,19 +12101,17 @@ librados::Rados* RGWRados::get_rados_handle()
 
     if (it != rados_map.end()) {
       handle_lock.put_read();
-      return rados[it->second];
+      return &rados[it->second];
     } else {
       handle_lock.put_read();
       handle_lock.get_write();
-      uint32_t handle = next_rados_handle.read();
-      if (handle == num_rados_handles) {
-        next_rados_handle.set(0);
-        handle = 0;
-      }
+      const uint32_t handle = next_rados_handle;
       rados_map[id] = handle;
-      next_rados_handle.inc();
+      if (++next_rados_handle == rados.size()) {
+        next_rados_handle = 0;
+      }
       handle_lock.put_write();
-      return rados[handle];
+      return &rados[handle];
     }
   }
 }
