@@ -165,13 +165,13 @@ class ObjectCacher {
       journal_tid = _journal_tid;
     }
 
-    bool is_missing() { return state == STATE_MISSING; }
-    bool is_dirty() { return state == STATE_DIRTY; }
-    bool is_clean() { return state == STATE_CLEAN; }
-    bool is_zero() { return state == STATE_ZERO; }
-    bool is_tx() { return state == STATE_TX; }
-    bool is_rx() { return state == STATE_RX; }
-    bool is_error() { return state == STATE_ERROR; }
+    bool is_missing() const { return state == STATE_MISSING; }
+    bool is_dirty() const { return state == STATE_DIRTY; }
+    bool is_clean() const { return state == STATE_CLEAN; }
+    bool is_zero() const { return state == STATE_ZERO; }
+    bool is_tx() const { return state == STATE_TX; }
+    bool is_rx() const { return state == STATE_RX; }
+    bool is_error() const { return state == STATE_ERROR; }
 
     // reference counting
     int get() {
@@ -276,14 +276,14 @@ class ObjectCacher {
       set_item.remove_myself();
     }
 
-    sobject_t get_soid() { return oid; }
+    sobject_t get_soid() const { return oid; }
     object_t get_oid() { return oid.oid; }
     snapid_t get_snap() { return oid.snap; }
-    ObjectSet *get_object_set() { return oset; }
+    ObjectSet *get_object_set() const { return oset; }
     string get_namespace() { return oloc.nspace; }
     uint64_t get_object_number() const { return object_no; }
 
-    object_locator_t& get_oloc() { return oloc; }
+    const object_locator_t& get_oloc() const { return oloc; }
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
@@ -778,7 +778,7 @@ public:
 };
 
 
-inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
+inline ostream& operator<<(ostream &out, const ObjectCacher::BufferHead &bh)
 {
   out << "bh[ " << &bh << " "
       << bh.start() << "~" << bh.length()
@@ -812,7 +812,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ObjectCacher::ObjectSet &os)
+inline ostream& operator<<(ostream &out, const ObjectCacher::ObjectSet &os)
 {
   return out << "objectset[" << os.ino
 	     << " ts " << os.truncate_seq << "/" << os.truncate_size
@@ -821,7 +821,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::ObjectSet &os)
 	     << "]";
 }
 
-inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
+inline ostream& operator<<(ostream &out, const ObjectCacher::Object &ob)
 {
   out << "object["
       << ob.get_soid() << " oset " << ob.oset << dec

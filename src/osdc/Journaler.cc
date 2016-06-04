@@ -89,7 +89,7 @@ void Journaler::_set_layout(file_layout_t const *l)
 
 /***************** HEADER *******************/
 
-ostream& operator<<(ostream& out, Journaler::Header &h)
+ostream& operator<<(ostream &out, const Journaler::Header &h)
 {
   return out << "loghead(trim " << h.trimmed_pos
 	     << ", expire " << h.expire_pos

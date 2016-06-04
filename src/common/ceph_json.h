@@ -73,7 +73,8 @@ public:
   JSONObjIter find_first(const string& name);
   JSONObj *find_obj(const string& name);
 
-  friend ostream& operator<<(ostream& out, JSONObj& obj); // does not work, FIXME
+  friend ostream& operator<<(ostream &out,
+			     const JSONObj &obj); // does not work, FIXME
 
   bool is_array();
   bool is_object();
