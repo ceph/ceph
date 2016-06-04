@@ -150,6 +150,13 @@ CHECK_CXX_SOURCE_COMPILES("
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
+option(ENABLE_SHARED "build shared libraries" ON)
+if(ENABLE_SHARED)
+  set(CEPH_SHARED SHARED)
+else(ENABLE_SHARED)
+  set(CEPH_SHARED STATIC)
+endif(ENABLE_SHARED)
+
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 find_package(execinfo)
@@ -347,11 +354,11 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 add_definitions(-D__linux__)
 
-if(BUILD_SHARED_LIBS)
+if(ENABLE_SHARED)
   set(Boost_USE_STATIC_LIBS   OFF)
-else(BUILD_SHARED_LIBS)
+else(ENABLE_SHARED)
   set(Boost_USE_STATIC_LIBS   ON)
-endif(BUILD_SHARED_LIBS)
+endif(ENABLE_SHARED)
 
 set(Boost_USE_MULTITHREADED ON)
 find_package(Boost COMPONENTS thread system regex random program_options date_time iostreams REQUIRED)
