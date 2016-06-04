@@ -20,7 +20,6 @@
 
 class BitAllocatorStats {
 public:
-  bool m_on;
   std::atomic<int64_t> m_total_alloc_calls;
   std::atomic<int64_t> m_total_free_calls;
   std::atomic<int64_t> m_total_allocated;
