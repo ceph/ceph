@@ -82,7 +82,10 @@ int IndexManager::init_index(coll_t c, const char *path, uint32_t version) {
 		  g_conf->filestore_split_multiple,
 		  version,
 		  g_conf->filestore_index_retry_probability);
-  return index.init();
+  r = index.init();
+  if (r < 0)
+    return r;
+  return index.read_settings();
 }
 
 int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **index) {
@@ -102,7 +105,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
       // Must be a HashIndex
       *index = new HashIndex(c, path, g_conf->filestore_merge_threshold,
 				   g_conf->filestore_split_multiple, version);
-      return 0;
+      return (*index)->read_settings();
     }
     default: assert(0);
     }
@@ -113,7 +116,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
 				 g_conf->filestore_split_multiple,
 				 CollectionIndex::HOBJECT_WITH_POOL,
 				 g_conf->filestore_index_retry_probability);
-    return 0;
+    return (*index)->read_settings();
   }
 }
 

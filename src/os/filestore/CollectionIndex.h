@@ -192,6 +192,9 @@ protected:
 
   virtual int apply_layout_settings() { assert(0); return 0; }
 
+  /// Read index-wide settings (should be called after construction)
+  virtual int read_settings() { return 0; }
+
   /// Virtual destructor
   virtual ~CollectionIndex() {}
 };
