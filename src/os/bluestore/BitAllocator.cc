@@ -843,8 +843,6 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
     return true;
   }
 
-  assert(start_block >= 0);
-
   while (num_blocks) {
     area = (BitMapArea *) m_child_list->get_nth_item(
                     start_block / m_child_size_blocks);
@@ -1015,8 +1013,6 @@ void BitMapAreaIN::free_blocks_int(int64_t start_block, int64_t num_blocks)
     return;
   }
 
-  assert(start_block >= 0);
-
   while (num_blocks) {
     child = (BitMapArea *) m_child_list->get_nth_item(
           start_block / m_child_size_blocks);
@@ -1186,8 +1182,6 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
   if (num_blocks == 0) {
     return;
   }
-
-  assert(start_block >= 0);
 
   while (num_blocks) {
     child = (BitMapArea *) m_child_list->get_nth_item(
