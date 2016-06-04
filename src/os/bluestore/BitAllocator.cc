@@ -1393,12 +1393,13 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
   lock_shared();
   serial_lock();
 
-  while (scans && !allocated) {
-    allocated = alloc_blocks_int(false, true, num_blocks, start_block);
-    scans --;
-  }
   if (is_stats_on()) {
     m_stats->add_concurrent_scans(scans);
+  }
+
+  while (scans && !allocated) {
+    allocated = alloc_blocks_int(false, true, num_blocks, start_block);
+    scans--;
   }
 
   if (!allocated) {
@@ -1447,12 +1448,13 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
     m_stats->add_allocated(num_blocks);
   }
 
+  if (is_stats_on()) {
+    m_stats->add_concurrent_scans(scans);
+  }
+
   while (scans && !allocated) {
     allocated = alloc_blocks_int(false, true,  num_blocks, start_block);
     scans--;
-  }
-  if (is_stats_on()) {
-    m_stats->add_concurrent_scans(scans);
   }
 
   if (!allocated) {
@@ -1547,13 +1549,13 @@ int64_t BitAllocator::alloc_blocks_dis(int64_t num_blocks, int64_t *block_list)
     goto exit;
   }
 
+  if (is_stats_on()) {
+    m_stats->add_concurrent_scans(scans);
+  }
 
   while (scans && allocated < num_blocks) {
     allocated += alloc_blocks_dis_int(false, num_blocks, blk_off, &block_list[allocated]);
-    scans --;
-  }
-  if (is_stats_on()) {
-    m_stats->add_concurrent_scans(scans);
+    scans--;
   }
 
   if (allocated < num_blocks) {
