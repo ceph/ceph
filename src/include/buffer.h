@@ -173,10 +173,10 @@ namespace buffer CEPH_BUFFER_API {
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
-    ptr(ptr&& p);
+    ptr(ptr&& p) noexcept;
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
-    ptr& operator= (ptr&& p);
+    ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
       release();
     }
