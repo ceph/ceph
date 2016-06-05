@@ -15,6 +15,7 @@
  * try and bench on a pool you don't have permission to access
  * it will just loop forever.
  */
+#include "include/compat.h"
 #include "common/Cond.h"
 #include "obj_bencher.h"
 

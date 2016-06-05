@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
+#include <signal.h>
 
 #include "HeartbeatMap.h"
 #include "ceph_context.h"
