@@ -1049,18 +1049,35 @@ OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
 OPTION(filestore_max_inline_xattr_size, OPT_U32, 0)	//Override
 OPTION(filestore_max_inline_xattr_size_xfs, OPT_U32, 65536)
 OPTION(filestore_max_inline_xattr_size_btrfs, OPT_U32, 2048)
+OPTION(filestore_max_inline_xattr_size_zfs, OPT_U32, 2048)
+#if defined(__FreeBSD__)
+// Assuming ZFS without using ZFS-FileStore
+OPTION(filestore_max_inline_xattr_size_other, OPT_U32, 2048)
+#else
 OPTION(filestore_max_inline_xattr_size_other, OPT_U32, 512)
+#endif
 
 // for more than filestore_max_inline_xattrs attrs
 OPTION(filestore_max_inline_xattrs, OPT_U32, 0)	//Override
 OPTION(filestore_max_inline_xattrs_xfs, OPT_U32, 10)
 OPTION(filestore_max_inline_xattrs_btrfs, OPT_U32, 10)
+OPTION(filestore_max_inline_xattrs_zfs, OPT_U32, 10)
+#if defined(__FreeBSD__)
+// Assuming running on ZFS without using ZFS-FileStore
+OPTION(filestore_max_inline_xattrs_other, OPT_U32, 10)
+#else
 OPTION(filestore_max_inline_xattrs_other, OPT_U32, 2)
+#endif
 
 // max xattr value size
 OPTION(filestore_max_xattr_value_size, OPT_U32, 0)	//Override
 OPTION(filestore_max_xattr_value_size_xfs, OPT_U32, 64<<10)
 OPTION(filestore_max_xattr_value_size_btrfs, OPT_U32, 64<<10)
+OPTION(filestore_max_xattr_value_size_zfs, OPT_U32, 64<<10)
+#if defined(__FreeBSD__)
+// Assuming ZFS without using ZFS-FileStore
+OPTION(filestore_max_xattr_value_size_other, OPT_U32, 64<<10)
+#else
 // ext4 allows 4k xattrs total including some smallish extra fields and the
 // keys.  We're allowing 2 512 inline attrs in addition some some filestore
 // replay attrs.  After accounting for those, we still need to fit up to
@@ -1068,6 +1085,7 @@ OPTION(filestore_max_xattr_value_size_btrfs, OPT_U32, 64<<10)
 // to be safe.  This is hacky, but it's not worth complicating the code
 // to work around ext4's total xattr limit.
 OPTION(filestore_max_xattr_value_size_other, OPT_U32, 1<<10)
+#endif
 
 OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
 OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
@@ -1078,7 +1096,11 @@ OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
 OPTION(filestore_btrfs_snap, OPT_BOOL, true)
 OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
+#if defined(__linux__)
 OPTION(filestore_zfs_snap, OPT_BOOL, false) // zfsonlinux is still unstable
+#else
+OPTION(filestore_zfs_snap, OPT_BOOL, true) 
+#endif
 OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
 OPTION(filestore_punch_hole, OPT_BOOL, false)
