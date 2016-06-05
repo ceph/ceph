@@ -19,11 +19,19 @@
 extern "C" {
 #endif
 
+#if defined(__linux__)
 // Almost everyone defines ENOATTR, except for Linux,
 // which does #define ENOATTR ENODATA.  It seems that occasionally that
 // isn't defined, though, so let's make sure.
 #ifndef ENOATTR
 # define ENOATTR ENODATA
+#endif
+#else
+// ! LINUX
+#if !defined(ENOATTR) && !defined(ENODATA)
+#warning ENOATTR and ENODATA should already be defined.
+#warning perhaps you need to include "include/compat.h" to fix this.
+#endif
 #endif
 
 int ceph_os_setxattr(const char *path, const char *name,
