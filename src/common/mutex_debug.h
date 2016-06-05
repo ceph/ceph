@@ -130,11 +130,13 @@ public:
 // pthread error check mutex.
 template<bool Recursive>
 class mutex_debug_impl : public mutex_debugging<mutex_debug_impl<Recursive> > {
+
 private:
   pthread_mutex_t m;
 public:
   static constexpr bool recursive = Recursive;
 
+#if defined(PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP)
   // Mutex concept is DefaultConstructible
   mutex_debug_impl(const std::string &n = std::string(), bool bt = false,
 		   CephContext *cct = nullptr) :
@@ -150,6 +152,23 @@ public:
     r = pthread_mutex_init(&m, &a);
     assert(r == 0);
   }
+#else
+  // Use the old method of construction the muxtex manually
+  mutex_debug_impl(const std::string &n = std::string(), bool bt = false,
+                   CephContext *cct = nullptr) :
+    mutex_debugging<mutex_debug_impl<Recursive> >(n, bt, cct) {
+    if (recursive) {
+      pthread_mutexattr_t attr;
+      pthread_mutexattr_init(&attr);
+      pthread_mutexattr_settype(&attr,PTHREAD_MUTEX_RECURSIVE);
+      pthread_mutex_init(&m,&attr);
+      pthread_mutexattr_destroy(&attr);
+    } else {
+      pthread_mutex_init(&m,NULL);
+    }
+  }
+#endif
+
   // Mutex is Destructible
   ~mutex_debug_impl() {
     int r = pthread_mutex_destroy(&m);

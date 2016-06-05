@@ -14,6 +14,7 @@
  */
 #include "include/compat.h"
 #include "include/int_types.h"
+#include "include/compat.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -4882,8 +4883,8 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
   r = 0;
  out:
   tracepoint(objectstore, omap_get_values_exit, r);
-  dout(15) << __func__ << " " << c << "/" << hoid << " = " << r
-	   << where << dendl;
+  dout(15) << __func__ << " " << c << "/" << hoid << " = " << r 
+	<< where << dendl; 
   return r;
 }
 

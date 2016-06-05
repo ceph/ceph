@@ -65,6 +65,10 @@ function run() {
     diff -w $dir/stat $dir/reftrunc || return 1
     
     # test xattrs
+    local notfoundattr="No data available"
+    [ x`uname`x = xFreeBSDx ] && \
+	 notfoundattr="Attribute not found"
+
     rados --pool rbd --striper setxattr toyfile somexattr somevalue || return 1
     rados --pool rbd --striper getxattr toyfile somexattr > $dir/xattrvalue || return 1 
     rados --pool rbd getxattr toyfile.0000000000000000 somexattr > $dir/xattrvalue2 || return 1 
@@ -78,9 +82,11 @@ function run() {
     diff -w $dir/xattrlist2 $dir/reflist || return 1    
     rados --pool rbd --striper rmxattr toyfile somexattr || return 1
     rados --pool rbd --striper getxattr toyfile somexattr >& $dir/rmxattrerror
-    grep -q 'No data available' $dir/rmxattrerror || return 1
+    cat  $dir/rmxattrerror 
+    grep -q "$notfoundattr" $dir/rmxattrerror || return 1
     rados --pool rbd getxattr toyfile.0000000000000000 somexattr >& $dir/rmxattrerror2
-    grep -q 'No data available' $dir/rmxattrerror2 || return 1
+    cat  $dir/rmxattrerror2 
+    grep -q "$notfoundattr" $dir/rmxattrerror2 || return 1
     
     # test rm
     rados --pool rbd --striper rm toyfile || return 1

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -xv
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
@@ -16,8 +16,12 @@
 # GNU Library Public License for more details.
 #
 
-source $(dirname $0)/../detect-build-env-vars.sh
+CEPH_ROOT=${CEPH_ROOT:-..}
+CEPH_LIB=${CEPH_LIB:-$CEPH_ROOT/src/.libs}
+
 source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+
+PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
 function run() {
     local dir=$1
@@ -27,6 +31,11 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--debug-filestore=20 "
+    CEPH_ARGS+="--debug-journal=20 "
+    CEPH_ARGS+="--debug-osd=20 "
+#    CEPH_ARGS+="--filestore-commit-timeout=180 "
+    CEPH_ARGS+="--filestore-wbthrottle-enable=false "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -77,6 +86,20 @@ function TEST_bench() {
     # default values should work
     #
     ceph tell osd.0 bench || return 1
+}
+
+function TEST_simple() {
+    # run the most simple config, and run a bechmark on it.
+    local dir=$1
+
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+
+    #
+    # default values should work
+    #
+    ceph tell osd.0 bench || return 1
+
 }
 
 main osd-bench "$@"

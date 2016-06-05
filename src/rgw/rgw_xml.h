@@ -165,7 +165,7 @@ void do_decode_xml_obj(vector<T>& l, const string& name, XMLObj *obj)
   XMLObjIter iter = obj->find(name);
   XMLObj *o;
 
-  while (o = iter.get_next()) {
+  while ((o = iter.get_next())) {
     T val;
     decode_xml_obj(val, o);
     l.push_back(val);

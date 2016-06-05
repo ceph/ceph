@@ -256,7 +256,7 @@ if ENABLE_COVERAGE
 EXTRALIBS += -lgcov
 endif # ENABLE_COVERAGE
 
-LIBCOMMON += -luuid
+# LIBCOMMON += -luuid
 
 # Libosd always needs osdc and os
 LIBOSD += $(LIBOSDC) $(LIBOS)

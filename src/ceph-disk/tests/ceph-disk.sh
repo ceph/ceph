@@ -54,7 +54,7 @@ CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
-if test -d ../.libs ; then
+if [ -d ../.libs ]; then
     CEPH_ARGS+=" --erasure-code-dir=../.libs"
     CEPH_ARGS+=" --compression-dir=../.libs"
 fi
@@ -64,14 +64,12 @@ CEPH_ARGS+=" --debug-mon=20"
 CEPH_ARGS+=" --debug-osd=20"
 CEPH_ARGS+=" --debug-bdev=20"
 CEPH_ARGS+=" --debug-bluestore=20"
-CEPH_ARGS+=" --osd-max-object-name-len=460"
-CEPH_ARGS+=" --osd-max-object-namespace-len=64"
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
 CEPH_DISK_ARGS+=" --prepend-to-path="
 CEPH_DISK_ARGS+=" --verbose"
-TIMEOUT=360
+TIMEOUT=600
 
 cat=$(which cat)
 timeout=$(which timeout)
@@ -89,11 +87,18 @@ function setup() {
 
 function teardown() {
     kill_daemons
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ x`uname`x != xFreeBSDx ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]
+    then
         rm -fr $DIR/*/*db
         teardown_btrfs $DIR
     fi
-    grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
+   
+    MOUNTS="/proc/mounts"
+    if [ x`uname`x = xFreeBSDx ]; then
+        MOUNTS="/compat/linux/"$MOUNTS
+    fi
+    grep " $(pwd)/$DIR/" < $MOUNTS | while read mounted rest ; do
         umount $mounted
     done
     rm -fr $DIR
@@ -120,7 +125,7 @@ function run_mon() {
 }
 
 function kill_daemons() {
-    if ! test -e $DIR ; then
+    if ! [ -e $DIR ]; then
         return
     fi
     for pidfile in $(find $DIR | grep pidfile) ; do
@@ -196,7 +201,35 @@ function test_path() {
 }
 
 function test_no_path() {
-    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:..:/usr/bin:/bin ; test_activate_dir ) || return 1
+    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:..:/usr/bin:/bin:/usr/local/bin ; test_activate_dir ) || return 1
+}
+
+function run_timeout() {
+    local status
+	local cmd
+	cmd="$@"
+	
+    $timeout $TIMEOUT $cmd
+    status=$?
+    case $status in
+      0)
+        return 0
+        ;;
+      124)
+        echo Command "$cmd" has timed out.
+        ;;
+      126)
+        echo Command "$cmd" was invalid
+        ;;
+      127)
+        echo Command "$cmd" does not exist
+        ;;
+      *)
+        echo Timeout for "$cmd" returned status $?
+        ;;
+    esac
+    return 1
+
 }
 
 function test_mark_init() {
@@ -212,29 +245,29 @@ function test_mark_init() {
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=auto \
         --no-start-daemon \
         $osd_data || return 1
 
-    test -f $osd_data/$(ceph-detect-init) || return 1
+    [ -f $osd_data/$(ceph-detect-init) ] || return 1
 
-    if test systemd = $(ceph-detect-init) ; then
+    if [ systemd = $(ceph-detect-init) ] ; then
         expected=sysvinit
     else
         expected=systemd
     fi
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=$expected \
         --no-start-daemon \
         $osd_data || return 1
 
-    ! test -f $osd_data/$(ceph-detect-init) || return 1
-    test -f $osd_data/$expected || return 1
+    [ ! -f $osd_data/$(ceph-detect-init) ] || return 1
+    [ -f $osd_data/$expected ] || return 1
 }
 
 function test_zap() {
@@ -280,14 +313,14 @@ function test_activate_dir_magic() {
 function test_pool_read_write() {
     local osd_uuid=$1
 
-    $timeout $TIMEOUT ceph osd pool set $TEST_POOL size 1 || return 1
+    run_timeout ceph osd pool set $TEST_POOL size 1 || return 1
 
     local id=$(ceph osd create $osd_uuid)
     local weight=1
     ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $DIR/BAR
-    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    run_timeout rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    run_timeout rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
     $diff $DIR/BAR $DIR/BAR.copy || return 1
 }
 
@@ -301,7 +334,8 @@ function test_activate() {
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $to_prepare || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+	
+    ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -331,7 +365,7 @@ function test_activate_dir_bluestore() {
         prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
 
     CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --enable_experimental_unrecoverable_data_corrupting_features=* --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
-      $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+      run_timeout ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -391,9 +425,9 @@ function run() {
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
     default_actions+="test_keyring_path "
-    default_actions+="test_mark_init "
+    [ x`uname`x != xFreeBSDx ] && default_actions+="test_mark_init "
     default_actions+="test_zap "
-    default_actions+="test_activate_dir_bluestore "
+    [ x`uname`x != xFreeBSDx ] && default_actions+="test_activate_dir_bluestore "
     default_actions+="test_ceph_osd_mkfs "
     local actions=${@:-$default_actions}
     local status
@@ -403,16 +437,21 @@ function run() {
         $action
         status=$?
         set +x
-        teardown
-        if test $status != 0 ; then
+        if [ $status -ne 0 ] ; then
             break
+        else
+	    # Only teardown if the $action has completed in order
+            teardown
         fi
     done
     rm -fr virtualenv-$DIR
+    # return the value that we saved from running the $action test
     return $status
 }
 
 run $@
+status=$?
+exit $status
 
 # Local Variables:
 # compile-command: "cd .. ; test/ceph-disk.sh # test_activate_dir"

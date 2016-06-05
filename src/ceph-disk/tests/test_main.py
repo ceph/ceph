@@ -14,6 +14,7 @@
 #
 from mock import patch, DEFAULT
 import os
+import platform
 import io
 import shutil
 import subprocess
@@ -310,6 +311,10 @@ class TestCephDisk(object):
             assert expect == main.list_devices()
 
     def test_list_dmcrypt_data(self):
+        if platform.system() == "FreeBSD":
+            # FreeBSD does not have blkid, and the semantics that go with it
+            print "SKIPPED: no blkid"
+            return
         partition_type2type = {
             main.PTYPE['plain']['osd']['ready']: 'plain',
             main.PTYPE['luks']['osd']['ready']: 'LUKS',
@@ -376,6 +381,10 @@ class TestCephDisk(object):
                 assert expect == main.list_devices()
 
     def test_list_multipath(self):
+        if platform.system() == "FreeBSD":
+            # FreeBSD does not have blkid, and the semantics that go with it
+            print "SKIPPED: no blkid"
+            return
         #
         # multipath data partition
         #
@@ -581,6 +590,10 @@ class TestCephDisk(object):
             assert expect == main.list_devices()
 
     def test_list_other(self):
+        if platform.system() == "FreeBSD":
+            # FreeBSD does not have the same type of devices
+            print "SKIPPED: FreeBSD devices have different properties"
+            return
         #
         # not swap, unknown fs type, not mounted, with uuid
         #

@@ -15,7 +15,9 @@
 # GNU Library Public License for more details.
 #
 
-verbose=
+
+verbose=true
+PS4='${FUNCNAME[0]}: $LINENO: '
 
 test -d ../src && export PATH=$PATH:.
 
@@ -26,6 +28,13 @@ elif type xml > /dev/null 2>&1; then
 else
     echo "Missing xmlstarlet binary!"
     exit 1
+fi
+
+if [ x`uname`x = xFreeBSDx ]; then
+    # native FreeBSD getopt gets confused by --long stuff
+    getoptcmd=/usr/local/bin/getopt
+else
+    getoptcmd=getopt
 fi
 
 function osdmap_get() {
@@ -90,7 +99,8 @@ EOF
 
 function main() {
     local temp
-    temp=$(getopt -o h --long verbose,help,mon-store:,out:,rewrite -n $0 -- "$@") || return 1
+    temp=$($getoptcmd -o h --long verbose,help,mon-store:,out:,rewrite -n $0 -- "$@") || return 1
+    echo $temp
 
     eval set -- "$temp"
     local rewrite
@@ -98,8 +108,7 @@ function main() {
         case "$1" in
             --verbose)
                 verbose=true
-                # set -xe
-                # PS4='${FUNCNAME[0]}: $LINENO: '
+                set -xe
                 shift;;
             -h|--help)
                 usage

@@ -10,6 +10,7 @@
  */
 
 #include "acconfig.h"
+#include "include/compat.h"
 #if defined(__FreeBSD__)
 #include <errno.h>
 #include <stdint.h>
@@ -17,6 +18,7 @@
 #include <strings.h>
 #include <sys/types.h>
 #include <sys/extattr.h>
+#include <assert.h>
 #elif defined(__linux__)
 #include <sys/types.h>
 #include <sys/xattr.h>
@@ -27,6 +29,17 @@
 #endif
 
 #include "common/xattr.h"
+
+#if defined(__FreeBSD__)
+// After all the includes are done
+// Make sure compatability has worked
+#if (ENODATA == 9919)
+#error "ENODATA used from /usr/include/c++/v1/cerrno");
+#endif
+#if (ENODATA != 87) 
+#error "ENODATA does not equal ENOATTR" );
+#endif
+#endif 
 
 /*
  * Sets extended attribute on a file.

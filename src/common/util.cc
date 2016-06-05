@@ -150,6 +150,7 @@ static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<stri
   }
 }
 
+#if defined(__linux__)
 static bool lsb_release_parse(map<string, string> *m, CephContext *cct)
 {
   static const map<string, string> kvm = {
@@ -210,6 +211,7 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
       lderr(cct) << "distro_detect - can't detect " << rk << dendl;
   }
 }
+#endif
 
 void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
@@ -269,8 +271,10 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     fclose(f);
   }
 
+#if defined(__linux__)
   // distro info
   distro_detect(m, cct);
+#endif
 }
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)

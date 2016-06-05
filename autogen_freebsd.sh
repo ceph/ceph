@@ -19,12 +19,13 @@ if [ x`uname`x = x"FreeBSD"x ]; then
     CLANGWARN="$CLANGWARN -Wno-unused-private-field"
     CLANGWARN="$CLANGWARN -Wno-varargs"
     CLANGWARN="$CLANGWARN -Wno-gnu-designator"
+    CLANGWARN="$CLANGWARN -Wno-mismatched-tags"
 
 # "-Wno-unused-local-typedef -Wno-mismatched-tags -Wno-macro-redefined -Wno-unused-function -Wno-unused-label -Wno-undefined-bool-conversion -Wno-unused-private-field -Wno-unused-local-typedef -Wno-uninitialized -Wno-gnu-designator -Wno-inconsistent-missing-override -Wno-deprecated-declarations -Wno-parentheses"
 
     CFLAGS="-g -I/usr/local/include ${CWARN} ${CLANGWARN}"
     CXXFLAGS="-g -DGTEST_USE_OWN_TR1_TUPLE=1 -I/usr/local/include ${CWARN} ${CLANGWARN}"
-    LDFLAGS="-g ${LDFLAGS} -L/usr/local/lib -export-dynamic -luuid"
+    LDFLAGS="-g ${LDFLAGS} -L/usr/local/lib -export-dynamic " # should be in Boost? -luuid
     FREEBSD_CONFIGURE_FLAGS="
       --disable-silent-rules
       --disable-gitversion
