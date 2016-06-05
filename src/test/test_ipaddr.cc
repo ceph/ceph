@@ -1,6 +1,10 @@
 #include "include/ipaddr.h"
 #include "gtest/gtest.h"
 
+#if defined(__FreeBSD__)
+#include <sys/types.h>
+#include <sys/socket.h>
+#endif
 #include <arpa/inet.h>
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
