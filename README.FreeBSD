@@ -16,10 +16,21 @@ The following setup will get things running for FreeBSD:
 	sudo pkg install bash
 	sudo ln -s /usr/local/bin/bash /bin/bash
 
-Building Ceph
-=============
+Building and Testing Ceph
+=========================
+
  - Go and start building
 	./do_freebsd.sh
+ - This is going to terminate some where in testing due to not all
+   commit to correct testing under FreeBSD are commited.
+ - Rerunning the TESTS can be done with:
+	cd src
+	gmake check
+   Or
+	cd src
+	gmake recheck
+  Where the last one actually only tests the previously failed tests.
+  To run tests in parallel use a '-j<nr>'.
 
 Parts not (yet) included:
 =========================
