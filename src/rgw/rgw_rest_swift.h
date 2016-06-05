@@ -246,6 +246,9 @@ protected:
     return s->op == OP_POST;
   }
 
+  RGWOp *get_ws_index_op();
+  RGWOp *get_ws_listing_op();
+
   RGWOp *get_obj_op(bool get_data);
   RGWOp *op_get();
   RGWOp *op_head();
@@ -256,6 +259,8 @@ protected:
 public:
   RGWHandler_REST_Bucket_SWIFT() {}
   virtual ~RGWHandler_REST_Bucket_SWIFT() {}
+
+  int retarget(RGWOp* op, RGWOp** new_op) override;
 };
 
 class RGWHandler_REST_Obj_SWIFT : public RGWHandler_REST_SWIFT {

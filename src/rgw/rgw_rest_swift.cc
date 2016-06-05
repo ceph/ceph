@@ -25,6 +25,8 @@
 #include <sstream>
 #include <memory>
 
+#include <boost/utility/string_ref.hpp>
+
 #define dout_subsys ceph_subsys_rgw
 
 int RGWListBuckets_ObjStore_SWIFT::get_params()
@@ -1561,6 +1563,83 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
   return NULL;
 }
 
+static bool is_web_mode(const req_state * const s) {
+  const boost::string_ref webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
+  return webmode == "true";
+}
+
+static bool can_be_website_req(const req_state * const s)
+{
+  /* Static website works only with the GET or HEAD method. Nothing more. */
+  const std::set<boost::string_ref> ws_methods = { "GET", "HEAD" };
+  if (ws_methods.count(s->info.method) == 0) {
+    return false;
+  }
+
+  /* We also need to handle early failures from the authentication system.
+   * In such cases req_state::auth_identity may be empty. Website treats them
+   * the same way as anonymous. */
+  if (! s->auth_identity) {
+    return true;
+  }
+
+  /* Swift serves websites only for anonymous requests unless client explicitly
+   * requested this behaviour by supplying X-Web-Mode HTTP header set to true. */
+  if (s->auth_identity->is_anonymous() || is_web_mode(s)) {
+    return true;
+  }
+
+  return false;
+}
+
+RGWOp* RGWHandler_REST_Bucket_SWIFT::get_ws_index_op()
+{
+  // retarget to get obj
+  s->object = s->bucket_info.website_conf.get_swift_index_doc();
+
+  auto getop = new RGWGetObj_ObjStore_SWIFT;
+  getop->set_get_data(true);
+
+  return getop;
+}
+
+RGWOp* RGWHandler_REST_Bucket_SWIFT::get_ws_listing_op()
+{
+  return nullptr;
+}
+
+int RGWHandler_REST_Bucket_SWIFT::retarget(RGWOp* op, RGWOp** new_op)
+{
+  ldout(s->cct, 10) << "Starting retarget" << dendl;
+  RGWOp* op_override = nullptr;
+
+  /* In Swift static web content is served if the request is anonymous or
+   * has W-Web-Mode HTTP header specified to true. */
+  if (can_be_website_req(s)) {
+    const auto& ws_conf = s->bucket_info.website_conf;
+    const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
+
+    if (! index.empty() /* && rgw_obj_exist()*/) {
+      op_override = get_ws_index_op();
+    } else if (ws_conf.listing_enabled) {
+      op_override = get_ws_listing_op();
+    }
+  }
+
+  if (op_override) {
+    put_op(op);
+    op_override->init(store, s, this);
+
+    *new_op = op_override;
+  } else {
+    *new_op = op;
+  }
+
+  /* Return 404 Not Found is the request has web mode enforced but we static web
+   * wasn't able to serve it accordingly. */
+  return ! op_override && is_web_mode(s) ? -ENOENT : 0;
+}
+
 RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
@@ -2048,8 +2127,9 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
   if (s->init_state.url_bucket.empty())
     return new RGWHandler_REST_Service_SWIFT;
 
-  if (s->object.empty())
+  if (s->object.empty()) {
     return new RGWHandler_REST_Bucket_SWIFT;
+  }
 
   return new RGWHandler_REST_Obj_SWIFT;
 }
