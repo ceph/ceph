@@ -22,7 +22,7 @@
   $ grep "pg_num $PG_NUM" "$OUT" || cat $OUT
   pool 0 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
+  $ grep -E "size $SIZE\W$TOTAL" $OUT || cat $OUT
   size 3\t8000 (esc)
   $ STATS_CRUSH=$(grep '^ avg ' "$OUT")
 # 
@@ -34,7 +34,7 @@
   $ grep "pg_num $PG_NUM" "$OUT" || cat $OUT
   pool 0 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ grep -P "size $SIZE\t$TOTAL" $OUT || cat $OUT
+  $ grep -E "size $SIZE\W$TOTAL" $OUT || cat $OUT
   size 3\t8000 (esc)
   $ STATS_RANDOM=$(grep '^ avg ' "$OUT")
 # it is almost impossible to get the same stats with random and crush
