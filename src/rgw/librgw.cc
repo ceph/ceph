@@ -52,6 +52,7 @@
 #include <string.h>
 #include <mutex>
 
+
 #define dout_subsys ceph_subsys_rgw
 
 bool global_stop = false;
@@ -469,9 +470,10 @@ namespace rgw {
     const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
     const string& ldap_dnattr =
       store->ctx()->_conf->rgw_ldap_dnattr;
+    std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
-    ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_searchdn,
-			      ldap_dnattr);
+    ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
+			      ldap_searchdn, ldap_dnattr);
     ldh->init();
     ldh->bind();
 

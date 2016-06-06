@@ -8,6 +8,8 @@
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
+#include "common/safe_io.h"
+#include <boost/algorithm/string.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -1600,10 +1602,32 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  s->perm_mask = RGW_PERM_FULL_CONTROL;
 	}
       } else if (store->ctx()->_conf->rgw_s3_auth_use_ldap &&
-		store->ctx()->_conf->rgw_ldap_uri.empty()) {
+		 (! store->ctx()->_conf->rgw_ldap_uri.empty())) {
+
+	ldout(store->ctx(), 15)
+	  << __func__ << " LDAP auth uri="
+	  << store->ctx()->_conf->rgw_ldap_uri
+	  << dendl;
+
 	RGWToken token{from_base64(s3_access_key)};
+	if (! token.valid())
+	  return -EACCES;
+
 	rgw::LDAPHelper *ldh = RGW_Auth_S3::get_ldap_ctx(store);
-	if ((! token.valid()) || ldh->auth(token.id, token.key) != 0)
+	if (unlikely(!ldh)) {
+	  ldout(store->ctx(), 0)
+	    << __func__ << " RGW_Auth_S3::get_ldap_ctx() failed"
+	    << dendl;
+	  return -EACCES;
+	}
+
+	ldout(store->ctx(), 10)
+	  << __func__ << " try LDAP auth uri="
+	  << store->ctx()->_conf->rgw_ldap_uri
+	  << " token.id=" << token.id
+	  << dendl;
+
+	if (ldh->auth(token.id, token.key) != 0)
 	  return -EACCES;
 
 	/* ok, succeeded */
@@ -2922,9 +2946,10 @@ void RGW_Auth_S3::init_impl(RGWRados* store)
   const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
   const string& ldap_dnattr =
     store->ctx()->_conf->rgw_ldap_dnattr;
+  std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
-  ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_searchdn,
-			    ldap_dnattr);
+  ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
+			    ldap_searchdn, ldap_dnattr);
 
   ldh->init();
   ldh->bind();
@@ -3720,29 +3745,45 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
     RGW_Auth_S3::init(store);
 
+    ldout(store->ctx(), 15)
+      << __func__ << " LDAP auth uri="
+      << store->ctx()->_conf->rgw_ldap_uri
+      << dendl;
+
     RGWToken token{from_base64(auth_id)};
-    if ((! token.valid()) || ldh->auth(token.id, token.key) != 0)
+
+    if (! token.valid())
       external_auth_result = -EACCES;
     else {
-      /* ok, succeeded */
-      external_auth_result = 0;
+      ldout(store->ctx(), 10)
+	<< __func__ << " try LDAP auth uri="
+	<< store->ctx()->_conf->rgw_ldap_uri
+	<< " token.id=" << token.id
+	<< dendl;
 
-      /* create local account, if none exists */
-      s->user->user_id = token.id;
-      s->user->display_name = token.id; // cn?
-      int ret = rgw_get_user_info_by_uid(store, s->user->user_id, *(s->user));
-      if (ret < 0) {
-	ret = rgw_store_user_info(store, *(s->user), nullptr, nullptr,
-				  real_time(), true);
+      if (ldh->auth(token.id, token.key) != 0)
+	external_auth_result = -EACCES;
+      else {
+	/* ok, succeeded */
+	external_auth_result = 0;
+
+	/* create local account, if none exists */
+	s->user->user_id = token.id;
+	s->user->display_name = token.id; // cn?
+	int ret = rgw_get_user_info_by_uid(store, s->user->user_id, *(s->user));
 	if (ret < 0) {
-	  dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
-		   << dendl;
+	  ret = rgw_store_user_info(store, *(s->user), nullptr, nullptr,
+				    real_time(), true);
+	  if (ret < 0) {
+	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
+		     << dendl;
+	  }
 	}
-      }
 
       /* set request perms */
       s->perm_mask = RGW_PERM_FULL_CONTROL;
-    } /* success */
+      } /* success */
+    } /* token */
   } /* ldap */
 
   /* keystone failed (or not enabled); check if we want to use rados backend */
