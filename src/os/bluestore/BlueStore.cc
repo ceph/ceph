@@ -882,7 +882,7 @@ BlueStore::BnodeRef BlueStore::Collection::get_bnode(
     get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
     BnodeRef e = new Bnode(hash, key, &bnode_set);
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " created " << e << " " << key << dendl;
+	     << " created " << e << dendl;
 
     bufferlist v;
     int r = store->db->get(PREFIX_OBJ, key, &v);
