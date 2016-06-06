@@ -454,7 +454,7 @@ void bluestore_blob_t::encode(bufferlist& bl) const
   ::encode(compressed_length, bl);
   ::encode(flags, bl);
   ::encode(csum_type, bl);
-  ::encode(csum_block_order, bl);
+  ::encode(csum_chunk_order, bl);
   ::encode(ref_map, bl);
   ::encode(unused, bl);
   ::encode(csum_data, bl);
@@ -469,7 +469,7 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
   ::decode(compressed_length, p);
   ::decode(flags, p);
   ::decode(csum_type, p);
-  ::decode(csum_block_order, p);
+  ::decode(csum_chunk_order, p);
   ::decode(ref_map, p);
   ::decode(unused, p);
   ::decode(csum_data, p);
@@ -487,7 +487,7 @@ void bluestore_blob_t::dump(Formatter *f) const
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
-  f->dump_unsigned("csum_block_order", csum_block_order);
+  f->dump_unsigned("csum_chunk_order", csum_chunk_order);
   f->dump_object("ref_map", ref_map);
   f->open_array_section("csum_data");
   size_t n = get_csum_count();
@@ -511,7 +511,7 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
   ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
   ls.back()->csum_type = CSUM_XXHASH32;
-  ls.back()->csum_block_order = 16;
+  ls.back()->csum_chunk_order = 16;
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->ref_map.get(3, 5);
   ls.back()->add_unused(0, 3);
@@ -528,7 +528,7 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   }
   if (o.csum_type) {
     out << " " << o.get_csum_type_string(o.csum_type)
-	<< "/0x" << std::hex << (1ull << o.csum_block_order) << std::dec;
+	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec;
   }
   if (!o.ref_map.empty()) {
     out << " " << o.ref_map;
@@ -571,8 +571,8 @@ void bluestore_blob_t::put_ref(
   }
 
   // we cannot release something smaller than our csum chunk size
-  if (has_csum_data() && get_csum_block_size() > min_release_size) {
-    min_release_size = get_csum_block_size();
+  if (has_csum_data() && get_csum_chunk_size() > min_release_size) {
+    min_release_size = get_csum_chunk_size();
   }
 
   // search from logical releases
@@ -664,15 +664,15 @@ void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
   switch (csum_type) {
   case CSUM_XXHASH32:
     Checksummer::calculate<Checksummer::xxhash32>(
-      get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, &csum_data);
     break;
   case CSUM_XXHASH64:
     Checksummer::calculate<Checksummer::xxhash64>(
-      get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, &csum_data);
     break;;
   case CSUM_CRC32C:
     Checksummer::calculate<Checksummer::crc32c>(
-      get_csum_block_size(), b_off, bl.length(), bl, &csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, &csum_data);
     break;
   }
 }
@@ -688,15 +688,15 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     break;
   case CSUM_XXHASH32:
     *b_bad_off = Checksummer::verify<Checksummer::xxhash32>(
-      get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
     break;
   case CSUM_XXHASH64:
     *b_bad_off = Checksummer::verify<Checksummer::xxhash64>(
-      get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
     break;
   case CSUM_CRC32C:
     *b_bad_off = Checksummer::verify<Checksummer::crc32c>(
-      get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data);
     break;
   default:
     r = -EOPNOTSUPP;

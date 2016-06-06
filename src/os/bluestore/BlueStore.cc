@@ -3397,7 +3397,7 @@ int BlueStore::_read_extent_sparse(
   // enough regions together.
   dout(20) << __func__ << " " << *blob << " " << *extent << dendl;
   IOContext ioc(NULL);   // FIXME?
-  uint64_t chunk_size = MAX(blob->get_csum_block_size(), block_size);
+  uint64_t chunk_size = MAX(blob->get_csum_chunk_size(), block_size);
 
   // all physical extents has to be aligned with read chunk size
   assert((extent->length % chunk_size) == 0);
@@ -5702,7 +5702,7 @@ void BlueStore::_do_write_small(
 	     << " bstart 0x" << std::hex << bstart << std::dec << dendl;
 
     // can we pad our head/tail out with zeros?
-    uint64_t chunk_size = MAX(block_size, b->get_csum_block_size());
+    uint64_t chunk_size = MAX(block_size, b->get_csum_chunk_size());
     uint64_t head_pad = offset % chunk_size;
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
