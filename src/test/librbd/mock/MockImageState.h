@@ -18,6 +18,8 @@ struct MockImageState {
 
   MOCK_METHOD0(close, int());
   MOCK_METHOD1(close, void(Context*));
+
+  MOCK_METHOD2(snap_set, void(const std::string &, Context*));
 };
 
 } // namespace librbd

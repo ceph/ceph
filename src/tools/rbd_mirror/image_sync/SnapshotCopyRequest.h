@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/parent_types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <map>
 #include <set>
@@ -15,6 +16,7 @@
 #include <tuple>
 
 class Context;
+class ContextWQ;
 namespace journal { class Journaler; }
 namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
@@ -35,15 +37,17 @@ public:
                                      ImageCtxT *remote_image_ctx,
                                      SnapMap *snap_map, Journaler *journaler,
                                      librbd::journal::MirrorPeerClientMeta *client_meta,
+                                     ContextWQ *work_queue,
                                      Context *on_finish) {
     return new SnapshotCopyRequest(local_image_ctx, remote_image_ctx,
-                                   snap_map, journaler, client_meta, on_finish);
+                                   snap_map, journaler, client_meta, work_queue,
+                                   on_finish);
   }
 
   SnapshotCopyRequest(ImageCtxT *local_image_ctx, ImageCtxT *remote_image_ctx,
                       SnapMap *snap_map, Journaler *journaler,
                       librbd::journal::MirrorPeerClientMeta *client_meta,
-                      Context *on_finish);
+                      ContextWQ *work_queue, Context *on_finish);
 
   void send();
 
@@ -90,6 +94,7 @@ private:
   SnapMap *m_snap_map;
   Journaler *m_journaler;
   librbd::journal::MirrorPeerClientMeta *m_client_meta;
+  ContextWQ *m_work_queue;
   Context *m_on_finish;
 
   SnapIdSet m_local_snap_ids;
@@ -98,6 +103,8 @@ private:
   librados::snap_t m_prev_snap_id = CEPH_NOSNAP;
 
   std::string m_snap_name;
+
+  librbd::parent_spec m_local_parent_spec;
 
   void send_snap_unprotect();
   void handle_snap_unprotect(int r);
@@ -114,9 +121,12 @@ private:
   void send_update_client();
   void handle_update_client(int r);
 
+  void error(int r);
   void finish(int r);
 
   void compute_snap_map();
+
+  int validate_parent(ImageCtxT *image_ctx, librbd::parent_spec *spec);
 
 };
 
