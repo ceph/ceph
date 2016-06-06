@@ -54,7 +54,8 @@ class SnappyCompressor : public Compressor {
   SnappyCompressor() : Compressor("snappy") {}
   int compress(const bufferlist &src, bufferlist &dst) override {
     BufferlistSource source(const_cast<bufferlist&>(src).begin(), src.length());
-    bufferptr ptr(snappy::MaxCompressedLength(src.length()));
+    bufferptr ptr = buffer::create_page_aligned(
+      snappy::MaxCompressedLength(src.length()));
     snappy::UncheckedByteArraySink sink(ptr.c_str());
     snappy::Compress(&source, &sink);
     dst.append(ptr, 0, sink.CurrentDestination()-ptr.c_str());
