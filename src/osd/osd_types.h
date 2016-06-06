@@ -511,6 +511,10 @@ struct spg_t {
       ghobject_t::NO_GEN,
       shard);
   }
+
+  unsigned hash_to_shard(unsigned num_shards) const {
+    return ps() % num_shards;
+  }
 };
 WRITE_CLASS_ENCODER(spg_t)
 WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
@@ -668,6 +672,12 @@ public:
       break;
     }
     return o;
+  }
+
+  unsigned hash_to_shard(unsigned num_shards) const {
+    if (type == TYPE_PG)
+      return pgid.hash_to_shard(num_shards);
+    return 0;  // whatever.
   }
 
   void dump(Formatter *f) const;
