@@ -75,7 +75,7 @@ keys can be generated in shell for eg::
 
 Then we can create a system user by following command::
 
-  $ radosgw_admin user create --uid=zone.user --display-name="Zone User" \
+  $ radosgw-admin user create --uid=zone.user --display-name="Zone User" \
                  --access-key=$SYSTEM_ACCESS_KEY --secret=$SYSTEM_SECRET_KEY --system
 
 
