@@ -204,9 +204,9 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
         const char *this_snap = udev_device_get_sysattr_value(dev,
                                                               "current_snap");
 
-        if (strcmp(this_pool, pool) == 0 &&
-            strcmp(this_image, image) == 0 &&
-            strcmp(this_snap, snap) == 0) {
+        if (this_pool && strcmp(this_pool, pool) == 0 &&
+            this_image && strcmp(this_image, image) == 0 &&
+            this_snap && strcmp(this_snap, snap) == 0) {
           bus_dev = dev;
           continue;
         }
@@ -595,13 +595,17 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
   return do_unmap(ctx->udev, devno, id);
 }
 
-static void dump_one_image(Formatter *f, TextTable *tbl,
-                           const char *id, const char *pool,
-                           const char *image, const char *snap)
+static bool dump_one_image(Formatter *f, TextTable *tbl,
+                           struct udev_device *dev)
 {
-  assert(id && pool && image && snap);
-
+  const char *id = udev_device_get_sysname(dev);
+  const char *pool = udev_device_get_sysattr_value(dev, "pool");
+  const char *image = udev_device_get_sysattr_value(dev, "name");
+  const char *snap = udev_device_get_sysattr_value(dev, "current_snap");
   string kname = get_kernel_rbd_name(id);
+
+  if (!pool || !image || !snap)
+    return false;
 
   if (f) {
     f->open_object_section(id);
@@ -613,6 +617,8 @@ static void dump_one_image(Formatter *f, TextTable *tbl,
   } else {
     *tbl << id << pool << image << snap << kname << TextTable::endrow;
   }
+
+  return true;
 }
 
 static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
@@ -638,18 +644,10 @@ static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
     struct udev_device *dev;
 
     dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(l));
-    if (!dev) {
-      r = -ENOMEM;
-      goto out_enm;
+    if (dev) {
+      have_output |= dump_one_image(f, tbl, dev);
+      udev_device_unref(dev);
     }
-
-    dump_one_image(f, tbl, udev_device_get_sysname(dev),
-                   udev_device_get_sysattr_value(dev, "pool"),
-                   udev_device_get_sysattr_value(dev, "name"),
-                   udev_device_get_sysattr_value(dev, "current_snap"));
-
-    have_output = true;
-    udev_device_unref(dev);
   }
 
   r = have_output;
