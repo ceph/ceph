@@ -606,6 +606,7 @@ bool Journal<I>::is_journal_replaying() const {
   Mutex::Locker locker(m_lock);
   return (m_state == STATE_REPLAYING ||
           m_state == STATE_FLUSHING_REPLAY ||
+          m_state == STATE_FLUSHING_RESTART ||
           m_state == STATE_RESTARTING_REPLAY);
 }
 
