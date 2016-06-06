@@ -52,8 +52,8 @@ struct rgw_user {
   }
 
   void from_str(const std::string& str) {
-    ssize_t pos = str.find('$');
-    if (pos >= 0) {
+    size_t pos = str.find('$');
+    if (pos != std::string::npos) {
       tenant = str.substr(0, pos);
       id = str.substr(pos + 1);
     } else {
