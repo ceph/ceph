@@ -783,11 +783,6 @@ public:
     }
 
     void flush() {
-      lock();
-      while (!wal_queue.empty()) {
-	_wait();
-      }
-      unlock();
       drain();
     }
   };
@@ -857,6 +852,8 @@ private:
   size_t block_size_order; ///< bits to shift to get block size
 
   uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
+
+  bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
   // compression options
   enum CompressionMode {
