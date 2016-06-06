@@ -337,8 +337,8 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
 
-  void print(ostream &out);
-  void dump(Formatter *f) const;
+  void print(ostream &out) const override;
+  void dump(Formatter *f) const override;
 
   // TrackedOp stuff
   typedef ceph::shared_ptr<MDRequestImpl> Ref;
