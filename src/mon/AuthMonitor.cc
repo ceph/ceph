@@ -37,7 +37,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
 		<< ").auth v" << v << " ";
 }
 
-ostream& operator<<(ostream& out, AuthMonitor& pm)
+ostream& operator<<(ostream &out, const AuthMonitor &pm)
 {
   return out << "auth";
 }

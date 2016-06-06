@@ -320,7 +320,7 @@ struct Inode {
   }
   ~Inode() { }
 
-  vinodeno_t vino() { return vinodeno_t(ino, snapid); }
+  vinodeno_t vino() const { return vinodeno_t(ino, snapid); }
 
   struct Compare {
     bool operator() (Inode* const & left, Inode* const & right) {
@@ -340,8 +340,8 @@ struct Inode {
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
   bool is_any_caps();
-  bool cap_is_valid(Cap* cap);
-  int caps_issued(int *implemented = 0);
+  bool cap_is_valid(Cap* cap) const;
+  int caps_issued(int *implemented = 0) const;
   void touch_cap(Cap *cap);
   void try_touch_cap(mds_rank_t mds);
   bool caps_issued_mask(unsigned mask);
@@ -359,6 +359,6 @@ struct Inode {
   void dump(Formatter *f) const;
 };
 
-ostream& operator<<(ostream &out, Inode &in);
+ostream& operator<<(ostream &out, const Inode &in);
 
 #endif

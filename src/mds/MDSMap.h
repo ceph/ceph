@@ -632,7 +632,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
-inline ostream& operator<<(ostream& out, MDSMap& m) {
+inline ostream& operator<<(ostream &out, const MDSMap &m) {
   m.print_summary(NULL, &out);
   return out;
 }

@@ -106,7 +106,7 @@ private:
 
 /// Used for dumping debug info.
 /// @related IO
-std::ostream& operator<<(std::ostream& out, IO::ptr io);
+std::ostream& operator<<(std::ostream &out, const IO::ptr &io);
 
 
 class StartThreadIO : public IO {
