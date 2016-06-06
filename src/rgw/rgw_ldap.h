@@ -23,27 +23,38 @@ namespace rgw {
   {
     std::string uri;
     std::string binddn;
+    std::string bindpw;
     std::string searchdn;
     std::string dnattr;
     LDAP *ldap;
+    bool msad = false; /* TODO: possible future specialization */
 
   public:
-    LDAPHelper(std::string _uri, std::string _binddn, std::string _searchdn,
-	      std::string _dnattr)
-      : uri(std::move(_uri)), binddn(std::move(_binddn)), searchdn(_searchdn),
-	dnattr(_dnattr), ldap(nullptr) {
+    LDAPHelper(std::string _uri, std::string _binddn, std::string _bindpw,
+	       std::string _searchdn, std::string _dnattr)
+      : uri(std::move(_uri)), binddn(std::move(_binddn)),
+	bindpw(std::move(_bindpw)), searchdn(_searchdn), dnattr(_dnattr),
+	ldap(nullptr) {
       // nothing
     }
 
     int init() {
       int ret;
       ret = ldap_initialize(&ldap, uri.c_str());
+      if (ret == LDAP_SUCCESS) {
+	unsigned long ldap_ver = LDAP_VERSION3;
+	ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION,
+			      (void*) &ldap_ver);
+      }
+      if (ret == LDAP_SUCCESS) {
+	ret = ldap_set_option(ldap, LDAP_OPT_REFERRALS, LDAP_OPT_OFF); 
+      }
       return (ret == LDAP_SUCCESS) ? ret : -EINVAL;
     }
 
     int bind() {
       int ret;
-      ret = ldap_simple_bind_s(ldap, nullptr, nullptr);
+      ret = ldap_simple_bind_s(ldap, binddn.c_str(), bindpw.c_str());
       return (ret == LDAP_SUCCESS) ? ret : -EINVAL;
     }
 
@@ -60,11 +71,18 @@ namespace rgw {
     int auth(const std::string uid, const std::string pwd) {
       int ret;
       std::string filter;
-      filter = "(";
-      filter += dnattr;
-      filter += "=";
-      filter += uid;
-      filter += ")";
+      if (msad) {
+	filter = "(&(objectClass=user)(sAMAccountName=";
+	filter += uid;
+	filter += "))";
+      } else {
+	/* openldap */
+	filter = "(";
+	filter += dnattr;
+	filter += "=";
+	filter += uid;
+	filter += ")";
+      }
       char *attrs[] = { const_cast<char*>(dnattr.c_str()), nullptr };
       LDAPMessage *answer = nullptr, *entry = nullptr;
       ret = ldap_search_s(ldap, searchdn.c_str(), LDAP_SCOPE_SUBTREE,
@@ -95,8 +113,8 @@ namespace rgw {
   class LDAPHelper
   {
   public:
-    LDAPHelper(std::string _uri, std::string _binddn, std::string _searchdn,
-	      std::string _dnattr)
+    LDAPHelper(std::string _uri, std::string _binddn, std::string _bindpw,
+	       std::string _searchdn, std::string _dnattr)
       {}
 
     int init() {
@@ -117,7 +135,17 @@ namespace rgw {
 
 
 #endif /* HAVE_OPENLDAP */
-
+  
 } /* namespace rgw */
+
+#include "common/ceph_context.h"
+#include "common/common_init.h"
+#include "common/dout.h"
+#include "common/safe_io.h"
+#include <boost/algorithm/string.hpp>
+
+#include "include/assert.h"
+
+std::string parse_rgw_ldap_bindpw(CephContext* ctx);
 
 #endif /* RGW_LDAP_H */
