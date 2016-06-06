@@ -458,6 +458,8 @@ private:
   BitAllocatorStats *m_stats;
   bool m_is_stats_on;
 
+  int64_t truncated_blocks; //see init_check
+
   bool is_stats_on() {
     return m_is_stats_on;
   }
@@ -493,6 +495,7 @@ public:
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t *block_list);
   void free_blocks_dis(int64_t num_blocks, int64_t *block_list);
 
+  int64_t get_truncated_blocks() { return truncated_blocks; }
   BitAllocatorStats *get_stats() {
       return m_stats;
   }
