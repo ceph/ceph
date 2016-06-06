@@ -117,7 +117,8 @@ function test_setup() {
 function teardown() {
     local dir=$1
     kill_daemons $dir KILL
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ `uname` != FreeBSD ] \
+        && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
     rm -fr $dir
@@ -179,7 +180,7 @@ function kill_daemon() {
             exit_code=0
             break
          fi
-         send_signal=0
+         [ x`uname`x = xFreeBSDx ] || send_signal=0
          sleep $try
     done;
     return $exit_code
@@ -607,7 +608,7 @@ function activate_osd() {
         --mark-init=none \
         $osd_data || return 1
 
-    [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
+    [ "$id" -eq "$(cat $osd_data/whoami)" ] || return 1
 
     ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
@@ -1286,8 +1287,14 @@ function erasure_code_plugin_exists() {
     local plugin=$1
 
     local status
+    local grepstr
+    case `uname` in
+        FreeBSD) grepstr="Cannot open.*$plugin" ;;
+        *) grepstr="$plugin.*No such file" ;;
+    esac
+
     if ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin 2>&1 |
-        grep "$plugin.*No such file" ; then
+        grep "$grepstr" ; then
         status=1
     else
         status=0
@@ -1458,7 +1465,6 @@ function main() {
         code=1
     fi
     teardown $dir || return 1
-    return $code
 }
 
 #######################################################################
