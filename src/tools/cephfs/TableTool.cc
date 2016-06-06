@@ -366,7 +366,6 @@ int TableTool::main(std::vector<const char*> &argv)
       jf.open_object_section("reset_snap_status");
       jf.dump_int("result", r);
       jf.close_section();
-      return r;
     } else {
       derr << "Invalid table '" << table << "'" << dendl;
       usage();
