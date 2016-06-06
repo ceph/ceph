@@ -342,6 +342,66 @@ TEST_P(StoreTest, SimpleObjectLongnameTest) {
   }
 }
 
+ghobject_t generate_long_name(unsigned i)
+{
+  stringstream name;
+  name << "object id " << i << " ";
+  for (unsigned j = 0; j < 500; ++j) name << 'a';
+  ghobject_t hoid(hobject_t(sobject_t(name.str(), CEPH_NOSNAP)));
+  hoid.hobj.set_hash(i % 2);
+  return hoid;
+}
+
+TEST_P(StoreTest, LongnameSplitTest) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  for (unsigned i = 0; i < 320; ++i) {
+    ObjectStore::Transaction t;
+    ghobject_t hoid = generate_long_name(i);
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = store->apply_transaction(&osr, t);
+  }
+
+  ghobject_t test_obj = generate_long_name(319);
+  ghobject_t test_obj_2 = test_obj;
+  test_obj_2.generation = 0;
+  test_obj_2.shard_id = shard_id_t(0);
+  {
+    ObjectStore::Transaction t;
+    // should cause a split
+    t.collection_move_rename(
+      cid, test_obj,
+      cid, test_obj_2);
+    r = store->apply_transaction(&osr, t);
+  }
+
+  for (unsigned i = 0; i < 319; ++i) {
+    ObjectStore::Transaction t;
+    ghobject_t hoid = generate_long_name(i);
+    t.remove(cid, hoid);
+    cerr << "Removing object " << hoid << std::endl;
+    r = store->apply_transaction(&osr, t);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, test_obj_2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+
+}
+
 TEST_P(StoreTest, ManyObjectTest) {
   int NUM_OBJS = 2000;
   int r = 0;
@@ -472,6 +532,12 @@ public:
       name = "DIR_" + name;
     }
 
+    if (seq % 2) {
+      for (unsigned i = 0; i < 300; ++i) {
+	name.push_back('a');
+      }
+    }
+
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
@@ -522,6 +588,38 @@ public:
         state->available_objects.insert(hoid);
       --(state->in_flight);
       state->cond.Signal();
+    }
+  };
+
+  class C_SyntheticOnStash : public Context {
+  public:
+    SyntheticWorkloadState *state;
+    ObjectStore::Transaction *t;
+    ghobject_t oid, noid;
+
+    C_SyntheticOnStash(SyntheticWorkloadState *state,
+		       ObjectStore::Transaction *t, ghobject_t oid,
+		       ghobject_t noid)
+      : state(state), t(t), oid(oid), noid(noid) {}
+
+    void finish(int r) {
+      Mutex::Locker locker(state->lock);
+      ASSERT_TRUE(state->in_flight_objects.count(oid));
+      ASSERT_EQ(r, 0);
+      state->in_flight_objects.erase(oid);
+      if (state->contents.count(noid))
+        state->available_objects.insert(noid);
+      --(state->in_flight);
+      bufferlist r2;
+      r = state->store->read(
+	state->cid, noid, 0,
+	state->contents[noid].data.length(), r2);
+      if (!state->contents[noid].data.contents_equal(r2)) {
+	assert(0 == " mismatch after clone");
+        ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
+      }
+      state->cond.Signal();
+      delete t;
     }
   };
 
@@ -626,6 +724,42 @@ public:
     if (!contents.count(new_obj))
       contents[new_obj] = Object();
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, new_obj));
+  }
+
+  int stash() {
+    Mutex::Locker locker(lock);
+    if (!can_unlink())
+      return -ENOENT;
+    if (!can_create())
+      return -ENOSPC;
+    wait_for_ready();
+
+    ghobject_t old_obj;
+    int max = 20;
+    do {
+      old_obj = get_uniform_random_object();
+    } while (--max && !contents[old_obj].data.length());
+    available_objects.erase(old_obj);
+    ghobject_t new_obj = old_obj;
+    new_obj.generation++;
+    new_obj.shard_id = shard_id_t(0);
+    available_objects.erase(new_obj);
+
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    t->collection_move_rename(cid, old_obj, cid, new_obj);
+    ++in_flight;
+    in_flight_objects.insert(old_obj);
+
+    // *copy* the data buffer, since we may modify it later.
+    contents[new_obj].attrs = contents[old_obj].attrs;
+    contents[new_obj].data.clear();
+    contents[new_obj].data.append(contents[old_obj].data.c_str(),
+				  contents[old_obj].data.length());
+    contents.erase(old_obj);
+    int status = store->queue_transaction(
+      osr, t,
+      new C_SyntheticOnStash(this, t, old_obj, new_obj));
+    return status;
   }
 
   int clone() {
@@ -998,6 +1132,8 @@ TEST_P(StoreTest, Synthetic) {
       test_obj.write();
     } else if (val > 50) {
       test_obj.clone();
+    } else if (val > 30) {
+      test_obj.stash();
     } else if (val > 10) {
       test_obj.read();
     } else {
@@ -1036,6 +1172,8 @@ TEST_P(StoreTest, AttrSynthetic) {
       test_obj.setattrs();
     } else if (val > 45) {
       test_obj.clone();
+    } else if (val > 37) {
+      test_obj.stash();
     } else if (val > 30) {
       test_obj.getattrs();
     } else {
