@@ -316,11 +316,11 @@ int main(int argc, const char **argv)
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
     vector<int> raw, up, acting;
-    int calced_primary, up_primary, acting_primary;
-    osdmap.pg_to_osds(pgid, &raw, &calced_primary);
+    int raw_primary, up_primary, acting_primary;
+    osdmap.pg_to_raw_osds(pgid, &raw, &raw_primary);
     osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
                                 &acting, &acting_primary);
-    cout << pgid << " raw (" << raw << ", p" << calced_primary
+    cout << pgid << " raw (" << raw << ", p" << raw_primary
          << ") up (" << up << ", p" << up_primary
          << ") acting (" << acting << ", p" << acting_primary << ")"
          << std::endl;
