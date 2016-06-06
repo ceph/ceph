@@ -162,6 +162,17 @@ protected:
   uint32_t warn_interval_multiplier; // limits output of a given op warning
   // Transitions from false -> true without locks being held
   atomic<bool> is_tracked; //whether in tracker and out of constructor
+public:
+  Mutex comp_lock;
+  bool can_op_lock_comp;
+  void * rep_gather;
+  uint64_t tid; // for debugging
+  bool all_applied;
+  bool all_committed;
+  bool is_sent_ack;
+  bool completed;
+protected:
+
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     xitem(this),
     tracker(_tracker),
@@ -169,8 +180,17 @@ protected:
     lock("TrackedOp::lock"),
     seq(0),
     warn_interval_multiplier(1),
-    is_tracked(false)
-  { }
+    is_tracked(false),
+    comp_lock("TrackedOp::comp_lock")
+  {
+    can_op_lock_comp = false;
+    rep_gather = NULL;
+    tid = 0;
+    all_applied = false;
+    all_committed = false;
+    is_sent_ack = false;
+    completed = false;
+  }
 
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(utime_t now, Formatter *f) const {}

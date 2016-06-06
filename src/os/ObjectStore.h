@@ -511,6 +511,7 @@ public:
 
     bufferptr op_ptr;
 
+  public:
     list<Context *> on_applied;
     list<Context *> on_commit;
     list<Context *> on_applied_sync;

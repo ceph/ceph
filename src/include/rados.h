@@ -376,6 +376,8 @@ static inline int ceph_osd_op_uses_extent(int op)
 
 extern const char *ceph_osd_op_name(int op);
 
+#define CEPH_OSD_FLAG_OP_COMP	16
+
 /*
  * osd op flags
  *

@@ -212,6 +212,9 @@ public:
   IsPGRecoverablePredicate *get_is_recoverable_predicate() {
     return get_pgbackend()->get_is_recoverable_predicate();
   }
+
+  virtual void lazy_completion_func(bool need_lock) {}
+
 protected:
   // Ops waiting for map, should be queued at back
   Mutex map_lock;
