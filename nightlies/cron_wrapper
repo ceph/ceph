@@ -8,12 +8,11 @@ if [ -z $1 ]; then
 fi
 
 # set permanent $LOG file var
-# set per-job $LOG_XX file
-# set $LOG_LOCKED_ERR in case locking failed
 LOG="/var/log/crontab-nightlies-log/crontab.log"
+# set $LOG_LOCKED_ERR in case locking failed
 LOG_LOCK_ERR="/var/log/crontab-nightlies-log/crontab_lock_problem.$$"
 
-# temp files to store sdtout and stderr
+# temp files to store stdout and stderr
 # named with the PID of this script in their name so they'll be unique
 STDERR="/var/tmp/stderr.$$"
 STDOUT="/var/tmp/stdout.$$"
@@ -21,11 +20,12 @@ STDOUT="/var/tmp/stdout.$$"
 # $STDOUT and $STDERR are removed when the script exits for any reason
 trap  "rm -f $STDOUT $STDERR" 0
 
-# log a name of the command about to be run
-echo "Running command: $@" >> $STDOUT
-
 # run a command from this script's argument
 # redirect stdout to $STDOUT file and redirect stderr to $STDERR file
+
+DATE=$(date)
+echo -n "$DATE: "  >> $STDOUT
+echo "Running command: $@" >> $STDOUT
 "$@" > $STDOUT 2> $STDERR
 
 # get return code from the command run
@@ -39,17 +39,12 @@ if [ $code != 0 ] ; then
         cat $STDERR
 else
         # normal exit: just log stdout
-        DATE=$(date)
-        echo -n "$DATE: "  >> $STDOUT
-        cat $STDOUT   >> $STDOUT
-fi
 
-# lock $LOG with file descriptor 200
-# if $LOC is locked by other process - wait for 20 sec
-# if lock failed, write to $LOG_LOCK_ERR, e.g. all information already in $LOG_XX
-exec 200>>$LOG
-flock -w 20 200 || LOG=$LOG_LOCK_ERR
-# write from per-job $LOG_XX file to the commonn $LOG
-cat $LOG_XX >> $LOG
-# unlock 
-flock -u 200
+	# lock $LOG with file descriptor 200
+	exec 200>>$LOG
+	# if $LOG is locked by other process - wait for 20 sec
+	flock -w 20 200 || LOG=$LOG_LOCK_ERR
+	cat $STDOUT >> $LOG
+	# unlock
+	flock -u 200
+fi
