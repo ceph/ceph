@@ -457,6 +457,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
+  Mutex::Locker l(lock);
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
 
