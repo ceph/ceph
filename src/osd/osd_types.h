@@ -3263,6 +3263,10 @@ struct object_info_t {
   // opportunistic checksums; may or may not be present
   __u32 data_digest;  ///< data crc32c
   __u32 omap_digest;  ///< omap crc32c
+  
+  // alloc hint attribute
+  uint64_t expected_object_size, expected_write_size;
+  uint32_t alloc_hint_flags;
 
   void copy_user_bits(const object_info_t& other);
 
@@ -3333,14 +3337,18 @@ struct object_info_t {
   explicit object_info_t()
     : user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0),
-      data_digest(-1), omap_digest(-1)
+      data_digest(-1), omap_digest(-1),
+      expected_object_size(0), expected_write_size(0),
+      alloc_hint_flags(0)
   {}
 
   explicit object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0),
-      data_digest(-1), omap_digest(-1)
+      data_digest(-1), omap_digest(-1),
+      expected_object_size(0), expected_write_size(0),
+      alloc_hint_flags(0)
   {}
 
   explicit object_info_t(bufferlist& bl) {
