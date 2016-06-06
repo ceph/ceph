@@ -85,18 +85,15 @@ public:
   struct region_t {
     uint64_t logical_offset;
     uint64_t blob_xoffset;   //region offset within the blob
-    uint64_t ext_xoffset;    //region offset within the pextent
     uint64_t length;
 
-    region_t(uint64_t offset, uint64_t b_offs, uint64_t x_offs, uint32_t len)
+    region_t(uint64_t offset, uint64_t b_offs, uint32_t len)
       : logical_offset(offset),
       blob_xoffset(b_offs),
-      ext_xoffset(x_offs),
       length(len) {}
     region_t(const region_t& from)
       : logical_offset(from.logical_offset),
       blob_xoffset(from.blob_xoffset),
-      ext_xoffset(from.ext_xoffset),
       length(from.length) {}
   };
   typedef list<region_t> regions2read_t;
