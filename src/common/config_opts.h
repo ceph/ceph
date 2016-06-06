@@ -960,8 +960,8 @@ OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
 OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
 OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
-OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
-OPTION(bluestore_collection_buffer_cache_size, OPT_U32, 16*1024*1024) // per collection!!
+OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
+OPTION(bluestore_buffer_cache_size, OPT_U32, 256*1024*1024)
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
