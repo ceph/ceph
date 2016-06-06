@@ -5578,3 +5578,33 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
     }
   }
 }
+
+void store_statfs_t::dump(Formatter *f) const
+{
+  f->dump_int("available", available);
+
+  f->dump_int("blocks", blocks);
+  f->dump_int("bsize", bsize);
+
+  f->dump_int("allocated", allocated);
+  f->dump_int("stored", stored);
+  f->dump_int("compressed", compressed);
+  f->dump_int("compressed_allocated", compressed_allocated);
+  f->dump_int("compressed_original", compressed_original);
+}
+
+ostream& operator<<(ostream& out, const store_statfs_t &s)
+{
+  out << std::hex
+      << " store_statfs(0x" << s.blocks
+      << "*0x"  << s.bsize
+      << "/0x"  << s.available
+      << ", stored 0x" << s.stored
+      << "/0x"  << s.allocated
+      << ", compress 0x" << s.compressed
+      << "/0x"  << s.compressed_allocated
+      << "/0x"  << s.compressed_original
+      << std::dec
+      << ")";
+  return out;
+}

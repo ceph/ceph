@@ -1892,7 +1892,7 @@ public:
     return false;   // assume a backend cannot, unless it says otherwise
   }
 
-  virtual int statfs(struct statfs *buf) = 0;
+  virtual int statfs(struct store_statfs_t *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
 
