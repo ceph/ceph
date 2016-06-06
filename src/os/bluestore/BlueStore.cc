@@ -3230,7 +3230,7 @@ int BlueStore::_do_read(
       l2read = MIN(l, lext->second.length - r_off);
       if (!ready_intervals_in_cache.contains( off, l2read)) {
 	regions2read_t& regions = blobs2read[bptr];
-	regions.push_back(region_t(off, r_off + lext->second.offset, 0, l2read));
+	regions.push_back(region_t(off, r_off + lext->second.offset, l2read));
       }
       ++lext;
     } else if (off >= lext->first + lext->second.length) {
