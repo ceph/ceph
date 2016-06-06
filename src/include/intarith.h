@@ -35,4 +35,57 @@
 # define SHIFT_ROUND_UP(x,y) (((x)+(1<<(y))-1) >> (y))
 #endif
 
+// count trailing zeros.
+// NOTE: the builtin is nondeterministic on 0 input
+static inline unsigned ctz(unsigned v) {
+  if (v == 0)
+    return sizeof(v) * 8;
+  return __builtin_ctz(v);
+}
+static inline unsigned ctzl(unsigned long v) {
+  if (v == 0)
+    return sizeof(v) * 8;
+  return __builtin_ctzl(v);
+}
+static inline unsigned ctzll(unsigned long long v) {
+  if (v == 0)
+    return sizeof(v) * 8;
+  return __builtin_ctzll(v);
+}
+
+// count leading zeros
+// NOTE: the builtin is nondeterministic on 0 input
+static inline unsigned clz(unsigned v) {
+  if (v == 0)
+    return sizeof(v) * 8;
+  return __builtin_clz(v);
+}
+static inline unsigned clzl(unsigned long v) {
+  if (v == 0)
+    return sizeof(v) * 8;
+  return __builtin_clzl(v);
+}
+static inline unsigned clzll(unsigned long long v) {
+  if (v == 0)
+    return sizeof(v) * 8;
+  return __builtin_clzll(v);
+}
+
+// count bits (set + any 0's that follow)
+static inline unsigned cbits(unsigned v) {
+  if (v == 0)
+    return 0;
+  return (sizeof(v) * 8) - __builtin_clz(v);
+}
+static inline unsigned cbitsl(unsigned long v) {
+  if (v == 0)
+    return 0;
+  return (sizeof(v) * 8) - __builtin_clzl(v);
+}
+static inline unsigned cbitsll(unsigned long long v) {
+  if (v == 0)
+    return 0;
+  return (sizeof(v) * 8) - __builtin_clzll(v);
+}
+
 #endif
