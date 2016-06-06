@@ -126,6 +126,11 @@ ceph_test_rados_watch_notify_LDADD = $(LIBRADOS) libsystest.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += ceph_test_rados_watch_notify
 endif # LINUX
 
+unittest_intarith_SOURCES = test/test_intarith.cc
+unittest_intarith_LDADD = $(UNITTEST_LDADD)
+unittest_intarith_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_intarith
+
 unittest_librados_SOURCES = test/librados/librados.cc
 unittest_librados_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_librados_CXXFLAGS = $(UNITTEST_CXXFLAGS)
