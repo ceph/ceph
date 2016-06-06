@@ -500,4 +500,21 @@ public:
 };
 
 
+class RGWDataLogTrimCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http;
+  const int num_shards;
+  const utime_t interval; //< polling interval
+  const std::string& zone; //< my zone id
+  std::vector<rgw_data_sync_status> peer_status; //< sync status for each peer
+  std::vector<rgw_data_sync_marker> min_shard_markers; //< min marker per shard
+  std::vector<std::string> last_trim; //< last trimmed marker per shard
+  int ret{0};
+
+ public:
+  RGWDataLogTrimCR(RGWRados *store, RGWHTTPManager *http,
+                   int num_shards, utime_t interval);
+  int operate() override;
+};
+
 #endif

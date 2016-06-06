@@ -987,13 +987,14 @@ public:
 class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
   RGWRados *store;
   RGWAioCompletionNotifier *cn{nullptr};
+ protected:
   std::string oid;
   real_time start_time;
   real_time end_time;
   std::string from_marker;
   std::string to_marker;
 
-public:
+ public:
   RGWRadosTimelogTrimCR(RGWRados *store, const std::string& oid,
                         const real_time& start_time, const real_time& end_time,
                         const std::string& from_marker,
