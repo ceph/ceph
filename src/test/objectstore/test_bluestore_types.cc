@@ -491,6 +491,22 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(1u, b.extents.size());
     ASSERT_FALSE(b.extents[0].is_valid());
   }
+  // verify csum chunk size if factored in properly
+  {
+    bluestore_blob_t b;
+    vector<bluestore_pextent_t> r;
+    b.length = mas * 4;
+    b.extents.push_back(bluestore_pextent_t(0, mas*4));
+    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, b.length);
+    b.ref_map.get(0, mas*4);
+    ASSERT_TRUE(b.is_allocated(0, mas*4));
+    b.put_ref(0, mas*3, mrs, &r);
+    cout << "r " << r << " " << b << std::endl;
+    ASSERT_EQ(0u, r.size());
+    ASSERT_TRUE(b.is_allocated(0, mas*4));
+    ASSERT_TRUE(b.extents[0].is_valid());
+    ASSERT_EQ(mas*4, b.extents[0].length);
+  }
 }
 
 TEST(bluestore_blob_t, calc_csum)
