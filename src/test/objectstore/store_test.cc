@@ -2492,7 +2492,7 @@ public:
   static const unsigned max_objects = 3000;
   static const unsigned max_attr_size = 5;
   static const unsigned max_attr_name_len = 100;
-  static const unsigned max_attr_value_len = 1024 * 4;
+  static const unsigned max_attr_value_len = 1024 * 64;
   coll_t cid;
   unsigned max_object_len;
   unsigned in_flight;
