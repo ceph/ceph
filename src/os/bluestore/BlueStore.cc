@@ -1054,7 +1054,6 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_wal_applying_lat, "state_wal_applying_lat", "Average wal_applying state latency");
   b.add_time_avg(l_bluestore_state_wal_aio_wait_lat, "state_wal_aio_wait_lat", "Average aio_wait state latency");
   b.add_time_avg(l_bluestore_state_wal_cleanup_lat, "state_wal_cleanup_lat", "Average cleanup state latency");
-  b.add_time_avg(l_bluestore_state_wal_done_lat, "state_wal_done_lat", "Average wal_done state latency");
   b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
 
