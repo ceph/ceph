@@ -5961,6 +5961,13 @@ int BlueStore::_do_alloc_write(
       }
     } else {
       b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
+      if (l->length() != b->length &&
+	  csum_order != block_size_order) {
+	// hrm, maybe we could do better here, but let's not bother.
+	dout(20) << __func__ << " downgrading csum_order from " << csum_order
+		 << " to block_size_order " << block_size_order << dendl;
+	csum_order = block_size_order;
+      }
     }
     while (final_length > 0) {
       bluestore_pextent_t e;
@@ -5977,7 +5984,10 @@ int BlueStore::_do_alloc_write(
       final_length -= e.length;
       hint = e.end();
     }
-    dout(20) << __func__ << " blob " << *b << dendl;
+    dout(20) << __func__ << " blob " << *b
+	     << " csum_order " << csum_order
+	     << " csum_length 0x" << std::hex << csum_length << std::dec
+	     << dendl;
 
     // checksum
     if (csum_type) {
@@ -6090,10 +6100,15 @@ int BlueStore::_do_write(
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
       (alloc_hints & (CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE|
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
-      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0)
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     wctx.comp_blob_size = comp_max_blob_size;
-  else
+    wctx.csum_order = min_alloc_size_order;
+  } else {
     wctx.comp_blob_size = comp_min_blob_size;
+  }
+  dout(20) << __func__ << " prefer csum_order " << wctx.csum_order
+	   << " comp_blob_size 0x" << std::hex << wctx.comp_blob_size
+	   << std::dec << dendl;
 
   // write in buffer cache
   o->bc.write(txc->seq, offset, bl, wctx.buffered ? 0 : Buffer::FLAG_NOCACHE);
