@@ -112,6 +112,7 @@ void hobject_t::encode(bufferlist& bl) const
   ::encode(max, bl);
   ::encode(nspace, bl);
   ::encode(pool, bl);
+  assert(!max || (*this == hobject_t(hobject_t::get_max())));
   ENCODE_FINISH(bl);
 }
 
@@ -141,6 +142,12 @@ void hobject_t::decode(bufferlist::iterator& bl)
 	oid.name.empty()) {
       pool = INT64_MIN;
       assert(is_min());
+    }
+
+    // for compatibility with some earlier verisons which might encoded
+    // a non-canonical max object
+    if (max) {
+      *this = hobject_t::get_max();
     }
   }
   DECODE_FINISH(bl);
