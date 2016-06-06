@@ -23,7 +23,6 @@
 #include <math.h>
 
 #define debug_assert assert
-#define MIN(x, y) ((x) > (y) ? (y) : (x))
 #define MAX_INT16 ((uint16_t) -1 >> 1)
 #define MAX_INT32 ((uint32_t) -1 >> 1)
 
@@ -1231,7 +1230,7 @@ BitAllocator::BitAllocator(int64_t total_blocks, int64_t zone_size_block,
 void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
        bmap_alloc_mode_t mode, bool def, bool stats_on)
 {
-  int64_t total_zones = 0;
+  int64_t unaligned_blocks = 0;
 
   if (mode != SERIAL && mode != CONCURRENT) {
     debug_assert(0);
@@ -1253,12 +1252,9 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
     debug_assert(0);
   }
 
-  truncated_blocks = total_blocks - (total_blocks / zone_size_block) * zone_size_block;
-  total_blocks = (total_blocks / zone_size_block) * zone_size_block;
-  total_zones = total_blocks / zone_size_block;
+  unaligned_blocks = total_blocks % zone_size_block;
+  total_blocks = ROUND_UP_TO(total_blocks, zone_size_block);
 
-  debug_assert(total_blocks > 0);
-  debug_assert(total_zones > 0);
   m_alloc_mode = mode;
   m_is_stats_on = stats_on;
   if (m_is_stats_on) {
@@ -1267,6 +1263,13 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
 
   pthread_rwlock_init(&m_rw_lock, NULL);
   init(total_blocks, 0, def);
+  if (!def && unaligned_blocks) {
+    /*
+     * Mark extra padded blocks used from begning.
+     */
+    set_blocks_used(total_blocks - (zone_size_block - unaligned_blocks),
+                 (zone_size_block - unaligned_blocks));
+  }
 }
 
 void BitAllocator::lock_excl()
@@ -1485,6 +1488,7 @@ void BitAllocator::free_blocks(int64_t start_block, int64_t num_blocks)
     return;
   }
 
+  debug_assert(start_block + num_blocks <= size());
   if (is_stats_on()) {
     m_stats->add_free_calls(1);
     m_stats->add_freed(num_blocks);
@@ -1506,6 +1510,7 @@ void BitAllocator::set_blocks_used(int64_t start_block, int64_t num_blocks)
     return;
   }
 
+  debug_assert(start_block + num_blocks <= size());
   lock_shared();
   serial_lock();
   set_blocks_used_int(start_block, num_blocks);

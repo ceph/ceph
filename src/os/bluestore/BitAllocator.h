@@ -17,6 +17,7 @@
 #include <mutex>
 #include <atomic>
 #include <vector>
+#include "include/intarith.h"
 
 class BitAllocatorStats {
 public:
