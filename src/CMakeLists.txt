@@ -461,10 +461,10 @@ else()
     perfglue/disabled_stubs.cc)
 endif(${HAVE_GPERFTOOLS})
 
-if(BUILD_SHARED_LIBS)
+if(ENABLE_SHARED)
   list(APPEND libcommon_files
     $<TARGET_OBJECTS:global_common_objs>)
-endif(BUILD_SHARED_LIBS)
+endif(ENABLE_SHARED)
 
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
