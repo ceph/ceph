@@ -11061,7 +11061,7 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
       pg_t pg = (pg_t)olayout.ol_pgid;
       vector<int> osds;
       int primary;
-      o.pg_to_osds(pg, &osds, &primary);
+      o.pg_to_raw_up(pg, &osds, &primary);
       return osds[0];
     });
 }
