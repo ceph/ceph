@@ -721,7 +721,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       ::decode(keyring, iter);
     } catch (const buffer::error &ex) {
       ss << "error decoding keyring" << " " << ex.what();
-      rs = err;
+      err = -EINVAL;
       goto done;
     }
     import_keyring(keyring);
