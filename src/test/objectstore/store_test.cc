@@ -3132,6 +3132,60 @@ public:
     return (available_objects.size() + in_flight_objects.size()) > 0;
   }
 
+  unsigned get_random_alloc_hints() {
+    unsigned f = 0;
+    {
+      boost::uniform_int<> u(0, 3);
+      switch (u(*rng)) {
+      case 1:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE;
+	break;
+      case 2:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE;
+	break;
+      }
+    }
+    {
+      boost::uniform_int<> u(0, 3);
+      switch (u(*rng)) {
+      case 1:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ;
+	break;
+      case 2:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ;
+	break;
+      }
+    }
+    {
+      // append_only, immutable
+      boost::uniform_int<> u(0, 4);
+      f |= u(*rng) << 4;
+    }
+    {
+      boost::uniform_int<> u(0, 3);
+      switch (u(*rng)) {
+      case 1:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_SHORTLIVED;
+	break;
+      case 2:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED;
+	break;
+      }
+    }
+    {
+      boost::uniform_int<> u(0, 3);
+      switch (u(*rng)) {
+      case 1:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE;
+	break;
+      case 2:
+	f |= CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE;
+	break;
+      }
+    }
+    return f;
+  }
+
   int touch() {
     Mutex::Locker locker(lock);
     EnterExit ee("touch");
@@ -3142,6 +3196,7 @@ public:
     available_objects.erase(new_obj);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->touch(cid, new_obj);
+    t->set_alloc_hint(cid, new_obj, 0, 0, get_random_alloc_hints());
     ++in_flight;
     in_flight_objects.insert(new_obj);
     if (!contents.count(new_obj))
