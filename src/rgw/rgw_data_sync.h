@@ -6,6 +6,7 @@
 #include "rgw_bucket.h"
 
 #include "common/RWLock.h"
+#include "common/ceph_json.h"
 
 
 struct rgw_datalog_info {
@@ -59,6 +60,18 @@ struct rgw_data_sync_info {
     encode_json("status", s, f);
     encode_json("num_shards", num_shards, f);
   }
+  void decode_json(JSONObj *obj) {
+    std::string s;
+    JSONDecoder::decode_json("status", s, obj);
+    if (s == "building-full-sync-maps") {
+      state = StateBuildingFullSyncMaps;
+    } else if (s == "sync") {
+      state = StateSync;
+    } else {
+      state = StateInit;
+    }
+    JSONDecoder::decode_json("num_shards", num_shards, obj);
+  }
 
   rgw_data_sync_info() : state((int)StateInit), num_shards(0) {}
 };
@@ -108,6 +121,18 @@ struct rgw_data_sync_marker {
     encode_json("pos", pos, f);
     encode_json("timestamp", utime_t(timestamp), f);
   }
+  void decode_json(JSONObj *obj) {
+    int s;
+    JSONDecoder::decode_json("state", s, obj);
+    state = s;
+    JSONDecoder::decode_json("marker", marker, obj);
+    JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
+    JSONDecoder::decode_json("total_entries", total_entries, obj);
+    JSONDecoder::decode_json("pos", pos, obj);
+    utime_t t;
+    JSONDecoder::decode_json("timestamp", t, obj);
+    timestamp = t.to_real_time();
+  }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
 
@@ -134,6 +159,10 @@ struct rgw_data_sync_status {
   void dump(Formatter *f) const {
     encode_json("info", sync_info, f);
     encode_json("markers", sync_markers, f);
+  }
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("info", sync_info, obj);
+    JSONDecoder::decode_json("markers", sync_markers, obj);
   }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_status)
