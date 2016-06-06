@@ -2,12 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/object_map/RefreshRequest.h"
-#include "cls/rbd/cls_rbd_client.h"
-#include "cls/rbd/cls_rbd_types.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/InvalidateRequest.h"
