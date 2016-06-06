@@ -32,6 +32,7 @@ class RGWDataNotifier;
 class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
+class RGWSyncLogTrimThread;
 class RGWRESTConn;
 
 /* flags for put_obj_meta() */
@@ -1846,6 +1847,8 @@ class RGWRados
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
+
+  RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
 
   Mutex meta_sync_thread_lock;
   Mutex data_sync_thread_lock;

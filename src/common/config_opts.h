@@ -1459,6 +1459,7 @@ OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for as
 OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notification interval to followers
 OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
 OPTION(rgw_sync_lease_period, OPT_INT, 120) // time in second for lease that rgw takes on a specific log (or log shard)
+OPTION(rgw_sync_log_trim_interval, OPT_INT, 1200) // time in seconds between attempts to trim sync logs
 
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
