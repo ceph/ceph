@@ -38,12 +38,12 @@ TEST(WorkQueue, Resize)
   sleep(1);
   ASSERT_EQ(3, tp.get_num_threads());
 
-  g_conf->set_val("osd op threads", "15");
+  g_conf->set_val("osd op threads", "0");
   g_conf->apply_changes(&cout);
   sleep(1);
-  ASSERT_EQ(15, tp.get_num_threads());
+  ASSERT_EQ(0, tp.get_num_threads());
 
-  g_conf->set_val("osd op threads", "0");
+  g_conf->set_val("osd op threads", "15");
   g_conf->apply_changes(&cout);
   sleep(1);
   ASSERT_EQ(15, tp.get_num_threads());
