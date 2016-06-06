@@ -668,20 +668,25 @@ void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
   }
 }
 
-int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl) const
+int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
+  int &b_bad_off) const
 {
+  b_bad_off = -1;
   switch (csum_type) {
   case CSUM_NONE:
-    return -1;
+    return 0;
   case CSUM_XXHASH32:
-    return Checksummer::verify<Checksummer::xxhash32>(
+    b_bad_off = Checksummer::verify<Checksummer::xxhash32>(
       get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+    return 0;
   case CSUM_XXHASH64:
-    return Checksummer::verify<Checksummer::xxhash64>(
+    b_bad_off = Checksummer::verify<Checksummer::xxhash64>(
       get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+    return 0;
   case CSUM_CRC32C:
-    return Checksummer::verify<Checksummer::crc32c>(
+    b_bad_off = Checksummer::verify<Checksummer::crc32c>(
       get_csum_block_size(), b_off, bl.length(), bl, csum_data);
+    return 0;
   default:
     return -EOPNOTSUPP;
   }
