@@ -3921,8 +3921,9 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
       missing[e.soid] = item(e.version, e.prior_version);
     }
     rmissing[e.version.version] = e.soid;
-  } else
+  } else if (e.is_delete()) {
     rm(e.soid, e.version);
+  }
 }
 
 void pg_missing_t::revise_need(hobject_t oid, eversion_t need)

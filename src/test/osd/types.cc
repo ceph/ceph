@@ -940,6 +940,26 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_FALSE(missing.is_missing(oid));
     EXPECT_TRUE(e.reqid_is_indexed());
   }
+
+  // ERROR op should not affect previous entries
+  {
+    pg_missing_t missing;
+    pg_log_entry_t modify = sample_e;
+
+    modify.op = pg_log_entry_t::MODIFY;
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(modify);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_EQ(missing.missing[oid].need, version);
+
+    pg_log_entry_t error = sample_e;
+    error.op = pg_log_entry_t::ERROR;
+    error.return_code = -ENOENT;
+    error.version = eversion_t(11, 5);
+    missing.add_next_event(error);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_EQ(missing.missing[oid].need, version);
+  }
 }
 
 TEST(pg_missing_t, revise_need)
