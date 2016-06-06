@@ -589,7 +589,8 @@ void PGLog::append_log_entries_update_missing(
       ldpp_dout(dpp, 20) << "update missing, append " << ne << dendl;
       log->index(ne);
     }
-    if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0) {
+    if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0 &&
+	!p->is_error()) {
       missing.add_next_event(*p);
       if (rollbacker) {
 	// hack to match PG::mark_all_unfound_lost
@@ -991,6 +992,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 ++i) {
       if (i->version <= info.last_complete) break;
       if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
+      if (i->is_error())
 	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
