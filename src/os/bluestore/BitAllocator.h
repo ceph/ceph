@@ -105,20 +105,20 @@ public:
     }
     m_cur_idx++;
 
-    if (m_cur_idx == m_list->size() &&
+    if (m_cur_idx == (int64_t)m_list->size() &&
         m_wrap) {
       m_cur_idx %= m_list->size();
       m_wrapped = true;
     }
 
-    if (cur_idx == m_list->size()) {
+    if (cur_idx == (int64_t)m_list->size()) {
       /*
        * End of list
        */
       return NULL;
     }
 
-    debug_assert(cur_idx < m_list->size());
+    debug_assert(cur_idx < (int64_t)m_list->size());
     return &(*m_list)[cur_idx];
   }
 
