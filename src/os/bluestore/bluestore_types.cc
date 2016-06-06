@@ -566,6 +566,11 @@ void bluestore_blob_t::put_ref(
     return;
   }
 
+  // we cannot release something smaller than our csum chunk size
+  if (has_csum_data() && get_csum_block_size() > min_release_size) {
+    min_release_size = get_csum_block_size();
+  }
+
   // search from logical releases
   for (auto le : logical) {
     uint64_t r_off = le.offset;
