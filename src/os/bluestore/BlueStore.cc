@@ -5202,10 +5202,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_SETALLOCHINT:
       {
-	r = _setallochint(txc, c, o,
-			  op->expected_object_size,
-			  op->expected_write_size,
-			  op->alloc_hint_flags);
+	r = _set_alloc_hint(txc, c, o,
+			    op->expected_object_size,
+			    op->expected_write_size,
+			    op->alloc_hint_flags);
       }
       break;
 
@@ -6394,12 +6394,13 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   return r;
 }
 
-int BlueStore::_setallochint(TransContext *txc,
-			     CollectionRef& c,
-			     OnodeRef& o,
-			     uint64_t expected_object_size,
-			     uint64_t expected_write_size,
-			     uint32_t flags)
+int BlueStore::_set_alloc_hint(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& o,
+  uint64_t expected_object_size,
+  uint64_t expected_write_size,
+  uint32_t flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
