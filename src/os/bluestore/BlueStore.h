@@ -101,7 +101,6 @@ public:
   };
   typedef list<region_t> regions2read_t;
   typedef map<const bluestore_blob_t*, regions2read_t> blobs2read_t;
-  typedef map<const bluestore_pextent_t*, regions2read_t> extents2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
@@ -1177,21 +1176,6 @@ private:
   // --------------------------------------------------------
   // read processing internal methods
   int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result);
-  int _read_extent_sparse(
-    const bluestore_blob_t* blob,
-    const bluestore_pextent_t* extent,
-    regions2read_t::const_iterator cur,
-    regions2read_t::const_iterator end,
-    OnodeRef o,
-    ready_regions_t* result);
-
-  int _blob2read_to_extents2read(
-    const bluestore_blob_t* blob,
-    regions2read_t::const_iterator cur,
-    regions2read_t::const_iterator end,
-    const interval_set<uint64_t>& ready_intervals_in_cache,
-    extents2read_t* result);
-
   int _verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const;
   int _decompress(bufferlist& source, bufferlist* result);
 
