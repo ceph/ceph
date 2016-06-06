@@ -38,6 +38,12 @@ namespace crimson {
 	assert(0 != delta && 0 != rho && rho <= delta);
       }
 
+      ReqParams() :
+	ReqParams(1, 1)
+      {
+	// empty
+      }
+
       ReqParams(const ReqParams& other) :
 	delta(other.delta),
 	rho(other.rho)
