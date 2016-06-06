@@ -109,11 +109,26 @@ const char * ceph_osd_op_flag_name(unsigned flag)
 string ceph_osd_op_flag_string(unsigned flags)
 {
   string s;
-  for (unsigned i=0; i<31; ++i) {
+  for (unsigned i=0; i<32; ++i) {
     if (flags & (1u<<i)) {
       if (s.length())
 	s += "+";
       s += ceph_osd_op_flag_name(1u << i);
+    }
+  }
+  if (s.length())
+    return s;
+  return string("-");
+}
+
+string ceph_osd_alloc_hint_flag_string(unsigned flags)
+{
+  string s;
+  for (unsigned i=0; i<32; ++i) {
+    if (flags & (1u<<i)) {
+      if (s.length())
+	s += "+";
+      s += ceph_osd_alloc_hint_flag_name(1u << i);
     }
   }
   if (s.length())
