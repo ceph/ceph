@@ -3273,21 +3273,45 @@ int BlueStore::_do_read(
 	return r;
 
       while (r2r_it != r2r.end()) {
-	ready_regions[r2r_it->logical_offset].substr_of(raw_bl, r2r_it->blob_xoffset, r2r_it->length);
+	ready_regions[r2r_it->logical_offset].substr_of(
+	  raw_bl, r2r_it->blob_xoffset, r2r_it->length);
 	++r2r_it;
       }
     } else {
-      extents2read_t e2r;
-      int r = _blob2read_to_extents2read(bptr, r2r_it, r2r.cend(), ready_intervals_in_cache, &e2r);
-      if (r < 0)
-	return r;
+      dout(20) << __func__ << "  blob " << *bptr << dendl;
+      for (auto reg : b2r_it->second) {
+	// determine how much of the blob to read
+	unsigned chunk_size = MAX(block_size, bptr->get_csum_chunk_size());
+	uint64_t r_off = reg.blob_xoffset;
+	uint64_t r_len = reg.length;
+	unsigned front = r_off % chunk_size;
+	if (front) {
+	  r_off -= front;
+	  r_len += front;
+	}
+	unsigned tail = r_len % chunk_size;
+	if (tail) {
+	  r_len += chunk_size - tail;
+	}
+	dout(20) << __func__ << "   region loff 0x" << std::hex
+		 << reg.logical_offset
+		 << " blob_xoffset 0x" << reg.blob_xoffset << "~" << reg.length
+		 << " reading 0x" << r_off << "~" << r_len
+		 << dendl;
 
-      extents2read_t::const_iterator it = e2r.cbegin();
-      while (it != e2r.cend()) {
-	int r = _read_extent_sparse(bptr, it->first, it->second.cbegin(), it->second.cend(), o, &ready_regions);
-	if (r < 0)
-	  return r;
-	++it;
+	// read it
+	IOContext ioc(NULL);  // FIXME?
+	bufferlist bl;
+	bptr->map(r_off, r_len, [&](uint64_t offset, uint64_t length) {
+	    bufferlist t;
+	    int r = bdev->read(offset, length, &t, &ioc, false);
+	    assert(r == 0);
+	    bl.claim_append(t);
+	  });
+	_verify_csum(bptr, r_off, bl);
+
+	// prune and keep result
+	ready_regions[reg.logical_offset].substr_of(bl, front, reg.length);
       }
     }
     ++b2r_it;
@@ -3381,121 +3405,6 @@ int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, buffer
     ++it;
   }
 
-  return 0;
-}
-
-int BlueStore::_read_extent_sparse(
-  const bluestore_blob_t* blob,
-  const bluestore_pextent_t* extent,
-  BlueStore::regions2read_t::const_iterator cur,
-  BlueStore::regions2read_t::const_iterator end,
-  OnodeRef o,
-  BlueStore::ready_regions_t* result)
-{
-  // FIXME: this is a trivial implementation that reads each region
-  // independently - can be improved to read neighboring and/or close
-  // enough regions together.
-  dout(20) << __func__ << " " << *blob << " " << *extent << dendl;
-  IOContext ioc(NULL);   // FIXME?
-  uint64_t chunk_size = MAX(blob->get_csum_chunk_size(), block_size);
-
-  // all physical extents has to be aligned with read chunk size
-  assert((extent->length % chunk_size) == 0);
-
-  while (cur != end) {
-    assert(cur->ext_xoffset + cur->length <= extent->length);
-    uint64_t r_off = cur->ext_xoffset;
-    uint64_t front_extra = r_off % chunk_size;
-    r_off -= front_extra;
-
-    uint64_t x_len = cur->length;
-    uint64_t r_len = ROUND_UP_TO(x_len + front_extra, chunk_size);
-
-    bufferlist bl;
-    int r = bdev->read(r_off + extent->offset, r_len, &bl, &ioc, false);
-    if (r < 0) {
-      return r;
-    }
-    if (blob->csum_type) {
-      r = _verify_csum(blob, cur->blob_xoffset, bl);
-      if (r < 0) {
-	dout(20) << __func__ << "  blob reading 0x" << std::hex
-	  << cur->logical_offset << " 0x"
-	  << cur->blob_xoffset << "~" << bl.length()
-	  << " csum verification failed" << dendl;
-	return -EIO;
-      }
-    }
-
-    (*result)[cur->logical_offset].substr_of(bl, front_extra, x_len);
-
-    ++cur;
-  }
-  return 0;
-}
-
-int BlueStore::_blob2read_to_extents2read(
-  const bluestore_blob_t* blob,
-  BlueStore::regions2read_t::const_iterator cur,
-  BlueStore::regions2read_t::const_iterator end,
-  const interval_set<uint64_t>& ready_intervals_in_cache,
-  BlueStore::extents2read_t* result)
-{
-  result->clear();
-
-  auto ext_it = blob->extents.cbegin();
-  auto ext_end = blob->extents.cend();
-
-  uint64_t ext_pos = 0;
-  uint64_t l = 0;
-  while (cur != end && ext_it != ext_end) {
-
-    assert(cur->ext_xoffset == 0);
-
-    //bypass preceeding extents
-    while (cur->blob_xoffset >= ext_pos + ext_it->length && ext_it != ext_end) {
-      ext_pos += ext_it->length;
-      ++ext_it;
-    }
-    l = cur->length;
-    uint64_t r_offs = cur->blob_xoffset - ext_pos;
-    uint64_t l_offs = cur->logical_offset;
-    uint64_t x_offs = cur->blob_xoffset;
-    while (l > 0 && ext_it != ext_end) {
-
-      auto plen = blob->get_aligned_payload_length(block_size);
-      assert(plen >= ext_pos + r_offs);
-      uint64_t r_len = MIN(plen - ext_pos - r_offs, ext_it->length - r_offs);
-
-      if (r_len > 0) {
-	r_len = MIN(r_len, l);
-	const bluestore_pextent_t* eptr = &(*ext_it);
-	if (!ready_intervals_in_cache.contains(l_offs, r_len)) {
-	  regions2read_t& regions = (*result)[eptr];
-	  regions.push_back(region_t(l_offs, x_offs, r_offs, r_len));
-	}
-	l -= r_len;
-	l_offs += r_len;
-	x_offs += r_len;
-      }
-
-      //leave extent pointer as-is if current region's been fully processed - lookup will start from it for the next region
-      if (l != 0) {
-	ext_pos += ext_it->length;
-	r_offs = 0;
-	++ext_it;
-      }
-    }
-
-    ++cur;
-    assert(cur == end || l_offs <= cur->logical_offset); //region offsets to be ordered ascending and with no overlaps. Overwise ext_it(ext_pos) to be enumerated from the beginning on each region
-  }
-
-  if (cur != end || l > 0) {
-    assert(l == 0);
-    assert(cur == end);
-    return -EFAULT;
-  }
   return 0;
 }
 

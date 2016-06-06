@@ -385,7 +385,7 @@ struct bluestore_blob_t {
 	       vector<bluestore_pextent_t> *r);
 
   void map(uint64_t x_off, uint64_t x_len,
-	   std::function<void(uint64_t,uint64_t)> f) {
+	   std::function<void(uint64_t,uint64_t)> f) const {
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
@@ -403,7 +403,7 @@ struct bluestore_blob_t {
   }
   void map_bl(uint64_t x_off,
 	      bufferlist& bl,
-	      std::function<void(uint64_t,uint64_t,bufferlist&)> f) {
+	      std::function<void(uint64_t,uint64_t,bufferlist&)> f) const {
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
