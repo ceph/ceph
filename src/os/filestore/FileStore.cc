@@ -1030,6 +1030,7 @@ int FileStore::mkjournal()
 
   new_journal();
   if (journal) {
+    journal->set_on_abort(on_abort);
     ret = journal->check();
     if (ret < 0) {
       ret = journal->create();
@@ -2987,6 +2988,7 @@ void FileStore::_do_transaction(
 	  dump_open_fds(g_ceph_context);
 	}
 
+	on_abort->complete(r);
 	assert(0 == "unexpected error");
       }
     }

@@ -35,6 +35,7 @@ public:
 protected:
   Cond *do_sync_cond;
   bool wait_on_full;
+  Context *on_abort;
 
 public:
   Journal(uuid_d f, Finisher *fin, Cond *c=0) :
@@ -42,6 +43,10 @@ public:
     do_sync_cond(c),
     wait_on_full(false) { }
   virtual ~Journal() { }
+
+  void set_on_abort(Context *c) {
+    on_abort = c;
+  }
 
   virtual int check() = 0;   ///< check if journal appears valid
   virtual int create() = 0;  ///< create a fresh journal

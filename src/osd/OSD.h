@@ -2479,7 +2479,17 @@ public:
 
   int enable_disable_fuse(bool stop);
 
-  void suicide(int exitcode);
+  class C_OSD_OnAbort : public Context {
+    OSD *osd;
+  public:
+    C_OSD_OnAbort(OSD *o) : osd(o) {}
+    void finish(int r) {
+      osd->on_abort();
+    }
+  };
+
+  void kick_pgs(bool flush);
+  void on_abort();
   int shutdown();
 
   void handle_signal(int signum);

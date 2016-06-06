@@ -1002,6 +1002,8 @@ void MemStore::_do_transaction(Transaction& t)
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
+
+	on_abort->complete(r);
 	assert(0 == "unexpected error");
       }
     }

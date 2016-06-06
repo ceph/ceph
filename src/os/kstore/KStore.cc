@@ -2187,7 +2187,10 @@ void KStore::_txc_state_proc(TransContext *txc)
 	std::lock_guard<std::mutex> l(kv_lock);
 	if (g_conf->kstore_sync_submit_transaction) {
           int r = db->submit_transaction(txc->t);
-	  assert(r == 0);
+	  if (r != 0) {
+	      on_abort->complete(r);
+	      assert(0);
+	  }
 	}
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
@@ -2195,7 +2198,10 @@ void KStore::_txc_state_proc(TransContext *txc)
       }
       {
 	int r = db->submit_transaction_sync(txc->t);
-	assert(r == 0);
+	if (r != 0) {
+	  on_abort->complete(r);
+	  assert(0);
+	}
       }
       break;
 
@@ -2358,11 +2364,17 @@ void KStore::_kv_sync_thread()
 	     it != kv_committing.end();
 	     ++it) {
 	  int r = db->submit_transaction((*it)->t);
-	  assert(r == 0);
+	  if (r != 0) {
+	      on_abort->complete(r);
+	      assert(0);
+	  }
 	}
       }
       int r = db->submit_transaction_sync(t);
-      assert(r == 0);
+      if (r != 0) {
+	  on_abort->complete(r);
+	  assert(0);
+      }
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
