@@ -1262,6 +1262,7 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
     debug_assert(0);
   }
 
+  truncated_blocks = total_blocks - (total_blocks / zone_size_block) * zone_size_block;
   total_blocks = (total_blocks / zone_size_block) * zone_size_block;
   total_zones = total_blocks / zone_size_block;
 
