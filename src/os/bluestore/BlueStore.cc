@@ -22,6 +22,7 @@
 #include "BlueStore.h"
 #include "kv.h"
 #include "include/compat.h"
+#include "include/intarith.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -5918,9 +5919,10 @@ int BlueStore::_do_alloc_write(
     bufferlist *l = &wi.bl;
     uint64_t final_length = b->length;
     uint64_t csum_length = b->length;
-    size_t csum_order = wctx->csum_order;
+    unsigned csum_order;
     bufferlist compressed_bl;
     CompressorRef c;
+    bool compressed = false;
     if (wctx->compress &&
 	b->length > min_alloc_size &&
 	(c = compressor) != nullptr) {
@@ -5951,22 +5953,26 @@ int BlueStore::_do_alloc_write(
 	l = &compressed_bl;
 	final_length = newlen;
 	csum_length = newlen;
+	csum_order = ctz(newlen);
 	b->set_compressed(rawlen);
+	compressed = true;
       } else {
-	dout(20) << __func__ << hex << "  compressed 0x" << l->length() << " -> 0x"
-		 << rawlen << " with " << chdr.type
+	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
+		 << " -> 0x" << rawlen << " with " << chdr.type
 		 << ", leaving uncompressed"
 		 << dec << dendl;
-	b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
       }
-    } else {
+    }
+    if (!compressed) {
       b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
-      if (l->length() != b->length &&
-	  csum_order != block_size_order) {
+      if (l->length() != b->length) {
 	// hrm, maybe we could do better here, but let's not bother.
-	dout(20) << __func__ << " downgrading csum_order from " << csum_order
-		 << " to block_size_order " << block_size_order << dendl;
+	dout(20) << __func__ << " forcing csum_order to block_size_order "
+		 << block_size_order << dendl;
 	csum_order = block_size_order;
+      } else {
+	assert(b_off == 0);
+	csum_order = std::min(wctx->csum_order, ctz(l->length()));
       }
     }
     while (final_length > 0) {
