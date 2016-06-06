@@ -50,14 +50,18 @@ external dependencies:
       ..
 
 If you often pipe `make`to `less` and would like to maintain the
-diagnostic colors for errors and warnings, you can invoke `cmake`
-with:
+diagnostic colors for errors and warnings (and if your compiler
+supports it), you can invoke `cmake` with:
 
-    $ cmake -DDIAG_COLOR_ALWAYS=yes [...]
+    $ cmake -DDIAGNOSTICS_COLOR=always [...]
 
 Then you'll get the diagnostic colors when you execute:
 
     $ make | less -R
+
+Other available values for DIAGNOSTICS_COLOR are 'auto' (default) and
+'never'.
+
 
 **More options will be implemented in the future.**
 
