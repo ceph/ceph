@@ -303,7 +303,7 @@ void MDRequestImpl::set_filepath2(const filepath& fp)
   more()->filepath2 = fp;
 }
 
-void MDRequestImpl::print(ostream &out)
+void MDRequestImpl::print(ostream &out) const
 {
   out << "request(" << reqid;
   //if (request) out << " " << *request;
