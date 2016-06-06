@@ -256,7 +256,7 @@ struct bluestore_blob_t {
   uint32_t flags;                  ///< FLAG_*
 
   uint8_t csum_type;               ///< CSUM_*
-  uint8_t csum_block_order;        ///< csum block size is 1<<block_order bytes
+  uint8_t csum_chunk_order;        ///< csum block size is 1<<block_order bytes
 
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   interval_set<uint32_t> unused;   ///< portion that has never been written to
@@ -266,14 +266,14 @@ struct bluestore_blob_t {
     : length(l),
       flags(f),
       csum_type(CSUM_NONE),
-      csum_block_order(12) {
+      csum_chunk_order(12) {
   }
 
   bluestore_blob_t(uint32_t l, const bluestore_pextent_t& ext, uint32_t f = 0)
     : length(l),
       flags(f),
       csum_type(CSUM_NONE),
-      csum_block_order(12) {
+      csum_chunk_order(12) {
     extents.push_back(ext);
   }
 
@@ -426,8 +426,8 @@ struct bluestore_blob_t {
     return csum_data.length() > 0;
   }
 
-  uint32_t get_csum_block_size() const {
-    return 1 << csum_block_order;
+  uint32_t get_csum_chunk_size() const {
+    return 1 << csum_chunk_order;
   }
 
   size_t get_csum_value_size() const {
@@ -473,8 +473,8 @@ struct bluestore_blob_t {
 
   void init_csum(unsigned type, unsigned order, unsigned len) {
     csum_type = type;
-    csum_block_order = order;
-    csum_data = buffer::create(get_csum_value_size() * len / get_csum_block_size());
+    csum_chunk_order = order;
+    csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
     csum_data.zero();
   }
 
