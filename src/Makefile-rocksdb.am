@@ -263,6 +263,7 @@ EXTRA_DIST += \
   rocksdb/include/rocksdb/utilities/db_ttl.h \
   rocksdb/include/rocksdb/utilities/document_db.h \
   rocksdb/include/rocksdb/utilities/env_mirror.h \
+  rocksdb/include/rocksdb/utilities/env_registry.h \
   rocksdb/include/rocksdb/utilities/flashcache.h \
   rocksdb/include/rocksdb/utilities/geo_db.h \
   rocksdb/include/rocksdb/utilities/info_log_finder.h \
@@ -586,6 +587,7 @@ EXTRA_DIST += \
   rocksdb/tools/check_format_compatible.sh \
   rocksdb/tools/db_bench.cc \
   rocksdb/tools/db_bench_tool.cc \
+  rocksdb/tools/db_bench_tool_test.cc \
   rocksdb/tools/db_crashtest.py \
   rocksdb/tools/dbench_monitor \
   rocksdb/tools/db_repl_stress.cc \
@@ -658,6 +660,7 @@ EXTRA_DIST += \
   rocksdb/util/dynamic_bloom.cc \
   rocksdb/util/dynamic_bloom.h \
   rocksdb/util/dynamic_bloom_test.cc \
+  rocksdb/util/env_basic_test.cc \
   rocksdb/util/env.cc \
   rocksdb/util/env_chroot.cc \
   rocksdb/util/env_chroot.h \
@@ -706,6 +709,8 @@ EXTRA_DIST += \
   rocksdb/utilities/document/json_document_test.cc \
   rocksdb/utilities/env_mirror.cc \
   rocksdb/utilities/env_mirror_test.cc \
+  rocksdb/utilities/env_registry.cc \
+  rocksdb/utilities/env_registry_test.cc \
   rocksdb/utilities/flashcache/flashcache.cc \
   rocksdb/utilities/flashcache/flashcache.h \
   rocksdb/utilities/geodb/geodb_impl.cc \
@@ -778,7 +783,6 @@ EXTRA_DIST += \
   rocksdb/util/log_write_bench.cc \
   rocksdb/util/lru_cache_handle.h \
   rocksdb/util/memenv.cc \
-  rocksdb/util/memenv_test.cc \
   rocksdb/util/mock_env.cc \
   rocksdb/util/mock_env.h \
   rocksdb/util/mock_env_test.cc \
