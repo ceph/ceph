@@ -464,7 +464,7 @@ ostream& operator<<(ostream& out, const spg_t &pg)
 
 pg_t pg_t::get_ancestor(unsigned old_pg_num) const
 {
-  int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+  int old_bits = cbits(old_pg_num);
   int old_mask = (1 << old_bits) - 1;
   pg_t ret = *this;
   ret.m_seed = ceph_stable_mod(m_seed, old_pg_num, old_mask);
@@ -479,7 +479,7 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
 
   bool split = false;
   if (true) {
-    int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+    int old_bits = cbits(old_pg_num);
     int old_mask = (1 << old_bits) - 1;
     for (int n = 1; ; n++) {
       int next_bit = (n << (old_bits-1));
@@ -498,7 +498,7 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
   }
   if (false) {
     // brute force
-    int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+    int old_bits = cbits(old_pg_num);
     int old_mask = (1 << old_bits) - 1;
     for (unsigned x = old_pg_num; x < new_pg_num; ++x) {
       unsigned o = ceph_stable_mod(x, old_pg_num, old_mask);
@@ -517,7 +517,7 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
   assert(pg_num > 1);
 
   // Find unique p such that pg_num \in [2^(p-1), 2^p)
-  unsigned p = pg_pool_t::calc_bits_of(pg_num);
+  unsigned p = cbits(pg_num);
   assert(p); // silence coverity #751330 
 
   if ((m_seed % (1<<(p-1))) < (pg_num % (1<<(p-1))))
@@ -528,7 +528,7 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
 
 pg_t pg_t::get_parent() const
 {
-  unsigned bits = pg_pool_t::calc_bits_of(m_seed);
+  unsigned bits = cbits(m_seed);
   assert(bits);
   pg_t retval = *this;
   retval.m_seed &= ~((~0)<<(bits - 1));
@@ -1193,20 +1193,10 @@ void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* t
   }
 }
 
-int pg_pool_t::calc_bits_of(int t)
-{
-  int b = 0;
-  while (t > 0) {
-    t = t >> 1;
-    ++b;
-  }
-  return b;
-}
-
 void pg_pool_t::calc_pg_masks()
 {
-  pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
-  pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
+  pg_num_mask = (1 << cbits(pg_num-1)) - 1;
+  pgp_num_mask = (1 << cbits(pgp_num-1)) - 1;
 }
 
 unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
