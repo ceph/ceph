@@ -157,8 +157,6 @@ else(ENABLE_SHARED)
   set(CEPH_SHARED STATIC)
 endif(ENABLE_SHARED)
 
-option(BUILD_SHARED_LIBS "Build shared libraries" ON)
-
 find_package(execinfo)
 
 find_package(udev REQUIRED)
