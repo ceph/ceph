@@ -1061,6 +1061,7 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes", "Sum for write-op padded bytes");
   b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops", "Sum for wal write op");
   b.add_u64(l_bluestore_wal_write_bytes, "wal_write_bytes", "Sum for wal write bytes");
+  b.add_u64(l_bluestore_write_penalty_read_ops, " write_penalty_read_ops", "Sum for write penalty read ops");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -5595,6 +5596,7 @@ void BlueStore::_do_write_small(
 	b_len += head_read;
 	head_bl.claim_append(padded);
 	padded.swap(head_bl);
+	logger->inc(l_bluestore_write_penalty_read_ops);
       }
       if (tail_read) {
 	bufferlist tail_bl;
@@ -5608,6 +5610,7 @@ void BlueStore::_do_write_small(
 	  padded.append_zero(zlen);
 	  logger->inc(l_bluestore_write_pad_bytes, zlen);
 	}
+	logger->inc(l_bluestore_write_penalty_read_ops);
       }
     }
 
