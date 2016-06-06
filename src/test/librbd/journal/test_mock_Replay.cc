@@ -615,9 +615,15 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
   when_replay_op_ready(mock_journal_replay, 123, &on_resume);
   ASSERT_EQ(0, on_snap_create_ready.wait());
 
-  ASSERT_EQ(0, when_shut_down(mock_journal_replay, true));
-  ASSERT_EQ(-ERESTART, on_snap_remove_safe.wait());
+  C_SaferCond on_shut_down;
+  mock_journal_replay.shut_down(true, &on_shut_down);
+
+  ASSERT_EQ(-ERESTART, on_resume.wait());
+  on_snap_create_finish->complete(-ERESTART);
   ASSERT_EQ(-ERESTART, on_snap_create_safe.wait());
+
+  ASSERT_EQ(-ERESTART, on_snap_remove_safe.wait());
+  ASSERT_EQ(0, on_shut_down.wait());
 }
 
 TEST_F(TestMockJournalReplay, UnknownOpFinishEvent) {

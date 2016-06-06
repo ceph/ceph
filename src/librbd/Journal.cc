@@ -1346,6 +1346,10 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
   CephContext *cct = m_image_ctx.cct;
 
   m_lock.Lock();
+  assert(m_state == STATE_REPLAYING ||
+         m_state == STATE_FLUSHING_RESTART ||
+         m_state == STATE_FLUSHING_REPLAY);
+
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
   if (r < 0) {
     lderr(cct) << "failed to commit journal event to disk: " << cpp_strerror(r)
@@ -1379,8 +1383,8 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
   } else {
     // only commit the entry if written successfully
     m_journaler->committed(replay_entry);
-    m_lock.Unlock();
   }
+  m_lock.Unlock();
 }
 
 template <typename I>
