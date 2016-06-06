@@ -1059,6 +1059,8 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
 
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes", "Sum for write-op padded bytes");
+  b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops", "Sum for wal write op");
+  b.add_u64(l_bluestore_wal_write_bytes, "wal_write_bytes", "Sum for wal write bytes");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -4674,6 +4676,8 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
   case bluestore_wal_op_t::OP_WRITE:
     {
       dout(20) << __func__ << " write " << wo.extents << dendl;
+      logger->inc(l_bluestore_wal_write_ops);
+      logger->inc(l_bluestore_wal_write_bytes, wo.data.length());
       bufferlist::iterator p = wo.data.begin();
       for (auto& e : wo.extents) {
 	bufferlist bl;
