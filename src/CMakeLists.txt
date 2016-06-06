@@ -91,22 +91,17 @@ else()
 endif()
 
 
-# if compiler allows it and if -DDIAG_COLOR_ALWAYS=yes is provided to
-# cmake, turn on diagnostic colors, even when compiler output does not
-# go to terminal (e.g., when piped to less)
+## Handle diagnostics color if compiler supports them.
 
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
-  COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS)
+  COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
 
-if(DIAG_COLOR_ALWAYS)
-  if(COMPILER_SUPPORTS_DIAG_COLOR_ALWAYS)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
-    message(STATUS "C and C++ compilers will always show diagnostic colors")
-  else()
-    message(WARNING
-      "Unable to turn on DIAG_COLOR_ALWAYS, because this compiler does not support -fdiagnostics-color=always flag.")
-  endif()
+set(DIAGNOSTICS_COLOR "auto"
+  CACHE STRING "Used if the C/C++ compiler supports the -fdiagnostics-color option. May have one of three values -- 'auto' (default), 'always', or 'never'. If set to 'always' and the compiler supports the option, 'make [...] | less -R' will make visible diagnostics colorization of compiler output.")
+
+if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
 endif()
 
 
