@@ -11,6 +11,7 @@ import xml.etree.ElementTree
 import xml.sax.saxutils
 
 import flask
+import jinja2
 
 from flask import render_template
 
@@ -34,7 +35,18 @@ DEFAULT_LOGDIR = '/var/log/ceph'
 
 # 'app' must be global for decorators, etc.
 APPNAME = '__main__'
-app = flask.Flask(APPNAME)
+
+APP_ROOT_DIR = os.path.join(os.path.dirname(__file__))
+app = flask.Flask(APPNAME, static_folder=os.path.join(APP_ROOT_DIR, 'static'))
+
+my_loader = jinja2.ChoiceLoader([
+    app.jinja_loader,
+    jinja2.FileSystemLoader([
+        os.path.join(APP_ROOT_DIR, 'templates'),
+    ]),
+])
+
+app.jinja_loader = my_loader
 
 LOGLEVELS = {
     'critical': logging.CRITICAL,

@@ -12,9 +12,9 @@ MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PYTHONPATH and LD_LIBRARY_PATH'
 
-if MYDIR.endswith('src') and \
-   os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')):
+if MYDIR.endswith('src') \
+        and os.path.exists(os.path.join(MYDIR, '.libs')) \
+        and os.path.exists(os.path.join(MYDIR, 'pybind')):
     MYLIBPATH = os.path.join(MYDIR, '.libs')
     if 'LD_LIBRARY_PATH' in os.environ:
         if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
@@ -37,6 +37,7 @@ def parse_args():
 
     return parser.parse_known_args()
 
+
 # main
 
 parsed_args, rest = parse_args()
@@ -44,7 +45,9 @@ parsed_args, rest = parse_args()
 # import now that env vars are available to imported module
 
 try:
+    sys.path.insert(0, os.path.join(MYDIR, 'pybind', 'ceph-rest-api'))
     import ceph_rest_api
+
 except EnvironmentError as e:
     print >> sys.stderr, "Error importing ceph_rest_api: ", str(e)
     sys.exit(1)
