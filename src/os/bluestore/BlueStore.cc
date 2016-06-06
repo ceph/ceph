@@ -6085,7 +6085,7 @@ int BlueStore::_do_write(
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
   }
-  wctx.csum_order = block_size_order;
+  wctx.csum_order = MAX(block_size_order, o->onode.get_preferred_csum_order());
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
@@ -6101,6 +6101,7 @@ int BlueStore::_do_write(
       (alloc_hints & (CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE|
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
+    dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
     wctx.comp_blob_size = comp_max_blob_size;
     wctx.csum_order = min_alloc_size_order;
   } else {
