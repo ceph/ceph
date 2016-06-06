@@ -58,6 +58,7 @@ enum {
   l_bluestore_write_pad_bytes,
   l_bluestore_wal_write_ops,
   l_bluestore_wal_write_bytes,
+  l_bluestore_write_penalty_read_ops,
   l_bluestore_last
 };
 
