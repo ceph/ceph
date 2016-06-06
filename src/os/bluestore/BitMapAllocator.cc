@@ -18,7 +18,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bitmapalloc:"
 
-#define NEXT_MULTIPLE(x, m) (!(x) ? 0: (((((x) - 1) / (m)) + 1)  * (m)))
 
 BitMapAllocator::BitMapAllocator(int64_t device_size)
   : m_num_uncommitted(0),
@@ -161,16 +160,8 @@ void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
   dout(10) << __func__ <<" instance "<< (uint64_t) this <<
     " offset " << offset << " length " << length << dendl;
 
-  offset = NEXT_MULTIPLE(offset, m_block_size);
-
-  // bitallocator::init may decrease the size of blkdev.
-  uint64_t total_size = m_bit_alloc->size() * m_block_size;
-  if (offset + length > total_size) {
-    assert(offset + length < total_size + m_bit_alloc->get_truncated_blocks() * m_block_size);
-    length -= (offset + length) - total_size;
-  }
-
-  insert_free(offset, (length / m_block_size) * m_block_size);
+  insert_free(ROUND_UP_TO(offset, m_block_size),
+      (length / m_block_size) * m_block_size);
 }
 
 void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)

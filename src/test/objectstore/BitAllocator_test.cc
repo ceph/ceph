@@ -408,6 +408,22 @@ TEST(BitAllocator, test_bmap_alloc)
   alloc->free_blocks(0, alloc->size());
   delete alloc;
 
+  // unaligned zones
+  total_blocks = 1024 * 2 + 11;
+  alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
+
+  for (int64_t iter = 0; iter < 4; iter++) {
+    for (int64_t i = 0; i < total_blocks; i++) {
+      allocated = alloc->alloc_blocks(1, &start_block);
+      bmap_test_assert(allocated == 1);
+      bmap_test_assert(start_block == i);
+    }
+
+    for (int64_t i = 0; i < total_blocks; i++) {
+      alloc->free_blocks(i, 1);
+    }
+  }
+
   // Make three > 3 levels tree and check allocations and dealloc
   // in a loop
   int64_t alloc_size = 16;
