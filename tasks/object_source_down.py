@@ -3,6 +3,7 @@ Test Object locations going down
 """
 import logging
 import ceph_manager
+import time
 from teuthology import misc as teuthology
 from util.rados import rados
 
@@ -26,7 +27,7 @@ def task(ctx, config):
         )
 
     while len(manager.get_osd_status()['up']) < 3:
-        manager.sleep(10)
+        time.sleep(10)
     manager.wait_for_clean()
 
     # something that is always there
