@@ -29,7 +29,7 @@ cls_method_handle_t h_accumulate_inode_metadata;
 
 
 
-std::ostream &operator<<(std::ostream &out, ObjCeiling &in)
+std::ostream &operator<<(std::ostream &out, const ObjCeiling &in)
 {
   out << "id: " << in.id << " size: " << in.size;
   return out;
