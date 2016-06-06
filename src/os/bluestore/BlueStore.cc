@@ -969,7 +969,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     wal_tp(cct,
 	   "BlueStore::wal_tp",
            "tp_wal",
-	   cct->_conf->bluestore_wal_threads,
+	   cct->_conf->bluestore_sync_wal_apply ? 0 : cct->_conf->bluestore_wal_threads,
 	   "bluestore_wal_threads"),
     wal_wq(this,
 	     cct->_conf->bluestore_wal_thread_timeout,
@@ -980,7 +980,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
-    min_alloc_size(0)
+    min_alloc_size(0),
+    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
 {
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
@@ -4293,7 +4294,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
       if (txc->wal_txn) {
 	txc->state = TransContext::STATE_WAL_QUEUED;
-	if (g_conf->bluestore_sync_wal_apply) {
+	if (sync_wal_apply) {
 	  _wal_apply(txc);
 	} else {
 	  wal_wq.queue(txc);

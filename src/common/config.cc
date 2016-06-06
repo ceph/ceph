@@ -650,13 +650,14 @@ void md_config_t::_apply_changes(std::ostream *oss)
     }
   }
 
+  changed.clear();
+
   // Make any pending observer callbacks
   for (rev_obs_map_t::const_iterator r = robs.begin(); r != robs.end(); ++r) {
     md_config_obs_t *obs = r->first;
     obs->handle_conf_change(this, r->second);
   }
 
-  changed.clear();
 }
 
 void md_config_t::call_all_observers()
