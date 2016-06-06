@@ -579,6 +579,9 @@ struct bluestore_onode_t {
       expected_write_size(0),
       alloc_hint_flags(0) {}
 
+  /// get preferred csum chunk size
+  size_t get_preferred_csum_order() const;
+
   /// find a lextent that includes offset
   map<uint64_t,bluestore_lextent_t>::iterator find_lextent(uint64_t offset) {
     map<uint64_t,bluestore_lextent_t>::iterator fp =

@@ -833,6 +833,15 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   // FIXME
 }
 
+size_t bluestore_onode_t::get_preferred_csum_order() const
+{
+  uint32_t t = expected_write_size;
+  if (!t) {
+    return 0;
+  }
+  return ctz(expected_write_size);
+}
+
 int bluestore_onode_t::compress_extent_map()
 {
   if (extent_map.empty())
