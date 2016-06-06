@@ -3565,31 +3565,29 @@ void Client::wake_inode_waiters(MetaSession *s)
 class C_Client_CacheInvalidate : public Context  {
 private:
   Client *client;
-  InodeRef inode;
+  vinodeno_t ino;
   int64_t offset, length;
 public:
   C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len) :
-			   client(c), inode(in), offset(off), length(len) {
+    client(c), offset(off), length(len) {
+    if (client->use_faked_inos())
+      ino = vinodeno_t(in->faked_ino, CEPH_NOSNAP);
+    else
+      ino = in->vino();
   }
   void finish(int r) {
     // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
     assert(!client->client_lock.is_locked_by_me());
-    client->_async_invalidate(inode, offset, length);
+    client->_async_invalidate(ino, offset, length);
   }
 };
 
-void Client::_async_invalidate(InodeRef& in, int64_t off, int64_t len)
+void Client::_async_invalidate(vinodeno_t ino, int64_t off, int64_t len)
 {
-  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << dendl;
-  if (use_faked_inos())
-    ino_invalidate_cb(callback_handle, vinodeno_t(in->faked_ino, CEPH_NOSNAP), off, len);
-  else
-    ino_invalidate_cb(callback_handle, in->vino(), off, len);
-
-  client_lock.Lock();
-  in.reset(); // put inode inside client_lock
-  client_lock.Unlock();
-  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << " done" << dendl;
+  if (unmounting)
+    return;
+  ldout(cct, 10) << "_async_invalidate " << ino << " " << off << "~" << len << dendl;
+  ino_invalidate_cb(callback_handle, ino, off, len);
 }
 
 void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len) {
@@ -4760,6 +4758,8 @@ public:
 
 void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name)
 {
+  if (unmounting)
+    return;
   ldout(cct, 10) << "_async_dentry_invalidate '" << name << "' ino " << ino
 		 << " in dir " << dirino << dendl;
   dentry_invalidate_cb(callback_handle, dirino, ino, name);
