@@ -23,3 +23,13 @@
 
 * The `osd crush location` config option is no longer supported.  Please
   update your ceph.conf to use the `crush location` option instead.
+
+* The static libraries are not included by the debian development packages
+  (lib*-dev) any more. As it is not required per debian packaging policy.
+  And their shared versions are packaged as before.
+
+* The libtool pseudo-libraries (.la files) are not included by the debian
+  development packages (lib*-dev) any more. As it is unneeded, and per
+  https://wiki.debian.org/ReleaseGoals/LAFileRemoval and
+  https://www.debian.org/doc/manuals/maint-guide/advanced.en.html,
+  we should remove them.
