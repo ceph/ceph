@@ -233,6 +233,7 @@ int KeyRing::load(CephContext *cct, const std::string &filename)
   }
   catch (const buffer::error& err) {
     lderr(cct) << "error parsing file " << filename << dendl;
+    return -EIO;
   }
 
   ldout(cct, 2) << "KeyRing::load: loaded key file " << filename << dendl;
