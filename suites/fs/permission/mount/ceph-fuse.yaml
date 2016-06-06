@@ -3,7 +3,7 @@ overrides:
     conf:
       client:
         fuse default permissions: false
-        client posix acl: true
+        client acl type: posix_acl
 tasks:
 - install:
 - ceph:
