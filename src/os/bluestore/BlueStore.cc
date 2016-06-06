@@ -3376,7 +3376,6 @@ int BlueStore::_blob2read_to_extents2read(
     uint64_t x_offs = cur->blob_xoffset;
     while (l > 0 && ext_it != ext_end) {
 
-      assert(blob->length >= ext_pos + r_offs);
       auto plen = blob->get_aligned_payload_length(block_size);
       assert(plen >= ext_pos + r_offs);
       uint64_t r_len = MIN(plen - ext_pos - r_offs, ext_it->length - r_offs);
