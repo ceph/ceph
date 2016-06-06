@@ -2758,7 +2758,12 @@ public:
     available_objects.erase(new_obj);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->touch(cid, new_obj);
-    t->set_alloc_hint(cid, new_obj, 0, 0, get_random_alloc_hints());
+    boost::uniform_int<> u(17, 22);
+    boost::uniform_int<> v(12, 17);
+    t->set_alloc_hint(cid, new_obj,
+		      1ull << u(*rng),
+		      1ull << v(*rng),
+		      get_random_alloc_hints());
     ++in_flight;
     in_flight_objects.insert(new_obj);
     if (!contents.count(new_obj))
