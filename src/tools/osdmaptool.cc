@@ -137,8 +137,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)NULL)) {
       string interr;
       pg_num = strict_strtoll(val.c_str(), 10, &interr);
-      if (interr.length() > 0)
+      if (interr.length() > 0) {
         cerr << "error parsing integer value " << interr << std::endl;
+        exit(EXIT_FAILURE);
+      }
     } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
@@ -308,8 +310,7 @@ int main(int argc, const char **argv)
   if (!test_map_pg.empty()) {
     pg_t pgid;
     if (!pgid.parse(test_map_pg.c_str())) {
-      cerr << me << ": failed to parse pg '" << test_map_pg
-	   << "', r = " << r << std::endl;
+      cerr << me << ": failed to parse pg '" << test_map_pg << std::endl;
       usage();
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
