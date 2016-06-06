@@ -38,7 +38,7 @@ public:
   void operator++();
   JSONObj *operator*();
 
-  bool end() {
+  bool end() const {
     return (cur == last);
   }
 };
