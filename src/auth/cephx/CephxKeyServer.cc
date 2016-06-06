@@ -296,14 +296,13 @@ bool KeyServer::contains(const EntityName& name) const
 int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 {
   Mutex::Locker l(lock);
-
-  if (f)
-    f->open_array_section("auth_dump");
-
   map<EntityName, EntityAuth>::const_iterator mapiter = data.secrets_begin();
 
   if (mapiter == data.secrets_end())
     return -ENOENT;
+
+  if (f)
+    f->open_array_section("auth_dump");
 
   while (mapiter != data.secrets_end()) {
     const EntityName& name = mapiter->first;
