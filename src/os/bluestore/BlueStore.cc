@@ -2880,7 +2880,7 @@ void BlueStore::_sync()
   dout(10) << __func__ << " done" << dendl;
 }
 
-int BlueStore::statfs(struct statfs *buf)
+int BlueStore::statfs(struct store_statfs_t *buf)
 {
   memset(buf, 0, sizeof(*buf));
   uint64_t bluefs_len = 0;
@@ -2888,13 +2888,13 @@ int BlueStore::statfs(struct statfs *buf)
       p != bluefs_extents.end(); p++)
     bluefs_len += p.get_len();
 
-  buf->f_blocks = bdev->get_size() / block_size;
-  buf->f_bsize = block_size;
-  buf->f_bfree = (alloc->get_free() - bluefs_len) / block_size;
-  buf->f_bavail = buf->f_bfree;
+  buf->reset();
 
-  dout(20) << __func__ << " free " << pretty_si_t(buf->f_bfree * buf->f_bsize)
-	   << " / " << pretty_si_t(buf->f_blocks * buf->f_bsize) << dendl;
+  buf->blocks = bdev->get_size() / block_size;
+  buf->bsize = block_size;
+  buf->available = (alloc->get_free() - bluefs_len);
+
+  dout(20) << __func__ << *buf << dendl;
   return 0;
 }
 

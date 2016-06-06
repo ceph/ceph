@@ -220,16 +220,17 @@ int MemStore::mkfs()
   return 0;
 }
 
-int MemStore::statfs(struct statfs *st)
+int MemStore::statfs(struct store_statfs_t *st)
 {
-  dout(10) << __func__ << dendl;
-  st->f_bsize = 4096;
+   dout(10) << __func__ << dendl;
+  st->reset();
+  st->bsize = 4096;
 
-  // Device size is a configured constant
-  st->f_blocks = g_conf->memstore_device_bytes / st->f_bsize;
+   // Device size is a configured constant
+  st->blocks = g_conf->memstore_device_bytes / st->bsize;
 
   dout(10) << __func__ << ": used_bytes: " << used_bytes << "/" << g_conf->memstore_device_bytes << dendl;
-  st->f_bfree = st->f_bavail = MAX((long(st->f_blocks) - long(used_bytes / st->f_bsize)), 0);
+  st->available = MAX((int64_t(st->blocks * st->bsize) - int64_t(used_bytes)), 0);
 
   return 0;
 }

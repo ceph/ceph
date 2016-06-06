@@ -1374,7 +1374,7 @@ void KStore::_sync()
   dout(10) << __func__ << " done" << dendl;
 }
 
-int KStore::statfs(struct statfs *buf)
+int KStore::statfs(struct store_statfs_t* buf)
 {
   return db->get_statfs(buf);
 }

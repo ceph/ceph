@@ -4311,4 +4311,28 @@ struct PromoteCounter {
   }
 };
 
+/** store_statfs_t
++* ObjectStore full statfs information
++*/
+struct store_statfs_t
+{
+  uint64_t available = 0;              // Free blocks available
+
+  uint64_t blocks = 0;                 // Total data blocks
+  uint32_t bsize = 0;                  // Optimal transfer block size
+
+  int64_t allocated = 0;               // Bytes allocated by the store
+  int64_t stored = 0;                  // Bytes actually stored by the user
+  int64_t compressed = 0;              // Bytes stored after compression
+  int64_t compressed_allocated = 0;    // Bytes allocated for compressed data
+  int64_t compressed_original = 0;     // Bytes that were successfully compressed
+
+  void reset() {
+    *this = store_statfs_t();
+  }
+
+  void dump(Formatter *f) const;
+};
+ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
+
 #endif
