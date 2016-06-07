@@ -828,8 +828,8 @@ def exec_test():
         module_suites = []
         for mod_name in modules:
             # Test names like cephfs.test_auto_repair
-            log.info("Loaded: {0}".format(list(module_suites)))
             module_suites.append(decorating_loader.loadTestsFromName(mod_name))
+        log.info("Loaded: {0}".format(list(module_suites)))
         overall_suite = suite.TestSuite(module_suites)
     else:
         log.info("Excuting all tests")
