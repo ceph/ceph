@@ -256,7 +256,7 @@ class PCP(Task):
             )
 
     def setup_graphite(self, hosts):
-        if not hasattr(self.ctx, 'archive'):
+        if not getattr(self.ctx, 'archive', None):
             self.use_graphite = False
         if self.use_graphite:
             out_dir = os.path.join(
@@ -275,7 +275,7 @@ class PCP(Task):
             )
 
     def setup_archive(self, hosts):
-        if not hasattr(self.ctx, 'archive'):
+        if not getattr(self.ctx, 'archive', None):
             self.fetch_archives = False
         if self.fetch_archives:
             self.archiver = PCPArchive(
