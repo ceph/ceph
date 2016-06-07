@@ -25,6 +25,7 @@
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/blkdev.h"
+#include "common/align.h"
 
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -495,26 +496,69 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   return r < 0 ? r : 0;
 }
 
-int KernelDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
+int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
+{
+  uint64_t aligned_off = align_down(off, block_size);
+  uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
+  bufferptr p = buffer::create_page_aligned(aligned_len);
+  int r = 0;
+
+  r = ::pread(fd_direct, p.c_str(), aligned_len, aligned_off);
+  if (r < 0) {
+    r = -errno;
+    goto out;
+  }
+  assert((uint64_t)r == aligned_len);
+  memcpy(buf, p.c_str() + (off - aligned_off), len);
+
+  dout(40) << __func__ << " data: ";
+  bufferlist bl;
+  bl.append(buf, len);
+  bl.hexdump(*_dout);
+  *_dout << dendl;
+
+ out:
+  return r < 0 ? r : 0;
+}
+
+int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
+                       bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	  << dendl;
   assert(len > 0);
   assert(off < size);
   assert(off + len <= size);
-
   int r = 0;
-  char *t = buf;
-  uint64_t left = len;
-  while (left > 0) {
-    r = ::pread(fd_buffered, t, left, off);
+
+  //if it's direct io and unaligned, we have to use a internal buffer
+  if (!buffered && ((off % block_size != 0)
+                    || (len % block_size != 0)
+                    || (uintptr_t(buf) % CEPH_PAGE_SIZE != 0)))
+    return direct_read_unaligned(off, len, buf);
+
+  if (buffered) {
+    //buffered read
+    char *t = buf;
+    uint64_t left = len;
+    while (left > 0) {
+      r = ::pread(fd_buffered, t, left, off);
+      if (r < 0) {
+	r = -errno;
+	goto out;
+      }
+      off += r;
+      t += r;
+      left -= r;
+    }
+  } else {
+    //direct and aligned read
+    r = ::pread(fd_direct, buf, len, off);
     if (r < 0) {
       r = -errno;
       goto out;
     }
-    off += r;
-    t += r;
-    left -= r;
+    assert((uint64_t)r == len);
   }
 
   dout(40) << __func__ << " data: ";
