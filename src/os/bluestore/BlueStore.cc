@@ -2549,7 +2549,18 @@ int BlueStore::fsck()
 	}
 	// lextents
 	map<int64_t,bluestore_extent_ref_map_t> local_blobs;
+	uint64_t lext_next_offset = 0, lext_prev_offset = 0;
 	for (auto& l : o->onode.extent_map) {
+	  if(l.first < lext_next_offset) {
+	    derr << " " << oid << " lextent at 0x" 
+		 << std::hex << l.first
+		 << "overlaps with the previous one 0x" 
+		 << lext_prev_offset << "~" << (lext_next_offset - lext_prev_offset)
+		 << std::dec << dendl;
+	    ++errors;
+	  }
+	  lext_next_offset = l.first + l.second.length;
+	  lext_prev_offset = l.first;
 	  if (l.second.blob >= 0) {
 	    local_blobs[l.second.blob].get(l.second.offset, l.second.length);
 	  } else {
