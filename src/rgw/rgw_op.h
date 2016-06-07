@@ -690,6 +690,7 @@ protected:
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
+  string crypt_http_responses;
 
   ceph::real_time delete_at;
 
