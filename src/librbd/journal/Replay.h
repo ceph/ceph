@@ -7,12 +7,10 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
-#include "include/rbd/librbd.hpp"
 #include "common/Mutex.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
-#include <set>
 #include <unordered_set>
 #include <unordered_map>
 
