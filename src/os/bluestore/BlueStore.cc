@@ -3413,12 +3413,19 @@ int BlueStore::_blob2read_to_extents2read(
 
 int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const
 {
-  int bad = blob->verify_csum(blob_xoffset, bl);
-  if (bad >= 0) {
-    dout(20) << __func__ << " at blob offset 0x" << std::hex << bad << dendl;
-    return -1;
+  int bad;
+  int r = blob->verify_csum(blob_xoffset, bl, &bad);
+  if (r < 0) {
+    if (r == -1) {
+      dout(20) << __func__ << "bad checksum at blob offset 0x"
+               << std::hex << bad << std::dec << dendl;
+    } else {
+      derr << __func__ << "failed with exit code: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  } else {
+    return 0;
   }
-  return 0;
 }
 
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)

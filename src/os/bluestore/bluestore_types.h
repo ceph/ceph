@@ -481,8 +481,10 @@ struct bluestore_blob_t {
   /// calculate csum for the buffer at the given b_off
   void calc_csum(uint64_t b_off, const bufferlist& bl);
 
-  /// verify csum: return offset of error, or -1 for no error.
-  int verify_csum(uint64_t b_off, const bufferlist& bl) const;
+  /// verify csum: return -EOPNOTSUPP for unsupported checksum type;
+  /// return -1 and valid(nonnegative) b_bad_off for checksum error;
+  /// return 0 if all is well.
+  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off) const;
 
 };
 WRITE_CLASS_ENCODER(bluestore_blob_t)
