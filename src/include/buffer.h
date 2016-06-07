@@ -308,8 +308,8 @@ namespace buffer CEPH_BUFFER_API {
 	//return off == bl->length();
       }
 
-      void advance(int o);
-      void seek(unsigned o);
+      void advance(ssize_t o);
+      void seek(size_t o);
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
@@ -351,8 +351,8 @@ namespace buffer CEPH_BUFFER_API {
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
-      void advance(int o);
-      void seek(unsigned o);
+      void advance(ssize_t o);
+      void seek(size_t o);
       char operator*();
       iterator& operator++();
       ptr get_current_ptr();
