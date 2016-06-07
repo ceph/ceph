@@ -564,13 +564,13 @@ namespace crimson {
 	      if (c.second->has_request()) {
 		double p = c.second->next_request().tag.proportion +
 		  c.second->prop_delta;
-		if (isnan(lowest_prop_tag) || p < lowest_prop_tag) {
+		if (std::isnan(lowest_prop_tag) || p < lowest_prop_tag) {
 		  lowest_prop_tag = p;
 		}
 	      }
 	    }
 	  }
-	  if (!isnan(lowest_prop_tag)) {
+	  if (!std::isnan(lowest_prop_tag)) {
 	    client.prop_delta = lowest_prop_tag - time;
 	  }
 	  client.idle = false;
