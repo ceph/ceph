@@ -223,7 +223,6 @@ class CephFSVolumeClient(object):
         self.auth_id = auth_id
         self.volume_prefix = volume_prefix if volume_prefix else self.DEFAULT_VOL_PREFIX
         self.pool_ns_prefix = pool_ns_prefix if pool_ns_prefix else self.DEFAULT_NS_PREFIX
-
         # For flock'ing in cephfs, I want a unique ID to distinguish me
         # from any other manila-share services that are loading this module.
         # We could use pid, but that's unnecessary weak: generate a
@@ -236,10 +235,6 @@ class CephFSVolumeClient(object):
         # TODO: remove .meta files on last rule for an auth ID deletion
         # TODO: implement fsync in bindings so that we don't have to syncfs
         # TODO: version the on-disk structures
-        # TODO: check dirty flag after locking something and call recover()
-        # if we are opening something dirty (racing with another instance
-        # of the driver restarting after failure) -- only required if someone
-        # running multiple manila-share instances with Ceph loaded.
 
     def recover(self):
         # Scan all auth keys to see if they're dirty: if they are, they have
@@ -251,17 +246,28 @@ class CephFSVolumeClient(object):
         # we're updating it with being dirty at the same time.
 
         # First list the auth IDs that have potentially dirty on-disk metadata
-        dir_handle = self.fs.opendir(self.volume_prefix)
+        log.debug("Recovering from partial auth updates (if any)...")
+
+        try:
+            dir_handle = self.fs.opendir(self.volume_prefix)
+        except cephfs.ObjectNotFound:
+            log.debug("Nothing to recover. No auth meta files.")
+            return
+
         d = self.fs.readdir(dir_handle)
         auth_ids = []
-        while d:
-            d = self.fs.readdir(dir_handle)
 
+        if not d:
+            log.debug("Nothing to recover. No auth meta files.")
+
+        while d:
             # Identify auth IDs from auth meta filenames. The auth meta files
             # are named as, "$<auth_id>.meta".
             match = re.search("^\$(.*)\.meta$", d.d_name)
             if match:
                 auth_ids.append(match.group(1))
+
+            d = self.fs.readdir(dir_handle)
 
         self.fs.closedir(dir_handle)
 
@@ -285,25 +291,58 @@ class CephFSVolumeClient(object):
                 auth_meta = self._auth_metadata_get(auth_id)
                 if not auth_meta or not auth_meta['dirty']:
                     continue
+                self._recover_auth_meta(auth_id, auth_meta)
 
-                for volume in auth_meta['volumes']:
-                    if not auth_meta['volumes'][volume]['dirty']:
-                        continue
+        log.debug("Recovered from partial auth updates (if any).")
 
-                    (group_id, volume_id) = volume.split('/')
-                    volume_path = VolumePath(group_id, volume_id)
-                    access_level = auth_meta['volumes'][volume]['access_level']
+    def _recover_auth_meta(auth_id, auth_meta):
+        """
+        Call me after locking the auth meta file.
+        """
+        remove_volumes = []
 
-                    with self._volume_lock(volume_path):
-                        vol_meta = self._volume_metadata_get(volume_path)
-                        readonly = True if access_level is 'r' else False
-                        self._authorize_volume(volume_path, auth_id, readonly)
+        for volume, volume_data in auth_meta['volumes'].items():
+            if not volume_data['dirty']:
+                continue
 
-                    auth_meta['volumes'][volume]['dirty'] = False
-                    self._auth_metadata_set(auth_id, auth_meta)
+            (group_id, volume_id) = volume.split('/')
+            volume_path = VolumePath(group_id, volume_id)
+            access_level = volume_data['access_level']
 
-                auth_meta['dirty'] = False
-                self._auth_metadata_set(auth_id, auth_meta)
+            with self._volume_lock(volume_path):
+                vol_meta = self._volume_metadata_get(volume_path)
+
+                # No VMeta update indicates that there was no auth update
+                # in Ceph either. So it's safe to remove corresponding
+                # partial update in AMeta.
+                if auth_id not in vol_meta['auths']:
+                    remove_volumes.append(volume)
+                    continue
+
+                want_auth = {
+                    'access_level': access_level,
+                    'dirty': False,
+                }
+                # VMeta update looks clean. Ceph auth update must have been
+                # clean.
+                if vol_meta['auths'][auth_id] == want_auth:
+                    continue
+
+                readonly = True if access_level is 'r' else False
+                self._authorize_volume(volume_path, auth_id, readonly)
+
+            # Recovered from partial auth updates for the auth ID's access
+            # to a volume.
+            auth_meta['volumes'][volume]['dirty'] = False
+            self._auth_metadata_set(auth_id, auth_meta)
+
+        for volume in remove_volumes:
+            del auth_meta['volumes'][volume]
+
+        # Recovered from all partial auth updates for the auth ID.
+        auth_meta['dirty'] = False
+        self._auth_metadata_set(auth_id, auth_meta)
+
 
     def evict(self, auth_id, timeout=30, volume_path=None):
         """
@@ -402,6 +441,10 @@ class CephFSVolumeClient(object):
         log.debug("CephFS mounting...")
         self.fs.mount()
         log.debug("Connection to cephfs complete")
+
+        # Recover from partial auth updates due to a previous
+        # crash.
+        self.recover()
 
     def get_mon_addrs(self):
         log.info("get_mon_addrs")
@@ -794,6 +837,9 @@ class CephFSVolumeClient(object):
                 # have mon auth caps that prevent it from accessing those keys
                 # (e.g. limit it to only access keys with a manila.* prefix)
             else:
+                if auth_meta['dirty']:
+                    self._recover_auth_meta(auth_id, auth_meta)
+
                 log.debug("Authorize: existing tenant {tenant}".format(
                     tenant=auth_meta['tenant_id']
                 ))
@@ -960,6 +1006,9 @@ class CephFSVolumeClient(object):
                     auth_id=auth_id, volume=volume_path.volume_id
                 ))
                 return
+
+            if auth_meta['dirty']:
+                self._recover_auth_meta(auth_id, auth_meta)
 
             auth_meta['dirty'] = True
             auth_meta['volumes'][volume_path_str]['dirty'] = True
