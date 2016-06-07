@@ -6,7 +6,6 @@
 
 #include "librbd/operation/Request.h"
 #include "librbd/parent_types.h"
-#include <iosfwd>
 #include <string>
 
 class Context;
