@@ -1069,7 +1069,8 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
 }
 
 template <typename I>
-int Journal<I>::start_external_replay(journal::Replay<I> **journal_replay) {
+void Journal<I>::start_external_replay(journal::Replay<I> **journal_replay,
+                                       Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -1077,11 +1078,42 @@ int Journal<I>::start_external_replay(journal::Replay<I> **journal_replay) {
   assert(m_state == STATE_READY);
   assert(m_journal_replay == nullptr);
 
+  on_finish = util::create_async_context_callback(m_image_ctx, on_finish);
+  on_finish = new FunctionContext(
+    [this, journal_replay, on_finish](int r) {
+      handle_start_external_replay(r, journal_replay, on_finish);
+    });
+
+  // safely flush all in-flight events before starting external replay
+  m_journaler->stop_append(util::create_async_context_callback(m_image_ctx,
+                                                               on_finish));
+}
+
+template <typename I>
+void Journal<I>::handle_start_external_replay(int r,
+                                              journal::Replay<I> **journal_replay,
+                                              Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_READY);
+  assert(m_journal_replay == nullptr);
+
+  if (r < 0) {
+    lderr(cct) << "failed to stop recording: " << cpp_strerror(r) << dendl;
+    *journal_replay = nullptr;
+
+    // get back to a sane-state
+    start_append();
+    on_finish->complete(r);
+    return;
+  }
+
   transition_state(STATE_REPLAYING, 0);
   m_journal_replay = journal::Replay<I>::create(m_image_ctx);
-
   *journal_replay = m_journal_replay;
-  return 0;
+  on_finish->complete(0);
 }
 
 template <typename I>
@@ -1092,7 +1124,8 @@ void Journal<I>::stop_external_replay() {
 
   delete m_journal_replay;
   m_journal_replay = nullptr;
-  transition_state(STATE_READY, 0);
+
+  start_append();
 }
 
 template <typename I>
@@ -1174,6 +1207,15 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
     }
     m_events.erase(it);
   }
+}
+
+template <typename I>
+void Journal<I>::start_append() {
+  assert(m_lock.is_locked());
+  m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
+			    m_image_ctx.journal_object_flush_bytes,
+			    m_image_ctx.journal_object_flush_age);
+  transition_state(STATE_READY, 0);
 }
 
 template <typename I>
@@ -1424,10 +1466,7 @@ void Journal<I>::handle_flushing_replay() {
   m_journal_replay = NULL;
 
   m_error_result = 0;
-  m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
-			    m_image_ctx.journal_object_flush_bytes,
-			    m_image_ctx.journal_object_flush_age);
-  transition_state(STATE_READY, 0);
+  start_append();
 }
 
 template <typename I>
