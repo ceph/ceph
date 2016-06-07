@@ -3284,9 +3284,16 @@ int BlueStore::_do_read(
     if (bptr->blob.has_flag(bluestore_blob_t::FLAG_COMPRESSED)) {
       bufferlist compressed_bl, raw_bl;
 
-      int r = _read_whole_blob(&bptr->blob, o, &compressed_bl);
-      if (r < 0)
-	return r;
+      IOContext ioc(NULL);   // FIXME?
+      bptr->blob.map(
+	0, bptr->blob.get_ondisk_length(),
+	[&](uint64_t offset, uint64_t length) {
+	  bufferlist t;
+	  int r = bdev->read(offset, length, &t, &ioc, false);
+	  assert(r == 0);
+	  compressed_bl.claim_append(t);
+	});
+
       if (bptr->blob.csum_type != bluestore_blob_t::CSUM_NONE) {
 	r = _verify_csum(&bptr->blob, 0, compressed_bl);
 	if (r < 0) {
@@ -3405,41 +3412,6 @@ int BlueStore::_do_read(
   assert(bl.length() == length);
   r = bl.length();
   return r;
-}
-
-int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o,
-				bufferlist* result)
-{
-  IOContext ioc(NULL);   // FIXME?
-
-  result->clear();
-
-  uint32_t l = blob->get_aligned_payload_length(block_size);
-  uint64_t ext_pos = 0;
-  auto it = blob->extents.cbegin();
-  while (it != blob->extents.cend() && l > 0) {
-    uint32_t r_len = MIN(l, it->length);
-    uint32_t x_len = ROUND_UP_TO(r_len, block_size);
-
-    bufferlist bl;
-    int r = bdev->read(it->offset, x_len, &bl, &ioc, false);
-    if (r < 0) {
-      return r;
-    }
-
-    if (x_len == r_len) {
-      result->claim_append(bl);
-    } else {
-      bufferlist u;
-      u.substr_of(bl, 0, r_len);
-      result->claim_append(u);
-    }
-    l -= r_len;
-    ext_pos += it->length;
-    ++it;
-  }
-
-  return 0;
 }
 
 int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
