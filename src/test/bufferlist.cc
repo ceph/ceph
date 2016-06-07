@@ -1286,6 +1286,21 @@ TEST(BufferListIterator, copy) {
   }
 }
 
+TEST(BufferListIterator, copy_huge) {
+  constexpr unsigned len = 2268888894U;
+  static_assert(int(len) < 0,
+		"should be a number underflows when being casted to int.");
+  bufferptr ptr(buffer::create_dummy());
+  ptr.set_length(len);
+
+  bufferlist src, dest;
+  src.append(ptr);
+  auto bp = src.begin();
+  bp.copy(len, dest);
+  // contents_equal() is not for this test
+  EXPECT_EQ(len, dest.length());
+}
+
 TEST(BufferListIterator, copy_in) {
   bufferlist bl;
   const char *existing = "XXX";
