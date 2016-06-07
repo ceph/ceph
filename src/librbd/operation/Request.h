@@ -9,7 +9,6 @@
 #include "common/RWLock.h"
 #include "librbd/Utils.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/Types.h"
 
 namespace librbd {
 
