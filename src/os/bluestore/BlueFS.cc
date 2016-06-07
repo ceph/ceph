@@ -1362,8 +1362,9 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << id << dendl;
   assert(id < alloc.size());
+  uint64_t min_alloc_size = g_conf->bluefs_alloc_size;
 
-  uint64_t left = ROUND_UP_TO(len, g_conf->bluefs_alloc_size);
+  uint64_t left = ROUND_UP_TO(len, min_alloc_size);
   int r = -ENOSPC;
   if (alloc[id]) {
     r = alloc[id]->reserve(left);
@@ -1389,24 +1390,27 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
   if (!ev->empty()) {
     hint = ev->back().end();
   }
-  while (left > 0) {
-    bluefs_extent_t e;
-    e.bdev = id;
-    int r = alloc[id]->allocate(left, g_conf->bluefs_alloc_size, hint,
-				&e.offset, &e.length);
+
+  int count = 0;
+  std::vector<AllocExtent> extents = 
+        std::vector<AllocExtent>(left / min_alloc_size);
+
+  r = alloc[id]->alloc_extents(left, min_alloc_size,
+                               hint, &extents, &count);
+  assert(r == 0);
+  for (int i = 0; i < count; i++) {
+    bluefs_extent_t e = bluefs_extent_t(id, extents[i].offset, extents[i].length);
     if (r < 0) {
       assert(0 == "allocate failed... wtf");
       return r;
     }
-    if (!ev->empty() && ev->back().end() == e.offset)
+    if (!ev->empty() && ev->back().end() == (uint64_t) e.offset) {
       ev->back().length += e.length;
-    else
+    } else {
       ev->push_back(e);
-    if (e.length >= left)
-      break;
-    left -= e.length;
-    hint = e.end();
+    }
   }
+   
   return 0;
 }
 

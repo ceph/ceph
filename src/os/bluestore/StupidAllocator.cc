@@ -148,7 +148,6 @@ int StupidAllocator::allocate(
     }
   }
 
-  assert(0 == "caller didn't reserve?");
   return -ENOSPC;
 
  found:
@@ -195,6 +194,44 @@ int StupidAllocator::allocate(
   assert(num_free >= 0);
   assert(num_reserved >= 0);
   last_alloc = *offset + *length;
+  return 0;
+}
+
+int StupidAllocator::alloc_extents(
+  uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
+  int64_t hint, std::vector<AllocExtent> *extents, int *count)
+{
+  uint64_t allocated_size = 0;
+  uint64_t offset = 0;
+  uint32_t length = 0;
+  int res = 0;
+
+  if (max_alloc_size == 0) {
+    max_alloc_size = want_size;
+  }
+
+  ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
+
+  while (allocated_size < want_size) {
+    res = allocate(MIN(max_alloc_size, (want_size - allocated_size)),
+       alloc_unit, hint, &offset, &length);
+    if (res != 0) {
+      /*
+       * Allocation failed.
+       */
+      break;
+    }
+    block_list.add_extents(offset, length);
+    allocated_size += length;
+    hint = offset + length;
+  }
+
+  *count = block_list.get_extent_count();
+  if (want_size - allocated_size > 0) {
+    release_extents(extents, *count);
+    return -ENOSPC;
+  }
+
   return 0;
 }
 
