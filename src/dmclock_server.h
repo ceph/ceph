@@ -839,8 +839,18 @@ namespace crimson {
 	  PhaseType                   phase;
 	};
 
-	typename super::NextReqType        type;
-	boost::variant<Retn,Time> data;
+	typename super::NextReqType   type;
+	boost::variant<Retn,Time>     data;
+
+	bool is_none() const { return type == super::NextReqType::none; }
+
+	bool is_retn() const { return type == super::NextReqType::returning; }
+	typename super::RequestRef getRetn() const {
+	  return boost::get<Retn>(data);
+	}
+
+	bool is_future() const { return type == super::NextReqType::future; }
+	Time getTime() const { return boost::get<Time>(data); }
       };
 
 
@@ -851,10 +861,10 @@ namespace crimson {
 
       template<typename Rep, typename Per>
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-		    std::chrono::duration<Rep,Per> _idle_age,
-		    std::chrono::duration<Rep,Per> _erase_age,
-		    std::chrono::duration<Rep,Per> _check_time,
-		    bool _allow_limit_break = false) :
+			std::chrono::duration<Rep,Per> _idle_age,
+			std::chrono::duration<Rep,Per> _erase_age,
+			std::chrono::duration<Rep,Per> _check_time,
+			bool _allow_limit_break = false) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
 	      _allow_limit_break)
@@ -865,27 +875,40 @@ namespace crimson {
 
       // pull convenience constructor
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-		    bool _allow_limit_break = false) :
+			bool _allow_limit_break = false) :
 	PullPriorityQueue(_client_info_f,
-		      std::chrono::minutes(10),
-		      std::chrono::minutes(15),
-		      std::chrono::minutes(6),
-		      _allow_limit_break)
+			  std::chrono::minutes(10),
+			  std::chrono::minutes(15),
+			  std::chrono::minutes(6),
+			  _allow_limit_break)
       {
 	// empty
       }
 
 
-      void add_request(const R& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       double addl_cost = 0.0) {
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      const ReqParams& req_params,
+			      double addl_cost = 0.0) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
 		    get_time(),
 		    addl_cost);
       }
+
+
+      inline void add_request(const R& request,
+			      const C& client_id,
+			      double addl_cost = 0.0) {
+	static const ReqParams null_req_params;
+	add_request(typename super::RequestRef(new R(request)),
+		    client_id,
+		    null_req_params,
+		    get_time(),
+		    addl_cost);
+      }
+
 
 
       inline void add_request(const R& request,
@@ -907,6 +930,15 @@ namespace crimson {
 			      double addl_cost = 0.0) {
 	add_request(request, req_params, client_id, get_time(), addl_cost);
       }
+
+
+      inline void add_request(typename super::RequestRef&& request,
+			      const C& client_id,
+			      double addl_cost = 0.0) {
+	static const ReqParams null_req_params;
+	add_request(request, null_req_params, client_id, get_time(), addl_cost);
+      }
+
 
 
       // this does the work; the versions above provide alternate interfaces
@@ -1065,12 +1097,12 @@ namespace crimson {
       // push full constructor
       template<typename Rep, typename Per>
       PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-		    CanHandleRequestFunc _can_handle_f,
-		    HandleRequestFunc _handle_f,
-		    std::chrono::duration<Rep,Per> _idle_age,
-		    std::chrono::duration<Rep,Per> _erase_age,
-		    std::chrono::duration<Rep,Per> _check_time,
-		    bool _allow_limit_break = false) :
+			CanHandleRequestFunc _can_handle_f,
+			HandleRequestFunc _handle_f,
+			std::chrono::duration<Rep,Per> _idle_age,
+			std::chrono::duration<Rep,Per> _erase_age,
+			std::chrono::duration<Rep,Per> _check_time,
+			bool _allow_limit_break = false) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
 	      _allow_limit_break)
@@ -1083,16 +1115,16 @@ namespace crimson {
 
       // push convenience constructor
       PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-		    CanHandleRequestFunc _can_handle_f,
-		    HandleRequestFunc _handle_f,
-		    bool _allow_limit_break = false) :
+			CanHandleRequestFunc _can_handle_f,
+			HandleRequestFunc _handle_f,
+			bool _allow_limit_break = false) :
 	PushPriorityQueue(_client_info_f,
-		      _can_handle_f,
-		      _handle_f,
-		      std::chrono::minutes(10),
-		      std::chrono::minutes(15),
-		      std::chrono::minutes(6),
-		      _allow_limit_break)
+			  _can_handle_f,
+			  _handle_f,
+			  std::chrono::minutes(10),
+			  std::chrono::minutes(15),
+			  std::chrono::minutes(6),
+			  _allow_limit_break)
       {
 	// empty
       }
