@@ -6008,7 +6008,6 @@ int BlueStore::_do_write(
   }
 
   _wctx_finish(txc, c, o, &wctx);
-  txc->write_onode(o);
 
   if (end > o->onode.size) {
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
