@@ -273,11 +273,6 @@ public:
     return data.secrets.size();
   }
 
-  /*void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
-    Mutex::Locker l(lock);
-    data.add_rotating_secret(service_id, key);
-  }
-  */
   void clone_to(KeyServerData& dst) const {
     Mutex::Locker l(lock);
     dst = data;
