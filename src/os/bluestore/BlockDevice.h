@@ -93,7 +93,8 @@ public:
 
   virtual int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc, bool buffered) = 0;
-  virtual int read_buffered(uint64_t off, uint64_t len, char *buf) = 0;
+  virtual int read_random(uint64_t off, uint64_t len, char *buf,
+           bool buffered) = 0;
 
   virtual int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc, bool buffered) = 0;
