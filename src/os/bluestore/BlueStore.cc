@@ -6043,21 +6043,24 @@ int BlueStore::_do_alloc_write(
 	csum_order = std::min(wctx->csum_order, ctz(l->length()));
       }
     }
-    while (final_length > 0) {
-      bluestore_pextent_t e;
-      uint32_t l;
-      uint64_t want = max_alloc_size ? MIN(final_length, max_alloc_size) : final_length;
-      int r = alloc->allocate(want, min_alloc_size, hint,
-			      &e.offset, &l);
-      assert(r == 0);
-      need -= l;
-      e.length = l;
+
+    int count = 0;
+    std::vector<AllocExtent> extents = 
+                std::vector<AllocExtent>(final_length / min_alloc_size);
+
+    int r = alloc->alloc_extents(final_length, min_alloc_size, max_alloc_size,
+                                 hint, &extents, &count);
+
+    need -= final_length;
+    assert(r == 0);
+    for (int i = 0; i < count; i++) {
+      bluestore_pextent_t e = bluestore_pextent_t(extents[i]);
       txc->allocated.insert(e.offset, e.length);
       txc->statfs_delta.allocated() += e.length;
       b->blob.extents.push_back(e);
-      final_length -= e.length;
       hint = e.end();
     }
+
     dout(20) << __func__ << " blob " << *b
 	     << " csum_order " << csum_order
 	     << " csum_length 0x" << std::hex << csum_length << std::dec
