@@ -3383,10 +3383,7 @@ int image_status_get_summary(cls_method_context_t hctx,
       }
 
       cls::rbd::MirrorImageStatus status;
-      r = image_status_get(hctx, mirror_image.global_image_id, &status);
-      if (r < 0) {
-	// Ignore.
-      }
+      image_status_get(hctx, mirror_image.global_image_id, &status);
 
       cls::rbd::MirrorImageStatusState state = status.up ? status.state :
 	cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
