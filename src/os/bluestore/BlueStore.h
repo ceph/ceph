@@ -198,6 +198,10 @@ public:
     state_list_t writing;
 
     BufferSpace(Cache *c) : cache(c) {}
+    ~BufferSpace() {
+      assert(buffer_map.empty());
+      assert(writing.empty());
+    }
 
     void _add_buffer(Buffer *b) {
       cache->_audit_lru("_add_buffer start");
@@ -238,6 +242,7 @@ public:
       return buffer_map.empty();
     }
 
+    // must be called under protection of the Cache lock
     void _clear();
 
     void discard(uint64_t offset, uint64_t length) {
@@ -351,6 +356,16 @@ public:
 
     int64_t get_new_id() {
       return blob_map.empty() ? 1 : blob_map.rbegin()->id + 1;
+    }
+
+    // must be called under protection of the Cache lock
+    void _clear() {
+      while (!blob_map.empty()) {
+	Blob *b = &*blob_map.begin();
+	b->bc._clear();
+	erase(b);
+	delete b;
+      }
     }
 
     friend ostream& operator<<(ostream& out, const BlobMap& m) {
