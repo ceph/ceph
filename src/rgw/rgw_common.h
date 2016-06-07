@@ -304,7 +304,7 @@ class RGWHTTPArgs
   int parse();
   void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
-  string& get(const string& name, bool *exists = NULL);
+  const string& get(const string& name, bool *exists = NULL) const;
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
@@ -313,22 +313,20 @@ class RGWHTTPArgs
   string sys_get(const string& name, bool *exists = nullptr);
 
   /** see if a parameter is contained in this RGWHTTPArgs */
-  bool exists(const char *name) {
-    map<string, string>::iterator iter = val_map.find(name);
-    return (iter != val_map.end());
+  bool exists(const char *name) const {
+    return (val_map.find(name) != std::end(val_map));
   }
-  bool sub_resource_exists(const char *name) {
-    map<string, string>::iterator iter = sub_resources.find(name);
-    return (iter != sub_resources.end());
+  bool sub_resource_exists(const char *name) const {
+    return (sub_resources.find(name) != std::end(sub_resources));
   }
   map<string, string>& get_params() {
     return val_map;
   }
   map<string, string>& get_sub_resources() { return sub_resources; }
-  unsigned get_num_params() {
+  unsigned get_num_params() const {
     return val_map.size();
   }
-  bool has_response_modifier() {
+  bool has_response_modifier() const {
     return has_resp_modifier;
   }
   void set_system() { /* make all system params visible */
@@ -542,6 +540,7 @@ struct RGWUserInfo
   int32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
+  __u8 admin;
   __u8 system;
   string default_placement;
   list<string> placement_tags;
@@ -549,7 +548,14 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
+  RGWUserInfo()
+    : auid(0),
+      suspended(0),
+      max_buckets(RGW_DEFAULT_MAX_BUCKETS),
+      op_mask(RGW_OP_TYPE_ALL),
+      admin(0),
+      system(0) {
+  }
 
   RGWAccessKey* get_key0() {
     if (access_keys.empty())
@@ -559,7 +565,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(17, 9, bl);
+     ENCODE_START(18, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -598,10 +604,11 @@ struct RGWUserInfo
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
      ::encode(user_id.tenant, bl);
+     ::encode(admin, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(17, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(18, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -667,6 +674,9 @@ struct RGWUserInfo
       ::decode(user_id.tenant, bl);
     } else {
       user_id.tenant.clear();
+    }
+    if (struct_v >= 18) {
+      ::decode(admin, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1207,6 +1217,8 @@ struct req_init_state {
 /* XXX why don't RGWRequest (or descendants) hold this state? */
 class RGWRequest;
 
+#include "rgw_auth.h"
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
@@ -1261,9 +1273,18 @@ struct req_state {
 
   RGWUserInfo *user;
 
+  /* Object having the knowledge about an authenticated identity and allowing
+   * to apply it during the authorization phase (verify_permission() methods
+   * of a given RGWOp). Thus, it bounds authentication and authorization steps
+   * through a well-defined interface. For more details, see rgw_auth.h. */
+  std::unique_ptr<RGWIdentityApplier> auth_identity;
+
+  std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
+  /* Is the request made by an user marked as a system one?
+   * Being system user means we also have the admin status. */
   bool system_request;
 
   /* aws4 auth support */
@@ -1277,9 +1298,6 @@ struct req_state {
 
   int prot_flags;
 
-  const char *os_auth_token;
-  string swift_user;
-  string swift_groups;
   /* Content-Disposition override for TempURL of Swift API. */
   struct {
     string override;
@@ -1854,13 +1872,20 @@ extern string rgw_trim_quotes(const string& val);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+bool verify_user_permission(struct req_state * const s,
+                            RGWAccessControlPolicy * const user_acl,
+                            const int perm);
+bool verify_user_permission(struct req_state * const s,
+                            const int perm);
 extern bool verify_bucket_permission(struct req_state * s,
+                                     RGWAccessControlPolicy * user_acl,
                                      RGWAccessControlPolicy * bucket_acl,
                                      int perm);
 extern bool verify_bucket_permission(struct req_state *s, int perm);
 extern bool verify_object_permission(struct req_state *s,
-                                     RGWAccessControlPolicy *bucket_acl,
-                                     RGWAccessControlPolicy *object_acl,
+                                     RGWAccessControlPolicy * user_acl,
+                                     RGWAccessControlPolicy * bucket_acl,
+                                     RGWAccessControlPolicy * object_acl,
                                      int perm);
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name

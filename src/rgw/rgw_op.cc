@@ -124,7 +124,9 @@ done:
   return r;
 }
 
-static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolicy *policy)
+static int decode_policy(CephContext *cct,
+                         bufferlist& bl,
+                         RGWAccessControlPolicy *policy)
 {
   bufferlist::iterator iter = bl.begin();
   try {
@@ -142,9 +144,32 @@ static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolic
   return 0;
 }
 
-static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
-                                       RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy, rgw_obj& obj)
+
+static int get_user_policy_from_attr(CephContext * const cct,
+                                     RGWRados * const store,
+                                     map<string, bufferlist>& attrs,
+                                     RGWAccessControlPolicy& policy    /* out */)
+{
+  auto aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter != attrs.end()) {
+    int ret = decode_policy(cct, aiter->second, &policy);
+    if (ret < 0) {
+      return ret;
+    }
+  } else {
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+static int get_bucket_policy_from_attr(CephContext *cct,
+                                       RGWRados *store,
+                                       void *ctx,
+                                       RGWBucketInfo& bucket_info,
+                                       map<string, bufferlist>& bucket_attrs,
+                                       RGWAccessControlPolicy *policy,
+                                       rgw_obj& obj)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -165,9 +190,13 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
   return 0;
 }
 
-static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, RGWObjectCtx& obj_ctx,
-                                    RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                    RGWAccessControlPolicy *policy, rgw_obj& obj)
+static int get_obj_policy_from_attr(CephContext *cct,
+                                    RGWRados *store,
+                                    RGWObjectCtx& obj_ctx,
+                                    RGWBucketInfo& bucket_info,
+                                    map<string, bufferlist>& bucket_attrs,
+                                    RGWAccessControlPolicy *policy,
+                                    rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
@@ -201,9 +230,13 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, RGWObject
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
-                                RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                RGWAccessControlPolicy *policy, rgw_obj& obj)
+static int get_policy_from_attr(CephContext *cct,
+                                RGWRados *store,
+                                void *ctx,
+                                RGWBucketInfo& bucket_info,
+                                map<string, bufferlist>& bucket_attrs,
+                                RGWAccessControlPolicy *policy,
+                                rgw_obj& obj)
 {
   if (obj.bucket.name.empty()) {
     return 0;
@@ -243,9 +276,13 @@ static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& o
   return ret;
 }
 
-static int read_policy(RGWRados *store, struct req_state *s,
-                       RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                       RGWAccessControlPolicy *policy, rgw_bucket& bucket, rgw_obj_key& object)
+static int read_policy(RGWRados *store,
+                       struct req_state *s,
+                       RGWBucketInfo& bucket_info,
+                       map<string, bufferlist>& bucket_attrs,
+                       RGWAccessControlPolicy *policy,
+                       rgw_bucket& bucket,
+                       rgw_obj_key& object)
 {
   string upload_id;
   upload_id = s->info.args.get("uploadId");
@@ -273,16 +310,19 @@ static int read_policy(RGWRados *store, struct req_state *s,
     string no_object;
     rgw_obj no_obj(bucket, no_object);
     ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
-    rgw_user& owner = bucket_policy.get_owner().get_id();
-    if (!s->system_request && owner.compare(s->user->user_id) != 0 &&
-        !bucket_policy.verify_permission(s->user->user_id, s->perm_mask,
-					RGW_PERM_READ))
-      ret = -EACCES;
-    else
-      ret = -ENOENT;
+    }
 
+    const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
+    if (bucket_owner.compare(s->user->user_id) != 0 &&
+        !s->auth_identity->is_admin_of(bucket_owner) &&
+        !bucket_policy.verify_permission(*s->auth_identity, s->perm_mask,
+                                         RGW_PERM_READ)) {
+      ret = -EACCES;
+    } else {
+      ret = -ENOENT;
+    }
   } else if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -291,9 +331,9 @@ static int read_policy(RGWRados *store, struct req_state *s,
 }
 
 /**
- * Get the AccessControlPolicy for a bucket or object off of disk.
+ * Get the AccessControlPolicy for an user, bucket or object off of disk.
  * s: The req_state to draw information from.
- * only_bucket: If true, reads the bucket ACL rather than the object ACL.
+ * only_bucket: If true, reads the user and bucket ACLs rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
 int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
@@ -314,6 +354,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   if(s->dialect.compare("s3") == 0) {
     s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
+    s->user_acl = std::unique_ptr<RGWAccessControlPolicy>(
+        new RGWAccessControlPolicy_SWIFTAcct(s->cct));
     s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
   } else {
     s->bucket_acl = new RGWAccessControlPolicy(s->cct);
@@ -333,6 +375,14 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       s->local_source = store->get_zonegroup().equals(zonegroup);
     }
   }
+
+  struct {
+    rgw_user uid;
+    std::string display_name;
+  } acct_acl_user = {
+    s->user->user_id,
+    s->user->display_name,
+  };
 
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
@@ -355,6 +405,10 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (s->bucket_exists) {
       rgw_obj_key no_obj;
       ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
+      acct_acl_user = {
+        s->bucket_info.owner,
+        s->bucket_acl->get_owner().get_display_name(),
+      };
     } else {
       s->bucket_acl->create_default(s->user->user_id, s->user->display_name);
       ret = -ERR_NO_SUCH_BUCKET;
@@ -388,6 +442,36 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       }
     }
   }
+
+  /* handle user ACL only for those APIs which support it */
+  if (s->user_acl) {
+    map<string, bufferlist> uattrs;
+
+    ret = rgw_get_user_attrs_by_uid(store, acct_acl_user.uid, uattrs);
+    if (!ret) {
+      ret = get_user_policy_from_attr(s->cct, store, uattrs, *s->user_acl);
+    }
+    if (-ENOENT == ret) {
+      /* In already existing clusters users won't have ACL. In such case
+       * assuming that only account owner has the rights seems to be
+       * reasonable. That allows to have only one verification logic.
+       * NOTE: there is small compatibility kludge for global, empty tenant:
+       *  1. if we try to reach an existing bucket, its owner is considered
+       *     as account owner.
+       *  2. otherwise account owner is identity stored in s->user->user_id.  */
+      s->user_acl->create_default(acct_acl_user.uid,
+                                  acct_acl_user.display_name);
+      ret = 0;
+    } else {
+      ldout(s->cct, 0) << "NOTICE: couldn't get user attrs for handling ACL (user_id="
+                       << s->user->user_id
+                       << ", ret="
+                       << ret
+                       << ")" << dendl;
+      return ret;
+    }
+  }
+
 
   return ret;
 }
@@ -432,11 +516,13 @@ int RGWGetObj::verify_permission()
 {
   obj = rgw_obj(s->bucket, s->object);
   store->set_atomic(s->obj_ctx, obj);
-  if (get_data)
+  if (get_data) {
     store->set_prefetch_data(s->obj_ctx, obj);
+  }
 
-  if (!verify_object_permission(s, RGW_PERM_READ))
+  if (!verify_object_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -719,7 +805,10 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   if (op_ret < 0)
     return op_ret;
 
-  if (!verify_object_permission(s, bucket_policy, &obj_policy, RGW_PERM_READ)) {
+  /* We can use global user_acl because LOs cannot have segments
+   * stored inside different accounts. */
+  if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
+          &obj_policy, RGW_PERM_READ)) {
     return -EPERM;
   }
 
@@ -1332,13 +1421,19 @@ int RGWGetObj::init_common()
 
 int RGWListBuckets::verify_permission()
 {
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
   return 0;
 }
 
 int RGWGetUsage::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*s->user))
+  if (s->auth_identity->is_anonymous()) {
     return -EACCES;
+  }
+
   return 0;
 }
 
@@ -1477,6 +1572,10 @@ void RGWGetUsage::execute()
 
 int RGWStatAccount::verify_permission()
 {
+  if (!verify_user_permission(s, RGW_PERM_READ)) {
+    return -EACCES;
+  }
+
   return 0;
 }
 
@@ -1518,8 +1617,9 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1537,8 +1637,9 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1658,8 +1759,9 @@ void RGWDeleteBucketWebsite::execute()
 
 int RGWStatBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1696,8 +1798,9 @@ void RGWStatBucket::execute()
 
 int RGWListBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1767,30 +1870,40 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
 
 int RGWCreateBucket::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*(s->user)))
+  /* This check is mostly needed for S3 that doesn't support account ACL.
+   * Swift doesn't allow to delegate any permission to an anonymous user,
+   * so it will become an early exit in such case. */
+  if (s->auth_identity->is_anonymous()) {
     return -EACCES;
+  }
+
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
 
   if (s->user->user_id.tenant != s->bucket_tenant) {
-    ldout(s->cct, 10)
-      << "user cannot create a bucket in a different tenant (user_id.tenant="
-      << s->user->user_id.tenant << " requested=" << s->bucket_tenant << ")"
-      << dendl;
+    ldout(s->cct, 10) << "user cannot create a bucket in a different tenant"
+                      << " (user_id.tenant=" << s->user->user_id.tenant
+                      << " requested=" << s->bucket_tenant << ")"
+                      << dendl;
     return -EACCES;
   }
   if (s->user->max_buckets < 0) {
@@ -1804,8 +1917,9 @@ int RGWCreateBucket::verify_permission()
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
 				   marker, string(), s->user->max_buckets,
 				   false, &is_truncated);
-    if (op_ret < 0)
+    if (op_ret < 0) {
       return op_ret;
+    }
 
     if ((int)buckets.count() >= s->user->max_buckets) {
       return -ERR_TOO_MANY_BUCKETS;
@@ -2184,8 +2298,9 @@ void RGWCreateBucket::execute()
 
 int RGWDeleteBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -2265,8 +2380,9 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -2857,6 +2973,12 @@ int RGWPutMetadataAccount::init_processing()
     return op_ret;
   }
 
+  if (has_policy) {
+    bufferlist acl_bl;
+    policy.encode(acl_bl);
+    attrs.emplace(RGW_ATTR_ACL, std::move(acl_bl));
+  }
+
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
   prepare_add_del_attrs(orig_attrs, rmattr_names, attrs);
   populate_with_generic_attrs(s, attrs);
@@ -2877,13 +2999,13 @@ int RGWPutMetadataAccount::init_processing()
 
 int RGWPutMetadataAccount::verify_permission()
 {
-  if (!rgw_user_is_authenticated(*(s->user))) {
+  if (s->auth_identity->is_anonymous()) {
     return -EACCES;
   }
 
-  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
-  //   return -EACCES;
-  // }
+  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
 
   /* Altering TempURL keys requires FULL_CONTROL. */
   if (!temp_url_keys.empty() && s->perm_mask != RGW_PERM_FULL_CONTROL) {
@@ -3108,8 +3230,9 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
 
 int RGWDeleteObj::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3283,14 +3406,17 @@ int RGWCopyObj::verify_permission()
 
     /* check source object permissions */
     op_ret = read_policy(store, s, src_bucket_info, src_attrs, &src_policy,
-			 src_bucket, src_object);
-    if (op_ret < 0)
+                         src_bucket, src_object);
+    if (op_ret < 0) {
       return op_ret;
+    }
 
-    if (!s->system_request && /* system request overrides permission checks */
-        !src_policy.verify_permission(s->user->user_id, s->perm_mask,
-				      RGW_PERM_READ))
+    /* admin request overrides permission checks */
+    if (!s->auth_identity->is_admin_of(src_policy.get_owner().get_id()) &&
+        !src_policy.verify_permission(*s->auth_identity, s->perm_mask,
+                                      RGW_PERM_READ)) {
       return -EACCES;
+    }
   }
 
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
@@ -3302,7 +3428,7 @@ int RGWCopyObj::verify_permission()
     dest_attrs = src_attrs;
   } else {
     op_ret = store->get_bucket_info(obj_ctx, dest_tenant_name, dest_bucket_name,
-				    dest_bucket_info, NULL, &dest_attrs);
+                                    dest_bucket_info, nullptr, &dest_attrs);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
         op_ret = -ERR_NO_SUCH_BUCKET;
@@ -3320,18 +3446,22 @@ int RGWCopyObj::verify_permission()
 
   /* check dest bucket permissions */
   op_ret = read_policy(store, s, dest_bucket_info, dest_attrs,
-		       &dest_bucket_policy, dest_bucket, no_obj);
-  if (op_ret < 0)
+                       &dest_bucket_policy, dest_bucket, no_obj);
+  if (op_ret < 0) {
     return op_ret;
+  }
 
-  if (!s->system_request && /* system request overrides permission checks */
-      !dest_bucket_policy.verify_permission(s->user->user_id, s->perm_mask,
-					    RGW_PERM_WRITE))
+  /* admin request overrides permission checks */
+  if (!s->auth_identity->is_admin_of(dest_policy.get_owner().get_id()) &&
+      !dest_bucket_policy.verify_permission(*s->auth_identity, s->perm_mask,
+                                            RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   op_ret = init_dest_policy();
-  if (op_ret < 0)
+  if (op_ret < 0) {
     return op_ret;
+  }
 
   return 0;
 }
@@ -3577,8 +3707,9 @@ void RGWPutACLs::execute()
 
 int RGWGetCORS::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3598,8 +3729,9 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3626,8 +3758,9 @@ void RGWPutCORS::execute()
 
 int RGWDeleteCORS::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -3751,8 +3884,9 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -4489,7 +4623,9 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
 
   bucket_owner = bacl.get_owner();
 
-  return verify_bucket_permission(s, &bacl, RGW_PERM_WRITE);
+  /* We can use global user_acl because each BulkDelete request is allowed
+   * to work on entities from a single account only. */
+  return verify_bucket_permission(s, s->user_acl.get(), &bacl, RGW_PERM_WRITE);
 }
 
 bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
