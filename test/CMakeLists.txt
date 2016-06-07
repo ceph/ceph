@@ -27,7 +27,7 @@ if (TARGET gtest AND TARGET gtest_main)
     pthread
     $<TARGET_FILE:gtest>
     $<TARGET_FILE:gtest_main>)
-else(GTEST_LIBRARY AND GTEST_MAIN_LIBRARY)
+else()
   target_link_libraries(dmclock-tests
     PUBLIC $<TARGET_FILE:dmclock> pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
 endif()
