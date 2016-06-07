@@ -2,10 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/image/RefreshRequest.h"
-#include "include/stringify.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AioImageRequestWQ.h"
