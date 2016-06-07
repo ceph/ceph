@@ -965,6 +965,10 @@ void Journal<I>::append_op_event(uint64_t op_tid,
   }
 
   on_safe = create_async_context_callback(m_image_ctx, on_safe);
+  on_safe = new FunctionContext([this, on_safe](int r) {
+      // ensure all committed IO before this op is committed
+      m_journaler->flush_commit_position(on_safe);
+    });
   future.flush(on_safe);
 
   CephContext *cct = m_image_ctx.cct;
