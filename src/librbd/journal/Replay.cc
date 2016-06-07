@@ -9,7 +9,6 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
