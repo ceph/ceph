@@ -362,6 +362,8 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;
 
+    bluestore_blob_map_t blob_map;       ///< local blobs (this onode onode)
+
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
@@ -377,13 +379,20 @@ public:
 	bc(c) {
     }
 
+    bluestore_blob_t *add_blob(int64_t *id) {
+      *id = blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
+      return &blob_map[*id];
+    }
+
     bluestore_blob_t *get_blob_ptr(int64_t id) {
       if (id < 0) {
 	assert(bnode);
 	return bnode->get_blob_ptr(-id);
-      } else {
-	return onode.get_blob_ptr(id);
       }
+      bluestore_blob_map_t::iterator p = blob_map.find(id);
+      if (p == blob_map.end())
+	return nullptr;
+      return &p->second;
     }
 
     void flush();
