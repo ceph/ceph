@@ -25,6 +25,7 @@
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
+#include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
 
 #include "include/assert.h"
@@ -78,7 +79,7 @@ public:
   void _set_compression();
 
   class TransContext;
-
+  class Blob;
 
   // --------------------------------------------------------
   // intermediate data structures used while reading
@@ -97,7 +98,7 @@ public:
       length(from.length) {}
   };
   typedef list<region_t> regions2read_t;
-  typedef map<const bluestore_blob_t*, regions2read_t> blobs2read_t;
+  typedef map<const Blob*, regions2read_t> blobs2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
@@ -281,6 +282,89 @@ public:
 
   struct BnodeSet;
 
+  /// in-memory blob metadata and associated cached buffers (if any)
+  struct Blob : public boost::intrusive::set_base_hook<> {
+    int64_t id = 0;          ///< id
+    bluestore_blob_t blob;   ///< blob metadata
+    BufferSpace bc;          ///< buffer cache
+
+    Blob(int64_t i, Cache *c) : id(i), bc(c) {}
+    ~Blob() {
+      assert(bc.empty());
+    }
+
+    // comparators for intrusive_set
+    friend bool operator<(const Blob &a, const Blob &b) {
+      return a.id < b.id;
+    }
+    friend bool operator>(const Blob &a, const Blob &b) {
+      return a.id > b.id;
+    }
+    friend bool operator==(const Blob &a, const Blob &b) {
+      return a.id == b.id;
+    }
+
+    friend ostream& operator<<(ostream& out, const Blob &b) {
+      return out << b.id << ":" << b.blob;
+    }
+  };
+
+  /// a map of blobs, indexed by int64_t
+  struct BlobMap {
+    typedef boost::intrusive::set<Blob> blob_map_t;
+
+    blob_map_t blob_map;
+
+    void encode(bufferlist& bl) const;
+    void decode(bufferlist::iterator& p, Cache *c);
+
+    bool empty() const {
+      return blob_map.empty();
+    }
+
+    Blob *get(int64_t id) {
+      Blob dummy(id, nullptr);
+      auto p = blob_map.find(dummy);
+      if (p != blob_map.end()) {
+	return &*p;
+      }
+      return nullptr;
+    }
+
+    Blob *new_blob(Cache *c) {
+      int64_t id = get_new_id();
+      Blob *b = new Blob(id, c);
+      blob_map.insert(*b);
+      return b;
+    }
+
+    void claim(Blob *b) {
+      assert(b->id == 0);
+      b->id = get_new_id();
+      blob_map.insert(*b);
+    }
+
+    void erase(Blob *b) {
+      blob_map.erase(*b);
+      b->id = 0;
+    }
+
+    int64_t get_new_id() {
+      return blob_map.empty() ? 1 : blob_map.rbegin()->id + 1;
+    }
+
+    friend ostream& operator<<(ostream& out, const BlobMap& m) {
+      out << '{';
+      for (auto p = m.blob_map.begin(); p != m.blob_map.end(); ++p) {
+	if (p != m.blob_map.begin()) {
+	  out << ',';
+	}
+	out << p->id << '=' << p->blob;
+      }
+      return out << '}';
+    }
+  };
+
   /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
   struct Bnode : public boost::intrusive::unordered_set_base_hook<> {
     std::atomic_int nref;        ///< reference count
@@ -288,7 +372,7 @@ public:
     string key;           ///< key under PREFIX_OBJ where we are stored
     BnodeSet *bnode_set;  ///< reference to the containing set
 
-    bluestore_blob_map_t blob_map;
+    BlobMap blob_map;
 
     Bnode(uint32_t h, const string& k, BnodeSet *s)
       : nref(0),
@@ -300,17 +384,6 @@ public:
       ++nref;
     }
     void put();
-
-    bluestore_blob_t *get_blob_ptr(int64_t id) {
-      bluestore_blob_map_t::iterator p = blob_map.find(id);
-      if (p == blob_map.end())
-	return nullptr;
-      return &p->second;
-    }
-
-    int64_t get_new_blob_id() {
-      return blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
-    }
 
     friend void intrusive_ptr_add_ref(Bnode *e) { e->get(); }
     friend void intrusive_ptr_release(Bnode *e) { e->put(); }
@@ -362,7 +435,7 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;
 
-    bluestore_blob_map_t blob_map;       ///< local blobs (this onode onode)
+    BlobMap blob_map;       ///< local blobs (this onode onode)
 
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
@@ -379,20 +452,12 @@ public:
 	bc(c) {
     }
 
-    bluestore_blob_t *add_blob(int64_t *id) {
-      *id = blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
-      return &blob_map[*id];
-    }
-
-    bluestore_blob_t *get_blob_ptr(int64_t id) {
+    Blob *get_blob(int64_t id) {
       if (id < 0) {
 	assert(bnode);
-	return bnode->get_blob_ptr(-id);
+	return bnode->blob_map.get(-id);
       }
-      bluestore_blob_map_t::iterator p = blob_map.find(id);
-      if (p == blob_map.end())
-	return nullptr;
-      return &p->second;
+      return blob_map.get(id);
     }
 
     void flush();
@@ -482,10 +547,14 @@ public:
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     BnodeRef get_bnode(uint32_t hash);
 
-    bluestore_blob_t *get_blob_ptr(OnodeRef& o, int64_t blob) {
-      if (blob < 0 && !o->bnode)
-	o->bnode = get_bnode(o->oid.hobj.get_hash());
-      return o->get_blob_ptr(blob);
+    Blob *get_blob(OnodeRef& o, int64_t blob) {
+      if (blob < 0) {
+	if (!o->bnode) {
+	  o->bnode = get_bnode(o->oid.hobj.get_hash());
+	}
+	return o->bnode->blob_map.get(-blob);
+      }
+      return o->blob_map.get(blob);
     }
 
     const coll_t &get_cid() override {
@@ -1026,7 +1095,7 @@ private:
   // for fsck
   int _fsck_verify_blob_map(
     string what,
-    const bluestore_blob_map_t& blob_map,
+    const BlobMap& blob_map,
     map<int64_t,bluestore_extent_ref_map_t>& v,
     interval_set<uint64_t> &used_blocks,
     store_statfs_t& expected_statfs);
