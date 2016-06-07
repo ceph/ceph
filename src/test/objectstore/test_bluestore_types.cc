@@ -515,31 +515,48 @@ TEST(bluestore_blob_t, calc_csum)
 	 << std::endl;
 
     bluestore_blob_t b;
-    ASSERT_EQ(-1, b.verify_csum(0, bl));
+    int bad_off;
+    ASSERT_EQ(0, b.verify_csum(0, bl, &bad_off));
+    ASSERT_EQ(-1, bad_off);
 
     b.init_csum(csum_type, 3, 24);
     cout << "  value size " << b.get_csum_value_size() << std::endl;
     b.calc_csum(0, bl);
-    ASSERT_EQ(-1, b.verify_csum(0, bl));
-    ASSERT_EQ(0, b.verify_csum(0, bl2));
+    ASSERT_EQ(0, b.verify_csum(0, bl, &bad_off));
+    ASSERT_EQ(-1, bad_off);
+    ASSERT_EQ(-1, b.verify_csum(0, bl2, &bad_off));
+    ASSERT_EQ(0, bad_off);
 
-    ASSERT_EQ(-1, b.verify_csum(0, f));
-    ASSERT_EQ(8, b.verify_csum(8, f));
-    ASSERT_EQ(16, b.verify_csum(16, f));
+    ASSERT_EQ(0, b.verify_csum(0, f, &bad_off));
+    ASSERT_EQ(-1, bad_off);
+    ASSERT_EQ(-1, b.verify_csum(8, f, &bad_off));
+    ASSERT_EQ(8, bad_off);
+    ASSERT_EQ(-1, b.verify_csum(16, f, &bad_off));
+    ASSERT_EQ(16, bad_off);
 
-    ASSERT_EQ(0, b.verify_csum(0, m));
-    ASSERT_EQ(-1, b.verify_csum(8, m));
-    ASSERT_EQ(16, b.verify_csum(16, m));
+    ASSERT_EQ(-1, b.verify_csum(0, m, &bad_off));
+    ASSERT_EQ(0, bad_off);
+    ASSERT_EQ(0, b.verify_csum(8, m, &bad_off));
+    ASSERT_EQ(-1, bad_off);
+    ASSERT_EQ(-1, b.verify_csum(16, m, &bad_off));
+    ASSERT_EQ(16, bad_off);
 
-    ASSERT_EQ(0, b.verify_csum(0, e));
-    ASSERT_EQ(8, b.verify_csum(8, e));
-    ASSERT_EQ(-1, b.verify_csum(16, e));
+    ASSERT_EQ(-1, b.verify_csum(0, e, &bad_off));
+    ASSERT_EQ(0, bad_off);
+    ASSERT_EQ(-1, b.verify_csum(8, e, &bad_off));
+    ASSERT_EQ(8, bad_off);
+    ASSERT_EQ(0, b.verify_csum(16, e, &bad_off));
+    ASSERT_EQ(-1, bad_off);
 
     b.calc_csum(8, n);
-    ASSERT_EQ(-1, b.verify_csum(0, f));
-    ASSERT_EQ(-1, b.verify_csum(8, n));
-    ASSERT_EQ(-1, b.verify_csum(16, e));
-    ASSERT_EQ(8, b.verify_csum(0, bl));
+    ASSERT_EQ(0, b.verify_csum(0, f, &bad_off));
+    ASSERT_EQ(-1, bad_off);
+    ASSERT_EQ(0, b.verify_csum(8, n, &bad_off));
+    ASSERT_EQ(-1, bad_off);
+    ASSERT_EQ(0, b.verify_csum(16, e, &bad_off));
+    ASSERT_EQ(-1, bad_off);
+    ASSERT_EQ(-1, b.verify_csum(0, bl, &bad_off));
+    ASSERT_EQ(8, bad_off);
   }
 }
 
