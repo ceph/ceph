@@ -6,10 +6,8 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "include/rados/librados.hpp"
 #include "librbd/ImageCtx.h"
 #include "msg/msg_types.h"
-#include <map>
 #include <string>
 
 class Context;
