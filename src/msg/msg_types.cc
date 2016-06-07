@@ -5,6 +5,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <ifaddrs.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <linux/if.h>
+#include <linux/sockios.h>
+#include <linux/ethtool.h>
 
 #include "common/Formatter.h"
 
@@ -130,7 +140,49 @@ bool entity_addr_t::parse(const char *s, const char **end)
   return true;
 }
 
+std::string entity_addr_t::get_iface_name(){
+  std::string ip = inet_ntoa(in4_addr().sin_addr);
+  struct sockaddr_in *sin = NULL;
+  struct ifaddrs *ifa = NULL, *ifList;
+  std::string ret = std::string("");
+  if(getifaddrs(&ifList) < 0){
+    return ret;
+  }
+  for (ifa = ifList; ifa != NULL; ifa = ifa->ifa_next){
+    if (ifa->ifa_addr->sa_family == AF_INET){
+      sin = (struct sockaddr_in *)ifa->ifa_addr;
+      if (std::string(inet_ntoa(sin->sin_addr)) == ip){
+        ret = std::string(ifa->ifa_name);
+        break;
+      }
+    }
+  }
+  freeifaddrs(ifList);
+  return ret;
+}
 
+bool entity_addr_t::is_iface_connected(){
+  std::string ifname = get_iface_name();
+  if (ifname == string())
+      return false;
+  int skfd;
+  struct ifreq ifr;
+  struct ethtool_value edata;
+  const char *if_name =  ifname.c_str();
+  edata.cmd = ETHTOOL_GLINK;
+  edata.data = 0;
+  memset(&ifr, 0,sizeof(ifr));
+  strncpy(ifr.ifr_name, if_name,sizeof(ifr.ifr_name)- 1);
+  ifr.ifr_data =(char *) &edata;
+  if (( skfd= socket(AF_INET, SOCK_DGRAM, 0 )) < 0)
+    return -1;
+  if (ioctl( skfd, SIOCETHTOOL,&ifr ) == -1) {
+    close(skfd);
+    return -1;
+  }
+  close(skfd);
+  return (1 == edata.data);
+}
 
 ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
