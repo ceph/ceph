@@ -8366,8 +8366,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   uint64_t totalwritten;
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
-  if (r < 0)
+  if (r < 0) {
+    delete[] bparr;
     return r;
+  }
 
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_BUFFER;
