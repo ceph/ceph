@@ -841,6 +841,31 @@ TEST_P(StoreTest, CompressionTest) {
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
+    cerr << "Cleaning object" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    g_conf->set_val("bluestore_compression_min_blob_size", "262144");
+    g_ceph_context->_conf->apply_changes(NULL);
+    data.resize(0x10000*6);
+
+    for(size_t i = 0;i < data.size(); i++)
+      data[i] = i / 256;
+    ObjectStore::Transaction t;
+    bufferlist bl, newdata;
+    bl.append(data);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "CompressibleData large blob" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
