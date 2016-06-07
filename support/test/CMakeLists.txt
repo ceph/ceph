@@ -12,20 +12,20 @@ add_executable(test_intru_heap test_intrusive_heap.cc)
 
 set(test_srcs test_indirect_intrusive_heap.cc)
 
-set_source_files_properties(${srcs} ${test_src}
+set_source_files_properties(${srcs} ${test_srcs}
   PROPERTIES
   COMPILE_FLAGS "${local_flags}"
   )
 
-add_executable(crim_tests EXCLUDE_FROM_ALL ${test_srcs})
+add_executable(data_struct_tests EXCLUDE_FROM_ALL ${test_srcs})
 
-target_link_libraries(crim_tests
+target_link_libraries(data_struct_tests
   PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
 
 # for every argument, adds a test with that name, using it as a gtest filter
 function(make_tests)
   foreach(targ ${ARGN})
-    add_test(NAME ${targ} COMMAND crim_tests --gtest_filter=${targ}.*)
+    add_test(NAME ${targ} COMMAND data_struct_tests --gtest_filter=${targ}.*)
   endforeach()
 endfunction()
 

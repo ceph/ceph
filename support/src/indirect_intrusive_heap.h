@@ -50,8 +50,8 @@ namespace crimson {
     class Iterator {
       friend IndIntruHeap<I, T, heap_info, C>;
 
-      IndIntruHeap<I, T, heap_info, C> heap;
-      size_t                           index;
+      IndIntruHeap<I, T, heap_info, C>& heap;
+      size_t                            index;
 
       Iterator(IndIntruHeap<I, T, heap_info, C>& _heap, size_t _index) :
 	heap(_heap),
@@ -118,6 +118,72 @@ namespace crimson {
 #endif
     }; // class Iterator
 
+    
+    class ConstIterator {
+      friend IndIntruHeap<I, T, heap_info, C>;
+
+      const IndIntruHeap<I, T, heap_info, C>& heap;
+      size_t                                  index;
+
+      ConstIterator(const IndIntruHeap<I, T, heap_info, C>& _heap, size_t _index) :
+	heap(_heap),
+	index(_index)
+      {
+	// empty
+      }
+
+    public:
+
+      ConstIterator(ConstIterator&& other) :
+	heap(other.heap),
+	index(other.index)
+      {
+	// empty
+      }
+
+      ConstIterator(const ConstIterator& other) :
+	heap(other.heap),
+	index(other.index)
+      {
+	// empty
+      }
+
+      ConstIterator& operator=(ConstIterator&& other) {
+	std::swap(heap, other.heap);
+	std::swap(index, other.index);
+	return *this;
+      }
+
+      ConstIterator& operator=(const ConstIterator& other) {
+	heap = other.heap;
+	index = other.index;
+      }
+
+      ConstIterator& operator++() {
+	if (index <= heap.count) {
+	  ++index;
+	}
+	return *this;
+      }
+
+      bool operator==(const ConstIterator& other) const {
+	return &heap == &other.heap && index == other.index;
+      }
+
+      bool operator!=(const ConstIterator& other) const {
+	return !(*this == other);
+      }
+
+      const T& operator*() {
+	return *heap.data[index];
+      }
+
+      const T* operator->() {
+	return &(*heap.data[index]);
+      }
+    }; // class ConstIterator
+
+    
   protected:
     using index_t = IndIntruHeapData;
 
@@ -231,6 +297,14 @@ namespace crimson {
 
     Iterator end() {
       return Iterator(*this, count);
+    }
+
+    ConstIterator cbegin() const {
+      return ConstIterator(*this, 0);
+    }
+
+    ConstIterator cend() const {
+      return ConstIterator(*this, count);
     }
 
     friend std::ostream& operator<<(std::ostream& out, const IndIntruHeap& h) {

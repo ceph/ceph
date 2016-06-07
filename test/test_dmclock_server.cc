@@ -134,7 +134,7 @@ namespace crimson {
 
       Request req;
       dmc::ReqParams req_params(1, 1);
-      pq.add_request(req, client, req_params, dmc::get_time());
+      pq.add_request_time(req, client, req_params, dmc::get_time());
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -200,7 +200,7 @@ namespace crimson {
       ReqParams<ClientId> req_params(client, 1, 1);
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(req, req_params, dmc::get_time());
+	pq->add_request_time(req, req_params, dmc::get_time());
       }
 
       {
@@ -298,8 +298,8 @@ namespace crimson {
       auto old_time = dmc::get_time() - 100.0;
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(req, client1, req_params, old_time);
-	pq->add_request(req, client2, req_params, old_time);
+	pq->add_request_time(req, client1, req_params, old_time);
+	pq->add_request_time(req, client2, req_params, old_time);
 	old_time += 0.001;
       }
 
@@ -371,7 +371,7 @@ namespace crimson {
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request(req, client1, req_params, now + 100);
+      pq->add_request_time(req, client1, req_params, now + 100);
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::future, pr.type);
@@ -403,7 +403,7 @@ namespace crimson {
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request(req, client1, req_params, now + 100);
+      pq->add_request_time(req, client1, req_params, now + 100);
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -434,7 +434,7 @@ namespace crimson {
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request(req, client1, req_params, now + 100);
+      pq->add_request_time(req, client1, req_params, now + 100);
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);

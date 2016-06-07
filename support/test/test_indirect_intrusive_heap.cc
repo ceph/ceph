@@ -415,11 +415,17 @@ TEST_F(HeapFixture1, iterator_basics) {
 
     EXPECT_EQ(7, count) << "count should be 7";
   }
+
+  auto i1 = heap.begin();
   
-  EXPECT_EQ(-12, heap.begin()->data) <<
+  EXPECT_EQ(-12, i1->data) <<
     "first member with * operator must be smallest";
 
-  EXPECT_EQ(-12, (*heap.begin()).data) <<
+  EXPECT_EQ(-12, (*i1).data) <<
+    "first member with -> operator must be smallest";
+
+  Elem& e1 = *i1;
+  EXPECT_EQ(-12, e1.data) <<
     "first member with -> operator must be smallest";
 
   {
@@ -433,6 +439,51 @@ TEST_F(HeapFixture1, iterator_basics) {
     values.insert(-7);
 
     for(auto i = heap.begin(); i != heap.end(); ++i) {
+      auto v = *i;
+      EXPECT_NE(values.end(), values.find(v.data)) <<
+	"value in heap must be part of original set";
+      values.erase(v.data);
+    }
+    EXPECT_EQ(0, values.size()) << "all values must have been seen";
+  }
+}
+
+
+TEST_F(HeapFixture1, const_iterator_basics) {
+  const auto& cheap = heap;
+
+  {
+    uint count = 0;
+    for(auto i = cheap.cbegin(); i != cheap.cend(); ++i) {
+      ++count;
+    }
+
+    EXPECT_EQ(7, count) << "count should be 7";
+  }
+
+  auto i1 = heap.cbegin();
+  
+  EXPECT_EQ(-12, i1->data) <<
+    "first member with * operator must be smallest";
+
+  EXPECT_EQ(-12, (*i1).data) <<
+    "first member with -> operator must be smallest";
+
+  const Elem& e1 = *i1;
+  EXPECT_EQ(-12, e1.data) <<
+    "first member with -> operator must be smallest";
+
+  {
+    std::set<int> values;
+    values.insert(2);
+    values.insert(99);
+    values.insert(1);
+    values.insert(-5);
+    values.insert(12);
+    values.insert(-12);
+    values.insert(-7);
+
+    for(auto i = heap.cbegin(); i != heap.cend(); ++i) {
       auto v = *i;
       EXPECT_NE(values.end(), values.find(v.data)) <<
 	"value in heap must be part of original set";
@@ -477,7 +528,7 @@ TEST_F(HeapFixture1, iterator_remove) {
   heap.remove(it1);
 
   auto it2 = heap.find(data7);
-  EXPECT_EQ(heap.end(), it1) << "find for removed element should fail";
+  EXPECT_EQ(heap.end(), it2) << "find for removed element should fail";
 
   for (auto it3 = heap.begin(); it3 != heap.end(); ++it3) {
     EXPECT_NE(-7, it3->data) <<

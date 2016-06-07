@@ -344,7 +344,12 @@ namespace crimson {
       using ClientInfoFunc = std::function<ClientInfo(C)>;
 
       
-      size_t size_count() const {
+      bool empty() const {
+	DataGuard g(data_mtx);
+	return (resv_heap.empty() || ! resv_heap.top().has_request());
+      }
+
+      size_t client_count() const {
 	DataGuard g(data_mtx);
 	return resv_heap.size();
       }
@@ -353,7 +358,7 @@ namespace crimson {
       size_t request_count() const {
 	DataGuard g(data_mtx);
 	size_t total = 0;
-	for (auto i = resv_heap.begin(); i != resv_heap.end(); ++i) {
+	for (auto i = resv_heap.cbegin(); i != resv_heap.cend(); ++i) {
 	  total += i->request_count();
 	}
 	return total;
@@ -845,7 +850,7 @@ namespace crimson {
 	bool is_none() const { return type == super::NextReqType::none; }
 
 	bool is_retn() const { return type == super::NextReqType::returning; }
-	typename super::RequestRef getRetn() const {
+	typename super::RequestRef& get_retn() const {
 	  return boost::get<Retn>(data);
 	}
 
@@ -911,11 +916,11 @@ namespace crimson {
 
 
 
-      inline void add_request(const R& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Time time,
-			      double addl_cost = 0.0) {
+      inline void add_request_time(const R& request,
+				   const C& client_id,
+				   const ReqParams& req_params,
+				   const Time time,
+				   double addl_cost = 0.0) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
@@ -938,7 +943,6 @@ namespace crimson {
 	static const ReqParams null_req_params;
 	add_request(request, null_req_params, client_id, get_time(), addl_cost);
       }
-
 
 
       // this does the work; the versions above provide alternate interfaces
@@ -1158,11 +1162,11 @@ namespace crimson {
       }
 
 
-      inline void add_request(const R& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Time time,
-			      double addl_cost = 0.0) {
+      inline void add_request_time(const R& request,
+				   const C& client_id,
+				   const ReqParams& req_params,
+				   const Time time,
+				   double addl_cost = 0.0) {
 	add_request(typename super::RequestRef(new R(request)),
 		    client_id,
 		    req_params,
