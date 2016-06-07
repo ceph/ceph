@@ -1163,6 +1163,16 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
       request->send();
     });
   }
+  if (m_remote_journaler != nullptr) {
+    ctx = new FunctionContext([this, ctx](int r) {
+        delete m_remote_journaler;
+        m_remote_journaler = nullptr;
+        ctx->complete(0);
+      });
+    ctx = new FunctionContext([this, ctx](int r) {
+        m_remote_journaler->shut_down(ctx);
+      });
+  }
   if (m_local_replay != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
         if (r < 0) {
@@ -1174,16 +1184,6 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
       });
     ctx = new FunctionContext([this, ctx](int r) {
         m_local_replay->shut_down(true, ctx);
-      });
-  }
-  if (m_remote_journaler != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
-        delete m_remote_journaler;
-        m_remote_journaler = nullptr;
-        ctx->complete(0);
-      });
-    ctx = new FunctionContext([this, ctx](int r) {
-        m_remote_journaler->shut_down(ctx);
       });
   }
   if (m_replay_handler != nullptr) {
