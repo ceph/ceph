@@ -2549,7 +2549,18 @@ int BlueStore::fsck()
 	}
 	// lextents
 	map<int64_t,bluestore_extent_ref_map_t> local_blobs;
+	uint64_t lext_next_offset = 0, lext_prev_offset = 0;
 	for (auto& l : o->onode.extent_map) {
+	  if(l.first < lext_next_offset) {
+	    derr << " " << oid << " lextent at 0x" 
+		 << std::hex << l.first
+		 << "overlaps with the previous one 0x" 
+		 << lext_prev_offset << "~" << (lext_next_offset - lext_prev_offset)
+		 << std::dec << dendl;
+	    ++errors;
+	  }
+	  lext_next_offset = l.first + l.second.length;
+	  lext_prev_offset = l.first;
 	  if (l.second.blob >= 0) {
 	    local_blobs[l.second.blob].get(l.second.offset, l.second.length);
 	  } else {
@@ -5755,18 +5766,18 @@ void BlueStore::_do_write_big(
   while (length > 0) {
     int64_t blob;
     bluestore_blob_t *b = o->onode.add_blob(&blob);
-    b->length = MIN(max_blob_len, length);
+    auto l = b->length = MIN(max_blob_len, length);
     bufferlist t;
-    blp.copy(b->length, t);
+    blp.copy(l, t);
     wctx->write(b, 0, t);
-    o->onode.punch_hole(offset, length, &wctx->lex_old);
-    o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, length, 0);
-    b->ref_map.get(0, length);
+    o->onode.punch_hole(offset, l, &wctx->lex_old);
+    o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, l, 0);
+    b->ref_map.get(0, l);
     dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
 	     << o->onode.extent_map[offset] << dendl;
     dout(20) << __func__ << "  blob " << *b << dendl;
-    offset += b->length;
-    length -= b->length;
+    offset += l;
+    length -= l;
   }
 }
 
