@@ -2623,7 +2623,7 @@ int BlueStore::fsck()
 	// blobs
 	errors += _fsck_verify_blob_map(
 	  "object " + stringify(oid),
-	  o->onode.blob_map,
+	  o->blob_map,
 	  local_blobs,
 	  used_blocks,
 	  expected_statfs);
@@ -4416,6 +4416,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
+    ::encode((*p)->blob_map, bl);
     dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
     t->set(PREFIX_OBJ, (*p)->key, bl);
 
@@ -5441,18 +5442,6 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     assert(p.first >= pos);
     pos = p.first + p.second.length;
   }
-  for (auto& b : o->onode.blob_map) {
-    dout(log_level) << __func__ << "  " << b.first << ": " << b.second
-		    << dendl;
-    if (b.second.has_csum_data()) {
-      vector<uint64_t> v;
-      unsigned n = b.second.get_csum_count();
-      for (unsigned i = 0; i < n; ++i)
-	v.push_back(b.second.get_csum_item(i));
-      dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
-		      << dendl;
-    }
-  }
   pos = 0;
   for (auto& v : o->onode.overlay_map) {
     dout(log_level) << __func__ << "  overlay 0x" << std::hex << v.first
@@ -5472,6 +5461,18 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 		      << i.second->length << std::dec
 		      << " seq " << i.second->seq
 		      << " " << Buffer::get_state_name(i.second->state)
+		      << dendl;
+    }
+  }
+  for (auto& b : o->blob_map) {
+    dout(log_level) << __func__ << "  " << b.first << ": " << b.second
+		    << dendl;
+    if (b.second.has_csum_data()) {
+      vector<uint64_t> v;
+      unsigned n = b.second.get_csum_count();
+      for (unsigned i = 0; i < n; ++i)
+	v.push_back(b.second.get_csum_item(i));
+      dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
 		      << dendl;
     }
   }
@@ -5748,7 +5749,7 @@ void BlueStore::_do_write_small(
 
   // new blob.
   int64_t blob;
-  b = o->onode.add_blob(&blob);
+  b = o->add_blob(&blob);
   b->length = min_alloc_size;
   uint64_t b_off = offset % min_alloc_size;
   uint64_t b_len = length;
@@ -5788,7 +5789,7 @@ void BlueStore::_do_write_big(
 	   << std::dec << dendl;
   while (length > 0) {
     int64_t blob;
-    bluestore_blob_t *b = o->onode.add_blob(&blob);
+    bluestore_blob_t *b = o->add_blob(&blob);
     auto l = b->length = MIN(max_blob_len, length);
     bufferlist t;
     blp.copy(l, t);
@@ -5956,7 +5957,7 @@ void BlueStore::_wctx_finish(
       }
       dout(20) << __func__ << " rm blob " << *b << dendl;
       if (l.blob >= 0) {
-	o->onode.blob_map.erase(l.blob);
+	o->blob_map.erase(l.blob);
       } else {
 	o->bnode->blob_map.erase(-l.blob);
       }
@@ -6515,9 +6516,9 @@ int BlueStore::_clone(TransContext *txc,
 	  dout(30) << __func__ << "  moving old onode blob " << p.second.blob
 		   << " to bnode blob " << id << dendl;
 	  bluestore_blob_t& b = e->blob_map[id] =
-	    oldo->onode.blob_map[p.second.blob];
+	    oldo->blob_map[p.second.blob];
 	  b.clear_flag(bluestore_blob_t::FLAG_MUTABLE);
-	  oldo->onode.blob_map.erase(p.second.blob);
+	  oldo->blob_map.erase(p.second.blob);
 	}
       }
       // update lextents
