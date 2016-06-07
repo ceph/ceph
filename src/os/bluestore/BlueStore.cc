@@ -522,7 +522,7 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
     }
     o->get();  // paranoia
     o->space->onode_map.erase(o->oid);
-    o->bc._clear();    // clear buffers, too
+    o->blob_map._clear();    // clear blobs and their buffers, too
     o->put();
     --num;
   }
@@ -769,8 +769,8 @@ void BlueStore::OnodeSpace::clear()
     auto q = cache->onode_lru.iterator_to(*p.second);
     cache->onode_lru.erase(q);
 
-    // clear buffers too, while we have cache->lock
-    p.second->bc._clear();
+    // clear blobs and their buffers too, while we have cache->lock
+    p.second->blob_map._clear();
   }
   onode_map.clear();
 }
@@ -4331,8 +4331,11 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
+      // FIXME: use a per-txc dirty blob list?
       for (auto& o : txc->onodes) {
-	o->bc.finish_write(txc->seq);
+	for (auto& p : o->blob_map.blob_map) {
+	  p.bc.finish_write(txc->seq);
+	}
       }
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
@@ -5487,16 +5490,6 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs
 		    << dendl;
   }
-  if (!o->bc.empty()) {
-    dout(log_level) << __func__ << "  buffer_cache" << dendl;
-    for (auto& i : o->bc.buffer_map) {
-      dout(log_level) << __func__ << "   0x" << std::hex << i.first << "~"
-		      << i.second->length << std::dec
-		      << " seq " << i.second->seq
-		      << " " << Buffer::get_state_name(i.second->state)
-		      << dendl;
-    }
-  }
   for (auto& b : o->blob_map.blob_map) {
     dout(log_level) << __func__ << "  " << b.id << ": " << b.blob
 		    << dendl;
@@ -5507,6 +5500,15 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 	v.push_back(b.blob.get_csum_item(i));
       dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
 		      << dendl;
+      if (!b.bc.empty()) {
+	for (auto& i : b.bc.buffer_map) {
+	  dout(log_level) << __func__ << "       0x" << std::hex << i.first
+			  << "~" << i.second->length << std::dec
+			  << " seq " << i.second->seq
+			  << " " << Buffer::get_state_name(i.second->state)
+			  << dendl;
+	}
+      }
     }
   }
   if (o->bnode) {
@@ -5688,6 +5690,8 @@ void BlueStore::_do_write_small(
 	       << " pad 0x" << head_pad << " + 0x" << tail_pad
 	       << std::dec << " of mutable " << blob << ": " << b << dendl;
       assert(b->blob.is_unreferenced(b_off, b_len));
+      b->bc.write(txc->seq, b_off, padded,
+		  wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
       b->blob.map_bl(
 	b_off, padded,
 	[&](uint64_t offset, uint64_t length, bufferlist& t) {
@@ -5756,6 +5760,8 @@ void BlueStore::_do_write_small(
 	b->blob.is_allocated(b_off, b_len)) {
       bluestore_wal_op_t *op = _get_wal_op(txc, o);
       op->op = bluestore_wal_op_t::OP_WRITE;
+      b->bc.write(txc->seq, b_off, padded,
+		  wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
       b->blob.map(
 	b_off, b_len,
 	[&](uint64_t offset, uint64_t length) {
@@ -5788,6 +5794,7 @@ void BlueStore::_do_write_small(
   b->blob.length = min_alloc_size;
   uint64_t b_off = offset % min_alloc_size;
   uint64_t b_len = length;
+  b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, &b_len, block_size);
   if (b_off)
     b->blob.add_unused(0, b_off);
@@ -5826,6 +5833,7 @@ void BlueStore::_do_write_big(
     auto l = b->blob.length = MIN(max_blob_len, length);
     bufferlist t;
     blp.copy(l, t);
+    b->bc.write(txc->seq, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     wctx->write(b, 0, t);
     o->onode.punch_hole(offset, l, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l, 0);
@@ -6063,9 +6071,6 @@ int BlueStore::_do_write(
 	   << " comp_blob_size 0x" << std::hex << wctx.comp_blob_size
 	   << std::dec << dendl;
 
-  // write in buffer cache
-  o->bc.write(txc->seq, offset, bl, wctx.buffered ? 0 : Buffer::FLAG_NOCACHE);
-
   bufferlist::iterator p = bl.begin();
   if (offset / min_alloc_size == (end - 1) / min_alloc_size &&
       (length != min_alloc_size)) {
@@ -6172,8 +6177,6 @@ int BlueStore::_do_zero(TransContext *txc,
   // they may touch.
   o->flush();
 
-  o->bc.discard(offset, length);
-
   WriteContext wctx;
   o->onode.punch_hole(offset, length, &wctx.lex_old);
   _wctx_finish(txc, c, o, &wctx);
@@ -6201,8 +6204,6 @@ int BlueStore::_do_truncate(
     // ensure any wal IO has completed before we truncate off any extents
     // they may touch.
     o->flush();
-
-    o->bc.truncate(offset);
 
     WriteContext wctx;
     o->onode.punch_hole(offset, o->onode.size, &wctx.lex_old);
