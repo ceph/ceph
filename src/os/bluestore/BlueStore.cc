@@ -3403,7 +3403,7 @@ int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
   if (r < 0) {
     if (r == -1) {
       dout(20) << __func__ << "bad checksum at blob offset 0x"
-               << std::hex << bad << dendl;
+               << std::hex << bad << std::dec << dendl;
     } else {
       derr << __func__ << "failed with exit code: " << cpp_strerror(r) << dendl;
     }
