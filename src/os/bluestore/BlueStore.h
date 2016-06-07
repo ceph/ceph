@@ -54,9 +54,12 @@ enum {
   l_bluestore_state_wal_applying_lat,
   l_bluestore_state_wal_aio_wait_lat,
   l_bluestore_state_wal_cleanup_lat,
-  l_bluestore_state_wal_done_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
+  l_bluestore_write_pad_bytes,
+  l_bluestore_wal_write_ops,
+  l_bluestore_wal_write_bytes,
+  l_bluestore_write_penalty_read_ops,
   l_bluestore_last
 };
 
