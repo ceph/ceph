@@ -96,6 +96,11 @@ public:
       : logical_offset(from.logical_offset),
       blob_xoffset(from.blob_xoffset),
       length(from.length) {}
+
+    friend ostream& operator<<(ostream& out, const region_t& r) {
+      return out << "0x" << std::hex << r.logical_offset << ":"
+		 << r.blob_xoffset << "~" << r.length << std::dec;
+    }
   };
   typedef list<region_t> regions2read_t;
   typedef map<const Blob*, regions2read_t> blobs2read_t;
@@ -1071,6 +1076,8 @@ private:
 
   void _dump_onode(OnodeRef o, int log_level=30);
   void _dump_bnode(BnodeRef b, int log_level=30);
+  void _dump_blob_map(BlobMap &bm, int log_level);
+
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);

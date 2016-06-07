@@ -5490,27 +5490,7 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
     dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs
 		    << dendl;
   }
-  for (auto& b : o->blob_map.blob_map) {
-    dout(log_level) << __func__ << "  " << b.id << ": " << b.blob
-		    << dendl;
-    if (b.blob.has_csum_data()) {
-      vector<uint64_t> v;
-      unsigned n = b.blob.get_csum_count();
-      for (unsigned i = 0; i < n; ++i)
-	v.push_back(b.blob.get_csum_item(i));
-      dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
-		      << dendl;
-      if (!b.bc.empty()) {
-	for (auto& i : b.bc.buffer_map) {
-	  dout(log_level) << __func__ << "       0x" << std::hex << i.first
-			  << "~" << i.second->length << std::dec
-			  << " seq " << i.second->seq
-			  << " " << Buffer::get_state_name(i.second->state)
-			  << dendl;
-	}
-      }
-    }
-  }
+  _dump_blob_map(o->blob_map, log_level);
   if (o->bnode) {
     _dump_bnode(o->bnode, log_level);
   }
@@ -5522,15 +5502,27 @@ void BlueStore::_dump_bnode(BnodeRef b, int log_level)
     return;
   dout(log_level) << __func__ << " " << b
 		  << " " << std::hex << b->hash << std::dec << dendl;
-  for (auto &p : b->blob_map.blob_map) {
-    dout(log_level) << __func__ << "  " << p.id << ": " << p.blob << dendl;
-    if (p.blob.has_csum_data()) {
+  _dump_blob_map(b->blob_map, log_level);
+}
+
+void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
+{
+  for (auto& b : bm.blob_map) {
+    dout(log_level) << __func__ << "  " << b << dendl;
+    if (b.blob.has_csum_data()) {
       vector<uint64_t> v;
-      unsigned n = p.blob.get_csum_count();
+      unsigned n = b.blob.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
-	v.push_back(p.blob.get_csum_item(i));
+	v.push_back(b.blob.get_csum_item(i));
       dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
 		      << dendl;
+    }
+    if (!b.bc.empty()) {
+      for (auto& i : b.bc.buffer_map) {
+	dout(log_level) << __func__ << "       0x" << std::hex << i.first
+			<< "~" << i.second->length << std::dec
+			<< " " << *i.second << dendl;
+      }
     }
   }
 }
