@@ -1324,16 +1324,16 @@ private:
     vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
 
     struct write_item {
-      bluestore_blob_t *b;
+      Blob *b;
       uint64_t b_off;
       bufferlist bl;
 
-      write_item(bluestore_blob_t *b, uint64_t o, bufferlist& bl)
+      write_item(Blob *b, uint64_t o, bufferlist& bl)
 	: b(b), b_off(o), bl(bl) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
-    void write(bluestore_blob_t *b, uint64_t o, bufferlist& bl) {
+    void write(Blob *b, uint64_t o, bufferlist& bl) {
       writes.emplace_back(write_item(b, o, bl));
     }
   };
