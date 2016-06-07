@@ -20,7 +20,6 @@
 
 class BitAllocatorStats {
 public:
-  bool m_on;
   std::atomic<int64_t> m_total_alloc_calls;
   std::atomic<int64_t> m_total_free_calls;
   std::atomic<int64_t> m_total_allocated;
@@ -98,7 +97,6 @@ public:
        */
       if (!m_end) {
         m_end = true;
-        //return m_list->get_nth_item(cur_idx);
         return &(*m_list)[cur_idx];
       }
       return NULL;
@@ -107,7 +105,7 @@ public:
 
     if (m_cur_idx == m_list->size() &&
         m_wrap) {
-      m_cur_idx %= m_list->size();
+      m_cur_idx = 0;
       m_wrapped = true;
     }
 
@@ -127,7 +125,7 @@ public:
   }
   void decr_idx() {
     m_cur_idx--;
-    debug_assert(m_cur_idx > 0);
+    debug_assert(m_cur_idx >= 0);
   }
 };
 
