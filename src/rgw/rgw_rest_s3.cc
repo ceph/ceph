@@ -23,9 +23,7 @@
 
 #include "rgw_client_io.h"
 
-/* This header consists several Keystone-related primitives
- * we want to reuse here. */
-#include "rgw_swift.h"
+#include "rgw_keystone.h"
 
 #include <typeinfo> // for 'typeid'
 
@@ -1730,6 +1728,10 @@ int RGWPostObj_ObjStore_S3::get_policy()
     *(s->user) = user_info;
     s->owner.set_id(user_info.user_id);
     s->owner.set_name(user_info.display_name);
+
+    /* FIXME: remove this after switching S3 to the new authentication
+     * infrastructure. */
+    s->auth_identity = rgw_auth_transform_old_authinfo(s);
   } else {
     ldout(s->cct, 0) << "No attached policy found!" << dendl;
   }
@@ -2974,7 +2976,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* get authentication token for Keystone. */
   string admin_token_id;
-  int r = RGWSwift::get_keystone_admin_token(cct, admin_token_id);
+  int r = KeystoneService::get_keystone_admin_token(cct, admin_token_id);
   if (r < 0) {
     ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
     return r;
@@ -3029,10 +3031,11 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* check if we have a valid role */
   bool found = false;
-  list<string>::iterator iter;
-  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    if ((found=response.has_role(*iter))==true)
+  for (const auto& role : accepted_roles) {
+    if (response.has_role(role) == true) {
+      found = true;
       break;
+    }
   }
 
   if (!found) {

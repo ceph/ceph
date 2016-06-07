@@ -25,6 +25,7 @@ librgw_la_SOURCES = \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
 	rgw/rgw_acl_swift.cc \
+	rgw/rgw_auth.cc \
 	rgw/rgw_coroutine.cc \
 	rgw/rgw_cr_rados.cc \
 	rgw/rgw_tools.cc \
@@ -82,7 +83,6 @@ librgw_la_SOURCES = \
 	rgw/rgw_rest_usage.cc \
 	rgw/rgw_rest_user.cc \
 	rgw/rgw_swift_auth.cc \
-	rgw/rgw_swift.cc \
 	rgw/rgw_usage.cc \
 	rgw/rgw_user.cc \
 	rgw/rgw_file.cc \
@@ -190,6 +190,8 @@ noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
+	rgw/rgw_auth.h \
+	rgw/rgw_auth_decoimpl.h \
 	rgw/rgw_b64.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_coroutine.h \
@@ -227,7 +229,6 @@ noinst_HEADERS += \
 	rgw/rgw_os_lib.h \
 	rgw/rgw_orphan.h \
 	rgw/rgw_http_client.h \
-	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \
 	rgw/rgw_quota.h \
 	rgw/rgw_rados.h \

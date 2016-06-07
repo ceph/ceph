@@ -754,10 +754,12 @@ protected:
   RGWObjVersionTracker acct_op_tracker;
 
   RGWAccessControlPolicy policy;
+  bool has_policy;
 
 public:
   RGWPutMetadataAccount()
-    : new_quota_extracted(false) {
+    : new_quota_extracted(false),
+      has_policy(false) {
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {

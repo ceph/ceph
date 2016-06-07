@@ -56,10 +56,6 @@ extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 extern void rgw_get_anon_user(RGWUserInfo& info);
 
 /**
- * verify that user is an actual user, and not the anonymous user
- */
-extern bool rgw_user_is_authenticated(RGWUserInfo& info);
-/**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
@@ -92,8 +88,11 @@ extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInf
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
+extern int rgw_get_user_info_by_swift(RGWRados *store,
+                                      const string& swift_name,
+                                      RGWUserInfo& info,        /* out */
+                                      RGWObjVersionTracker *objv_tracker = nullptr,
+                                      real_time *pmtime = nullptr);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
@@ -159,6 +158,7 @@ struct RGWUserAdminOpState {
   std::string display_name;
   int32_t max_buckets;
   __u8 suspended;
+  __u8 admin;
   __u8 system;
   __u8 exclusive;
   __u8 fetch_stats;
@@ -198,6 +198,7 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
+  bool admin_specified;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
@@ -315,6 +316,11 @@ struct RGWUserAdminOpState {
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
+  }
+
+  void set_admin(__u8 is_admin) {
+    admin = is_admin;
+    admin_specified = true;
   }
 
   void set_system(__u8 is_system) {
@@ -474,6 +480,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = RGW_PERM_NONE;
     suspended = 0;
+    admin = 0;
     system = 0;
     exclusive = 0;
     fetch_stats = 0;

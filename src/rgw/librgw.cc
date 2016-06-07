@@ -41,6 +41,7 @@
 #include "rgw_rest_user.h"
 #include "rgw_rest_s3.h"
 #include "rgw_os_lib.h"
+#include "rgw_auth.h"
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
@@ -228,6 +229,12 @@ namespace rgw {
       goto done;
     }
 
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (! s->auth_identity) {
+      s->auth_identity = rgw_auth_transform_old_authinfo(s);
+    }
+
     req->log(s, "reading op permissions");
     ret = req->read_permissions(op);
     if (ret < 0) {
@@ -254,6 +261,8 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
@@ -332,6 +341,12 @@ namespace rgw {
       goto done;
     }
 
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (! s->auth_identity) {
+      s->auth_identity = rgw_auth_transform_old_authinfo(s);
+    }
+
     req->log(s, "reading op permissions");
     ret = req->read_permissions(op);
     if (ret < 0) {
@@ -358,6 +373,8 @@ namespace rgw {
     if (ret < 0) {
       if (s->system_request) {
 	dout(2) << "overriding permissions due to system operation" << dendl;
+      } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+	dout(2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
