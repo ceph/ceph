@@ -1,6 +1,8 @@
 # Makefile for Sphinx documentation
 #
 
+GENERATED_API_DOCS = {modules,teuthology{,.openstack,.openstack.test,.orchestra,.task,.task.tests}}.rst
+
 # You can set these variables from the command line.
 SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
@@ -48,7 +50,7 @@ help:
 	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
 
 clean:
-	rm -rf $(BUILDDIR)/*
+	rm -rf $(BUILDDIR)/* $(GENERATED_API_DOCS)
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
