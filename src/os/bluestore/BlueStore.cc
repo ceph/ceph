@@ -1104,9 +1104,13 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_wal_applying_lat, "state_wal_applying_lat", "Average wal_applying state latency");
   b.add_time_avg(l_bluestore_state_wal_aio_wait_lat, "state_wal_aio_wait_lat", "Average aio_wait state latency");
   b.add_time_avg(l_bluestore_state_wal_cleanup_lat, "state_wal_cleanup_lat", "Average cleanup state latency");
-  b.add_time_avg(l_bluestore_state_wal_done_lat, "state_wal_done_lat", "Average wal_done state latency");
   b.add_time_avg(l_bluestore_state_finishing_lat, "state_finishing_lat", "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat", "Average done state latency");
+
+  b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes", "Sum for write-op padded bytes");
+  b.add_u64(l_bluestore_wal_write_ops, "wal_write_ops", "Sum for wal write op");
+  b.add_u64(l_bluestore_wal_write_bytes, "wal_write_bytes", "Sum for wal write bytes");
+  b.add_u64(l_bluestore_write_penalty_read_ops, " write_penalty_read_ops", "Sum for write penalty read ops");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -4741,6 +4745,8 @@ int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
   case bluestore_wal_op_t::OP_WRITE:
     {
       dout(20) << __func__ << " write " << wo.extents << dendl;
+      logger->inc(l_bluestore_wal_write_ops);
+      logger->inc(l_bluestore_wal_write_bytes, wo.data.length());
       bufferlist::iterator p = wo.data.begin();
       for (auto& e : wo.extents) {
 	bufferlist bl;
@@ -5473,14 +5479,17 @@ void BlueStore::_pad_zeros(
   // front
   size_t front_pad = *offset % chunk_size;
   size_t back_pad = 0;
+  size_t pad_count = 0;
   if (front_pad) {
     size_t front_copy = MIN(chunk_size - front_pad, *length);
     bufferptr z = buffer::create_page_aligned(chunk_size);
     memset(z.c_str(), 0, front_pad);
+    pad_count += front_pad;
     memcpy(z.c_str() + front_pad, bl->get_contiguous(0, front_copy), front_copy);
     if (front_copy + front_pad < chunk_size) {
       back_pad = chunk_size - (*length + front_pad);
       memset(z.c_str() + front_pad + *length, 0, back_pad);
+      pad_count += back_pad;
     }
     bufferlist old, t;
     old.swap(*bl);
@@ -5507,6 +5516,7 @@ void BlueStore::_pad_zeros(
     bl->substr_of(old, 0, *length - back_copy);
     bl->append(tail);
     *length += back_pad;
+    pad_count += back_pad;
   }
   dout(20) << __func__ << " pad 0x" << std::hex << front_pad << " + 0x"
 	   << back_pad << " on front/back, now 0x" << *offset << "~"
@@ -5514,6 +5524,8 @@ void BlueStore::_pad_zeros(
   dout(40) << "after:\n";
   bl->hexdump(*_dout);
   *_dout << dendl;
+  if (pad_count)
+    logger->inc(l_bluestore_write_pad_bytes, pad_count);
 }
 
 bool BlueStore::_can_overlay_write(OnodeRef o, uint64_t length)
@@ -5587,9 +5599,11 @@ void BlueStore::_do_write_small(
       z.append_zero(head_pad);
       z.claim_append(padded);
       padded.claim(z);
+      logger->inc(l_bluestore_write_pad_bytes, head_pad);
     }
     if (tail_pad) {
       padded.append_zero(tail_pad);
+      logger->inc(l_bluestore_write_pad_bytes, tail_pad);
     }
     if (head_pad || tail_pad) {
       dout(20) << __func__ << "  can pad head 0x" << std::hex << head_pad
@@ -5644,11 +5658,13 @@ void BlueStore::_do_write_small(
 	size_t zlen = head_read - r;
 	if (zlen) {
 	  head_bl.append_zero(zlen);
+	  logger->inc(l_bluestore_write_pad_bytes, zlen);
 	}
 	b_off -= head_read;
 	b_len += head_read;
 	head_bl.claim_append(padded);
 	padded.swap(head_bl);
+	logger->inc(l_bluestore_write_penalty_read_ops);
       }
       if (tail_read) {
 	bufferlist tail_bl;
@@ -5660,7 +5676,9 @@ void BlueStore::_do_write_small(
 	size_t zlen = tail_read - r;
 	if (zlen) {
 	  padded.append_zero(zlen);
+	  logger->inc(l_bluestore_write_pad_bytes, zlen);
 	}
+	logger->inc(l_bluestore_write_penalty_read_ops);
       }
     }
 
@@ -5798,6 +5816,7 @@ int BlueStore::_do_alloc_write(
       if (newlen < final_length) {
 	// pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
+	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
 	dout(20) << __func__ << hex << "  compressed 0x" << b->length
 		 << " -> 0x" << rawlen << " => 0x" << newlen
 		 << " with " << chdr.type
