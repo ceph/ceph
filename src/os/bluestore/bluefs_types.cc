@@ -105,7 +105,7 @@ vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
 {
   vector<bluefs_extent_t>::iterator p = extents.begin();
   while (p != extents.end()) {
-    if (offset >= p->length) {
+    if ((int64_t) offset >= p->length) {
       offset -= p->length;
       ++p;
     } else {
