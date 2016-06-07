@@ -13,6 +13,12 @@ import time
 
 
 def get_fake_time_and_sleep():
+    # Below we set m_time.side_effect, but we also set m_time.return_value.
+    # The reason for this is that we need to store a 'fake time' that
+    # increments when m_sleep() is called; we could use any variable name we
+    # wanted for the return value, but since 'return_value' is already a
+    # standard term in mock, and since setting side_effect causes return_value
+    # to be ignored, it's safe to just reuse the name here.
     m_time = Mock()
     m_time.return_value = time.time()
 
