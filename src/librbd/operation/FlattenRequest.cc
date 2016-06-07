@@ -6,8 +6,6 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
-#include "librbd/ObjectMap.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include <boost/lambda/bind.hpp>
