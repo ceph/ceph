@@ -11274,13 +11274,10 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 			  file_layout_t* layout)
 {
   Mutex::Locker lock(client_lock);
-  Mutex flock("Client::ll_read_block flock");
-  Cond cond;
   vinodeno_t vino = ll_get_vino(in);
   object_t oid = file_object_t(vino.ino, blockid);
   int r = 0;
-  bool done = false;
-  Context *onfinish = new C_SafeCond(&flock, &cond, &done, &r);
+  C_SaferCond cond;
   bufferlist bl;
 
   objecter->read(oid,
@@ -11290,10 +11287,11 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 		 vino.snapid,
 		 &bl,
 		 CEPH_OSD_FLAG_READ,
-		 onfinish);
+		 &cond);
 
-  while (!done)
-      cond.Wait(client_lock);
+  client_lock.Unlock();
+  r = cond.wait();
+  client_lock.Lock(); // lock is going to unlock on exit.
 
   if (r >= 0) {
       bl.copy(0, bl.length(), buf);
