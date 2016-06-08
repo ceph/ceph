@@ -1401,6 +1401,7 @@ public:
     // is acquired before sending the first OP and released upon receiving
     // the last op reply.
     int ctx_budget;
+    bool listing_single_pg;
 
     NListContext() : current_pg(0),
 		     current_pg_epoch(0),
@@ -1416,7 +1417,8 @@ public:
 		     list(),
 		     filter(),
 		     extra_info(),
-		     ctx_budget(-1) {}
+		     ctx_budget(-1),
+		     listing_single_pg(false) {}
 
     bool at_end() const {
       return at_end_of_pool;
@@ -1470,6 +1472,7 @@ public:
     // is acquired before sending the first OP and released upon receiving
     // the last op reply.
     int ctx_budget;
+    bool listing_single_pg;
 
     ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
 		    at_end_of_pool(false),
@@ -1483,7 +1486,8 @@ public:
 		    list(),
 		    filter(),
 		    extra_info(),
-		    ctx_budget(-1) {}
+		    ctx_budget(-1),
+		    listing_single_pg(false) {}
 
     bool at_end() const {
       return at_end_of_pool;

@@ -1715,6 +1715,17 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   return iter;
 }
 
+librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t *pgid)
+{
+  assert(pgid != NULL);
+
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open_pg(io_ctx_impl, &listh, *pgid);
+  NObjectIterator iter((ObjListCtx*)listh);
+  iter.get_next();
+  return iter;
+}
+
 librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
 {
   bufferlist bl;
@@ -4210,6 +4221,27 @@ extern "C" int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *list
   return 0;
 }
 
+extern "C" int rados_nobjects_list_open_pg(rados_ioctx_t io, rados_list_ctx_t *listh, uint32_t pgid)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+
+  // Let's do it the old way for backward compatbility if not using ANY_NSPACES
+  if (ctx->oloc.nspace != librados::all_nspaces)
+    return rados_objects_list_open_pg(io, listh, pgid);
+
+  tracepoint(librados, rados_nobjects_list_open_pg_enter, io, pgid);
+
+  Objecter::NListContext *h = new Objecter::NListContext;
+  h->pool_id = ctx->poolid;
+  h->pool_snap_seq = ctx->snap_seq;
+  h->listing_single_pg = true;
+  h->current_pg = pgid;
+  h->nspace = ctx->oloc.nspace; // After dropping compatibility need nspace
+  *listh = (void *)new librados::ObjListCtx(ctx, h);
+  tracepoint(librados, rados_nobjects_list_open_pg_exit, 0, *listh, pgid);
+  return 0;
+}
+
 extern "C" void rados_nobjects_list_close(rados_list_ctx_t h)
 {
   tracepoint(librados, rados_nobjects_list_close_enter, h);
@@ -4259,6 +4291,23 @@ extern "C" int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh
   h->nspace = ctx->oloc.nspace;
   *listh = (void *)new librados::ObjListCtx(ctx, h);
   tracepoint(librados, rados_objects_list_open_exit, 0, *listh);
+  return 0;
+}
+
+extern "C" int rados_objects_list_open_pg(rados_ioctx_t io, rados_list_ctx_t *listh, uint32_t pgid)
+{
+  tracepoint(librados, rados_objects_list_open_pg_enter, io, pgid);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  if (ctx->oloc.nspace == librados::all_nspaces)
+    return -EINVAL;
+  Objecter::ListContext *h = new Objecter::ListContext;
+  h->pool_id = ctx->poolid;
+  h->pool_snap_seq = ctx->snap_seq;
+  h->nspace = ctx->oloc.nspace;
+  h->current_pg = pgid;
+  h->listing_single_pg = true;
+  *listh = (void *)new librados::ObjListCtx(ctx, h);
+  tracepoint(librados, rados_objects_list_open_pg_exit, 0, *listh, pgid);
   return 0;
 }
 
