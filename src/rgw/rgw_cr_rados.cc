@@ -651,6 +651,47 @@ int RGWRadosTimelogAddCR::request_complete()
   return r;
 }
 
+RGWRadosTimelogTrimCR::RGWRadosTimelogTrimCR(RGWRados *store,
+                                             const std::string& oid,
+                                             const real_time& start_time,
+                                             const real_time& end_time,
+                                             const std::string& from_marker,
+                                             const std::string& to_marker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), oid(oid),
+    start_time(start_time), end_time(end_time),
+    from_marker(from_marker), to_marker(to_marker)
+{
+  set_description() << "timelog trim oid=" <<  oid
+      << " start_time=" << start_time << " end_time=" << end_time
+      << " from_marker=" << from_marker << " to_marker=" << to_marker;
+}
+
+RGWRadosTimelogTrimCR::~RGWRadosTimelogTrimCR()
+{
+  if (cn) {
+    cn->put();
+  }
+}
+
+int RGWRadosTimelogTrimCR::send_request()
+{
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  cn->get();
+  return store->time_log_trim(oid, start_time, end_time, from_marker,
+                              to_marker, cn->completion());
+}
+
+int RGWRadosTimelogTrimCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
 int RGWAsyncStatObj::_send_request()
 {
   return store->raw_obj_stat(obj, psize, pmtime, pepoch,
