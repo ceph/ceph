@@ -79,3 +79,29 @@ target_link_libraries(ceph_test_rbd_mirror_random_write
   librbd librados global keyutils
   )
 
+add_executable(ceph_test_rbd_mirror_image_replay
+  image_replay.cc
+  $<TARGET_OBJECTS:parse_secret_objs>)
+set_target_properties(ceph_test_rbd_mirror_image_replay PROPERTIES
+  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rbd_mirror_image_replay
+  rbd_mirror
+  rados_test_stub
+  rbd_mirror_internal
+  rbd_internal
+  rbd_api
+  journal
+  cls_rbd_client
+  cls_lock_client
+  cls_journal_client
+  rbd_types
+  librados
+  osdc
+  global
+  radostest
+  ${UNITTEST_LIBS})
+
+install(TARGETS
+  ceph_test_rbd_mirror
+  ceph_test_rbd_mirror_random_write
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
