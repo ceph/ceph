@@ -3284,8 +3284,8 @@ int main(int argc, const char **argv)
       break; 
     } else if (strcmp(*j, "-f") == 0) {
       val = *(j+1);
-      
       unique_ptr<Formatter> formatter(Formatter::create(val.c_str());
+      
       if (formatter) {
 	j = args.erase(j);
 	opts["format"] = val;
