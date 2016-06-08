@@ -356,5 +356,36 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveSnapError) {
   ASSERT_EQ(-ENOENT, cond_ctx.wait());
 }
 
+TEST_F(TestMockOperationSnapshotRemoveRequest, MissingSnap) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
+  expect_op_work_queue(mock_image_ctx);
+
+  ::testing::InSequence seq;
+  uint64_t snap_id = 456;
+
+  C_SaferCond cond_ctx;
+  MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
+    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    req->send();
+  }
+  ASSERT_EQ(-ENOENT, cond_ctx.wait());
+}
+
 } // namespace operation
 } // namespace librbd
