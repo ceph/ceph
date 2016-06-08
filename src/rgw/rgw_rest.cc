@@ -728,6 +728,23 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static void build_redirect_url(req_state *s, const string& redirect_base, string *redirect_url)
+{
+  string& dest_uri = *redirect_url;
+  
+  dest_uri = redirect_base;
+  /*
+   * reqest_uri is always start with slash, so we need to remove
+   * the unnecessary slash at the end of dest_uri.
+   */
+  if (dest_uri[dest_uri.size() - 1] == '/') {
+    dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+  }
+  dest_uri += s->info.request_uri;
+  dest_uri += "?";
+  dest_uri += s->info.request_params;
+}
+
 void abort_early(struct req_state *s, RGWOp* op, int err_no,
 		RGWHandler* handler)
 {
@@ -759,6 +776,13 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
     if (!s->err.http_ret || s->err.http_ret == 200) {
       set_req_state_err(s, err_no);
     }
+
+    if (s->err.http_ret == 404 && !s->redirect_zone_endpoint.empty()) {
+      s->err.http_ret = 301;
+      err_no = -ERR_PERMANENT_REDIRECT;
+      build_redirect_url(s, s->redirect_zone_endpoint, &s->redirect);
+    }
+
     dump_errno(s);
     dump_bucket_from_state(s);
     if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
@@ -766,17 +790,7 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
       if (!s->redirect.empty()) {
         dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
-        dest_uri = s->zonegroup_endpoint;
-        /*
-         * reqest_uri is always start with slash, so we need to remove
-         * the unnecessary slash at the end of dest_uri.
-         */
-        if (dest_uri[dest_uri.size() - 1] == '/') {
-          dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
-        }
-        dest_uri += s->info.request_uri;
-        dest_uri += "?";
-        dest_uri += s->info.request_params;
+        build_redirect_url(s, s->zonegroup_endpoint, &dest_uri);
       }
 
       if (!dest_uri.empty()) {
