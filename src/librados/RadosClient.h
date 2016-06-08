@@ -21,6 +21,7 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
+#include "mgr/MgrClient.h"
 #include "msg/Dispatcher.h"
 
 #include "IoCtxImpl.h"
@@ -47,6 +48,7 @@ private:
   } state;
 
   MonClient monclient;
+  MgrClient mgrclient;
   Messenger *messenger;
 
   uint64_t instance_id;
@@ -130,6 +132,8 @@ public:
 	          bufferlist *outbl, string *outs);
   int mon_command(string name,
 		  const vector<string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int mgr_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *poutbl, string *prs);
