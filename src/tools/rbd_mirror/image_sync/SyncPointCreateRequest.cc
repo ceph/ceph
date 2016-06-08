@@ -138,6 +138,30 @@ void SyncPointCreateRequest<I>::handle_create_snap(int r) {
     return;
   }
 
+  send_final_refresh_image();
+}
+
+template <typename I>
+void SyncPointCreateRequest<I>::send_final_refresh_image() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    SyncPointCreateRequest<I>,
+    &SyncPointCreateRequest<I>::handle_final_refresh_image>(this);
+  m_remote_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+void SyncPointCreateRequest<I>::handle_final_refresh_image(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    derr << ": failed to refresh image for snapshot: " << cpp_strerror(r)
+         << dendl;
+    finish(r);
+    return;
+  }
+
   finish(0);
 }
 
