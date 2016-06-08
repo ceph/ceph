@@ -447,19 +447,23 @@ int main(int argc, const char **argv)
 
   Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::OSD(whoami), "client",
-					   getpid());
+					   getpid(), 0,
+					   Messenger::HAS_HEAVY_TRAFFIC |
+					   Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
-					    getpid(), CEPH_FEATURES_ALL);
+					    getpid(), CEPH_FEATURES_ALL,
+					    Messenger::HAS_HEAVY_TRAFFIC |
+					    Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
-					     getpid());
+					     getpid(), 0, Messenger::HEARTBEAT);
   Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
-						   getpid());
+						   getpid(), 0, Messenger::HEARTBEAT);
   Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
-						    getpid());
+						    getpid(), 0, Messenger::HEARTBEAT);
   Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid());
