@@ -850,7 +850,7 @@ namespace crimson {
 	bool is_none() const { return type == super::NextReqType::none; }
 
 	bool is_retn() const { return type == super::NextReqType::returning; }
-	typename super::RequestRef& get_retn() const {
+	Retn& get_retn() {
 	  return boost::get<Retn>(data);
 	}
 

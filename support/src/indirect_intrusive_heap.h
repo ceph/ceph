@@ -213,7 +213,11 @@ namespace crimson {
 
     T& top() { return *data[0]; }
 
+    const T& top() const { return *data[0]; }
+
     I& top_ind() { return data[0]; }
+
+    const I& top_ind() const { return data[0]; }
 
     void push(I&& item) {
       index_t i = count++;

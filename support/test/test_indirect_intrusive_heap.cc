@@ -549,3 +549,26 @@ TEST_F(HeapFixture1, iterator_remove) {
   EXPECT_EQ(99, heap.top().data);
   heap.pop();
 }
+
+
+TEST_F(HeapFixture1, four_tops) {
+  Elem& top1 = heap.top();
+  EXPECT_EQ(-12, top1.data);
+
+  const Elem& top2 = heap.top();
+  EXPECT_EQ(-12, top2.data);
+
+  std::shared_ptr<Elem> top3 = heap.top_ind();
+  EXPECT_EQ(-12, top3->data);
+
+  const std::shared_ptr<Elem> top4 = heap.top_ind();
+  EXPECT_EQ(-12, top4->data);
+
+  const auto& c_heap = heap;
+
+  const Elem& top5 = c_heap.top();
+  EXPECT_EQ(-12, top5.data);
+
+  const std::shared_ptr<Elem> top6 = c_heap.top_ind();
+  EXPECT_EQ(-12, top6->data);
+}
