@@ -47,7 +47,7 @@ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 # Automake
 AM_PROG_CC_C_O
-AM_PROG_LIBTOOL
+LT_INIT([disable-static])
 AM_PROG_AS
 
 
