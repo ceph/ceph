@@ -34,10 +34,12 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_torrent.h"
 
 #include "include/assert.h"
 
 using namespace std;
+using ceph::crypto::SHA1;
 
 struct req_state;
 class RGWHandler;
@@ -103,6 +105,7 @@ RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
 
 class RGWGetObj : public RGWOp {
 protected:
+  seed torrent; // get torrent
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
@@ -642,6 +645,7 @@ class RGWPutObj : public RGWOp {
   friend class RGWPutObjProcessor;
 
 protected:
+  seed torrent;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
