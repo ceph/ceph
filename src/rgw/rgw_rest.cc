@@ -1478,7 +1478,7 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
     // Name too short
     return -ERR_INVALID_BUCKET_NAME;
   }
-  else if (len > 255) {
+  else if (len > MAX_BUCKET_NAME_LEN) {
     // Name too long
     return -ERR_INVALID_BUCKET_NAME;
   }
@@ -1493,7 +1493,7 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
 int RGWHandler_REST::validate_object_name(const string& object)
 {
   int len = object.size();
-  if (len > 1024) {
+  if (len > MAX_OBJ_NAME_LEN) {
     // Name too long
     return -ERR_INVALID_OBJECT_NAME;
   }

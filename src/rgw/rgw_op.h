@@ -1394,6 +1394,17 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
+class RGWInfo: public RGWOp {
+public:
+  RGWInfo() = default;
+  ~RGWInfo() = default;
+
+  int verify_permission() override { return 0; }
+  const string name() override { return "get info"; }
+  RGWOpType get_type() override { return RGW_OP_GET_INFO; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
 class RGWHandler {
 protected:
   RGWRados *store;
