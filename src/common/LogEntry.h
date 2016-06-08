@@ -62,12 +62,12 @@ struct LogEntryKey {
   LogEntryKey() : seq(0) {}
   LogEntryKey(const entity_inst_t& w, utime_t t, uint64_t s) : who(w), stamp(t), seq(s) {}
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
 };
-WRITE_CLASS_ENCODER(LogEntryKey)
+WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
 static inline bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
   return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
@@ -87,12 +87,12 @@ struct LogEntry {
 
   void log_to_syslog(string level, string facility);
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
 };
-WRITE_CLASS_ENCODER(LogEntry)
+WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 
 struct LogSummary {
   version_t version;
@@ -114,12 +114,12 @@ struct LogSummary {
     return false;
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogSummary*>& o);
 };
-WRITE_CLASS_ENCODER(LogSummary)
+WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 
 inline ostream& operator<<(ostream& out, clog_type t)
 {

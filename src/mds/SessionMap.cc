@@ -372,7 +372,7 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
 
       // Serialize V
       bufferlist bl;
-      session->info.encode(bl);
+      session->info.encode(bl, mds->mdsmap->get_up_features());
 
       // Add to RADOS op
       to_set[k.str()] = bl;
@@ -710,7 +710,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
 
     // Serialize V
     bufferlist bl;
-    session->info.encode(bl);
+    session->info.encode(bl, mds->mdsmap->get_up_features());
 
     // Add to RADOS op
     to_set[k.str()] = bl;

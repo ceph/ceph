@@ -224,7 +224,7 @@ public:
     ::encode(complete, payload);
     ::encode(oloc, payload);
     ::encode(data_included, payload);
-    ::encode(recovery_info, payload);
+    ::encode(recovery_info, payload, features);
     ::encode(recovery_progress, payload);
     ::encode(current_progress, payload);
     ::encode(omap_entries, payload);
