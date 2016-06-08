@@ -1604,7 +1604,7 @@ int Client::make_request(MetaRequest *request,
 
     // choose mds
     mds_rank_t mds = choose_target_mds(request);
-    if (mds < MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
+    if (mds == MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
       wait_on_list(waiting_for_mdsmap);
       continue;
