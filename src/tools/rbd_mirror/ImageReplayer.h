@@ -77,6 +77,7 @@ public:
   };
 
   ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+                ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                 RadosRef local, RadosRef remote,
                 const std::string &local_mirror_uuid,
                 const std::string &remote_mirror_uuid, int64_t local_pool_id,
@@ -223,6 +224,7 @@ private:
 
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
+  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
   RadosRef m_local, m_remote;
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
