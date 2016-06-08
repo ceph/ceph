@@ -617,6 +617,14 @@ void Operations<I>::execute_snap_create(const char *snap_name,
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.get_snap_id(snap_name) != CEPH_NOSNAP) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EEXIST);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
+
   operation::SnapshotCreateRequest<I> *req =
     new operation::SnapshotCreateRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name,
