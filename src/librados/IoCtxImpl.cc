@@ -316,11 +316,10 @@ void librados::IoCtxImpl::flush_aio_writes()
   aio_write_list_lock.Unlock();
 }
 
-const string& librados::IoCtxImpl::get_cached_pool_name()
+string librados::IoCtxImpl::get_cached_pool_name()
 {
   std::string pn;
   client->pool_get_name(get_id(), &pn);
-
   return pn;
 }
 
