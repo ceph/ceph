@@ -17,5 +17,7 @@ if(${WITH_CEPHFS})
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
+  install(TARGETS ceph_test_libcephfs
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(${WITH_CEPHFS})  
 
