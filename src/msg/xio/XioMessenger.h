@@ -64,6 +64,7 @@ private:
 public:
   XioMessenger(CephContext *cct, entity_name_t name,
 	       string mname, uint64_t nonce, uint64_t features,
+	       uint64_t cflags = 0,
 	       DispatchStrategy* ds = new QueueStrategy(1));
 
   virtual ~XioMessenger();
@@ -149,8 +150,8 @@ public:
   void learned_addr(const entity_addr_t& peer_addr_for_me);
 
 private:
-  int get_nconns_per_portal();
-  int get_nportals();
+  int get_nconns_per_portal(uint64_t cflags);
+  int get_nportals(uint64_t cflags);
 
 protected:
   virtual void ready()
