@@ -908,6 +908,8 @@ private:
 
   uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
 
+  uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
+
   bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
   // compression options
@@ -944,7 +946,7 @@ private:
   int _read_fsid(uuid_d *f);
   int _write_fsid();
   void _close_fsid();
-  void _set_min_alloc();
+  void _set_alloc_sizes();
   int _open_bdev(bool create);
   void _close_bdev();
   int _open_db(bool create);
