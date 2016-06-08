@@ -1120,7 +1120,7 @@ namespace librados
     int cache_pin(const std::string& o);
     int cache_unpin(const std::string& o);
 
-    const std::string& get_pool_name() const;
+    std::string get_pool_name() const;
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
