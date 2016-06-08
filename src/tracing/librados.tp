@@ -542,6 +542,42 @@ TRACEPOINT_EVENT(librados, rados_osd_command_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_mgr_command_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_pg_command_enter,
     TP_ARGS(
         rados_t, cluster,
