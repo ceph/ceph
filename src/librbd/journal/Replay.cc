@@ -87,6 +87,14 @@ struct ExecuteOp : public Context {
   }
 
   virtual void finish(int r) override {
+    CephContext *cct = image_ctx.cct;
+    if (r < 0) {
+      lderr(cct) << "ExecuteOp: " << __func__ << ": r=" << r << dendl;
+      on_op_complete->complete(r);
+      return;
+    }
+
+    ldout(cct, 20) << "ExecuteOp: " << __func__ << dendl;
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
     execute(event);
   }
@@ -102,7 +110,17 @@ struct C_RefreshIfRequired : public Context {
   }
 
   virtual void finish(int r) override {
+    CephContext *cct = image_ctx.cct;
+
+    if (r < 0) {
+      lderr(cct) << "C_RefreshIfRequired: " << __func__ << ": r=" << r << dendl;
+      image_ctx.op_work_queue->queue(on_finish, r);
+      return;
+    }
+
     if (image_ctx.state->is_refresh_required()) {
+      ldout(cct, 20) << "C_RefreshIfRequired: " << __func__ << ": "
+                     << "refresh required" << dendl;
       image_ctx.state->refresh(on_finish);
       return;
     }
@@ -156,8 +174,6 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   AioCompletion *flush_comp = nullptr;
-  OpTids cancel_op_tids;
-  Contexts op_finish_events;
   on_finish = util::create_async_context_callback(
     m_image_ctx, on_finish);
 
@@ -176,7 +192,9 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
         // OpFinishEvent or waiting for ready)
         if (op_event.on_start_ready == nullptr &&
             op_event.on_op_finish_event != nullptr) {
-          cancel_op_tids.push_back(op_event_pair.first);
+          Context *on_op_finish_event = nullptr;
+          std::swap(on_op_finish_event, op_event.on_op_finish_event);
+          m_image_ctx.op_work_queue->queue(on_op_finish_event, -ERESTART);
         }
       } else if (op_event.on_op_finish_event != nullptr) {
         // start ops waiting for OpFinishEvent
@@ -199,9 +217,6 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   if (flush_comp != nullptr) {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
-  }
-  for (auto op_tid : cancel_op_tids) {
-    handle_op_complete(op_tid, -ERESTART);
   }
   if (on_finish != nullptr) {
     on_finish->complete(0);
@@ -743,10 +758,8 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
             op_event.on_finish_safe != nullptr) || shutting_down);
   }
 
-  // skipped upon error -- so clean up if non-null
-  delete op_event.on_op_finish_event;
-  if (r == -ERESTART) {
-    delete op_event.on_op_complete;
+  if (op_event.on_op_finish_event != nullptr) {
+    op_event.on_op_finish_event->complete(r);
   }
 
   if (op_event.on_finish_ready != nullptr) {

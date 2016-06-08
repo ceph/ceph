@@ -341,6 +341,8 @@ void *AioImageRequestWQ::_void_dequeue() {
     get_pool_lock().Lock();
     return nullptr;
   }
+
+  item->start_op();
   return item;
 }
 
@@ -398,8 +400,7 @@ int AioImageRequestWQ::start_in_flight_op(AioCompletion *c) {
     CephContext *cct = m_image_ctx.cct;
     lderr(cct) << "IO received on closed image" << dendl;
 
-    c->get();
-    c->fail(cct, -ESHUTDOWN);
+    c->fail(-ESHUTDOWN);
     return false;
   }
 

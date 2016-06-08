@@ -40,6 +40,10 @@ public:
     return false;
   }
 
+  void start_op() {
+    m_aio_comp->start_op();
+  }
+
   void send();
   void fail(int r);
 
@@ -106,8 +110,6 @@ protected:
       m_synchronous(false) {
   }
 
-  virtual aio_type_t get_aio_type() const = 0;
-
   virtual void send_request();
 
   virtual uint32_t get_cache_request_count(bool journaling) const {
@@ -140,9 +142,6 @@ public:
   }
 
 protected:
-  virtual aio_type_t get_aio_type() const {
-    return AIO_TYPE_WRITE;
-  }
   virtual const char *get_request_type() const {
     return "aio_write";
   }
@@ -175,9 +174,6 @@ public:
   }
 
 protected:
-  virtual aio_type_t get_aio_type() const {
-    return AIO_TYPE_DISCARD;
-  }
   virtual const char *get_request_type() const {
     return "aio_discard";
   }

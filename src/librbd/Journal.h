@@ -30,7 +30,6 @@ class Journaler;
 
 namespace librbd {
 
-class AioCompletion;
 class AioObjectRequest;
 class ImageCtx;
 
@@ -129,13 +128,11 @@ public:
 
   void flush_commit_position(Context *on_finish);
 
-  uint64_t append_write_event(AioCompletion *aio_comp,
-                              uint64_t offset, size_t length,
+  uint64_t append_write_event(uint64_t offset, size_t length,
                               const bufferlist &bl,
                               const AioObjectRequests &requests,
                               bool flush_entry);
-  uint64_t append_io_event(AioCompletion *aio_comp,
-                           journal::EventEntry &&event_entry,
+  uint64_t append_io_event(journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,
                            uint64_t offset, size_t length,
                            bool flush_entry);
@@ -176,7 +173,6 @@ private:
 
   struct Event {
     Futures futures;
-    AioCompletion *aio_comp = nullptr;
     AioObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
     ExtentInterval pending_extents;
@@ -186,9 +182,9 @@ private:
 
     Event() {
     }
-    Event(const Futures &_futures, AioCompletion *_aio_comp,
-          const AioObjectRequests &_requests, uint64_t offset, size_t length)
-      : futures(_futures), aio_comp(_aio_comp), aio_object_requests(_requests) {
+    Event(const Futures &_futures, const AioObjectRequests &_requests,
+          uint64_t offset, size_t length)
+      : futures(_futures), aio_object_requests(_requests) {
       if (length > 0) {
         pending_extents.insert(offset, length);
       }
@@ -290,8 +286,7 @@ private:
 
   journal::Replay<ImageCtxT> *m_journal_replay;
 
-  uint64_t append_io_events(AioCompletion *aio_comp,
-                            journal::EventType event_type,
+  uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
                             const AioObjectRequests &requests,
                             uint64_t offset, size_t length, bool flush_entry);
