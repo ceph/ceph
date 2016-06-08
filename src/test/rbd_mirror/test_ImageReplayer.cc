@@ -30,6 +30,7 @@
 #include "librbd/internal.h"
 #include "tools/rbd_mirror/types.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/ImageDeleter.h"
 
@@ -104,9 +105,12 @@ public:
 
     m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
+
     m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_local_cluster,
                                                       m_threads->timer,
                                                       &m_threads->timer_lock));
+
+    m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
   }
 
   ~TestImageReplayer()
@@ -127,7 +131,7 @@ public:
 
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
-    m_replayer = new ImageReplayerT(m_threads, m_image_deleter,
+    m_replayer = new ImageReplayerT(m_threads, m_image_deleter, m_image_sync_throttler,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
       rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
       m_local_mirror_uuid, m_remote_mirror_uuid, m_local_ioctx.get_id(),
@@ -340,6 +344,7 @@ public:
   std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
   std::shared_ptr<librados::Rados> m_local_cluster;
   librados::Rados m_remote_cluster;
+  std::shared_ptr<rbd::mirror::ImageSyncThrottler<>> m_image_sync_throttler;
   std::string m_local_mirror_uuid = "local mirror uuid";
   std::string m_remote_mirror_uuid = "remote mirror uuid";
   std::string m_local_pool_name, m_remote_pool_name;
