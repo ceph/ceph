@@ -2624,8 +2624,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "successfully created pool " << nargs[1] << std::endl;
   }
   else if (strcmp(nargs[0], "cppool") == 0) {
-    bool force = nargs.size() == 4 && !strcmp(nargs[3], "--yes-i-really-mean-it");
-    if (nargs.size() != 3 && !(nargs.size() == 4 && force))
+    if (nargs.size() != 3)
       usage_exit();
     const char *src_pool = nargs[1];
     const char *target_pool = nargs[2];
@@ -2634,21 +2633,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "cannot copy pool into itself" << std::endl;
       ret = -1;
       goto out;
-    }
-
-    cerr << "WARNING: pool copy does not preserve user_version, which some "
-	 << "    apps may rely on." << std::endl;
-
-    if (rados.get_pool_is_selfmanaged_snaps_mode(src_pool)) {
-      cerr << "WARNING: pool " << src_pool << " has selfmanaged snaps, which are not preserved\n"
-	   << "    by the cppool operation.  This will break any snapshot user."
-	   << std::endl;
-      if (!force) {
-	cerr << "    If you insist on making a broken copy, you can pass\n"
-	     << "    --yes-i-really-mean-it to proceed anyway."
-	     << std::endl;
-	exit(1);
-      }
     }
 
     ret = do_copy_pool(rados, src_pool, target_pool);
@@ -3284,12 +3268,38 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  std::map < std::string, std::string > opts;
+  std::vector<const char*>::iterator i;
+  std::vector<const char*>::iterator j;
+  std::string val;
+
+  /* Necessary to support usage of -f for formatting,
+   * since global_init will remove the -f using ceph
+   * argparse procedures. */
+  for (j = args.begin(); j != args.end(); ) {
+    if (strcmp(*j, "--") == 0) {
+      break;
+    } else if ((j+1) == args.end()) {
+      // This can't be a formatting call (no format arg)
+      break; 
+    } else if (strcmp(*j, "-f") == 0) {
+      val = *(j+1);
+      
+      unique_ptr<Formatter> formatter(Formatter::create(val.c_str()));
+      if (formatter) {
+	j = args.erase(j);
+	opts["format"] = val;
+	
+	j = args.erase(j);
+	break;
+      }
+    }
+    ++j;
+  }
+
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  std::map < std::string, std::string > opts;
-  std::vector<const char*>::iterator i;
-  std::string val;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
