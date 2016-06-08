@@ -49,10 +49,25 @@ external dependencies:
       -DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
       ..
 
-More options will be implemented in the future.
+If you often pipe `make`to `less` and would like to maintain the
+diagnostic colors for errors and warnings (and if your compiler
+supports it), you can invoke `cmake` with:
+
+    $ cmake -DDIAGNOSTICS_COLOR=always [...]
+
+Then you'll get the diagnostic colors when you execute:
+
+    $ make | less -R
+
+Other available values for DIAGNOSTICS_COLOR are 'auto' (default) and
+'never'.
+
+
+**More options will be implemented in the future.**
+
 
 Targets Built
-==============
+=============
 
 * ceph-mon 
 * ceph-osd 
