@@ -4782,7 +4782,8 @@ int RGWRados::time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cl
 }
 
 int RGWRados::time_log_trim(const string& oid, const real_time& start_time, const real_time& end_time,
-			    const string& from_marker, const string& to_marker)
+			    const string& from_marker, const string& to_marker,
+                            librados::AioCompletion *completion)
 {
   librados::IoCtx io_ctx;
 
@@ -4795,7 +4796,15 @@ int RGWRados::time_log_trim(const string& oid, const real_time& start_time, cons
   utime_t st(start_time);
   utime_t et(end_time);
 
-  return cls_log_trim(io_ctx, oid, st, et, from_marker, to_marker);
+  ObjectWriteOperation op;
+  cls_log_trim(op, st, et, from_marker, to_marker);
+
+  if (!completion) {
+    r = io_ctx.operate(oid, &op);
+  } else {
+    r = io_ctx.aio_operate(oid, completion, &op);
+  }
+  return r;
 }
 
 string RGWRados::objexp_hint_get_shardname(int shard_num)

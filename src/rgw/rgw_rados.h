@@ -2911,7 +2911,8 @@ public:
   int time_log_info(const string& oid, cls_log_header *header);
   int time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cls_log_header *header, librados::AioCompletion *completion);
   int time_log_trim(const string& oid, const ceph::real_time& start_time, const ceph::real_time& end_time,
-                    const string& from_marker, const string& to_marker);
+                    const string& from_marker, const string& to_marker,
+                    librados::AioCompletion *completion = nullptr);
 
   string objexp_hint_get_shardname(int shard_num);
   int objexp_key_shard(const rgw_obj_key& key);
