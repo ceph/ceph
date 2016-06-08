@@ -557,7 +557,7 @@ void bluestore_blob_t::put_ref(
     }
     extents.resize(1);
     extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
-    extents[0].length = this->length;
+    extents[0].length = pos;
     return;
   }
 

@@ -588,6 +588,58 @@ public:
     vector<OnodeRef> wal_op_onodes;
 
     interval_set<uint64_t> allocated, released;
+    struct volatile_statfs{
+      enum {
+        STATFS_ALLOCATED = 0,
+        STATFS_STORED,
+        STATFS_COMPRESSED_ORIGINAL,
+        STATFS_COMPRESSED,
+        STATFS_COMPRESSED_ALLOCATED,
+        STATFS_LAST
+      };
+      int64_t values[STATFS_LAST];
+      volatile_statfs() {
+        memset(this, 0, sizeof(volatile_statfs));
+      }
+      void reset() {
+        *this = volatile_statfs();
+      }
+      int64_t& allocated() {
+        return values[STATFS_ALLOCATED];
+      }
+      int64_t& stored() {
+        return values[STATFS_STORED];
+      }
+      int64_t& compressed_original() {
+        return values[STATFS_COMPRESSED_ORIGINAL];
+      }
+      int64_t& compressed() {
+        return values[STATFS_COMPRESSED];
+      }
+      int64_t& compressed_allocated() {
+        return values[STATFS_COMPRESSED_ALLOCATED];
+      }
+      bool is_empty() {
+        return values[STATFS_ALLOCATED] == 0 &&
+          values[STATFS_STORED] == 0 &&
+          values[STATFS_COMPRESSED] == 0 &&
+          values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
+          values[STATFS_COMPRESSED_ALLOCATED] == 0;
+      }
+      void decode(bufferlist::iterator& it) {
+        for (size_t i = 0; i < STATFS_LAST; i++) {
+          ::decode(values[i], it);
+        }
+      }
+
+      void encode(bufferlist& bl) {
+        for (size_t i = 0; i < STATFS_LAST; i++) {
+          //::encode(ceph_le64(values[i]), bl);
+          ::encode(values[i], bl);
+        }
+      }
+    } statfs_delta;
+
 
     IOContext ioc;
 
@@ -929,6 +981,7 @@ private:
   void _dump_bnode(BnodeRef b, int log_level=30);
 
   TransContext *_txc_create(OpSequencer *osr);
+  void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
@@ -1006,7 +1059,7 @@ public:
   }
 
 public:
-  int statfs(struct statfs *buf) override;
+  int statfs(struct store_statfs_t *buf) override;
 
   bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
