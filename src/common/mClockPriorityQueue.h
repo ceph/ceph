@@ -18,6 +18,7 @@
 #include <functional>
 #include <map>
 #include <list>
+#include <cmath>
 
 #include "common/Formatter.h"
 #include "common/OpQueue.h"
@@ -214,21 +215,14 @@ namespace ceph {
     std::list<std::pair<K,T>> queue_front;
 
     static double cost_to_tag(unsigned cost) {
-      static const double log_of_2 = log(2.0);
-      return log(cost) / log_of_2;
+      static const double log_of_2 = std::log(2.0);
+      return std::log(cost) / log_of_2;
     }
 
   public:
 
-#if 0
-    dmc::ClientInfo client_info_f(K client) {
-      static dmc::ClientInfo _default(1.0, 1.0, 1.0);
-      return _default;
-    }
-#endif
-
     
-    dmc::ClientInfo client_info_f(osd_op_type_t client) {
+    dmc::ClientInfo client_info_f(const osd_op_type_t& client) {
       static dmc::ClientInfo _default(1.0, 1.0, 1.0);
       return _default;
     }
