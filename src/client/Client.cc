@@ -8323,8 +8323,13 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * FIXME: this is racy in that we may block _after_ this point waiting for caps, and size may
      * change out from under us.
      */
-    if (f->flags & O_APPEND)
-      _lseek(f, 0, SEEK_END);
+    if (f->flags & O_APPEND) {
+      int r = _lseek(f, 0, SEEK_END);
+      if (r < 0) {
+        unlock_fh_pos(f);
+        return r;
+      }
+    }
     offset = f->pos;
     f->pos = offset+size;
     unlock_fh_pos(f);
