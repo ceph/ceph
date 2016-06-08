@@ -426,6 +426,212 @@ int BlueFS::_open_super()
   return 0;
 }
 
+void
+BlueFS::dump_logfile(ostream& out)
+{
+  out << __func__ << std::endl;
+  ino_last = 1;  // by the log
+  log_seq = 0;
+
+  FileRef base_log_file = _get_file(1);
+  base_log_file->fnode = super.log_fnode;
+
+  FileReader *log_reader = new FileReader(
+    base_log_file, g_conf->bluefs_alloc_size,
+    false,  // !random
+    true);  // ignore eof
+  while (true) {
+    assert((log_reader->buf.pos & ~super.block_mask()) == 0);
+    uint64_t pos = log_reader->buf.pos;
+    bufferlist bl;
+    {
+      int r = _read(log_reader, &log_reader->buf, pos, super.block_size,
+		    &bl, NULL);
+      assert(r == (int)super.block_size);
+    }
+    uint64_t more = 0;
+    uint64_t seq;
+    uuid_d uuid;
+    {
+      bufferlist::iterator p = bl.begin();
+      __u8 a, b;
+      uint32_t len;
+      ::decode(a, p);
+      ::decode(b, p);
+      ::decode(len, p);
+      ::decode(uuid, p);
+      ::decode(seq, p);
+      if (len + 6 > bl.length()) {
+	more = ROUND_UP_TO(len + 6 - bl.length(), super.block_size);
+      }
+    }
+      out << __func__ << " Pos: " << pos << "seq: " << seq
+	       << " log seq: " << log_seq + 1 << std::endl;
+
+    if (uuid != super.uuid) {
+      out << __func__ << " " << pos << ": stop: uuid " << uuid
+	       << " != super.uuid " << super.uuid << std::endl;
+      break;
+    }
+    if (seq != log_seq + 1) {
+      out << __func__ << " " << pos << ": stop: seq " << seq
+	       << " != expected " << log_seq + 1 << std::endl;
+      break;
+    }
+
+    if (more) {
+      out << __func__ << "  need " << more << " more bytes" << std::endl;
+      bufferlist t;
+      int r = _read(log_reader, &log_reader->buf, pos + super.block_size, more,
+		    &t, NULL);
+      if (r < (int)more) {
+	out << __func__ << " Pos: " << pos << " len is "
+		 << bl.length() + more << ", which is past eof" << std::endl;
+	break;
+      }
+      assert(r == (int)more);
+      bl.claim_append(t);
+    }
+    bluefs_transaction_t t;
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(t, p);
+    }
+    catch (buffer::error& e) {
+      out << __func__ << " " << pos << ": stop: failed to decode: "
+	       << e.what() << std::endl;
+      delete log_reader;
+    }
+    assert(seq == t.seq);
+    out << __func__ << " " << pos << ": " << t << std::endl;
+
+    bufferlist::iterator p = t.op_bl.begin();
+    while (!p.end()) {
+      __u8 op;
+      ::decode(op, p);
+      switch (op) {
+
+      case bluefs_transaction_t::OP_INIT:
+	out << __func__ << " " << pos << ":  op_init" << std::endl;
+	break;
+
+      case bluefs_transaction_t::OP_JUMP_SEQ:
+        {
+	  uint64_t next_seq;
+	  ::decode(next_seq, p);
+	  out << __func__ << " " << pos << ":  op_jump_seq "
+		   << next_seq << std::endl;
+	  assert(next_seq >= log_seq);
+	  log_seq = next_seq - 1; // we will increment it below
+	}
+	break;
+
+      case bluefs_transaction_t::OP_ALLOC_ADD:
+        {
+	  __u8 id;
+	  uint64_t offset, length;
+	  ::decode(id, p);
+	  ::decode(offset, p);
+	  ::decode(length, p);
+	  out << __func__ << " " << pos << ":  op_alloc_add "
+		   << " " << (int)id << ":" << offset << "~" << length << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_ALLOC_RM:
+        {
+	  __u8 id;
+	  uint64_t offset, length;
+	  ::decode(id, p);
+	  ::decode(offset, p);
+	  ::decode(length, p);
+	  out << __func__ << " " << pos << ":  op_alloc_rm "
+		   << " " << (int)id << ":" << offset << "~" << length << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_LINK:
+        {
+	  string dirname, filename;
+	  uint64_t ino;
+	  ::decode(dirname, p);
+	  ::decode(filename, p);
+	  ::decode(ino, p);
+	  out << __func__ << " " << pos << ":  op_dir_link "
+		   << " " << dirname << "/" << filename << " to " << ino
+		   << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_UNLINK:
+        {
+	  string dirname, filename;
+	  ::decode(dirname, p);
+	  ::decode(filename, p);
+	  out << __func__ << " " << pos << ":  op_dir_unlink "
+		   << " " << dirname << "/" << filename << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_CREATE:
+        {
+	  string dirname;
+	  ::decode(dirname, p);
+	  out << __func__ << " " << pos << ":  op_dir_create " << dirname
+		   << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_REMOVE:
+        {
+	  string dirname;
+	  ::decode(dirname, p);
+	  out << __func__ << " " << pos << ":  op_dir_remove " << dirname
+		   << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_FILE_UPDATE:
+        {
+	  bluefs_fnode_t fnode;
+	  ::decode(fnode, p);
+	  out << __func__ << " " << pos << ":  op_file_update "
+		   << " " << fnode << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_FILE_REMOVE:
+        {
+	  uint64_t ino;
+	  ::decode(ino, p);
+	  out << __func__ << " " << pos << ":  op_file_remove " << ino
+		   << std::endl;
+	}
+	break;
+
+      default:
+	out << __func__ << " " << pos << ": stop: unrecognized op " << (int)op
+	     << std::endl;
+	delete log_reader;
+      }
+    }
+    assert(p.end());
+    ++log_seq;
+    base_log_file->fnode.size = log_reader->buf.pos;
+  }
+
+  out << __func__ << " log file size was " << base_log_file->fnode.size << " log reader position: " << log_reader->buf.pos << std::endl;
+  delete log_reader;
+
+  // dump all the file link counts
+  for (auto& p : file_map)
+      out << __func__ << " ino: " << p.second->fnode.ino << " refs: " << p.second->refs
+	     << " fnode: " << p.second->fnode  << std::endl;
+
+  out << __func__ << " done" << std::endl;
+}
+
+
 int BlueFS::_replay()
 {
   dout(10) << __func__ << dendl;
@@ -912,6 +1118,11 @@ void BlueFS::_maybe_compact_log()
  * beginnging extents to the allocator for reuse.
  */
 
+void BlueFS::compact_log()
+{
+  _compact_log();
+}
+
 
 void BlueFS::_compact_log()
 {
@@ -1002,6 +1213,11 @@ void BlueFS::_pad_bl(bufferlist& bl)
 	     << " zeros" << dendl;
     bl.append_zero(super.block_size - partial);
   }
+}
+
+void BlueFS::flush_log()
+{
+  _flush_log();
 }
 
 int BlueFS::_flush_log()
