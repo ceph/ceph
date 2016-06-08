@@ -164,7 +164,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
         maxkey = sorted(app.ceph_sigdict.keys())[-1]
         maxkey = int(maxkey.replace('cmd', ''))
         osdkey = maxkey + 1
-        for k, v in osd_sigdict.iteritems():
+        for k, v in osd_sigdict.items():
             newv = v
             newv['flavor'] = 'tell'
             globk = 'cmd' + str(osdkey)
@@ -180,12 +180,12 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     # 'avail', a comma-separated list of strings of consumers that should
     #    display this command (filtered by parse_json_funcsigs() above)
     app.ceph_urls = {}
-    for cmdnum, cmddict in app.ceph_sigdict.iteritems():
+    for cmdnum, cmddict in app.ceph_sigdict.items():
         cmdsig = cmddict['sig']
         flavor = cmddict.get('flavor', 'mon')
         url, params = generate_url_and_params(app, cmdsig, flavor)
         perm = cmddict['perm']
-        for k in METHOD_DICT.iterkeys():
+        for k in METHOD_DICT.keys():
             if k in perm:
                 methods = METHOD_DICT[k]
         urldict = {'paramsig': params,
@@ -280,7 +280,7 @@ def show_human_help(prefix):
     """
     permmap = {'r': 'GET', 'rw': 'PUT', 'rx': 'GET', 'rwx': 'PUT'}
     data = []
-    for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
+    for cmdsig in sorted(app.ceph_sigdict.values(), cmp=descsort):
         flavor = cmdsig.get('flavor', 'mon')
         endpoint = concise_sig_for_uri(cmdsig['sig'], flavor)
 
@@ -390,7 +390,6 @@ def handler(catchall_path=None, fmt=None, target=None):
     <target>.  Partial match or ?help cause the HTML-table
     "show_human_help" output.
     '''
-
     ep = catchall_path or flask.request.endpoint
     ep = ep.replace('.<fmt>', '')
 
@@ -469,7 +468,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         # if there are parameters for this endpoint, process them
         if paramsig:
             args = {}
-            for k, l in flask.request.args.iterlists():
+            for k, l in flask.request.args.items():
                 if len(l) == 1:
                     args[k] = l[0]
                 else:
