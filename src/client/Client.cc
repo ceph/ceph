@@ -2545,27 +2545,28 @@ void Client::handle_mds_map(MMDSMap* m)
 
   // Cancel any commands for missing or laggy GIDs
   std::list<ceph_tid_t> cancel_ops;
-  for (std::map<ceph_tid_t, CommandOp>::iterator i = commands.begin();
-       i != commands.end(); ++i) {
-    const mds_gid_t op_mds_gid = i->second.mds_gid;
+  auto commands = command_table.get_commands();
+  for (const auto &i : commands) {
+    const MDSCommandOp *op = i.second;
+    const mds_gid_t op_mds_gid = op->mds_gid;
     if (mdsmap->is_dne_gid(op_mds_gid) || mdsmap->is_laggy_gid(op_mds_gid)) {
-      ldout(cct, 1) << __func__ << ": cancelling command op " << i->first << dendl;
-      cancel_ops.push_back(i->first);
-      if (i->second.outs) {
+      ldout(cct, 1) << __func__ << ": cancelling command op " << i.first << dendl;
+      cancel_ops.push_back(i.first);
+      if (op->outs) {
         std::ostringstream ss;
         ss << "MDS " << op_mds_gid << " went away";
-        *(i->second.outs) = ss.str();
+        *(op->outs) = ss.str();
       }
-      i->second.con->mark_down();
-      if (i->second.on_finish) {
-        i->second.on_finish->complete(-ETIMEDOUT);
+      op->con->mark_down();
+      if (op->on_finish) {
+        op->on_finish->complete(-ETIMEDOUT);
       }
     }
   }
 
   for (std::list<ceph_tid_t>::iterator i = cancel_ops.begin();
        i != cancel_ops.end(); ++i) {
-    commands.erase(*i);
+    command_table.erase(*i);
   }
 
   // reset session
@@ -5498,31 +5499,28 @@ int Client::mds_command(
   // Send commands to targets
   C_GatherBuilder gather(cct, onfinish);
   for (const auto target_gid : non_laggy) {
-    ceph_tid_t tid = ++last_tid;
     const auto info = fsmap->get_info_gid(target_gid);
 
     // Open a connection to the target MDS
     entity_inst_t inst = info.get_inst();
     ConnectionRef conn = messenger->get_connection(inst);
 
-    // Generate CommandOp state
-    CommandOp op;
-    op.tid = tid;
-    op.on_finish = gather.new_sub();
-    op.outbl = outbl;
-    op.outs = outs;
-    op.mds_gid = target_gid;
-    op.con = conn;
-    commands[op.tid] = op;
+    // Generate MDSCommandOp state
+    MDSCommandOp *op = command_table.start_command();
+
+    op->on_finish = gather.new_sub();
+    op->cmd = cmd;
+    op->outbl = outbl;
+    op->outs = outs;
+    op->inbl = inbl;
+    op->mds_gid = target_gid;
+    op->con = conn;
 
     ldout(cct, 4) << __func__ << ": new command op to " << target_gid
-      << " tid=" << op.tid << cmd << dendl;
+      << " tid=" << op->tid << cmd << dendl;
 
     // Construct and send MCommand
-    MCommand *m = new MCommand(monclient->get_fsid());
-    m->cmd = cmd;
-    m->set_data(inbl);
-    m->set_tid(tid);
+    MCommand *m = op->get_message(monclient->get_fsid());
     conn->send_message(m);
   }
   gather.activate();
@@ -5536,24 +5534,25 @@ void Client::handle_command_reply(MCommandReply *m)
 
   ldout(cct, 10) << __func__ << ": tid=" << m->get_tid() << dendl;
 
-  map<ceph_tid_t, CommandOp>::iterator opiter = commands.find(tid);
-  if (opiter == commands.end()) {
+  MDSCommandOp *op = command_table.get_command(tid);
+  if (op == nullptr) {
     ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
     m->put();
     return;
   }
 
-  CommandOp const &op = opiter->second;
-  if (op.outbl) {
-    op.outbl->claim(m->get_data());
+  if (op->outbl) {
+    op->outbl->claim(m->get_data());
   }
-  if (op.outs) {
-    *op.outs = m->rs;
+  if (op->outs) {
+    *op->outs = m->rs;
   }
 
-  if (op.on_finish) {
-    op.on_finish->complete(m->r);
+  if (op->on_finish) {
+    op->on_finish->complete(m->r);
   }
+
+  command_table.erase(tid);
 
   m->put();
 }
@@ -11720,8 +11719,7 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
   Mutex::Locker lock(client_lock);
   vinodeno_t vino = ll_get_vino(in);
   object_t oid = file_object_t(vino.ino, blockid);
-  int r = 0;
-  C_SaferCond cond;
+  C_SaferCond onfinish;
   bufferlist bl;
 
   objecter->read(oid,
@@ -11731,11 +11729,11 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
 		 vino.snapid,
 		 &bl,
 		 CEPH_OSD_FLAG_READ,
-		 &cond);
+                 &onfinish);
 
   client_lock.Unlock();
-  r = cond.wait();
-  client_lock.Lock(); // lock is going to unlock on exit.
+  int r = onfinish.wait();
+  client_lock.Lock();
 
   if (r >= 0) {
       bl.copy(0, bl.length(), buf);
