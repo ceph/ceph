@@ -1217,6 +1217,7 @@ void BlueFS::_pad_bl(bufferlist& bl)
 
 void BlueFS::flush_log()
 {
+  std::lock_guard<std::mutex> l(lock);
   _flush_log();
 }
 

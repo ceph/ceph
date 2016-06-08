@@ -7,6 +7,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <thread>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "include/stringify.h"
@@ -27,6 +28,15 @@ string get_temp_bdev(uint64_t size)
   ::close(fd);
   return fn;
 }
+
+char* gen_buffer(uint64_t size)
+{
+    char *buffer = new char[size];
+    boost::random::random_device rand;
+    rand.generate(buffer, buffer + size);
+    return buffer;
+}
+
 
 void rm_temp_bdev(string f)
 {
@@ -130,6 +140,255 @@ TEST(BlueFS, small_appends) {
   fs.umount();
   rm_temp_bdev(fn);
 }
+
+TEST(BlueFS, write_small_files) {
+  uint64_t size = 1048476 * 128;
+  string fn = get_temp_bdev(size);
+
+  BlueFS fs;
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
+  {
+    BlueFS::FileWriter *h;
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       ASSERT_EQ(0, fs.mkdir(dir));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          bufferlist bl;
+          char *buf = gen_buffer(4096);
+	  bufferptr bp = buffer::claim_char(4096, buf);
+	  bl.push_back(bp);
+          h->append(bl);
+          fs.fsync(h);
+          fs.close_writer(h);
+       }
+    }
+  }
+  {
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          fs.unlink(dir, file);
+	  fs.flush_log();
+       }
+       fs.rmdir(dir);
+       fs.flush_log();
+    }
+  }
+  fs.umount();
+  rm_temp_bdev(fn);
+}
+
+TEST(BlueFS, write_big_files) {
+  uint64_t size = 1048476 * 128;
+  string fn = get_temp_bdev(size);
+
+  BlueFS fs;
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
+  {
+    BlueFS::FileWriter *h;
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       ASSERT_EQ(0, fs.mkdir(dir));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          bufferlist bl;
+          char *buf = gen_buffer(409600);
+	  bufferptr bp = buffer::claim_char(409600, buf);
+	  bl.push_back(bp);
+          h->append(bl);
+          fs.fsync(h);
+          fs.close_writer(h);
+       }
+    }
+  }
+  {
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          fs.unlink(dir, file);
+	  fs.flush_log();
+       }
+       fs.rmdir(dir);
+       fs.flush_log();
+    }
+  }
+  fs.umount();
+  rm_temp_bdev(fn);
+}
+
+TEST(BlueFS, test_simple_compaction) {
+  uint64_t size = 1048476 * 128;
+  string fn = get_temp_bdev(size);
+
+  BlueFS fs;
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
+  {
+    BlueFS::FileWriter *h;
+    for (int i=0; i<10; i++) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       ASSERT_EQ(0, fs.mkdir(dir));
+       for (int j=0; j<10; j++) {
+          string file = "file.";
+	  file.append(to_string(j));
+          ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+          bufferlist bl;
+          char *buf = gen_buffer(4096);
+	  bufferptr bp = buffer::claim_char(4096, buf);
+	  bl.push_back(bp);
+          h->append(bl);
+          fs.fsync(h);
+          fs.close_writer(h);
+       }
+    }
+  }
+  // Don't remove all
+  {
+    for (int i=0; i<10; i+=2) {
+       string dir = "dir.";
+       dir.append(to_string(i));
+       for (int j=0; j<10; j+=2) {
+          string file = "file.";
+	  file.append(to_string(j));
+          fs.unlink(dir, file);
+	  fs.flush_log();
+       }
+       fs.rmdir(dir);
+       fs.flush_log();
+    }
+  }
+  fs.compact_log();
+  fs.umount();
+  rm_temp_bdev(fn);
+}
+
+bool pause_thread = false;
+bool stop = false;
+
+void write_data(BlueFS &fs)
+{
+    BlueFS::FileWriter *h;
+    int j=0;
+    stringstream ss;
+    string dir = "dir.";
+    ss << std::this_thread::get_id();
+    dir.append(ss.str());
+    dir.append(".");
+    dir.append(to_string(j));
+    ASSERT_EQ(0, fs.mkdir(dir));
+    while(1) {
+      if (stop == true)
+        break;
+      if (pause_thread == true)
+        sleep(10);
+      string file = "file.";
+      file.append(to_string(j));
+      ASSERT_EQ(0, fs.open_for_write(dir, file, &h, false));
+      bufferlist bl;
+      char *buf = gen_buffer(4096);
+      bufferptr bp = buffer::claim_char(4096, buf);
+      bl.push_back(bp);
+      h->append(bl);
+      fs.fsync(h);
+      j++;
+      if (j%4 == 0)
+      {
+          file = "file.";
+	  file.append(to_string(j-1));
+          fs.unlink(dir, file);
+	  fs.flush_log();
+      }
+      fs.close_writer(h);
+    }
+}
+
+void sync_fs(BlueFS &fs)
+{
+    while(1) {
+      if(stop == true)
+        break;
+      if (pause_thread == true)
+        sleep(10);
+      fs.sync_metadata();
+      sleep(2);
+    }
+}
+
+void do_join(std::thread& t)
+{
+    t.join();
+}
+
+void join_all(std::vector<std::thread>& v)
+{
+    std::for_each(v.begin(),v.end(),do_join);
+}
+
+#define NUM_WRITERS 5
+#define NUM_SYNC_THREADS 1
+
+TEST(BlueFS, test_compaction) {
+  uint64_t size = 1048476 * 512;
+  string fn = get_temp_bdev(size);
+
+  BlueFS fs;
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
+  {
+    std::vector<std::thread> write_threads;
+    for (int i=0; i<NUM_WRITERS; i++) {
+      write_threads.push_back(std::thread(write_data, std::ref(fs)));
+    }
+
+    sleep(2);
+
+    std::vector<std::thread> sync_threads;
+    for (int i=0; i<NUM_SYNC_THREADS; i++) {
+      sync_threads.push_back(std::thread(sync_fs, std::ref(fs)));
+    }
+
+    pause_thread = true;
+    sleep(1);
+    pause_thread = false;
+    sleep(2);
+    stop = true;
+    sleep(1);
+    join_all(write_threads);
+    join_all(sync_threads);
+    fs.compact_log();
+  }
+  fs.umount();
+  rm_temp_bdev(fn);
+}
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;
