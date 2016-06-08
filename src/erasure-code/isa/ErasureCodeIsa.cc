@@ -14,7 +14,6 @@
 
 // -----------------------------------------------------------------------------
 #include <algorithm>
-#include <dlfcn.h>
 #include <errno.h>
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
@@ -22,6 +21,8 @@
 #include "xor_op.h"
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
+using namespace std;
+
 // -----------------------------------------------------------------------------
 extern "C" {
 #include "isa-l/include/erasure_code.h"

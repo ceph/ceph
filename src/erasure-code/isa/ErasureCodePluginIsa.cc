@@ -25,7 +25,6 @@
 
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
-#include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeIsaTableCache.h"
 #include "ErasureCodeIsa.h"
@@ -38,7 +37,7 @@ public:
   virtual int factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     ErasureCodeIsa *interface;
     std::string t;

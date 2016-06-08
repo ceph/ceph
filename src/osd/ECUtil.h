@@ -15,10 +15,6 @@
 #ifndef ECUTIL_H
 #define ECUTIL_H
 
-#include <map>
-#include <set>
-
-#include "include/memory.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "include/assert.h"
@@ -69,59 +65,59 @@ public:
     assert(offset % chunk_size == 0);
     return (offset / chunk_size) * stripe_width;
   }
-  pair<uint64_t, uint64_t> aligned_offset_len_to_chunk(
-    pair<uint64_t, uint64_t> in) const {
-    return make_pair(
+  std::pair<uint64_t, uint64_t> aligned_offset_len_to_chunk(
+    std::pair<uint64_t, uint64_t> in) const {
+    return std::make_pair(
       aligned_logical_offset_to_chunk_offset(in.first),
       aligned_logical_offset_to_chunk_offset(in.second));
   }
-  pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
-    pair<uint64_t, uint64_t> in) const {
+  std::pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
+    std::pair<uint64_t, uint64_t> in) const {
     uint64_t off = logical_to_prev_stripe_offset(in.first);
     uint64_t len = logical_to_next_stripe_offset(
       (in.first - off) + in.second);
-    return make_pair(off, len);
+    return std::make_pair(off, len);
   }
 };
 
 int decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
-  map<int, bufferlist> &to_decode,
+  std::map<int, bufferlist> &to_decode,
   bufferlist *out);
 
 int decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
-  map<int, bufferlist> &to_decode,
-  map<int, bufferlist*> &out);
+  std::map<int, bufferlist> &to_decode,
+  std::map<int, bufferlist*> &out);
 
 int encode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
   bufferlist &in,
-  const set<int> &want,
-  map<int, bufferlist> *out);
+  const std::set<int> &want,
+  std::map<int, bufferlist> *out);
 
 class HashInfo {
   uint64_t total_chunk_size;
-  vector<uint32_t> cumulative_shard_hashes;
+  std::vector<uint32_t> cumulative_shard_hashes;
 public:
   HashInfo() : total_chunk_size(0) {}
   explicit HashInfo(unsigned num_chunks)
   : total_chunk_size(0),
     cumulative_shard_hashes(num_chunks, -1) {}
-  void append(uint64_t old_size, map<int, bufferlist> &to_append);
+  void append(uint64_t old_size, std::map<int, bufferlist> &to_append);
   void clear() {
     total_chunk_size = 0;
-    cumulative_shard_hashes = vector<uint32_t>(
+    cumulative_shard_hashes = std::vector<uint32_t>(
       cumulative_shard_hashes.size(),
       -1);
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<HashInfo*>& o);
+  static void generate_test_instances(std::list<HashInfo*>& o);
   uint32_t get_chunk_hash(int shard) const {
     assert((unsigned)shard < cumulative_shard_hashes.size());
     return cumulative_shard_hashes[shard];
@@ -130,10 +126,10 @@ public:
     return total_chunk_size;
   }
 };
-typedef ceph::shared_ptr<HashInfo> HashInfoRef;
+typedef std::shared_ptr<HashInfo> HashInfoRef;
 
-bool is_hinfo_key_string(const string &key);
-const string &get_hinfo_key();
+bool is_hinfo_key_string(const std::string &key);
+const std::string &get_hinfo_key();
 
 }
 WRITE_CLASS_ENCODER(ECUtil::HashInfo)
