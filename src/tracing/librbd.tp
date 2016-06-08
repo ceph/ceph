@@ -1832,6 +1832,44 @@ TRACEPOINT_EVENT(librbd, is_exclusive_lock_owner_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, lock_acquire_enter,
+    TP_ARGS(
+        void*, imagectx,
+        int, lock_mode),
+    TP_FIELDS(
+      ctf_integer_hex(void*, imagectx, imagectx)
+      ctf_integer(int, lock_mode, lock_mode)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, lock_acquire_exit,
+    TP_ARGS(
+        void*, imagectx,
+        int, retval),
+    TP_FIELDS(
+      ctf_integer_hex(void*, imagectx, imagectx)
+      ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, lock_release_enter,
+    TP_ARGS(
+        void*, imagectx),
+    TP_FIELDS(
+      ctf_integer_hex(void*, imagectx, imagectx)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, lock_release_exit,
+    TP_ARGS(
+        void*, imagectx,
+        int, retval),
+    TP_FIELDS(
+      ctf_integer_hex(void*, imagectx, imagectx)
+      ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, stat_enter,
     TP_ARGS(
         void*, imagectx,

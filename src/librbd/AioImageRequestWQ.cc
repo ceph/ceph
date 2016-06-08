@@ -6,6 +6,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/exclusive_lock/Policy.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -440,6 +441,17 @@ void AioImageRequestWQ::queue(AioImageRequest<> *req) {
 
   assert(m_image_ctx.owner_lock.is_locked());
   bool write_op = req->is_write_op();
+  bool lock_required = (write_op && is_lock_required()) ||
+    (!write_op && m_require_lock_on_read);
+
+  if (lock_required && !m_image_ctx.get_exclusive_lock_policy()->may_auto_request_lock()) {
+    lderr(cct) << "op requires exclusive lock" << dendl;
+    req->fail(-EROFS);
+    delete req;
+    finish_in_flight_op();
+    return;
+  }
+
   if (write_op) {
     m_queued_writes.inc();
   } else {
@@ -448,8 +460,7 @@ void AioImageRequestWQ::queue(AioImageRequest<> *req) {
 
   ThreadPool::PointerWQ<AioImageRequest<> >::queue(req);
 
-  if ((write_op && is_lock_required()) ||
-      (!write_op && m_require_lock_on_read)) {
+  if (lock_required) {
     m_image_ctx.exclusive_lock->request_lock(nullptr);
   }
 }
