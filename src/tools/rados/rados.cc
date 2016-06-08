@@ -3275,7 +3275,7 @@ int main(int argc, const char **argv)
 
   /* Necessary to support usage of -f for formatting,
    * since global_init will remove the -f using ceph
-   * argparse functions. */
+   * argparse procedures. */
   for (j = args.begin(); j != args.end(); ) {
     if (strcmp(*j, "--") == 0) {
       break;
