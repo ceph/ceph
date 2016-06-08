@@ -16,6 +16,7 @@ usr/bin/rbdmap
 usr/bin/rbd-replay*
 usr/bin/ceph-post-file
 usr/bin/ceph-brag
+usr/lib/ceph/compressor/*
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
