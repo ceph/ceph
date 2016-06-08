@@ -25,15 +25,15 @@
 
 // -----------------------------------------------------------------------------
 #include "ceph_ver.h"
-#include "common/debug.h"
 #include "ErasureCodePluginIsa.h"
+#include "ErasureCodeIsaTableCache.h"
 #include "ErasureCodeIsa.h"
 // -----------------------------------------------------------------------------
 
 int ErasureCodePluginIsa::factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
-                      ostream *ss)
+                      std::ostream *ss)
 {
     ErasureCodeIsa *interface;
     std::string t;

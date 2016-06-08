@@ -16,13 +16,14 @@
  */
 
 #include <errno.h>
-#include <vector>
 #include <algorithm>
-#include <ostream>
+
+#include "ErasureCode.h"
 
 #include "common/strtol.h"
-#include "ErasureCode.h"
 #include "include/buffer.h"
+
+using namespace std;
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
 
