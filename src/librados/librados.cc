@@ -1159,7 +1159,7 @@ std::string librados::IoCtx::get_pool_name()
   return s;
 }
 
-const std::string& librados::IoCtx::get_pool_name() const
+std::string librados::IoCtx::get_pool_name() const
 {
   return io_ctx_impl->get_cached_pool_name();
 }
