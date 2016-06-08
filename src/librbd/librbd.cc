@@ -87,11 +87,11 @@ struct C_OpenComplete : public Context {
     }
     if (r < 0) {
       *ictxp = nullptr;
-      comp->fail(ictx->cct, r);
+      comp->fail(r);
     } else {
       *ictxp = ictx;
       comp->lock.Lock();
-      comp->complete(ictx->cct);
+      comp->complete();
       comp->put_unlock();
     }
   }
@@ -123,10 +123,10 @@ struct C_CloseComplete : public Context {
   virtual void finish(int r) {
     ldout(cct, 20) << "C_CloseComplete::finish: r=" << r << dendl;
     if (r < 0) {
-      comp->fail(cct, r);
+      comp->fail(r);
     } else {
       comp->lock.Lock();
-      comp->complete(cct);
+      comp->complete();
       comp->put_unlock();
     }
   }
