@@ -341,7 +341,7 @@ namespace crimson {
 
 
       // a function that can be called to look up client information
-      using ClientInfoFunc = std::function<ClientInfo(C)>;
+      using ClientInfoFunc = std::function<ClientInfo(const C&)>;
 
       
       bool empty() const {
