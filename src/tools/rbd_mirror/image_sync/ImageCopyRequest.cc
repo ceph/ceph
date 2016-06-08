@@ -56,8 +56,7 @@ template <typename I>
 void ImageCopyRequest<I>::cancel() {
   Mutex::Locker locker(m_lock);
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
   m_canceled = true;
 }
 
@@ -81,8 +80,7 @@ void ImageCopyRequest<I>::send_update_max_object_count() {
 
   update_progress("UPDATE_MAX_OBJECT_COUNT");
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": sync_object_count=" << max_objects << dendl;
+  dout(20) << ": sync_object_count=" << max_objects << dendl;
 
   m_client_meta_copy = *m_client_meta;
   m_client_meta_copy.sync_object_count = max_objects;
@@ -99,21 +97,19 @@ void ImageCopyRequest<I>::send_update_max_object_count() {
 
 template <typename I>
 void ImageCopyRequest<I>::handle_update_max_object_count(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r == 0) {
     Mutex::Locker locker(m_lock);
     if (m_canceled) {
-      ldout(cct, 10) << ": image copy canceled" << dendl;
+      dout(10) << ": image copy canceled" << dendl;
       r = -ECANCELED;
     }
   }
 
   if (r < 0) {
     if (r != -ECANCELED) {
-      lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-		 << dendl;
+      derr << ": failed to update client data: " << cpp_strerror(r) << dendl;
     }
     finish(r);
     return;
@@ -159,10 +155,9 @@ void ImageCopyRequest<I>::send_object_copies() {
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
   assert(m_lock.is_locked());
-  CephContext *cct = m_local_image_ctx->cct;
 
   if (m_canceled && m_ret_val == 0) {
-    ldout(cct, 10) << ": image copy canceled" << dendl;
+    dout(10) << ": image copy canceled" << dendl;
     m_ret_val = -ECANCELED;
   }
 
@@ -172,7 +167,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
 
   uint64_t ono = m_object_no++;
 
-  ldout(cct, 20) << ": object_num=" << ono << dendl;
+  dout(20) << ": object_num=" << ono << dendl;
 
   ++m_current_ops;
 
@@ -185,8 +180,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
 
 template <typename I>
 void ImageCopyRequest<I>::handle_object_copy(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   int percent;
   bool complete;
@@ -198,7 +192,7 @@ void ImageCopyRequest<I>::handle_object_copy(int r) {
     percent = 100 * m_object_no / m_end_object_no;
 
     if (r < 0) {
-      lderr(cct) << ": object copy failed: " << cpp_strerror(r) << dendl;
+      derr << ": object copy failed: " << cpp_strerror(r) << dendl;
       if (m_ret_val == 0) {
         m_ret_val = r;
       }
@@ -231,8 +225,7 @@ void ImageCopyRequest<I>::send_flush_sync_point() {
     m_sync_point->object_number = boost::none;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": sync_point=" << *m_sync_point << dendl;
+  dout(20) << ": sync_point=" << *m_sync_point << dendl;
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(m_client_meta_copy);
@@ -246,14 +239,13 @@ void ImageCopyRequest<I>::send_flush_sync_point() {
 
 template <typename I>
 void ImageCopyRequest<I>::handle_flush_sync_point(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
     *m_client_meta = m_client_meta_copy;
 
-    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to update client data: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -263,7 +255,6 @@ void ImageCopyRequest<I>::handle_flush_sync_point(int r) {
 
 template <typename I>
 int ImageCopyRequest<I>::compute_snap_map() {
-  CephContext *cct = m_local_image_ctx->cct;
 
   librados::snap_t snap_id_start = 0;
   librados::snap_t snap_id_end;
@@ -271,8 +262,8 @@ int ImageCopyRequest<I>::compute_snap_map() {
     RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
     snap_id_end = m_remote_image_ctx->get_snap_id(m_sync_point->snap_name);
     if (snap_id_end == CEPH_NOSNAP) {
-      lderr(cct) << ": failed to locate snapshot: "
-                 << m_sync_point->snap_name << dendl;
+      derr << ": failed to locate snapshot: "
+           << m_sync_point->snap_name << dendl;
       return -ENOENT;
     }
 
@@ -280,8 +271,8 @@ int ImageCopyRequest<I>::compute_snap_map() {
       snap_id_start = m_remote_image_ctx->get_snap_id(
         m_sync_point->from_snap_name);
       if (snap_id_start == CEPH_NOSNAP) {
-        lderr(cct) << ": failed to locate from snapshot: "
-                   << m_sync_point->from_snap_name << dendl;
+        derr << ": failed to locate from snapshot: "
+             << m_sync_point->from_snap_name << dendl;
         return -ENOENT;
       }
     }
@@ -301,7 +292,7 @@ int ImageCopyRequest<I>::compute_snap_map() {
   }
 
   if (m_snap_map.empty()) {
-    lderr(cct) << ": failed to map snapshots within boundary" << dendl;
+    derr << ": failed to map snapshots within boundary" << dendl;
     return -EINVAL;
   }
 

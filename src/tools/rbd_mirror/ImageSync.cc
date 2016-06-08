@@ -56,8 +56,7 @@ template <typename I>
 void ImageSync<I>::cancel() {
   Mutex::Locker locker(m_lock);
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   m_canceled = true;
 
@@ -79,8 +78,7 @@ void ImageSync<I>::send_prune_catch_up_sync_point() {
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_prune_catch_up_sync_point>(this);
@@ -91,12 +89,11 @@ void ImageSync<I>::send_prune_catch_up_sync_point() {
 
 template <typename I>
 void ImageSync<I>::handle_prune_catch_up_sync_point(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to prune catch-up sync point: "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to prune catch-up sync point: "
+         << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -115,8 +112,7 @@ void ImageSync<I>::send_create_sync_point() {
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_create_sync_point>(this);
@@ -127,12 +123,11 @@ void ImageSync<I>::send_create_sync_point() {
 
 template <typename I>
 void ImageSync<I>::handle_create_sync_point(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to create sync point: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to create sync point: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -149,8 +144,7 @@ void ImageSync<I>::send_copy_snapshots() {
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_copy_snapshots>(this);
@@ -167,8 +161,7 @@ void ImageSync<I>::send_copy_snapshots() {
 
 template <typename I>
 void ImageSync<I>::handle_copy_snapshots(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   {
     Mutex::Locker locker(m_lock);
@@ -180,12 +173,11 @@ void ImageSync<I>::handle_copy_snapshots(int r) {
   }
 
   if (r == -ECANCELED) {
-    ldout(cct, 10) << ": snapshot copy canceled" << dendl;
+    dout(10) << ": snapshot copy canceled" << dendl;
     finish(r);
     return;
   } else if (r < 0) {
-    lderr(cct) << ": failed to copy snapshot metadata: "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to copy snapshot metadata: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -202,8 +194,7 @@ void ImageSync<I>::send_copy_image() {
     return;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_copy_image>(this);
@@ -221,8 +212,7 @@ void ImageSync<I>::send_copy_image() {
 
 template <typename I>
 void ImageSync<I>::handle_copy_image(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   {
     Mutex::Locker locker(m_lock);
@@ -234,11 +224,11 @@ void ImageSync<I>::handle_copy_image(int r) {
   }
 
   if (r == -ECANCELED) {
-    ldout(cct, 10) << ": image copy canceled" << dendl;
+    dout(10) << ": image copy canceled" << dendl;
     finish(r);
     return;
   } else if (r < 0) {
-    lderr(cct) << ": failed to copy image: " << cpp_strerror(r) << dendl;
+    derr << ": failed to copy image: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -267,9 +257,8 @@ void ImageSync<I>::send_copy_object_map() {
   assert(snap_id_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t snap_id = snap_id_it->second;
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": snap_id=" << snap_id << ", "
-                 << "snap_name=" << sync_point.snap_name << dendl;
+  dout(20) << ": snap_id=" << snap_id << ", "
+           << "snap_name=" << sync_point.snap_name << dendl;
 
   // rollback the object map (copy snapshot object map to HEAD)
   RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
@@ -281,8 +270,7 @@ void ImageSync<I>::send_copy_object_map() {
 
 template <typename I>
 void ImageSync<I>::handle_copy_object_map(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   assert(r == 0);
   send_refresh_object_map();
@@ -290,8 +278,7 @@ void ImageSync<I>::handle_copy_object_map(int r) {
 
 template <typename I>
 void ImageSync<I>::send_refresh_object_map() {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   update_progress("REFRESH_OBJECT_MAP");
 
@@ -303,8 +290,7 @@ void ImageSync<I>::send_refresh_object_map() {
 
 template <typename I>
 void ImageSync<I>::handle_refresh_object_map(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   assert(r == 0);
   {
@@ -318,8 +304,7 @@ void ImageSync<I>::handle_refresh_object_map(int r) {
 
 template <typename I>
 void ImageSync<I>::send_prune_sync_points() {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   update_progress("PRUNE_SYNC_POINTS");
 
@@ -332,12 +317,11 @@ void ImageSync<I>::send_prune_sync_points() {
 
 template <typename I>
 void ImageSync<I>::handle_prune_sync_points(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to prune sync point: "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to prune sync point: "
+         << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
