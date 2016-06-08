@@ -250,6 +250,7 @@ void ImageReplayer<I>::BootstrapProgressContext::update_progress(
 template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads *threads,
                              shared_ptr<ImageDeleter> image_deleter,
+                             ImageSyncThrottlerRef<I> image_sync_throttler,
                              RadosRef local, RadosRef remote,
 			     const std::string &local_mirror_uuid,
 			     const std::string &remote_mirror_uuid,
@@ -259,6 +260,7 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
                              const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
+  m_image_sync_throttler(image_sync_throttler),
   m_local(local),
   m_remote(remote),
   m_local_mirror_uuid(local_mirror_uuid),
@@ -391,11 +393,11 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
-    m_local_ioctx, m_remote_ioctx, &m_local_image_ctx,
-    m_local_image_name, m_remote_image_id, m_global_image_id,
-    m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-    m_local_mirror_uuid, m_remote_mirror_uuid, m_remote_journaler,
-    &m_client_meta, ctx, &m_progress_cxt);
+    m_local_ioctx, m_remote_ioctx, m_image_sync_throttler,
+    &m_local_image_ctx, m_local_image_name, m_remote_image_id,
+    m_global_image_id, m_threads->work_queue, m_threads->timer,
+    &m_threads->timer_lock, m_local_mirror_uuid, m_remote_mirror_uuid,
+    m_remote_journaler, &m_client_meta, ctx, &m_progress_cxt);
 
   {
     Mutex::Locker locker(m_lock);
