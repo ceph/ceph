@@ -343,6 +343,9 @@ int main(int argc, const char **argv)
   if (apis_map.count("swift") > 0) {
     rest.register_resource(g_conf->rgw_swift_url_prefix,
 			   set_logging(new RGWRESTMgr_SWIFT));
+
+    RGWRESTMgr* const swift_info_resource = new RGWRESTMgr_SWIFT_Info;
+    rest.register_resource("info", set_logging(swift_info_resource));
   }
 
   if (apis_map.count("swift_auth") > 0)
