@@ -563,10 +563,7 @@ protected:
 
   int authenticate();
 
-  void put_qtree(Inode *in);
-  void invalidate_quota_tree(Inode *in);
   Inode* get_quota_root(Inode *in);
-
   bool check_quota_condition(
       Inode *in,
       std::function<bool (const Inode &)> test);
