@@ -11,7 +11,8 @@ struct Policy {
   virtual ~Policy() {
   }
 
-  virtual void lock_requested(bool force) = 0;
+  virtual bool may_auto_request_lock() = 0;
+  virtual int lock_requested(bool force) = 0;
 };
 
 } // namespace exclusive_lock

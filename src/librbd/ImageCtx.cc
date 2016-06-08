@@ -16,6 +16,7 @@
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
@@ -205,7 +206,11 @@ struct C_InvalidateCache : public Context {
                                   cct->_conf->rbd_op_thread_timeout,
                                   thread_pool_singleton);
 
-    exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
+      exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
+    } else {
+      exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
+    }
     journal_policy = new journal::StandardPolicy(this);
   }
 

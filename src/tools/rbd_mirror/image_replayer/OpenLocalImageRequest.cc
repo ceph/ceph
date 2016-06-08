@@ -30,10 +30,15 @@ namespace {
 
 struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 
-  virtual void lock_requested(bool force) {
+  virtual bool may_auto_request_lock() {
+    return false;
+  }
+
+  virtual int lock_requested(bool force) {
     // TODO: interlock is being requested (e.g. local promotion)
     // Wait for demote event from peer or abort replay on forced
     // promotion.
+    return -EROFS;
   }
 
 };
