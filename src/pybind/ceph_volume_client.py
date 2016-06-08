@@ -233,7 +233,6 @@ class CephFSVolumeClient(object):
         # ".meta" filenames
         # TODO: remove .meta files on volume deletion
         # TODO: remove .meta files on last rule for an auth ID deletion
-        # TODO: implement fsync in bindings so that we don't have to syncfs
         # TODO: version the on-disk structures
 
     def recover(self):
@@ -726,7 +725,7 @@ class CephFSVolumeClient(object):
         fd = self.fs.open(path, "w")
         try:
             self.fs.write(fd, serialized, 0)
-            self.fs.sync_fs()
+            self.fs.fsync(fd, 0)
         finally:
             self.fs.close(fd)
 
