@@ -1295,6 +1295,203 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(cid, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(cid, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.stored);
+    ASSERT_EQ(0x1000u, statfs.bsize);
+    ASSERT_EQ(g_conf->bluestore_block_size / 0x1000, statfs.blocks);
+    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
+  }
+  std::string data;
+  data.resize(0x10000 * 3);
+  {
+    ObjectStore::Transaction t;
+    for(size_t i = 0;i < data.size(); i++)
+      data[i] = i / 256 + 1;
+    bufferlist bl, newdata;
+    bl.append(data);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    t.zero(cid, hoid, 0x10000, 0x10000);
+    cerr << "Append 3*0x10000 bytes and punch a hole 0x10000~10000" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x20000, statfs.stored);
+    ASSERT_EQ(0x20000, statfs.allocated);
+
+    r = store->read(cid, hoid, 0, data.size(), newdata);
+    ASSERT_EQ(r, (int)data.size());
+    {
+      bufferlist expected;
+      expected.append(data.substr(0, 0x10000));
+      expected.append(string(0x10000, 0));
+      expected.append(data.substr(0x20000, 0x10000));
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+    newdata.clear();
+
+    r = store->read(cid, hoid, 1, data.size()-2, newdata);
+    ASSERT_EQ(r, (int)data.size()-2);
+    {
+      bufferlist expected;
+      expected.append(data.substr(1, 0x10000-1));
+      expected.append(string(0x10000, 0));
+      expected.append(data.substr(0x20000, 0x10000 - 1));
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+    newdata.clear();
+  }
+  //force fsck
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+
+  {
+    ObjectStore::Transaction t;
+    std::string data2(3, 'b');
+    bufferlist bl, newdata;
+    bl.append(data2);
+    t.write(cid, hoid, 0x20000, bl.length(), bl);
+    cerr << "Write 3 bytes after the hole" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x20000, statfs.allocated);
+    ASSERT_EQ(0x20000, statfs.stored);
+
+    r = store->read(cid, hoid, 0x20000-1, 21, newdata);
+    ASSERT_EQ(r, (int)21);
+    {
+      bufferlist expected;
+      expected.append(string(0x1, 0));
+      expected.append(string(data2));
+      expected.append(data.substr(0x20003, 21-4));
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+    newdata.clear();
+  }
+  //force fsck
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+
+  {
+    ObjectStore::Transaction t;
+    std::string data2(3, 'a');
+    bufferlist bl, newdata;
+    bl.append(data2);
+    t.write(cid, hoid, 0x10000+1, bl.length(), bl);
+    cerr << "Write 3 bytes to the hole" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x30000, statfs.allocated);
+    ASSERT_EQ(0x20003, statfs.stored);
+
+    r = store->read(cid, hoid, 0x10000-1, 0x10000+22, newdata);
+    ASSERT_EQ(r, (int)0x10000+22);
+    {
+      bufferlist expected;
+      expected.append(data.substr(0x10000-1, 1));
+      expected.append(string(0x1, 0));
+      expected.append(data2);
+      expected.append(string(0x10000-4, 0));
+      expected.append(string(0x3, 'b'));
+      expected.append(data.substr(0x20004, 21-3));
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+    newdata.clear();
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, newdata;
+    bl.append(string(0x30000, 'c'));
+    t.write(cid, hoid, 0, 0x30000, bl);
+    t.zero(cid, hoid, 0, 0x10000);
+    t.zero(cid, hoid, 0x20000, 0x10000);
+    cerr << "Rewrite an object and create two holes at the begining and the end" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0x10000, statfs.allocated);
+    ASSERT_EQ(0x10000, statfs.stored);
+
+    r = store->read(cid, hoid, 0, 0x30000, newdata);
+    ASSERT_EQ(r, (int)0x30000);
+    {
+      bufferlist expected;
+      expected.append(string(0x10000, 0));
+      expected.append(string(0x10000, 'c'));
+      expected.append(string(0x10000, 0));
+      ASSERT_TRUE(newdata.contents_equal(expected));
+    }
+    newdata.clear();
+  }
+
+  //force fsck
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    struct store_statfs_t statfs;
+    r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ( 0u, statfs.allocated);
+    ASSERT_EQ( 0u, statfs.stored);
+    ASSERT_EQ( 0u, statfs.compressed_original);
+    ASSERT_EQ( 0u, statfs.compressed);
+    ASSERT_EQ( 0u, statfs.compressed_allocated);
+  }
+}
+
 TEST_P(StoreTest, ManySmallWrite) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -4522,6 +4719,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("bluestore_debug_small_allocations", "4");
   g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
   g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
+  g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);
