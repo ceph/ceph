@@ -90,6 +90,21 @@ else()
   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
 endif()
 
+
+## Handle diagnostics color if compiler supports them.
+
+CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
+  COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
+
+set(DIAGNOSTICS_COLOR "auto"
+  CACHE STRING "Used if the C/C++ compiler supports the -fdiagnostics-color option. May have one of three values -- 'auto' (default), 'always', or 'never'. If set to 'always' and the compiler supports the option, 'make [...] | less -R' will make visible diagnostics colorization of compiler output.")
+
+if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
+endif()
+
+
 ## detect sse support
 
 # create a tmp file with an empty main()
@@ -235,15 +250,15 @@ if(HAVE_XIO)
 endif(HAVE_XIO)
 
 # sort out which allocator to use
-if(Tcmalloc_FOUND)
+if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS tcmalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
-elseif(NOT Tcmalloc_FOUND AND JEMALLOC_FOUND)
+elseif(ALLOCATOR STREQUAL "jemalloc")
   set(ALLOC_LIBS jemalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-elseif(${ALLOCATOR} STREQUAL "libc")
+elseif(ALLOCATOR STREQUAL "libc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 endif()
 
@@ -834,9 +849,12 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 # make rocksdb statically
+if(NOT ALLOCATOR STREQUAL "jemalloc")
+  set(disable_jemalloc "DISABLE_JEMALLOC=1")
+endif()
 add_custom_target(build_rocksdb
     COMMAND
-    PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
+    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 

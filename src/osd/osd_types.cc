@@ -4610,12 +4610,12 @@ SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
 
 // -- watch_info_t --
 
-void watch_info_t::encode(bufferlist& bl) const
+void watch_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
-  ::encode(addr, bl);
+  ::encode(addr, bl, features);
   ENCODE_FINISH(bl);
 }
 
@@ -4691,7 +4691,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
   return ps;
 }
 
-void object_info_t::encode(bufferlist& bl) const
+void object_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   object_locator_t myoloc(soid);
   map<entity_name_t, watch_info_t> old_watchers;
@@ -4717,13 +4717,13 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
   ::encode(is_lost(), bl);
-  ::encode(old_watchers, bl);
+  ::encode(old_watchers, bl, features);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
   ::encode(test_flag(FLAG_USES_TMAP), bl);
-  ::encode(watchers, bl);
+  ::encode(watchers, bl, features);
   __u32 _flags = flags;
   ::encode(_flags, bl);
   ::encode(local_mtime, bl);
@@ -4936,13 +4936,13 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
   f->dump_string("omap_recovered_to", omap_recovered_to);
 }
 
-void ObjectRecoveryInfo::encode(bufferlist &bl) const
+void ObjectRecoveryInfo::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(2, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
-  ::encode(oi, bl);
+  ::encode(oi, bl, features);
   ::encode(ss, bl);
   ::encode(copy_subset, bl);
   ::encode(clone_subset, bl);
@@ -5082,11 +5082,11 @@ void PullOp::generate_test_instances(list<PullOp*> &o)
   o.back()->recovery_info.version = eversion_t(0, 0);
 }
 
-void PullOp::encode(bufferlist &bl) const
+void PullOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
-  ::encode(recovery_info, bl);
+  ::encode(recovery_info, bl, features);
   ::encode(recovery_progress, bl);
   ENCODE_FINISH(bl);
 }
@@ -5147,7 +5147,7 @@ void PushOp::generate_test_instances(list<PushOp*> &o)
   o.back()->version = eversion_t(0, 0);
 }
 
-void PushOp::encode(bufferlist &bl) const
+void PushOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
@@ -5157,7 +5157,7 @@ void PushOp::encode(bufferlist &bl) const
   ::encode(omap_header, bl);
   ::encode(omap_entries, bl);
   ::encode(attrset, bl);
-  ::encode(recovery_info, bl);
+  ::encode(recovery_info, bl, features);
   ::encode(after_progress, bl);
   ::encode(before_progress, bl);
   ENCODE_FINISH(bl);
@@ -5577,4 +5577,34 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
       out.append(ops[i].outdata);
     }
   }
+}
+
+void store_statfs_t::dump(Formatter *f) const
+{
+  f->dump_int("available", available);
+
+  f->dump_int("blocks", blocks);
+  f->dump_int("bsize", bsize);
+
+  f->dump_int("allocated", allocated);
+  f->dump_int("stored", stored);
+  f->dump_int("compressed", compressed);
+  f->dump_int("compressed_allocated", compressed_allocated);
+  f->dump_int("compressed_original", compressed_original);
+}
+
+ostream& operator<<(ostream& out, const store_statfs_t &s)
+{
+  out << std::hex
+      << " store_statfs(0x" << s.blocks
+      << "*0x"  << s.bsize
+      << "/0x"  << s.available
+      << ", stored 0x" << s.stored
+      << "/0x"  << s.allocated
+      << ", compress 0x" << s.compressed
+      << "/0x"  << s.compressed_allocated
+      << "/0x"  << s.compressed_original
+      << std::dec
+      << ")";
+  return out;
 }

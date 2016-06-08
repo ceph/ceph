@@ -201,8 +201,7 @@ class ObjectCacher {
     }
 
     inline bool can_merge_journal(BufferHead *bh) const {
-      return (get_journal_tid() == 0 || bh->get_journal_tid() == 0 ||
-	      get_journal_tid() == bh->get_journal_tid());
+      return (get_journal_tid() == bh->get_journal_tid());
     }
 
     struct ptr_lt {

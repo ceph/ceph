@@ -21,7 +21,7 @@ Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 
 Messenger *Messenger::create(CephContext *cct, const string &type,
 			     entity_name_t name, string lname,
-			     uint64_t nonce, uint64_t features)
+			     uint64_t nonce, uint64_t features, uint64_t cflags)
 {
   int r = -1;
   if (type == "random") {
@@ -36,7 +36,7 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
 	   cct->check_experimental_feature_enabled("ms-type-xio"))
-    return new XioMessenger(cct, name, lname, nonce, features);
+    return new XioMessenger(cct, name, lname, nonce, features, cflags);
 #endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return nullptr;

@@ -701,14 +701,21 @@ void FileStore::collect_metadata(map<string,string> *pm)
   }
 }
 
-int FileStore::statfs(struct statfs *buf)
+int FileStore::statfs(struct store_statfs_t *buf0)
 {
-  if (::statfs(basedir.c_str(), buf) < 0) {
+  struct statfs buf;
+  buf0->reset();
+  if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
     assert(!m_filestore_fail_eio || r != -EIO);
     assert(r != -ENOENT);
     return r;
   }
+  buf0->blocks = buf.f_blocks;
+  buf0->bsize = buf.f_bsize;
+
+  buf0->allocated = buf.f_bavail;
+
   return 0;
 }
 

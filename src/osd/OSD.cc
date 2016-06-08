@@ -767,16 +767,16 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
   // fill in osd stats too
-  struct statfs stbuf;
+  struct store_statfs_t stbuf;
   int r = osd->store->statfs(&stbuf);
   if (r < 0) {
     derr << "statfs() failed: " << cpp_strerror(r) << dendl;
     return;
   }
 
-  uint64_t bytes = stbuf.f_blocks * stbuf.f_bsize;
-  uint64_t used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize;
-  uint64_t avail = stbuf.f_bavail * stbuf.f_bsize;
+  uint64_t bytes = stbuf.blocks * stbuf.bsize;
+  uint64_t used = bytes - stbuf.available;
+  uint64_t avail = stbuf.available;
 
   osd_stat.kb = bytes >> 10;
   osd_stat.kb_used = used >> 10;
@@ -2791,7 +2791,7 @@ int OSD::update_crush_location()
   if (g_conf->osd_crush_initial_weight >= 0) {
     snprintf(weight, sizeof(weight), "%.4lf", g_conf->osd_crush_initial_weight);
   } else {
-    struct statfs st;
+    struct store_statfs_t st;
     int r = store->statfs(&st);
     if (r < 0) {
       derr << "statfs: " << cpp_strerror(r) << dendl;
@@ -2799,7 +2799,7 @@ int OSD::update_crush_location()
     }
     snprintf(weight, sizeof(weight), "%.4lf",
 	     MAX((double).00001,
-		 (double)(st.f_blocks * st.f_bsize) /
+		 (double)(st.blocks * st.bsize) /
 		 (double)(1ull << 40 /* TB */)));
   }
 

@@ -103,20 +103,20 @@ public:
     }
     m_cur_idx++;
 
-    if (m_cur_idx == m_list->size() &&
+    if (m_cur_idx == (int64_t)m_list->size() &&
         m_wrap) {
       m_cur_idx = 0;
       m_wrapped = true;
     }
 
-    if (cur_idx == m_list->size()) {
+    if (cur_idx == (int64_t)m_list->size()) {
       /*
        * End of list
        */
       return NULL;
     }
 
-    debug_assert(cur_idx < m_list->size());
+    debug_assert(cur_idx < (int64_t)m_list->size());
     return &(*m_list)[cur_idx];
   }
 
@@ -456,6 +456,8 @@ private:
   BitAllocatorStats *m_stats;
   bool m_is_stats_on;
 
+  int64_t truncated_blocks; //see init_check
+
   bool is_stats_on() {
     return m_is_stats_on;
   }
@@ -491,6 +493,7 @@ public:
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t *block_list);
   void free_blocks_dis(int64_t num_blocks, int64_t *block_list);
 
+  int64_t get_truncated_blocks() { return truncated_blocks; }
   BitAllocatorStats *get_stats() {
       return m_stats;
   }

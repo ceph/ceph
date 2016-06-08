@@ -461,7 +461,7 @@ public:
 
   void collect_metadata(map<string,string> *pm);
 
-  int statfs(struct statfs *buf);
+  int statfs(struct store_statfs_t *buf) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
