@@ -221,7 +221,7 @@ void entity_addrvec_t::encode(bufferlist& bl, uint64_t features) const
     if (v.size() > 0) {
       for (vector<entity_addr_t>::const_iterator p = v.begin();
            p != v.end(); ++p) {
-        if ((*p).type == (*p).TYPE_LEGACY) {
+        if ((*p).type == entity_addr_t::TYPE_LEGACY) {
 	  ::encode(*p, bl, 0);
 	  return;
 	}
