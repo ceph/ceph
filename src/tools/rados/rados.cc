@@ -3284,9 +3284,8 @@ int main(int argc, const char **argv)
       break; 
     } else if (strcmp(*j, "-f") == 0) {
       val = *(j+1);
-
-      Formatter *formatter = NULL;
-      formatter = Formatter::create(val.c_str());
+      
+      unique_ptr<Formatter> formatter(Formatter::create(val.c_str());
       if (formatter) {
 	j = args.erase(j);
 	opts["format"] = val;
@@ -3294,7 +3293,6 @@ int main(int argc, const char **argv)
 	j = args.erase(j);
 	break;
       }
-      delete formatter;
     }
     ++j;
   }
