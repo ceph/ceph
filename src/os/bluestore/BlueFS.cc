@@ -867,6 +867,7 @@ uint64_t BlueFS::_estimate_log_size()
   return ROUND_UP_TO(size, super.block_size);
 }
 
+
 void BlueFS::_maybe_compact_log()
 {
   uint64_t current = log_writer->file->fnode.size;
@@ -883,22 +884,45 @@ void BlueFS::_maybe_compact_log()
 	   << " vs expected " << expected << dendl;
 }
 
+/*
+ * 1. Check whether log needs compaction or not. It depends on
+ * bluefs_log_compact_min_size and bluefs_log_compact_min_ratio.
+ * This can be a simple heuristic that compares the estimated
+ * space we need (number of fnodes * some average size) vs the actual log size.
+ *
+ * 2. Allocate a new extent to continue the log, and then log an event
+ * that jumps the log write position to the new extent.  At this point, the
+ * old extent(s) won't be written to, and reflect everything should compact.
+ *
+ * 3. While still holding the lock, encode a bufferlist that dumps all of the
+ * in-memory fnodes and names.  This will become the new beginning of the
+ * log.  The last event will jump to the log continuation extent from #2.
+ *
+ * 4. Drop the lock so that writes can continue.
+ *
+ * 5. Queue a write to a new extent for the new beginnging of the log.  Wait
+ * for it to commit and flush.
+ *
+ * 6. Retake the lock.
+ *
+ * 7. Update the log_fnode to splice in the new beginning.  Queue an io to
+ * update the superblock.  Drop the lock.
+ *
+ * 8. Wait for things to flush.  Retake the lock, and release the old log
+ * beginnging extents to the allocator for reuse.
+ */
+
+
 void BlueFS::_compact_log()
 {
-  // FIXME: we currently hold the lock while writing out the compacted log,
-  // which may mean a latency spike.  we could drop the lock while writing out
-  // the big compacted log, while continuing to log at the end of the old log
-  // file, and once it's done swap out the old log extents for the new ones.
-  dout(10) << __func__ << dendl;
   File *log_file = log_writer->file.get();
-
-  // clear out log (be careful who calls us!!!)
-  log_t.clear();
-
   bluefs_transaction_t t;
   t.seq = 1;
   t.uuid = super.uuid;
   dout(20) << __func__ << " op_init" << dendl;
+
+  lock.lock();
+
   t.op_init();
   for (unsigned bdev = 0; bdev < MAX_BDEV; ++bdev) {
     interval_set<uint64_t>& p = block_all[bdev];
@@ -929,6 +953,7 @@ void BlueFS::_compact_log()
   bufferlist bl;
   ::encode(t, bl);
   _pad_bl(bl);
+  lock.unlock();
 
   uint64_t need = bl.length() + g_conf->bluefs_max_log_runway;
   dout(20) << __func__ << " need " << need << dendl;
@@ -950,17 +975,21 @@ void BlueFS::_compact_log()
   int r = _flush(log_writer, true);
   assert(r == 0);
   _flush_wait(log_writer);
+  lock.lock();
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
   ++super.version;
+  lock.unlock();
   _write_super();
   _flush_bdev();
 
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
+  lock.lock();
   for (auto& r : old_extents) {
     alloc[r.bdev]->release(r.offset, r.length);
   }
+  lock.unlock();
 
   logger->inc(l_bluefs_log_compactions);
 }
@@ -1297,7 +1326,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 
 void BlueFS::sync_metadata()
 {
-  std::lock_guard<std::mutex> l(lock);
+  lock.lock();
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
     return;
@@ -1315,7 +1344,39 @@ void BlueFS::sync_metadata()
       p->commit_finish();
     }
   }
-  _maybe_compact_log();
+  // check whether we need to compact the log or not
+  uint64_t current = log_writer->file->fnode.size;
+  uint64_t expected = _estimate_log_size();
+  float ratio = (float)current / (float)expected;
+  dout(10) << __func__ << " current " << current
+	   << " expected " << expected
+	   << " ratio " << ratio << dendl;
+
+  if (current < g_conf->bluefs_log_compact_min_size ||
+      ratio < g_conf->bluefs_log_compact_min_ratio) {
+    lock.unlock();
+    return;
+  }
+  /*
+   Allocate an extent at the end so that writes can proceed and
+   we can compact the log incore
+   Can we do this in background so that the write thread doesn't need
+   to pay this penality?
+  */
+  int r = _allocate(log_writer->file->fnode.prefer_bdev,
+                    g_conf->bluefs_max_log_runway,
+		    &log_writer->file->fnode.extents);
+  assert(r == 0);
+  log_t.op_file_update(log_writer->file->fnode);
+  ++log_seq;
+  dout(20) << __func__ << " op_jump_seq " << log_seq << dendl;
+  log_t.op_jump_seq(log_seq);
+
+  // clear out log (be careful who calls us!!!)
+  log_t.clear();
+  lock.unlock();
+  // Let us grab the lock again while compacting the log
+  _compact_log();
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
   dout(10) << __func__ << " done in " << dur << dendl;
