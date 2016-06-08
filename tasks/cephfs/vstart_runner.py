@@ -257,14 +257,14 @@ class LocalDaemon(object):
         Return PID as an integer or None if not found
         """
         ps_txt = self.controller.run(
-            args=["ps", "-u"+str(os.getuid())]
+            args=["ps", "-xu"+str(os.getuid())]
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.info("Found ps line for daemon: {0}".format(line))
-                return int(line.split()[0])
+                return int(line.split()[1])
 
         return None
 
