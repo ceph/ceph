@@ -205,7 +205,7 @@ void global_init(std::vector < const char * > *alt_def_args,
 	getgrnam_r(g_conf->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
 	if (!g) {
 	  cerr << "unable to look up group '" << g_conf->setgroup << "'"
-	       << std::endl;
+	       << ": " << cpp_strerror(errno) << std::endl;
 	  exit(1);
 	}
 	gid = g->gr_gid;
@@ -220,10 +220,9 @@ void global_init(std::vector < const char * > *alt_def_args,
       struct stat st;
       int r = ::stat(match_path.c_str(), &st);
       if (r < 0) {
-	r = -errno;
 	cerr << "unable to stat setuser_match_path "
 	     << g_conf->setuser_match_path
-	     << ": " << cpp_strerror(r) << std::endl;
+	     << ": " << cpp_strerror(errno) << std::endl;
 	exit(1);
       }
       if ((uid && uid != st.st_uid) ||
@@ -246,14 +245,12 @@ void global_init(std::vector < const char * > *alt_def_args,
     g_ceph_context->set_uid_gid_strings(uid_string, gid_string);
     if ((flags & CINIT_FLAG_DEFER_DROP_PRIVILEGES) == 0) {
       if (setgid(gid) != 0) {
-	int r = errno;
-	cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
+	cerr << "unable to setgid " << gid << ": " << cpp_strerror(errno)
 	     << std::endl;
 	exit(1);
       }
       if (setuid(uid) != 0) {
-	int r = errno;
-	cerr << "unable to setuid " << uid << ": " << cpp_strerror(r)
+	cerr << "unable to setuid " << uid << ": " << cpp_strerror(errno)
 	     << std::endl;
 	exit(1);
       }
@@ -271,8 +268,7 @@ void global_init(std::vector < const char * > *alt_def_args,
       !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
     if (r < 0 && errno != EEXIST) {
-      r = -errno;
-      cerr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << std::endl;
+      cerr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(errno) << std::endl;
     }
   }
 
