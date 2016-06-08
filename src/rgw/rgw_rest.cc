@@ -790,6 +790,20 @@ int RGWGetObj_ObjStore::get_params()
     mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
   }
 
+  /* start gettorrent */
+  bool is_torrent = s->info.args.exists(GET_TORRENT);
+  bool torrent_flag = s->cct->_conf->rgw_torrent_flag;
+  if (torrent_flag && is_torrent)
+  {
+    int ret = 0;
+    ret = torrent.get_params();
+    if (ret < 0)
+    {
+      return ret;
+    }
+  }
+  /* end gettorrent */
+
   return 0;
 }
 
@@ -1000,6 +1014,19 @@ int RGWPutObj_ObjStore::verify_params()
 
 int RGWPutObj_ObjStore::get_params()
 {
+  /* start gettorrent */
+  if (s->cct->_conf->rgw_torrent_flag)
+  {
+    int ret = 0;
+    ret = torrent.get_params();
+    ldout(s->cct, 5) << "NOTICE:  open produce torrent file " << dendl;
+    if (ret < 0)
+    {
+      return ret;
+    }
+    torrent.set_info_name((s->object).name);
+  }
+  /* end gettorrent */
   supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;

@@ -85,7 +85,8 @@ set(rgw_a_srcs
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc
-  rgw_xml_enc.cc)
+  rgw_xml_enc.cc
+  rgw_torrent.cc)
 
 add_library(rgw_a STATIC ${rgw_a_srcs})
 target_include_directories(rgw_a PUBLIC ${FCGI_INCLUDE_DIR})
