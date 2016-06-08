@@ -224,6 +224,9 @@ struct entity_addr_t {
   entity_addr_t() : type(0), nonce(0) { 
     memset(&u, 0, sizeof(u));
   }
+  entity_addr_t(__u32 _type, __u32 _nonce) : type(_type), nonce(_nonce) {
+    memset(&u, 0, sizeof(u));
+  }
   explicit entity_addr_t(const ceph_entity_addr &o) {
     type = o.type;
     nonce = o.nonce;
