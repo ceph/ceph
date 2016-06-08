@@ -41,6 +41,7 @@ using namespace libradosstriper;
 #include <stdexcept>
 #include <climits>
 #include <locale>
+#include <memory>
 
 #include "cls/lock/cls_lock_client.h"
 #include "include/compat.h"
@@ -3284,12 +3285,36 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
+  std::map < std::string, std::string > opts;
+  std::string val;
+
+  // Necessary to support usage of -f for formatting,
+  // since global_init will remove the -f using ceph
+  // argparse procedures.
+  for (auto j = args.begin(); j != args.end(); ++j) {
+    if (strcmp(*j, "--") == 0) {
+      break;
+    } else if ((j+1) == args.end()) {
+      // This can't be a formatting call (no format arg)
+      break; 
+    } else if (strcmp(*j, "-f") == 0) {
+      val = *(j+1);
+      unique_ptr<Formatter> formatter(Formatter::create(val.c_str()));
+      
+      if (formatter) {
+	j = args.erase(j);
+	opts["format"] = val;
+	
+	j = args.erase(j);
+	break;
+      }
+    }
+  }
+
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  std::map < std::string, std::string > opts;
   std::vector<const char*>::iterator i;
-  std::string val;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
