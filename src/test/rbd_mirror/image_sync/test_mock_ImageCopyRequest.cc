@@ -77,6 +77,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::WithArg;
+using ::testing::InvokeWithoutArgs;
 
 class TestMockImageSyncImageCopyRequest : public TestMockFixture {
 public:
@@ -379,7 +380,6 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   expect_get_object_count(mock_remote_image_ctx, 2);
   expect_update_client(mock_journaler, 0);
   expect_object_copy_send(mock_object_copy_request);
-  expect_update_client(mock_journaler, 0);
 
   C_SaferCond ctx;
   MockImageCopyRequest *request = create_request(mock_remote_image_ctx,
@@ -393,7 +393,38 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   request->cancel();
 
   ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, 0));
-  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(-ECANCELED, ctx.wait());
+}
+
+TEST_F(TestMockImageSyncImageCopyRequest, Cancel1) {
+  ASSERT_EQ(0, create_snap("snap1"));
+  m_client_meta.sync_points = {{"snap1", boost::none}};
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+  MockObjectCopyRequest mock_object_copy_request;
+
+  C_SaferCond ctx;
+  MockImageCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                 mock_local_image_ctx,
+                                                 mock_journaler,
+                                                 m_client_meta.sync_points.front(),
+                                                 &ctx);
+
+  expect_get_snap_id(mock_remote_image_ctx);
+
+  InSequence seq;
+  expect_get_object_count(mock_remote_image_ctx, 1);
+  expect_get_object_count(mock_remote_image_ctx, 0);
+  EXPECT_CALL(mock_journaler, update_client(_, _))
+    .WillOnce(DoAll(InvokeWithoutArgs([request]() {
+	    request->cancel();
+	  }),
+	WithArg<1>(CompleteContext(0))));
+
+  request->send();
+  ASSERT_EQ(-ECANCELED, ctx.wait());
 }
 
 TEST_F(TestMockImageSyncImageCopyRequest, MissingSnap) {

@@ -10,6 +10,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/parent_types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/BaseRequest.h"
 #include <map>
 #include <set>
 #include <string>
@@ -25,7 +26,7 @@ namespace mirror {
 namespace image_sync {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class SnapshotCopyRequest {
+class SnapshotCopyRequest : public BaseRequest {
 public:
   typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::Journaler Journaler;
@@ -50,6 +51,7 @@ public:
                       ContextWQ *work_queue, Context *on_finish);
 
   void send();
+  void cancel();
 
 private:
   /**
@@ -95,7 +97,6 @@ private:
   Journaler *m_journaler;
   librbd::journal::MirrorPeerClientMeta *m_client_meta;
   ContextWQ *m_work_queue;
-  Context *m_on_finish;
 
   SnapIdSet m_local_snap_ids;
   SnapIdSet m_remote_snap_ids;
@@ -105,6 +106,9 @@ private:
   std::string m_snap_name;
 
   librbd::parent_spec m_local_parent_spec;
+
+  Mutex m_lock;
+  bool m_canceled = false;
 
   void send_snap_unprotect();
   void handle_snap_unprotect(int r);
@@ -121,8 +125,9 @@ private:
   void send_update_client();
   void handle_update_client(int r);
 
+  bool handle_cancellation();
+
   void error(int r);
-  void finish(int r);
 
   void compute_snap_map();
 

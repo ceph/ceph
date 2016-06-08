@@ -33,16 +33,22 @@ ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
                         MirrorPeerClientMeta *client_meta,
                         ContextWQ *work_queue, Context *on_finish,
 			ProgressContext *progress_ctx)
-  : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
+  : BaseRequest("rbd::mirror::ImageSync", local_image_ctx->cct, on_finish),
+    m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_mirror_uuid(mirror_uuid),
     m_journaler(journaler), m_client_meta(client_meta),
-    m_work_queue(work_queue), m_on_finish(on_finish),
-    m_progress_ctx(progress_ctx),
+    m_work_queue(work_queue), m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)) {
 }
 
 template <typename I>
-void ImageSync<I>::start() {
+ImageSync<I>::~ImageSync() {
+  assert(m_snapshot_copy_request == nullptr);
+  assert(m_image_copy_request == nullptr);
+}
+
+template <typename I>
+void ImageSync<I>::send() {
   send_prune_catch_up_sync_point();
 }
 
@@ -54,6 +60,11 @@ void ImageSync<I>::cancel() {
   ldout(cct, 20) << dendl;
 
   m_canceled = true;
+
+  if (m_snapshot_copy_request != nullptr) {
+    m_snapshot_copy_request->cancel();
+  }
+
   if (m_image_copy_request != nullptr) {
     m_image_copy_request->cancel();
   }
@@ -131,17 +142,27 @@ void ImageSync<I>::handle_create_sync_point(int r) {
 
 template <typename I>
 void ImageSync<I>::send_copy_snapshots() {
-  update_progress("COPY_SNAPSHOTS");
+  m_lock.Lock();
+  if (m_canceled) {
+    m_lock.Unlock();
+    finish(-ECANCELED);
+    return;
+  }
 
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_copy_snapshots>(this);
-  SnapshotCopyRequest<I> *request = SnapshotCopyRequest<I>::create(
+  m_snapshot_copy_request = SnapshotCopyRequest<I>::create(
     m_local_image_ctx, m_remote_image_ctx, &m_snap_map, m_journaler,
     m_client_meta, m_work_queue, ctx);
-  request->send();
+  m_snapshot_copy_request->get();
+  m_lock.Unlock();
+
+  update_progress("COPY_SNAPSHOTS");
+
+  m_snapshot_copy_request->send();
 }
 
 template <typename I>
@@ -149,7 +170,20 @@ void ImageSync<I>::handle_copy_snapshots(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
 
-  if (r < 0) {
+  {
+    Mutex::Locker locker(m_lock);
+    m_snapshot_copy_request->put();
+    m_snapshot_copy_request = nullptr;
+    if (r == 0 && m_canceled) {
+      r = -ECANCELED;
+    }
+  }
+
+  if (r == -ECANCELED) {
+    ldout(cct, 10) << ": snapshot copy canceled" << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
     lderr(cct) << ": failed to copy snapshot metadata: "
                << cpp_strerror(r) << dendl;
     finish(r);
@@ -177,6 +211,7 @@ void ImageSync<I>::send_copy_image() {
     m_local_image_ctx, m_remote_image_ctx, m_timer, m_timer_lock,
     m_journaler, m_client_meta, &m_client_meta->sync_points.front(),
     ctx, m_progress_ctx);
+  m_image_copy_request->get();
   m_lock.Unlock();
 
   update_progress("COPY_IMAGE");
@@ -186,16 +221,17 @@ void ImageSync<I>::send_copy_image() {
 
 template <typename I>
 void ImageSync<I>::handle_copy_image(int r) {
+  CephContext *cct = m_local_image_ctx->cct;
+  ldout(cct, 20) << ": r=" << r << dendl;
+
   {
     Mutex::Locker locker(m_lock);
+    m_image_copy_request->put();
     m_image_copy_request = nullptr;
     if (r == 0 && m_canceled) {
       r = -ECANCELED;
     }
   }
-
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
 
   if (r == -ECANCELED) {
     ldout(cct, 10) << ": image copy canceled" << dendl;
@@ -312,15 +348,6 @@ void ImageSync<I>::handle_prune_sync_points(int r) {
   }
 
   finish(0);
-}
-
-template <typename I>
-void ImageSync<I>::finish(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
 }
 
 template <typename I>

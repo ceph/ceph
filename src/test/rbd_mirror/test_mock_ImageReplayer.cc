@@ -80,7 +80,14 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
     s_instance = this;
   }
 
+  void put() {
+  }
+
+  void get() {
+  }
+
   MOCK_METHOD0(send, void());
+  MOCK_METHOD0(cancel, void());
 };
 
 template<>
