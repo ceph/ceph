@@ -386,7 +386,7 @@ public:
     return false;
   }
 
-  int statfs(struct statfs *buf);
+  int statfs(struct store_statfs_t *buf) override;
 
   bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
