@@ -13,25 +13,29 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+import logging
+import platform
+
 from ceph_detect_init import centos
 from ceph_detect_init import debian
-from ceph_detect_init import exc
 from ceph_detect_init import fedora
 from ceph_detect_init import rhel
 from ceph_detect_init import suse
-import logging
-import platform
+from ceph_detect_init.Exceptions import UnsupportedPlatform
 
 
 def get(use_rhceph=False):
     distro_name, release, codename = platform_information()
-    if not codename or not _get_distro(distro_name):
-        raise exc.UnsupportedPlatform(
+
+    dist = _get_distro(distro_name, use_rhceph=use_rhceph)
+
+    if not codename or not dist:
+        raise UnsupportedPlatform(
             distro=distro_name,
             codename=codename,
             release=release)
 
-    module = _get_distro(distro_name, use_rhceph=use_rhceph)
+    module = dist
     module.name = distro_name
     module.normalized_name = _normalized_distro_name(distro_name)
     module.distro = module.normalized_name
@@ -75,11 +79,15 @@ def _normalized_distro_name(distro):
         return 'suse'
     elif distro.startswith('centos'):
         return 'centos'
+    elif distro.startswith(('linuxmint', 'linux mint')):
+        return 'linuxmint'
     return distro
 
 
 def platform_information():
-    """detect platform information from remote host."""
+    """
+    detect platform information from remote host.
+    """
     logging.debug('platform_information: linux_distribution = ' +
                   str(platform.linux_distribution()))
     distro, release, codename = platform.linux_distribution()

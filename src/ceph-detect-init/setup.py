@@ -20,8 +20,10 @@
 #
 import os
 import sys
-from setuptools import setup
+
 from setuptools import find_packages
+from setuptools import setup
+
 
 def read(fname):
     path = os.path.join(os.path.dirname(__file__), fname)
@@ -31,10 +33,18 @@ def read(fname):
 
 def filter_included_modules(*m):
     modules = sum(m, [])
-    if sys.version_info[0] == 2 and sys.version_info[1] <= 6:
+    if sys.version_info[0:2] <= (2, 6):
         return modules
-    included_modules = set(['argparse', 'importlib', 'sysconfig'])
-    return list(set(modules) - included_modules)
+
+    elif sys.version_info[0:2] == (3, 0):
+        return modules
+
+    elif sys.version_info[0:2] == (3, 1):
+        return list(set(modules) - set(['importlib']))
+
+    else:
+        # Python 2.7+ and Python 3.2+
+        return list(set(modules) - set(['argparse', 'importlib', 'sysconfig']))
 
 
 install_requires = read('requirements.txt').split()
@@ -63,9 +73,14 @@ setup(
         'Intended Audience :: System Administrators',
         'Operating System :: POSIX :: Linux',
         'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 2.6',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.0',
+        'Programming Language :: Python :: 3.1',
+        'Programming Language :: Python :: 3.2',
+        'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
         'Topic :: Utilities',
     ],
 
@@ -73,7 +88,7 @@ setup(
 
         'console_scripts': [
             'ceph-detect-init = ceph_detect_init.main:run',
-            ],
+        ],
 
-        },
-    )
+    },
+)

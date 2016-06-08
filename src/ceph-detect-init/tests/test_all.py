@@ -25,7 +25,7 @@ import testtools
 import ceph_detect_init
 from ceph_detect_init import centos
 from ceph_detect_init import debian
-from ceph_detect_init import exc
+from ceph_detect_init.Exceptions import UnsupportedPlatform
 from ceph_detect_init import fedora
 from ceph_detect_init import main
 from ceph_detect_init import rhel
@@ -36,34 +36,73 @@ logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
 
 
 class TestCephDetectInit(testtools.TestCase):
-
     def test_centos(self):
+        with mock.patch('ceph_detect_init.centos.release',
+                        '5.0'):
+            self.assertEqual('sysvinit', centos.choose_init())
+
+        with mock.patch('ceph_detect_init.centos.release',
+                        '6.0'):
+            self.assertEqual('upstart', centos.choose_init())
+
         with mock.patch('ceph_detect_init.centos.release',
                         '7.0'):
             self.assertEqual('systemd', centos.choose_init())
         self.assertEqual('sysvinit', centos.choose_init())
 
     def test_debian(self):
-        with mock.patch.multiple('ceph_detect_init.debian',
-                                 distro='debian',
-                                 codename='wheezy'):
-            self.assertEqual('sysvinit', debian.choose_init())
+        # Debian
         with mock.patch.multiple('ceph_detect_init.debian',
                                  distro='debian',
                                  codename='squeeze'):
             self.assertEqual('sysvinit', debian.choose_init())
+
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='debian',
+                                 codename='wheezy'):
+            self.assertEqual('sysvinit', debian.choose_init())
+
         with mock.patch.multiple('ceph_detect_init.debian',
                                  distro='debian',
                                  codename='jessie'):
             self.assertEqual('systemd', debian.choose_init())
+
+        # Ubuntu
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='ubuntu',
+                                 codename='dapper'):
+            self.assertEqual('sysvinit', debian.choose_init())
+
         with mock.patch.multiple('ceph_detect_init.debian',
                                  distro='ubuntu',
                                  codename='trusty'):
             self.assertEqual('upstart', debian.choose_init())
+
         with mock.patch.multiple('ceph_detect_init.debian',
                                  distro='ubuntu',
                                  codename='vivid'):
             self.assertEqual('systemd', debian.choose_init())
+
+        # Linux Mint
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='linuxmint',
+                                 release='1.0',
+                                 codename='ada'):
+            self.assertEqual('sysvinit', debian.choose_init())
+
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='linuxmint',
+                                 release='15',
+                                 codename='olivia'):
+            self.assertEqual('upstart', debian.choose_init())
+
+        with mock.patch.multiple('ceph_detect_init.debian',
+                                 distro='linuxmint',
+                                 release='2',
+                                 codename='debian'):
+            self.assertEqual('sysvinit', debian.choose_init())
+
+        # Unsupported platform
         with mock.patch.multiple('ceph_detect_init.debian',
                                  distro='not-debian',
                                  codename='andy'):
@@ -71,14 +110,32 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_fedora(self):
         with mock.patch('ceph_detect_init.fedora.release',
+                        '8'):
+            self.assertEqual('sysvinit', fedora.choose_init())
+
+        with mock.patch('ceph_detect_init.fedora.release',
+                        '14'):
+            self.assertEqual('upstart', fedora.choose_init())
+
+        with mock.patch('ceph_detect_init.fedora.release',
                         '22'):
             self.assertEqual('systemd', fedora.choose_init())
+
         self.assertEqual('sysvinit', fedora.choose_init())
 
     def test_rhel(self):
         with mock.patch('ceph_detect_init.rhel.release',
+                        '5.0'):
+            self.assertEqual('sysvinit', rhel.choose_init())
+
+        with mock.patch('ceph_detect_init.rhel.release',
+                        '6.0'):
+            self.assertEqual('upstart', rhel.choose_init())
+
+        with mock.patch('ceph_detect_init.rhel.release',
                         '7.0'):
             self.assertEqual('systemd', rhel.choose_init())
+
         self.assertEqual('sysvinit', rhel.choose_init())
 
     def test_suse(self):
@@ -98,15 +155,15 @@ class TestCephDetectInit(testtools.TestCase):
     def test_get(self):
         g = ceph_detect_init.get
         with mock.patch('platform.linux_distribution',
-                        lambda: (('unknown', '', ''))):
-            self.assertRaises(exc.UnsupportedPlatform, g)
+                        lambda: ('unknown', '', '')):
+            self.assertRaises(UnsupportedPlatform, g)
             try:
                 g()
-            except exc.UnsupportedPlatform as e:
-                self.assertIn('Platform is not supported', str(e))
+            except UnsupportedPlatform as e:
+                self.assertIn('Unsupported platform', str(e))
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '6.0', ''))):
+                        lambda: ('debian', '6.0', '')):
             distro = ceph_detect_init.get()
             self.assertEqual(debian, distro)
             self.assertEqual('debian', distro.name)
@@ -122,6 +179,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(None, g(None))
         self.assertEqual(debian, g('debian'))
         self.assertEqual(debian, g('ubuntu'))
+        self.assertEqual(debian, g('linuxmint'))
         self.assertEqual(centos, g('centos'))
         self.assertEqual(centos, g('scientific'))
         self.assertEqual(fedora, g('fedora'))
@@ -148,30 +206,32 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('debian', n('debian'))
         self.assertEqual('ubuntu', n('Ubuntu'))
         self.assertEqual('ubuntu', n('ubuntu'))
+        self.assertEqual('linuxmint', n('Linux Mint'))
+        self.assertEqual('linuxmint', n('LinuxMint'))
 
     def test_platform_information(self):
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '6.0', ''))):
+                        lambda: ('debian', '6.0', '')):
             self.assertEqual(('debian', '6.0', 'squeeze'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '7.0', ''))):
+                        lambda: ('debian', '7.0', '')):
             self.assertEqual(('debian', '7.0', 'wheezy'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '8.0', ''))):
+                        lambda: ('debian', '8.0', '')):
             self.assertEqual(('debian', '8.0', 'jessie'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', 'jessie/sid', ''))):
+                        lambda: ('debian', 'jessie/sid', '')):
             self.assertEqual(('debian', 'jessie/sid', 'sid'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', 'sid/jessie', ''))):
+                        lambda: ('debian', 'sid/jessie', '')):
             self.assertEqual(('debian', 'sid/jessie', 'sid'),
                              ceph_detect_init.platform_information())
 
@@ -180,8 +240,8 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(0, main.run(argv))
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('unknown', '', ''))):
-            self.assertRaises(exc.UnsupportedPlatform, main.run, argv)
+                        lambda: ('unknown', '', '')):
+            self.assertRaises(UnsupportedPlatform, main.run, argv)
             self.assertEqual(0, main.run(argv + ['--default=sysvinit']))
 
 # Local Variables:
