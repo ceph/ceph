@@ -537,16 +537,16 @@ public:
     : ThreadPool::WorkQueueVal<
       GenContext<ThreadPool::TPHandle&>*>(name, ti, ti*10, tp) {}
   
-  void _enqueue(GenContext<ThreadPool::TPHandle&> *c) {
+  void _enqueue(GenContext<ThreadPool::TPHandle&> *c) override {
     _queue.push_back(c);
   }
-  void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) {
+  void _enqueue_front(GenContext<ThreadPool::TPHandle&> *c) override {
     _queue.push_front(c);
   }
-  bool _empty() {
+  bool _empty() override {
     return _queue.empty();
   }
-  GenContext<ThreadPool::TPHandle&> *_dequeue() {
+  GenContext<ThreadPool::TPHandle&> *_dequeue() override {
     assert(!_queue.empty());
     GenContext<ThreadPool::TPHandle&> *c = _queue.front();
     _queue.pop_front();
