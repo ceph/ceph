@@ -971,6 +971,7 @@ void RGWZone::dump(Formatter *f) const
   encode_json("tier_type", tier_type, f);
   encode_json("sync_from_all", sync_from_all, f);
   encode_json("sync_from", sync_from, f);
+  encode_json("redirect_zone", redirect_zone, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -988,6 +989,7 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tier_type", tier_type, obj);
   JSONDecoder::decode_json("sync_from_all", sync_from_all, obj);
   JSONDecoder::decode_json("sync_from", sync_from, obj);
+  JSONDecoder::decode_json("redirect_zone", redirect_zone, obj);
 }
 
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
