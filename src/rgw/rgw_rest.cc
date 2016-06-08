@@ -790,6 +790,19 @@ int RGWGetObj_ObjStore::get_params()
     mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
   }
 
+  /* start gettorrent */
+  const char *query_str = s->info.env->get("QUERY_STRING");
+  if (0 == strcmp(query_str, GET_TORRENT))
+  {
+    int ret = 0;
+    ret = torrent.get_params();
+    if (ret < 0)
+    {
+      return ret;
+    }
+  }
+  /* end gettorrent */
+
   return 0;
 }
 
@@ -1000,6 +1013,15 @@ int RGWPutObj_ObjStore::verify_params()
 
 int RGWPutObj_ObjStore::get_params()
 {
+  /* start gettorrent */
+  int ret = 0;
+  ret = torrent.get_params();
+  if (ret < 0)
+  {
+    return ret;
+  }
+  torrent.set_info_name((s->object).name);
+  /* end gettorrent */
   supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;
