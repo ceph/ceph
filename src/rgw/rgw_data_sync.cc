@@ -639,11 +639,7 @@ int RGWRemoteDataLog::get_shard_info(int shard_id)
 
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
-  if (r == -ENOENT) {
-    r = 0;
-  }
-  return r;
+  return run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
 }
 
 int RGWRemoteDataLog::init_sync_status(int num_shards)

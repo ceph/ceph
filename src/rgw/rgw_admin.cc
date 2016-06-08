@@ -1788,7 +1788,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   }
 
   ret = sync.read_sync_status();
-  if (ret < 0) {
+  if (ret < 0 && ret != -ENOENT) {
     push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
     return;
   }
@@ -5091,7 +5091,7 @@ next:
     }
 
     ret = sync.read_sync_status();
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
