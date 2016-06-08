@@ -142,11 +142,16 @@ public:
   };
   list<ClientAsyncReadStatus> in_progress_client_reads;
   void objects_read_async(
+    ObjectStore::Sequencer *osr,
     const hobject_t &hoid,
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		    pair<bufferlist*, Context*> > > &to_read,
     Context *on_complete,
     bool fast_read = false);
+
+  bool allows_async_read() override {
+    return true;
+  }
 
 private:
   friend struct ECRecoveryHandle;
