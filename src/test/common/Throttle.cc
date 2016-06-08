@@ -276,7 +276,8 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   std::condition_variable c;
   uint64_t total = 0;
   std::list<uint64_t> in_queue;
-  bool stop = false;
+  bool putter_stop = false;
+  bool getter_stop = false;
 
   auto wait_time = std::chrono::duration<double>(0);
   uint64_t waits = 0;
@@ -301,7 +302,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
     std::uniform_int_distribution<> dis(0, 10);
 
     std::unique_lock<std::mutex> g(l);
-    while (!stop) {
+    while (!getter_stop) {
       g.unlock();
 
       uint64_t to_get = dis(gen);
@@ -317,25 +318,27 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   };
 
   auto putter = [&]() {
+    bool empty;
     std::unique_lock<std::mutex> g(l);
-    while (!stop) {
-      while (in_queue.empty())
+    while (!putter_stop) {
+      empty = in_queue.empty();
+      if (in_queue.empty()) {
 	c.wait(g);
+      } else {
+	uint64_t c = in_queue.front();
+	total_observed_total += total;
+	total_observations++;
+	in_queue.pop_front();
+	assert(total <= max);
 
-      uint64_t c = in_queue.front();
-
-      total_observed_total += total;
-      total_observations++;
-      in_queue.pop_front();
-      assert(total <= max);
-
-      g.unlock();
-      std::this_thread::sleep_for(
+	g.unlock();
+	std::this_thread::sleep_for(
 	c * std::chrono::duration<double>(put_delay_per_count*putters));
-      g.lock();
+	g.lock();
 
-      total -= c;
-      throttle.put(c);
+	total -= c;
+	throttle.put(c);
+      }
     }
   };
 
@@ -348,12 +351,24 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   std::this_thread::sleep_for(std::chrono::duration<double>(5));
   {
     std::unique_lock<std::mutex> g(l);
-    stop = true;
   }
+
+  // Terminate all threads we've forked
+  // First stop the getters filling the queue
+  getter_stop = true;
+  c.notify_all();
   for (auto &&i: gts) i.join();
   gts.clear();
+  cout << __func__<< ":" << __LINE__ << " Switch stop, getters collected." << "\n";
+
+  // Then all putters need to be stopped
+  // Add a bit of waiting to let the threads stabalize
+  putter_stop = true;
+  std::this_thread::sleep_for (std::chrono::milliseconds(500));
+  c.notify_all();
   for (auto &&i: pts) i.join();
   pts.clear();
+  cout << __func__<< ":" << __LINE__ << " Switch stop, putters collected." << "\n";
 
   return make_pair(
     ((double)total_observed_total)/((double)total_observations),
