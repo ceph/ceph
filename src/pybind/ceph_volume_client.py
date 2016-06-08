@@ -40,6 +40,8 @@ log = logging.getLogger(__name__)
 # that are not assigned to a group (i.e. created with group=None)
 NO_GROUP_NAME = "_nogroup"
 
+# Filename extensions for meta files.
+META_FILE_EXT = ".meta"
 
 class VolumePath(object):
     """
@@ -229,8 +231,6 @@ class CephFSVolumeClient(object):
         # UUID
         self._id = struct.unpack(">Q", uuid.uuid1().get_bytes()[0:8])[0]
 
-        # TODO: prevent craftily-named volumes from colliding with
-        # ".meta" filenames
         # TODO: remove .meta files on volume deletion
         # TODO: remove .meta files on last rule for an auth ID deletion
         # TODO: version the on-disk structures
@@ -261,8 +261,9 @@ class CephFSVolumeClient(object):
 
         while d:
             # Identify auth IDs from auth meta filenames. The auth meta files
-            # are named as, "$<auth_id>.meta".
-            match = re.search("^\$(.*)\.meta$", d.d_name)
+            # are named as, "$<auth_id><meta filename extension>"
+            regex = "^\$(.*){0}$".format(re.escape(META_FILE_EXT))
+            match = re.search(regex, d.d_name)
             if match:
                 auth_ids.append(match.group(1))
 
@@ -536,6 +537,11 @@ class CephFSVolumeClient(object):
             return pool_id
 
     def create_group(self, group_id):
+        # Prevent craftily-named volume groups from colliding with the meta
+        # files.
+        if group_id.endswith(META_FILE_EXT):
+            raise ValueError("group ID cannot end with '{0}'.".format(
+                META_FILE_EXT))
         path = self._get_group_path(group_id)
         self._mkdir_p(path)
 
@@ -743,8 +749,8 @@ class CephFSVolumeClient(object):
         return fn()
 
     def _auth_metadata_path(self, auth_id):
-        return os.path.join(self.volume_prefix, "${auth_id}.meta".format(
-            auth_id=auth_id))
+        return os.path.join(self.volume_prefix, "${0}{1}".format(
+            auth_id, META_FILE_EXT))
 
     def _auth_lock(self, auth_id):
         return self._lock(self._auth_metadata_path(auth_id))
@@ -756,11 +762,11 @@ class CephFSVolumeClient(object):
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
     def _volume_metadata_path(self, volume_path):
-       if volume_path.group_id:
-            return os.path.join(self.volume_prefix, "_{0}:{1}.meta".format(
-                volume_path.group_id if volume_path.group_id else "",
-                volume_path.volume_id
-            ))
+        return os.path.join(self.volume_prefix, "_{0}:{1}{2}".format(
+            volume_path.group_id if volume_path.group_id else "",
+            volume_path.volume_id,
+            META_FILE_EXT
+        ))
 
     def _volume_lock(self, volume_path):
         """
