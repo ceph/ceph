@@ -1797,7 +1797,7 @@ struct do_fix_lost : public action_on_object_t {
         return 0;
       oi.clear_flag(object_info_t::FLAG_LOST);
       bufferlist bl;
-      ::encode(oi, bl);
+      ::encode(oi, bl, -1);  /* fixme: using full features */
       ObjectStore::Transaction t;
       t.setattr(coll, ghobj, OI_ATTR, bl);
       int r = store->apply_transaction(osr, std::move(t));
@@ -1969,7 +1969,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
   if (!dry_run) {
     attr.clear();
     oi.size = setsize;
-    ::encode(oi, attr);
+    ::encode(oi, attr, -1);  /* fixme: using full features */
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, OI_ATTR, attr);
     t.truncate(coll, ghobj, setsize);

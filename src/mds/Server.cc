@@ -6486,7 +6486,8 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 	  
   // imported caps
   ::decode(mdr->more()->imported_client_map, blp);
-  ::encode(mdr->more()->imported_client_map, *client_map_bl);
+  ::encode(mdr->more()->imported_client_map, *client_map_bl,
+           mds->mdsmap->get_up_features());
   prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
 
   list<ScatterLock*> updated_scatterlocks;  // we clear_updated explicitly below
@@ -7262,7 +7263,7 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
       (*p)->state_clear(CDir::STATE_EXPORTBOUND);
 
     if (reply) {
-      ::encode(exported_client_map, reply->inode_export);
+      ::encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
       reply->inode_export.claim_append(inodebl);
       reply->inode_export_v = srcdnl->get_inode()->inode.version;
     }

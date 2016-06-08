@@ -72,7 +72,7 @@ private:
 public:
   void encode_payload(uint64_t features) {
     ::encode(tid, payload);
-    ::encode(client, payload);
+    ::encode(client, payload, features);
     ::encode(client_caps, payload, features);
     payload.append(msg_bl);
     ::encode(con_features, payload);

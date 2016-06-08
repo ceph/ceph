@@ -127,9 +127,9 @@ struct cls_lock_get_info_reply
 
   cls_lock_get_info_reply() : lock_type(LOCK_NONE) {}
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(lockers, bl);
+    ::encode(lockers, bl, features);
     uint8_t t = (uint8_t)lock_type;
     ::encode(t, bl);
     ::encode(tag, bl);
@@ -147,7 +147,7 @@ struct cls_lock_get_info_reply
   void dump(Formatter *f) const;
   static void generate_test_instances(list<cls_lock_get_info_reply*>& o);
 };
-WRITE_CLASS_ENCODER(cls_lock_get_info_reply)
+WRITE_CLASS_ENCODER_FEATURES(cls_lock_get_info_reply)
 
 struct cls_lock_list_locks_reply
 {

@@ -198,7 +198,7 @@ void ReplicatedPG::on_local_recover(
       recovery_info.oi.prior_version = recovery_info.oi.version;
       recovery_info.oi.version = latest->version;
       bufferlist bl;
-      ::encode(recovery_info.oi, bl);
+      ::encode(recovery_info.oi, bl, get_osdmap()->get_up_osd_features());
       assert(!pool.info.require_rollback());
       t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
       if (obc)
@@ -3495,7 +3495,7 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
     bl.clear();
-    ::encode(coi, bl);
+    ::encode(coi, bl, get_osdmap()->get_up_osd_features());
     setattr_maybe_cache(ctx->obc, ctx.get(), t, OI_ATTR, bl);
 
     ctx->log.push_back(
@@ -3578,7 +3578,7 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
     attrs[SS_ATTR].claim(bl);
 
     bl.clear();
-    ::encode(ctx->snapset_obc->obs.oi, bl);
+    ::encode(ctx->snapset_obc->obs.oi, bl, get_osdmap()->get_up_osd_features());
     attrs[OI_ATTR].claim(bl);
     setattrs_maybe_cache(ctx->snapset_obc, ctx.get(), t, attrs);
 
@@ -4781,7 +4781,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           resp.entries.push_back(wi);
         }
 
-        resp.encode(osd_op.outdata);
+        resp.encode(osd_op.outdata, ctx->get_features());
         result = 0;
 
         ctx->delta_stats.num_rd++;
@@ -6271,7 +6271,7 @@ void ReplicatedPG::_make_clone(
   object_info_t *poi)
 {
   bufferlist bv;
-  ::encode(*poi, bv);
+  ::encode(*poi, bv, get_osdmap()->get_up_osd_features());
 
   t->clone(head, coid);
   setattr_maybe_cache(obc, ctx, t, OI_ATTR, bv);
@@ -6732,7 +6732,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
       map<string, bufferlist> attrs;
       bufferlist bv(sizeof(ctx->new_obs.oi));
-      ::encode(ctx->snapset_obc->obs.oi, bv);
+      ::encode(ctx->snapset_obc->obs.oi, bv, get_osdmap()->get_up_osd_features());
       ctx->op_t->touch(snapoid);
       attrs[OI_ATTR].claim(bv);
       attrs[SS_ATTR].claim(bss);
@@ -6778,7 +6778,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
     map <string, bufferlist> attrs;
     bufferlist bv(sizeof(ctx->new_obs.oi));
-    ::encode(ctx->new_obs.oi, bv);
+    ::encode(ctx->new_obs.oi, bv, get_osdmap()->get_up_osd_features());
     attrs[OI_ATTR].claim(bv);
 
     if (soid.snap == CEPH_NOSNAP) {
@@ -8878,7 +8878,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   oi.prior_version = obc->obs.oi.version;
   oi.version = ctx->at_version;
   bufferlist bl;
-  ::encode(oi, bl);
+  ::encode(oi, bl, get_osdmap()->get_up_osd_features());
   setattr_maybe_cache(obc, ctx.get(), t, OI_ATTR, bl);
 
   if (pool.info.require_rollback()) {
@@ -9692,7 +9692,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
   obc->obs.oi.prior_version = version;
 
   bufferlist b2;
-  obc->obs.oi.encode(b2);
+  obc->obs.oi.encode(b2, get_osdmap()->get_up_osd_features());
   assert(!pool.info.require_rollback());
   t->setattr(coll, ghobject_t(oid), OI_ATTR, b2);
 
@@ -10580,7 +10580,7 @@ uint64_t ReplicatedPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ObjectStore::Transaction t;
 	      bufferlist b2;
-	      obc->obs.oi.encode(b2);
+	      obc->obs.oi.encode(b2, get_osdmap()->get_up_osd_features());
 	      assert(!pool.info.require_rollback());
 	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
@@ -11714,7 +11714,7 @@ void ReplicatedPG::hit_set_persist()
   bufferlist bss;
   ::encode(ctx->new_snapset, bss);
   bufferlist boi(sizeof(ctx->new_obs.oi));
-  ::encode(ctx->new_obs.oi, boi);
+  ::encode(ctx->new_obs.oi, boi, get_osdmap()->get_up_osd_features());
 
   ctx->op_t->append(oid, 0, bl.length(), bl, 0);
   map <string, bufferlist> attrs;

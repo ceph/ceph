@@ -1725,7 +1725,7 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
-  ::encode(client_inst, bl);
+  ::encode(client_inst, bl, features);
   ::encode(open, bl);
   ::encode(cmapv, bl);
   ::encode(inos, bl);
@@ -1776,7 +1776,7 @@ void ESession::generate_test_instances(list<ESession*>& ls)
 void ESessions::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(client_map, bl);
+  ::encode(client_map, bl, features);
   ::encode(cmapv, bl);
   ::encode(stamp, bl);
   ENCODE_FINISH(bl);

@@ -135,7 +135,7 @@ public:
       }
 
       bufferlist bl;
-      ::encode(reply, bl);
+      ::encode(reply, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
       std::string str(bl.c_str(), bl.length());
       expect.WillOnce(DoAll(WithArg<5>(CopyInBufferlist(str)), Return(0)));

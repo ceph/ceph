@@ -335,7 +335,7 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
     n = *p;
     ::encode(n, bl);
   }
-  ::encode(new_up_client, bl);
+  ::encode(new_up_client, bl, 0);
   ::encode(new_state, bl);
   ::encode(new_weight, bl);
   // for ::encode(new_pg_temp, bl);
@@ -372,7 +372,7 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
   ::encode(new_pools, bl, features);
   ::encode(new_pool_names, bl);
   ::encode(old_pools, bl);
-  ::encode(new_up_client, bl);
+  ::encode(new_up_client, bl, features);
   ::encode(new_state, bl);
   ::encode(new_weight, bl);
   ::encode(new_pg_temp, bl);
@@ -380,17 +380,17 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
   // extended
   __u16 ev = 10;
   ::encode(ev, bl);
-  ::encode(new_hb_back_up, bl);
+  ::encode(new_hb_back_up, bl, features);
   ::encode(new_up_thru, bl);
   ::encode(new_last_clean_interval, bl);
   ::encode(new_lost, bl);
-  ::encode(new_blacklist, bl);
-  ::encode(old_blacklist, bl);
-  ::encode(new_up_cluster, bl);
+  ::encode(new_blacklist, bl, features);
+  ::encode(old_blacklist, bl, features);
+  ::encode(new_up_cluster, bl, features);
   ::encode(cluster_snapshot, bl);
   ::encode(new_uuid, bl);
   ::encode(new_xinfo, bl);
-  ::encode(new_hb_front_up, bl);
+  ::encode(new_hb_front_up, bl, features);
 }
 
 void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
@@ -428,7 +428,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_pools, bl, features);
     ::encode(new_pool_names, bl);
     ::encode(old_pools, bl);
-    ::encode(new_up_client, bl);
+    ::encode(new_up_client, bl, features);
     ::encode(new_state, bl);
     ::encode(new_weight, bl);
     ::encode(new_pg_temp, bl);
@@ -441,17 +441,17 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
 
   {
     ENCODE_START(2, 1, bl); // extended, osd-only data
-    ::encode(new_hb_back_up, bl);
+    ::encode(new_hb_back_up, bl, features);
     ::encode(new_up_thru, bl);
     ::encode(new_last_clean_interval, bl);
     ::encode(new_lost, bl);
-    ::encode(new_blacklist, bl);
-    ::encode(old_blacklist, bl);
-    ::encode(new_up_cluster, bl);
+    ::encode(new_blacklist, bl, features);
+    ::encode(old_blacklist, bl, features);
+    ::encode(new_up_cluster, bl, features);
     ::encode(cluster_snapshot, bl);
     ::encode(new_uuid, bl);
     ::encode(new_xinfo, bl);
-    ::encode(new_hb_front_up, bl);
+    ::encode(new_hb_front_up, bl, features);
     ::encode(features, bl);         // NOTE: features arg, not the member
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -1805,7 +1805,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   ::encode(max_osd, bl);
   ::encode(osd_state, bl);
   ::encode(osd_weight, bl);
-  ::encode(osd_addrs->client_addr, bl);
+  ::encode(osd_addrs->client_addr, bl, 0);
 
   // for ::encode(pg_temp, bl);
   n = pg_temp->size();
@@ -1849,7 +1849,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   ::encode(max_osd, bl);
   ::encode(osd_state, bl);
   ::encode(osd_weight, bl);
-  ::encode(osd_addrs->client_addr, bl);
+  ::encode(osd_addrs->client_addr, bl, features);
 
   ::encode(*pg_temp, bl);
 
@@ -1861,15 +1861,15 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   // extended
   __u16 ev = 10;
   ::encode(ev, bl);
-  ::encode(osd_addrs->hb_back_addr, bl);
+  ::encode(osd_addrs->hb_back_addr, bl, features);
   ::encode(osd_info, bl);
-  ::encode(blacklist, bl);
-  ::encode(osd_addrs->cluster_addr, bl);
+  ::encode(blacklist, bl, features);
+  ::encode(osd_addrs->cluster_addr, bl, features);
   ::encode(cluster_snapshot_epoch, bl);
   ::encode(cluster_snapshot, bl);
   ::encode(*osd_uuid, bl);
   ::encode(osd_xinfo, bl);
-  ::encode(osd_addrs->hb_front_addr, bl);
+  ::encode(osd_addrs->hb_front_addr, bl, features);
 }
 
 void OSDMap::encode(bufferlist& bl, uint64_t features) const
@@ -1910,7 +1910,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(max_osd, bl);
     ::encode(osd_state, bl);
     ::encode(osd_weight, bl);
-    ::encode(osd_addrs->client_addr, bl);
+    ::encode(osd_addrs->client_addr, bl, features);
 
     ::encode(*pg_temp, bl);
     ::encode(*primary_temp, bl);
@@ -1931,7 +1931,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   {
     ENCODE_START(1, 1, bl); // extended, osd-only data
-    ::encode(osd_addrs->hb_back_addr, bl);
+    ::encode(osd_addrs->hb_back_addr, bl, features);
     ::encode(osd_info, bl);
     {
       // put this in a sorted, ordered map<> so that we encode in a
@@ -1940,14 +1940,14 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p =
 	     blacklist.begin(); p != blacklist.end(); ++p)
 	blacklist_map.insert(make_pair(p->first, p->second));
-      ::encode(blacklist_map, bl);
+      ::encode(blacklist_map, bl, features);
     }
-    ::encode(osd_addrs->cluster_addr, bl);
+    ::encode(osd_addrs->cluster_addr, bl, features);
     ::encode(cluster_snapshot_epoch, bl);
     ::encode(cluster_snapshot, bl);
     ::encode(*osd_uuid, bl);
     ::encode(osd_xinfo, bl);
-    ::encode(osd_addrs->hb_front_addr, bl);
+    ::encode(osd_addrs->hb_front_addr, bl, features);
     ENCODE_FINISH(bl); // osd-only data
   }
 
