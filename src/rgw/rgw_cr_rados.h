@@ -984,6 +984,26 @@ public:
   int request_complete();
 };
 
+class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+  RGWAioCompletionNotifier *cn{nullptr};
+  std::string oid;
+  real_time start_time;
+  real_time end_time;
+  std::string from_marker;
+  std::string to_marker;
+
+public:
+  RGWRadosTimelogTrimCR(RGWRados *store, const std::string& oid,
+                        const real_time& start_time, const real_time& end_time,
+                        const std::string& from_marker,
+                        const std::string& to_marker);
+  ~RGWRadosTimelogTrimCR();
+
+  int send_request() override;
+  int request_complete() override;
+};
+
 class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   RGWRados *store;
   rgw_obj obj;
