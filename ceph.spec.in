@@ -1481,6 +1481,8 @@ fi
 # Now, relabel the files
 /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
 rm -f ${FILE_CONTEXT}.pre
+# The fixfiles command won't fix label for /var/run/ceph
+/usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
 # Start the daemons iff they were running before
 if test $STATUS -eq 0; then
@@ -1496,7 +1498,7 @@ if [ $1 -eq 0 ]; then
     cp ${FILE_CONTEXT} ${FILE_CONTEXT}.pre
 
     # Remove the module
-    /usr/sbin/semodule -n -r ceph
+    /usr/sbin/semodule -n -r ceph > /dev/null 2>&1
 
     # Reload the policy if SELinux is enabled
     if ! /usr/sbin/selinuxenabled ; then
@@ -1515,6 +1517,8 @@ if [ $1 -eq 0 ]; then
 
     /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
     rm -f ${FILE_CONTEXT}.pre
+    # The fixfiles command won't fix label for /var/run/ceph
+    /usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
     # Start the daemons if they were running before
     if test $STATUS -eq 0; then
