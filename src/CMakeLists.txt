@@ -834,9 +834,12 @@ if(WITH_SPDK)
 endif(WITH_SPDK)
 
 # make rocksdb statically
+if(NOT ALLOCATOR STREQUAL "jemalloc")
+  set(disable_jemalloc "DISABLE_JEMALLOC=1")
+endif()
 add_custom_target(build_rocksdb
     COMMAND
-    PORTABLE=1 $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
+    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
