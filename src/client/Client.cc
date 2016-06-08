@@ -12395,7 +12395,7 @@ mds_rank_t Client::_get_random_up_mds() const
   mdsmap->get_up_mds_set(up);
 
   if (up.empty())
-    return -1;
+    return MDS_RANK_NONE;
   std::set<mds_rank_t>::const_iterator p = up.begin();
   for (int n = rand() % up.size(); n; n--)
     ++p;
