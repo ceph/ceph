@@ -185,8 +185,30 @@ public:
   void send_response();
 };
 
+class RGWInfo_ObjStore_SWIFT : public RGWInfo_ObjStore {
+protected:
+  struct info
+  {
+    bool is_admin_info;
+    function<void (Formatter&, const md_config_t&, RGWRados&)> list_data;
+  };
+
+  static const vector<pair<string, struct info>> swift_info;
+public:
+  RGWInfo_ObjStore_SWIFT() {}
+  ~RGWInfo_ObjStore_SWIFT() {}
+
+  void execute() override;
+  void send_response() override;
+  static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static bool is_expired(const std::string& expires, CephContext* cct);
+};
+
 class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
+  friend class RGWRESTMgr_SWIFT_Info;
 protected:
   virtual bool is_acl_op() {
     return false;
@@ -216,6 +238,14 @@ protected:
 public:
   RGWHandler_REST_Service_SWIFT() {}
   virtual ~RGWHandler_REST_Service_SWIFT() {}
+};
+
+class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
+protected:
+  RGWOp *op_get();
+public:
+  RGWHandler_REST_SWIFT_Info() = default;
+  virtual ~RGWHandler_REST_SWIFT_Info() = default;
 };
 
 class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
@@ -394,5 +424,12 @@ public:
   }
 };
 
+
+class RGWRESTMgr_SWIFT_Info : public RGWRESTMgr {
+public:
+  RGWRESTMgr_SWIFT_Info() = default;
+  virtual ~RGWRESTMgr_SWIFT_Info() = default;
+  virtual RGWHandler_REST *get_handler(struct req_state *s) override;
+};
 
 #endif

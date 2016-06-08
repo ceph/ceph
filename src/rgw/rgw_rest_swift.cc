@@ -5,6 +5,7 @@
 #include <boost/utility/in_place_factory.hpp>
 
 #include "include/assert.h"
+#include "ceph_ver.h"
 
 #include "common/Formatter.h"
 #include "common/utf8.h"
@@ -1377,6 +1378,133 @@ void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
   }
 }
 
+const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT::swift_info =
+{
+    {"bulk_delete", {false, nullptr}},
+    {"container_quotas", {false, nullptr}},
+    {"swift", {false, RGWInfo_ObjStore_SWIFT::list_swift_data}},
+    {"tempurl", { false, RGWInfo_ObjStore_SWIFT::list_tempurl_data}},
+    {"slo", {false, RGWInfo_ObjStore_SWIFT::list_slo_data}},
+    {"account_quotas", {false, nullptr}},
+    {"staticweb", {false, nullptr}},
+    {"tempauth", {false, nullptr}},
+};
+
+void RGWInfo_ObjStore_SWIFT::execute()
+{
+  bool is_admin_info_enabled = false;
+
+  const string& swiftinfo_sig = s->info.args.get("swiftinfo_sig");
+  const string& swiftinfo_expires = s->info.args.get("swiftinfo_expires");
+
+  if (!swiftinfo_sig.empty() &&
+      !swiftinfo_expires.empty() &&
+      !is_expired(swiftinfo_expires, s->cct)) {
+    is_admin_info_enabled = true;
+  }
+
+  s->formatter->open_object_section("info");
+
+  for (const auto& pair : swift_info) {
+    if(!is_admin_info_enabled && pair.second.is_admin_info)
+      continue;
+
+    if (!pair.second.list_data) {
+      s->formatter->open_object_section((pair.first).c_str());
+      s->formatter->close_section();
+    }
+    else {
+      pair.second.list_data(*(s->formatter), *(s->cct->_conf), *store);
+    }
+  }
+
+  s->formatter->close_section();
+}
+
+void RGWInfo_ObjStore_SWIFT::send_response()
+{
+  if (op_ret <  0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
+                                              const md_config_t& config,
+                                              RGWRados& store)
+{
+  formatter.open_object_section("swift");
+  formatter.dump_int("max_file_size", config.rgw_max_put_size);
+  formatter.dump_int("container_listing_limit", RGW_LIST_BUCKETS_LIMIT_MAX);
+
+  string ceph_version(CEPH_GIT_NICE_VER);
+  formatter.dump_string("version", ceph_version);
+  formatter.dump_int("max_meta_name_length", 81);
+
+  formatter.open_array_section("policies");
+  RGWZoneGroup& zonegroup = store.get_zonegroup();
+
+  for (const auto& placement_targets : zonegroup.placement_targets) {
+    formatter.open_object_section("policy");
+    if (placement_targets.second.name.compare(zonegroup.default_placement) == 0)
+      formatter.dump_bool("default", true);
+    formatter.dump_string("name", placement_targets.second.name.c_str());
+    formatter.close_section();
+  }
+  formatter.close_section();
+
+  formatter.dump_int("max_object_name_size", RGWHandler_REST::MAX_OBJ_NAME_LEN);
+  formatter.dump_bool("strict_cors_mode", true);
+  formatter.dump_int("max_container_name_length", RGWHandler_REST::MAX_BUCKET_NAME_LEN);
+  formatter.close_section();
+}
+
+void RGWInfo_ObjStore_SWIFT::list_tempurl_data(Formatter& formatter,
+                                                const md_config_t& config,
+                                                RGWRados& store)
+{
+  formatter.open_object_section("tempurl");
+  formatter.open_array_section("methods");
+  formatter.dump_string("methodname", "GET");
+  formatter.dump_string("methodname", "HEAD");
+  formatter.dump_string("methodname", "PUT");
+  formatter.dump_string("methodname", "POST");
+  formatter.dump_string("methodname", "DELETE");
+  formatter.close_section();
+  formatter.close_section();
+}
+
+void RGWInfo_ObjStore_SWIFT::list_slo_data(Formatter& formatter,
+                                            const md_config_t& config,
+                                            RGWRados& store)
+{
+  formatter.open_object_section("slo");
+  formatter.dump_int("max_manifest_segments", config.rgw_max_slo_entries);
+  formatter.close_section();
+}
+
+bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, CephContext* cct)
+{
+  string err;
+  const utime_t now = ceph_clock_now(cct);
+  const uint64_t expiration = (uint64_t)strict_strtoll(expires.c_str(),
+                                                       10, &err);
+  if (!err.empty()) {
+    ldout(cct, 5) << "failed to parse siginfo_expires: " << err << dendl;
+    return true;
+  }
+
+  if (expiration <= (uint64_t)now.sec()) {
+    ldout(cct, 5) << "siginfo expired: " << expiration << " <= " << now.sec() << dendl;
+    return true;
+  }
+
+  return false;
+}
+
 RGWOp *RGWHandler_REST_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -1401,6 +1529,11 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
     return new RGWBulkDelete_ObjStore_SWIFT;
   }
   return NULL;
+}
+
+RGWOp* RGWHandler_REST_SWIFT_Info::op_get() {
+
+  return new RGWInfo_ObjStore_SWIFT;
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
@@ -1784,12 +1917,23 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
     blen = sprintf(buf, "/%s/v1%s",
                    g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
   }
-  if (s->decoded_uri[0] != '/' ||
-    s->decoded_uri.compare(0, blen, buf) !=  0) {
-    return -ENOENT;
+
+  string uri = "/info";
+  if ((s->decoded_uri[0] != '/' ||
+    s->decoded_uri.compare(0, blen, buf) !=  0) &&
+    s->decoded_uri.compare(uri) != 0) {
+        return -ENOENT;
   }
 
-  int ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
+  int ret;
+  //Set the formatter to JSON by default for /info api
+  if (s->decoded_uri.compare(uri) == 0) {
+    ret = allocate_formatter(s, RGW_FORMAT_JSON, false);
+  }
+  else {
+    ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
+  }
+
   if (ret < 0)
     return ret;
 
@@ -1894,4 +2038,14 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
     return new RGWHandler_REST_Bucket_SWIFT;
 
   return new RGWHandler_REST_Obj_SWIFT;
+}
+
+RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(struct req_state *s)
+{
+  int ret = RGWHandler_REST_SWIFT::init_from_header(s);
+  if (ret < 0) {
+    return nullptr;
+  }
+
+  return new RGWHandler_REST_SWIFT_Info;
 }

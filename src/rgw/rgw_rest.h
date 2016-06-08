@@ -364,6 +364,12 @@ public:
   virtual int get_params();
 };
 
+class RGWInfo_ObjStore : public RGWInfo {
+public:
+    RGWInfo_ObjStore() = default;
+    ~RGWInfo_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;
@@ -395,6 +401,9 @@ protected:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
 public:
+  static constexpr int MAX_BUCKET_NAME_LEN = 255;
+  static constexpr int MAX_OBJ_NAME_LEN = 1024;
+
   RGWHandler_REST() {}
   virtual ~RGWHandler_REST() {}
 
