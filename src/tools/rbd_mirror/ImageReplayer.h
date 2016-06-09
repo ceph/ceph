@@ -302,6 +302,7 @@ private:
   void handle_init_remote_journaler(int r);
 
   void start_replay();
+  void handle_start_replay(int r);
 
   void replay_flush();
   void handle_replay_flush(int r);

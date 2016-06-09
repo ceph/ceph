@@ -154,7 +154,8 @@ public:
     return op_tid;
   }
 
-  int start_external_replay(journal::Replay<ImageCtxT> **journal_replay);
+  void start_external_replay(journal::Replay<ImageCtxT> **journal_replay,
+                             Context *on_finish);
   void stop_external_replay();
 
 private:
@@ -298,6 +299,8 @@ private:
 
   void complete_event(typename Events::iterator it, int r);
 
+  void start_append();
+
   void handle_initialized(int r);
   void handle_get_tags(int r);
 
@@ -305,6 +308,10 @@ private:
   void handle_replay_complete(int r);
   void handle_replay_process_ready(int r);
   void handle_replay_process_safe(ReplayEntry replay_entry, int r);
+
+  void handle_start_external_replay(int r,
+                                    journal::Replay<ImageCtxT> **journal_replay,
+                                    Context *on_finish);
 
   void handle_flushing_restart(int r);
   void handle_flushing_replay();
