@@ -4315,10 +4315,10 @@ struct PromoteCounter {
 +*/
 struct store_statfs_t
 {
-  uint64_t available = 0;              // Free blocks available
 
   uint64_t blocks = 0;                 // Total data blocks
   uint32_t bsize = 0;                  // Optimal transfer block size
+  uint64_t available = 0;              // Free bytes available
 
   int64_t allocated = 0;               // Bytes allocated by the store
   int64_t stored = 0;                  // Bytes actually stored by the user
