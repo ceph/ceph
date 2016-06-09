@@ -26,7 +26,7 @@ class BitMapAllocator : public Allocator {
 
 public:
   BitMapAllocator();
-  BitMapAllocator(int64_t device_size);
+  BitMapAllocator(int64_t device_size, int64_t block_size);
   ~BitMapAllocator();
 
   int reserve(uint64_t need);
