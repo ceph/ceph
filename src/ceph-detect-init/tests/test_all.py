@@ -143,7 +143,7 @@ class TestCephDetectInit(testtools.TestCase):
     def test_get(self):
         g = ceph_detect_init.get
         with mock.patch('platform.linux_distribution',
-                        lambda: (('unknown', '', ''))):
+                        lambda **kwargs: (('unknown', '', ''))):
             self.assertRaises(exc.UnsupportedPlatform, g)
             try:
                 g()
@@ -151,7 +151,7 @@ class TestCephDetectInit(testtools.TestCase):
                 self.assertIn('Platform is not supported', str(e))
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '6.0', ''))):
+                        lambda **kwargs: (('debian', '6.0', ''))):
             distro = ceph_detect_init.get()
             self.assertEqual(debian, distro)
             self.assertEqual('debian', distro.name)
@@ -203,27 +203,27 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_platform_information(self):
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '6.0', ''))):
+                        lambda **kwargs: (('debian', '6.0', ''))):
             self.assertEqual(('debian', '6.0', 'squeeze'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '7.0', ''))):
+                        lambda **kwargs: (('debian', '7.0', ''))):
             self.assertEqual(('debian', '7.0', 'wheezy'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', '8.0', ''))):
+                        lambda **kwargs: (('debian', '8.0', ''))):
             self.assertEqual(('debian', '8.0', 'jessie'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', 'jessie/sid', ''))):
+                        lambda **kwargs: (('debian', 'jessie/sid', ''))):
             self.assertEqual(('debian', 'jessie/sid', 'sid'),
                              ceph_detect_init.platform_information())
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('debian', 'sid/jessie', ''))):
+                        lambda **kwargs: (('debian', 'sid/jessie', ''))):
             self.assertEqual(('debian', 'sid/jessie', 'sid'),
                              ceph_detect_init.platform_information())
 
@@ -232,7 +232,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(0, main.run(argv))
 
         with mock.patch('platform.linux_distribution',
-                        lambda: (('unknown', '', ''))):
+                        lambda **kwargs: (('unknown', '', ''))):
             self.assertRaises(exc.UnsupportedPlatform, main.run, argv)
             self.assertEqual(0, main.run(argv + ['--default=sysvinit']))
 
