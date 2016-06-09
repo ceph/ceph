@@ -298,7 +298,7 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
     return false;
 
   default:
-    assert(0);
+    assert(0 == "unknown type!");
     return true;
   }
 }
@@ -315,7 +315,7 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   case CEPH_MSG_AUTH:
     return prep_auth(op, true);
   default:
-    assert(0);
+    assert(0 == "unknown type!");
     return false;
   }
 }

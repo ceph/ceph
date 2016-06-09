@@ -136,7 +136,7 @@ bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_JOIN:
     return preprocess_join(op);
   default:
-    assert(0);
+    assert(0 == "unknown type!");
     return true;
   }
 }
@@ -264,7 +264,7 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
   case MSG_MON_JOIN:
     return prepare_join(op);
   default:
-    assert(0);
+    assert(0 == "unknown type!");
   }
 
   return false;
