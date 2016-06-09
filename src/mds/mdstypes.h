@@ -182,7 +182,7 @@ struct frag_info_t : public scatter_info_t {
 
   // *this += cur - acc;
   void add_delta(const frag_info_t &cur, frag_info_t &acc, bool& touched_mtime) {
-    if (!(cur.mtime == acc.mtime)) {
+    if (cur.mtime > mtime) {
       mtime = cur.mtime;
       touched_mtime = true;
     }

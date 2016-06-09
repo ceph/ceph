@@ -1969,6 +1969,7 @@ void CInode::finish_scatter_gather_update(int type)
     {
       fragtree_t tmpdft = dirfragtree;
       struct frag_info_t dirstat;
+      bool dirstat_valid = true;
 
       // adjust summation
       assert(is_auth());
@@ -1984,7 +1985,13 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && dir->get_version() != 0 &&  !dir->is_frozen();
+	bool update;
+	if (dir->get_version() != 0) {
+	  update = dir->is_auth() && !dir->is_frozen();
+	} else {
+	  update = false;
+	  dirstat_valid = false;
+	}
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -2023,16 +2030,15 @@ void CInode::finish_scatter_gather_update(int type)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
-      if (!dirstat.same_sums(pi->dirstat)) {
-	bool all = true;
+      if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
 	list<frag_t> ls;
 	tmpdft.get_leaves_under(frag_t(), ls);
 	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
 	  if (!dirfrags.count(*p)) {
-	    all = false;
+	    dirstat_valid = false;
 	    break;
 	  }
-	if (all) {
+	if (dirstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " dirstat mismatch, fixing" << dendl;
 	  } else {
@@ -2068,6 +2074,7 @@ void CInode::finish_scatter_gather_update(int type)
       fragtree_t tmpdft = dirfragtree;
       nest_info_t rstat;
       rstat.rsubdirs = 1;
+      bool rstat_valid = true;
 
       // adjust summation
       assert(is_auth());
@@ -2081,7 +2088,13 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && dir->get_version() != 0 && !dir->is_frozen();
+	bool update;
+	if (dir->get_version() != 0) {
+	  update = dir->is_auth() && !dir->is_frozen();
+	} else {
+	  update = false;
+	  rstat_valid = false;
+	}
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -2122,16 +2135,15 @@ void CInode::finish_scatter_gather_update(int type)
       }
       dout(20) << " final rstat " << pi->rstat << dendl;
 
-      if (!rstat.same_sums(pi->rstat)) {
-	bool all = true;
+      if (rstat_valid && !rstat.same_sums(pi->rstat)) {
 	list<frag_t> ls;
 	tmpdft.get_leaves_under(frag_t(), ls);
 	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
 	  if (!dirfrags.count(*p)) {
-	    all = false;
+	    rstat_valid = false;
 	    break;
 	  }
-	if (all) {
+	if (rstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " rstat mismatch, fixing" << dendl;
 	  } else {
