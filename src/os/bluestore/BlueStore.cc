@@ -3338,7 +3338,10 @@ int BlueStore::_do_read(
 	    assert(r == 0);
 	    bl.claim_append(t);
 	  });
-	_verify_csum(&bptr->blob, r_off, bl);
+	int r = _verify_csum(&bptr->blob, r_off, bl);
+	if (r < 0) {
+	  return r;
+	}
 
 	// prune and keep result
 	ready_regions[reg.logical_offset].substr_of(bl, front, reg.length);
@@ -3446,10 +3449,10 @@ int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
   int r = blob->verify_csum(blob_xoffset, bl, &bad);
   if (r < 0) {
     if (r == -1) {
-      dout(20) << __func__ << "bad checksum at blob offset 0x"
+      dout(20) << __func__ << " bad checksum at blob offset 0x"
                << std::hex << bad << std::dec << dendl;
     } else {
-      derr << __func__ << "failed with exit code: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
     return r;
   } else {
