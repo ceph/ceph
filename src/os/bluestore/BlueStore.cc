@@ -3304,8 +3304,7 @@ int BlueStore::_do_read(
 	  assert(r == 0);
 	  compressed_bl.claim_append(t);
 	});
-      if (bptr->blob.csum_type != bluestore_blob_t::CSUM_NONE &&
-	  _verify_csum(&bptr->blob, 0, compressed_bl) < 0) {
+      if (_verify_csum(o, &bptr->blob, 0, compressed_bl) < 0) {
 	return -EIO;
       }
       r = _decompress(compressed_bl, &raw_bl);
@@ -3348,7 +3347,7 @@ int BlueStore::_do_read(
 	    assert(r == 0);
 	    bl.claim_append(t);
 	  });
-	int r = _verify_csum(&bptr->blob, r_off, bl);
+	int r = _verify_csum(o, &bptr->blob, r_off, bl);
 	if (r < 0) {
 	  return r;
 	}
@@ -3394,15 +3393,26 @@ int BlueStore::_do_read(
   return r;
 }
 
-int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
+int BlueStore::_verify_csum(OnodeRef& o,
+			    const bluestore_blob_t* blob, uint64_t blob_xoffset,
 			    const bufferlist& bl) const
 {
   int bad;
   int r = blob->verify_csum(blob_xoffset, bl, &bad);
   if (r < 0) {
     if (r == -1) {
-      dout(20) << __func__ << " bad checksum at blob offset 0x"
-               << std::hex << bad << std::dec << dendl;
+      vector<bluestore_pextent_t> pex;
+      blob->map(
+	blob_xoffset,
+	blob->get_csum_chunk_size(),
+	[&](uint64_t offset, uint64_t length) {
+	  pex.emplace_back(bluestore_pextent_t(offset, length));
+	});
+      derr << __func__ << " bad " << blob->get_csum_type_string(blob->csum_type)
+	   << "/0x" << std::hex << blob->get_csum_chunk_size()
+	   << " checksum at blob offset 0x" << bad << std::dec
+	   << ", device location " << pex
+	   << ", object " << o->oid << dendl;
     } else {
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
