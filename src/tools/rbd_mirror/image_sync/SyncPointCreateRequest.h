@@ -56,6 +56,9 @@ private:
    * CREATE_SNAP . . . .
    *    |
    *    v
+   * REFRESH_IMAGE
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -77,6 +80,9 @@ private:
 
   void send_create_snap();
   void handle_create_snap(int r);
+
+  void send_final_refresh_image();
+  void handle_final_refresh_image(int r);
 
   void finish(int r);
 };
