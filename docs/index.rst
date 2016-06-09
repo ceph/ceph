@@ -5,6 +5,7 @@ Content Index
    :maxdepth: 2
 
    README.rst
+   intro_testers.rst
    siteconfig.rst
    openstack_backend.rst
    INSTALL.rst

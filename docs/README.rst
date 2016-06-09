@@ -23,6 +23,9 @@ operations on remote hosts over SSH, as implemented by `Paramiko
 
 When testing, it is common to group many `jobs` together to form a `test run`.
 
+If you are new to teuthology and simply want to run existing tests, check out
+:ref:`intro_testers`
+
 
 Provided Utilities
 ==================
