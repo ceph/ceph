@@ -638,8 +638,6 @@ protected:
 
   void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
 		     bool complete, int r);
-  void _tmap_fetch();
-  void _tmap_fetched(bufferlist &bl, int r);
 
   // -- commit --
   compact_map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;

@@ -1482,57 +1482,6 @@ void CDir::fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys)
   _omap_fetch(c, keys);
 }
 
-class C_IO_Dir_TMAP_Fetched : public CDirIOContext {
- public:
-  bufferlist bl;
-
-  C_IO_Dir_TMAP_Fetched(CDir *d) : CDirIOContext(d) { }
-  void finish(int r) {
-    dir->_tmap_fetched(bl, r);
-  }
-};
-
-void CDir::_tmap_fetch()
-{
-  // start by reading the first hunk of it
-  C_IO_Dir_TMAP_Fetched *fin = new C_IO_Dir_TMAP_Fetched(this);
-  object_t oid = get_ondisk_object();
-  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
-  ObjectOperation rd;
-  rd.tmap_get(&fin->bl, NULL);
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
-			     new C_OnFinisher(fin, cache->mds->finisher));
-}
-
-void CDir::_tmap_fetched(bufferlist& bl, int r)
-{
-  LogChannelRef clog = cache->mds->clog;
-  dout(10) << "_tmap_fetched " << bl.length()  << " bytes for " << *this << dendl;
-
-  assert(r == 0 || r == -ENOENT);
-  assert(is_auth());
-  assert(!is_frozen());
-
-  bufferlist header;
-  map<string, bufferlist> omap;
-
-  if (bl.length() == 0) {
-    r = -ENODATA;
-  } else {
-    bufferlist::iterator p = bl.begin();
-    ::decode(header, p);
-    ::decode(omap, p);
-
-    if (!p.end()) {
-      clog->warn() << "tmap buffer of dir " << dirfrag() << " has "
-		  << bl.length() - p.get_off() << " extra bytes\n";
-    }
-    bl.clear();
-  }
-
-  _omap_fetched(header, omap, true, r);
-}
-
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
   MDSInternalContextBase *fin;
 public:
@@ -1774,12 +1723,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   assert(!is_frozen());
 
   if (hdrbl.length() == 0) {
-    if (r != -ENODATA) { // called by _tmap_fetched() ?
-      dout(10) << "_fetched 0 byte from omap, retry tmap" << dendl;
-      _tmap_fetch();
-      return;
-    }
-
     dout(0) << "_fetched missing object for " << *this << dendl;
     clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
@@ -2120,8 +2063,6 @@ void CDir::_omap_commit(int op_prio)
       if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
 	op.stat(NULL, (ceph::real_time*) NULL, NULL);
 
-      op.tmap_to_omap(true); // convert tmap to omap
-
       if (!to_set.empty())
 	op.omap_set(to_set);
       if (!to_remove.empty())
@@ -2143,8 +2084,6 @@ void CDir::_omap_commit(int op_prio)
   // don't create new dirfrag blindly
   if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
     op.stat(NULL, (ceph::real_time*)NULL, NULL);
-
-  op.tmap_to_omap(true); // convert tmap to omap
 
   /*
    * save the header at the last moment.. If we were to send it off before other
