@@ -1933,12 +1933,22 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
       }
       struct rgw_bucket_category_stats& stats =
           header.stats[cur_change.meta.category];
+      bool log_op = (op & CEPH_RGW_DIR_SUGGEST_LOG_OP) != 0;
+      op &= CEPH_RGW_DIR_SUGGEST_OP_MASK;
       switch(op) {
       case CEPH_RGW_REMOVE:
         CLS_LOG(10, "CEPH_RGW_REMOVE name=%s instance=%s\n", cur_change.key.name.c_str(), cur_change.key.instance.c_str());
 	ret = cls_cxx_map_remove_key(hctx, cur_change_key);
 	if (ret < 0)
 	  return ret;
+        if (log_op && cur_disk.exists) {
+          ret = log_index_operation(hctx, cur_disk.key, CLS_RGW_OP_DEL, cur_disk.tag, cur_disk.meta.mtime,
+                                    cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL);
+          if (ret < 0) {
+            CLS_LOG(0, "ERROR: %s(): failed to log operation ret=%d", __func__, ret);
+            return ret;
+          }
+        }
         break;
       case CEPH_RGW_UPDATE:
         CLS_LOG(10, "CEPH_RGW_UPDATE name=%s instance=%s total_entries: %" PRId64 " -> %" PRId64 "\n",
@@ -1953,9 +1963,18 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         ret = cls_cxx_map_set_val(hctx, cur_change_key, &cur_state_bl);
         if (ret < 0)
 	  return ret;
+        if (log_op) {
+          ret = log_index_operation(hctx, cur_change.key, CLS_RGW_OP_ADD, cur_change.tag, cur_change.meta.mtime,
+                                    cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL);
+          if (ret < 0) {
+            CLS_LOG(0, "ERROR: %s(): failed to log operation ret=%d", __func__, ret);
+            return ret;
+          }
+        }
         break;
       }
     }
+
   }
 
   if (header_changed) {
