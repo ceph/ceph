@@ -7027,7 +7027,7 @@ int ReplicatedPG::fill_in_copy_get(
 
   // omap
   uint32_t omap_keys = 0;
-  if (!pool.info.supports_omap() || !oi.is_omap()) {
+  if (!pool.info.supports_omap()) {
     cursor.omap_complete = true;
   } else {
     if (left > 0 && !cursor.omap_complete) {
