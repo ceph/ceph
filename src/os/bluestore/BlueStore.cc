@@ -1416,7 +1416,9 @@ int BlueStore::_open_alloc()
 {
   assert(alloc == NULL);
   assert(bdev->get_size());
-  alloc = Allocator::create(g_conf->bluestore_allocator, bdev->get_size());
+  alloc = Allocator::create(g_conf->bluestore_allocator,
+                            bdev->get_size(),
+                            min_alloc_size);
   uint64_t num = 0, bytes = 0;
   fm->enumerate_reset();
   uint64_t offset, length;
