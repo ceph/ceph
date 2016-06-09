@@ -112,7 +112,11 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
 
   dout(4) << "JournalTool: connecting to RADOS..." << dendl;
-  rados.connect();
+  r = rados.connect();
+  if (r < 0) {
+    derr << "couldn't connect to cluster: " << cpp_strerror(r) << dendl;
+    return r;
+  }
  
   auto fs = fsmap->get_filesystem(role_selector.get_ns());
   assert(fs != nullptr);
