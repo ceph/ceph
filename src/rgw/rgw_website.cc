@@ -106,7 +106,7 @@ bool RGWBucketWebsiteConf::should_redirect(const string& key, const int http_err
   return true;
 }
 
-void RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key)
+void RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key) const
 {
 
   if (key.empty()) {
