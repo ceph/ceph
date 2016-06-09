@@ -96,8 +96,10 @@ target_link_libraries(ceph_test_rbd_mirror_image_replay
   cls_journal_client
   rbd_types
   librados
+  librbd
   osdc
   global
+  keyutils
   radostest
   ${UNITTEST_LIBS})
 
