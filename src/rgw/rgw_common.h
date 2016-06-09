@@ -93,6 +93,13 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_QUOTA_NOBJS    RGW_ATTR_META_PREFIX "quota-count"
 #define RGW_ATTR_QUOTA_MSIZE    RGW_ATTR_META_PREFIX "quota-bytes"
 
+/* Static Web Site of Swift API. */
+#define RGW_ATTR_WEB_INDEX      RGW_ATTR_META_PREFIX "web-index"
+#define RGW_ATTR_WEB_ERROR      RGW_ATTR_META_PREFIX "web-error"
+#define RGW_ATTR_WEB_LISTINGS   RGW_ATTR_META_PREFIX "web-listings"
+#define RGW_ATTR_WEB_LIST_CSS   RGW_ATTR_META_PREFIX "web-listings-css"
+#define RGW_ATTR_SUBDIR_MARKER  RGW_ATTR_META_PREFIX "web-directory-type"
+
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
 #define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
