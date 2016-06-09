@@ -461,15 +461,12 @@ public:
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
     set<TransContext*> flush_txns;   ///< committing or wal txns
 
-    BufferSpace bc;
-
-    Onode(OnodeSpace *s, const ghobject_t& o, const string& k, Cache *c)
+    Onode(OnodeSpace *s, const ghobject_t& o, const string& k)
       : nref(0),
 	oid(o),
 	key(k),
 	space(s),
-	exists(false),
-	bc(c) {
+	exists(false) {
     }
 
     Blob *get_blob(int64_t id) {
