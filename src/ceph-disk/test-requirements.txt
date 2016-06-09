@@ -7,5 +7,5 @@ testrepository>=0.0.17
 testtools>=0.9.32
 mock
 pytest
-tox
+tox>=2.0
 flake8
