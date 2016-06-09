@@ -7,6 +7,7 @@ Content Index
    README.rst
    intro_testers.rst
    siteconfig.rst
+   detailed_test_config.rst
    openstack_backend.rst
    INSTALL.rst
    LAB_SETUP.rst
