@@ -55,6 +55,7 @@ struct bench_data {
 const int OP_WRITE     = 1;
 const int OP_SEQ_READ  = 2;
 const int OP_RAND_READ = 3;
+const int OP_RANDSEQ_READ = 4;
 
 // Object is composed of <oid,namespace>
 typedef std::pair<std::string, std::string> Object;
@@ -73,10 +74,10 @@ protected:
   struct bench_data data;
 
   int fetch_bench_metadata(const std::string& metadata_file, size_t* op_size,
-			   size_t* object_size, int* num_objects, int* prevPid);
+			   size_t* object_size, int* num_objects, int* prevPid, int *num_ops = NULL);
 
   int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta, unsigned max_objects);
-  int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
+  int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false, bool use_randseq=false);
   int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);

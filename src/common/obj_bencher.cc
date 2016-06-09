@@ -227,6 +227,7 @@ int ObjBencher::aio_bench(
   int num_objects = 0;
   int r = 0;
   int prevPid = 0;
+  int num_ops = 0;
 
   // default metadata object is used if user does not specify one
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
@@ -235,7 +236,7 @@ int ObjBencher::aio_bench(
   if (operation != OP_WRITE) {
     size_t prev_op_size, prev_object_size;
     r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
-			     &num_objects, &prevPid);
+			     &num_objects, &prevPid, &num_ops);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Must write data before running a read benchmark!" << std::endl;
@@ -270,11 +271,15 @@ int ObjBencher::aio_bench(
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = seq_read_bench(secondsToRun, num_ops, concurrentios, prevPid, no_verify, false);   // use_randseq = false
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
-    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = rand_read_bench(secondsToRun, num_ops, concurrentios, prevPid, no_verify);  
+    if (r != 0) goto out;
+  }
+  else if (OP_RANDSEQ_READ == operation) {
+    r = seq_read_bench(secondsToRun, num_ops, concurrentios, prevPid, no_verify, true);   // use_randseq = true
     if (r != 0) goto out;
   }
 
@@ -345,7 +350,7 @@ static T vec_stddev(vector<T>& v)
 
 int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 				     size_t *op_size, size_t* object_size,
-				     int* num_objects, int* prevPid) {
+				     int* num_objects, int* prevPid, int *num_ops) {
   int r = 0;
   bufferlist object_data;
 
@@ -360,14 +365,20 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
   }
   bufferlist::iterator p = object_data.begin();
   ::decode(*object_size, p);
-  ::decode(*num_objects, p);
+  int metadata_num_ops;
+  ::decode(metadata_num_ops, p);
   ::decode(*prevPid, p);
   if (!p.end()) {
     ::decode(*op_size, p);
   } else {
     *op_size = *object_size;
   }
-
+  if (num_ops != NULL) {
+    *num_ops = metadata_num_ops;
+  }
+  // compute num_objects from num_ops
+  int writes_per_object = *object_size / *op_size;
+  *num_objects = (metadata_num_ops + writes_per_object - 1) / writes_per_object;
   return 0;
 }
 
@@ -451,7 +462,7 @@ int ObjBencher::write_bench(int secondsToRun,
 
   //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
-  int num_objects;
+  int num_ops;
 
   //don't need locking for reads because other thread doesn't write
 
@@ -596,8 +607,8 @@ int ObjBencher::write_bench(int secondsToRun,
   }
   //write object size/number data for read benchmarks
   ::encode(data.object_size, b_write);
-  num_objects = (data.finished + writes_per_object - 1) / writes_per_object;
-  ::encode(num_objects, b_write);
+  num_ops = data.finished;
+  ::encode(num_ops, b_write);
   ::encode(getpid(), b_write);
   ::encode(data.op_size, b_write);
 
@@ -622,7 +633,7 @@ int ObjBencher::write_bench(int secondsToRun,
   return r;
 }
 
-int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify) {
+int ObjBencher::seq_read_bench(int seconds_to_run, int num_ops, int concurrentios, int pid, bool no_verify, bool use_randseq) {
   lock_cond lc(&lock);
 
   if (concurrentios <= 0) 
@@ -647,13 +658,23 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   if (data.op_size)
     writes_per_object = data.object_size / data.op_size;
 
+  // setup sequence of operation indices, randomize if using randseq
+  std::vector<int> op_indices;
+  for (int i=0; i<num_ops; i++) {
+    op_indices.push_back(i);
+  }
+  if (use_randseq) {
+    std::random_shuffle (op_indices.begin(), op_indices.end());
+  }
+
   r = completions_init(concurrentios);
   if (r < 0)
     return r;
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name(i / writes_per_object, pid);
+    name[i] = generate_object_name(op_indices[i] / writes_per_object, pid);
+    index[i] = op_indices[i];
     contents[i] = new bufferlist();
   }
 
@@ -669,11 +690,10 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    index[i] = i;
     start_times[i] = ceph_clock_now(cct);
     create_completion(i, _aio_cb, (void *)&lc);
     r = aio_read(name[i], i, contents[i], data.op_size,
-		 data.op_size * (i % writes_per_object));
+		 data.op_size * (index[i] % writes_per_object));
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -690,7 +710,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   slot = 0;
   while ((!seconds_to_run || ceph_clock_now(cct) < finish_time) &&
-	 num_objects > data.started) {
+	 num_ops > data.started) {
     lock.Lock();
     int old_slot = slot;
     bool found = false;
@@ -729,8 +749,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       }
     }
 
-    newName = generate_object_name(data.started / writes_per_object, pid);
-    index[slot] = data.started;
+    newName = generate_object_name(op_indices[data.started] / writes_per_object, pid);
+    index[slot] = op_indices[data.started];
     lock.Unlock();
     completion_wait(slot);
     lock.Lock();
@@ -753,7 +773,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     start_times[slot] = ceph_clock_now(cct);
     create_completion(slot, _aio_cb, (void *)&lc);
     r = aio_read(newName, slot, contents[slot], data.op_size,
-		 data.op_size * (data.started % writes_per_object));
+		 data.op_size * (index[slot] % writes_per_object));
     if (r < 0) {
       goto ERR;
     }
@@ -848,7 +868,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   return r;
 }
 
-int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify)
+int ObjBencher::rand_read_bench(int seconds_to_run, int num_ops, int concurrentios, int pid, bool no_verify)
 {
   lock_cond lc(&lock);
 
@@ -973,7 +993,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       }
     } 
 
-    rand_id = rand() % num_objects;
+    rand_id = rand() % num_ops;
     newName = generate_object_name(rand_id / writes_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);
