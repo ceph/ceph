@@ -1912,7 +1912,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
                 cur_disk.pending_map.begin();
       while(iter != cur_disk.pending_map.end()) {
         map<string, struct rgw_bucket_pending_info>::iterator cur_iter=iter++;
-        if (cur_time > (cur_iter->second.timestamp + tag_timeout)) {
+        if (cur_time > (cur_iter->second.timestamp + timespan(tag_timeout))) {
           cur_disk.pending_map.erase(cur_iter);
         }
       }
