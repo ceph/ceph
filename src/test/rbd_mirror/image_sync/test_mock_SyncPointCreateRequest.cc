@@ -79,6 +79,7 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, Success) {
   expect_update_client(mock_journaler, 0);
   expect_image_refresh(mock_remote_image_ctx, 0);
   expect_snap_create(mock_remote_image_ctx, 0);
+  expect_image_refresh(mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
   MockSyncPointCreateRequest *req = create_request(mock_remote_image_ctx,
@@ -100,6 +101,7 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, ResyncSuccess) {
   expect_update_client(mock_journaler, 0);
   expect_image_refresh(mock_remote_image_ctx, 0);
   expect_snap_create(mock_remote_image_ctx, 0);
+  expect_image_refresh(mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
   MockSyncPointCreateRequest *req = create_request(mock_remote_image_ctx,
@@ -123,6 +125,7 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, SnapshotExists) {
   expect_update_client(mock_journaler, 0);
   expect_image_refresh(mock_remote_image_ctx, 0);
   expect_snap_create(mock_remote_image_ctx, 0);
+  expect_image_refresh(mock_remote_image_ctx, 0);
 
   C_SaferCond ctx;
   MockSyncPointCreateRequest *req = create_request(mock_remote_image_ctx,
