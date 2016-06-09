@@ -57,8 +57,8 @@ Infrastructure
 ==============
 
 The examples in this document are based on the lab machine configuration used
-by the Red Hat Ceph development and quality assurance teams (see
-:ref:`lab_setup`). Other instances of a Ceph Lab being used in a
+by the Red Hat Ceph development and quality assurance teams 
+(see :ref:`lab_setup`). Other instances of a Ceph Lab being used in a
 development or testing environment may differ from these examples.
 
 
