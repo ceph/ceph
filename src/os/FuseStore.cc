@@ -984,7 +984,7 @@ static int os_statfs(const char *path, struct statvfs *stbuf)
     return r;
   stbuf->f_bsize = s.bsize;
   stbuf->f_blocks = s.blocks;
-  stbuf->f_bavail = stbuf->f_bfree = s.available / s.blocks;
+  stbuf->f_bavail = stbuf->f_bfree = s.available / s.bsize;
 
   return 0;
 }
