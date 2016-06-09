@@ -628,7 +628,7 @@ protected:
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
-  void _async_invalidate(InodeRef& in, int64_t off, int64_t len);
+  void _async_invalidate(vinodeno_t ino, int64_t off, int64_t len);
   bool _release(Inode *in);
   
   /**
