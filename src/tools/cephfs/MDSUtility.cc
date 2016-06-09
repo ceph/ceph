@@ -138,6 +138,7 @@ bool MDSUtility::ms_dispatch(Message *m)
    default:
      return false;
    }
+   m->put();
    return true;
 }
 

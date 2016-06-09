@@ -95,8 +95,8 @@ int Resetter::reset(mds_role_t role)
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-    
-  lock.Lock();
+
+  Mutex::Locker l(lock);
   if (r != 0) {
     return r;
   }
@@ -105,8 +105,6 @@ int Resetter::reset(mds_role_t role)
   if (r != 0) {
     return r;
   }
-
-  lock.Unlock();
 
   cout << "done" << std::endl;
 

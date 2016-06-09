@@ -310,9 +310,11 @@ int TableTool::main(std::vector<const char*> &argv)
   }
 
   dout(4) << "connecting to RADOS..." << dendl;
-  rados.connect();
- 
-
+  r = rados.connect();
+  if (r < 0) {
+    derr << "couldn't connect to cluster: " << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   // Require at least 3 args <rank> <mode> <arg> [args...]
   if (argv.size() < 3) {
@@ -364,7 +366,6 @@ int TableTool::main(std::vector<const char*> &argv)
       jf.open_object_section("reset_snap_status");
       jf.dump_int("result", r);
       jf.close_section();
-      return r;
     } else {
       derr << "Invalid table '" << table << "'" << dendl;
       usage();
