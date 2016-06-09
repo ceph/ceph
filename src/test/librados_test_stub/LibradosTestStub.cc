@@ -1216,3 +1216,12 @@ int cls_register_cxx_method(cls_handle_t hclass, const char *method,
   librados::TestClassHandler *cls = get_class_handler();
   return cls->create_method(hclass, method, class_call, handle);
 }
+
+int cls_register_cxx_filter(cls_handle_t hclass,
+                            const std::string &filter_name,
+                            cls_cxx_filter_factory_t fn,
+                            cls_filter_handle_t *)
+{
+  librados::TestClassHandler *cls = get_class_handler();
+  return cls->create_filter(hclass, filter_name, fn);
+}
