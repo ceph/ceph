@@ -3219,7 +3219,7 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   assert(r == 0);
 
   bufferlist bl;
-  encode(ondisk_status, bl);
+  encode(ondisk_status, bl, cls_get_features(hctx));
 
   r = cls_cxx_map_set_val(hctx, status_global_key(global_image_id), &bl);
   if (r < 0) {
