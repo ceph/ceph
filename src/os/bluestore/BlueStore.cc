@@ -3211,8 +3211,6 @@ int BlueStore::_do_read(
 	   << o->onode.size << ")" << dendl;
   bl.clear();
 
-  auto& lextents = o->onode.extent_map;
-
   if (offset >= o->onode.size) {
     return r;
   }
@@ -3224,66 +3222,79 @@ int BlueStore::_do_read(
   o->flush();
   _dump_onode(o);
 
-  auto lext = lextents.upper_bound(offset);
-  uint32_t l = length;
-  uint64_t off = offset;
-  if (lext == lextents.begin() && offset + length <= lext->first) {
-    bl.append_zero(length);
-    return length;
-  } else if (lext == lextents.begin()) {
-    off = lext->first;
-    l -= lext->first - offset;
-  } else {
-    --lext;
-  }
+  ready_regions_t ready_regions;
 
-  ready_regions_t ready_regions_in_cache, ready_regions;
-  interval_set<uint64_t> ready_intervals_in_cache;
-  o->bc.read(off, l, ready_regions_in_cache, ready_intervals_in_cache);
-  dout(20) << __func__ << " regions in cache 0x" << std::hex
-	   << ready_regions_in_cache.size() << " " << ready_intervals_in_cache
-	   << std::dec << dendl;
-
-  //build blob list to read
+  // build blob-wise list to of stuff read (that isn't cached)
   blobs2read_t blobs2read;
-  while (l > 0 && lext != lextents.end()) {
-    //bluestore_blob_t* bptr = get_blob(lext->second.blob);
-    const Blob *bptr = c->get_blob(o, lext->second.blob);
+  unsigned left = length;
+  uint64_t pos = offset;
+  auto lp = o->onode.seek_lextent(offset);
+  while (left > 0 && lp != o->onode.extent_map.end()) {
+    if (pos < lp->first) {
+      unsigned hole = lp->first - pos;
+      if (hole >= left) {
+	break;
+      }
+      dout(30) << __func__ << "  hole 0x" << std::hex << pos << "~" << hole
+	       << std::dec << dendl;
+      pos += hole;
+      left -= hole;
+      continue;
+    }
+    Blob *bptr = c->get_blob(o, lp->second.blob);
     if (bptr == nullptr) {
-      dout(20) << __func__ << " missed blob " << lext->second.blob << dendl;
-      _dump_onode(o);
+      dout(20) << __func__ << "  missed blob " << lp->second.blob << dendl;
     }
     assert(bptr != nullptr);
-    uint32_t l2read;
-    if (off >= lext->first && off < lext->first + lext->second.length) {
-      uint32_t r_off = off - lext->first;
-      l2read = MIN(l, lext->second.length - r_off);
-      if (!ready_intervals_in_cache.contains( off, l2read)) {
-	regions2read_t& regions = blobs2read[bptr];
-	regions.push_back(region_t(off, r_off + lext->second.offset, l2read));
+    unsigned l_off = pos - lp->first;
+    unsigned b_off = l_off + lp->second.offset;
+    unsigned b_len = std::min(left, lp->second.length - l_off);
+    assert(b_len <= bptr->blob.length - b_off);
+
+    ready_regions_t cache_res;
+    interval_set<uint64_t> cache_interval;
+    bptr->bc.read(b_off, b_len, cache_res, cache_interval);
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+	     << " need 0x" << b_off << "~" << b_len
+	     << " cache has 0x" << cache_interval
+	     << std::dec << dendl;
+
+    auto pc = cache_res.begin();
+    while (b_len > 0) {
+      unsigned l;
+      if (pc != cache_res.end() &&
+	  pc->first == b_off) {
+	l = pc->second.length();
+	ready_regions[pos].claim(pc->second);
+	dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
+		 << b_off << "~" << l << std::dec << dendl;
+	++pc;
+      } else {
+	l = b_len;
+	if (pc != cache_res.end()) {
+	  assert(pc->first > b_off);
+	  l = pc->first - b_off;
+	}
+	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
+		 << b_off << "~" << l << std::dec << dendl;
+	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
       }
-      ++lext;
-    } else if (off >= lext->first + lext->second.length) {
-      //handling the case when the first lookup get into the previous block due to the hole
-      l2read = 0;
-      ++lext;
-    } else {
-      //hole found
-      l2read = MIN(l, lext->first - off);
+      pos += l;
+      b_off += l;
+      left -= l;
+      b_len -= l;
     }
-    off += l2read;
-    l -= l2read;
+    ++lp;
   }
 
   //enumerate and read/decompress desired blobs
   blobs2read_t::iterator b2r_it = blobs2read.begin();
   while (b2r_it != blobs2read.end()) {
-    const Blob* bptr = b2r_it->first;
-    regions2read_t r2r = b2r_it->second;
-    regions2read_t::const_iterator r2r_it = r2r.cbegin();
+    Blob* bptr = b2r_it->first;
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+	     << " need 0x" << b2r_it->second << std::dec << dendl;
     if (bptr->blob.has_flag(bluestore_blob_t::FLAG_COMPRESSED)) {
       bufferlist compressed_bl, raw_bl;
-
       IOContext ioc(NULL);   // FIXME?
       bptr->blob.map(
 	0, bptr->blob.get_ondisk_length(),
@@ -3293,29 +3304,21 @@ int BlueStore::_do_read(
 	  assert(r == 0);
 	  compressed_bl.claim_append(t);
 	});
-
-      if (bptr->blob.csum_type != bluestore_blob_t::CSUM_NONE) {
-	r = _verify_csum(&bptr->blob, 0, compressed_bl);
-	if (r < 0) {
-	  dout(20) << __func__ << "  blob reading 0x" << std::hex
-		   << r2r_it->logical_offset
-		   << " 0~" << compressed_bl.length()
-		   << std::dec << " csum verification failed." << dendl;
-	  return -EIO;
-	}
+      if (bptr->blob.csum_type != bluestore_blob_t::CSUM_NONE &&
+	  _verify_csum(&bptr->blob, 0, compressed_bl) < 0) {
+	return -EIO;
       }
-
       r = _decompress(compressed_bl, &raw_bl);
       if (r < 0)
 	return r;
-
-      while (r2r_it != r2r.end()) {
-	ready_regions[r2r_it->logical_offset].substr_of(
-	  raw_bl, r2r_it->blob_xoffset, r2r_it->length);
-	++r2r_it;
+      if (buffered) {
+	bptr->bc.did_read(0, raw_bl);
+      }
+      for (auto& i : b2r_it->second) {
+	ready_regions[i.logical_offset].substr_of(
+	  raw_bl, i.blob_xoffset, i.length);
       }
     } else {
-      dout(20) << __func__ << "  blob " << *bptr << dendl;
       for (auto reg : b2r_it->second) {
 	// determine how much of the blob to read
 	unsigned chunk_size = MAX(block_size, bptr->blob.get_csum_chunk_size());
@@ -3330,9 +3333,9 @@ int BlueStore::_do_read(
 	if (tail) {
 	  r_len += chunk_size - tail;
 	}
-	dout(20) << __func__ << "   region loff 0x" << std::hex
+	dout(20) << __func__ << "    region 0x" << std::hex
 		 << reg.logical_offset
-		 << " blob_xoffset 0x" << reg.blob_xoffset << "~" << reg.length
+		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
 		 << " reading 0x" << r_off << "~" << r_len
 		 << dendl;
 
@@ -3349,6 +3352,9 @@ int BlueStore::_do_read(
 	if (r < 0) {
 	  return r;
 	}
+	if (buffered) {
+	  bptr->bc.did_read(r_off, bl);
+	}
 
 	// prune and keep result
 	ready_regions[reg.logical_offset].substr_of(bl, front, reg.length);
@@ -3358,58 +3364,32 @@ int BlueStore::_do_read(
   }
 
   // generate a resulting buffer
-  auto pc = ready_regions_in_cache.begin();
-  auto pc_end = ready_regions_in_cache.end();
   auto pr = ready_regions.begin();
   auto pr_end = ready_regions.end();
-  for (uint64_t pos = offset; pos < offset + length; ) {
-    // take any cache content at pos
-    if (pc != pc_end && pc->first <= pos) {
-      assert(pc->first == pos);
-      dout(30) << __func__ << " used cached region 0x" << std::hex
-	       << pc->first << "~" << pc->second.length() << std::dec
-	       << dendl;
-      pos = pc->first + pc->second.length();
-      bl.claim_append(pc->second);
-      ++pc;      // we can always move forward here.
-      continue;
-    }
-    // calc space till next cached data
-    uint64_t l = offset + length - pos;
-    if (pc != pc_end) {
-      l = pc->first - pos;
-    }
-    // take any read data at pos
-    while (pr != pr_end && pr->first + pr->second.length() <= pos) {
-      ++pr;
-    }
-    if (pr != pr_end && pr->first <= pos) {
-      uint64_t r_off = pos - pr->first;
-      uint64_t r_len = MIN(l, pr->second.length() - r_off);
-      dout(30) << __func__ << " used read region 0x" << std::hex
-	       << r_off << "~" << r_len
-	       << " from 0x" << pr->first << "~" << pr->second.length()
+  pos = 0;
+  while (pos < length) {
+    if (pr != pr_end && pr->first == pos + offset) {
+      dout(30) << __func__ << " assemble 0x" << std::hex << pos
+	       << ": data from 0x" << pr->first << "~" << pr->second.length()
 	       << std::dec << dendl;
-      bufferlist tmp;
-      tmp.substr_of(pr->second, r_off, r_len);
-      if (buffered) {
-	o->bc.did_read(pos, tmp);
+      pos += pr->second.length();
+      bl.claim_append(pr->second);
+      ++pr;
+    } else {
+      uint64_t l = length - pos;
+      if (pr != pr_end) {
+	l = pr->first - (pos + offset);
       }
-      bl.claim_append(tmp);
-      pos += r_len;
-      continue;
+      dout(30) << __func__ << " assemble 0x" << std::hex << pos
+	       << ": zeros for 0x" << (pos + offset) << "~" << l
+	       << std::dec << dendl;
+      bl.append_zero(l);
+      pos += l;
     }
-    // fill in any gap with zeros
-    if (pr != pr_end && pr->first < pos + l) {
-      l = pr->first - pos;
-    }
-    assert(l);
-    dout(30) << __func__ << " used zeros for 0x" << std::hex << pos
-	     << "~" << l << std::dec << dendl;
-    bl.append_zero(l);
-    pos += l;
   }
   assert(bl.length() == length);
+  assert(pos == length);
+  assert(pr == pr_end);
   r = bl.length();
   return r;
 }
@@ -6510,6 +6490,7 @@ int BlueStore::_clone(TransContext *txc,
       if (!newo->bnode) {
 	newo->bnode = oldo->bnode;
       }
+      assert(newo->bnode == oldo->bnode);
       // move blobs
       map<int64_t,int64_t> moved_blobs;
       for (auto& p : oldo->onode.extent_map) {

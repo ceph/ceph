@@ -103,7 +103,7 @@ public:
     }
   };
   typedef list<region_t> regions2read_t;
-  typedef map<const Blob*, regions2read_t> blobs2read_t;
+  typedef map<Blob*, regions2read_t> blobs2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
@@ -1328,7 +1328,6 @@ private:
 
   // --------------------------------------------------------
   // read processing internal methods
-  int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result);
   int _verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const;
   int _decompress(bufferlist& source, bufferlist* result);
 
