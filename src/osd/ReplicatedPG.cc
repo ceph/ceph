@@ -5822,12 +5822,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (oi.is_omap()) {
-	  t->omap_clear(soid);
-	  ctx->delta_stats.num_wr++;
-	  obs.oi.clear_omap_digest();
-	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
-	}
+	t->omap_clear(soid);
+	ctx->delta_stats.num_wr++;
+	obs.oi.clear_omap_digest();
+	obs.oi.clear_flag(object_info_t::FLAG_OMAP);
       }
       break;
 
