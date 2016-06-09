@@ -4,7 +4,7 @@ Content Index
 .. toctree::
    :maxdepth: 2
 
-   index.rst
+   README.rst
    siteconfig.rst
    INSTALL.rst
    LAB_SETUP.rst
