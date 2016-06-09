@@ -921,6 +921,27 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
   bh_write_scattered(blist);
 }
 
+class ObjectCacher::C_WriteCommit : public Context {
+  ObjectCacher *oc;
+  int64_t poolid;
+  sobject_t oid;
+  vector<pair<loff_t, uint64_t> > ranges;
+public:
+  ceph_tid_t tid;
+  C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s,
+		uint64_t l) :
+    oc(c), poolid(_poolid), oid(o), tid(0) {
+      ranges.push_back(make_pair(s, l));
+    }
+  C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o,
+		vector<pair<loff_t, uint64_t> >& _ranges) :
+    oc(c), poolid(_poolid), oid(o), tid(0) {
+      ranges.swap(_ranges);
+    }
+  void finish(int r) {
+    oc->bh_write_commit(poolid, oid, ranges, tid, r);
+  }
+};
 void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
 {
   assert(lock.is_locked());
@@ -1630,6 +1651,17 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
   trim();
   return r;
 }
+
+class ObjectCacher::C_WaitForWrite : public Context {
+public:
+  C_WaitForWrite(ObjectCacher *oc, uint64_t len, Context *onfinish) :
+    m_oc(oc), m_len(len), m_onfinish(onfinish) {}
+  void finish(int r);
+private:
+  ObjectCacher *m_oc;
+  uint64_t m_len;
+  Context *m_onfinish;
+};
 
 void ObjectCacher::C_WaitForWrite::finish(int r)
 {
