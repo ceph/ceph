@@ -14,6 +14,7 @@
  */
 #include "include/compat.h"
 #include "include/int_types.h"
+#include "boost/tuple/tuple.hpp"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -2696,6 +2697,22 @@ void FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_MERGE_DELETE:
+      {
+        ghobject_t src_oid = i.get_oid(op->oid);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->dest_oid);
+        coll_t src_cid = i.get_cid(op->cid);
+        _kludge_temp_object_collection(cid, oid);
+        _kludge_temp_object_collection(src_cid, src_oid);
+        vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
+        i.decode_move_info(move_info);
+        tracepoint(objectstore, merge_delete_srcobj_enter, osr_name);
+        r = _merge_delete_srcobj(src_cid, src_oid, cid, oid, move_info, spos);
+        tracepoint(objectstore, merge_delete_srcobj_exit, r);
+      }
+      break;
+
     case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -2812,7 +2829,7 @@ void FileStore::_do_transaction(
 
     case Transaction::OP_COLL_SETATTR:
     case Transaction::OP_COLL_RMATTR:
-      assert(0 == "collection attr methods no longer implmented");
+      assert(0 == "collection attr methods no longer implemented");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -3746,6 +3763,73 @@ int FileStore::_clone_range(const coll_t& cid, const ghobject_t& oldoid, const g
   return r;
 }
 
+/*
+ * Move contents of src object according to move_info to base object. Once the move_info is traversed completely, delete the src object.
+ */
+int FileStore::_merge_delete_srcobj(const coll_t& src_cid, const ghobject_t& src_oid, const coll_t& cid, const ghobject_t& oid,
+                              const vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info,
+                              const SequencerPosition& spos)
+{
+  int r = 0;
+  bool err = false;
+  int dstcmp;
+  FDRef t, b;
+
+  dout(10) << "merge_delete_srcobj " << src_cid << "/" << src_oid << " -> " << cid << "/" << oid << dendl;
+
+  dstcmp = _check_replay_guard(cid, oid, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  r = lfn_open(src_cid, src_oid, false, &t);
+  if (r < 0) {
+    err = true;
+    goto out;
+  }
+
+  r = lfn_open(cid, oid, true, &b);
+  if (r < 0) {
+    err = true;
+    goto out2;
+  }
+
+  for (unsigned i = 0; i < move_info.size(); ++i) {
+     uint64_t srcoff;
+     uint64_t dstoff;
+     uint64_t len;
+
+     srcoff = move_info[i].get<0>();
+     dstoff = move_info[i].get<1>();
+     len = move_info[i].get<2>();
+
+     r = _do_clone_range(**t, **b, srcoff, len, dstoff);
+     if (r < 0) {
+       err = true;
+       goto out3;
+      }
+  }
+
+  dout(10) << "merge_delete_srcobj "  << cid << "/" << oid << " "  <<  " = " << r << dendl;
+
+  out3:
+    if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
+      _set_replay_guard(**b, spos, &oid);
+    }
+    lfn_close(b);
+  out2:
+    lfn_close(t);
+    if (err) { return r; }
+
+  if (_check_replay_guard(src_cid, src_oid, spos) > 0) {
+    /* delete the src obj */
+    lfn_unlink(src_cid, src_oid, spos, true);
+  }
+
+  out:
+  dout(10) << "merge_delete_srcobj "  << cid << "/" << oid << " "  <<  " = " << r << dendl;
+  return r;
+}
+
 class SyncEntryTimeout : public Context {
 public:
   explicit SyncEntryTimeout(int commit_timeo)
@@ -4639,7 +4723,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       continue;
     coll_t cid;
     if (!cid.parse(de->d_name)) {
-      derr << "ignoging invalid collection '" << de->d_name << "'" << dendl;
+      derr << "ignoring invalid collection '" << de->d_name << "'" << dendl;
       continue;
     }
     if (!cid.is_temp() || include_temp)

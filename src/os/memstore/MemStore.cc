@@ -840,6 +840,12 @@ void MemStore::_do_transaction(Transaction& t)
       }
       break;
 
+    case Transaction::OP_MERGE_DELETE:
+      {
+       assert(0 == "not implemented");
+      }
+      break;
+
     case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);

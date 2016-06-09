@@ -6635,6 +6635,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_MERGE_DELETE:
+      assert(0 == "not implemented");
+      break;
+
     case Transaction::OP_COLL_ADD:
       assert(0 == "not implemented");
       break;

@@ -2360,6 +2360,16 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_MERGE_DELETE:
+      {
+  const ghobject_t& boid = i.get_oid(op->dest_oid);
+  OnodeRef bo = c->get_onode(boid, true);
+  vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info;
+  i.decode_move_info(move_info);
+  r = _merge_delete_srcobj(txc, c, o, cvec[op->dest_cid], bo, move_info);
+      }
+			break;
+
     case Transaction::OP_COLL_ADD:
       assert(0 == "not implemented");
       break;
@@ -3168,6 +3178,45 @@ int KStore::_clone_range(TransContext *txc,
 	   << " = " << r << dendl;
   return r;
 }
+
+int KStore::_merge_delete_srcobj(TransContext *txc,
+                           CollectionRef& c,
+                           OnodeRef& srco,
+                           CollectionRef& basec,
+                           OnodeRef& baseo,
+                           vector<boost::tuple<uint64_t, uint64_t, uint64_t>> move_info)
+{
+  int r = 0;
+  bufferlist bl;
+  baseo->exists = true;
+  _assign_nid(txc, baseo);
+
+//for loop
+  for (unsigned i = 0; i < move_info.size(); ++i) {
+    uint64_t srcoff;
+    uint64_t dstoff;
+    uint64_t len;
+
+    srcoff = move_info[i].get<0>();
+    dstoff = move_info[i].get<1>();
+    len = move_info[i].get<2>();
+
+    r = _do_read(srco, srcoff, len, bl, 0);
+    if (r < 0)
+    goto out;
+
+    r = _do_write(txc, baseo, dstoff, bl.length(), bl, 0);
+    txc->write_onode(baseo);
+    r = 0;
+  }
+
+// after for loop ends, remove src obj
+  r = _do_remove(txc, srco);
+
+  out:
+  return r;
+}
+
 
 int KStore::_rename(TransContext *txc,
 		    CollectionRef& c,
