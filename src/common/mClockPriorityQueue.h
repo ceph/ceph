@@ -214,22 +214,26 @@ namespace ceph {
     // empty do we use queue.
     std::list<std::pair<K,T>> queue_front;
 
-    static double cost_to_tag(unsigned cost) {
+    const int cost_factor;
+
+    // turn cost, which can range from 1000 to 50 * 2^20
+    double cost_to_tag(unsigned cost) {
       static const double log_of_2 = std::log(2.0);
-      return std::log(cost) / log_of_2;
+      return cost_factor * std::log(cost) / log_of_2;
     }
 
-  public:
-
-    
     dmc::ClientInfo client_info_f(const osd_op_type_t& client) {
       static dmc::ClientInfo _default(1.0, 1.0, 1.0);
       return _default;
     }
 
-    mClockQueue() :
+  public:
+
+    
+    mClockQueue(const int _cost_factor) :
       queue(std::bind(&mClockQueue::client_info_f, this, std::placeholders::_1),
-	    true)
+	    true),
+      cost_factor(_cost_factor)
     {
       // empty
     }
@@ -347,6 +351,7 @@ namespace ceph {
     }
 
     void dump(ceph::Formatter *f) const override final {
+#if 0
       f->open_array_section("high_queues");
       for (typename SubQueues::const_iterator p = high_queue.begin();
 	   p != high_queue.end();
@@ -365,7 +370,8 @@ namespace ceph {
       f->open_object_section("queue");
       f->dump_int("size", queue.request_count());
       f->close_section();
-    }
+#endif
+    } // dump
   };
 
 } // namespace ceph

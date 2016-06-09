@@ -1745,6 +1745,53 @@ private:
   const unsigned int op_prio_cutoff;
 
   friend class PGQueueable;
+
+  struct mclock_op_tags_t {
+    const double client_op_res;
+    const double client_op_wgt;
+    const double client_op_lim;
+
+    const double osd_subop_res;
+    const double osd_subop_wgt;
+    const double osd_subop_lim;
+
+    const double snap_res;
+    const double snap_wgt;
+    const double snap_lim;
+
+    const double recov_res;
+    const double recov_wgt;
+    const double recov_lim;
+
+    const double scrub_res;
+    const double scrub_wgt;
+    const double scrub_lim;
+
+    mclock_op_tags_t(CephContext *cct) :
+      client_op_res(cct->_conf->osd_op_queue_mclock_client_op_res),
+      client_op_wgt(cct->_conf->osd_op_queue_mclock_client_op_wgt),
+      client_op_lim(cct->_conf->osd_op_queue_mclock_client_op_lim),
+
+      osd_subop_res(cct->_conf->osd_op_queue_mclock_osd_subop_res),
+      osd_subop_wgt(cct->_conf->osd_op_queue_mclock_osd_subop_wgt),
+      osd_subop_lim(cct->_conf->osd_op_queue_mclock_osd_subop_lim),
+
+      snap_res(cct->_conf->osd_op_queue_mclock_snap_res),
+      snap_wgt(cct->_conf->osd_op_queue_mclock_snap_wgt),
+      snap_lim(cct->_conf->osd_op_queue_mclock_snap_lim),
+
+      recov_res(cct->_conf->osd_op_queue_mclock_recov_res),
+      recov_wgt(cct->_conf->osd_op_queue_mclock_recov_wgt),
+      recov_lim(cct->_conf->osd_op_queue_mclock_recov_lim),
+
+      scrub_res(cct->_conf->osd_op_queue_mclock_scrub_res),
+      scrub_wgt(cct->_conf->osd_op_queue_mclock_scrub_wgt),
+      scrub_lim(cct->_conf->osd_op_queue_mclock_scrub_lim)
+    {
+      // empty
+    }
+  } mclock_op_tags;
+
   class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
 
     struct ShardData {
@@ -1769,10 +1816,11 @@ private:
 		<PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
 		  new PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
 		    max_tok_per_prio, min_cost));
-	    } else if (opqueue == io_queue::mclock_opclass) {
+	    } else if (io_queue::mclock_opclass == opqueue) {
 	      pqueue = std::unique_ptr
 		<ceph::mClockQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new ceph::mClockQueue< pair<PGRef, PGQueueable>, entity_inst_t>());
+		  new ceph::mClockQueue< pair<PGRef,PGQueueable>, entity_inst_t>(
+		    cct->_conf->osd_op_queue_mclock_cost_factor));
 	    }
 	  }
     };
@@ -1903,6 +1951,8 @@ private:
       return sdata->pqueue->empty();
     }
   } op_shardedwq;
+
+  // end of SHARD TODO remove
 
 
   void enqueue_op(PGRef pg, OpRequestRef& op);
