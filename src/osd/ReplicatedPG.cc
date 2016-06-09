@@ -953,7 +953,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
         dout(10) << " pgnls lower_bound " << lower_bound
 		 << " pg_end " << pg_end << dendl;
 	if (get_sort_bitwise() &&
-	    ((lower_bound != hobject_t::get_max() &&
+	    ((!lower_bound.is_max() &&
 	      cmp_bitwise(lower_bound, pg_end) >= 0) ||
 	     (lower_bound != hobject_t() &&
 	      cmp_bitwise(lower_bound, pg_start) < 0))) {
