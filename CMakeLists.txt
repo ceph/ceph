@@ -275,7 +275,7 @@ else(ALLOCATOR)
   else()
     message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
     set(ALLOCATOR "libc")
-  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+  endif(Tcmalloc_FOUND)
 endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
