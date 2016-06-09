@@ -5848,7 +5848,7 @@ void BlueStore::_do_write_big(
     o->onode.punch_hole(offset, l, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, l, 0);
     b->ref_map.get(0, l);
-    txc->statfs_delta.stored() += length;
+    txc->statfs_delta.stored() += l;
     dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
 	     << o->onode.extent_map[offset] << dendl;
     dout(20) << __func__ << "  blob " << *b << dendl;
