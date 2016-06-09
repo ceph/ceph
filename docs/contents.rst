@@ -6,6 +6,7 @@ Content Index
 
    README.rst
    siteconfig.rst
+   openstack_backend.rst
    INSTALL.rst
    LAB_SETUP.rst
    ChangeLog.rst
