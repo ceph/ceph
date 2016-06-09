@@ -796,7 +796,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   OnodeRef o = po->second;
 
   // install a non-existent onode at old location
-  oldo.reset(new Onode(this, old_oid, o->key, o->bc.cache));
+  oldo.reset(new Onode(this, old_oid, o->key));
   po->second = oldo;
   cache->onode_lru.push_back(*po->second);
 
@@ -970,11 +970,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       return OnodeRef();
 
     // new
-    on = new Onode(&onode_map, oid, key, cache);
+    on = new Onode(&onode_map, oid, key);
   } else {
     // loaded
     assert(r >=0);
-    on = new Onode(&onode_map, oid, key, cache);
+    on = new Onode(&onode_map, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
     ::decode(on->onode, p);
