@@ -16,61 +16,29 @@
 # GNU Library Public License for more details.
 #
 
-#
-# Removes btrfs subvolumes under the given directory param
-#
-function teardown_btrfs() {
-    local btrfs_base_dir=$1
+# ceph-disk.sh is launched by tox which expects tox.ini in current
+# directory. so we cannot run ceph-disk.sh in build directory directly,
+# and hence not able to use detect-build-env-vars.sh to set the build
+# env vars.
+if [ -z "$CEPH_ROOT" ] || [ -z "$CEPH_BIN" ] || [ -z "$CEPH_LIB" ]; then
+    CEPH_ROOT=`readlink -f $(dirname $0)/../../..`
+    CEPH_BIN=$CEPH_ROOT
+    CEPH_LIB=$CEPH_ROOT/.libs
+fi
+source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
-    btrfs_dirs=`ls -l $btrfs_base_dir | egrep '^d' | awk '{print $9}'`
-    for btrfs_dir in $btrfs_dirs
-    do
-        btrfs_subdirs=`ls -l $btrfs_base_dir/$btrfs_dir | egrep '^d' | awk '{print $9}'` 
-        for btrfs_subdir in $btrfs_subdirs
-        do
-	    btrfs subvolume delete $btrfs_base_dir/$btrfs_dir/$btrfs_subdir
-        done
-    done
-}
+set -x
 
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-export PATH=..:.:$PATH # make sure program from sources are preferred
+export PATH=$CEPH_BIN:.:$PATH # make sure program from sources are preferred
 export PATH=../ceph-detect-init/virtualenv/bin:$PATH
 export PATH=virtualenv/bin:$PATH
-DIR=test-ceph-disk
+export LD_LIBRARY_PATH=$CEPH_LIB
 : ${CEPH_DISK:=ceph-disk}
-OSD_DATA=$DIR/osd
-MON_ID=a
-MONA=127.0.0.1:7451
-TEST_POOL=rbd
-FSID=$(uuidgen)
-export CEPH_CONF=$DIR/ceph.conf
-export CEPH_ARGS="--fsid $FSID"
-CEPH_ARGS+=" --chdir="
-CEPH_ARGS+=" --journal-dio=false"
-CEPH_ARGS+=" --run-dir=$DIR"
-CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
-CEPH_ARGS+=" --mon-host=$MONA"
-CEPH_ARGS+=" --log-file=$DIR/\$name.log"
-CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
-if test -d ../.libs ; then
-    CEPH_ARGS+=" --erasure-code-dir=../.libs"
-    CEPH_ARGS+=" --compression-dir=../.libs"
-fi
-CEPH_ARGS+=" --auth-supported=none"
-CEPH_ARGS+=" --osd-journal-size=100"
-CEPH_ARGS+=" --debug-mon=20"
-CEPH_ARGS+=" --debug-osd=20"
-CEPH_ARGS+=" --debug-bdev=20"
-CEPH_ARGS+=" --debug-bluestore=20"
-CEPH_ARGS+=" --osd-max-object-name-len=460"
-CEPH_ARGS+=" --osd-max-object-namespace-len=64"
 CEPH_DISK_ARGS=
-CEPH_DISK_ARGS+=" --statedir=$DIR"
-CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
-CEPH_DISK_ARGS+=" --prepend-to-path="
 CEPH_DISK_ARGS+=" --verbose"
+CEPH_DISK_ARGS+=" --prepend-to-path="
 TIMEOUT=360
 
 cat=$(which cat)
@@ -81,133 +49,124 @@ rm=$(which rm)
 uuidgen=$(which uuidgen)
 
 function setup() {
-    teardown
-    mkdir $DIR
-    mkdir $OSD_DATA
-    touch $DIR/ceph.conf # so ceph-disk think ceph is the cluster
+    local dir=$1
+    teardown $dir
+    mkdir -p $dir/osd
+    touch $dir/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
 function teardown() {
-    kill_daemons
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
-        rm -fr $DIR/*/*db
-        teardown_btrfs $DIR
-    fi
-    grep " $(pwd)/$DIR/" < /proc/mounts | while read mounted rest ; do
-        umount $mounted
-    done
-    rm -fr $DIR
-}
-
-function run_mon() {
-    local mon_dir=$DIR/$MON_ID
-
-    ceph-mon \
-        --id $MON_ID \
-        --mkfs \
-        --mon-data=$mon_dir \
-        --mon-initial-members=$MON_ID \
-        "$@"
-
-    ceph-mon \
-        --id $MON_ID \
-        --mon-data=$mon_dir \
-        --mon-osd-full-ratio=.99 \
-        --mon-data-avail-crit=1 \
-        --mon-cluster-log-file=$mon_dir/log \
-        --public-addr $MONA \
-        "$@"
-}
-
-function kill_daemons() {
-    if ! test -e $DIR ; then
+    local dir=$1
+    if ! test -e $dir ; then
         return
     fi
-    for pidfile in $(find $DIR | grep pidfile) ; do
-        pid=$(cat $pidfile)
-        for try in 0 1 1 1 2 3 ; do
-            kill $pid 2>/dev/null || break
-            sleep $try
-        done
+    kill_daemons
+    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+        rm -fr $dir/*/*db
+        __teardown_btrfs $dir
+    fi
+    grep " $(pwd)/$dir/" < /proc/mounts | while read mounted rest ; do
+        umount $mounted
     done
+    rm -fr $dir
 }
 
 function command_fixture() {
+    local dir=$1
+    shift
     local command=$1
+    shift
     local fpath=`readlink -f $(which $command)`
-    [ "$fpath" = `readlink -f ../$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
+    [ "$fpath" = `readlink -f $CEPH_BIN/$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
 
-    cat > $DIR/$command <<EOF
+    cat > $dir/$command <<EOF
 #!/bin/bash
-touch $DIR/used-$command
-exec ../$command "\$@"
+touch $dir/used-$command
+exec $CEPH_BIN/$command "\$@"
 EOF
-    chmod +x $DIR/$command
+    chmod +x $dir/$command
 }
 
 function tweak_path() {
+    local dir=$1
+    shift
     local tweaker=$1
+    shift
 
-    setup
+    setup $dir
 
-    command_fixture ceph-conf || return 1
-    command_fixture ceph-osd || return 1
+    command_fixture $dir ceph-conf || return 1
+    command_fixture $dir ceph-osd || return 1
 
-    test_activate_dir || return 1
+    test_activate_dir $dir || return 1
 
-    [ ! -f $DIR/used-ceph-conf ] || return 1
-    [ ! -f $DIR/used-ceph-osd ] || return 1
+    [ ! -f $dir/used-ceph-conf ] || return 1
+    [ ! -f $dir/used-ceph-osd ] || return 1
 
-    teardown
+    teardown $dir
 
-    setup
+    setup $dir
 
-    command_fixture ceph-conf || return 1
-    command_fixture ceph-osd || return 1
+    command_fixture $dir ceph-conf || return 1
+    command_fixture $dir ceph-osd || return 1
 
-    $tweaker test_activate_dir || return 1
+    $tweaker $dir test_activate_dir || return 1
 
-    [ -f $DIR/used-ceph-osd ] || return 1
+    [ -f $dir/used-ceph-osd ] || return 1
 
-    teardown
+    teardown $dir
 }
 
 function use_prepend_to_path() {
+    local dir=$1
+    shift
+
     local ceph_disk_args
-    ceph_disk_args+=" --statedir=$DIR"
-    ceph_disk_args+=" --sysconfdir=$DIR"
-    ceph_disk_args+=" --prepend-to-path=$DIR"
+    ceph_disk_args+=" --statedir=$dir"
+    ceph_disk_args+=" --sysconfdir=$dir"
+    ceph_disk_args+=" --prepend-to-path=$dir"
     ceph_disk_args+=" --verbose"
     CEPH_DISK_ARGS="$ceph_disk_args" \
-        "$@" || return 1
+        "$@" $dir || return 1
 }
 
 function test_prepend_to_path() {
-    tweak_path use_prepend_to_path || return 1
+    local dir=$1
+    shift
+    tweak_path $dir use_prepend_to_path || return 1
 }
 
 function use_path() {
-    PATH="$DIR:$PATH" \
-        "$@" || return 1
+    local dir=$1
+    shift
+    PATH="$dir:$PATH" \
+        "$@" $dir || return 1
 }
 
 function test_path() {
-    tweak_path use_path || return 1
+    local dir=$1
+    shift
+    tweak_path $dir use_path || return 1
 }
 
 function test_no_path() {
-    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:..:/usr/bin:/bin ; test_activate_dir ) || return 1
+    local dir=$1
+    shift
+    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:$CEPH_BIN:/usr/bin:/bin ; test_activate_dir $dir) || return 1
 }
 
 function test_mark_init() {
-    run_mon
+    local dir=$1
+    shift
 
-    local osd_data=$(pwd)/$DIR/dir
+    run_mon $dir a
+
+    local osd_data=$dir/dir
     $mkdir -p $osd_data
 
     local osd_uuid=$($uuidgen)
 
-    $mkdir -p $OSD_DATA
+    $mkdir -p $osd_data
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
@@ -238,7 +197,8 @@ function test_mark_init() {
 }
 
 function test_zap() {
-    local osd_data=$DIR/dir
+    local dir=$1
+    local osd_data=$dir/dir
     $mkdir -p $osd_data
 
     ${CEPH_DISK} $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep -q 'not full block device' || return 1
@@ -249,54 +209,54 @@ function test_zap() {
 # ceph-disk prepare returns immediately on success if the magic file
 # exists in the --osd-data directory.
 function test_activate_dir_magic() {
+    local dir=$1
     local uuid=$($uuidgen)
-    local osd_data=$DIR/osd
+    local osd_data=$dir/osd
 
     echo a failure to create the fsid file implies the magic file is not created
 
     mkdir -p $osd_data/fsid
     CEPH_ARGS="--fsid $uuid" \
-     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data > $DIR/out 2>&1
-    grep --quiet 'Is a directory' $DIR/out || return 1
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data > $dir/out 2>&1
+    grep --quiet 'Is a directory' $dir/out || return 1
     ! [ -f $osd_data/magic ] || return 1
     rmdir $osd_data/fsid
 
     echo successfully prepare the OSD
 
     CEPH_ARGS="--fsid $uuid" \
-     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
-    grep --quiet 'Preparing osd data dir' $DIR/out || return 1
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $dir/out
+    grep --quiet 'Preparing osd data dir' $dir/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
     [ -f $osd_data/magic ] || return 1
 
     echo will not override an existing OSD
 
     CEPH_ARGS="--fsid $($uuidgen)" \
-     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
-    grep --quiet 'Data dir .* already exists' $DIR/out || return 1
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $dir/out
+    grep --quiet 'Data dir .* already exists' $dir/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
 function test_pool_read_write() {
     local osd_uuid=$1
+    local TEST_POOL=rbd
 
     $timeout $TIMEOUT ceph osd pool set $TEST_POOL size 1 || return 1
 
     local id=$(ceph osd create $osd_uuid)
     local weight=1
     ceph osd crush add osd.$id $weight root=default host=localhost || return 1
-    echo FOO > $DIR/BAR
-    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
-    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
-    $diff $DIR/BAR $DIR/BAR.copy || return 1
+    echo FOO > $dir/BAR
+    $timeout $TIMEOUT rados --pool $TEST_POOL put BAR $dir/BAR || return 1
+    $timeout $TIMEOUT rados --pool $TEST_POOL get BAR $dir/BAR.copy || return 1
+    $diff $dir/BAR $dir/BAR.copy || return 1
 }
 
 function test_activate() {
     local to_prepare=$1
     local to_activate=$2
     local osd_uuid=$($uuidgen)
-
-    $mkdir -p $OSD_DATA
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $to_prepare || return 1
@@ -310,17 +270,22 @@ function test_activate() {
 }
 
 function test_activate_dir() {
-    run_mon
+    local dir=$1
+    shift
 
-    local osd_data=$DIR/dir
+    run_mon $dir a
+    $@
+
+    local osd_data=$dir/dir
     $mkdir -p $osd_data
     test_activate $osd_data $osd_data || return 1
 }
 
 function test_activate_dir_bluestore() {
-    run_mon
+    local dir=$1
+    run_mon $dir a
 
-    local osd_data=$DIR/dir
+    local osd_data=$dir/dir
     $mkdir -p $osd_data
     local to_prepare=$osd_data
     local to_activate=$osd_data
@@ -339,50 +304,78 @@ function test_activate_dir_bluestore() {
 }
 
 function test_find_cluster_by_uuid() {
-    setup
-    test_activate_dir 2>&1 | tee $DIR/test_find
-    ! grep "No cluster conf found in $DIR" $DIR/test_find || return 1
-    teardown
+    local dir=$1
+    test_activate_dir $dir 2>&1 | tee $dir/test_find
+    ! grep "No cluster conf found in $dir" $dir/test_find || return 1
+    teardown $dir
 
-    setup
-    rm $DIR/ceph.conf
-    test_activate_dir > $DIR/test_find 2>&1 
-    grep --quiet "No cluster conf found in $DIR" $DIR/test_find || return 1
-    teardown
+    setup $dir
+    test_activate_dir $dir "rm $dir/ceph.conf" > $dir/test_find 2>&1
+    cp $dir/test_find /tmp
+    grep --quiet "No cluster conf found in $dir" $dir/test_find || return 1
 }
 
 # http://tracker.ceph.com/issues/9653
 function test_keyring_path() {
-    test_activate_dir 2>&1 | tee $DIR/test_keyring
-    grep --quiet "keyring $DIR/bootstrap-osd/ceph.keyring" $DIR/test_keyring || return 1
+    local dir=$1
+    test_activate_dir $dir 2>&1 | tee $dir/test_keyring
+    grep --quiet "keyring $dir/bootstrap-osd/ceph.keyring" $dir/test_keyring || return 1
 }
 
 # http://tracker.ceph.com/issues/13522
 function ceph_osd_fail_once_fixture() {
+    local dir=$1
     local command=ceph-osd
     local fpath=`readlink -f $(which $command)`
-    [ "$fpath" = `readlink -f ../$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
+    [ "$fpath" = `readlink -f $CEPH_BIN/$command` ] || [ "$fpath" = `readlink -f $(pwd)/$command` ] || return 1
 
-    cat > $DIR/$command <<EOF
+    cat > $dir/$command <<EOF
 #!/bin/bash
-if echo "\$@" | grep -e --mkfs && ! test -f $DIR/used-$command ; then
-   touch $DIR/used-$command
+if echo "\$@" | grep -e --mkfs && ! test -f $dir/used-$command ; then
+   touch $dir/used-$command
    # sleep longer than the first CEPH_OSD_MKFS_DELAYS value (5) below
    sleep 600
 else
-   exec ../$command "\$@"
+   exec $CEPH_BIN/$command "\$@"
 fi
 EOF
-    chmod +x $DIR/$command
+    chmod +x $dir/$command
 }
 
 function test_ceph_osd_mkfs() {
-    ceph_osd_fail_once_fixture || return 1
-    CEPH_OSD_MKFS_DELAYS='5 300 300' use_path test_activate_dir || return 1
-    [ -f $DIR/used-ceph-osd ] || return 1
+    local dir=$1
+    ceph_osd_fail_once_fixture $dir || return 1
+    CEPH_OSD_MKFS_DELAYS='5 300 300' use_path $dir test_activate_dir || return 1
+    [ -f $dir/used-ceph-osd ] || return 1
 }
 
 function run() {
+    local dir=$1
+    shift
+    CEPH_DISK_ARGS+=" --statedir=$dir"
+    CEPH_DISK_ARGS+=" --sysconfdir=$dir"
+
+    export CEPH_MON="127.0.0.1:7451" # git grep '\<7451\>' : there must be only one
+    export CEPH_ARGS
+    CEPH_ARGS+=" --fsid=$(uuidgen)"
+    CEPH_ARGS+=" --auth-supported=none"
+    CEPH_ARGS+=" --mon-host=$CEPH_MON"
+    CEPH_ARGS+=" --chdir="
+    CEPH_ARGS+=" --journal-dio=false"
+    CEPH_ARGS+=" --erasure-code-dir=$CEPH_LIB"
+    CEPH_ARGS+=" --plugin-dir=$CEPH_LIB"
+    CEPH_ARGS+=" --compression-dir=$CEPH_LIB"
+    CEPH_ARGS+=" --log-file=$dir/\$name.log"
+    CEPH_ARGS+=" --pid-file=$dir/\$name.pidfile"
+    CEPH_ARGS+=" --osd-class-dir=$CEPH_LIB"
+    CEPH_ARGS+=" --run-dir=$dir"
+    CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
+    CEPH_ARGS+=" --osd-journal-size=100"
+    CEPH_ARGS+=" --debug-osd=20"
+    CEPH_ARGS+=" --debug-bdev=20"
+    CEPH_ARGS+=" --debug-bluestore=20"
+    CEPH_ARGS+=" --osd-max-object-name-len=460"
+    CEPH_ARGS+=" --osd-max-object-namespace-len=64 "
     local default_actions
     default_actions+="test_path "
     default_actions+="test_no_path "
@@ -396,23 +389,16 @@ function run() {
     default_actions+="test_activate_dir_bluestore "
     default_actions+="test_ceph_osd_mkfs "
     local actions=${@:-$default_actions}
-    local status
     for action in $actions  ; do
-        setup
+        setup $dir || return 1
         set -x
-        $action
-        status=$?
+        $action $dir || return 1
         set +x
-        teardown
-        if test $status != 0 ; then
-            break
-        fi
+        teardown $dir || return 1
     done
-    rm -fr virtualenv-$DIR
-    return $status
 }
 
-run $@
+main test-ceph-disk "$@"
 
 # Local Variables:
 # compile-command: "cd .. ; test/ceph-disk.sh # test_activate_dir"
