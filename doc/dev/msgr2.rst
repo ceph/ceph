@@ -240,4 +240,11 @@ Once a session is stablished, we can exchange messages.
 
   - Time stamp is from the TAG_KEEPALIVE2 we are responding to.
 
-  
+* TAG_CLOSE: terminate a stream
+
+  Indicates that a stream should be terminated. This is equivalent to
+  a hangup or reset (i.e., should trigger ms_handle_reset).  It isn't
+  strictly necessary or useful if there is only a single stream as we
+  could just disconnect the TCP connection, although one could
+  certainly use it creatively (e.g., reset the stream state and retry
+  an authentication handshake).
