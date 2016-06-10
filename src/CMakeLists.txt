@@ -296,6 +296,7 @@ set(mds_files)
 list(APPEND mds_files
   mds/MDSMap.cc
   mds/FSMap.cc
+  mds/FSMapUser.cc
   mds/inode_backtrace.cc
   mds/mdstypes.cc)
 

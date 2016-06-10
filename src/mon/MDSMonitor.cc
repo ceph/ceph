@@ -26,6 +26,7 @@
 #include "common/cmdparse.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
+#include "messages/MFSMapUser.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMonCommand.h"
 #include "messages/MGenericMessage.h"
@@ -2453,6 +2454,7 @@ void MDSMonitor::check_subs()
   // filesystems.  Build a list of all the types we service
   // subscriptions for.
   types.push_back("fsmap");
+  types.push_back("fsmap.user");
   types.push_back("mdsmap");
   for (const auto &i : fsmap.filesystems) {
     auto fscid = i.first;
@@ -2487,7 +2489,26 @@ void MDSMonitor::check_sub(Subscription *sub)
         sub->next = fsmap.get_epoch() + 1;
       }
     }
-  } else {
+  } else if (sub->type == "fsmap.user") {
+    if (sub->next <= fsmap.get_epoch()) {
+      FSMapUser fsmap_u;
+      fsmap_u.epoch = fsmap.get_epoch();
+      fsmap_u.legacy_client_fscid = fsmap.legacy_client_fscid;
+      for (auto p = fsmap.filesystems.begin();
+	   p != fsmap.filesystems.end();
+	   ++p) {
+	FSMapUser::fs_info_t& fs_info = fsmap_u.filesystems[p->first];
+	fs_info.cid = p->first;
+	fs_info.name= p->second->mds_map.fs_name;
+      }
+      sub->session->con->send_message(new MFSMapUser(mon->monmap->fsid, fsmap_u));
+      if (sub->onetime) {
+	mon->session_map.remove_sub(sub);
+      } else {
+	sub->next = fsmap.get_epoch() + 1;
+      }
+    }
+  } else if (sub->type.compare(0, 6, "mdsmap") == 0) {
     if (sub->next > fsmap.get_epoch()) {
       return;
     }

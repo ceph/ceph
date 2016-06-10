@@ -49,6 +49,7 @@ using std::fstream;
 #include "UserGroups.h"
 
 class FSMap;
+class FSMapUser;
 class MonClient;
 
 class CephContext;
@@ -289,10 +290,12 @@ protected:
   // FSMap, for when using mds_command
   list<Cond*> waiting_for_fsmap;
   FSMap *fsmap;
+  FSMapUser *fsmap_user;
 
   // MDS command state
   std::map<ceph_tid_t, CommandOp> commands;
   void handle_command_reply(MCommandReply *m);
+  int fetch_fsmap(bool user);
   int resolve_mds(
       const std::string &mds_spec,
       std::vector<mds_gid_t> *targets);
@@ -569,6 +572,7 @@ protected:
   // messaging
   void handle_mds_map(class MMDSMap *m);
   void handle_fs_map(class MFSMap *m);
+  void handle_fs_map_user(class MFSMapUser *m);
   void handle_osd_map(class MOSDMap *m);
 
   void handle_lease(MClientLease *m);
