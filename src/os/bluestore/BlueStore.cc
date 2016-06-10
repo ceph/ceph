@@ -480,13 +480,11 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
       }
       dout(20) << __func__ << " rm " << *b << dendl;
       b->space->_rm_buffer(p);
+    } if (i != buffer_lru.begin()) {
+      --i;
+      continue;
     } else {
-      if (i != buffer_lru.begin()) {
-	--i;
-	continue;
-      } else {
-	break;
-      }
+      break;
     }
   }
 
