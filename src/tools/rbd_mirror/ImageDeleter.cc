@@ -26,6 +26,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
+#include "librbd/journal/Policy.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
@@ -68,6 +69,16 @@ public:
 
 private:
   ImageDeleter *image_del;
+};
+
+struct DeleteJournalPolicy : public librbd::journal::Policy {
+  virtual void allocate_tag_on_lock(Context *on_finish) {
+    on_finish->complete(0);
+  }
+
+  virtual void cancel_external_replay(Context *on_finish) {
+    on_finish->complete(0);
+  }
 };
 
 } // anonymous namespace
@@ -302,10 +313,10 @@ bool ImageDeleter::process_image_delete() {
       return true;
     }
 
-    // We are disabling Journaling so that we can delete image snapshots
-    // of a non-primary image. Otherwise, we would fail to acquire the
-    // exclusive lock.
-    imgctx->features ^= RBD_FEATURE_JOURNALING;
+    {
+      RWLock::WLocker snap_locker(imgctx->snap_lock);
+      imgctx->set_journal_policy(new DeleteJournalPolicy());
+    }
 
     std::vector<librbd::snap_info_t> snaps;
     r = librbd::snap_list(imgctx, snaps);
@@ -354,16 +365,6 @@ bool ImageDeleter::process_image_delete() {
           enqueue_failed_delete(r);
           return true;
         }
-
-        r = imgctx->state->refresh();
-        if (r < 0) {
-          derr << "error refreshing image " << imgctx->name << ": "
-               << cpp_strerror(r) << dendl;
-          imgctx->state->close();
-          enqueue_failed_delete(r);
-          return true;
-        }
-        imgctx->features ^= RBD_FEATURE_JOURNALING;
       }
 
       r = imgctx->operations->snap_remove(snap.name.c_str());
