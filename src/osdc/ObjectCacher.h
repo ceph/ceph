@@ -250,8 +250,8 @@ class ObjectCacher {
     map< ceph_tid_t, list<Context*> > waitfor_commit;
     xlist<C_ReadFinish*> reads;
 
-    Object(const Object& other);
-    const Object& operator=(const Object& other);
+    Object(const Object&) = delete;
+    Object& operator=(const Object&) = delete;
 
     Object(ObjectCacher *_oc, sobject_t o, uint64_t ono, ObjectSet *os,
 	   object_locator_t& l, uint64_t ts, uint64_t tq) :
