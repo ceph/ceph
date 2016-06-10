@@ -29,10 +29,12 @@ ImageCopyRequest<I>::ImageCopyRequest(I *local_image_ctx, I *remote_image_ctx,
                                       MirrorPeerSyncPoint *sync_point,
                                       Context *on_finish,
 				      ProgressContext *progress_ctx)
-  : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
+  : BaseRequest("rbd::mirror::image_sync::ImageCopyRequest",
+		local_image_ctx->cct, on_finish),
+    m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_timer(timer), m_timer_lock(timer_lock), m_journaler(journaler),
     m_client_meta(client_meta), m_sync_point(sync_point),
-    m_on_finish(on_finish), m_progress_ctx(progress_ctx),
+    m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)),
     m_client_meta_copy(*client_meta) {
   assert(!m_client_meta_copy.sync_points.empty());
@@ -100,9 +102,19 @@ void ImageCopyRequest<I>::handle_update_max_object_count(int r) {
   CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": r=" << r << dendl;
 
+  if (r == 0) {
+    Mutex::Locker locker(m_lock);
+    if (m_canceled) {
+      ldout(cct, 10) << ": image copy canceled" << dendl;
+      r = -ECANCELED;
+    }
+  }
+
   if (r < 0) {
-    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-               << dendl;
+    if (r != -ECANCELED) {
+      lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
+		 << dendl;
+    }
     finish(r);
     return;
   }
@@ -147,15 +159,19 @@ void ImageCopyRequest<I>::send_object_copies() {
 template <typename I>
 void ImageCopyRequest<I>::send_next_object_copy() {
   assert(m_lock.is_locked());
-  if (m_canceled) {
-    return;
-  } else if (m_ret_val < 0 || m_object_no >= m_end_object_no) {
+  CephContext *cct = m_local_image_ctx->cct;
+
+  if (m_canceled && m_ret_val == 0) {
+    ldout(cct, 10) << ": image copy canceled" << dendl;
+    m_ret_val = -ECANCELED;
+  }
+
+  if (m_ret_val < 0 || m_object_no >= m_end_object_no) {
     return;
   }
 
   uint64_t ono = m_object_no++;
 
-  CephContext *cct = m_local_image_ctx->cct;
   ldout(cct, 20) << ": object_num=" << ono << dendl;
 
   ++m_current_ops;
@@ -178,6 +194,7 @@ void ImageCopyRequest<I>::handle_object_copy(int r) {
     Mutex::Locker locker(m_lock);
     assert(m_current_ops > 0);
     --m_current_ops;
+
     percent = 100 * m_object_no / m_end_object_no;
 
     if (r < 0) {
@@ -242,15 +259,6 @@ void ImageCopyRequest<I>::handle_flush_sync_point(int r) {
   }
 
   finish(0);
-}
-
-template <typename I>
-void ImageCopyRequest<I>::finish(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
-
-  m_on_finish->complete(r);
-  delete this;
 }
 
 template <typename I>

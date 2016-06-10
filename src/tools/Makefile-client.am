@@ -112,6 +112,7 @@ librbd_mirror_internal_la_SOURCES = \
 	tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc
 noinst_LTLIBRARIES += librbd_mirror_internal.la
 noinst_HEADERS += \
+	tools/rbd_mirror/BaseRequest.h \
 	tools/rbd_mirror/ClusterWatcher.h \
 	tools/rbd_mirror/ImageReplayer.h \
 	tools/rbd_mirror/ImageSync.h \

@@ -395,20 +395,17 @@ TEST_F(TestImageReplayer, StartInterrupted)
   m_replayer->stop(&stop_cond);
   int r = start_cond.wait();
   printf("start returned %d\n", r);
-  // TODO: improve the test to avoid this race  // TODO: improve the test to avoid this race
-  ASSERT_TRUE(r == -EINTR || r == 0);
+  // TODO: improve the test to avoid this race
+  ASSERT_TRUE(r == -ECANCELED || r == 0);
   ASSERT_EQ(0, stop_cond.wait());
 }
 
-TEST_F(TestImageReplayer, ErrorJournalReset)
+TEST_F(TestImageReplayer, JournalReset)
 {
   bootstrap();
-
   ASSERT_EQ(0, librbd::Journal<>::reset(m_remote_ioctx, m_remote_image_id));
-
-  C_SaferCond cond;
-  m_replayer->start(&cond);
-  ASSERT_EQ(-EEXIST, cond.wait());
+  // try to recover
+  bootstrap();
 }
 
 TEST_F(TestImageReplayer, ErrorNoJournal)

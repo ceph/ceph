@@ -100,7 +100,7 @@ public:
 TEST_F(TestImageSync, Empty) {
   C_SaferCond ctx;
   ImageSync<> *request = create_request(&ctx);
-  request->start();
+  request->send();
   ASSERT_EQ(0, ctx.wait());
 
   ASSERT_EQ(0U, m_client_meta.sync_points.size());
@@ -115,7 +115,7 @@ TEST_F(TestImageSync, Simple) {
 
   C_SaferCond ctx;
   ImageSync<> *request = create_request(&ctx);
-  request->start();
+  request->send();
   ASSERT_EQ(0, ctx.wait());
 
   int64_t object_size = std::min<int64_t>(
@@ -159,7 +159,7 @@ TEST_F(TestImageSync, SnapshotStress) {
 
   C_SaferCond ctx;
   ImageSync<> *request = create_request(&ctx);
-  request->start();
+  request->send();
   ASSERT_EQ(0, ctx.wait());
 
   int64_t object_size = std::min<int64_t>(
