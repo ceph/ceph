@@ -737,7 +737,7 @@ void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
-  cache->onode_lru.push_front(*o);
+  cache->_add_onode(o);
 }
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
@@ -759,8 +759,7 @@ void BlueStore::OnodeSpace::clear()
   std::lock_guard<std::mutex> l(cache->lock);
   dout(10) << __func__ << dendl;
   for (auto &p : onode_map) {
-    auto q = cache->onode_lru.iterator_to(*p.second);
-    cache->onode_lru.erase(q);
+    cache->_rm_onode(p.second);
 
     // clear blobs and their buffers too, while we have cache->lock
     p.second->blob_map._clear();
@@ -782,8 +781,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   assert(po != onode_map.end());
   if (pn != onode_map.end()) {
     dout(30) << __func__ << "  removing target " << pn->second << dendl;
-    auto p = cache->onode_lru.iterator_to(*pn->second);
-    cache->onode_lru.erase(p);
+    cache->_rm_onode(pn->second);
     onode_map.erase(pn);
   }
   OnodeRef o = po->second;
@@ -791,7 +789,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   // install a non-existent onode at old location
   oldo.reset(new Onode(this, old_oid, o->key));
   po->second = oldo;
-  cache->onode_lru.push_back(*po->second);
+  cache->_add_onode(po->second);
 
   // add at new position and fix oid, key
   onode_map.insert(make_pair(new_oid, o));
