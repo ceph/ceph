@@ -710,6 +710,7 @@ private:
     Client *client;
     Fh *f;
     C_Readahead(Client *c, Fh *f);
+    ~C_Readahead();
     void finish(int r);
   };
 
