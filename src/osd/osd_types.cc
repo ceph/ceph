@@ -5579,6 +5579,18 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
   }
 }
 
+bool store_statfs_t::operator==(const store_statfs_t& other) const
+{
+  return blocks == other.blocks
+    && bsize == other.bsize
+    && available == other.available
+    && allocated == other.allocated
+    && stored == other.stored
+    && compressed == other.compressed
+    && compressed_allocated == other.compressed_allocated
+    && compressed_original == other.compressed_original;
+}
+
 void store_statfs_t::dump(Formatter *f) const
 {
   f->dump_int("available", available);
