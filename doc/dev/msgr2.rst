@@ -10,23 +10,37 @@ Definitions
 
 * *client* (C): the party initiating a (TCP) connection
 * *server* (S): the party accepting a (TCP) connection
-* *connection*: an instance of a (TCP) connection between two peers
-* *session*: a stateful session between two peers in which message
+* *connection*: an instance of a (TCP) connection between two processes.
+* *entity*: a ceph entity instantiation, e.g. 'osd.0'.  each entity
+  has one or more unique entity_addr_t's by virtue of the 'nonce'
+  field, which is typically a pid or random value.
+* *stream*: an exchange, passed over a connection, between two unique
+  entities. in the future multiple entities may coexist within the
+  same process.
+* *session*: a stateful session between two entities in which message
   exchange is ordered and lossless.  A session might span multiple
-  connections if there is an interruption (TCP connection disconnect).
+  connections (and streams) if there is an interruption (TCP connection
+  disconnect).
 * *frame*: a discrete message sent between the peers.  Each frame
-  consists of a tag (type code), payload, and (if signing or
-  encryption is enabled) some other fields.  See below for the
+  consists of a tag (type code), stream id, payload, and (if signing
+  or encryption is enabled) some other fields.  See below for the
   structure.
+* *stream id*: a 32-bit value that uniquely identifies a stream within
+  a given connection.  the stream id implicitly instantiated when the send
+  sends a frame using that id.
 * *tag*: a single-byte type code associated with a frame.  The tag
   determines the structure of the payload.
 
 Phases
 ------
 
-A connection has four distinct phases:
+A connection has two distinct phases:
 
 #. banner
+#. frame exchange for one or more strams
+
+A stream has three distinct phases:
+
 #. authentication
 #. message flow handshake
 #. message exchange
@@ -44,15 +58,29 @@ features are defined or required, so this will be "ceph 0 0\n".
 If the remote party advertises required features we don't support, we
 can disconnect.
 
-Authentication
---------------
+Frame format
+------------
 
 A series of frames between client and server of the form::
 
-  tag byte (TAG_*)
+  stream_id (le32)
+  frame_len (le32)
+  tag (TAG_* byte)
   payload
+  [payload padding -- only present after stream auth phase]
+  [signature -- only present after stream auth phase]
 
-where the payload is determiend by the tag.
+* frame_len includes everything after the frame_len le32 up to the end of the
+  frame (all payloads, signatures, and padding).
+
+* The payload format and length is determined by the tag.
+
+* The signature portion is only present in a given stream after the
+  authentication if signatures are enabled.
+
+
+Authentication
+--------------
 
 * TAG_AUTH_METHODS (server only): list authentication methods (none, cephx, ...)::
 
@@ -90,18 +118,24 @@ where the payload is determiend by the tag.
 Message frame format
 --------------------
 
-Each frame can take one of three forms.
+The frame format is fixed (see above), but can take three different
+forms, depending on the AUTH_DONE flags:
 
 * If neither FLAG_SIGNED or FLAG_ENCRYPTED is specified, things are simple::
 
-    tag byte
+    stream_id
+    frame_len
+    tag
     payload
+    payload_padding (out to auth block_size)
 
 * If FLAG_SIGNED has been specified::
 
-    tag byte
+    stream_id
+    frame_len
+    tag
     payload
-    padding (pad data from before tag byte out to block size)
+    payload_padding (out to auth block_size)
     signature (sig_size bytes)
 
   Here the padding just makes life easier for the signature.  It can be
@@ -111,9 +145,13 @@ Each frame can take one of three forms.
 
 * If FLAG_ENCRYPTED has been specified::
 
-    tag byte
-    payload
-    padding (pad data from before tag byte out to block size)
+    stream_id
+    frame_len
+    {
+      payload_sig_length
+      payload
+      payload_padding (out to auth block_size)
+    } ^ stream cipher
 
   Note that the padding ensures that the total frame is a multiple of
   the auth method's block_size so that the message can be sent out over
