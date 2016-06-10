@@ -1020,7 +1020,8 @@ private:
     string what,
     const bluestore_blob_map_t& blob_map,
     map<int64_t,bluestore_extent_ref_map_t>& v,
-    interval_set<uint64_t> &used_blocks);
+    interval_set<uint64_t> &used_blocks,
+    store_statfs_t& expected_statfs);
 
 public:
   BlueStore(CephContext *cct, const string& path);
