@@ -1713,13 +1713,16 @@ public:
   bool operator<(const rgw_obj& o) const {
     int r = bucket.name.compare(o.bucket.name);
     if (r == 0) {
-     r = object.compare(o.object);
-     if (r == 0) {
-       r = ns.compare(o.ns);
-       if (r == 0) {
-         r = instance.compare(o.instance);
-       }
-     }
+      r = bucket.bucket_id.compare(o.bucket.bucket_id);
+      if (r == 0) {
+        r = object.compare(o.object);
+        if (r == 0) {
+          r = ns.compare(o.ns);
+          if (r == 0) {
+            r = instance.compare(o.instance);
+          }
+        }
+      }
     }
 
     return (r < 0);
