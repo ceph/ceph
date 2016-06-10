@@ -479,6 +479,8 @@ BlueStore::Cache *BlueStore::Cache::create(string type)
 {
   if (type == "lru")
     return new LRUCache;
+  if (type == "2q")
+    return new TwoQCache;
   assert(0 == "unrecognized cache type");
 }
 
@@ -569,6 +571,195 @@ void BlueStore::LRUCache::_audit(const char *when)
       assert(s == buffer_size);
     }
     dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
+	     << " ok" << dendl;
+  }
+  if (false) {
+    uint64_t lc = 0, oc = 0;
+    set<OnodeSpace*> spaces;
+    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
+      assert(i->space->onode_map.count(i->oid));
+      if (spaces.count(i->space) == 0) {
+	spaces.insert(i->space);
+	oc += i->space->onode_map.size();
+      }
+      ++lc;
+    }
+    if (lc != oc) {
+      derr << " lc " << lc << " oc " << oc << dendl;
+    }
+  }
+}
+#endif
+
+// TwoQCache
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.2QCache(" << this << ") "
+
+
+void BlueStore::TwoQCache::_touch_onode(OnodeRef& o)
+{
+  auto p = onode_lru.iterator_to(*o);
+  onode_lru.erase(p);
+  onode_lru.push_front(*o);
+}
+
+void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
+{
+  dout(20) << __func__ << " level " << level << " near " << near
+	   << " on " << *b
+	   << " which has level " << b->cache_private << dendl;
+  if (near) {
+    b->cache_private = near->cache_private;
+    switch (b->cache_private) {
+    case BUFFER_WARM_IN:
+      buffer_warm_in.insert(buffer_warm_in.iterator_to(*near), *b);
+      break;
+    case BUFFER_WARM_OUT:
+      buffer_warm_out.insert(buffer_warm_out.iterator_to(*near), *b);
+      break;
+    case BUFFER_HOT:
+      buffer_hot.insert(buffer_hot.iterator_to(*near), *b);
+      break;
+    default:
+      assert(0 == "bad cache_private");
+    }
+  } else if (b->cache_private == BUFFER_NEW) {
+    b->cache_private = BUFFER_WARM_IN;
+    if (level > 0) {
+      buffer_warm_in.push_front(*b);
+    } else {
+      // take caller hint to start at the back of the warm queue
+      buffer_warm_in.push_back(*b);
+    }
+  } else {
+    // ew got a hint from discard
+    switch (b->cache_private) {
+    case BUFFER_WARM_IN:
+      // stay in warm_in.  move to front, even though 2Q doesn't actually
+      // do this.
+      dout(20) << __func__ << " move to front of warm " << *b << dendl;
+      buffer_warm_in.push_front(*b);
+      break;
+    case BUFFER_WARM_OUT:
+      // move to hot.  fall-thru
+    case BUFFER_HOT:
+      dout(20) << __func__ << " move to hot " << *b << dendl;
+      b->cache_private = BUFFER_HOT;
+      buffer_hot.push_front(*b);
+      break;
+    default:
+      assert(0 == "bad cache_private");
+    }
+  }
+  if (!b->is_empty()) {
+    buffer_bytes += b->length;
+  }
+}
+
+void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
+{
+  std::lock_guard<std::mutex> l(lock);
+
+  dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
+	   << " buffers " << buffer_bytes << " / " << buffer_max
+	   << dendl;
+
+  _audit("trim start");
+
+  // buffers
+  uint64_t num_buffers = buffer_hot.size() + buffer_warm_in.size();
+  if (num_buffers) {
+    // for simplicity, we assume buffer sizes are uniform across hot
+    // and warm_in.  FIXME?
+    uint64_t avg_buffer_size = buffer_bytes / num_buffers;
+    uint64_t kin = buffer_max / avg_buffer_size / 2;
+    uint64_t khot = kin;
+    uint64_t kout = buffer_max / avg_buffer_size;
+    // if hot is small, give slack to warm_in.
+    if (buffer_hot.size() < kin) {
+      kin += kin - buffer_hot.size();
+    }
+    dout(20) << __func__ << " num_buffers " << num_buffers
+	     << " (hot " << buffer_hot.size()
+	     << " + warm_in " << buffer_warm_in.size() << ")"
+	     << " avg size " << avg_buffer_size
+	     << " warm_out " << buffer_warm_out.size()
+	     << " khot " << khot << " kin " << kin << " kout " << kout
+	     << dendl;
+    while (buffer_hot.size() > khot) {
+      Buffer *b = &*buffer_hot.rbegin();
+      assert(b->is_clean());
+      dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
+      b->space->_rm_buffer(b);
+    }
+    while (buffer_warm_in.size() > kin) {
+      Buffer *b = &*buffer_warm_in.rbegin();
+      assert(b->is_clean());
+      dout(20) << __func__ << " buffer_warm_in -> out " << *b << dendl;
+      buffer_bytes -= b->length;
+      b->state = Buffer::STATE_EMPTY;
+      b->data.clear();
+      buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
+      buffer_warm_out.push_front(*b);
+      b->cache_private = BUFFER_WARM_OUT;
+    }
+    while (buffer_warm_out.size() > kout) {
+      Buffer *b = &*buffer_warm_out.rbegin();
+      assert(b->is_empty());
+      dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
+      b->space->_rm_buffer(b);
+    }
+  }
+
+  // onodes
+  int num = onode_lru.size() - onode_max;
+  if (num <= 0)
+    return; // don't even try
+
+  auto p = onode_lru.end();
+  if (num)
+    --p;
+  while (num > 0) {
+    Onode *o = &*p;
+    int refs = o->nref.load();
+    if (refs > 1) {
+      dout(20) << __func__ << "  " << o->oid << " has " << refs
+	       << " refs; stopping with " << num << " left to trim" << dendl;
+      break;
+    }
+    dout(30) << __func__ << "  trim " << o->oid << dendl;
+    if (p != onode_lru.begin()) {
+      onode_lru.erase(p--);
+    } else {
+      onode_lru.erase(p);
+      assert(num == 1);
+    }
+    o->get();  // paranoia
+    o->space->onode_map.erase(o->oid);
+    o->blob_map._clear();    // clear blobs and their buffers, too
+    o->put();
+    --num;
+  }
+}
+
+#ifdef DEBUG_CACHE
+void BlueStore::TwoQCache::_audit(const char *when)
+{
+  if (true) {
+    dout(10) << __func__ << " " << when << " start" << dendl;
+    uint64_t s = 0;
+    for (auto i = buffer_hot.begin(); i != buffer_hot.end(); ++i) {
+      s += i->length;
+    }
+    for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
+      s += i->length;
+    }
+    if (s != buffer_bytes) {
+      derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
+	   << dendl;
+      assert(s == buffer_bytes);
+    }
+    dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
 	     << " ok" << dendl;
   }
   if (false) {
