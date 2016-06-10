@@ -105,7 +105,7 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
     int r = m_local_image_ctx->is_snap_unprotected(local_snap_id,
                                                    &local_unprotected);
     if (r < 0) {
-      derr << "failed to retrieve local snap unprotect status: "
+      derr << ": failed to retrieve local snap unprotect status: "
            << cpp_strerror(r) << dendl;
       m_local_image_ctx->snap_lock.put_read();
       finish(r);
@@ -132,7 +132,7 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
       r = m_remote_image_ctx->is_snap_unprotected(snap_seq_it->first,
                                                   &remote_unprotected);
       if (r < 0) {
-        derr << "failed to retrieve remote snap unprotect status: "
+        derr << ": failed to retrieve remote snap unprotect status: "
              << cpp_strerror(r) << dendl;
         m_remote_image_ctx->snap_lock.put_read();
         finish(r);
@@ -281,7 +281,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   auto snap_info_it = m_remote_image_ctx->snap_info.find(m_prev_snap_id);
   if (snap_info_it == m_remote_image_ctx->snap_info.end()) {
     m_remote_image_ctx->snap_lock.put_read();
-    derr << "failed to retrieve remote snap info: " << m_snap_name
+    derr << ": failed to retrieve remote snap info: " << m_snap_name
          << dendl;
     finish(-ENOENT);
     return;
@@ -358,7 +358,7 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     int r = m_remote_image_ctx->is_snap_protected(remote_snap_id,
                                                   &remote_protected);
     if (r < 0) {
-      derr << "failed to retrieve remote snap protect status: "
+      derr << ": failed to retrieve remote snap protect status: "
            << cpp_strerror(r) << dendl;
       m_remote_image_ctx->snap_lock.put_read();
       finish(r);
@@ -380,7 +380,7 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     r = m_local_image_ctx->is_snap_protected(snap_seq_it->second,
                                              &local_protected);
     if (r < 0) {
-      derr << "failed to retrieve local snap protect status: "
+      derr << ": failed to retrieve local snap protect status: "
            << cpp_strerror(r) << dendl;
       m_local_image_ctx->snap_lock.put_read();
       finish(r);

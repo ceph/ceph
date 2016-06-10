@@ -509,7 +509,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
   {
     RWLock::RLocker snap_locker(local_image_ctx->snap_lock);
     if (local_image_ctx->journal == nullptr) {
-      derr << "local image does not support journaling" << dendl;
+      derr << ": local image does not support journaling" << dendl;
       m_ret_val = -EINVAL;
       close_local_image();
       return;
