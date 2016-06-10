@@ -494,6 +494,7 @@ public:
       }
       yield {
         int ret = http_op->wait(shard_info);
+        http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
         }
@@ -558,6 +559,7 @@ public:
 
   int request_complete() {
     int ret = http_op->wait(result);
+    http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldout(sync_env->store->ctx(), 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
       return ret;
@@ -948,6 +950,7 @@ public:
       }
       yield {
         int ret = http_op->wait_bl(pbl);
+        http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
         }
