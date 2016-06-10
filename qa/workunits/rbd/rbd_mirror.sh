@@ -445,6 +445,15 @@ create_image()
 	--image-feature layering,exclusive-lock,journaling ${image}
 }
 
+remove_image()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} -p ${pool} rm ${image}
+}
+
 clone_image()
 {
     local cluster=$1
@@ -458,7 +467,7 @@ clone_image()
 	${clone_pool}/${clone_image} --image-feature layering,exclusive-lock,journaling
 }
 
-create_protected_snapshot()
+create_snapshot()
 {
     local cluster=$1
     local pool=$2
@@ -466,7 +475,52 @@ create_protected_snapshot()
     local snap=$4
 
     rbd --cluster ${cluster} -p ${pool} snap create ${image}@${snap}
+}
+
+remove_snapshot()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap=$4
+
+    rbd --cluster ${cluster} -p ${pool} snap rm ${image}@${snap}
+}
+
+protect_snapshot()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap=$4
+
     rbd --cluster ${cluster} -p ${pool} snap protect ${image}@${snap}
+}
+
+unprotect_snapshot()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap=$4
+
+    rbd --cluster ${cluster} -p ${pool} snap unprotect ${image}@${snap}
+}
+
+wait_for_snap_present()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap_name=$4
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
+	sleep ${s}
+        rbd --cluster ${cluster} -p ${pool} info ${image}@${snap_name} || continue
+        return 0
+    done
+    return 1
 }
 
 write_image()
@@ -701,7 +755,8 @@ parent_image=test_parent
 parent_snap=snap
 create_image ${CLUSTER2} ${PARENT_POOL} ${parent_image}
 write_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} 100
-create_protected_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+create_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
+protect_snapshot ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap}
 
 clone_image=test_clone
 clone_image ${CLUSTER2} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} ${clone_image}
@@ -719,13 +774,48 @@ test_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'maste
 compare_images ${POOL} ${clone_image}
 
 testlog "TEST: disable mirroring / delete non-primary image"
-test_image_present ${CLUSTER1} ${POOL} ${image} 'present'
+image2=test2
+image3=test3
+image4=test4
+image5=test5
+for i in ${image2} ${image3} ${image4} ${image5}; do
+  create_image ${CLUSTER2} ${POOL} ${i}
+  write_image ${CLUSTER2} ${POOL} ${i} 100
+  create_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
+  create_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
+  if [ "${i}" = "${image4}" ] || [ "${i}" = "${image5}" ]; then
+    protect_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
+    protect_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
+  fi
+  write_image ${CLUSTER2} ${POOL} ${i} 100
+  wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'present'
+  wait_for_snap_present ${CLUSTER1} ${POOL} ${i} 'snap2'
+done
+
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'image'
-disable_mirror ${CLUSTER2} ${POOL} ${image}
-wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
+for i in ${image2} ${image4}; do
+  disable_mirror ${CLUSTER2} ${POOL} ${i}
+done
+
+unprotect_snapshot ${CLUSTER2} ${POOL} ${image5} 'snap1'
+unprotect_snapshot ${CLUSTER2} ${POOL} ${image5} 'snap2'
+for i in ${image3} ${image5}; do
+  remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
+  remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
+  remove_image ${CLUSTER2} ${POOL} ${i}
+done
+
+for i in ${image2} ${image3} ${image4} ${image5}; do
+  wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'deleted'
+done
+
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
-wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
-wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+for i in ${image2} ${image4}; do
+  wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'present'
+  wait_for_snap_present ${CLUSTER1} ${POOL} ${i} 'snap2'
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${i}
+  compare_images ${POOL} ${i}
+done
 
 testlog "TEST: disable mirror while daemon is stopped"
 stop_mirror ${CLUSTER1}
