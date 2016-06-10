@@ -482,19 +482,13 @@ void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
   }
   while (buffer_size > buffer_max) {
     Buffer *b = &*i;
-    if (b->is_clean()) {
-      auto p = b->space->buffer_map.find(b->offset);
-      if (i != buffer_lru.begin()) {
-	--i;
-      }
-      dout(20) << __func__ << " rm " << *b << dendl;
-      b->space->_rm_buffer(p);
-    } if (i != buffer_lru.begin()) {
+    assert(b->is_clean());
+    auto p = b->space->buffer_map.find(b->offset);
+    if (i != buffer_lru.begin()) {
       --i;
-      continue;
-    } else {
-      break;
     }
+    dout(20) << __func__ << " rm " << *b << dendl;
+    b->space->_rm_buffer(p);
   }
 
   // onodes
