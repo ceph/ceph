@@ -668,6 +668,9 @@ void Replayer::mirror_image_status_shut_down() {
 void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
                                     const boost::optional<std::string>& image_name)
 {
+  dout(20) << "global_image_id=" << image_replayer->get_global_image_id()
+           << dendl;
+
   if (!image_replayer->is_stopped()) {
     return;
   }
@@ -688,11 +691,25 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer
 
 bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
+  dout(20) << "global_image_id=" << image_replayer->get_global_image_id()
+           << dendl;
+
   if (image_replayer->is_stopped()) {
+    if (m_image_deleter) {
+      dout(20) << "scheduling delete" << dendl;
+      m_image_deleter->schedule_image_delete(
+        image_replayer->get_local_pool_id(),
+        image_replayer->get_local_image_id(),
+        image_replayer->get_local_image_name(),
+        image_replayer->get_global_image_id());
+    }
     return true;
   }
 
   if (image_replayer->is_running()) {
+    if (m_image_deleter) {
+      dout(20) << "scheduling delete after image replayer stopped" << dendl;
+    }
     FunctionContext *ctx = new FunctionContext(
         [&image_replayer, this] (int r) {
           if (m_image_deleter) {
