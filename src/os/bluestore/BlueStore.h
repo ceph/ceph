@@ -137,8 +137,9 @@ public:
     }
 
     BufferSpace *space;
-    uint32_t state;            ///< STATE_*
-    uint32_t flags;            ///< FLAG_*
+    uint16_t state;             ///< STATE_*
+    uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
+    uint32_t flags;             ///< FLAG_*
     uint64_t seq;
     uint64_t offset, length;
     bufferlist data;
@@ -253,18 +254,19 @@ public:
     // must be called under protection of the Cache lock
     void _clear();
 
-    void discard(uint64_t offset, uint64_t length) {
+    // return value is the highest cache_private of a trimmed buffer, or 0.
+    int discard(uint64_t offset, uint64_t length) {
       std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, length);
+      return _discard(offset, length);
     }
-    void _discard(uint64_t offset, uint64_t length);
+    int _discard(uint64_t offset, uint64_t length);
 
     void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
       std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags),
-		  (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+			     flags);
+      b->cache_private = _discard(offset, bl.length());
+      _add_buffer(b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
     }
     void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {

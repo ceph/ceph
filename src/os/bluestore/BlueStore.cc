@@ -600,8 +600,10 @@ void BlueStore::BufferSpace::_clear()
   }
 }
 
-void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
+int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 {
+  // note: we already hold cache->lock
+  int cache_private = 0;
   cache->_audit("discard start");
   auto i = _data_lower_bound(offset);
   uint64_t end = offset + length;
@@ -609,6 +611,9 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
     Buffer *b = i->second.get();
     if (b->offset >= end) {
       break;
+    }
+    if (b->cache_private > cache_private) {
+      cache_private = b->cache_private;
     }
     if (b->offset < offset) {
       int64_t front = offset - b->offset;
@@ -625,7 +630,7 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	b->truncate(front);
 	cache->_audit("discard end 1");
-	return;
+	break;
       } else {
 	// drop tail
 	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
@@ -651,8 +656,9 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
       _rm_buffer(i);
     }
     cache->_audit("discard end 2");
-    return;
+    break;
   }
+  return cache_private;
 }
 
 void BlueStore::BufferSpace::read(
