@@ -13,6 +13,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+from ceph_detect_init import alpine
 from ceph_detect_init import centos
 from ceph_detect_init import debian
 from ceph_detect_init import exc
@@ -52,6 +53,7 @@ def _get_distro(distro, use_rhceph=False):
 
     distro = _normalized_distro_name(distro)
     distributions = {
+        'alpine': alpine,
         'debian': debian,
         'ubuntu': debian,
         'linuxmint': debian,

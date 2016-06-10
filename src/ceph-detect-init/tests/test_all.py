@@ -23,6 +23,7 @@ import mock
 import testtools
 
 import ceph_detect_init
+from ceph_detect_init import alpine
 from ceph_detect_init import centos
 from ceph_detect_init import debian
 from ceph_detect_init import exc
@@ -37,6 +38,9 @@ logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
 
 
 class TestCephDetectInit(testtools.TestCase):
+
+    def test_alpine(self):
+        self.assertEqual('openrc', alpine.choose_init())
 
     def test_centos(self):
         with mock.patch('ceph_detect_init.centos.release',
