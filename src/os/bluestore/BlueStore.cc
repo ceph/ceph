@@ -435,7 +435,7 @@ static void get_wal_key(uint64_t seq, string *out)
 
 ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 {
-  out << "buffer(space " << b.space << " 0x" << std::hex
+  out << "buffer(" << &b << " space " << b.space << " 0x" << std::hex
       << b.offset << "~" << b.length << std::dec
       << " " << BlueStore::Buffer::get_state_name(b.state);
   if (b.flags)
