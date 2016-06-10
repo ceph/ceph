@@ -14,7 +14,7 @@
 
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
-#include "CompressionZlib.h"
+#include "ZlibCompressor.h"
 #include "osd/osd_types.h"
 // -----------------------------------------------------------------------------
 
@@ -31,13 +31,13 @@
 static ostream&
 _prefix(std::ostream* _dout)
 {
-  return *_dout << "CompressionZlib: ";
+  return *_dout << "ZlibCompressor: ";
 }
 // -----------------------------------------------------------------------------
 
 const long unsigned int max_len = 2048;
 
-int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
+int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 {
   int ret;
   unsigned have;
@@ -56,8 +56,6 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
     return -1;
   }
 
-   unsigned char c_out [max_len];
-
   for (std::list<buffer::ptr>::const_iterator i = in.buffers().begin();
       i != in.buffers().end();) {
 
@@ -72,7 +70,8 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
 
     do {
       strm.avail_out = max_len;
-      strm.next_out = c_out;
+      bufferptr ptr = buffer::create_page_aligned(max_len);
+      strm.next_out = (unsigned char*)ptr.c_str();
       ret = deflate(&strm, flush);    /* no bad return value */
       if (ret == Z_STREAM_ERROR) {
          dout(1) << "Compression error: compress return Z_STREAM_ERROR("
@@ -81,7 +80,7 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
          return -1;
       }
       have = max_len - strm.avail_out;
-      out.append((char*)c_out, have);
+      out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
       dout(10) << "Compression error: unused input" << dendl;
@@ -94,7 +93,7 @@ int CompressionZlib::compress(const bufferlist &in, bufferlist &out)
   return 0;
 }
 
-int CompressionZlib::decompress(bufferlist::iterator &p, size_t compressed_size, bufferlist &out)
+int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, bufferlist &out)
 {
   int ret;
   unsigned have;
@@ -114,8 +113,7 @@ int CompressionZlib::decompress(bufferlist::iterator &p, size_t compressed_size,
     return -1;
   }
 
-  unsigned char c_out[max_len];
-  size_t remaining = MIN( p.get_remaining(), compressed_size);
+  size_t remaining = MIN(p.get_remaining(), compressed_size);
   while(remaining) {
 
     long unsigned int len = p.get_ptr_and_advance(remaining, &c_in);
@@ -125,7 +123,8 @@ int CompressionZlib::decompress(bufferlist::iterator &p, size_t compressed_size,
 
     do {
       strm.avail_out = max_len;
-      strm.next_out = c_out;
+      bufferptr ptr = buffer::create_page_aligned(max_len);
+      strm.next_out = (unsigned char*)ptr.c_str();
       ret = inflate(&strm, Z_NO_FLUSH);
       if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {
        dout(1) << "Decompression error: decompress return "
@@ -134,7 +133,7 @@ int CompressionZlib::decompress(bufferlist::iterator &p, size_t compressed_size,
        return -1;
       }
       have = max_len - strm.avail_out;
-      out.append((char*)c_out, have);
+      out.append(ptr, 0, have);
     } while (strm.avail_out == 0);
 
   }
@@ -144,7 +143,7 @@ int CompressionZlib::decompress(bufferlist::iterator &p, size_t compressed_size,
   return 0;
 }
 
-int CompressionZlib::decompress(const bufferlist &in, bufferlist &out)
+int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out)
 {
   bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
   return decompress(i, in.length(), out);
