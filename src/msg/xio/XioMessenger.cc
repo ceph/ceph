@@ -775,7 +775,9 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
     return NULL;
   XioMsg *xmsg = reinterpret_cast<XioMsg*>(mp_mem.addr);
   assert(!!xmsg);
-  new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt);
+  new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt,
+		    static_cast<XioMessenger*>(
+		      xcon->get_messenger())->local_features);
   return xmsg;
 }
 
