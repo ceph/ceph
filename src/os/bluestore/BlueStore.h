@@ -111,14 +111,14 @@ public:
   /// cached buffer
   struct Buffer {
     enum {
-      STATE_UNDEF = 0,
-      STATE_CLEAN,
-      STATE_WRITING,
+      STATE_EMPTY,     ///< empty buffer -- used for cache history
+      STATE_CLEAN,     ///< clean data that is up to date
+      STATE_WRITING,   ///< data that is being written (io not yet complete)
       STATE_READING,
     };
     static const char *get_state_name(int s) {
       switch (s) {
-      case STATE_UNDEF: return "undef";
+      case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
       case STATE_WRITING: return "writing";
       case STATE_READING: return "reading";
@@ -154,6 +154,9 @@ public:
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
 
+    bool is_empty() const {
+      return state == STATE_EMPTY;
+    }
     bool is_clean() const {
       return state == STATE_CLEAN;
     }
