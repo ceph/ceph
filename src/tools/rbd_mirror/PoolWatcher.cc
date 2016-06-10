@@ -57,10 +57,12 @@ const PoolWatcher::ImageIds& PoolWatcher::get_images() const
 void PoolWatcher::refresh_images(bool reschedule)
 {
   ImageIds image_ids;
-  refresh(&image_ids);
+  int r = refresh(&image_ids);
 
   Mutex::Locker l(m_lock);
-  m_images = std::move(image_ids);
+  if (r >= 0) {
+    m_images = std::move(image_ids);
+  }
 
   if (!m_stopping && reschedule) {
     FunctionContext *ctx = new FunctionContext(
@@ -72,7 +74,7 @@ void PoolWatcher::refresh_images(bool reschedule)
   // about new/removed mirrored images
 }
 
-void PoolWatcher::refresh(ImageIds *image_ids) {
+int PoolWatcher::refresh(ImageIds *image_ids) {
   dout(20) << "enter" << dendl;
 
   std::string pool_name = m_remote_io_ctx.get_pool_name();
@@ -81,11 +83,11 @@ void PoolWatcher::refresh(ImageIds *image_ids) {
   if (r < 0) {
     derr << "could not tell whether mirroring was enabled for "
          << pool_name << ": " << cpp_strerror(r) << dendl;
-    return;
+    return r;
   }
   if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
     dout(20) << "pool " << pool_name << " has mirroring disabled" << dendl;
-    return;
+    return 0;
   }
 
   std::map<std::string, std::string> images_map;
@@ -93,6 +95,7 @@ void PoolWatcher::refresh(ImageIds *image_ids) {
   if (r < 0) {
     derr << "error retrieving image names from pool " << pool_name << ": "
          << cpp_strerror(r) << dendl;
+    return r;
   }
 
   std::map<std::string, std::string> image_id_to_name;
@@ -109,7 +112,7 @@ void PoolWatcher::refresh(ImageIds *image_ids) {
     if (r < 0) {
       derr << "error listing mirrored image directory: "
            << cpp_strerror(r) << dendl;
-      continue;
+      return r;
     }
     for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
       boost::optional<std::string> image_name(boost::none);
@@ -124,6 +127,8 @@ void PoolWatcher::refresh(ImageIds *image_ids) {
     }
     r = mirror_images.size();
   } while (r == max_read);
+
+  return 0;
 }
 
 } // namespace mirror
