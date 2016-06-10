@@ -298,6 +298,7 @@ public:
 
   int request_complete() {
     int ret = http_op->wait(result);
+    http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldout(sync_env->store->ctx(), 0) << "ERROR: failed to list remote datalog shard, ret=" << ret << dendl;
       return ret;
