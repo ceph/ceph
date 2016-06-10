@@ -81,22 +81,6 @@ static int get_features(bool *old_format, uint64_t *features)
   return 0;
 }
 
-static int get_image_id(librbd::Image &image, std::string *image_id)
-{
-  librbd::image_info_t info;
-  int r = image.stat(info, sizeof(info));
-  if (r < 0) {
-    return r;
-  }
-
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-  *image_id = std::string(prefix + strlen(RBD_DATA_PREFIX));
-  return 0;
-}
-
 static int create_image_full(rados_ioctx_t ioctx, const char *name,
 			      uint64_t size, int *order, int old_format,
 			      uint64_t features)
