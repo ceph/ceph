@@ -208,10 +208,10 @@ public:
       assert(writing.empty());
     }
 
-    void _add_buffer(Buffer *b) {
+    void _add_buffer(Buffer *b, int level, Buffer *near) {
       cache->_audit_lru("_add_buffer start");
       buffer_map[b->offset].reset(b);
-      cache->_add_buffer(b);
+      cache->_add_buffer(b, level, near);
       if (b->is_writing()) {
 	writing.push_back(*b);
       }
@@ -258,13 +258,15 @@ public:
       std::lock_guard<std::mutex> l(cache->lock);
       _discard(offset, bl.length());
       _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags));
+			     flags),
+		  (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
     }
     void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {
       std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl));
+      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
+      b->cache_private = _discard(offset, bl.length());
+      _add_buffer(b, 1, nullptr);
     }
 
     void read(uint64_t offset, uint64_t length,
@@ -523,8 +525,15 @@ public:
     }
     void _touch_onode(OnodeRef& o);
 
-    void _add_buffer(Buffer *b) {
-      buffer_lru.push_front(*b);
+    void _add_buffer(Buffer *b, int level, Buffer *near) {
+      if (near) {
+	auto q = buffer_lru.iterator_to(*near);
+	buffer_lru.insert(q, *b);
+      } else if (level > 0) {
+	buffer_lru.push_front(*b);
+      } else {
+	buffer_lru.push_back(*b);
+      }
       buffer_size += b->length;
     }
     void _rm_buffer(Buffer *b) {

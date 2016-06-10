@@ -617,9 +617,9 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  _add_buffer(new Buffer(this, b->state, b->seq, end, bl));
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
 	} else {
-	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail));
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail), 0, b);
 	}
 	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	b->truncate(front);
@@ -643,10 +643,10 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      _add_buffer(new Buffer(this, b->state, b->seq, end, bl));
+      _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
       _rm_buffer(i);
     } else {
-      _add_buffer(new Buffer(this, b->state, b->seq, end, keep));
+      _add_buffer(new Buffer(this, b->state, b->seq, end, keep), 0, b);
       _rm_buffer(i);
     }
     cache->_audit_lru("discard end 2");
