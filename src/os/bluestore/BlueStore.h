@@ -494,24 +494,34 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_lru_list_t;
+  private:
     typedef boost::intrusive::list<
       Onode,
       boost::intrusive::member_hook<
         Onode,
 	boost::intrusive::list_member_hook<>,
 	&Onode::lru_item> > onode_lru_list_t;
+    onode_lru_list_t onode_lru;
+
+  public:
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+	Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::lru_item> > buffer_lru_list_t;
 
     std::mutex lock;                ///< protect lru and other structures
     buffer_lru_list_t buffer_lru;
     uint64_t buffer_size = 0;
-    onode_lru_list_t onode_lru;
 
+    void _add_onode(OnodeRef& o) {
+        onode_lru.push_front(*o);
+    }
+    void _rm_onode(OnodeRef& o) {
+      auto q = onode_lru.iterator_to(*o);
+      onode_lru.erase(q);
+    }
     void _touch_onode(OnodeRef& o);
 
     void _touch_buffer(Buffer *b) {
