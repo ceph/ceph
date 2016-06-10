@@ -32,6 +32,7 @@ noinst_HEADERS += \
 	mds/MDSAuthCaps.h \
 	mds/MDSMap.h \
 	mds/FSMap.h \
+	mds/FSMapUser.h \
 	mds/MDSTable.h \
 	mds/MDSTableServer.h \
 	mds/MDSTableClient.h \

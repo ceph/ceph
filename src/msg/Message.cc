@@ -112,6 +112,7 @@ using namespace std;
 
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
+#include "messages/MFSMapUser.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSResolve.h"
@@ -577,6 +578,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_FS_MAP:
     m = new MFSMap;
+    break;
+  case CEPH_MSG_FS_MAP_USER:
+    m = new MFSMapUser;
     break;
   case MSG_MDS_BEACON:
     m = new MMDSBeacon;

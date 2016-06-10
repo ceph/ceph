@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,43 +7,41 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
  */
 
 
-#ifndef CEPH_MFSMAP_H
-#define CEPH_MFSMAP_H
+#ifndef CEPH_MFSMAPCOMPACT_H
+#define CEPH_MFSMAPCOMPACT_H
 
 #include "msg/Message.h"
-#include "mds/FSMap.h"
+#include "mds/FSMapUser.h"
 #include "include/ceph_features.h"
 
-class MFSMap : public Message {
+class MFSMapUser : public Message {
  public:
   epoch_t epoch;
-  bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
-  const FSMap & get_fsmap() {return fsmap;}
+  const FSMapUser & get_fsmap() { return fsmap; }
 
-  MFSMap() : 
-    Message(CEPH_MSG_FS_MAP), epoch(0) {}
-  MFSMap(const uuid_d &f, const FSMap &fsmap_) :
-    Message(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
+  MFSMapUser() :
+    Message(CEPH_MSG_FS_MAP_USER), epoch(0) {}
+  MFSMapUser(const uuid_d &f, const FSMapUser &fsmap_) :
+    Message(CEPH_MSG_FS_MAP_USER), epoch(fsmap_.epoch)
   {
     fsmap = fsmap_;
   }
 private:
-  FSMap fsmap;
+  FSMapUser fsmap;
 
-  ~MFSMap() {}
+  ~MFSMapUser() {}
 
 public:
-  const char *get_type_name() const { return "fsmap"; }
+  const char *get_type_name() const { return "fsmap.user"; }
   void print(ostream& out) const {
-    out << "fsmap(e " << epoch << ")";
+    out << "fsmap.user(e " << epoch << ")";
   }
 
   // marshalling
