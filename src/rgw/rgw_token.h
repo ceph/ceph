@@ -62,7 +62,6 @@ namespace rgw {
       default:
 	return "none";
       };
-      return "none";
     }
 
     token_type type;
