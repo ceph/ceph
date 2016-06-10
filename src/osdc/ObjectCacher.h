@@ -240,7 +240,6 @@ class ObjectCacher {
     bool complete;
     bool exists;
 
-  public:
     map<loff_t, BufferHead*>     data;
 
     ceph_tid_t last_write_tid;  // version of bh (if non-zero)
@@ -251,7 +250,6 @@ class ObjectCacher {
     map< ceph_tid_t, list<Context*> > waitfor_commit;
     xlist<C_ReadFinish*> reads;
 
-  public:
     Object(const Object& other);
     const Object& operator=(const Object& other);
 
