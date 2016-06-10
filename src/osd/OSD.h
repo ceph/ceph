@@ -1741,6 +1741,8 @@ private:
     weightedpriority,
     mclock_opclass // may want other mclock variations later that include client
   };
+  friend std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
+
   const io_queue op_queue;
   const unsigned int op_prio_cutoff;
 
@@ -2558,9 +2560,13 @@ public:
   friend class OSDService;
 };
 
+
+std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
+
+
 //compatibility of the executable
 extern const CompatSet::Feature ceph_osd_feature_compat[];
 extern const CompatSet::Feature ceph_osd_feature_ro_compat[];
 extern const CompatSet::Feature ceph_osd_feature_incompat[];
 
-#endif
+#endif // CEPH_OSD_H
