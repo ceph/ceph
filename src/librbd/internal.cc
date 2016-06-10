@@ -1878,6 +1878,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
     }
 
+    ictx->notify_update();
+
     if (ictx->exclusive_lock != nullptr && acquired_lock) {
       C_SaferCond lock_ctx;
       ictx->exclusive_lock->release_lock(&lock_ctx);
@@ -1887,8 +1889,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
         return r;
       }
     }
-
-    ictx->notify_update();
     return 0;
   }
 

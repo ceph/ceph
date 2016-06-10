@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockImageState.h"
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockJournalPolicy.h"
 #include "test/librbd/mock/MockObjectMap.h"
@@ -56,6 +57,16 @@ public:
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
                   .WillOnce(Return(r));
+  }
+
+  void expect_is_refresh_required(MockImageCtx &mock_image_ctx, bool required) {
+    EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
+      .WillOnce(Return(required));
+  }
+
+  void expect_refresh(MockImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.state, refresh(_))
+                  .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_create_object_map(MockImageCtx &mock_image_ctx,
@@ -188,6 +199,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
 
   MockObjectMap mock_object_map;
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
@@ -212,6 +224,35 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   ASSERT_EQ(0, ctx.wait());
 }
 
+TEST_F(TestMockExclusiveLockAcquireRequest, SuccessRefresh) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
+  expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, true);
+  expect_refresh(mock_image_ctx, 0);
+
+  MockObjectMap mock_object_map;
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
+  expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
+
+  C_SaferCond acquire_ctx;
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       &acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(0, acquire_ctx.wait());
+  ASSERT_EQ(0, ctx.wait());
+}
+
 TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -224,6 +265,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
 
   MockObjectMap mock_object_map;
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
@@ -254,6 +296,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
 
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, false);
 
@@ -275,6 +318,31 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
+TEST_F(TestMockExclusiveLockAcquireRequest, RefreshError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_flush_notifies(mock_image_ctx);
+  expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, true);
+  expect_refresh(mock_image_ctx, -EINVAL);
+  expect_unlock(mock_image_ctx, 0);
+
+  C_SaferCond *acquire_ctx = new C_SaferCond();
+  C_SaferCond ctx;
+  MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx,
+                                                       TEST_COOKIE,
+                                                       acquire_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
 TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -287,6 +355,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, JournalError) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
@@ -322,6 +391,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, AllocateJournalTagError) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
@@ -665,6 +735,7 @@ TEST_F(TestMockExclusiveLockAcquireRequest, OpenObjectMapError) {
   InSequence seq;
   expect_flush_notifies(mock_image_ctx);
   expect_lock(mock_image_ctx, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
