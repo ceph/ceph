@@ -2,7 +2,7 @@
 
 set(zlib_sources
   CompressionPluginZlib.cc
-  CompressionZlib.cc
+  ZlibCompressor.cc
 )
 
 add_library(ceph_zlib SHARED ${zlib_sources})
