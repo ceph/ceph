@@ -212,27 +212,27 @@ public:
     }
 
     void _add_buffer(Buffer *b, int level, Buffer *near) {
-      cache->_audit_lru("_add_buffer start");
+      cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
 	writing.push_back(*b);
       } else {
 	cache->_add_buffer(b, level, near);
       }
-      cache->_audit_lru("_add_buffer end");
+      cache->_audit("_add_buffer end");
     }
     void _rm_buffer(Buffer *b) {
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
-      cache->_audit_lru("_rm_buffer start");
+      cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
 	writing.erase(writing.iterator_to(*p->second));
       } else {
 	cache->_rm_buffer(p->second.get());
       }
       buffer_map.erase(p);
-      cache->_audit_lru("_rm_buffer end");
+      cache->_audit("_rm_buffer end");
     }
 
     map<uint64_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -498,6 +498,31 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
+    std::mutex lock;                ///< protect lru and other structures
+
+    static Cache *create(string type);
+
+    virtual ~Cache() {}
+
+    virtual void _add_onode(OnodeRef& o, int level) = 0;
+    virtual void _rm_onode(OnodeRef& o) = 0;
+    virtual void _touch_onode(OnodeRef& o) = 0;
+
+    virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
+    virtual void _rm_buffer(Buffer *b) = 0;
+    virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
+    virtual void _touch_buffer(Buffer *b) = 0;
+
+    virtual void trim(uint64_t onode_max, uint64_t buffer_max) = 0;
+
+#ifdef DEBUG_CACHE
+    virtual void _audit(const char *s) = 0;
+#else
+    void _audit(const char *s) { /* no-op */ }
+#endif
+  };
+
+  struct LRUCache : public Cache {
   private:
     typedef boost::intrusive::list<
       Onode,
@@ -518,21 +543,19 @@ public:
     uint64_t buffer_size = 0;
 
   public:
-    std::mutex lock;                ///< protect lru and other structures
-
-    void _add_onode(OnodeRef& o, int level) {
+    void _add_onode(OnodeRef& o, int level) override {
       if (level > 0)
 	onode_lru.push_front(*o);
       else
 	onode_lru.push_back(*o);
     }
-    void _rm_onode(OnodeRef& o) {
+    void _rm_onode(OnodeRef& o) override {
       auto q = onode_lru.iterator_to(*o);
       onode_lru.erase(q);
     }
-    void _touch_onode(OnodeRef& o);
+    void _touch_onode(OnodeRef& o) override;
 
-    void _add_buffer(Buffer *b, int level, Buffer *near) {
+    void _add_buffer(Buffer *b, int level, Buffer *near) override {
       if (near) {
 	auto q = buffer_lru.iterator_to(*near);
 	buffer_lru.insert(q, *b);
@@ -543,30 +566,29 @@ public:
       }
       buffer_size += b->length;
     }
-    void _rm_buffer(Buffer *b) {
+    void _rm_buffer(Buffer *b) override {
       assert(buffer_size >= b->length);
       buffer_size -= b->length;
       auto q = buffer_lru.iterator_to(*b);
       buffer_lru.erase(q);
     }
-    void _adjust_buffer_size(Buffer *b, int64_t delta) {
+    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
       assert((int64_t)buffer_size + delta >= 0);
       buffer_size += delta;
     }
-    void _touch_buffer(Buffer *b) {
+    void _touch_buffer(Buffer *b) override {
       auto p = buffer_lru.iterator_to(*b);
       buffer_lru.erase(p);
       buffer_lru.push_front(*b);
-      _audit_lru("_touch_buffer end");
+      _audit("_touch_buffer end");
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max);
+    void trim(uint64_t onode_max, uint64_t buffer_max) override;
 
 #ifdef DEBUG_CACHE
-    void _audit_lru(const char *s);
-#else
-    void _audit_lru(const char *s) { /* no-op */ }
+    void _audit(const char *s) override;
 #endif
+
   };
 
   struct OnodeSpace {
@@ -580,7 +602,8 @@ public:
 
     void add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
-    void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
+    void rename(OnodeRef& o, const ghobject_t& old_oid,
+		const ghobject_t& new_oid);
     void clear();
 
     /// return true if f true for any item
