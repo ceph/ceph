@@ -1776,7 +1776,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             return -EINVAL;
           }
 
-          disable_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+          disable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
           r = remove_object_map(ictx);
           if (r < 0) {
             lderr(cct) << "failed to remove object map" << dendl;
@@ -1784,7 +1784,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           }
         }
         if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
-          disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
+          disable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
         }
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
           rbd_mirror_mode_t mirror_mode;
