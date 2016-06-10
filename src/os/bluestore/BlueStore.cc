@@ -673,7 +673,9 @@ void BlueStore::BufferSpace::read(
 	res_intervals.insert(offset, l);
 	offset += l;
 	length -= l;
-	cache->_touch_buffer(b);
+	if (!b->is_writing()) {
+	  cache->_touch_buffer(b);
+	}
 	continue;
       }
       if (b->offset > offset) {
@@ -684,7 +686,9 @@ void BlueStore::BufferSpace::read(
 	offset += gap;
 	length -= gap;
       }
-      cache->_touch_buffer(b);
+      if (!b->is_writing()) {
+	cache->_touch_buffer(b);
+      }
       if (b->length > length) {
 	res[offset].substr_of(b->data, 0, length);
 	res_intervals.insert(offset, length);
@@ -714,6 +718,7 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
       } else {
 	b->state = Buffer::STATE_CLEAN;
 	writing.erase(i++);
+	cache->_add_buffer(b, 1, nullptr);
       }
     } else {
       ++i;

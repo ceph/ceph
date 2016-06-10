@@ -211,9 +211,10 @@ public:
     void _add_buffer(Buffer *b, int level, Buffer *near) {
       cache->_audit_lru("_add_buffer start");
       buffer_map[b->offset].reset(b);
-      cache->_add_buffer(b, level, near);
       if (b->is_writing()) {
 	writing.push_back(*b);
+      } else {
+	cache->_add_buffer(b, level, near);
       }
       cache->_audit_lru("_add_buffer end");
     }
@@ -222,9 +223,10 @@ public:
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->_audit_lru("_rm_buffer start");
-      cache->_rm_buffer(p->second.get());
       if (p->second->is_writing()) {
 	writing.erase(writing.iterator_to(*p->second));
+      } else {
+	cache->_rm_buffer(p->second.get());
       }
       buffer_map.erase(p);
       cache->_audit_lru("_rm_buffer end");
