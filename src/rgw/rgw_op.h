@@ -176,6 +176,13 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
   virtual bool need_object_expiration() { return false; }
+  /**
+   * calculates filter used to decrypt RGW objects data
+   */
+  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb, bufferlist* manifest_bl) {
+    *filter = NULL;
+    return 0;
+  }
 };
 
 class RGWGetObj_CB : public RGWGetDataCB
@@ -187,6 +194,36 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
     return op->get_data_cb(bl, bl_ofs, bl_len);
+  }
+};
+
+class RGWGetObj_Filter : public RGWGetDataCB
+{
+protected:
+  RGWGetDataCB& next;
+public:
+  RGWGetObj_Filter(RGWGetDataCB& next): next(next) {}
+  virtual ~RGWGetObj_Filter() {}
+  /**
+   * Passes data through filter.
+   * Filter can modify content of bl.
+   * When bl_len == 0 , it means 'flush
+   */
+  virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+    return next.handle_data(bl, bl_ofs, bl_len);
+  }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    return next.flush();
+  }
+  /**
+   * Allows filter to extend range required for successful filtering
+   */
+  virtual int fixup_range(off_t& bl_ofs, off_t& bl_len) {
+    return next.fixup_range(bl_ofs, bl_len);
   }
 };
 
@@ -653,6 +690,7 @@ protected:
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
+  string crypt_http_responses;
 
   ceph::real_time delete_at;
 
@@ -683,6 +721,10 @@ public:
   virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
 
+  virtual int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
+     *filter = NULL;
+     return 0;
+  }
   int verify_permission();
   void pre_exec();
   void execute();
@@ -694,6 +736,22 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_PUT_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
+
+class RGWPutObj_Filter : public RGWPutObjDataProcessor
+{
+protected:
+  RGWPutObjDataProcessor& next;
+public:
+  RGWPutObj_Filter(RGWPutObjDataProcessor& next) :
+  next(next){}
+  virtual ~RGWPutObj_Filter(){}
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) {
+    return next.handle_data(bl, ofs, phandle, pobj, again);
+  }
+  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) {
+    return next.throttle_data(handle, obj, need_to_wait);
+  }
+}; /* RGWPutObj_Filter */
 
 class RGWPostObj : public RGWOp {
 
@@ -735,6 +793,10 @@ public:
   RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
   void dispose_processor(RGWPutObjProcessor *processor);
 
+  virtual int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) {
+    *filter = NULL;
+    return 0;
+  }
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
@@ -1126,6 +1188,7 @@ public:
   virtual const string name() { return "init_multipart"; }
   virtual RGWOpType get_type() { return RGW_OP_INIT_MULTIPART; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+  virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
@@ -1198,72 +1261,6 @@ public:
   virtual const string name() { return "list_multipart"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_MULTIPART; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
-};
-
-#define MP_META_SUFFIX ".meta"
-
-class RGWMPObj {
-  string oid;
-  string prefix;
-  string meta;
-  string upload_id;
-public:
-  RGWMPObj() {}
-  RGWMPObj(const string& _oid, const string& _upload_id) {
-    init(_oid, _upload_id, _upload_id);
-  }
-  void init(const string& _oid, const string& _upload_id) {
-    init(_oid, _upload_id, _upload_id);
-  }
-  void init(const string& _oid, const string& _upload_id, const string& part_unique_str) {
-    if (_oid.empty()) {
-      clear();
-      return;
-    }
-    oid = _oid;
-    upload_id = _upload_id;
-    prefix = oid + ".";
-    meta = prefix + upload_id + MP_META_SUFFIX;
-    prefix.append(part_unique_str);
-  }
-  string& get_meta() { return meta; }
-  string get_part(int num) {
-    char buf[16];
-    snprintf(buf, 16, ".%d", num);
-    string s = prefix;
-    s.append(buf);
-    return s;
-  }
-  string get_part(string& part) {
-    string s = prefix;
-    s.append(".");
-    s.append(part);
-    return s;
-  }
-  string& get_upload_id() {
-    return upload_id;
-  }
-  string& get_key() {
-    return oid;
-  }
-  bool from_meta(string& meta) {
-    int end_pos = meta.rfind('.'); // search for ".meta"
-    if (end_pos < 0)
-      return false;
-    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
-    if (mid_pos < 0)
-      return false;
-    oid = meta.substr(0, mid_pos);
-    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
-    init(oid, upload_id, upload_id);
-    return true;
-  }
-  void clear() {
-    oid = "";
-    prefix = "";
-    meta = "";
-    upload_id = "";
-  }
 };
 
 struct RGWMultipartUploadEntry {
@@ -1372,30 +1369,36 @@ extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
 extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				    bool prefetch_data);
 
-static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
+static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
 					bufferlist& data, off_t ofs,
-					MD5 *hash, bool need_to_wait)
+					bool need_to_wait)
 {
   bool again;
 
   do {
-    void *handle;
+    void *handle = nullptr;
     rgw_obj obj;
-
-    int ret = processor->handle_data(data, ofs, hash, &handle, &obj, &again);
+    int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
     if (ret < 0)
       return ret;
-
-    ret = processor->throttle_data(handle, obj, need_to_wait);
-    if (ret < 0)
-      return ret;
-
+    if (handle != nullptr)
+    {
+      ret = processor->throttle_data(handle, obj, need_to_wait);
+      if (ret < 0)
+        return ret;
+    }
+    else
+      break;
     need_to_wait = false; /* the need to wait only applies to the first
 			   * iteration */
   } while (again);
 
   return 0;
 } /* put_data_and_throttle */
+
+
+
+
 
 static inline int get_system_versioning_params(req_state *s,
 					      uint64_t *olh_epoch,
@@ -1458,11 +1461,19 @@ static inline void rgw_get_request_metadata(CephContext *cct,
 					    map<string, bufferlist>& attrs,
 					    const bool allow_empty_attrs = true)
 {
+  static const std::set<std::string> blacklisted_headers = {
+      "x-amz-server-side-encryption-customer-algorithm",
+      "x-amz-server-side-encryption-customer-key",
+      "x-amz-server-side-encryption-customer-key-md5"
+  };
   map<string, string>::iterator iter;
   for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
-
+    if (blacklisted_headers.count(name) == 1) {
+      lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
+      continue;
+    }
     if (allow_empty_attrs || !xattr.empty()) {
       lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);

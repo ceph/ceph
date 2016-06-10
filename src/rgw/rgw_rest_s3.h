@@ -33,6 +33,7 @@ public:
   int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
+  virtual int get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB& cb, bufferlist* manifest_bl) override;
 };
 
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
@@ -162,6 +163,7 @@ public:
   int get_params();
   int get_data(bufferlist& bl);
   void send_response();
+  int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) override;
 };
 
 struct post_part_field {
@@ -209,6 +211,7 @@ public:
   int complete_get_params();
   void send_response();
   int get_data(bufferlist& bl);
+  int get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb) override;
 };
 
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
@@ -307,6 +310,7 @@ public:
 
   int get_params();
   void send_response();
+  int prepare_encryption(map<string, bufferlist>& attrs) override;
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
@@ -622,5 +626,7 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
 
   return 0;
 }
+
+int RGW_S3_get_encrypt_filter(const struct req_state *s, RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb);
 
 #endif /* CEPH_RGW_REST_S3_H */

@@ -103,6 +103,11 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
 
+#define RGW_ATTR_CRYPT_PREFIX   RGW_ATTR_PREFIX "crypt."
+#define RGW_ATTR_CRYPT_MODE     RGW_ATTR_CRYPT_PREFIX "mode"
+#define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
+#define RGW_ATTR_CRYPT_KEY      RGW_ATTR_CRYPT_PREFIX "key"
+
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_MAX_PENDING_CHUNKS  16

@@ -140,6 +140,19 @@ public:
   virtual void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    return 0;
+  }
+  /**
+   * Allows to extend fetch range of RGW object. Used by RGWGetObjFilter.
+   */
+  virtual int fixup_range(off_t& bl_ofs, off_t& bl_end) {
+    return 0;
+  }
 };
 
 class RGWAccessListFilter {
@@ -509,6 +522,11 @@ public:
     /* current ofs relative to start of rgw object */
     uint64_t get_ofs() const {
       return ofs;
+    }
+
+    /* stripe number */
+    int get_cur_stripe() const {
+      return cur_stripe;
     }
 
     /* current stripe size */
@@ -3045,7 +3063,21 @@ public:
   }
 }; /* RGWChainedCacheImpl */
 
-class RGWPutObjProcessor
+/**
+ * Base of PUT operation.
+ * Allow to create chained data transformers like compresors and encryptors.
+ */
+class RGWPutObjDataProcessor
+{
+public:
+  RGWPutObjDataProcessor(){}
+  virtual ~RGWPutObjDataProcessor(){}
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) = 0;
+  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
+}; /* RGWPutObjDataProcessor */
+
+
+class RGWPutObjProcessor : public RGWPutObjDataProcessor
 {
 protected:
   RGWRados *store;
@@ -3065,11 +3097,9 @@ public:
     store = _store;
     return 0;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again) = 0;
-  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
-  virtual void complete_hash(MD5 *hash) {
-    assert(0);
-  }
+
+  //virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again);
+  //virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
   virtual int complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
                        map<string, bufferlist>& attrs, ceph::real_time delete_at,
                        const char *if_match = NULL, const char *if_nomatch = NULL);
@@ -3176,8 +3206,7 @@ public:
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again);
-  virtual void complete_hash(MD5 *hash);
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again);
   bufferlist& get_extra_data() { return extra_data_bl; }
 
   void set_olh_epoch(uint64_t epoch) {
@@ -3189,4 +3218,89 @@ public:
   }
 }; /* RGWPutObjProcessor_Atomic */
 
+#define MP_META_SUFFIX ".meta"
+
+class RGWMPObj {
+  string oid;
+  string prefix;
+  string meta;
+  string upload_id;
+public:
+  RGWMPObj() {}
+  RGWMPObj(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
+  }
+  void init(const string& _oid, const string& _upload_id) {
+    init(_oid, _upload_id, _upload_id);
+  }
+  void init(const string& _oid, const string& _upload_id, const string& part_unique_str) {
+    if (_oid.empty()) {
+      clear();
+      return;
+    }
+    oid = _oid;
+    upload_id = _upload_id;
+    prefix = oid + ".";
+    meta = prefix + upload_id + MP_META_SUFFIX;
+    prefix.append(part_unique_str);
+  }
+  string& get_meta() { return meta; }
+  string get_part(int num) {
+    char buf[16];
+    snprintf(buf, 16, ".%d", num);
+    string s = prefix;
+    s.append(buf);
+    return s;
+  }
+  string get_part(string& part) {
+    string s = prefix;
+    s.append(".");
+    s.append(part);
+    return s;
+  }
+  string& get_upload_id() {
+    return upload_id;
+  }
+  string& get_key() {
+    return oid;
+  }
+  bool from_meta(string& meta) {
+    int end_pos = meta.rfind('.'); // search for ".meta"
+    if (end_pos < 0)
+      return false;
+    int mid_pos = meta.rfind('.', end_pos - 1); // <key>.<upload_id>
+    if (mid_pos < 0)
+      return false;
+    oid = meta.substr(0, mid_pos);
+    upload_id = meta.substr(mid_pos + 1, end_pos - mid_pos - 1);
+    init(oid, upload_id, upload_id);
+    return true;
+  }
+  void clear() {
+    oid = "";
+    prefix = "";
+    meta = "";
+    upload_id = "";
+  }
+};
+
+class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
+{
+  string part_num;
+  RGWMPObj mp;
+  req_state *s;
+  string upload_id;
+
+protected:
+  int prepare(RGWRados *store, string *oid_rand);
+  int do_complete(string& etag, real_time *mtime, real_time set_mtime,
+                  map<string, bufferlist>& attrs, real_time delete_at,
+                  const char *if_match = NULL, const char *if_nomatch = NULL);
+
+public:
+  bool immutable_head() { return true; }
+  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
+                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+  void get_mp(RGWMPObj** _mp);
+}; /* RGWPutObjProcessor_Multipart */
 #endif
