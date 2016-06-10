@@ -113,7 +113,6 @@ def remove_kernel_mounts(ctx):
                 'grep', '-o', "/.* ", run.Raw('|'),
                 'xargs', '-r',
                 'sudo', 'umount', '-f', run.Raw(';'),
-                'fi'
             ],
             check_status=False,
             timeout=60
