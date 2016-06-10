@@ -263,7 +263,8 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
 
 static void dump_container_metadata(struct req_state *,
                                     const RGWBucketEnt&,
-                                    const RGWQuotaInfo&);
+                                    const RGWQuotaInfo&,
+                                    const RGWBucketWebsiteConf&);
 
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
@@ -271,7 +272,8 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, bucket, bucket_quota);
+  dump_container_metadata(s, bucket, bucket_quota,
+                          s->bucket_info.website_conf);
 
   s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
@@ -363,7 +365,8 @@ next:
 
 static void dump_container_metadata(struct req_state *s,
                                     const RGWBucketEnt& bucket,
-                                    const RGWQuotaInfo& quota)
+                                    const RGWQuotaInfo& quota,
+                                    const RGWBucketWebsiteConf& ws_conf)
 {
   char buf[32];
   /* Adding X-Timestamp to keep align with Swift API */
@@ -433,6 +436,31 @@ static void dump_container_metadata(struct req_state *s,
 			  (long long)quota.max_objects);
     }
   }
+
+  /* Dump Static Website headers. */
+  if (! ws_conf.index_doc_suffix.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Index: %s\r\n",
+	                ws_conf.index_doc_suffix.c_str());
+  }
+
+  if (! ws_conf.error_doc.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Error: %s\r\n",
+	                ws_conf.error_doc.c_str());
+  }
+
+  if (! ws_conf.subdir_marker.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Directory-Type: %s\r\n",
+                        ws_conf.subdir_marker.c_str());
+  }
+
+  if (! ws_conf.listing_css_doc.empty()) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Listings-CSS: %s\r\n",
+	                ws_conf.listing_css_doc.c_str());
+  }
+
+  if (ws_conf.listing_enabled) {
+    STREAM_IO(s)->print("X-Container-Meta-Web-Listings: true\r\n");
+  }
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
@@ -467,7 +495,8 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket, bucket_quota);
+    dump_container_metadata(s, bucket, bucket_quota,
+                            s->bucket_info.website_conf);
   }
 
   set_req_state_err(s, op_ret);
