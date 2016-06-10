@@ -19,11 +19,10 @@
 
 #include "compressor/Compressor.h"
 
-class CompressionZlib : public Compressor {
-  const char version = '1';
-
+class ZlibCompressor : public Compressor {
 public:
-  CompressionZlib() : Compressor("zlib") {}
+  ZlibCompressor() : Compressor("zlib") {}
+
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
   int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override;
