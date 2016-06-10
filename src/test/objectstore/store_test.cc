@@ -1192,7 +1192,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0x20000, statfs.allocated);
     ASSERT_EQ(available0 - 0x20000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000, statfs.compressed_original);
+    ASSERT_EQ(0x30000 - 9, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
   }
   {
@@ -1213,7 +1213,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0x30000, statfs.allocated);
     ASSERT_EQ(available0 - 0x30000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000, statfs.compressed_original);
+    ASSERT_EQ(0x30000 - 9 - 0x1000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
   }
   {

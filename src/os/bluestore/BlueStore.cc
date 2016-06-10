@@ -5969,18 +5969,23 @@ void BlueStore::_wctx_finish(
   for (auto &l : wctx->lex_old) {
     bluestore_blob_t *b = c->get_blob_ptr(o, l.blob);
     vector<bluestore_pextent_t> r;
+    bool compressed = b->is_compressed();
     b->put_ref(l.offset, l.length, min_alloc_size, &r);
     txc->statfs_delta.stored() -= l.length;
+    if (compressed) {
+      txc->statfs_delta.compressed_original() -= l.length;
+    }
     for (auto e : r) {
       dout(20) << __func__ << " release " << e << dendl;
       txc->released.insert(e.offset, e.length);
       txc->statfs_delta.allocated() -= e.length;
+      if (compressed) {
+        txc->statfs_delta.compressed_allocated() -= e.length;
+      }
     }
     if (b->ref_map.empty()) {
-      if (b->is_compressed()) {
-       txc->statfs_delta.compressed() -= b->get_payload_length();
-       txc->statfs_delta.compressed_original() -= b->length;
-       txc->statfs_delta.compressed_allocated() -= b->get_ondisk_length();
+      if (compressed) {
+        txc->statfs_delta.compressed() -= b->get_payload_length();
       }
       dout(20) << __func__ << " rm blob " << *b << dendl;
       if (l.blob >= 0) {
