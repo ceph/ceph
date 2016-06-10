@@ -28,6 +28,8 @@ extern "C" {
 
 namespace bi = boost::intrusive;
 
+class XioMessenger;
+
 class XioMsgCnt
 {
 public:
@@ -51,10 +53,12 @@ public:
   entity_addr_t addr; /* XXX hack! */
   ceph_msg_header* hdr;
   ceph_msg_footer* ftr;
+  uint64_t features;
   buffer::list bl;
 public:
-  XioMsgHdr(ceph_msg_header& _hdr, ceph_msg_footer& _ftr)
-    : tag(CEPH_MSGR_TAG_MSG), msg_cnt(0), hdr(&_hdr), ftr(&_ftr)
+  XioMsgHdr(ceph_msg_header& _hdr, ceph_msg_footer& _ftr, uint64_t _features)
+    : tag(CEPH_MSGR_TAG_MSG), msg_cnt(0), hdr(&_hdr), ftr(&_ftr),
+      features(_features)
     { }
 
   XioMsgHdr(ceph_msg_header& _hdr, ceph_msg_footer &_ftr, buffer::ptr p)
@@ -69,11 +73,11 @@ public:
 
   const buffer::list& get_bl() { encode(bl); return bl; };
 
-  inline void encode_hdr(buffer::list& bl) const {
+  inline void encode_hdr(ceph::buffer::list& bl) const {
     ::encode(tag, bl);
     ::encode(msg_cnt, bl);
     ::encode(peer_type, bl);
-    ::encode(addr, bl);
+    ::encode(addr, bl, features);
     ::encode(hdr->seq, bl);
     ::encode(hdr->tid, bl);
     ::encode(hdr->type, bl);
@@ -248,9 +252,9 @@ public:
 
 public:
   XioMsg(Message *_m, XioConnection *_xcon, struct xio_reg_mem& _mp,
-	 int _ex_cnt) :
+	 int _ex_cnt, uint64_t _features) :
     XioSend(_xcon, _mp, _ex_cnt),
-    m(_m), hdr(m->get_header(), m->get_footer()),
+    m(_m), hdr(m->get_header(), m->get_footer(), _features),
     req_arr(NULL)
     {
       const entity_inst_t &inst = xcon->get_messenger()->get_myinst();
