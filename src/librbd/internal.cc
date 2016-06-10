@@ -1817,6 +1817,15 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             }
           }
 
+          C_SaferCond cond;
+          ictx->journal->close(&cond);
+          r = cond.wait();
+          if (r < 0) {
+            lderr(cct) << "error closing image journal: " << cpp_strerror(r)
+                       << dendl;
+            return r;
+          }
+
           r = Journal<>::remove(ictx->md_ctx, ictx->id);
           if (r < 0) {
             lderr(cct) << "error removing image journal: " << cpp_strerror(r)
