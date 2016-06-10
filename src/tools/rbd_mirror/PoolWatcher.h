@@ -64,7 +64,7 @@ private:
 
   ImageIds m_images;
 
-  void refresh(ImageIds *image_ids);
+  int refresh(ImageIds *image_ids);
 };
 
 } // namespace mirror
