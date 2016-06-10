@@ -61,7 +61,8 @@ can disconnect.
 Frame format
 ------------
 
-A series of frames between client and server of the form::
+All further data sent or received is contained by a frame.  Each frame has
+the form::
 
   stream_id (le32)
   frame_len (le32)
@@ -75,8 +76,9 @@ A series of frames between client and server of the form::
 
 * The payload format and length is determined by the tag.
 
-* The signature portion is only present in a given stream after the
-  authentication if signatures are enabled.
+* The signature portion is only present in a given stream if the
+  authentication phase has completed (TAG_AUTH_DONE has been sent) and
+  signatures are enabled.
 
 
 Authentication
@@ -204,14 +206,6 @@ an established session.
   - Indicates that the server is already connecting to the client, and
     that direction should win the race.  The client should wait for that
     connection to complete.
-
-* TAG_START: client is ready to start the message exchange session::
-
-    __le64 flags
-
-  - Sent by client when it is ready.  Server replies with same.
-  - No flags are defined now, but we might use them later.
-  - I'm not sure this is necessary.
 
 Message exchange
 ----------------
