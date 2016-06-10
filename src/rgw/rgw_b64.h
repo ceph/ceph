@@ -61,7 +61,8 @@ namespace rgw {
   inline std::string from_base64(boost::string_ref sref)
   {
     using namespace boost::archive::iterators;
-
+    if (sref.empty())
+      return std::string();
     /* MIME-compliant input will have line-breaks, so we have to
      * filter WS */
     typedef

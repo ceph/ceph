@@ -17,6 +17,7 @@
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
+#include "rgw_rest.h"
 
 #include "rgw_token.h"
 #include "include/assert.h"
@@ -34,6 +35,7 @@ protected:
   // Serving a custom error page from an object is really a 200 response with
   // just the status line altered.
   int custom_http_ret = 0;
+  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() override {}
@@ -165,6 +167,9 @@ public:
 };
 
 class RGWPutObj_ObjStore_S3 : public RGWPutObj_ObjStore {
+private:
+  std::map<std::string, std::string> crypt_http_responses;
+
 public:
   RGWPutObj_ObjStore_S3() {}
   ~RGWPutObj_ObjStore_S3() override {}
@@ -203,6 +208,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   RGWPolicyEnv env;
   RGWPolicy post_policy;
   string err_msg;
+  map<string, string> crypt_http_responses;
 
   const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
 
@@ -356,6 +362,8 @@ public:
 };
 
 class RGWInitMultipart_ObjStore_S3 : public RGWInitMultipart_ObjStore {
+private:
+  std::map<std::string, std::string> crypt_http_responses;
 public:
   RGWInitMultipart_ObjStore_S3() {}
   ~RGWInitMultipart_ObjStore_S3() override {}

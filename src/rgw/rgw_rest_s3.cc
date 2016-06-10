@@ -229,6 +229,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     }
   }
 
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
+
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
 
@@ -314,143 +317,22 @@ send_data:
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(RGWGetDataCB** filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
 {
   int res = 0;
-  *filter = nullptr;
-  map<string, bufferlist>::iterator attr_iter;
-  std::string attr_mode;
-  std::string attr_md5;
-  attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
-  if (attr_iter == attrs.end() ) {
-    /* no encryption - no problem with that */
-    goto done;
-  }
-  try {
-    ::decode(attr_mode, attr_iter->second);
-  } catch (buffer::error& err) {
-    ldout(s->cct, 0) << "ERROR: failed to decode " RGW_ATTR_CRYPT_MODE << dendl;
-    res = -EIO;
-    goto done;
-  }
-  ldout(s->cct, 20) << "Encryption mode=" << attr_mode << dendl;
-  if (attr_mode == "SSE-C-AES256") {
-   const char *enc_customer = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", "");
-   if (strcmp(enc_customer, "AES256") != 0) {
-     ldout(s->cct, 10) << "ERROR. x-amz-server-side-encryption-customer-algorithm must be 'AES256'" << dendl;
-     res = -ERR_INVALID_REQUEST;
-     goto done;
-   }
-   const char* key = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", "");
-   std::string key_bin = from_base64(key);
-   if (key_bin.size() != AES_256_CTR::AES_256_KEYSIZE) {
-     ldout(s->cct, 10) << "ERROR. x-amz-server-side-encryption-customer-key must decode to 256 bit key" << dendl;
-     res = -ERR_INVALID_REQUEST;
-     goto done;
-   }
-   const char* keymd5 = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
-   std::string keymd5_bin = from_base64(keymd5);
-   if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-     ldout(s->cct, 10) << "ERROR. x-amz-server-side-encryption-customer-key-md5 mismatches key" << dendl;
-     res = -ERR_INVALID_DIGEST;
-     goto done;
-   }
-
-   MD5 key_hash;
-   uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-   key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
-   key_hash.Final(key_hash_res);
-
-   if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
-     ldout(s->cct, 20) << "MD5 failed" << dendl;
-     res = -ERR_INVALID_DIGEST;
-     goto done;
-   }
-   attr_iter = attrs.find(RGW_ATTR_CRYPT_KEYMD5);
-   if (attr_iter == attrs.end()) {
-     res = - ERR_INVALID_DIGEST;
-     goto done;
-   }
-   try {
-     ::decode(attr_md5, attr_iter->second);
-   }
-   catch (buffer::error& err) {
-     ldout(s->cct, 0) << "ERROR: failed to decode" RGW_ATTR_CRYPT_KEYMD5 << dendl;
-     res = -EIO;
-     goto done;
-   }
-   if (attr_md5 != keymd5_bin) {
-     ldout(s->cct, 20) << "MD5 from " RGW_ATTR_CRYPT_KEYMD5 " mismatches x-amz-server-side-encryption-customer-key-md5" << dendl;
-     res = - ERR_INVALID_DIGEST;
-     goto done;
-   }
-
-   AES_256_CTR* aes=new AES_256_CTR(s->cct);
-   aes->set_key((uint8_t*)key_bin.c_str(), AES_256_CTR::AES_256_KEYSIZE);
-
-   RGWGetObj_BlockDecrypt* f =new RGWGetObj_BlockDecrypt(s->cct, /*manifest_bl,*/ *cb, aes);
-   if (f != nullptr) {
-     res = f->read_manifest(*manifest_bl);
-     if (res == 0) {
-       *filter = f;
-     } else {
-       delete f;
-     }
-   }
-   ldout(s->cct, 20) << "Created decryptor key." << dendl;
-   goto done;
-  }
-
-  if (attr_mode == "RGW-AUTO") {
-    std::string master_encryption_key = from_base64(/*std::string*/(s->cct->_conf->rgw_crypt_default_encryption_key));
-    if (master_encryption_key.size() != 256 / 8) {
-      ldout(s->cct, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
-      /* not an error to return; missing encryption does not inhibit processing */
-      res = -EIO;
-      goto done;
-    }
-    std::string attr_key_selector;
-    attr_iter = attrs.find(RGW_ATTR_CRYPT_KEYSEL);
-    if (attr_iter == attrs.end()) {
-      res = - EIO;
-      goto done;
-    }
-    try {
-      ::decode(attr_key_selector, attr_iter->second);
-      //attr_key_selector = "abcdefghijabcdefghijabcdefghijab";
-    }
-    catch (buffer::error& err) {
-      ldout(s->cct, 0) << "ERROR: failed to decode" RGW_ATTR_CRYPT_KEYMD5 << dendl;
-      res = -EIO;
-      goto done;
-    }
-    if (attr_key_selector.size() != AES_256_CTR::AES_256_KEYSIZE) {
-      res = -EIO;
-      goto done;
-    }
-
-    uint8_t actual_key[AES_256_KEYSIZE];
-    if (AES_256_ECB_encrypt((uint8_t*)master_encryption_key.c_str(), AES_256_KEYSIZE,
-                            (uint8_t*)attr_key_selector.c_str(),
-                            actual_key, AES_256_KEYSIZE) != true) {
-      res = -EIO;
-      goto done;
-    }
-
-    AES_256_CTR* aes=new AES_256_CTR(s->cct);
-    aes->set_key(actual_key, AES_256_KEYSIZE);
-
-    RGWGetObj_BlockDecrypt* f =new RGWGetObj_BlockDecrypt(s->cct, /*manifest_bl,*/ *cb, aes);
-    if (f != nullptr) {
-      if (manifest_bl != nullptr)
-        res = f->read_manifest(*manifest_bl);
-      if (res == 0) {
-        *filter = f;
-      } else {
-        delete f;
+  BlockCrypt* block_crypt = nullptr;
+  res = s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  if (res == 0) {
+    if (block_crypt != nullptr) {
+      RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, block_crypt);
+      if (f != nullptr) {
+        if (manifest_bl != nullptr)
+          res = f->read_manifest(*manifest_bl);
+        if (res == 0) {
+          *filter = f;
+        } else {
+          delete f;
+        }
       }
     }
-    ldout(s->cct, 20) << "Created decryptor key." << dendl;
-    goto done;
   }
-  done:
   return res;
 }
 
@@ -1474,22 +1356,6 @@ static int get_success_retcode(int code)
   return 0;
 }
 
-static std::string get_str_attribute(map<string, bufferlist>& attrs, const std::string& name, const std::string& default_value="") {
-  std::string value;
-  auto iter = attrs.find(name);
-  if (iter == attrs.end() ) {
-    value = default_value;
-  } else {
-    try {
-      ::decode(value, iter->second);
-    } catch (buffer::error& err) {
-      value = default_value;
-      dout(0) << "ERROR: failed to decode attr:" << name << dendl;
-    }
-  }
-  return value;
-}
-
 void RGWPutObj_ObjStore_S3::send_response()
 {
   if (op_ret) {
@@ -1562,8 +1428,6 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb)
 {
   int res = 0;
-  *filter = nullptr;
-
   RGWPutObjProcessor_Multipart* multi_processor=dynamic_cast<RGWPutObjProcessor_Multipart*>(cb);
   if (multi_processor != nullptr) {
     RGWMPObj* mp = nullptr;
@@ -1577,151 +1441,23 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, R
       obj.init_ns(s->bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
       obj.set_in_extra_data(true);
       res = get_obj_attrs(store, s, obj, xattrs);
-      if (res != 0) {
-        goto done;
-      }
-      std::string stored_mode = get_str_attribute(xattrs, RGW_ATTR_CRYPT_MODE);
-      ldout(s->cct, 15) << "Multipart encryption mode: " << stored_mode << dendl;
-
-      const char *req_cust_alg = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
-      if (stored_mode == "SSE-C-AES256") {
-        if ((nullptr == req_cust_alg) || (strcmp(req_cust_alg, "AES256") != 0)) {
-          res = -ERR_INVALID_REQUEST;
-          goto done;
-        }
-
-        std::string key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
-        if (key_bin.size() != AES_256_CTR::AES_256_KEYSIZE) {
-          res = -ERR_INVALID_REQUEST;
-          goto done;
-        }
-
-        std::string keymd5 = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
-        std::string keymd5_bin = from_base64(keymd5);
-        if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-          res = -ERR_INVALID_DIGEST;
-          goto done;
-        }
-        MD5 key_hash;
-        uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-        key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
-        key_hash.Final(key_hash_res);
-
-        if ((memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) ||
-            (get_str_attribute(xattrs, RGW_ATTR_CRYPT_KEYMD5) != keymd5_bin)) {
-          res = -ERR_INVALID_DIGEST;
-          goto done;
-        }
-        AES_256_CTR* aes=new AES_256_CTR(s->cct);
-        aes->set_key((uint8_t*)key_bin.c_str(), AES_256_CTR::AES_256_KEYSIZE);
-        *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, aes);
-
-        crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] =
-            "AES256";
-        crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] =
-            keymd5;
-        goto done;
-      }
-
-      if (stored_mode == "RGW-AUTO") {
-        std::string master_encryption_key = from_base64(std::string(s->cct->_conf->rgw_crypt_default_encryption_key));
-        if (master_encryption_key.size() != 256 / 8) {
-          ldout(s->cct, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
-          res = -EIO;
-          goto done;
-        }
-        std::string attr_key_selector = get_str_attribute(xattrs, RGW_ATTR_CRYPT_KEYSEL);
-        if (attr_key_selector.size() != AES_256_CTR::AES_256_KEYSIZE) {
-          ldout(s->cct, 0) << "ERROR: missing or invalid " RGW_ATTR_CRYPT_KEYSEL << dendl;
-          res = -EIO;
-          goto done;
-        }
-        uint8_t actual_key[AES_256_KEYSIZE];
-        if (AES_256_ECB_encrypt((uint8_t*)master_encryption_key.c_str(), AES_256_KEYSIZE,
-                                (uint8_t*)attr_key_selector.c_str(),
-                                actual_key, AES_256_KEYSIZE) != true) {
-          res = -EIO;
-          goto done;
-        }
-        AES_256_CTR* aes=new AES_256_CTR(s->cct);
-        aes->set_key(actual_key, AES_256_KEYSIZE);
-        *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, aes);
-        goto done;
+      if (res == 0) {
+        BlockCrypt* block_crypt = nullptr;
+        res = s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+        if (res == 0 && block_crypt != nullptr)
+          *filter=new RGWPutObj_BlockEncrypt(s->cct, cb, block_crypt);
       }
     }
-    /* no encryption at all for multipart*/
-    goto done;
+    /* it is ok, to not have encryption at all */
   }
   else
   {
-    const char* req_sse = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
-    if (req_sse != NULL) {
-      if (strcmp(req_sse, "AES256") != 0) {
-        res = -ERR_INVALID_REQUEST;
-        goto done;
-      }
-      const char* key = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", NULL);
-      std::string key_bin = (key ? from_base64(key) : "");
-      if (key_bin.size() != AES_256_CTR::AES_256_KEYSIZE) {
-        res = -ERR_INVALID_REQUEST;
-        goto done;
-      }
-      std::string keymd5 = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
-      std::string keymd5_bin = from_base64(keymd5);
-      if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-        res = -ERR_INVALID_DIGEST;
-        goto done;
-      }
-      MD5 key_hash;
-      uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-      key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
-      key_hash.Final(key_hash_res);
-
-      if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
-        res = -ERR_INVALID_DIGEST;
-        goto done;
-      }
-
-      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-C-AES256");
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYMD5, keymd5_bin);
-
-      AES_256_CTR* aes=new AES_256_CTR(s->cct);
-      aes->set_key((uint8_t*)key_bin.c_str(), AES_256_CTR::AES_256_KEYSIZE);
-      *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, aes);
-      crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] =
-          "AES256";
-      crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] =
-          keymd5;
-      goto done;
-    }
-
-    /* no other encryption mode, check if default encryption is selected */
-    if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
-      std::string master_encryption_key = from_base64(std::string(s->cct->_conf->rgw_crypt_default_encryption_key));
-      if (master_encryption_key.size() != 256 / 8) {
-        ldout(s->cct, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
-        /* not an error to return; missing encryption does not inhibit processing */
-        goto done;
-      }
-
-      set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO");
-      std::string key_selector = create_random_key_selector();
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
-
-      uint8_t actual_key[AES_256_KEYSIZE];
-      if (AES_256_ECB_encrypt((uint8_t*)master_encryption_key.c_str(), AES_256_KEYSIZE,
-                              (uint8_t*)key_selector.c_str(),
-                              actual_key, AES_256_KEYSIZE) != true) {
-        res = -EIO;
-        goto done;
-      }
-      AES_256_CTR* aes=new AES_256_CTR(s->cct);
-      aes->set_key(actual_key, AES_256_KEYSIZE);
-      *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, aes);
-      goto done;
+    BlockCrypt* block_crypt = nullptr;
+    res = s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
+    if (res == 0 && block_crypt!=nullptr) {
+      *filter = new RGWPutObj_BlockEncrypt(s->cct, cb, block_crypt);
     }
   }
-  done:
   return res;
 }
 /*
@@ -2389,6 +2125,8 @@ void RGWPostObj_ObjStore_S3::send_response()
 
 done:
   if (op_ret == STATUS_CREATED) {
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s",
@@ -2416,72 +2154,11 @@ done:
 int RGWPostObj_ObjStore_S3::get_encrypt_filter(RGWPutObjDataProcessor** filter, RGWPutObjDataProcessor* cb)
 {
   int res = 0;
-  *filter = nullptr;
-  const char *enc_customer = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
-  if (enc_customer != NULL) {
-    if (strcmp(enc_customer,"AES256") != 0) {
-      res = -ERR_INVALID_REQUEST;
-      goto done;
-    }
-    const char* key = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", NULL);
-    std::string key_bin = from_base64(key);
-    if (key_bin.size() != AES_256_CTR::AES_256_KEYSIZE) {
-      res = -ERR_INVALID_REQUEST;
-      goto done;
-    }
-    const char* keymd5 = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", NULL);
-    std::string keymd5_bin = from_base64(keymd5);
-    if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-      res = -ERR_INVALID_DIGEST;
-      goto done;
-    }
-
-    MD5 key_hash;
-    uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
-    key_hash.Final(key_hash_res);
-
-   if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
-      res = -ERR_INVALID_DIGEST;
-      goto done;
-    }
-
-    set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-C-AES256");
-    set_attr(attrs, RGW_ATTR_CRYPT_KEYMD5, keymd5_bin);
-
-    AES_256_CTR* aes=new AES_256_CTR(s->cct);
-    aes->set_key((uint8_t*)key_bin.c_str(), AES_256_CTR::AES_256_KEYSIZE);
-    *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, aes);
-    goto done;
+  BlockCrypt* block_crypt = nullptr;
+  res = s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
+  if (res == 0 && block_crypt != nullptr) {
+    *filter = new RGWPutObj_BlockEncrypt(s->cct, cb, block_crypt);
   }
-  /* no other encryption mode, check if default encryption is selected */
-  if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
-    std::string master_encryption_key = from_base64(std::string(s->cct->_conf->rgw_crypt_default_encryption_key));
-    if (master_encryption_key.size() != 256 / 8) {
-      ldout(s->cct, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
-      /* not an error to return; missing encryption does not inhibit processing */
-      goto done;
-    }
-
-    set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO");
-    std::string key_selector = create_random_key_selector();
-    set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
-
-    uint8_t actual_key[AES_256_KEYSIZE];
-    if (AES_256_ECB_encrypt((uint8_t*)master_encryption_key.c_str(), AES_256_KEYSIZE,
-                            (uint8_t*)key_selector.c_str(),
-                            actual_key, AES_256_KEYSIZE) != true) {
-      res = -EIO;
-      goto done;
-    }
-
-    AES_256_CTR* aes=new AES_256_CTR(s->cct);
-    aes->set_key(actual_key, AES_256_KEYSIZE);
-    *filter=new RGWPutObj_BlockEncrypt(s->cct, *cb, aes);
-    goto done;
-  }
-
-  done:
   return res;
 }
 
@@ -2991,6 +2668,8 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+  for (auto &it : crypt_http_responses)
+     dump_header(s, it.first, it.second);
   end_header(s, this, "application/xml");
   if (op_ret == 0) {
     dump_start(s);
@@ -3008,41 +2687,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
 {
   int res = 0;
-  if (strcmp(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", ""), "AES256") == 0)
-  {
-    std::string key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
-    if (key_bin.size() != AES_256_CTR::AES_256_KEYSIZE) {
-      res = -ERR_INVALID_REQUEST;
-      goto done;
-    }
-    const char* keymd5 = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
-    std::string keymd5_bin = from_base64(keymd5);
-    if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-      res = -ERR_INVALID_DIGEST;
-      goto done;
-    }
-    MD5 key_hash;
-    uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    key_hash.Update((uint8_t*)key_bin.c_str(), key_bin.size());
-    key_hash.Final(key_hash_res);
-
-    if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
-      res = -ERR_INVALID_DIGEST;
-      goto done;
-    }
-
-    set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-C-AES256");
-    set_attr(attrs, RGW_ATTR_CRYPT_KEYMD5, keymd5_bin);
-
-    goto done;
-  }
-  if (s->cct->_conf->rgw_crypt_default_encryption_key != "")
-  {
-    set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO");
-    std::string key_selector = create_random_key_selector();
-    set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
-  }
-  done:
+  res = s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
   return res;
 }
 
