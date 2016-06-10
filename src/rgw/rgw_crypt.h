@@ -7,6 +7,8 @@
 #define CEPH_RGW_CRYPT_H
 
 #include <rgw/rgw_op.h>
+#include <rgw/rgw_rest_s3.h>
+#include <boost/utility/string_ref.hpp>
 
 class BlockCrypt {
 public:
@@ -80,7 +82,7 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   size_t block_size;
   std::vector<size_t> parts_len;
 public:
-  RGWGetObj_BlockDecrypt(CephContext* cct, RGWGetDataCB& next, BlockCrypt* crypt);
+  RGWGetObj_BlockDecrypt(CephContext* cct, RGWGetDataCB* next, BlockCrypt* crypt);
   virtual ~RGWGetObj_BlockDecrypt();
 
   virtual int fixup_range(off_t& bl_ofs, off_t& bl_end) override;
@@ -98,14 +100,25 @@ class RGWPutObj_BlockEncrypt : public RGWPutObj_Filter
   bufferlist cache;
   size_t block_size;
 public:
-  RGWPutObj_BlockEncrypt(CephContext* cct, RGWPutObjDataProcessor& next, BlockCrypt* crypt);
+  RGWPutObj_BlockEncrypt(CephContext* cct, RGWPutObjDataProcessor* next, BlockCrypt* crypt);
   virtual ~RGWPutObj_BlockEncrypt();
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override;
   virtual int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 std::string create_random_key_selector();
-int get_actual_key_from_kms(CephContext *cct, const char* key_id, const std::string& key_selector, std::string& actual_key);
+//int get_actual_key_from_kms(CephContext *cct, const std::string& key_id, const std::string& key_selector, std::string& actual_key);
+int get_actual_key_from_kms(CephContext *cct, boost::string_ref key_id, boost::string_ref key_selector, std::string& actual_key);
+
+int s3_prepare_encrypt(struct req_state* s,
+                       map<string, bufferlist>& attrs,
+                       map<string, post_form_part, const ltstr_nocase>* parts,
+                       BlockCrypt** block_crypt,
+                       std::map<std::string, std::string>& crypt_http_responses);
+int s3_prepare_decrypt(struct req_state* s,
+                       map<string, bufferlist>& attrs,
+                       BlockCrypt** block_crypt,
+                       std::map<std::string, std::string>& crypt_http_responses);
 
 
 #endif

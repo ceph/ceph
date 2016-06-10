@@ -1376,6 +1376,53 @@ void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
 }
 
 
+void rgw::keystone::BarbicanTokenRequestVer2::dump(Formatter* const f) const
+{
+  f->open_object_section("token_request");
+    f->open_object_section("auth");
+      f->open_object_section("passwordCredentials");
+        encode_json("username", cct->_conf->rgw_keystone_barbican_user, f);
+        encode_json("password", cct->_conf->rgw_keystone_barbican_password, f);
+      f->close_section();
+      encode_json("tenantName", cct->_conf->rgw_keystone_barbican_tenant, f);
+    f->close_section();
+  f->close_section();
+}
+
+void rgw::keystone::BarbicanTokenRequestVer3::dump(Formatter* const f) const
+{
+  f->open_object_section("token_request");
+    f->open_object_section("auth");
+      f->open_object_section("identity");
+        f->open_array_section("methods");
+          f->dump_string("", "password");
+        f->close_section();
+        f->open_object_section("password");
+          f->open_object_section("user");
+            f->open_object_section("domain");
+              encode_json("name", cct->_conf->rgw_keystone_barbican_domain, f);
+            f->close_section();
+            encode_json("name", cct->_conf->rgw_keystone_barbican_user, f);
+            encode_json("password", cct->_conf->rgw_keystone_barbican_password, f);
+          f->close_section();
+        f->close_section();
+      f->close_section();
+      f->open_object_section("scope");
+        f->open_object_section("project");
+          if (!cct->_conf->rgw_keystone_barbican_project.empty()) {
+            encode_json("name", cct->_conf->rgw_keystone_barbican_project, f);
+          } else {
+            encode_json("name", cct->_conf->rgw_keystone_barbican_tenant, f);
+          }
+          f->open_object_section("domain");
+            encode_json("name", cct->_conf->rgw_keystone_barbican_domain, f);
+          f->close_section();
+        f->close_section();
+      f->close_section();
+    f->close_section();
+  f->close_section();
+}
+
 void RGWOrphanSearchStage::dump(Formatter *f) const
 {
   f->open_object_section("orphan_search_stage");

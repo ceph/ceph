@@ -1460,6 +1460,11 @@ OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user passwor
 OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant (for keystone v2.0)
 OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project (for keystone v3)
 OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
+OPTION(rgw_keystone_barbican_user, OPT_STR, "")  // keystone user to access barbican secrets
+OPTION(rgw_keystone_barbican_password, OPT_STR, "")  // keystone password for barbican user
+OPTION(rgw_keystone_barbican_tenant, OPT_STR, "")  // keystone barbican user tenant (for keystone v2.0)
+OPTION(rgw_keystone_barbican_project, OPT_STR, "")  // keystone barbican user project (for keystone v3)
+OPTION(rgw_keystone_barbican_domain, OPT_STR, "")  // keystone barbican user domain
 OPTION(rgw_keystone_api_version, OPT_INT, 2) // Version of Keystone API to use (2 or 3)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
 OPTION(rgw_keystone_accepted_admin_roles, OPT_STR, "") // list of roles allowing an user to gain admin privileges
@@ -1472,6 +1477,7 @@ OPTION(rgw_healthcheck_disabling_path, OPT_STR, "") // path that existence cause
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL, true)  // should we try to use the internal credentials for s3?
 OPTION(rgw_s3_auth_use_keystone, OPT_BOOL, false)  // should we try to use keystone for s3?
 OPTION(rgw_s3_auth_aws4_force_boto2_compat, OPT_BOOL, true) // force aws4 auth boto2 compatibility
+OPTION(rgw_barbican_url, OPT_STR, "")  // url for barbican server
 
 /* OpenLDAP-style LDAP parameter strings */
 /* rgw_ldap_uri  space-separated list of LDAP servers in URI format */
