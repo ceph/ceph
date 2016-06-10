@@ -513,11 +513,13 @@ public:
     uint64_t buffer_size = 0;
 
   public:
-
     std::mutex lock;                ///< protect lru and other structures
 
-    void _add_onode(OnodeRef& o) {
-        onode_lru.push_front(*o);
+    void _add_onode(OnodeRef& o, int level) {
+      if (level > 0)
+	onode_lru.push_front(*o);
+      else
+	onode_lru.push_back(*o);
     }
     void _rm_onode(OnodeRef& o) {
       auto q = onode_lru.iterator_to(*o);

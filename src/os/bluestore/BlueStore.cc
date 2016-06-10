@@ -735,7 +735,7 @@ void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
-  cache->_add_onode(o);
+  cache->_add_onode(o, 1);
 }
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
@@ -787,7 +787,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   // install a non-existent onode at old location
   oldo.reset(new Onode(this, old_oid, o->key));
   po->second = oldo;
-  cache->_add_onode(po->second);
+  cache->_add_onode(po->second, 1);
 
   // add at new position and fix oid, key
   onode_map.insert(make_pair(new_oid, o));
