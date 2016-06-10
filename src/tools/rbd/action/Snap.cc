@@ -365,6 +365,17 @@ int execute_protect(const po::variables_map &vm) {
     return r;
   }
 
+  bool is_protected = false;
+  r = image.snap_is_protected(snap_name.c_str(), &is_protected);
+  if (r < 0) {
+    std::cerr << "rbd: protecting snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  } else if (is_protected) {
+    std::cerr << "rbd: snap is already protected" << std::endl;
+    return -EBUSY;
+  }
+
   r = do_protect_snap(image, snap_name.c_str());
   if (r < 0) {
     std::cerr << "rbd: protecting snap failed: " << cpp_strerror(r)
@@ -398,6 +409,17 @@ int execute_unprotect(const po::variables_map &vm) {
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
+  }
+  
+  bool is_protected = false;
+  r = image.snap_is_protected(snap_name.c_str(), &is_protected);
+  if (r < 0) {
+    std::cerr << "rbd: unprotecting snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  } else if (!is_protected) {
+    std::cerr << "rbd: snap is already unprotected" << std::endl;
+    return -EINVAL;
   }
 
   r = do_unprotect_snap(image, snap_name.c_str());
