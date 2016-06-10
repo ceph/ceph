@@ -1646,15 +1646,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    r = ictx->aio_work_queue->block_writes();
-    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
-      ictx->aio_work_queue->unblock_writes();
-    };
-    if (r < 0) {
-      return r;
-    }
-
     uint64_t disable_mask = (RBD_FEATURES_MUTABLE |
                              RBD_FEATURES_DISABLE_ONLY);
     if ((enabled && (features & RBD_FEATURES_MUTABLE) != features) ||
@@ -1664,6 +1655,35 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     } else if (features == 0) {
       lderr(cct) << "update requires at least one feature" << dendl;
       return -EINVAL;
+    }
+
+    rbd_mirror_mode_t mirror_mode = RBD_MIRROR_MODE_DISABLED;
+    if ((features & RBD_FEATURE_JOURNALING) != 0) {
+      r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
+      if (r < 0) {
+        lderr(cct) << "error in retrieving pool mirroring status: "
+                   << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      // mark mirroring as disabling and prune all sync snapshots
+      // before acquiring locks
+      if (mirror_mode == RBD_MIRROR_MODE_POOL && !enabled) {
+        r = mirror_image_disable_internal(ictx, false, false);
+        if (r < 0) {
+          lderr(cct) << "error disabling image mirroring: "
+                     << cpp_strerror(r) << dendl;
+        }
+      }
+    }
+
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    r = ictx->aio_work_queue->block_writes();
+    BOOST_SCOPE_EXIT_ALL( (ictx) ) {
+      ictx->aio_work_queue->unblock_writes();
+    };
+    if (r < 0) {
+      return r;
     }
 
     // avoid accepting new requests from peers while we manipulate
@@ -1749,14 +1769,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             return r;
           }
 
-          rbd_mirror_mode_t mirror_mode;
-          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
-          if (r < 0) {
-            lderr(cct) << "error in retrieving pool mirroring status: "
-              << cpp_strerror(r) << dendl;
-            return r;
-          }
-
           enable_mirroring = (mirror_mode == RBD_MIRROR_MODE_POOL);
         }
 
@@ -1793,14 +1805,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           disable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
         }
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
-          rbd_mirror_mode_t mirror_mode;
-          r = librbd::mirror_mode_get(ictx->md_ctx, &mirror_mode);
-          if (r < 0) {
-            lderr(cct) << "error in retrieving pool mirroring status: "
-              << cpp_strerror(r) << dendl;
-            return r;
-          }
-
           if (mirror_mode == RBD_MIRROR_MODE_IMAGE) {
             cls::rbd::MirrorImage mirror_image;
             r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
@@ -1816,10 +1820,11 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
               return -EINVAL;
             }
           } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
-            r = mirror_image_disable_internal(ictx, false);
+            r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
             if (r < 0) {
-              lderr(cct) << "error disabling image mirroring: "
-                << cpp_strerror(r) << dendl;
+              lderr(cct) << "failed to remove image from mirroring directory: "
+                         << cpp_strerror(r) << dendl;
+              return r;
             }
           }
 
