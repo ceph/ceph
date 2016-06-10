@@ -54,6 +54,8 @@
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 
+#include <boost/scope_exit.hpp>
+
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
 /*
@@ -394,6 +396,10 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
         journal::Journaler journaler(io_ctx, image_id, JOURNAL_CLIENT_ID, 0);
         C_SaferCond init_ctx;
         journaler.init(&init_ctx);
+        BOOST_SCOPE_EXIT_ALL( (&journaler) ) {
+                journaler.shut_down();
+        };
+
         r = init_ctx.wait();
         if (r < 0) {
                 simple_err("failed to initialize journal", r);
@@ -401,8 +407,13 @@ int replay_journal(rados_ioctx_t ioctx, const char *image_name,
         }
 
         journal::Journaler replay_journaler(io_ctx, replay_image_id, "", 0);
+
         C_SaferCond replay_init_ctx;
         replay_journaler.init(&replay_init_ctx);
+        BOOST_SCOPE_EXIT_ALL( (&replay_journaler) ) {
+                replay_journaler.shut_down();
+        };
+
         r = replay_init_ctx.wait();
         if (r < 0) {
                 simple_err("failed to initialize replay journal", r);
