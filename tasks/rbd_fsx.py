@@ -44,12 +44,13 @@ def task(ctx, config):
 def _run_one_client(ctx, config, role):
     """Spawned task that runs the client"""
     krbd = config.get('krbd', False)
+    nbd = config.get('nbd', False)
     testdir = teuthology.get_testdir(ctx)
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
 
     args = []
-    if krbd:
-        args.append('sudo') # rbd map/unmap need privileges
+    if krbd or nbd:
+        args.append('sudo') # rbd(-nbd) map/unmap need privileges
     args.extend([
         'adjust-ulimits',
         'ceph-coverage',
@@ -83,6 +84,8 @@ def _run_one_client(ctx, config, role):
     ])
     if krbd:
         args.append('-K') # -K enables krbd mode
+    if nbd:
+        args.append('-M') # -M enables nbd mode
     if config.get('direct_io', False):
         args.append('-Z') # -Z use direct IO
     if not config.get('randomized_striping', True):
