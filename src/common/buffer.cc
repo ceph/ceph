@@ -752,6 +752,20 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return new raw_unshareable(len);
   }
 
+  class dummy_raw : public buffer::raw {
+  public:
+    dummy_raw()
+      : raw(UINT_MAX)
+    {}
+    virtual raw* clone_empty() override {
+      return new dummy_raw();
+    }
+  };
+
+  buffer::raw* buffer::create_dummy() {
+    return new dummy_raw();
+  }
+
   buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
   {
     r->nref.inc();
@@ -1041,7 +1055,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::advance(int o)
+  void buffer::list::iterator_impl<is_const>::advance(ssize_t o)
   {
     //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
     if (o > 0) {
@@ -1080,7 +1094,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::seek(unsigned o)
+  void buffer::list::iterator_impl<is_const>::seek(size_t o)
   {
     p = ls->begin();
     off = p_off = 0;
@@ -1247,12 +1261,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     : iterator_impl(l, o, ip, po)
   {}
 
-  void buffer::list::iterator::advance(int o)
+  void buffer::list::iterator::advance(ssize_t o)
   {
     buffer::list::iterator_impl<false>::advance(o);
   }
 
-  void buffer::list::iterator::seek(unsigned o)
+  void buffer::list::iterator::seek(size_t o)
   {
     buffer::list::iterator_impl<false>::seek(o);
   }
