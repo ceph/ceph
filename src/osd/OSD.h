@@ -571,8 +571,8 @@ public:
     Mutex::Locker l(pre_publish_lock);
     assert(next_osdmap);
     while (true) {
-      map<epoch_t, unsigned>::iterator i = map_reservations.begin();
-      if (i == map_reservations.end() || i->first >= next_osdmap->get_epoch()) {
+      map<epoch_t, unsigned>::const_iterator i = map_reservations.cbegin();
+      if (i == map_reservations.cend() || i->first >= next_osdmap->get_epoch()) {
 	break;
       } else {
 	pre_publish_cond.Wait(pre_publish_lock);
@@ -669,11 +669,11 @@ public:
     Mutex::Locker l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
       return false;
-    set<ScrubJob>::iterator iter = sched_scrub_pg.lower_bound(next);
-    if (iter == sched_scrub_pg.end())
+    set<ScrubJob>::const_iterator iter = sched_scrub_pg.lower_bound(next);
+    if (iter == sched_scrub_pg.cend())
       return false;
     ++iter;
-    if (iter == sched_scrub_pg.end())
+    if (iter == sched_scrub_pg.cend())
       return false;
     *out = *iter;
     return true;
@@ -1166,8 +1166,8 @@ public:
   void dump_live_pgids() {
     Mutex::Locker l(pgid_lock);
     derr << "live pgids:" << dendl;
-    for (map<spg_t, int>::iterator i = pgid_tracker.begin();
-	 i != pgid_tracker.end();
+    for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
+	 i != pgid_tracker.cend();
 	 ++i) {
       derr << "\t" << *i << dendl;
       live_pgs[i->first]->dump_live_ids();
@@ -1450,9 +1450,9 @@ private:
 
   void clear_waiting_sessions() {
     Mutex::Locker l(session_waiting_lock);
-    for (map<spg_t, set<Session*> >::iterator i =
-	   session_waiting_for_pg.begin();
-	 i != session_waiting_for_pg.end();
+    for (map<spg_t, set<Session*> >::const_iterator i =
+	   session_waiting_for_pg.cbegin();
+	 i != session_waiting_for_pg.cend();
 	 ++i) {
       for (set<Session*>::iterator j = i->second.begin();
 	   j != i->second.end();
@@ -1522,9 +1522,9 @@ private:
     Mutex::Locker l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
 
-    for (map<spg_t, list<OpRequestRef> >::iterator i =
-	   session->waiting_for_pg.begin();
-	 i != session->waiting_for_pg.end();
+    for (map<spg_t, list<OpRequestRef> >::const_iterator i =
+	   session->waiting_for_pg.cbegin();
+	 i != session->waiting_for_pg.cend();
 	 ++i) {
       clear_session_waiting_on_pg(session, i->first);
     }    
@@ -1541,8 +1541,8 @@ private:
   void register_session_waiting_on_pg(Session *session, spg_t pgid) {
     Mutex::Locker l(session_waiting_lock);
     set<Session*> &s = session_waiting_for_pg[pgid];
-    set<Session*>::iterator i = s.find(session);
-    if (i == s.end()) {
+    set<Session*>::const_iterator i = s.find(session);
+    if (i == s.cend()) {
       session->get();
       s.insert(session);
     }
@@ -1868,11 +1868,11 @@ private:
       // items in pqueue are behind items in pg_for_processing
       sdata->pqueue->remove_by_filter(f);
 
-      map<PG *, list<PGQueueable> >::iterator iter =
+      map<PG *, list<PGQueueable> >::const_iterator iter =
 	sdata->pg_for_processing.find(pg);
-      if (iter != sdata->pg_for_processing.end()) {
-	for (auto i = iter->second.rbegin();
-	     i != iter->second.rend();
+      if (iter != sdata->pg_for_processing.cend()) {
+	for (auto i = iter->second.crbegin();
+	     i != iter->second.crend();
 	     ++i) {
 	  f.accumulate(*i);
 	}
