@@ -168,7 +168,7 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 /*
  * count bytes we have cached in given range
  */
-bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
+bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 {
   assert(oc->lock.is_locked());
   map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(cur);

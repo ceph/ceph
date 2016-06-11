@@ -332,14 +332,14 @@ class ObjectCacher {
 	put();
     }
 
-    bool is_empty() { return data.empty(); }
+    bool is_empty() const { return data.empty(); }
 
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
     void merge_left(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
-    bool is_cached(loff_t off, loff_t len);
+    bool is_cached(loff_t off, loff_t len) const;
     bool include_all_cached_data(loff_t off, loff_t len);
     int map_read(ObjectExtent &ex,
                  map<loff_t, BufferHead*>& hits,
