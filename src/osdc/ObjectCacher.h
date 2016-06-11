@@ -69,7 +69,7 @@ class ObjectCacher {
       : snap(s), bl(b), fadvise_flags(f) {}
   };
 
-  OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) {
+  OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) const {
     return new OSDRead(snap, b, f);
   }
 
@@ -87,8 +87,11 @@ class ObjectCacher {
 	journal_tid(_journal_tid) {}
   };
 
-  OSDWrite *prepare_write(const SnapContext& sc, const bufferlist &b,
-			  ceph::real_time mt, int f, ceph_tid_t journal_tid) {
+  OSDWrite *prepare_write(const SnapContext& sc,
+			  const bufferlist &b,
+			  ceph::real_time mt,
+			  int f,
+			  ceph_tid_t journal_tid) const {
     return new OSDWrite(sc, b, mt, f, journal_tid);
   }
 
@@ -189,14 +192,14 @@ class ObjectCacher {
     void set_dontneed(bool v) {
       dontneed = v;
     }
-    bool get_dontneed() {
+    bool get_dontneed() const {
       return dontneed;
     }
 
     void set_nocache(bool v) {
       nocache = v;
     }
-    bool get_nocache() {
+    bool get_nocache() const {
       return nocache;
     }
 
@@ -283,7 +286,7 @@ class ObjectCacher {
     const object_locator_t& get_oloc() const { return oloc; }
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
-    bool can_close() {
+    bool can_close() const {
       if (lru_is_expireable()) {
 	assert(data.empty());
 	assert(waitfor_commit.empty());
@@ -459,12 +462,12 @@ class ObjectCacher {
 
   void bh_stat_add(BufferHead *bh);
   void bh_stat_sub(BufferHead *bh);
-  loff_t get_stat_tx() { return stat_tx; }
-  loff_t get_stat_rx() { return stat_rx; }
-  loff_t get_stat_dirty() { return stat_dirty; }
-  loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
-  loff_t get_stat_clean() { return stat_clean; }
-  loff_t get_stat_zero() { return stat_zero; }
+  loff_t get_stat_tx() const { return stat_tx; }
+  loff_t get_stat_rx() const { return stat_rx; }
+  loff_t get_stat_dirty() const { return stat_dirty; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  loff_t get_stat_clean() const { return stat_clean; }
+  loff_t get_stat_zero() const { return stat_zero; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
