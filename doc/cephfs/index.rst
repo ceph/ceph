@@ -60,7 +60,7 @@ least one :term:`Ceph Metadata Server` running.
 
 Once you have a healthy Ceph Storage Cluster with at least
 one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
-Ensure that you client has network connectivity and the proper
+Ensure that your client has network connectivity and the proper
 authentication keyring.
 
 .. toctree:: 
