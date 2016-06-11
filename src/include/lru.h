@@ -41,7 +41,7 @@ class LRUObject {
   // pin/unpin item in cache
   void lru_pin(); 
   void lru_unpin();
-  bool lru_is_expireable() { return !lru_pinned; }
+  bool lru_is_expireable() const { return !lru_pinned; }
 
   friend class LRU;
   friend class LRUList;
