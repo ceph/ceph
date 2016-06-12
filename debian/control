@@ -429,7 +429,7 @@ Description: debugging symbols for librados
 Package: librados-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Conflicts: librados1-dev, librados2-dev
 Replaces: librados1-dev, librados2-dev
 Description: RADOS distributed object store client library (development files)
@@ -638,7 +638,7 @@ Section: debug
 Priority: extra
 Depends: ceph-test (= ${binary:Version}), ceph-common (= ${binary:Version}),
          curl, xml2,
-         ${misc:Depends}, ${shlibs:Depends}
+         ${misc:Depends}
 Description: Ceph test and benchmarking tools
  .
  This package contains the debugging symbols for ceph-test.
@@ -660,7 +660,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6
@@ -675,7 +675,7 @@ Description: Python libraries for the Ceph librados library
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6
@@ -690,7 +690,7 @@ Description: Python libraries for the Ceph librbd library
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
+Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6
