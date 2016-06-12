@@ -121,7 +121,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   version_t keys_ver = mon->key_server.get_ver();
   if (version == keys_ver)
     return;
-  assert(version >= keys_ver);
+  assert(version > keys_ver);
 
   version_t latest_full = get_version_latest_full();
 
