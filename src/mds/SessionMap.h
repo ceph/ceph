@@ -482,7 +482,6 @@ public:
   bool have_unclosed_sessions() {
     return
       is_any_state(Session::STATE_OPENING) ||
-      is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPEN) ||
       is_any_state(Session::STATE_CLOSING) ||
       is_any_state(Session::STATE_STALE) ||
