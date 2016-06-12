@@ -7717,7 +7717,6 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
   }
 
   const md_config_t *conf = cct->_conf;
-  loff_t p = in->layout.stripe_count * in->layout.object_size;
   f->readahead.set_trigger_requests(1);
   f->readahead.set_min_readahead_size(conf->client_readahead_min);
   uint64_t max_readahead = Readahead::NO_LIMIT;
@@ -7725,11 +7724,11 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode)
     max_readahead = MIN(max_readahead, (uint64_t)conf->client_readahead_max_bytes);
   }
   if (conf->client_readahead_max_periods) {
-    max_readahead = MIN(max_readahead, ((uint64_t)conf->client_readahead_max_periods) * p);
+    max_readahead = MIN(max_readahead, in->layout.get_period()*(uint64_t)conf->client_readahead_max_periods);
   }
   f->readahead.set_max_readahead_size(max_readahead);
   vector<uint64_t> alignments;
-  alignments.push_back(p);
+  alignments.push_back(in->layout.get_period());
   alignments.push_back(in->layout.stripe_unit);
   f->readahead.set_alignments(alignments);
 
@@ -8169,15 +8168,19 @@ done:
 }
 
 Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
-  client(c), f(f) {
-    f->get();
+    client(c), f(f) {
+  f->get();
+  f->readahead.inc_pending();
+}
+
+Client::C_Readahead::~C_Readahead() {
+  f->readahead.dec_pending();
+  client->_put_fh(f);
 }
 
 void Client::C_Readahead::finish(int r) {
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
   client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
-  f->readahead.dec_pending();
-  client->_put_fh(f);
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
@@ -8196,8 +8199,9 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     len = in->size - off;    
   }
 
-  ldout(cct, 10) << " max_bytes=" << conf->client_readahead_max_bytes
-		 << " max_periods=" << conf->client_readahead_max_periods << dendl;
+  ldout(cct, 10) << " min_bytes=" << f->readahead.get_min_readahead_size()
+                 << " max_bytes=" << f->readahead.get_max_readahead_size()
+                 << " max_periods=" << conf->client_readahead_max_periods << dendl;
 
   // read (and possibly block)
   int r, rvalue = 0;
@@ -8222,13 +8226,12 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     delete onfinish;
   }
 
-  if(conf->client_readahead_max_bytes > 0) {
+  if(f->readahead.get_min_readahead_size() > 0) {
     pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
     if (readahead_extent.second > 0) {
       ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
 		     << " (caller wants " << off << "~" << len << ")" << dendl;
       Context *onfinish2 = new C_Readahead(this, f);
-      f->readahead.inc_pending();
       int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 				       readahead_extent.first, readahead_extent.second,
 				       NULL, 0, onfinish2);
@@ -8236,7 +8239,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
 	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
       } else {
-	f->readahead.dec_pending();
 	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
 	delete onfinish2;
       }
