@@ -8077,7 +8077,7 @@ void MDCache::open_remote_dentry(CDentry *dn, bool projected, MDSInternalContext
   dout(10) << "open_remote_dentry " << *dn << dendl;
   CDentry::linkage_t *dnl = projected ? dn->get_projected_linkage() : dn->get_linkage();
   inodeno_t ino = dnl->get_remote_ino();
-  uint64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->mdsmap->get_metadata_pool() : -1;
+  int64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->mdsmap->get_metadata_pool() : -1;
   open_ino(ino, pool,
       new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked), true, want_xlocked); // backtrace
 }
