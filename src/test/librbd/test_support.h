@@ -9,6 +9,7 @@ bool get_features(uint64_t *features);
 bool is_feature_enabled(uint64_t feature);
 int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                     const std::string &name, uint64_t size);
+int get_image_id(librbd::Image &image, std::string *image_id);
 
 #define REQUIRE_FEATURE(feature) { 	  \
   if (!is_feature_enabled(feature)) { 	  \
