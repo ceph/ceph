@@ -79,6 +79,16 @@ public:
   void set_trigger_requests(int trigger_requests);
 
   /**
+     Gets the minimum size of a readahead request, in bytes.
+   */
+  uint64_t get_min_readahead_size(void);
+
+  /**
+     Gets the maximum size of a readahead request, in bytes.
+   */
+  uint64_t get_max_readahead_size(void);
+
+  /**
      Sets the minimum size of a readahead request, in bytes.
    */
   void set_min_readahead_size(uint64_t min_readahead_size);
