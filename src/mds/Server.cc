@@ -1426,14 +1426,16 @@ void Server::handle_client_request(MClientRequest *req)
 
   // register + dispatch
   MDRequestRef mdr = mdcache->request_start(req);
-  if (mdr.get()) {
-    if (session) {
-      mdr->session = session;
-      session->requests.push_back(&mdr->item_session_request);
-    }
-    if (has_completed)
-      mdr->has_completed = true;
+  if (!mdr.get())
+    return;
+
+  if (session) {
+    mdr->session = session;
+    session->requests.push_back(&mdr->item_session_request);
   }
+
+  if (has_completed)
+    mdr->has_completed = true;
 
   // process embedded cap releases?
   //  (only if NOT replay!)
@@ -1446,8 +1448,7 @@ void Server::handle_client_request(MClientRequest *req)
     req->releases.clear();
   }
 
-  if (mdr.get())
-    dispatch_client_request(mdr);
+  dispatch_client_request(mdr);
   return;
 }
 
