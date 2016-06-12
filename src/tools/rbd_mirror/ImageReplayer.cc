@@ -465,7 +465,15 @@ template <typename I>
 void ImageReplayer<I>::start_replay() {
   dout(20) << dendl;
 
-  int r = m_local_image_ctx->journal->start_external_replay(&m_local_replay);
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
+  m_local_image_ctx->journal->start_external_replay(&m_local_replay, ctx);
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_start_replay(int r) {
+  dout(20) << "r=" << r << dendl;
+
   if (r < 0) {
     derr << "error starting external replay on local image "
 	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
@@ -1155,6 +1163,16 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
       request->send();
     });
   }
+  if (m_remote_journaler != nullptr) {
+    ctx = new FunctionContext([this, ctx](int r) {
+        delete m_remote_journaler;
+        m_remote_journaler = nullptr;
+        ctx->complete(0);
+      });
+    ctx = new FunctionContext([this, ctx](int r) {
+        m_remote_journaler->shut_down(ctx);
+      });
+  }
   if (m_local_replay != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
         if (r < 0) {
@@ -1166,16 +1184,6 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
       });
     ctx = new FunctionContext([this, ctx](int r) {
         m_local_replay->shut_down(true, ctx);
-      });
-  }
-  if (m_remote_journaler != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
-        delete m_remote_journaler;
-        m_remote_journaler = nullptr;
-        ctx->complete(0);
-      });
-    ctx = new FunctionContext([this, ctx](int r) {
-        m_remote_journaler->shut_down(ctx);
       });
   }
   if (m_replay_handler != nullptr) {
