@@ -108,7 +108,6 @@ Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.92-1223),
 	  ceph-test (<< 0.94-1322), ceph (<< 10)
 Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322), 
         ceph (<< 10)
-X-Python-Version: >= 2.6
 Description: common ceph daemon libraries and management tools
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -649,7 +648,6 @@ Section: python
 Depends: python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
          python-cephfs (= ${binary:Version})
-X-Python-Version: >= 2.6
 Description: Meta-package for python libraries for the Ceph libraries
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -663,7 +661,6 @@ Section: python
 Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph librados library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -678,7 +675,6 @@ Section: python
 Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph librbd library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -693,7 +689,6 @@ Section: python
 Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph libcephfs library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
