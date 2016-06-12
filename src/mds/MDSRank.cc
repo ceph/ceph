@@ -270,7 +270,7 @@ class C_MDS_VoidFn : public MDSInternalContext
   }
 };
 
-uint64_t MDSRank::get_metadata_pool()
+int64_t MDSRank::get_metadata_pool()
 {
     return mdsmap->get_metadata_pool();
 }

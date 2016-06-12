@@ -125,7 +125,7 @@ class MDSRank {
 
   public:
     mds_rank_t get_nodeid() const { return whoami; }
-    uint64_t get_metadata_pool();
+    int64_t get_metadata_pool();
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
