@@ -2879,6 +2879,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if ((cmode & CEPH_FILE_MODE_WR) && mdcache->is_readonly()) {
     dout(7) << "read-only FS" << dendl;
     respond_to_request(mdr, -EROFS);
+    return;
   }
   
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
