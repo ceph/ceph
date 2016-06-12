@@ -723,7 +723,6 @@ cmake .. \
 
 # Parallel build settings ...
 PARALLEL_BUILD=%{?_smp_mflags}
-%if %{with lowmem_builder}
 lo_jobs="%{?jobs:%{jobs}}"
 %ifarch %arm
     %if ! 0%{?qemu_user_space_build:1}
@@ -748,7 +747,6 @@ fi
 if test -n "$lo_jobs" ; then
   PARALLEL_BUILD="-j$lo_jobs"
 fi
-%endif
 
 make "$PARALLEL_BUILD"
 
