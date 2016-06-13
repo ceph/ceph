@@ -272,7 +272,7 @@ class MDSThrasher(Greenlet):
             time.sleep(delay)
 
             self.log('reviving mds.{id}'.format(id=active_mds))
-            self.manager.revive_mds(active_mds, standby_for_rank=takeover_rank)
+            self.revive_mds(active_mds, standby_for_rank=takeover_rank)
 
             status = {}
             while True:
@@ -294,7 +294,7 @@ class MDSThrasher(Greenlet):
                     delay = random.randrange(0.0, self.max_replay_thrash_delay)
                 time.sleep(delay)
                 self.log('kill replaying mds.{id}'.format(id=self.to_kill))
-                self.manager.kill_mds(self.to_kill)
+                self.kill_mds(self.to_kill)
 
                 delay = self.max_revive_delay
                 if self.randomize:
@@ -305,7 +305,7 @@ class MDSThrasher(Greenlet):
                 time.sleep(delay)
 
                 self.log('revive mds.{id}'.format(id=self.to_kill))
-                self.manager.revive_mds(self.to_kill)
+                self.revive_mds(self.to_kill)
 
 
 @contextlib.contextmanager
