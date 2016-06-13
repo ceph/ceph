@@ -23,12 +23,10 @@ journal="$data/journal"
 if [ -L "$journal" -a ! -e "$journal" ]; then
     udevadm settle --timeout=5 || :
     if [ -L "$journal" -a ! -e "$journal" ]; then
-        echo "ceph-osd($UPSTART_INSTANCE): journal not present, not starting yet." 1>&2
-        stop
+        echo "ceph-osd(${cluster:-ceph}-$id): journal not present, not starting yet." 1>&2
         exit 0
     fi
 fi
-
 
 # ensure ownership is correct
 owner=`stat -c %U $data/.`
