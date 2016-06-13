@@ -4,7 +4,6 @@
 #ifndef CEPH_CLS_LOG_OPS_H
 #define CEPH_CLS_LOG_OPS_H
 
-#include "include/types.h"
 #include "cls_log_types.h"
 
 struct cls_log_add_op {
