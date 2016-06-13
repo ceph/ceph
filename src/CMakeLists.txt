@@ -1323,6 +1323,21 @@ if(${WITH_RADOSGW})
     rgw/rgw_acl_swift.cc
     rgw/rgw_auth.cc
     rgw/rgw_auth_s3.cc
+    rgw/rgw_lc.cc
+    rgw/rgw_lc_s3.cc
+    rgw/rgw_client_io.cc
+    rgw/rgw_fcgi.cc
+    rgw/rgw_xml.cc
+    rgw/rgw_usage.cc
+    rgw/rgw_json_enc.cc
+    rgw/rgw_user.cc
+    rgw/rgw_bucket.cc
+    rgw/rgw_tools.cc
+    rgw/rgw_rados.cc
+    rgw/rgw_http_client.cc
+    rgw/rgw_rest_client.cc
+    rgw/rgw_rest_conn.cc
+    rgw/rgw_op.cc
     rgw/rgw_basic_types.cc
     rgw/rgw_bucket.cc
     rgw/rgw_cache.cc

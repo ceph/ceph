@@ -928,4 +928,28 @@ struct cls_rgw_gc_obj_info
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
 
+struct cls_rgw_lc_obj_head
+{ 
+  time_t start_date;
+  string marker;
+
+  cls_rgw_lc_obj_head() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(start_date, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(start_date, bl);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+  
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
+
 #endif

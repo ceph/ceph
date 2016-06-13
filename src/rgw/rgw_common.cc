@@ -744,6 +744,7 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("location") == 0) ||
       (name.compare("logging") == 0) ||
       (name.compare("usage") == 0) ||
+      (name.compare("lifecycle") == 0) ||
       (name.compare("delete") == 0) ||
       (name.compare("uploads") == 0) ||
       (name.compare("partNumber") == 0) ||
