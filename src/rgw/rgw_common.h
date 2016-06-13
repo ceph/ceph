@@ -1206,6 +1206,10 @@ struct rgw_aws4_auth {
   string signature;
   string new_signature;
   string payload_hash;
+  string seed_signature;
+  string signing_key;
+  char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  bufferlist bl;
 };
 
 struct req_init_state {
@@ -1289,6 +1293,7 @@ struct req_state {
 
   /* aws4 auth support */
   bool aws4_auth_needs_complete;
+  bool aws4_auth_streaming_mode;
   unique_ptr<rgw_aws4_auth> aws4_auth;
 
   string canned_acl;
