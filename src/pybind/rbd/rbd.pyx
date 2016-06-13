@@ -474,23 +474,21 @@ cdef void __aio_complete_cb(rbd_completion_t completion, void *args) with gil:
     cb._complete()
 
 
-@cython.no_gc_clear
 cdef class Completion(object):
     """completion object"""
 
-    cdef public:
-         object image
-         object oncomplete
-         object ref
-         object exc_info
-
     cdef:
-         rbd_completion_t rbd_comp
-         PyObject* buf
+        object image
+        object oncomplete
+        rbd_completion_t rbd_comp
+        PyObject* buf
+        bint persisted
+        object exc_info
 
     def __cinit__(self, image, object oncomplete):
         self.oncomplete = oncomplete
         self.image = image
+        self.persisted = False
 
     def is_complete(self):
         """
@@ -560,14 +558,17 @@ cdef class Completion(object):
             self.exc_info = sys.exc_info()
 
     cdef __persist(self):
-        if self.oncomplete is not None:
-            # Keep around a reference to ourselves to make sure the completion
+        if self.oncomplete is not None and not self.persisted:
+            # Increment our own reference count to make sure the completion
             # is not freed until the callback is called. The completion is
             # allowed to be freed if there is no callback.
-            self.ref = self
+            ref.Py_INCREF(self)
+            self.persisted = True
 
     cdef __unpersist(self):
-        self.ref = None
+        if self.persisted:
+            ref.Py_DECREF(self)
+            self.persisted = False
 
 
 class RBD(object):
