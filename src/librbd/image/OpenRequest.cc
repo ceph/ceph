@@ -374,7 +374,7 @@ void OpenRequest<I>::send_refresh() {
 
   using klass = OpenRequest<I>;
   RefreshRequest<I> *ctx = RefreshRequest<I>::create(
-    *m_image_ctx,
+    *m_image_ctx, false,
     create_context_callback<klass, &klass::handle_refresh>(this));
   ctx->send();
 }
