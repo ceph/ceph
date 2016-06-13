@@ -954,7 +954,7 @@ void MDSRank::boot_start(BootStep step, int r)
           mdcache->open_root_inode(gather.new_sub());
         } else {
           // replay.  make up fake root inode to start with
-          mdcache->create_root_inode();
+          (void)mdcache->create_root_inode();
         }
         gather.activate();
       }
