@@ -215,7 +215,7 @@ class MDSThrasher(Greenlet):
             active_rank = actives[0]['rank']
 
             self.log('kill mds.{id} (rank={r})'.format(id=active_mds, r=active_rank))
-            self.manager.kill_mds_by_rank(active_rank)
+            self.kill_mds_by_rank(active_rank)
 
             # wait for mon to report killed mds as crashed
             last_laggy_since = None
