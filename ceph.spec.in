@@ -27,6 +27,9 @@
 %if 0%{?suse_version}
 %bcond_with cephfs_java
 %bcond_without ocf
+%if %{with ocf}
+%global _with_ocf --with-ocf
+%endif
 %bcond_with selinux
 %endif
 
