@@ -1,22 +1,16 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/int_types.h"
 #include "include/types.h"
 
-#include <iostream>
-#include <string.h>
-#include <stdlib.h>
 #include <errno.h>
 
-#include "common/ceph_time.h"
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "common/Clock.h"
 #include "common/strtol.h"
 #include "common/escape.h"
 
-#include "global/global_context.h"
 #include "include/compat.h"
 
 CLS_VER(1,0)
