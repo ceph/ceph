@@ -343,7 +343,6 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   // TrackedOp stuff
   typedef ceph::shared_ptr<MDRequestImpl> Ref;
 protected:
-  void _dump(utime_t now, Formatter *f) const;
   void _dump_op_descriptor_unlocked(ostream& stream) const;
 };
 
