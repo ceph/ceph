@@ -2313,6 +2313,11 @@ int librados::Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   return 0;
 }
 
+void librados::Rados::set_block_on_osdfull(bool block)
+{
+  client->set_block_on_osdfull(block);
+}
+
 void librados::Rados::test_blacklist_self(bool set)
 {
   client->blacklist_self(set);
@@ -5512,6 +5517,13 @@ extern "C" int rados_cache_unpin(rados_ioctx_t io, const char *o)
   return retval;
 }
 
+extern "C" void rados_set_block_on_osdfull(rados_t cluster, int block)
+{
+  tracepoint(librados, rados_set_block_on_osdfull_enter, cluster, block);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  client->set_block_on_osdfull(!!block);
+  tracepoint(librados, rados_set_block_on_osdfull_exit);
+}
 
 ///////////////////////////// ListObject //////////////////////////////
 librados::ListObject::ListObject() : impl(NULL)

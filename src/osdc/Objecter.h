@@ -1127,7 +1127,8 @@ private:
   atomic_t num_uncommitted;
   atomic_t global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
-  bool honor_osdmap_full;
+  bool osdmap_full_force;
+  bool osdmap_full_try;
 
 public:
   void maybe_request_map();
@@ -1941,7 +1942,7 @@ private:
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
     max_linger_id(0), num_unacked(0), num_uncommitted(0), global_op_flags(0),
-    keep_balanced_budget(false), honor_osdmap_full(true),
+    keep_balanced_budget(false), osdmap_full_force(false), osdmap_full_try(false),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
     num_homeless_ops(0),
@@ -2007,8 +2008,15 @@ private:
   void set_balanced_budget() { keep_balanced_budget = true; }
   void unset_balanced_budget() { keep_balanced_budget = false; }
 
-  void set_honor_osdmap_full() { honor_osdmap_full = true; }
-  void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+  /*
+   * If osdmap_full_force is true, all op will be w/ CEPH_OSD_FLAG_FULL_FORCE flag.
+   */
+  void set_osdmap_full_force(bool force) { osdmap_full_force = force; }
+
+  /*
+   * If osdmap_full_try is true, all op will be w/ CEPH_OSD_FLAG_FULL_TRY flag.
+   */
+  void set_osdmap_full_try(bool full_try) { osdmap_full_try = full_try; };
 
   void _scan_requests(OSDSession *s,
 		      bool force_resend,

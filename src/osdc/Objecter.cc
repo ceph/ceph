@@ -2310,22 +2310,32 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
+  /*
+   * For FULL_FORCE/FULL_TRY, it can set directly on OP or set by Objcter
+   * like osdmap_full_force & osdmap_full_try
+   */
+  int flags = op->target.flags;
+  if (osdmap_full_force)
+    flags |= CEPH_OSD_FLAG_FULL_FORCE;
+  if (osdmap_full_try)
+    flags |= CEPH_OSD_FLAG_FULL_TRY;
+
   bool need_send = false;
 
-  if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
+  if ((flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_READ) &&
+  } else if ((flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
     ldout(cct, 10) << " paused read " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-	     !(op->target.flags & (CEPH_OSD_FLAG_FULL_TRY |
+  } else if ((flags & CEPH_OSD_FLAG_WRITE) &&
+	     !(flags & (CEPH_OSD_FLAG_FULL_TRY |
 				   CEPH_OSD_FLAG_FULL_FORCE)) &&
 	     (_osdmap_full_flag() ||
 	      _osdmap_pool_full(op->target.base_oloc.pool))) {
@@ -2599,7 +2609,7 @@ bool Objecter::_osdmap_has_pool_full() const
 
 bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
 {
-  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_osdmap_full;
+  return p.has_flag(pg_pool_t::FLAG_FULL) && !osdmap_full_force;
 }
 
 /**
@@ -2607,8 +2617,8 @@ bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
  */
 bool Objecter::_osdmap_full_flag() const
 {
-  // Ignore the FULL flag if the caller has honor_osdmap_full
-  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_osdmap_full;
+  // Ignore the FULL flag if the caller set osdmap_full_force
+  return osdmap->test_flag(CEPH_OSDMAP_FULL) && !osdmap_full_force;
 }
 
 void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
@@ -3024,8 +3034,10 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   if (op->onack)
     flags |= CEPH_OSD_FLAG_ACK;
 
-  if (!honor_osdmap_full)
+  if (osdmap_full_force)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
+  if (osdmap_full_try)
+    flags |= CEPH_OSD_FLAG_FULL_TRY;
 
   op->target.paused = false;
   op->stamp = ceph::mono_clock::now();

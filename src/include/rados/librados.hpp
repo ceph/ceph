@@ -1210,6 +1210,8 @@ namespace librados
     int ioctx_create(const char *name, IoCtx &pioctx);
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
 
+    void set_block_on_osdfull(bool block);
+
     // Features useful for test cases
     void test_blacklist_self(bool set);
 

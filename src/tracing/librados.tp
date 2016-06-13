@@ -3661,3 +3661,18 @@ TRACEPOINT_EVENT(librados, rados_inconsistent_pg_list_exit,
         ctf_integer(int, retval, retval)
     )
 )
+
+TRACEPOINT_EVENT(librados, rados_set_block_on_osdfull_enter,
+    TP_ARGS(
+	rados_t, cluster,
+	int,	block),
+    TP_FIELDS(
+	ctf_integer_hex(rados_t, cluster, cluster)
+	ctf_integer(int, block, block)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_set_block_on_osdfull_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
