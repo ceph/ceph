@@ -1,7 +1,6 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "cls/user/cls_user_types.h"
 #include "cls/user/cls_user_ops.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
