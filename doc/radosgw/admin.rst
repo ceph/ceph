@@ -111,12 +111,23 @@ For example::
     "max_buckets": 1000,
     "auid": 0,
     "subusers": [
-          { "id": "johndoe:swift",
-            "permissions": "full-control"}],
+          { 
+            "id": "johndoe:swift",
+            "permissions": "full-control"
+          }
+     ],
     "keys": [
-          { "user": "johndoe",
+          { 
+            "user": "johndoe",
             "access_key": "11BS02LGFB6AL6H1ADMW",
-            "secret_key": "vzCEkuryfn060dfee4fgQPqFrncKEIkh3ZcdOANY"}],
+            "secret_key": "vzCEkuryfn060dfee4fgQPqFrncKEIkh3ZcdOANY"
+          },
+          {
+            "user": "johndoe:swift",
+            "access_key": "441JSYWXAWZTY6R9NG1W",
+            "secret_key": ""
+          },
+     ],
     "swift_keys": [],
     "caps": [],
     "op_mask": "read, write, delete",
@@ -190,8 +201,7 @@ Options include:
 - **Purge Data:** The ``--purge-data`` option purges all data associated 
   to the UID.
   
-- **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
-  to the UID.
+- **Purge Keys:** The ``--purge-keys`` option purges the key specified by ``--access-key``.
 
 
 Remove a Subuser
@@ -207,8 +217,9 @@ The user will remain in the system. To remove the subuser, specify
 
 Options include:
   
-- **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
-  to the UID.
+- **Purge Keys:** The ``--purge-keys`` option purges the key specified by ``--access-key``. For example::
+
+	radosgw-admin subuser rm --subuser=johndoe:swift --purge-keys --access-key=441JSYWXAWZTY6R9NG1W 
 
 
 Create a Key
