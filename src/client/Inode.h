@@ -226,8 +226,11 @@ struct Inode {
   }
 
   // about the dir (if this is one!)
+  Dir       *dir;     // if i'm a dir.
+  fragtree_t dirfragtree;
   set<int>  dir_contacts;
-  bool      dir_hashed, dir_replicated;
+  uint64_t dir_release_count, dir_ordered_count;
+  bool dir_hashed, dir_replicated;
 
   // per-mds caps
   map<mds_rank_t, Cap*> caps;            // mds -> Cap
@@ -256,10 +259,8 @@ struct Inode {
 
   int       _ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
-  Dir       *dir;     // if i'm a dir.
   set<Dentry*> dn_set;      // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
-  fragtree_t dirfragtree;
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
@@ -300,9 +301,8 @@ struct Inode {
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
       size(0), truncate_seq(1), truncate_size(-1),
       time_warp_seq(0), max_size(0), version(0), xattr_version(0),
-      inline_version(0),
-      flags(0),
-      qtree(NULL),
+      inline_version(0), flags(0), qtree(NULL),
+      dir(0), dir_release_count(1), dir_ordered_count(1),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       cap_dirtier_uid(-1), cap_dirtier_gid(-1),
       dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
@@ -311,7 +311,7 @@ struct Inode {
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->pool_id, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), dir(0), dn_set(),
+      _ref(0), ll_ref(0), dn_set(),
       fcntl_locks(NULL), flock_locks(NULL),
       async_err(0)
   {
