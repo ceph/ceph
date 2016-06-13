@@ -357,6 +357,7 @@ template <typename I>
 void BootstrapRequest<I>::create_local_image() {
   dout(20) << dendl;
 
+  m_local_image_id = "";
   update_progress("CREATE_LOCAL_IMAGE");
 
   Context *ctx = create_context_callback<
