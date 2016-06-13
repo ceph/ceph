@@ -4,10 +4,9 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/buffer.h"
-#include "include/Context.h"
 #include "include/encoding.h"
 #include "include/rbd_types.h"
-#include "common/Cond.h"
+#include "include/rados/librados.hpp"
 
 #include <errno.h>
 
