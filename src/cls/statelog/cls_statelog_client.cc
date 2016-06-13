@@ -1,7 +1,6 @@
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/statelog/cls_statelog_ops.h"
+#include "cls/statelog/cls_statelog_client.h"
 #include "include/rados/librados.hpp"
 
 
