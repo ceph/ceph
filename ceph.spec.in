@@ -13,8 +13,6 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_with ocf
-%bcond_without cephfs_java
 %bcond_with tests
 %bcond_with xio
 %bcond_without tcmalloc
@@ -22,9 +20,13 @@
 %bcond_with lowmem_builder
 %bcond_with minimal_debugging_information
 %if 0%{?fedora} || 0%{?rhel}
+%bcond_without cephfs_java
+%bcond_with ocf
 %bcond_without selinux
 %endif
 %if 0%{?suse_version}
+%bcond_with cephfs_java
+%bcond_without ocf
 %bcond_with selinux
 %endif
 
