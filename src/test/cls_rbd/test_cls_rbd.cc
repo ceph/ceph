@@ -1383,6 +1383,10 @@ TEST_F(TestClsRbd, mirror_image) {
   cls::rbd::MirrorImage image3("uuid3", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
+  ASSERT_EQ(-ENOENT, mirror_image_set(&ioctx, "image_id2", image2));
+  image2.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+  ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
+  image2.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
   ASSERT_EQ(-EINVAL, mirror_image_set(&ioctx, "image_id1", image2));
   ASSERT_EQ(-EEXIST, mirror_image_set(&ioctx, "image_id3", image2));

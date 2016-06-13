@@ -3112,6 +3112,12 @@ int image_set(cls_method_context_t hctx, const string &image_id,
               cpp_strerror(r).c_str());
       return r;
     }
+
+    // make sure this was not a race for disabling
+    if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+      CLS_ERR("image '%s' is already disabled", image_id.c_str());
+      return r;
+    }
   } else if (r < 0) {
     CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
 	    cpp_strerror(r).c_str());
