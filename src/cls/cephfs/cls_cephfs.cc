@@ -15,7 +15,6 @@
 
 #include <string>
 #include <errno.h>
-#include <sstream>
 
 #include "objclass/objclass.h"
 

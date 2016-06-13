@@ -14,7 +14,7 @@
 
 
 #include "cls_cephfs_client.h"
-
+#include "include/rados/librados.hpp"
 #include "mds/CInode.h"
 
 #define XATTR_CEILING "scan_ceiling"
