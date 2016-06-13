@@ -1,6 +1,7 @@
 set(kv_srcs
   KeyValueDB.cc
   LevelDBStore.cc
+  MemDB.cc
   RocksDBStore.cc)
 add_library(kv_objs OBJECT ${kv_srcs})
 add_library(kv STATIC $<TARGET_OBJECTS:kv_objs>)
