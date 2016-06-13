@@ -181,6 +181,7 @@ set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
 for i in ${image2} ${image4}; do
   wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'present'
   wait_for_snap_present ${CLUSTER1} ${POOL} ${i} 'snap2'
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
   wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${i}
   compare_images ${POOL} ${i}
 done
