@@ -705,7 +705,7 @@ Description: Java libraries for the Ceph File System
 
 Package: libcephfs-jni
 Architecture: linux-any
-Section: libs
+Section: java
 Depends: libcephfs1 (= ${binary:Version}), ${java:Depends},
          ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings
