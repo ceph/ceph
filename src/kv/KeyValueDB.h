@@ -124,6 +124,7 @@ public:
   virtual int init(string option_str="") = 0;
   virtual int open(std::ostream &out) = 0;
   virtual int create_and_open(std::ostream &out) = 0;
+  virtual void close() { }
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
