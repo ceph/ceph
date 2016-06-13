@@ -2174,7 +2174,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
       ldout(cct, 2) << "removing image from rbd_mirroring object..." << dendl;
       r = cls_client::mirror_image_remove(&io_ctx, id);
-      if (r < 0 && r != -ENOENT) {
+      if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
         lderr(cct) << "failed to remove image from mirroring directory: "
                    << cpp_strerror(r) << dendl;
         return r;
