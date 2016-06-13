@@ -3,8 +3,6 @@
 
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/user/cls_user_ops.h"
 #include "cls/user/cls_user_client.h"
 #include "include/rados/librados.hpp"
 
