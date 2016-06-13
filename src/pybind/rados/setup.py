@@ -105,7 +105,7 @@ def check_sanity():
         )
 
         compiler.add_include_dir(os.path.join(CEPH_SRC_DIR, 'include'))
-        compiler.add_library_dir(os.environ['CEPH_LIB_DIR'])
+        compiler.add_library_dir(os.environ.get('CEPH_LIBDIR'))
 
     try:
         compiler.link_executable(
