@@ -428,14 +428,14 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
 
 def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     # change the weight of osd.0 to math.pi in the newest osdmap of given osd
-    osdmap_file = tempfile.NamedTemporaryFile()
+    osdmap_file = tempfile.NamedTemporaryFile(delete=True)
     cmd = (CFSD_PREFIX + "--op get-osdmap --file {osdmap_file}").format(osd=osd_path,
                                                                         osdmap_file=osdmap_file.name)
     output = check_output(cmd, shell=True)
     epoch = int(re.findall('#(\d+)', output)[0])
 
-    new_crush_file = tempfile.NamedTemporaryFile(delete=False)
-    old_crush_file = tempfile.NamedTemporaryFile(delete=False)
+    new_crush_file = tempfile.NamedTemporaryFile(delete=True)
+    old_crush_file = tempfile.NamedTemporaryFile(delete=True)
     ret = call("{path}/osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
                                                                           crush_file=old_crush_file.name, path=CEPH_BIN),
                stdout=subprocess.DEVNULL,
@@ -475,17 +475,10 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
     ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
 
-    try:
-        os.unlink(osdmap_file.name)
-        os.unlink(new_crush_file.name)
-        os.unlink(old_crush_file.name)
-    except:
-        pass
-
     return ret == 0
 
 def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
-    osdmap_file = tempfile.NamedTemporaryFile()
+    osdmap_file = tempfile.NamedTemporaryFile(delete=True)
     cmd = (CFSD_PREFIX + "--op get-osdmap --file {osdmap_file}").format(osd=osd_path,
                                                                         osdmap_file=osdmap_file.name)
     ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
@@ -494,7 +487,7 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     # we have to read the weights from the crush map, even we can query the weights using
     # osdmaptool, but please keep in mind, they are different:
     #    item weights in crush map versus weight associated with each osd in osdmap
-    crush_file = tempfile.NamedTemporaryFile(delete=False)
+    crush_file = tempfile.NamedTemporaryFile(delete=True)
     ret = call("{path}/osdmaptool --export-crush {crush_file} {osdmap_file}".format(osdmap_file=osdmap_file.name,
                                                                                crush_file=crush_file.name, path=CEPH_BIN),
                stdout=subprocess.DEVNULL,
@@ -508,12 +501,6 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     for line in output.strip().split('\n'):
         osd_id, weight, osd_name = re.split('\s+', line)
         weights.append(float(weight))
-
-    try:
-        os.unlink(osdmap_file.name)
-        os.unlink(crush_file.name)
-    except:
-        pass
 
     return weights
 
@@ -548,14 +535,14 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     # OSD's peers, so an obvious way to test it is simply overwrite an epoch
     # with a different copy, and read it back to see if it matches.
     kill_daemons()
-    file_e2 = tempfile.NamedTemporaryFile()
+    file_e2 = tempfile.NamedTemporaryFile(delete=True)
     cmd = (CFSD_PREFIX + "--op get-inc-osdmap --file {file}").format(osd=osd_path,
                                                                      file=file_e2.name)
     output = check_output(cmd, shell=True)
     epoch = int(re.findall('#(\d+)', output)[0])
     # backup e1 incremental before overwriting it
     epoch -= 1
-    file_e1_backup = tempfile.NamedTemporaryFile()
+    file_e1_backup = tempfile.NamedTemporaryFile(delete=True)
     cmd = CFSD_PREFIX + "--op get-inc-osdmap --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
     if ret: return 1
@@ -568,7 +555,7 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
     if ret: return 1
     # read from e1
-    file_e1_read = tempfile.NamedTemporaryFile(delete=False)
+    file_e1_read = tempfile.NamedTemporaryFile(delete=True)
     cmd = CFSD_PREFIX + "--op get-inc-osdmap --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_read.name), shell=True)
     if ret: return 1
@@ -584,13 +571,6 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
         if ret:
             logging.error("Failed to revert the changed inc-osdmap")
             errors += 1
-
-    try:
-        os.unlink(file_e2.name)
-        os.unlink(file_e1_read.name)
-        os.unlink(file_e1_backup.name)
-    except:
-        pass
 
     return errors
 
