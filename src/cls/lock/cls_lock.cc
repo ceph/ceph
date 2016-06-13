@@ -8,14 +8,8 @@
  *
  */
 
-#include <algorithm>
-#include <cstring>
-#include <cstdlib>
 #include <errno.h>
-#include <iostream>
 #include <map>
-#include <sstream>
-#include <vector>
 
 #include "include/types.h"
 #include "include/utime.h"
