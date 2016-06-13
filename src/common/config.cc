@@ -267,8 +267,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
      * If cluster name is not set yet, use the prefix of the
      * basename of configuration file as cluster name.
      */
-    const char *fn = c->c_str();
-    std::string name(basename(fn));
+    std::string name = c->substr(c->find_last_of("/") + 1);
     int pos = name.find(".conf");
     if (pos < 0) {
       /*

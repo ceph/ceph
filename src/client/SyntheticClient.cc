@@ -16,6 +16,7 @@
 #include <sstream>
 using namespace std;
 
+#include "acconfig.h"
 
 #include "common/config.h"
 #include "SyntheticClient.h"
@@ -934,7 +935,9 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   assert(thread_id);
+#ifdef HAVE_PTHREAD_SETNAME_NP
   pthread_setname_np(thread_id, "client");
+#endif
   return 0;
 }
 

@@ -126,6 +126,10 @@ LIBRGW_DEPS += \
       -lldap
 endif
 
+if WITH_OPENLDAP
+    LIBRGW_DEPS += -lldap
+endif
+
 librgw_la_LIBADD = $(LIBRGW_DEPS) \
 	$(PTHREAD_LIBS) $(RESOLV_LIBS) libglobal.la \
 	$(EXTRALIBS)

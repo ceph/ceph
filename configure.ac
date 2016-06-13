@@ -244,14 +244,7 @@ AC_CHECK_PROG(YASM_CHECK, yasm, yes)
 if test x"$YASM_CHECK" = x"yes"; then
   if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
      echo 'we have a modern and working yasm'
-     # FreeBSD has uname -p not arch(1), so do not exec arch
-     arch_x86_64=0
-     if test x`uname -p`x = x"amd64"x ; then
-	arch_x86_64=1
-     elif which arch 2>&1 > /dev/null; then 
-	test x`arch`x = x"x86_64"x  && arch_x86_64=1
-     fi
-     if test $arch_x86_64 -eq 1 ; then
+     if test `uname -m` = "x86_64" ; then
         echo 'we are x86_64'
         arch_x32=0
         AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
@@ -354,7 +347,7 @@ if test x"$linux" = x"yes"; then
 fi
 
 #
-# Check for res_nquery in libresolv. There are several variations. On OSX
+# Check for res_nquery or res_query in libresolv. There are several variations. On OSX
 # res_nquery is a macro defined in resolv.h, so the typical AC_CHECK_LIB
 # doesn't work. On FreeBSD res_nquery can be found in libc. The required
 # library for linking (if any) is defined RESOLV_LIBS.
@@ -362,30 +355,37 @@ fi
 AC_CHECK_HEADER([resolv.h], [], [], [#include <netinet/in.h>])
 
 AC_DEFUN([CHECK_RESOLV_LIBS], [{
-  AC_MSG_CHECKING([if res_nquery will link (LIBS=$1)])
+  AC_MSG_CHECKING([if $1 will link (LIBS=$2)])
   saved_LIBS="${LIBS}"
-  LIBS="$1"
+  LIBS="$2"
+  AS_CASE($1,
+          res_nquery, [resolve_func="res_nquery(0, 0, 0, 0, 0, 0)"],
+          res_query, [resolve_func="res_query(0, 0, 0, 0, 0)"],
+          AC_MSG_FAILURE([unknown resolv func]))
   AC_LINK_IFELSE([AC_LANG_PROGRAM([[
         #include <netinet/in.h>
         #include <resolv.h>
-      ]], [[res_nquery(0, 0, 0, 0, 0, 0);]])],
+      ]], [[$resolve_func;]])],
       [AC_MSG_RESULT([yes])
-      [$2]],
+      AC_DEFINE(AS_TR_CPP([HAVE_$1]), 1, [Define if you have $1])
+      [$3]],
       AC_MSG_RESULT([no]))
   LIBS="${saved_LIBS}"
 }])
 
 RESOLV_LIBS=""
-CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+CHECK_RESOLV_LIBS([res_nquery], [$RESOLV_LIBS], [resolv_libs="ok"])
 if test x"$resolv_libs" != "xok"; then
-  RESOLV_LIBS="-lresolv"
-  CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+  CHECK_RESOLV_LIBS([res_query], [$RESOLV_LIBS], [resolv_libs="ok"])
   if test x"$resolv_libs" != "xok"; then
-    AC_MSG_FAILURE([no resolv library found])
+    RESOLV_LIBS="-lresolv"
+    CHECK_RESOLV_LIBS([res_nquery], [$RESOLV_LIBS], [resolv_libs="ok"])
+    if test x"$resolv_libs" != "xok"; then
+      AC_MSG_FAILURE([no resolv library found])
+    fi
   fi
 fi
 AC_SUBST([RESOLV_LIBS])
-AC_DEFINE(HAVE_RES_NQUERY, 1, [Define if you have res_nquery])
 
 dnl check for libkeyutils on linux
 KEYUTILS_LIB=""
@@ -948,13 +948,23 @@ AC_CHECK_HEADER([boost/program_options/option.hpp], [],
 
 # If we have the boost system library installed, then we may want to link
 # with it.
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
+BOOST_SYSTEM_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_SYSTEM_LIBS)
 
+saved_LIBS="${LIBS}"
+LIBS=""
 AC_CHECK_LIB(boost_iostreams-mt, main, [],
     [AC_CHECK_LIB(boost_iostreams, main, [],
         AC_MSG_FAILURE(["Boost iostreams library not found."]))])
+BOOST_IOSTREAMS_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_IOSTREAMS_LIBS)
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""
@@ -1145,6 +1155,7 @@ LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
 AC_CHECK_FUNC([pthread_spin_init],
   [AC_DEFINE(HAVE_PTHREAD_SPINLOCK, 1, [Define if you have pthread_spin_init])])
+AC_CHECK_FUNCS([pthread_getname_np pthread_setname_np pthread_rwlockattr_setkind_np])
 LIBS="$saved_LIBS"
 CFLAGS="$saved_CFLAGS"
 
@@ -1304,6 +1315,28 @@ if test "x$with_openldap" != "xno"; then
    have_openldap="yes"
 fi
 AM_CONDITIONAL(WITH_OPENLDAP, [ test "$have_openldap" = "yes" ])
+
+AC_ARG_WITH([reentrant-strsignal],
+            [AS_HELP_STRING([--with-reentrant-strsignal], [Use strsignal(3) instead of sys_siglist[]])],
+            [],
+            [with_reentrant_strsignal=no])
+AS_IF([test "x$with_reentrant_strsignal" != xno],
+  [AC_DEFINE(HAVE_REENTRANT_STRSIGNAL, 1, [Define if strsignal(3) is reentrant])])
+
+AC_ARG_WITH([thread-safe-res-query],
+            [AS_HELP_STRING([--with-thread-safe-res-query], [Use res_query(3) without locking])],
+            [],
+            [with_thread_safe_res_query=no])
+AS_IF([test "x$with_thread_safe_res_query" != xno],
+  [AC_DEFINE(HAVE_THREAD_SAFE_RES_QUERY, 1, [Define if res_query(3) is thread safe])])
+
+EXECINFO_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(execinfo, backtrace)
+EXECINFO_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(EXECINFO_LIBS)
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
