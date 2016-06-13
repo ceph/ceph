@@ -4485,6 +4485,18 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
+static bool needs_copy(const string& ceph_lib)
+{
+  string libceph_snappy_path(ceph_lib);
+  libceph_snappy_path += "/compressor/libceph_snappy.so";
+  if (access(libceph_snappy_path.c_str(), F_OK))
+    return true;
+  if (access(libceph_snappy_path.c_str(), W_OK)) {
+    return false;
+  }
+  return false;
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -4495,18 +4507,19 @@ int main(int argc, char **argv) {
 
   const char* env = getenv("CEPH_LIB");
   std::string directory(env ? env : ".libs");
-  string mkdir_compressor = "mkdir -p " + directory + "/compressor";
-  int r = system(mkdir_compressor.c_str());
-  (void)r;
+  if (needs_copy(directory)) {
+    string mkdir_compressor = "mkdir -p " + directory + "/compressor";
+    int r = system(mkdir_compressor.c_str());
+    (void)r;
 
-  string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
-  r = system(cp_libceph_snappy.c_str());
-  (void)r;
+    string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
+    r = system(cp_libceph_snappy.c_str());
+    (void)r;
 
-  string cp_libceph_zlib = "cp " + directory + "/libceph_zlib.so* " + directory + "/compressor/";
-  r = system(cp_libceph_zlib.c_str());
-  (void)r;
-
+    string cp_libceph_zlib = "cp " + directory + "/libceph_zlib.so* " + directory + "/compressor/";
+    r = system(cp_libceph_zlib.c_str());
+    (void)r;
+  }
   g_ceph_context->_conf->set_val("plugin_dir", directory, false, false);
 
 
@@ -4527,7 +4540,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
-  r = RUN_ALL_TESTS();
+  int r = RUN_ALL_TESTS();
   g_ceph_context->put();
   return r;
 }
