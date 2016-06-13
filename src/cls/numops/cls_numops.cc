@@ -21,8 +21,6 @@
 
 #include "objclass/objclass.h"
 #include <errno.h>
-#include <iostream>
-#include <map>
 #include <string>
 #include <sstream>
 #include <cstdio>
