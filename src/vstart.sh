@@ -43,6 +43,7 @@ elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+        [ -z "$CS_PATH" ] && CS_PATH=$CEPH_LIB
 else
         [ -z "$CEPH_BIN" ] && CEPH_BIN=.
         [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
