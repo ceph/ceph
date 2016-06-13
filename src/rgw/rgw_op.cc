@@ -27,14 +27,21 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
+#include "rgw_lc.h"
+#include "rgw_lc_s3.h"
 #include "rgw_client_io.h"
+#include "cls/lock/cls_lock_client.h"
+#include "cls/rgw/cls_rgw_client.h"
+
 
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+using namespace librados;
 using ceph::crypto::MD5;
+
 
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
@@ -3662,7 +3669,37 @@ int RGWPutACLs::verify_permission()
   return 0;
 }
 
+int RGWPutLC::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+int RGWDeleteLC::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
 void RGWPutACLs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutLC::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWDeleteLC::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
 }
@@ -3756,6 +3793,152 @@ void RGWPutACLs::execute()
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   }
+}
+
+static void get_lc_oid(struct req_state *s, string& oid)
+{
+  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  int max_objs = (s->cct->_conf->rgw_lc_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_lc_max_objs;
+  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
+  oid = lc_oid_prefix;
+  char buf[32];
+  snprintf(buf, 32, ".%d", index);
+  oid.append(buf);
+  return;
+}
+void RGWPutLC::execute()
+{
+  bufferlist bl;
+  
+  RGWLifecycleConfiguration_S3 *config = NULL;
+  RGWLCXMLParser_S3 parser(s->cct);
+  RGWLifecycleConfiguration_S3 new_config(s->cct);
+  ret = 0;
+
+  if (!parser.init()) {
+    ret = -EINVAL;
+    return;
+  }
+
+  ret = get_params();
+  if (ret < 0)
+    return;
+
+  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+
+  if (!parser.parse(data, len, 1)) {
+    ret = -EACCES;
+    return;
+  }
+  config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));
+  if (!config) {
+    ret = -EINVAL;
+    return;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "Old LifecycleConfiguration";
+    config->to_xml(*_dout);
+    *_dout << dendl;
+  }
+
+  ret = config->rebuild(store, new_config);
+  if (ret < 0)
+    return;
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "New LifecycleConfiguration:";
+    new_config.to_xml(*_dout);
+    *_dout << dendl;
+  }
+  
+  new_config.encode(bl);
+  map<string, bufferlist> attrs;
+  attrs = s->bucket_attrs;
+  attrs[RGW_ATTR_LC] = bl;
+  ret =rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (ret < 0)
+    return;
+  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;  
+  string oid; 
+  get_lc_oid(s, oid);
+  pair<string, int> entry(shard_id, lc_uninitial);
+  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  rados::cls::lock::Lock l(lc_index_lock_name); 
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  do {
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret == -EBUSY) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << ret << dendl;
+      break;
+    }
+    ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << ret << dendl;     
+    }
+    break;
+  }while(1);
+  l.unlock(ctx, oid);
+  return;
+}
+
+void RGWDeleteLC::execute()
+{
+  bufferlist bl;
+  map<string, bufferlist> orig_attrs, attrs;
+  map<string, bufferlist>::iterator iter;
+  rgw_obj obj;
+  store->get_bucket_instance_obj(s->bucket, obj);
+  store->set_atomic(s->obj_ctx, obj);
+  ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+  if (op_ret < 0)
+    return;
+    
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+      const string& name = iter->first;
+      dout(10) << "DeleteLC : attr: " << name << dendl;
+      if (name.compare(0, (sizeof(RGW_ATTR_LC) - 1), RGW_ATTR_LC) != 0) {
+        if (attrs.find(name) == attrs.end()) {
+        attrs[name] = iter->second;
+        }
+      }
+    }
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  pair<string, int> entry(shard_id, lc_uninitial);
+  string oid; 
+  get_lc_oid(s, oid);
+  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  rados::cls::lock::Lock l(lc_index_lock_name);
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  do {
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret == -EBUSY) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << ret << dendl;
+      break;
+    }
+    ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
+    if (ret < 0) {
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << ret << dendl;     
+    }
+    break;
+  }while(1);
+  l.unlock(ctx, oid);
+  return;
 }
 
 int RGWGetCORS::verify_permission()
