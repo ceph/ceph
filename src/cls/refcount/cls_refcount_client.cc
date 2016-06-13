@@ -1,6 +1,6 @@
 #include <errno.h>
 
-#include "include/types.h"
+#include "cls/refcount/cls_refcount_client.h"
 #include "cls/refcount/cls_refcount_ops.h"
 #include "include/rados/librados.hpp"
 
