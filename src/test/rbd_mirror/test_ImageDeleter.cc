@@ -342,6 +342,11 @@ TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
 TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
   remove_image();
 
+  cls::rbd::MirrorImage mirror_image(GLOBAL_IMAGE_ID,
+                              MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
+  EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
+                                            mirror_image));
+
   m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
@@ -358,12 +363,36 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
 TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
   remove_image(true);
 
+  cls::rbd::MirrorImage mirror_image(GLOBAL_IMAGE_ID,
+                              MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
+  EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
+                                            mirror_image));
+  mirror_image.state = MirrorImageState::MIRROR_IMAGE_STATE_DISABLING;
+  EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
+                                            mirror_image));
+
   m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
       m_image_name, GLOBAL_IMAGE_ID);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_image_name, &ctx);
   EXPECT_EQ(0, ctx.wait());
+
+  ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
+  ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());
+
+  check_image_deleted();
+}
+
+TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
+  remove_image();
+
+  m_deleter->schedule_image_delete(m_local_pool_id, m_local_image_id,
+      m_image_name, GLOBAL_IMAGE_ID);
+
+  C_SaferCond ctx;
+  m_deleter->wait_for_scheduled_deletion(m_image_name, &ctx);
+  EXPECT_EQ(-ENOENT, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());
