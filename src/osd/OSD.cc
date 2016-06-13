@@ -1721,7 +1721,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_remove_thread_timeout,
     cct->_conf->osd_remove_thread_suicide_timeout,
     &disk_tp),
-  mclock_op_tags(cct),
   service(this)
 {
   monc->set_messenger(client_messenger);

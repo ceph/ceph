@@ -34,9 +34,6 @@ namespace ceph {
 
   namespace dmc = crimson::dmclock;
 
-  enum class osd_op_type_t {
-    client, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
-
   template <typename T, typename K>
   class mClockQueue : public OpQueue <T, K> {
 
@@ -211,7 +208,7 @@ namespace ceph {
 
     SubQueues high_queue;
 
-    crimson::dmclock::PullPriorityQueue<osd_op_type_t,T> queue;
+    dmc::PullPriorityQueue<K,T> queue;
 
     // when enqueue_front is called, rather than try to re-calc tags
     // to put in mClock priority queue, we'll just keep a separate
@@ -219,26 +216,11 @@ namespace ceph {
     // empty do we use queue.
     std::list<std::pair<K,T>> queue_front;
 
-    const int cost_factor;
-
-    // turn cost, which can range from 1000 to 50 * 2^20
-    double cost_to_tag(unsigned cost) {
-      static const double log_of_2 = std::log(2.0);
-      return cost_factor * std::log(cost) / log_of_2;
-    }
-
-    dmc::ClientInfo client_info_f(const osd_op_type_t& client) {
-      static dmc::ClientInfo _default(1.0, 1.0, 1.0);
-      return _default;
-    }
-
   public:
 
-    
-    mClockQueue(const int _cost_factor) :
-      queue(std::bind(&mClockQueue::client_info_f, this, std::placeholders::_1),
-	    true),
-      cost_factor(_cost_factor)
+    mClockQueue(
+      const typename dmc::PullPriorityQueue<K,T>::ClientInfoFunc& info_func) :
+      queue(info_func, true)
     {
       // empty
     }
@@ -254,26 +236,16 @@ namespace ceph {
       return total;
     }
 
-    void remove_by_filter(std::function<bool (T)> f) override final {
-#if 0 // REPLACE
-      for (typename SubQueues::iterator i = queue.begin();
-	   i != queue.end();
-	) {
-	unsigned priority = i->first;
+    void remove_by_filter(std::function<bool (T)> filter) override final {
+      queue.remove_by_req_filter(filter);
+
+      queue_front.remove_if(
+	[&] (const std::pair<K,T>& p) { return filter(p.second); });
       
-	i->second.remove_by_filter(f);
-	if (i->second.empty()) {
-	  ++i;
-	  remove_queue(priority);
-	} else {
-	  ++i;
-	}
-      }
-#endif
       for (typename SubQueues::iterator i = high_queue.begin();
 	   i != high_queue.end();
 	) {
-	i->second.remove_by_filter(f);
+	i->second.remove_by_filter(filter);
 	if (i->second.empty()) {
 	  high_queue.erase(i++);
 	} else {
@@ -318,9 +290,8 @@ namespace ceph {
     }
 
     void enqueue(K cl, unsigned priority, unsigned cost, T item) override final {
-      double tag_cost = cost_to_tag(cost);
-      osd_op_type_t op_type = osd_op_type_t::client;
-      queue.add_request(item, op_type, tag_cost);
+      // priority is ignored
+      queue.add_request(item, cl, cost);
     }
 
     void enqueue_front(K cl, unsigned priority, unsigned cost, T item) override final {
@@ -356,7 +327,6 @@ namespace ceph {
     }
 
     void dump(ceph::Formatter *f) const override final {
-#if 0
       f->open_array_section("high_queues");
       for (typename SubQueues::const_iterator p = high_queue.begin();
 	   p != high_queue.end();
@@ -375,7 +345,6 @@ namespace ceph {
       f->open_object_section("queue");
       f->dump_int("size", queue.request_count());
       f->close_section();
-#endif
     } // dump
   };
 

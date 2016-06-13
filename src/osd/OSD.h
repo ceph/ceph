@@ -51,7 +51,7 @@ using namespace std;
 #include "common/sharedptr_registry.hpp"
 #include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
-#include "common/mClockPriorityQueue.h"
+#include "common/mClockOpClassAdapter.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
 
@@ -1748,52 +1748,6 @@ private:
 
   friend class PGQueueable;
 
-  struct mclock_op_tags_t {
-    const double client_op_res;
-    const double client_op_wgt;
-    const double client_op_lim;
-
-    const double osd_subop_res;
-    const double osd_subop_wgt;
-    const double osd_subop_lim;
-
-    const double snap_res;
-    const double snap_wgt;
-    const double snap_lim;
-
-    const double recov_res;
-    const double recov_wgt;
-    const double recov_lim;
-
-    const double scrub_res;
-    const double scrub_wgt;
-    const double scrub_lim;
-
-    mclock_op_tags_t(CephContext *cct) :
-      client_op_res(cct->_conf->osd_op_queue_mclock_client_op_res),
-      client_op_wgt(cct->_conf->osd_op_queue_mclock_client_op_wgt),
-      client_op_lim(cct->_conf->osd_op_queue_mclock_client_op_lim),
-
-      osd_subop_res(cct->_conf->osd_op_queue_mclock_osd_subop_res),
-      osd_subop_wgt(cct->_conf->osd_op_queue_mclock_osd_subop_wgt),
-      osd_subop_lim(cct->_conf->osd_op_queue_mclock_osd_subop_lim),
-
-      snap_res(cct->_conf->osd_op_queue_mclock_snap_res),
-      snap_wgt(cct->_conf->osd_op_queue_mclock_snap_wgt),
-      snap_lim(cct->_conf->osd_op_queue_mclock_snap_lim),
-
-      recov_res(cct->_conf->osd_op_queue_mclock_recov_res),
-      recov_wgt(cct->_conf->osd_op_queue_mclock_recov_wgt),
-      recov_lim(cct->_conf->osd_op_queue_mclock_recov_lim),
-
-      scrub_res(cct->_conf->osd_op_queue_mclock_scrub_res),
-      scrub_wgt(cct->_conf->osd_op_queue_mclock_scrub_wgt),
-      scrub_lim(cct->_conf->osd_op_queue_mclock_scrub_lim)
-    {
-      // empty
-    }
-  } mclock_op_tags;
-
   class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
 
     struct ShardData {
@@ -1802,6 +1756,7 @@ private:
       Mutex sdata_op_ordering_lock;
       map<PG*, list<PGQueueable> > pg_for_processing;
       std::unique_ptr<OpQueue< pair<PGRef, PGQueueable>, entity_inst_t>> pqueue;
+
       ShardData(
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
@@ -1820,9 +1775,8 @@ private:
 		    max_tok_per_prio, min_cost));
 	    } else if (io_queue::mclock_opclass == opqueue) {
 	      pqueue = std::unique_ptr
-		<ceph::mClockQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new ceph::mClockQueue< pair<PGRef,PGQueueable>, entity_inst_t>(
-		    cct->_conf->osd_op_queue_mclock_cost_factor));
+		<ceph::mClockOpClassQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
+		  new ceph::mClockOpClassQueue< pair<PGRef,PGQueueable>, entity_inst_t>(cct));
 	    }
 	  }
     };
