@@ -1706,11 +1706,17 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
       C_SaferCond lock_ctx;
       ictx->exclusive_lock->request_lock(&lock_ctx);
+
+      // don't block holding lock since refresh might be required
+      ictx->owner_lock.put_read();
       r = lock_ctx.wait();
+      ictx->owner_lock.get_read();
+
       if (r < 0) {
         lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
         return r;
-      } else if (!ictx->exclusive_lock->is_lock_owner()) {
+      } else if (ictx->exclusive_lock == nullptr ||
+                 !ictx->exclusive_lock->is_lock_owner()) {
         lderr(cct) << "failed to acquire exclusive lock" << dendl;
         return -EROFS;
       }
@@ -2936,11 +2942,17 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     C_SaferCond lock_ctx;
     ictx->exclusive_lock->request_lock(&lock_ctx);
+
+    // don't block holding lock since refresh might be required
+    ictx->owner_lock.put_read();
     r = lock_ctx.wait();
+    ictx->owner_lock.get_read();
+
     if (r < 0) {
       lderr(cct) << "failed to lock image: " << cpp_strerror(r) << dendl;
       return r;
-    } else if (!ictx->exclusive_lock->is_lock_owner()) {
+    } else if (ictx->exclusive_lock == nullptr ||
+               !ictx->exclusive_lock->is_lock_owner()) {
       lderr(cct) << "failed to acquire exclusive lock" << dendl;
       return -EROFS;
     }
