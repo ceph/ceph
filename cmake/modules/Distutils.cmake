@@ -46,6 +46,7 @@ function(distutils_add_cython_module name src)
     OPT=\"-DNDEBUG -g -fwrapv -O2 -Wall\"
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
     ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py build --build-base ${CYTHON_MODULE_DIR} --verbose
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -68,6 +69,7 @@ function(distutils_install_cython_module name)
     execute_process(
        COMMAND env
            CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+           CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
            CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
            ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --build-base ${CYTHON_MODULE_DIR} --verbose
