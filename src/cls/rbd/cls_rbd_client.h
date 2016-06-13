@@ -8,14 +8,15 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/bit_vector.hpp"
 #include "common/snap_types.h"
-#include "include/rados/librados.hpp"
 #include "include/types.h"
 #include "librbd/parent_types.h"
 
-#include <string>
-#include <vector>
-
 class Context;
+namespace librados {
+  class ObjectReadOperation;
+  class IoCtx;
+  class ObjectWriteOperation;
+}
 
 namespace librbd {
   namespace cls_client {
