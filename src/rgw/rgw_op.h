@@ -1005,6 +1005,58 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWPutLC : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWPutLC() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWPutLC() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+//  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWDeleteLC : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWDeleteLC() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWDeleteLC() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_lifecycle"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWGetCORS : public RGWOp {
 protected:
 
