@@ -5586,6 +5586,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       }
     }
 
+    if (osize && bsize > osize)
+      bsize = osize;
+
     dout(1) << " bench count " << count
             << " bsize " << prettybyte_t(bsize) << dendl;
 
