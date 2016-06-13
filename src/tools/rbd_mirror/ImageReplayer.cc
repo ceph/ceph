@@ -51,7 +51,7 @@ template <typename I>
 struct ReplayHandler : public ::journal::ReplayHandler {
   ImageReplayer<I> *replayer;
   ReplayHandler(ImageReplayer<I> *replayer) : replayer(replayer) {}
-virtual void get() {}
+  virtual void get() {}
   virtual void put() {}
 
   virtual void handle_entries_available() {
@@ -282,6 +282,7 @@ ImageReplayer<I>::~ImageReplayer()
   assert(m_replay_handler == nullptr);
   assert(m_on_start_finish == nullptr);
   assert(m_on_stop_finish == nullptr);
+  assert(m_bootstrap_request == nullptr);
   assert(m_in_flight_status_updates == 0);
   delete m_asok_hook;
 }
@@ -366,7 +367,6 @@ void ImageReplayer<I>::bootstrap() {
   dout(20) << "bootstrap params: "
 	   << "local_image_name=" << m_local_image_name << dendl;
 
-  // TODO: add a new bootstrap state and support canceling
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
@@ -379,6 +379,7 @@ void ImageReplayer<I>::bootstrap() {
 
   {
     Mutex::Locker locker(m_lock);
+    request->get();
     m_bootstrap_request = request;
   }
 
@@ -394,6 +395,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
   {
     Mutex::Locker locker(m_lock);
+    m_bootstrap_request->put();
     m_bootstrap_request = nullptr;
     if (m_local_image_ctx) {
       m_local_image_id = m_local_image_ctx->id;
@@ -463,7 +465,15 @@ template <typename I>
 void ImageReplayer<I>::start_replay() {
   dout(20) << dendl;
 
-  int r = m_local_image_ctx->journal->start_external_replay(&m_local_replay);
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
+  m_local_image_ctx->journal->start_external_replay(&m_local_replay, ctx);
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_start_replay(int r) {
+  dout(20) << "r=" << r << dendl;
+
   if (r < 0) {
     derr << "error starting external replay on local image "
 	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
@@ -513,10 +523,10 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
       {
         Mutex::Locker locker(m_lock);
         m_state = STATE_STOPPING;
-        if (r < 0 && r != -EINTR) {
+        if (r < 0 && r != -ECANCELED) {
           derr << "start failed: " << cpp_strerror(r) << dendl;
         } else {
-          dout(20) << "start interrupted" << dendl;
+          dout(20) << "start canceled" << dendl;
         }
         std::swap(m_on_start_finish, on_start_finish);
       }
@@ -537,7 +547,7 @@ bool ImageReplayer<I>::on_start_interrupted()
     return false;
   }
 
-  on_start_fail(-EINTR);
+  on_start_fail(-ECANCELED);
   return true;
 }
 
@@ -555,7 +565,10 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual)
     } else {
       if (!is_stopped_()) {
 	if (m_state == STATE_STARTING) {
-	  dout(20) << "interrupting start" << dendl;
+	  dout(20) << "canceling start" << dendl;
+	  if (m_bootstrap_request) {
+	    m_bootstrap_request->cancel();
+	  }
 	} else {
 	  dout(20) << "interrupting replay" << dendl;
 	  shut_down_replay = true;
@@ -1150,6 +1163,16 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
       request->send();
     });
   }
+  if (m_remote_journaler != nullptr) {
+    ctx = new FunctionContext([this, ctx](int r) {
+        delete m_remote_journaler;
+        m_remote_journaler = nullptr;
+        ctx->complete(0);
+      });
+    ctx = new FunctionContext([this, ctx](int r) {
+        m_remote_journaler->shut_down(ctx);
+      });
+  }
   if (m_local_replay != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
         if (r < 0) {
@@ -1161,16 +1184,6 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
       });
     ctx = new FunctionContext([this, ctx](int r) {
         m_local_replay->shut_down(true, ctx);
-      });
-  }
-  if (m_remote_journaler != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
-        delete m_remote_journaler;
-        m_remote_journaler = nullptr;
-        ctx->complete(0);
-      });
-    ctx = new FunctionContext([this, ctx](int r) {
-        m_remote_journaler->shut_down(ctx);
       });
   }
   if (m_replay_handler != nullptr) {

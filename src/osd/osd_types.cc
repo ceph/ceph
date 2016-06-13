@@ -2761,7 +2761,7 @@ void pg_info_t::encode(bufferlist &bl) const
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
   ::encode(log_tail, bl);
-  if (last_backfill_bitwise && last_backfill != last_backfill.get_max()) {
+  if (last_backfill_bitwise && !last_backfill.is_max()) {
     ::encode(hobject_t(), bl);
   } else {
     ::encode(last_backfill, bl);

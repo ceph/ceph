@@ -18,8 +18,10 @@ from cpython cimport PyObject, ref, exc
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport realloc, free
+from libc.string cimport strdup
 
 from collections import Iterable
+from datetime import datetime
 
 cimport rados
 
@@ -32,6 +34,9 @@ cdef extern from "Python.h":
     PyObject *PyBytes_FromStringAndSize(char *v, Py_ssize_t len) except NULL
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
+
+cdef extern from "time.h":
+    ctypedef long int time_t
 
 ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
@@ -81,6 +86,43 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t size
         char *name
 
+    ctypedef enum rbd_mirror_mode_t:
+        _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
+        _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
+        _RBD_MIRROR_MODE_POOL "RBD_MIRROR_MODE_POOL"
+
+    ctypedef struct rbd_mirror_peer_t:
+        char *uuid
+        char *cluster_name
+        char *client_name
+
+    ctypedef enum rbd_mirror_image_state_t:
+        _RBD_MIRROR_IMAGE_DISABLING "RBD_MIRROR_IMAGE_DISABLING"
+        _RBD_MIRROR_IMAGE_ENABLED "RBD_MIRROR_IMAGE_ENABLED"
+        _RBD_MIRROR_IMAGE_DISABLED "RBD_MIRROR_IMAGE_DISABLED"
+
+    ctypedef struct rbd_mirror_image_info_t:
+        char *global_id
+        rbd_mirror_image_state_t state
+        bint primary
+
+    ctypedef enum rbd_mirror_image_status_state_t:
+        _MIRROR_IMAGE_STATUS_STATE_UNKNOWN "MIRROR_IMAGE_STATUS_STATE_UNKNOWN"
+        _MIRROR_IMAGE_STATUS_STATE_ERROR "MIRROR_IMAGE_STATUS_STATE_ERROR"
+        _MIRROR_IMAGE_STATUS_STATE_SYNCING "MIRROR_IMAGE_STATUS_STATE_SYNCING"
+        _MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY "MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY"
+        _MIRROR_IMAGE_STATUS_STATE_REPLAYING "MIRROR_IMAGE_STATUS_STATE_REPLAYING"
+        _MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY "MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY"
+        _MIRROR_IMAGE_STATUS_STATE_STOPPED "MIRROR_IMAGE_STATUS_STATE_STOPPED"
+
+    ctypedef struct rbd_mirror_image_status_t:
+        char *name
+        rbd_mirror_image_info_t info
+        rbd_mirror_image_status_state_t state
+        char *description
+        time_t last_update
+        bint up
+
     void rbd_version(int *major, int *minor, int *extra)
 
     void rbd_image_options_create(rbd_image_options_t* opts)
@@ -108,6 +150,31 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_remove(rados_ioctx_t io, const char *name)
     int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                    const char *destname)
+
+    int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
+    int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
+    int rbd_mirror_peer_add(rados_ioctx_t io, char *uuid,
+                            size_t uuid_max_length, const char *cluster_name,
+                            const char *client_name)
+    int rbd_mirror_peer_remove(rados_ioctx_t io, const char *uuid)
+    int rbd_mirror_peer_list(rados_ioctx_t io_ctx, rbd_mirror_peer_t *peers,
+                             int *max_peers)
+    void rbd_mirror_peer_list_cleanup(rbd_mirror_peer_t *peers, int max_peers)
+    int rbd_mirror_peer_set_client(rados_ioctx_t io, const char *uuid,
+                                   const char *client_name)
+    int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx, const char *uuid,
+                                    const char *cluster_name)
+    int rbd_mirror_image_status_list(rados_ioctx_t io, const char *start_id,
+                                     size_t max, char **image_ids,
+                                     rbd_mirror_image_status_t *images,
+                                     size_t *len)
+    void rbd_mirror_image_status_list_cleanup(char **image_ids,
+                                              rbd_mirror_image_status_t *images,
+                                              size_t len)
+    int rbd_mirror_image_status_summary(rados_ioctx_t io,
+                                        rbd_mirror_image_status_state_t *states,
+                                        int *counts, size_t *maxlen)
+
     int rbd_open(rados_ioctx_t io, const char *name,
                  rbd_image_t *image, const char *snap_name)
     int rbd_open_read_only(rados_ioctx_t io, const char *name,
@@ -179,6 +246,17 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_flush(rbd_image_t image)
     int rbd_invalidate_cache(rbd_image_t image)
 
+    int rbd_mirror_image_enable(rbd_image_t image)
+    int rbd_mirror_image_disable(rbd_image_t image, bint force)
+    int rbd_mirror_image_promote(rbd_image_t image, bint force)
+    int rbd_mirror_image_demote(rbd_image_t image)
+    int rbd_mirror_image_resync(rbd_image_t image)
+    int rbd_mirror_image_get_info(rbd_image_t image,
+                                  rbd_mirror_image_info_t *mirror_image_info,
+                                  size_t info_size)
+    int rbd_mirror_image_get_status(rbd_image_t image,
+                                    rbd_mirror_image_status_t *mirror_image_status,
+                                    size_t status_size)
 
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
@@ -195,6 +273,22 @@ RBD_FEATURES_SINGLE_CLIENT = _RBD_FEATURES_SINGLE_CLIENT
 RBD_FEATURES_ALL = _RBD_FEATURES_ALL
 
 RBD_FLAG_OBJECT_MAP_INVALID = _RBD_FLAG_OBJECT_MAP_INVALID
+
+RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
+RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
+RBD_MIRROR_MODE_POOL = _RBD_MIRROR_MODE_POOL
+
+RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
+RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
+RBD_MIRROR_IMAGE_DISABLED = _RBD_MIRROR_IMAGE_DISABLED
+
+MIRROR_IMAGE_STATUS_STATE_UNKNOWN = _MIRROR_IMAGE_STATUS_STATE_UNKNOWN
+MIRROR_IMAGE_STATUS_STATE_ERROR = _MIRROR_IMAGE_STATUS_STATE_ERROR
+MIRROR_IMAGE_STATUS_STATE_SYNCING = _MIRROR_IMAGE_STATUS_STATE_SYNCING
+MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY = _MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY
+MIRROR_IMAGE_STATUS_STATE_REPLAYING = _MIRROR_IMAGE_STATUS_STATE_REPLAYING
+MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY = _MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY
+MIRROR_IMAGE_STATUS_STATE_STOPPED = _MIRROR_IMAGE_STATUS_STATE_STOPPED
 
 RBD_IMAGE_OPTION_FORMAT = _RBD_IMAGE_OPTION_FORMAT
 RBD_IMAGE_OPTION_FEATURES = _RBD_IMAGE_OPTION_FEATURES
@@ -368,7 +462,7 @@ class RBD(object):
         return (major, minor, extra)
 
     def create(self, ioctx, name, size, order=None, old_format=True,
-               features=0, stripe_unit=0, stripe_count=0):
+               features=None, stripe_unit=0, stripe_count=0):
         """
         Create an rbd image.
 
@@ -405,7 +499,7 @@ class RBD(object):
         if order is not None:
             _order = order
         if old_format:
-            if features != 0 or stripe_unit != 0 or stripe_count != 0:
+            if features or stripe_unit != 0 or stripe_count != 0:
                 raise InvalidArgument('format 1 images do not support feature'
                                       ' masks or non-default striping')
             with nogil:
@@ -415,8 +509,10 @@ class RBD(object):
             try:
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FORMAT,
                                              1 if old_format else 2)
-                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
-                                             features)
+                if features is not None:
+                    rbd_image_options_set_uint64(opts,
+                                                 RBD_IMAGE_OPTION_FEATURES,
+                                                 features)
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                              _order)
                 rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
@@ -432,7 +528,7 @@ class RBD(object):
             raise make_ex(ret, 'error creating image')
 
     def clone(self, p_ioctx, p_name, p_snapname, c_ioctx, c_name,
-              features=0, order=None, stripe_unit=0, stripe_count=0):
+              features=None, order=None, stripe_unit=0, stripe_count=0):
         """
         Clone a parent rbd snapshot into a COW sparse child.
 
@@ -475,8 +571,9 @@ class RBD(object):
 
         rbd_image_options_create(&opts)
         try:
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
-                                         features)
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                          order)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
@@ -566,6 +663,314 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
 
+    def mirror_mode_get(self, ioctx):
+        """
+        Get pool mirror mode.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: int - pool mirror mode
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            rbd_mirror_mode_t mirror_mode
+        with nogil:
+            ret = rbd_mirror_mode_get(_ioctx, &mirror_mode)
+        if ret != 0:
+            raise make_ex(ret, 'error getting mirror mode')
+        return mirror_mode
+
+    def mirror_mode_set(self, ioctx, mirror_mode):
+        """
+        Set pool mirror mode.
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param mirror_mode: mirror mode to set
+        :type mirror_mode: int
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            rbd_mirror_mode_t _mirror_mode = mirror_mode
+        with nogil:
+            ret = rbd_mirror_mode_set(_ioctx, _mirror_mode)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror mode')
+
+    def mirror_peer_add(self, ioctx, cluster_name, client_name):
+        """
+        Add mirror peer.
+
+        :param ioctx: determines which RADOS pool is used
+        :type ioctx: :class:`rados.Ioctx`
+        :param cluster_name: mirror peer cluster name
+        :type cluster_name: str
+        :param client_name: mirror peer client name
+        :type client_name: str
+        :returns: str - peer uuid
+        """
+        cluster_name = cstr(cluster_name, 'cluster_name')
+        client_name = cstr(client_name, 'client_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = NULL
+            size_t _uuid_max_length = 512
+            char *_cluster_name = cluster_name
+            char *_client_name = client_name
+        try:
+            _uuid = <char *>realloc_chk(_uuid, _uuid_max_length)
+            ret = rbd_mirror_peer_add(_ioctx, _uuid, _uuid_max_length,
+                                      _cluster_name, _client_name)
+            if ret != 0:
+                raise make_ex(ret, 'error adding mirror peer')
+            return decode_cstr(_uuid)
+        finally:
+            free(_uuid)
+
+    def mirror_peer_remove(self, ioctx, uuid):
+        """
+        Remove mirror peer.
+
+        :param ioctx: determines which RADOS pool is used
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: peer uuid
+        :type uuid: str
+        """
+        uuid = cstr(uuid, 'uuid')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+        with nogil:
+            ret = rbd_mirror_peer_remove(_ioctx, _uuid)
+        if ret != 0:
+            raise make_ex(ret, 'error removing mirror peer')
+
+    def mirror_peer_list(self, ioctx):
+        """
+        Iterate over the peers of a pool.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`MirrorPeerIterator`
+        """
+        return MirrorPeerIterator(ioctx)
+
+    def mirror_peer_set_client(self, ioctx, uuid, client_name):
+        """
+        Set mirror peer client name
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: uuid of the mirror peer
+        :type uuid: str
+        :param client_name: client name of the mirror peer to set
+        :type client_name: str
+        """
+        uuid = cstr(uuid, 'uuid')
+        client_name = cstr(client_name, 'client_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+            char *_client_name = client_name
+        with nogil:
+            ret = rbd_mirror_peer_set_client(_ioctx, _uuid, _client_name)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror peer client')
+
+    def mirror_peer_set_cluster(self, ioctx, uuid, cluster_name):
+        """
+        Set mirror peer cluster name
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: uuid of the mirror peer
+        :type uuid: str
+        :param cluster_name: cluster name of the mirror peer to set
+        :type cluster_name: str
+        """
+        uuid = cstr(uuid, 'uuid')
+        cluster_name = cstr(cluster_name, 'cluster_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+            char *_cluster_name = cluster_name
+        with nogil:
+            ret = rbd_mirror_peer_set_cluster(_ioctx, _uuid, _cluster_name)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror peer cluster')
+
+    def mirror_image_status_list(self, ioctx):
+        """
+        Iterate over the mirror image statuses of a pool.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`MirrorImageStatus`
+        """
+        return MirrorImageStatusIterator(ioctx)
+
+    def mirror_image_status_summary(self, ioctx):
+        """
+        Get mirror image status summary of a pool.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: list - a list of (state, count) tuples
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            rbd_mirror_image_status_state_t *states = NULL
+            int *counts = NULL
+            size_t maxlen = 32
+        try:
+            states = <rbd_mirror_image_status_state_t *>realloc_chk(states,
+                sizeof(rbd_mirror_image_status_state_t) * maxlen)
+            counts = <int *>realloc_chk(counts, sizeof(int) * maxlen)
+            with nogil:
+                ret = rbd_mirror_image_status_summary(_ioctx, states, counts,
+                                                      &maxlen)
+            if ret < 0:
+                raise make_ex(ret, 'error getting mirror image status summary')
+            return [(states[i], counts[i]) for i in range(maxlen)]
+        finally:
+            free(states)
+            free(counts)
+
+cdef class MirrorPeerIterator(object):
+    """
+    Iterator over mirror peer info for a pool.
+
+    Yields a dictionary containing information about a peer.
+
+    Keys are:
+
+    * ``uuid`` (str) - uuid of the peer
+
+    * ``cluster_name`` (str) - cluster name of the peer
+
+    * ``client_name`` (str) - client name of the peer
+    """
+
+    cdef:
+        rbd_mirror_peer_t *peers
+        int num_peers
+
+    def __init__(self, ioctx):
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+        self.peers = NULL
+        self.num_peers = 10
+        while True:
+            self.peers = <rbd_mirror_peer_t *>realloc_chk(
+                self.peers, self.num_peers * sizeof(rbd_mirror_peer_t))
+            with nogil:
+                ret = rbd_mirror_peer_list(_ioctx, self.peers, &self.num_peers)
+            if ret < 0:
+                if ret == -errno.ERANGE:
+                    continue
+                self.num_peers = 0
+                raise make_ex(ret, 'error listing peers')
+            break
+
+    def __iter__(self):
+        for i in range(self.num_peers):
+            yield {
+                'uuid'         : decode_cstr(self.peers[i].uuid),
+                'cluster_name' : decode_cstr(self.peers[i].cluster_name),
+                'client_name'  : decode_cstr(self.peers[i].client_name),
+                }
+
+    def __dealloc__(self):
+        if self.peers:
+            rbd_mirror_peer_list_cleanup(self.peers, self.num_peers)
+            free(self.peers)
+
+cdef class MirrorImageStatusIterator(object):
+    """
+    Iterator over mirror image status for a pool.
+
+    Yields a dictionary containing mirror status of an image.
+
+    Keys are:
+
+        * ``name`` (str) - mirror image name
+
+        * `info` (dict) - mirror image info
+
+        * `state` (int) - mirror state
+
+        * `description` (str) - status description
+
+        * `last_update` (datetime) - last status update time
+
+        * ``up`` (bool) - is mirroring agent up
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        size_t max_read
+        char *last_read
+        char **image_ids
+        rbd_mirror_image_status_t *images
+        size_t size
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.max_read = 1024
+        self.last_read = strdup("")
+        self.image_ids = <char **>realloc_chk(NULL,
+            sizeof(char *) * self.max_read)
+        self.images = <rbd_mirror_image_status_t *>realloc_chk(NULL,
+            sizeof(rbd_mirror_image_status_t) * self.max_read)
+        self.size = 0
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while self.size > 0:
+            for i in range(self.size):
+                yield {
+                    'name'        : decode_cstr(self.images[i].name),
+                    'info'        : {
+                        'global_id' : decode_cstr(self.images[i].info.global_id),
+                        'state'     : self.images[i].info.state,
+                        },
+                    'state'       : self.images[i].state,
+                    'description' : decode_cstr(self.images[i].description),
+                    'last_update' : datetime.fromtimestamp(self.images[i].last_update),
+                    'up'          : self.images[i].up,
+                    }
+            if self.size < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def __dealloc__(self):
+        rbd_mirror_image_status_list_cleanup(self.image_ids, self.images,
+                                             self.size)
+        if self.last_read:
+            free(self.last_read)
+        if self.image_ids:
+            free(self.image_ids)
+        if self.images:
+            free(self.images)
+
+    def get_next_chunk(self):
+        if self.size > 0:
+            rbd_mirror_image_status_list_cleanup(self.image_ids, self.images,
+                                                 self.size)
+            self.size = 0
+        with nogil:
+            ret = rbd_mirror_image_status_list(self.ioctx, self.last_read,
+                                               self.max_read, self.image_ids,
+                                               self.images, &self.size)
+        if ret < 0:
+            raise make_ex(ret, 'error listing mirror images status')
+        if self.size > 0:
+            free(self.last_read)
+            last_read = decode_cstr(self.image_ids[self.size - 1])
+            self.last_read = strdup(last_read)
+        else:
+            free(self.last_read)
+            self.last_read = strdup("")
 
 cdef int diff_iterate_cb(uint64_t offset, size_t length, int write, void *cb) \
     except? -9000 with gil:
@@ -857,8 +1262,8 @@ cdef class Image(object):
             raise make_ex(ret, 'error getting lock status for image' % (self.name))
         return owner == 1
 
-    def copy(self, dest_ioctx, dest_name, features=0, order=None, stripe_unit=0,
-             stripe_count=0):
+    def copy(self, dest_ioctx, dest_name, features=None, order=None,
+             stripe_unit=0, stripe_count=0):
         """
         Copy the image to another location.
 
@@ -890,8 +1295,9 @@ cdef class Image(object):
 
         rbd_image_options_create(&opts)
         try:
-            rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
-                                         features)
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
                                          order)
             rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
@@ -1398,6 +1804,130 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
+    def mirror_image_enable(self):
+        """
+        Enable mirroring for the image.
+        """
+        with nogil:
+            ret = rbd_mirror_image_enable(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error enabling mirroring for image %s'
+                          % (self.name,))
+
+    def mirror_image_disable(self, force):
+        """
+        Disable mirroring for the image.
+
+        :param force: force disabling
+        :type force: bool
+        """
+        cdef bint c_force = force
+        with nogil:
+            ret = rbd_mirror_image_disable(self.image, c_force)
+        if ret < 0:
+            raise make_ex(ret, 'error disabling mirroring for image %s' %
+                          (self.name,))
+
+    def mirror_image_promote(self, force):
+        """
+        Promote the image to primary for mirroring.
+
+        :param force: force promoting
+        :type force: bool
+        """
+        cdef bint c_force = force
+        with nogil:
+            ret = rbd_mirror_image_promote(self.image, c_force)
+        if ret < 0:
+            raise make_ex(ret, 'error promoting image %s to primary' %
+                          (self.name,))
+
+    def mirror_image_demote(self):
+        """
+        Demote the image to secondary for mirroring.
+        """
+        with nogil:
+            ret = rbd_mirror_image_demote(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error demoting image %s to secondary' %
+                          (self.name,))
+
+    def mirror_image_resync(self):
+        """
+        Flag the image to resync.
+        """
+        with nogil:
+            ret = rbd_mirror_image_resync(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error to resync image %s' % (self.name,))
+
+    def mirror_image_get_info(self):
+        """
+        Get mirror info for the image.
+
+        :returns: dict - contains the following keys:
+
+            * ``global_id`` (str) - image global id
+
+            * ``state`` (int) - mirror state
+
+            * ``primary`` (bool) - is image primary
+        """
+        cdef rbd_mirror_image_info_t c_info
+        with nogil:
+            ret = rbd_mirror_image_get_info(self.image, &c_info, sizeof(c_info))
+        if ret != 0:
+            raise make_ex(ret, 'error getting mirror info for image %s' %
+                          (self.name,))
+        info = {
+            'global_id' : decode_cstr(c_info.global_id),
+            'state'     : int(c_info.state),
+            'primary'   : c_info.primary,
+            }
+        free(c_info.global_id)
+        return info
+
+    def mirror_image_get_status(self):
+        """
+        Get mirror status for the image.
+
+        :returns: dict - contains the following keys:
+
+            * ``name`` (str) - mirror image name
+
+            * `info` (dict) - mirror image info
+
+            * ``state`` (int) - status mirror state
+
+            * ``description`` (str) - status description
+
+            * ``last_update`` (datetime) - last status update time
+
+            * ``up`` (bool) - is mirroring agent up
+        """
+        cdef rbd_mirror_image_status_t c_status
+        with nogil:
+            ret = rbd_mirror_image_get_status(self.image, &c_status,
+                                              sizeof(c_status))
+        if ret != 0:
+            raise make_ex(ret, 'error getting mirror status for image %s' %
+                          (self.name,))
+        status = {
+            'name'      : decode_cstr(c_status.name),
+            'info'      : {
+                'global_id' : decode_cstr(c_status.info.global_id),
+                'state'     : int(c_status.info.state),
+                'primary'   : c_status.info.primary,
+                },
+            'state'       : c_status.state,
+            'description' : decode_cstr(c_status.description),
+            'last_update' : datetime.fromtimestamp(c_status.last_update),
+            'up'          : c_status.up,
+            }
+        free(c_status.name)
+        free(c_status.info.global_id)
+        free(c_status.description)
+        return status
 
 cdef class SnapIterator(object):
     """

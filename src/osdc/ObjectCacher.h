@@ -201,8 +201,7 @@ class ObjectCacher {
     }
 
     inline bool can_merge_journal(BufferHead *bh) const {
-      return (get_journal_tid() == 0 || bh->get_journal_tid() == 0 ||
-	      get_journal_tid() == bh->get_journal_tid());
+      return (get_journal_tid() == bh->get_journal_tid());
     }
 
     struct ptr_lt {
@@ -344,13 +343,13 @@ class ObjectCacher {
 
     bool is_cached(loff_t off, loff_t len);
     bool include_all_cached_data(loff_t off, loff_t len);
-    int map_read(OSDRead *rd,
-		 map<loff_t, BufferHead*>& hits,
-		 map<loff_t, BufferHead*>& missing,
-		 map<loff_t, BufferHead*>& rx,
+    int map_read(ObjectExtent &ex,
+                 map<loff_t, BufferHead*>& hits,
+                 map<loff_t, BufferHead*>& missing,
+                 map<loff_t, BufferHead*>& rx,
 		 map<loff_t, BufferHead*>& errors);
-    BufferHead *map_write(OSDWrite *wr);
-
+    BufferHead *map_write(ObjectExtent &ex, ceph_tid_t tid);
+    
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);

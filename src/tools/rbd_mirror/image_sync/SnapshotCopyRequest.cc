@@ -36,6 +36,7 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
 } // anonymous namespace
 
 using librbd::util::create_context_callback;
+using librbd::util::unique_lock_name;
 
 template <typename I>
 SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
@@ -45,10 +46,12 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
                                             librbd::journal::MirrorPeerClientMeta *meta,
                                             ContextWQ *work_queue,
                                             Context *on_finish)
-  : m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
+  : BaseRequest("rbd::mirror::image_sync::SnapshotCopyRequest",
+		local_image_ctx->cct, on_finish),
+    m_local_image_ctx(local_image_ctx), m_remote_image_ctx(remote_image_ctx),
     m_snap_map(snap_map), m_journaler(journaler), m_client_meta(meta),
-    m_work_queue(work_queue), m_on_finish(on_finish),
-    m_snap_seqs(meta->snap_seqs) {
+    m_work_queue(work_queue), m_snap_seqs(meta->snap_seqs),
+    m_lock(unique_lock_name("SnapshotCopyRequest::m_lock", this)) {
   m_snap_map->clear();
 
   // snap ids ordered from oldest to newest
@@ -79,8 +82,15 @@ void SnapshotCopyRequest<I>::send() {
 }
 
 template <typename I>
+void SnapshotCopyRequest<I>::cancel() {
+  Mutex::Locker locker(m_lock);
+
+  dout(20) << dendl;
+  m_canceled = true;
+}
+
+template <typename I>
 void SnapshotCopyRequest<I>::send_snap_unprotect() {
-  CephContext *cct = m_local_image_ctx->cct;
 
   SnapIdSet::iterator snap_id_it = m_local_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
@@ -95,8 +105,8 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
     int r = m_local_image_ctx->is_snap_unprotected(local_snap_id,
                                                    &local_unprotected);
     if (r < 0) {
-      lderr(cct) << "failed to retrieve local snap unprotect status: "
-                 << cpp_strerror(r) << dendl;
+      derr << "failed to retrieve local snap unprotect status: "
+           << cpp_strerror(r) << dendl;
       m_local_image_ctx->snap_lock.put_read();
       finish(r);
       return;
@@ -122,8 +132,8 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
       r = m_remote_image_ctx->is_snap_unprotected(snap_seq_it->first,
                                                   &remote_unprotected);
       if (r < 0) {
-        lderr(cct) << "failed to retrieve remote snap unprotect status: "
-                   << cpp_strerror(r) << dendl;
+        derr << "failed to retrieve remote snap unprotect status: "
+             << cpp_strerror(r) << dendl;
         m_remote_image_ctx->snap_lock.put_read();
         finish(r);
         return;
@@ -150,9 +160,9 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
   m_prev_snap_id = *snap_id_it;
   m_snap_name = get_snapshot_name(m_local_image_ctx, m_prev_snap_id);
 
-  ldout(cct, 20) << ": "
-                 << "snap_name=" << m_snap_name << ", "
-                 << "snap_id=" << m_prev_snap_id << dendl;
+  dout(20) << ": "
+           << "snap_name=" << m_snap_name << ", "
+           << "snap_id=" << m_prev_snap_id << dendl;
 
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_unprotect>(
@@ -164,13 +174,16 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
 
 template <typename I>
 void SnapshotCopyRequest<I>::handle_snap_unprotect(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to unprotect snapshot '" << m_snap_name << "': "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to unprotect snapshot '" << m_snap_name << "': "
+         << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -179,8 +192,6 @@ void SnapshotCopyRequest<I>::handle_snap_unprotect(int r) {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_snap_remove() {
-  CephContext *cct = m_local_image_ctx->cct;
-
   SnapIdSet::iterator snap_id_it = m_local_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_local_snap_ids.upper_bound(m_prev_snap_id);
@@ -211,9 +222,9 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
   m_prev_snap_id = *snap_id_it;
   m_snap_name = get_snapshot_name(m_local_image_ctx, m_prev_snap_id);
 
-  ldout(cct, 20) << ": "
-                 << "snap_name=" << m_snap_name << ", "
-                 << "snap_id=" << m_prev_snap_id << dendl;
+  dout(20) << ": "
+           << "snap_name=" << m_snap_name << ", "
+           << "snap_id=" << m_prev_snap_id << dendl;
 
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_remove>(
@@ -224,13 +235,16 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
 
 template <typename I>
 void SnapshotCopyRequest<I>::handle_snap_remove(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to remove snapshot '" << m_snap_name << "': "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to remove snapshot '" << m_snap_name << "': "
+         << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -239,8 +253,6 @@ void SnapshotCopyRequest<I>::handle_snap_remove(int r) {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_snap_create() {
-  CephContext *cct = m_local_image_ctx->cct;
-
   SnapIdSet::iterator snap_id_it = m_remote_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_remote_snap_ids.upper_bound(m_prev_snap_id);
@@ -269,8 +281,8 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   auto snap_info_it = m_remote_image_ctx->snap_info.find(m_prev_snap_id);
   if (snap_info_it == m_remote_image_ctx->snap_info.end()) {
     m_remote_image_ctx->snap_lock.put_read();
-    lderr(cct) << "failed to retrieve remote snap info: " << m_snap_name
-               << dendl;
+    derr << "failed to retrieve remote snap info: " << m_snap_name
+         << dendl;
     finish(-ENOENT);
     return;
   }
@@ -285,15 +297,15 @@ void SnapshotCopyRequest<I>::send_snap_create() {
   m_remote_image_ctx->snap_lock.put_read();
 
 
-  ldout(cct, 20) << ": "
-                 << "snap_name=" << m_snap_name << ", "
-                 << "snap_id=" << m_prev_snap_id << ", "
-                 << "size=" << size << ", "
-                 << "parent_info=["
-                 << "pool_id=" << parent_spec.pool_id << ", "
-                 << "image_id=" << parent_spec.image_id << ", "
-                 << "snap_id=" << parent_spec.snap_id << ", "
-                 << "overlap=" << parent_overlap << "]" << dendl;
+  dout(20) << ": "
+           << "snap_name=" << m_snap_name << ", "
+           << "snap_id=" << m_prev_snap_id << ", "
+           << "size=" << size << ", "
+           << "parent_info=["
+           << "pool_id=" << parent_spec.pool_id << ", "
+           << "image_id=" << parent_spec.image_id << ", "
+           << "snap_id=" << parent_spec.snap_id << ", "
+           << "overlap=" << parent_overlap << "]" << dendl;
 
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_create>(
@@ -305,13 +317,16 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
 template <typename I>
 void SnapshotCopyRequest<I>::handle_snap_create(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to create snapshot '" << m_snap_name << "': "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to create snapshot '" << m_snap_name << "': "
+         << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -321,8 +336,8 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
   assert(snap_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t local_snap_id = snap_it->second;
 
-  ldout(cct, 20) << ": mapping remote snap id " << m_prev_snap_id << " to "
-                 << local_snap_id << dendl;
+  dout(20) << ": mapping remote snap id " << m_prev_snap_id << " to "
+           << local_snap_id << dendl;
   m_snap_seqs[m_prev_snap_id] = local_snap_id;
 
   send_snap_create();
@@ -330,8 +345,6 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_snap_protect() {
-  CephContext *cct = m_local_image_ctx->cct;
-
   SnapIdSet::iterator snap_id_it = m_remote_snap_ids.begin();
   if (m_prev_snap_id != CEPH_NOSNAP) {
     snap_id_it = m_remote_snap_ids.upper_bound(m_prev_snap_id);
@@ -345,8 +358,8 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     int r = m_remote_image_ctx->is_snap_protected(remote_snap_id,
                                                   &remote_protected);
     if (r < 0) {
-      lderr(cct) << "failed to retrieve remote snap protect status: "
-                 << cpp_strerror(r) << dendl;
+      derr << "failed to retrieve remote snap protect status: "
+           << cpp_strerror(r) << dendl;
       m_remote_image_ctx->snap_lock.put_read();
       finish(r);
       return;
@@ -367,8 +380,8 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     r = m_local_image_ctx->is_snap_protected(snap_seq_it->second,
                                              &local_protected);
     if (r < 0) {
-      lderr(cct) << "failed to retrieve local snap protect status: "
-                 << cpp_strerror(r) << dendl;
+      derr << "failed to retrieve local snap protect status: "
+           << cpp_strerror(r) << dendl;
       m_local_image_ctx->snap_lock.put_read();
       finish(r);
       return;
@@ -390,9 +403,9 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
   m_prev_snap_id = *snap_id_it;
   m_snap_name = get_snapshot_name(m_remote_image_ctx, m_prev_snap_id);
 
-  ldout(cct, 20) << ": "
-                 << "snap_name=" << m_snap_name << ", "
-                 << "snap_id=" << m_prev_snap_id << dendl;
+  dout(20) << ": "
+           << "snap_name=" << m_snap_name << ", "
+           << "snap_id=" << m_prev_snap_id << dendl;
 
   Context *ctx = create_context_callback<
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_protect>(
@@ -403,13 +416,16 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
 
 template <typename I>
 void SnapshotCopyRequest<I>::handle_snap_protect(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to protect snapshot '" << m_snap_name << "': "
-               << cpp_strerror(r) << dendl;
+    derr << ": failed to protect snapshot '" << m_snap_name << "': "
+         << cpp_strerror(r) << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -418,8 +434,7 @@ void SnapshotCopyRequest<I>::handle_snap_protect(int r) {
 
 template <typename I>
 void SnapshotCopyRequest<I>::send_update_client() {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   compute_snap_map();
 
@@ -438,13 +453,16 @@ void SnapshotCopyRequest<I>::send_update_client() {
 
 template <typename I>
 void SnapshotCopyRequest<I>::handle_update_client(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to update client data: " << cpp_strerror(r)
+         << dendl;
     finish(r);
+    return;
+  }
+  if (handle_cancellation())
+  {
     return;
   }
 
@@ -454,24 +472,23 @@ void SnapshotCopyRequest<I>::handle_update_client(int r) {
 }
 
 template <typename I>
-void SnapshotCopyRequest<I>::error(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  m_work_queue->queue(create_context_callback<
-    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::finish>(this), r);
+bool SnapshotCopyRequest<I>::handle_cancellation() {
+  {
+    Mutex::Locker locker(m_lock);
+    if (!m_canceled) {
+      return false;
+    }
+  }
+  dout(10) << ": snapshot copy canceled" << dendl;
+  finish(-ECANCELED);
+  return true;
 }
 
 template <typename I>
-void SnapshotCopyRequest<I>::finish(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+void SnapshotCopyRequest<I>::error(int r) {
+  dout(20) << ": r=" << r << dendl;
 
-  if (r >= 0) {
-    m_client_meta->snap_seqs = m_snap_seqs;
-  }
-
-  m_on_finish->complete(r);
-  delete this;
+  m_work_queue->queue(new FunctionContext([this, r](int r1) { finish(r); }));
 }
 
 template <typename I>
