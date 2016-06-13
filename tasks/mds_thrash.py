@@ -411,5 +411,6 @@ def task(ctx, config):
         for t in thrashers:
             log.info('join thrasher for failure group [{fg}]'.format(fg=', '.join(failure_group)))
             thrashers[t].stop()
+            thrashers[t].get()  # Raise any exception from _run()
             thrashers[t].join()
         log.info('done joining')
