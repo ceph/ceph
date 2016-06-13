@@ -251,7 +251,7 @@ To request the mirror pool summary status with ``rbd``, specify the
 
 For example::
 
-        rbd mirror image status image-pool
+        rbd mirror pool status image-pool
 
 .. note:: Adding ``--verbose`` option to the ``mirror pool status`` command will
    additionally output status details for every mirroring image in the pool.
