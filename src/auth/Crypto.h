@@ -107,10 +107,12 @@ public:
   int create(CephContext *cct, int type);
   int encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
 	       std::string *error) const {
+    assert(ckh); // Bad key?
     return ckh->encrypt(in, out, error);
   }
   int decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
 	       std::string *error) const {
+    assert(ckh); // Bad key?
     return ckh->decrypt(in, out, error);
   }
 
