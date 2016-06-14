@@ -257,7 +257,7 @@ class Run(object):
 
     def schedule_suite(self):
         """
-        Schedule the suite-run. Returns the number of jobs scheduled.
+        Schedule the suite run. Returns the number of jobs scheduled.
         """
         name = self.name
         arch = util.get_arch(self.base_config.machine_type)
