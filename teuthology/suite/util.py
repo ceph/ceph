@@ -115,9 +115,9 @@ def get_distro_defaults(distro, machine_type):
 
     This is used to default to:
         ('x86_64', 'trusty', 'deb') when passed 'ubuntu' and 'plana'
-    ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
-    ('x86_64', 'wheezy', 'deb') when passed 'debian'
-    ('x86_64', 'fedora20', 'rpm') when passed 'fedora'
+        ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
+        ('x86_64', 'wheezy', 'deb') when passed 'debian'
+        ('x86_64', 'fedora20', 'rpm') when passed 'fedora'
     And ('x86_64', 'centos7', 'rpm') when passed anything else
     """
     arch = 'x86_64'
