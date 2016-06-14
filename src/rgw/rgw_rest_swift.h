@@ -9,6 +9,7 @@
 #include "rgw_rest.h"
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
+  int custom_http_ret = 0;
 public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() {}
@@ -16,7 +17,14 @@ public:
   int get_params();
   int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
-  bool need_object_expiration() { return true; }
+
+  void set_custom_http_response(const int http_ret) {
+    custom_http_ret = http_ret;
+  }
+
+  bool need_object_expiration() {
+    return true;
+  }
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {

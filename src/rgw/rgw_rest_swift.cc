@@ -1243,9 +1243,19 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     goto send_data;
   }
 
-  set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
+  if (custom_http_ret) {
+    set_req_state_err(s, 0);
+    dump_errno(s, custom_http_ret);
+  } else {
+    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
 		    : op_ret);
-  dump_errno(s);
+    dump_errno(s);
+
+    if (s->err.is_err()) {
+      end_header(s, NULL);
+      return 0;
+    }
+  }
 
   if (range_str) {
     dump_range(s, ofs, end, s->obj_size);
