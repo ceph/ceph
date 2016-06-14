@@ -84,8 +84,8 @@ logging_send_syslog_msg(ceph_t)
 sysnet_dns_name_resolve(ceph_t)
 
 # basis for future security review
-allow ceph_t ceph_var_run_t:sock_file { create unlink write };
-allow ceph_t self:capability sys_rawio;
+allow ceph_t ceph_var_run_t:sock_file { create unlink write setattr };
+allow ceph_t self:capability { sys_rawio chown };
 
 allow ceph_t self:tcp_socket { accept listen };
 corenet_tcp_connect_cyphesis_port(ceph_t)
