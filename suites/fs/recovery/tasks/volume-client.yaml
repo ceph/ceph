@@ -1,4 +1,10 @@
 
+overrides:
+  ceph:
+    conf:
+      global:
+        ms type: simple
+
 tasks:
   - cephfs_test_runner:
       modules:
