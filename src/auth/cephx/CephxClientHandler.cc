@@ -46,6 +46,12 @@ int CephxClientHandler::build_request(bufferlist& bl) const
       return -ENOENT;
     }
 
+    // is the key OK?
+    if (!secret.get_secret().length()) {
+      ldout(cct, 20) << "secret for entity " << cct->_conf->name << " is invalid" << dendl;
+      return -EINVAL;
+    }
+
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
     std::string error;
