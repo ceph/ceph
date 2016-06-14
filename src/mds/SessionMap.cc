@@ -439,6 +439,7 @@ void SessionMap::decode_legacy(bufferlist::iterator &p)
 uint64_t SessionMap::set_state(Session *session, int s) {
   if (session->state != s) {
     session->set_state(s);
+    session->item_session_list.remove_myself();
     if (by_state.count(s) == 0)
       by_state[s] = new xlist<Session*>;
     by_state[s]->push_back(&session->item_session_list);
