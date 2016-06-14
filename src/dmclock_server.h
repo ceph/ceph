@@ -237,7 +237,9 @@ namespace crimson {
 	c::IndIntruHeapData   reserv_heap_data;
 	c::IndIntruHeapData   lim_heap_data;
 	c::IndIntruHeapData   ready_heap_data;
+#if USE_PROP_HEAP
 	c::IndIntruHeapData   prop_heap_data;
+#endif
 
       public:
 
@@ -302,6 +304,23 @@ namespace crimson {
 	  return requests.size();
 	}
 
+	// NB: because a deque is the underlying structure, this
+	// operation might be expensive
+	bool remove_by_req_filter(std::function<bool(R)> filter) {
+	  bool any_removed = false;
+	  for (auto i = requests.begin();
+	       i != requests.end();
+	       /* no inc */) {
+	    if (filter(*i->request)) {
+	      any_removed = true;
+	      i = requests.erase(i);
+	    } else {
+	      ++i;
+	    }
+	  }
+	  return any_removed;
+	}
+
 	friend std::ostream&
 	operator<<(std::ostream& out,
 		   const typename PriorityQueueBase<C,R>::ClientRec& e) {
@@ -343,11 +362,12 @@ namespace crimson {
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<ClientInfo(const C&)>;
 
-      
+
       bool empty() const {
 	DataGuard g(data_mtx);
 	return (resv_heap.empty() || ! resv_heap.top().has_request());
       }
+
 
       size_t client_count() const {
 	DataGuard g(data_mtx);
@@ -364,6 +384,24 @@ namespace crimson {
 	return total;
       }
 
+
+      bool remove_by_req_filter(std::function<bool(R)> filter) {
+	bool any_removed = false;
+	DataGuard g(data_mtx);
+	for (auto i : client_map) {
+	  bool modified = i.second->remove_by_req_filter(filter);
+	  if (modified) {
+	    resv_heap.adjust(*i.second);
+	    limit_heap.adjust(*i.second);
+	    ready_heap.adjust(*i.second);
+#if USE_PROP_HEAP
+	    resv_heap.adjust(*i.second);
+#endif
+	    any_removed = true;
+	  }
+	}
+	return any_removed;
+      }
 
     protected:
 

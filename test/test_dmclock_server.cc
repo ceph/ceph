@@ -76,7 +76,7 @@ namespace crimson {
 	"where reservation and proportion are both 0";
     }
 
-    
+
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
       using Queue = dmc::PushPriorityQueue<ClientId,Request>;
@@ -211,6 +211,55 @@ namespace crimson {
       }
     } // TEST
 #endif
+
+
+    TEST(dmclock_server, remove_by_req_filter) {
+      struct MyReq {
+	int id;
+
+	MyReq(int _id) :
+	  id(_id)
+	{
+	  // empty
+	}
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      dmc::ClientInfo info1(0.0, 1.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info1;
+      };
+
+      Queue pq(client_info_f, true);
+
+      EXPECT_EQ(0, pq.client_count());
+      EXPECT_EQ(0, pq.request_count());
+
+      ReqParams req_params(1,1);
+
+      pq.add_request(MyReq(1), client1, req_params);
+      pq.add_request(MyReq(11), client1, req_params);
+      pq.add_request(MyReq(2), client2, req_params);
+      pq.add_request(MyReq(0), client2, req_params);
+      pq.add_request(MyReq(13), client2, req_params);
+      pq.add_request(MyReq(2), client2, req_params);
+      pq.add_request(MyReq(13), client2, req_params);
+      pq.add_request(MyReq(98), client2, req_params);
+      pq.add_request(MyReq(44), client1, req_params);
+
+      EXPECT_EQ(2, pq.client_count());
+      EXPECT_EQ(9, pq.request_count());
+
+      pq.remove_by_req_filter([](MyReq r) -> bool {return 1 == r.id % 2;});
+
+      EXPECT_EQ(5, pq.request_count());
+    } // TEST
 
 
     TEST(dmclock_server_pull, pull_weight) {
@@ -411,6 +460,7 @@ namespace crimson {
       auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(client1, retn.client);
     }
+
 
     TEST(dmclock_server_pull, pull_future_limit_break_reservation) {
       using ClientId = int;
