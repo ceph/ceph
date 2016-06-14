@@ -9,6 +9,7 @@ Copyright (C) 2013 Inktank Storage, Inc.
 
 LGPL2.  See file COPYING.
 """
+from __future__ import print_function
 import copy
 import errno
 import json
@@ -737,7 +738,7 @@ def parse_json_funcsigs(s, consumer):
     try:
         overall = json.loads(s)
     except Exception as e:
-        print >> sys.stderr, "Couldn't parse JSON {0}: {1}".format(s, e)
+        print("Couldn't parse JSON {0}: {1}".format(s, e), file=sys.stderr)
         raise e
     sigdict = {}
     for cmdtag, cmd in overall.iteritems():
@@ -929,19 +930,20 @@ def validate(args, signature, partial=False):
                 valid = True
             except ArgumentError as e:
                 valid = False
+                exc = e
             if not valid:
                 # argument mismatch
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    save_exception = [ myarg, e ]
+                    save_exception = [ myarg, exc ]
                     myargs.insert(0, myarg)
                     break
                 else:
                     # hm, it was required, so time to return/raise
                     if partial:
                         return d
-                    raise e
+                    raise exc
 
             # Whew, valid arg acquired.  Store in dict
             matchcnt += 1
@@ -955,7 +957,7 @@ def validate(args, signature, partial=False):
 
     if myargs and not partial:
         if save_exception:
-            print >> sys.stderr, save_exception[0], 'not valid: ', str(save_exception[1])
+            print(save_exception[0], 'not valid: ', save_exception[1], file=sys.stderr)
         raise ArgumentError("unused arguments: " + str(myargs))
 
     # Finally, success
@@ -974,8 +976,7 @@ def validate_command(sigdict, args, verbose=False):
     validated against sigdict.
     """
     if verbose:
-        print >> sys.stderr, \
-            "validate_command: " + " ".join(args)
+        print("validate_command: " + " ".join(args), file=sys.stderr)
     found = []
     valid_dict = {}
     if args:
@@ -988,18 +989,16 @@ def validate_command(sigdict, args, verbose=False):
             matched = matchnum(args, sig, partial=True)
             if matched > best_match_cnt:
                 if verbose:
-                    print >> sys.stderr, \
-                        "better match: {0} > {1}: {2}:{3} ".\
-                        format(matched, best_match_cnt, cmdtag,
-                               concise_sig(sig))
+                    print("better match: {0} > {1}: {2}:{3} ".format(
+                        matched, best_match_cnt, cmdtag, concise_sig(sig)
+                    ), file=sys.stderr)
                 best_match_cnt = matched
                 bestcmds = [{cmdtag: cmd}]
             elif matched == best_match_cnt:
                 if verbose:
-                    print >> sys.stderr, \
-                        "equal match: {0} > {1}: {2}:{3} ".\
-                        format(matched, best_match_cnt, cmdtag,
-                               concise_sig(sig))
+                    print("equal match: {0} > {1}: {2}:{3} ".format(
+                        matched, best_match_cnt, cmdtag, concise_sig(sig)
+                    ), file=sys.stderr)
                 bestcmds.append({cmdtag: cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
@@ -1008,7 +1007,7 @@ def validate_command(sigdict, args, verbose=False):
                                  cmp=lambda x, y: cmp(cmdsiglen(x), cmdsiglen(y)))
 
         if verbose:
-            print >> sys.stderr, "bestcmds_sorted: "
+            print("bestcmds_sorted: ", file=sys.stderr)
             pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
         # for everything in bestcmds, look for a true match
@@ -1029,23 +1028,23 @@ def validate_command(sigdict, args, verbose=False):
                     # cmdsigs we'll fall out unfound; if we're not, maybe
                     # the next one matches completely.  Whine, but pass.
                     if verbose:
-                        print >> sys.stderr, 'Not enough args supplied for ', \
-                            concise_sig(sig)
+                        print('Not enough args supplied for ',
+                              concise_sig(sig), file=sys.stderr)
                 except ArgumentError as e:
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
                     # some other input is invalid
-                    print >> sys.stderr, "Invalid command: ", str(e)
-                    print >> sys.stderr, concise_sig(sig), ': ', cmd['help']
+                    print("Invalid command: ", e, file=sys.stderr)
+                    print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
                     return {}
             if found:
                 break
 
         if not found:
-            print >> sys.stderr, 'no valid command found; 10 closest matches:'
+            print('no valid command found; 10 closest matches:', file=sys.stderr)
             for cmdsig in bestcmds[:10]:
-                for (cmdtag, cmd) in cmdsig.iteritems():
-                    print >> sys.stderr, concise_sig(cmd['sig'])
+                for (cmdtag, cmd) in cmdsig.items():
+                    print(concise_sig(cmd['sig']), file=sys.stderr)
             return None
 
         return valid_dict
@@ -1195,8 +1194,8 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             osdid = target[1]
 
             if verbose:
-                print >> sys.stderr, 'submit {0} to osd.{1}'.\
-                    format(cmd, osdid)
+                print('submit {0} to osd.{1}'.format(cmd, osdid),
+                      file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
                 cluster.osd_command, osdid, cmd, inbuf, timeout)
 
@@ -1211,15 +1210,15 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                 cmddict = dict(pgid=pgid)
             cmd = [json.dumps(cmddict)]
             if verbose:
-                print >> sys.stderr, 'submit {0} for pgid {1}'.\
-                    format(cmd, pgid)
+                print('submit {0} for pgid {1}'.format(cmd, pgid),
+                      file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
                 cluster.pg_command, pgid, cmd, inbuf, timeout)
 
         elif target[0] == 'mon':
             if verbose:
-                print >> sys.stderr, '{0} to {1}'.\
-                    format(cmd, target[0])
+                print('{0} to {1}'.format(cmd, target[0]),
+                      file=sys.stderr)
             if target[1] == '':
                 ret, outbuf, outs = run_in_thread(
                     cluster.mon_command, cmd, inbuf, timeout)
@@ -1230,8 +1229,8 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             mds_spec = target[1]
 
             if verbose:
-                print >> sys.stderr, 'submit {0} to mds.{1}'.\
-                    format(cmd, mds_spec)
+                print('submit {0} to mds.{1}'.format(cmd, mds_spec),
+                      file=sys.stderr)
 
             try:
                 from cephfs import LibCephFS
