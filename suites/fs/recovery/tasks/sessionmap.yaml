@@ -1,6 +1,9 @@
 
 overrides:
   ceph:
+    conf:
+      global:
+        ms type: simple
     log-whitelist:
       - client session with invalid root
 
