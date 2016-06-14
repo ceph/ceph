@@ -2927,7 +2927,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if ((flags & O_TRUNC) && !cur->inode.is_file()) {
     dout(7) << "specified O_TRUNC on !(file|symlink) " << *cur << dendl;
     // we should return -EISDIR for directory, return -EINVAL for other non-regular
-    respond_to_request(mdr, cur->inode.is_dir() ? EISDIR : -EINVAL);
+    respond_to_request(mdr, cur->inode.is_dir() ? -EISDIR : -EINVAL);
     return;
   }
 
