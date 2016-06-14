@@ -1125,14 +1125,14 @@ class RadosThread(threading.Thread):
         self.args = args
         self.kwargs = kwargs
         self.target = target
-	self.exception = None
+        self.exception = None
         threading.Thread.__init__(self)
 
     def run(self):
         try:
-		self.retval = self.target(*self.args, **self.kwargs)
-	except Exception as e:
-		self.exception = e
+            self.retval = self.target(*self.args, **self.kwargs)
+        except Exception as e:
+            self.exception = e
 
 
 # time in seconds between each call to t.join() for child thread
