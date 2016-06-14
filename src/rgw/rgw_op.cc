@@ -2647,13 +2647,11 @@ void RGWPutObj::execute()
     if (!len)
       break;
 
-    bufferlist data;
+    bufferlist &data = data_in;
     if (s->aws4_auth_streaming_mode) {
       /* use unwrapped data */
       data = s->aws4_auth->bl;
       len = data.length();
-    } else {
-      data = data_in;
     }
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
