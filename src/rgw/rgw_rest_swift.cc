@@ -21,6 +21,9 @@
 #include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
+#include "rgw_request.h"
+#include "rgw_process.h"
+
 #include <array>
 #include <sstream>
 #include <memory>
@@ -1608,6 +1611,57 @@ static bool can_be_website_req(const req_state * const s)
   }
 
   return false;
+}
+
+static int serve_errordoc(RGWRados* const store,
+                          RGWHandler_REST* const handler,
+                          req_state* const s,
+                          const int http_ret,
+                          const std::string error_doc)
+{
+  s->formatter->reset(); /* Try to throw it all away */
+
+  class RGWGetErrorPage : public RGWGetObj_ObjStore_SWIFT {
+  public:
+    RGWGetErrorPage(RGWRados* const store,
+                    RGWHandler_REST* const handler,
+                    req_state* const s,
+                    const int http_ret) {
+      /* Calling a virtual from the base class is safe as the subobject should
+       * be properly initialized and we haven't overridden the init method. */
+      init(store, s, handler);
+      set_get_data(true);
+      set_custom_http_response(http_ret);
+    }
+
+    int error_handler(const int err_no,
+                      std::string* const error_content) override {
+      /* Enforce that any error generated while getting the error page will
+       * not be send to a client. This allows us to recover from the double
+       * fault situation by sending the original message. */
+      return 0;
+    }
+  } get_errpage_op(store, handler, s, http_ret);
+
+  s->object = std::to_string(http_ret) + error_doc;
+
+  RGWOp* newop = &get_errpage_op;
+  RGWRequest req(0);
+  return rgw_process_authenticated(handler, newop, &req, s, true);
+}
+
+int RGWHandler_REST_Bucket_SWIFT::error_handler(
+  const int err_no,
+  std::string* const error_content)
+{
+  const auto& ws_conf = s->bucket_info.website_conf;
+
+  if (can_be_website_req(s) && ! ws_conf.error_doc.empty()) {
+    return serve_errordoc(store, this, s, 404, ws_conf.error_doc);
+  }
+
+  /* Let's go to the default, no-op handler. */
+  return RGWHandler_REST_SWIFT::error_handler(err_no, error_content);
 }
 
 RGWOp* RGWHandler_REST_Bucket_SWIFT::get_ws_index_op()

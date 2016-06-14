@@ -268,6 +268,7 @@ public:
   RGWHandler_REST_Bucket_SWIFT() {}
   virtual ~RGWHandler_REST_Bucket_SWIFT() {}
 
+  int error_handler(int err_no, std::string *error_content) override;
   int retarget(RGWOp* op, RGWOp** new_op) override;
 };
 
