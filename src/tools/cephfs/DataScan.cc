@@ -289,7 +289,7 @@ int DataScan::main(const std::vector<const char*> &args)
       std::cerr << "Filesystem id " << fscid << " does not exist" << std::endl;
       return -ENOENT;
     }
-    int const metadata_pool_id = fs->mds_map.get_metadata_pool();
+    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     std::string metadata_pool_name;
@@ -1587,7 +1587,7 @@ int MetadataDriver::init(
 {
   auto fs =  fsmap->get_filesystem(fscid);
   assert(fs != nullptr);
-  int const metadata_pool_id = fs->mds_map.get_metadata_pool();
+  int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
   dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
   std::string metadata_pool_name;
