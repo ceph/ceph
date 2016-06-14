@@ -351,7 +351,7 @@ struct PGRecovery {
 };
 
 
-class PGQueueable {
+class OpQueueItem {
   typedef boost::variant<
     OpRequestRef,
     PGSnapTrim,
@@ -376,23 +376,23 @@ class PGQueueable {
   };
 public:
   // cppcheck-suppress noExplicitConstructor
-  PGQueueable(OpRequestRef op)
+  OpQueueItem(OpRequestRef op)
     : qvariant(op), cost(op->get_req()->get_cost()),
       priority(op->get_req()->get_priority()),
       start_time(op->get_req()->get_recv_stamp()),
       owner(op->get_req()->get_source_inst())
     {}
-  PGQueueable(
+  OpQueueItem(
     const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
     const entity_inst_t &owner)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner) {}
-  PGQueueable(
+  OpQueueItem(
     const PGScrub &op, int cost, unsigned priority, utime_t start_time,
     const entity_inst_t &owner)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner) {}
-  PGQueueable(
+  OpQueueItem(
     const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
     const entity_inst_t &owner)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
@@ -434,7 +434,7 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > &op_wq;
+  ShardedThreadPool::ShardedWQ < pair <PGRef, OpQueueItem> > &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
   GenContextWQ op_gen_wq;
@@ -887,7 +887,7 @@ public:
     op_wq.queue(
       make_pair(
 	pg,
-	PGQueueable(
+	OpQueueItem(
 	  PGSnapTrim(pg->get_osdmap()->get_epoch()),
 	  cct->_conf->osd_snap_trim_cost,
 	  cct->_conf->osd_snap_trim_priority,
@@ -898,7 +898,7 @@ public:
     op_wq.queue(
       make_pair(
 	pg,
-	PGQueueable(
+	OpQueueItem(
 	  PGScrub(pg->get_osdmap()->get_epoch()),
 	  cct->_conf->osd_scrub_cost,
 	  pg->get_scrub_priority(),
@@ -923,9 +923,9 @@ private:
   void _queue_for_recovery(
     pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
     assert(recovery_lock.is_locked_by_me());
-    pair<PGRef, PGQueueable> to_queue = make_pair(
+    pair<PGRef, OpQueueItem> to_queue = make_pair(
       p.second,
-      PGQueueable(
+      OpQueueItem(
 	PGRecovery(p.first, reserved_pushes),
 	cct->_conf->osd_recovery_cost,
 	cct->_conf->osd_recovery_priority,
@@ -1739,15 +1739,15 @@ private:
   const io_queue op_queue;
   const unsigned int op_prio_cutoff;
 
-  friend class PGQueueable;
-  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > {
+  friend class OpQueueItem;
+  class ShardedOpWQ: public ShardedThreadPool::ShardedWQ < pair <PGRef, OpQueueItem> > {
 
     struct ShardData {
       Mutex sdata_lock;
       Cond sdata_cond;
       Mutex sdata_op_ordering_lock;
-      map<PG*, list<PGQueueable> > pg_for_processing;
-      std::unique_ptr<OpQueue< pair<PGRef, PGQueueable>, entity_inst_t>> pqueue;
+      map<PG*, list<OpQueueItem> > pg_for_processing;
+      std::unique_ptr<OpQueue< pair<PGRef, OpQueueItem>, entity_inst_t>> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
@@ -1756,13 +1756,13 @@ private:
 	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true, false, cct) {
 	    if (opqueue == weightedpriority) {
 	      pqueue = std::unique_ptr
-		<WeightedPriorityQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new WeightedPriorityQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
+		<WeightedPriorityQueue< pair<PGRef, OpQueueItem>, entity_inst_t>>(
+		  new WeightedPriorityQueue< pair<PGRef, OpQueueItem>, entity_inst_t>(
 		    max_tok_per_prio, min_cost));
 	    } else if (opqueue == prioritized) {
 	      pqueue = std::unique_ptr
-		<PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t>(
+		<PrioritizedQueue< pair<PGRef, OpQueueItem>, entity_inst_t>>(
+		  new PrioritizedQueue< pair<PGRef, OpQueueItem>, entity_inst_t>(
 		    max_tok_per_prio, min_cost));
 	    }
 	  }
@@ -1774,7 +1774,7 @@ private:
 
   public:
     ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, time_t si, ShardedThreadPool* tp):
-      ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> >(ti, si, tp),
+      ShardedThreadPool::ShardedWQ < pair <PGRef, OpQueueItem> >(ti, si, tp),
       osd(o), num_shards(pnum_shards) {
       for(uint32_t i = 0; i < num_shards; i++) {
 	char lock_name[32] = {0};
@@ -1799,8 +1799,8 @@ private:
     }
 
     void _process(uint32_t thread_index, heartbeat_handle_d *hb);
-    void _enqueue(pair <PGRef, PGQueueable> item);
-    void _enqueue_front(pair <PGRef, PGQueueable> item);
+    void _enqueue(pair <PGRef, OpQueueItem> item);
+    void _enqueue_front(pair <PGRef, OpQueueItem> item);
       
     void return_waiting_threads() {
       for(uint32_t i = 0; i < num_shards; i++) {
@@ -1833,7 +1833,7 @@ private:
       uint64_t reserved_pushes_to_free;
       Pred(PG *pg, list<OpRequestRef> *out_ops = 0)
 	: pg(pg), out_ops(out_ops), reserved_pushes_to_free(0) {}
-      void accumulate(const PGQueueable &op) {
+      void accumulate(const OpQueueItem &op) {
 	reserved_pushes_to_free += op.get_reserved_pushes();
 	if (out_ops) {
 	  boost::optional<OpRequestRef> mop = op.maybe_get_op();
@@ -1841,7 +1841,7 @@ private:
 	    out_ops->push_front(*mop);
 	}
       }
-      bool operator()(const pair<PGRef, PGQueueable> &op) {
+      bool operator()(const pair<PGRef, OpQueueItem> &op) {
 	if (op.first == pg) {
 	  accumulate(op.second);
 	  return true;
@@ -1871,7 +1871,7 @@ private:
       // items in pqueue are behind items in pg_for_processing
       sdata->pqueue->remove_by_filter(f);
 
-      map<PG *, list<PGQueueable> >::const_iterator iter =
+      map<PG *, list<OpQueueItem> >::const_iterator iter =
 	sdata->pg_for_processing.find(pg);
       if (iter != sdata->pg_for_processing.cend()) {
 	for (auto i = iter->second.crbegin();
