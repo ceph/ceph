@@ -120,6 +120,18 @@ TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
   return ctx;
 }
 
+int TestClassHandler::create_filter(cls_handle_t hclass,
+				    const std::string& name,
+				    cls_cxx_filter_factory_t fn)
+{
+  Class *cls = reinterpret_cast<Class*>(hclass);
+  if (cls->filters.find(name) != cls->filters.end()) {
+    return -EEXIST;
+  }
+  cls->filters[name] = fn;
+  return 0;
+}
+
 TestClassHandler::MethodContext::~MethodContext() {
   io_ctx_impl->put();
 }
