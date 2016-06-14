@@ -36,7 +36,8 @@ void RGWProcess::RGWWQ::_dump_queue()
 int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWOp *& op,
                               RGWRequest * const req,
-                              req_state * const s)
+                              req_state * const s,
+                              const bool skip_retarget)
 {
   req->log(s, "init permissions");
   int ret = handler->init_permissions(op);
@@ -48,12 +49,16 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
    * Only some accesses support website mode, and website mode does NOT apply
    * if you are using the REST endpoint either (ergo, no authenticated access)
    */
-  req->log(s, "recalculating target");
-  ret = handler->retarget(op, &op);
-  if (ret < 0) {
-    return ret;
+  if (! skip_retarget) {
+    req->log(s, "recalculating target");
+    ret = handler->retarget(op, &op);
+    if (ret < 0) {
+      return ret;
+    }
+    req->op = op;
+  } else {
+    req->log(s, "retargeting skipped because of SubOp mode");
   }
-  req->op = op;
 
   /* If necessary extract object ACL and put them into req_state. */
   req->log(s, "reading permissions");
