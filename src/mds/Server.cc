@@ -453,7 +453,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      if (session->connection != NULL) {;
+      if (session->connection != NULL) {
         // Conditional because terminate_sessions will indiscrimately
         // put sessions in CLOSING whether they ever had a conn or not.
         session->connection->mark_disposable();
