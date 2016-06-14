@@ -169,8 +169,16 @@ public:
 };
 
 /* process stream request */
-int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
-		    RGWStreamIO* client_io, OpsLogSocket* olog);
+extern int process_request(RGWRados* store,
+                           RGWREST* rest,
+                           RGWRequest* req,
+		           RGWStreamIO* client_io,
+                           OpsLogSocket* olog);
+
+extern int rgw_process_authenticated(RGWHandler_REST * handler,
+                                     RGWOp*& op,
+                                     RGWRequest * req,
+                                     req_state * s);
 
 #if defined(def_dout_subsys)
 #undef def_dout_subsys
