@@ -2698,7 +2698,7 @@ public:
   static const unsigned max_attr_name_len = 100;
   static const unsigned max_attr_value_len = 1024 * 4;
   coll_t cid;
-  unsigned max_object_len;
+  unsigned max_object_len, max_write_len;
   unsigned in_flight;
   map<ghobject_t, Object, ghobject_t::BitwiseComparator> contents;
   set<ghobject_t, ghobject_t::BitwiseComparator> available_objects;
@@ -2822,7 +2822,9 @@ public:
     static const char alphanum[] = "0123456789"
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
       "abcdefghijklmnopqrstuvwxyz";
-
+    if (!size) {
+      return;
+    }
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
       bp[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
@@ -2837,8 +2839,9 @@ public:
 			 gen_type *rng,
 			 ObjectStore::Sequencer *osr,
 			 coll_t cid,
-			 unsigned max_size)
-    : cid(cid), max_object_len(max_size),
+			 unsigned max_size,
+			 unsigned max_write)
+    : cid(cid), max_object_len(max_size), max_write_len(max_write),
       in_flight(0), object_gen(gen), rng(rng), store(store), osr(osr),
       lock("State lock") {}
 
@@ -3147,13 +3150,11 @@ public:
     available_objects.erase(new_obj);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
-    boost::uniform_int<> u1(0, max_object_len/2);
-    boost::uniform_int<> u2(0, max_object_len/10);
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
     uint64_t offset = u1(*rng);
     uint64_t len = u2(*rng);
     bufferlist bl;
-    if (offset > len)
-      swap(offset, len);
 
     filled_byte_array(bl, len);
 
@@ -3378,12 +3379,10 @@ public:
     available_objects.erase(new_obj);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
 
-    boost::uniform_int<> u1(0, max_object_len/2);
-    boost::uniform_int<> u2(0, max_object_len/10);
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
     uint64_t offset = u1(*rng);
     uint64_t len = u2(*rng);
-    if (offset > len)
-      swap(offset, len);
 
     if (contents[new_obj].data.length() < offset + len) {
       contents[new_obj].data.append_zero(offset+len-contents[new_obj].data.length());
@@ -3414,7 +3413,7 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store)
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 400*1024);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 400*1024, 40*1024);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
@@ -3473,13 +3472,26 @@ TEST_P(StoreTest, SyntheticCompressed) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, SyntheticNoCSum) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  g_conf->set_val("bluestore_csum", "false");
+  g_conf->set_val("bluestore_csum_type", "none");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  doSyntheticTest(store);
+
+  g_conf->set_val("bluestore_csum", "true");
+  g_conf->set_val("bluestore_csum_type", "crc32c");
+}
+
 TEST_P(StoreTest, AttrSynthetic) {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen(447);
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,447),shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 40*1024);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 40*1024, 4*1024);
   test_obj.init();
   for (int i = 0; i < 500; ++i) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
@@ -4530,6 +4542,46 @@ int main(int argc, char **argv) {
   r = RUN_ALL_TESTS();
   g_ceph_context->put();
   return r;
+}
+
+void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store)
+{
+  ObjectStore::Sequencer osr("test");
+  MixedGenerator gen(555);
+  gen_type rng(time(NULL));
+  coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
+
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 4*1024*1024, 4096);
+  test_obj.init();
+  const int max_objects = 1;
+  for (int i = 0; i < max_objects; ++i) {
+    if (!(i % 500)) cerr << "seeding object " << i << std::endl;
+    test_obj.touch();
+  }
+  for (int i = 0; i < 1000; ++i) {
+    if (!(i % 1000)) {
+      cerr << "Op " << i << std::endl;
+      test_obj.print_internal_state();
+    }
+    test_obj.write();
+  }
+  test_obj.wait_for_done();
+  test_obj.shutdown();
+}
+
+TEST_P(StoreTest, Many4KWritesTest) {
+  g_ceph_context->_conf->apply_changes(NULL);
+  doMany4KWritesTest(store);
+}
+
+TEST_P(StoreTest, Many4KWritesNoCSumTest) {
+  g_conf->set_val("bluestore_csum", "false");
+  g_conf->set_val("bluestore_csum_type", "none");
+  g_ceph_context->_conf->apply_changes(NULL);
+  doMany4KWritesTest(store);
+
+  g_conf->set_val("bluestore_csum", "true");
+  g_conf->set_val("bluestore_csum_type", "crc32c");
 }
 
 /*
