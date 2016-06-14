@@ -1,4 +1,5 @@
-from .. import matrix
+from teuthology.suite import matrix
+
 
 def verify_matrix_output_diversity(res):
     """
@@ -10,8 +11,10 @@ def verify_matrix_output_diversity(res):
     for i in range(res.size()):
         assert sz == len(s)
 
+
 def mbs(num, l):
     return matrix.Sum(num*10, [matrix.Base(i + (100*num)) for i in l])
+
 
 class TestMatrix(object):
     def test_simple(self):

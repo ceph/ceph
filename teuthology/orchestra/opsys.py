@@ -1,6 +1,42 @@
 import ast
 import re
 
+DISTRO_CODENAME_MAP = {
+    "ubuntu": {
+        "16.04": "xenial",
+        "15.04": "vivid",
+        "14.04": "trusty",
+        "13.10": "saucy",
+        "12.04": "precise",
+    },
+    "debian": {
+        "7": "wheezy",
+        "8": "jessie",
+    },
+    "rhel": {
+        "7": "maipo",
+        "6": "santiago",
+    },
+    "centos": {
+        "7": "core",
+        "6": "core",
+    },
+    "fedora": {
+        "21": "twenty one",
+        "20": "heisenbug",
+    },
+}
+
+DEFAULT_OS_VERSION = dict(
+    ubuntu="14.04",
+    fedora="20",
+    centos="7.0",
+    opensuse="12.2",
+    sles="11-sp2",
+    rhel="7.0",
+    debian='7.0'
+)
+
 
 class OS(object):
     """
@@ -17,9 +53,25 @@ class OS(object):
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
-        self.version = version
-        self.codename = codename
+        self.version = version or self._codename_to_version(name, codename)
+        self.codename = codename or self._version_to_codename(name, version)
         self._set_package_type()
+
+    @staticmethod
+    def _version_to_codename(name, version):
+        for (_version, codename) in DISTRO_CODENAME_MAP[name].iteritems():
+            if version == _version or version.split('.')[0] == _version:
+                return codename
+
+    @staticmethod
+    def _codename_to_version(name, codename):
+        for (version, _codename) in DISTRO_CODENAME_MAP[name].iteritems():
+            if codename == _codename:
+                return version
+        raise RuntimeError("No version found for %s %s !" % (
+            name,
+            codename,
+        ))
 
     @classmethod
     def from_python(cls, python_val):
@@ -47,11 +99,7 @@ class OS(object):
             name = 'centos'
         elif name.startswith('fedora'):
             name = 'fedora'
-        obj = cls()
-        obj.name = name
-        obj.version = version
-        obj.codename = codename.lower()
-        obj._set_package_type()
+        obj = cls(name=name, version=version, codename=codename.lower())
         return obj
 
     @classmethod
@@ -72,17 +120,15 @@ class OS(object):
         Additionally, we set the package type:
             package_type = 'deb'
         """
-        obj = cls()
         str_ = lsb_release_str.strip()
-        name = obj._get_value(str_, 'Distributor ID')
+        name = cls._get_value(str_, 'Distributor ID')
         if name == 'RedHatEnterpriseServer':
             name = 'rhel'
-        obj.name = name.lower()
+        name = name.lower()
 
-        obj.version = obj._get_value(str_, 'Release')
-        obj.codename = obj._get_value(str_, 'Codename').lower()
-
-        obj._set_package_type()
+        version = cls._get_value(str_, 'Release')
+        codename = cls._get_value(str_, 'Codename').lower()
+        obj = cls(name=name, version=version, codename=codename)
 
         return obj
 
@@ -106,13 +152,10 @@ class OS(object):
         Additionally, we set the package type:
             package_type = 'deb'
         """
-        obj = cls()
         str_ = os_release_str.strip()
-        obj.name = cls._get_value(str_, 'ID').lower()
-        obj.version = cls._get_value(str_, 'VERSION_ID')
-        obj.codename = None
-
-        obj._set_package_type()
+        name = cls._get_value(str_, 'ID').lower()
+        version = cls._get_value(str_, 'VERSION_ID')
+        obj = cls(name=name, version=version)
 
         return obj
 
@@ -145,3 +188,9 @@ class OS(object):
             .format(name=repr(self.name),
                     version=repr(self.version),
                     codename=repr(self.codename))
+
+    def __eq__(self, other):
+        for slot in self.__slots__:
+            if not getattr(self, slot) == getattr(other, slot):
+                return False
+        return True

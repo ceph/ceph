@@ -8,7 +8,7 @@ import sys
 import yaml
 
 from teuthology.exceptions import ParseError
-from teuthology.suite import build_matrix, combine_path
+from teuthology.suite.build_matrix import build_matrix, combine_path
 
 
 def main(args):

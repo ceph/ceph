@@ -8,6 +8,7 @@ from cStringIO import StringIO
 from .config import config
 from .contextutil import safe_while
 from .exceptions import VersionNotFoundError
+from .orchestra.opsys import OS, DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -27,29 +28,6 @@ Map 'generic' service name to 'flavor-specific' service name.
 _SERVICE_MAP = {
     'httpd': {'deb': 'apache2', 'rpm': 'httpd'}
 }
-
-DISTRO_CODENAME_MAP = {
-    "ubuntu": {
-        "16.04": "xenial",
-        "14.04": "trusty",
-        "12.04": "precise",
-        "15.04": "vivid",
-    },
-    "debian": {
-        "7": "wheezy",
-        "8": "jessie",
-    },
-}
-
-DEFAULT_OS_VERSION = dict(
-    ubuntu="14.04",
-    fedora="20",
-    centos="7.0",
-    opensuse="12.2",
-    sles="11-sp2",
-    rhel="7.0",
-    debian='7.0'
-)
 
 
 def get_package_name(pkg, rem):
@@ -490,8 +468,7 @@ class GitbuilderProject(object):
         """
         Initializes the class from a teuthology job config
         """
-        # a bad assumption, but correct for most situations I believe
-        self.arch = "x86_64"
+        self.arch = self.job_config.get('arch', 'x86_64')
         self.os_type = self.job_config.get("os_type")
         self.os_version = self._get_version()
         self.distro = self._get_distro(
@@ -503,7 +480,7 @@ class GitbuilderProject(object):
             "debian",
         ) else "rpm"
         # avoiding circular imports
-        from teuthology.suite import get_install_task_flavor
+        from teuthology.suite.util import get_install_task_flavor
         # when we're initializing from a full teuthology config, not just a
         # task config we need to make sure we're looking at the flavor for
         # the install task
@@ -576,7 +553,8 @@ class GitbuilderProject(object):
             # debian and ubuntu just use the distro name
             return self.os_type
 
-    def _parse_version(self, version):
+    @staticmethod
+    def _parse_version(version):
         """
         Parses a distro version string and returns a modified string
         that matches the format needed for the gitbuilder url.
@@ -585,7 +563,8 @@ class GitbuilderProject(object):
         """
         return version.split(".")[0]
 
-    def _get_distro(self, distro=None, version=None, codename=None):
+    @classmethod
+    def _get_distro(cls, distro=None, version=None, codename=None):
         """
         Given a distro and a version, returned the combined string
         to use in a gitbuilder url.
@@ -598,14 +577,14 @@ class GitbuilderProject(object):
         if distro in ('centos', 'rhel'):
             distro = "centos"
         elif distro == "fedora":
-            distro = "fc"
+            distro = "fedora"
         elif distro == "opensuse":
             distro = "opensuse"
         else:
             # deb based systems use codename instead of a distro/version combo
             if not codename:
                 # lookup codename based on distro string
-                codename = self._get_codename(distro, version)
+                codename = OS._version_to_codename(distro, version)
                 if not codename:
                     msg = "No codename found for: {distro} {version}".format(
                         distro=distro,
@@ -617,29 +596,8 @@ class GitbuilderProject(object):
 
         return "{distro}{version}".format(
             distro=distro,
-            version=self._parse_version(version),
+            version=cls._parse_version(version),
         )
-
-    def _get_codename(self, distro, version):
-        """
-        Attempts to find the codename for a given distro / version
-        pair.  Will first attempt to find the codename for the full
-        version and if not found will look again using only the major
-        version.  If a codename is not found, None is returned.
-
-        The constant DISTRO_CODENAME_MAP is used to provide this mapping.
-
-        :returns: The codename as string or None if not found.
-        """
-        major_version = version.split(".")[0]
-        distro_codes = DISTRO_CODENAME_MAP.get(distro)
-        if not distro_codes:
-            return None
-        codename = distro_codes.get(version)
-        if not codename:
-            codename = distro_codes.get(major_version)
-
-        return codename
 
     def _get_version(self):
         """
