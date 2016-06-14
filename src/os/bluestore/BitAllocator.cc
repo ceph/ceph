@@ -842,7 +842,7 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
     area = (BitMapArea *) m_child_list->get_nth_item(
                     start_block / m_child_size_blocks);
 
-    area_block_offset = start_block % area->size();
+    area_block_offset = start_block % m_child_size_blocks;
     falling_in_area = MIN(m_child_size_blocks - area_block_offset,
               num_blocks);
     if (!area->is_allocated(area_block_offset, falling_in_area)) {
@@ -1214,15 +1214,13 @@ BitAllocator::BitAllocator(int64_t total_blocks, int64_t zone_size_block, bmap_a
 }
 
 BitAllocator::BitAllocator(int64_t total_blocks, int64_t zone_size_block,
-         bmap_alloc_mode_t mode, bool def):
-  BitMapAreaIN(total_blocks, zone_size_block, def)
+         bmap_alloc_mode_t mode, bool def)
 {
   init_check(total_blocks, zone_size_block, mode, def, false);
 }
 
 BitAllocator::BitAllocator(int64_t total_blocks, int64_t zone_size_block,
-         bmap_alloc_mode_t mode, bool def, bool stats_on):
-  BitMapAreaIN(total_blocks, zone_size_block, def)
+         bmap_alloc_mode_t mode, bool def, bool stats_on)
 {
   init_check(total_blocks, zone_size_block, mode, def, stats_on);
 }

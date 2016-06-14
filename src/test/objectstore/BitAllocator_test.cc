@@ -13,7 +13,7 @@
 
 #define bmap_test_assert(x) EXPECT_EQ(true, (x))
 #define NUM_THREADS 16
-#define MAX_BLOCKS (1024 * 1024 * 16)
+#define MAX_BLOCKS (1024 * 1024 * 1)
 
 TEST(BitAllocator, test_bmap_iter)
 {
@@ -481,7 +481,6 @@ verify_blocks(int64_t num_blocks, int64_t *blocks)
 }
 
 __thread int my_tid;
-__thread int64_t allocated_blocks[MAX_BLOCKS];
 
 void
 do_work(BitAllocator *alloc)
@@ -491,6 +490,7 @@ do_work(BitAllocator *alloc)
   int64_t start_block = -1;
   int64_t num_blocks = alloc->size() / NUM_THREADS;
   int total_alloced = 0;
+  int64_t *allocated_blocks = (int64_t *) new int64_t [MAX_BLOCKS];
 
   while (num_iters--) {
     printf("Allocating in tid %d.\n", my_tid);
