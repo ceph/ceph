@@ -158,9 +158,18 @@ void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ <<" instance "<< (uint64_t) this <<
     " offset " << offset << " length " << length << dendl;
+  uint64_t size = m_bit_alloc->size() * m_block_size;
 
-  insert_free(ROUND_UP_TO(offset, m_block_size),
-      (length / m_block_size) * m_block_size);
+  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t length_adj = ((length - (offset_adj - offset)) /
+                         m_block_size) * m_block_size;
+
+  if ((offset_adj + length_adj) > size) {
+    assert(((offset_adj + length_adj) - m_block_size) < size);
+    length_adj = size - offset_adj;
+  }
+
+  insert_free(offset_adj, length_adj);
 }
 
 void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
