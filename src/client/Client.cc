@@ -8398,6 +8398,9 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
         bufferlist bl;
         int r = _read(fh, offset, totallen, &bl);
         ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
+        if (r <= 0)
+          return r;
+
         int bufoff = 0;
         for (unsigned j = 0, resid = r; j < iovcnt && resid > 0; j++) {
                /*
