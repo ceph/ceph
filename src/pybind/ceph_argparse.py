@@ -20,8 +20,13 @@ import socket
 import stat
 import sys
 import threading
-import types
 import uuid
+
+
+try:
+    basestring
+except NameError:
+    basestring = str
 
 
 class ArgumentError(Exception):
@@ -135,11 +140,11 @@ class CephInt(CephArgtype):
             self.range = list()
         else:
             self.range = list(range.split('|'))
-            self.range = map(long, self.range)
+            self.range = [int(x) for x in self.range]
 
     def valid(self, s, partial=False):
         try:
-            val = long(s)
+            val = int(s)
         except ValueError:
             raise ArgumentValid("{0} doesn't represent an int".format(s))
         if len(self.range) == 2:
@@ -170,7 +175,7 @@ class CephFloat(CephArgtype):
             self.range = list()
         else:
             self.range = list(range.split('|'))
-            self.range = map(float, self.range)
+            self.range = [float(x) for x in self.range]
 
     def valid(self, s, partial=False):
         try:
@@ -288,7 +293,7 @@ class CephIPAddr(CephArgtype):
                 socket.inet_pton(socket.AF_INET6, a)
             except:
                 raise ArgumentValid('{0} not valid IPv6 address'.format(s))
-        if p is not None and long(p) > 65535:
+        if p is not None and int(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
         self.val = s
         self.addr = a
@@ -310,12 +315,12 @@ class CephEntityAddr(CephIPAddr):
             ip = s
         super(self.__class__, self).valid(ip)
         if nonce:
-            nonce_long = None
+            nonce_int = None
             try:
-                nonce_long = long(nonce)
+                nonce_int = int(nonce)
             except ValueError:
                 pass
-            if nonce_long is None or nonce_long < 0:
+            if nonce_int is None or nonce_int < 0:
                 raise ArgumentValid(
                     '{0}: invalid entity, nonce {1} not integer > 0'.
                     format(s, nonce)
@@ -499,11 +504,11 @@ class CephFragment(CephArgtype):
         if not val.startswith('0x'):
             raise ArgumentFormat("{0} not a hex integer".format(val))
         try:
-            long(val)
+            int(val)
         except:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(val))
         try:
-            long(bits)
+            int(bits)
         except:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(bits))
         self.val = s
@@ -535,12 +540,14 @@ class CephPrefix(CephArgtype):
         self.prefix = prefix
 
     def valid(self, s, partial=False):
-        try:
-            # `prefix` can always be converted into unicode when being compared,
-            # but `s` could be anything passed by user.
-            s = unicode(s)
-        except UnicodeDecodeError:
-            raise ArgumentPrefix("no match for {0}".format(s))
+        s = str(s)
+        if isinstance(s, bytes):
+            try:
+                # `prefix` can always be converted into unicode when being compared,
+                # but `s` could be anything passed by user.
+                s = s.decode('ascii')
+            except UnicodeDecodeError:
+                raise ArgumentPrefix("no match for {0}".format(s))
 
         if partial:
             if self.prefix.startswith(s):
@@ -584,7 +591,7 @@ class argdesc(object):
     and will store the validated value in self.instance.val for extraction.
     """
     def __init__(self, t, name=None, n=1, req=True, **kwargs):
-        if isinstance(t, types.StringTypes):
+        if isinstance(t, basestring):
             self.t = CephPrefix
             self.typeargs = {'prefix': t}
             self.req = True
@@ -604,7 +611,7 @@ class argdesc(object):
     def __repr__(self):
         r = 'argdesc(' + str(self.t) + ', '
         internals = ['N', 'typeargs', 'instance', 't']
-        for (k, v) in self.__dict__.iteritems():
+        for (k, v) in self.__dict__.items():
             if k.startswith('__') or k in internals:
                 pass
             else:
@@ -612,7 +619,7 @@ class argdesc(object):
                 if k == 'n' and self.N:
                     v = 'N'
                 r += '{0}={1}, '.format(k, v)
-        for (k, v) in self.typeargs.iteritems():
+        for (k, v) in self.typeargs.items():
             r += '{0}={1}, '.format(k, v)
         return r[:-2] + ')'
 
@@ -672,7 +679,7 @@ def parse_funcsig(sig):
     argnum = 0
     for desc in sig:
         argnum += 1
-        if isinstance(desc, types.StringTypes):
+        if isinstance(desc, basestring):
             t = CephPrefix
             desc = {'type': t, 'name': 'prefix', 'prefix': desc}
         else:
@@ -681,11 +688,11 @@ def parse_funcsig(sig):
                 s = 'JSON descriptor {0} has no type'.format(sig)
                 raise JsonFormat(s)
             # look up type string in our globals() dict; if it's an
-            # object of type types.TypeType, it must be a
+            # object of type `type`, it must be a
             # locally-defined class. otherwise, we haven't a clue.
             if desc['type'] in globals():
                 t = globals()[desc['type']]
-                if not isinstance(t, types.TypeType):
+                if not isinstance(t, type):
                     s = 'unknown type {0}'.format(desc['type'])
                     raise JsonFormat(s)
             else:
@@ -741,7 +748,7 @@ def parse_json_funcsigs(s, consumer):
         print("Couldn't parse JSON {0}: {1}".format(s, e), file=sys.stderr)
         raise e
     sigdict = {}
-    for cmdtag, cmd in overall.iteritems():
+    for cmdtag, cmd in overall.items():
         if 'sig' not in cmd:
             s = "JSON descriptor {0} has no 'sig'".format(cmdtag)
             raise JsonFormat(s)
@@ -967,7 +974,8 @@ def validate(args, signature, partial=False):
 def cmdsiglen(sig):
     sigdict = sig.values()
     assert len(sigdict) == 1
-    return len(sig.values()[0]['sig'])
+    some_value = next(iter(sig.values()))
+    return len(some_value['sig'])
 
 
 def validate_command(sigdict, args, verbose=False):
@@ -984,7 +992,7 @@ def validate_command(sigdict, args, verbose=False):
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
         bestcmds = []
-        for cmdtag, cmd in sigdict.iteritems():
+        for cmdtag, cmd in sigdict.items():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
             if matched > best_match_cnt:
@@ -1003,8 +1011,7 @@ def validate_command(sigdict, args, verbose=False):
 
         # Sort bestcmds by number of args so we can try shortest first
         # (relies on a cmdsig being key,val where val is a list of len 1)
-        bestcmds_sorted = sorted(bestcmds,
-                                 cmp=lambda x, y: cmp(cmdsiglen(x), cmdsiglen(y)))
+        bestcmds_sorted = sorted(bestcmds, key=cmdsiglen)
 
         if verbose:
             print("bestcmds_sorted: ", file=sys.stderr)
@@ -1012,7 +1019,7 @@ def validate_command(sigdict, args, verbose=False):
 
         # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds_sorted:
-            for cmd in cmdsig.itervalues():
+            for cmd in cmdsig.values():
                 sig = cmd['sig']
                 try:
                     valid_dict = validate(args, sig)
