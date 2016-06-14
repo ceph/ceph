@@ -79,7 +79,7 @@ public:
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
-  static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
+  static const int PIN_FRAGMENTING =  2;  // containing dir is refragmenting
   static const int PIN_PURGING =      3;
   static const int PIN_SCRUBQUEUE =   4; // TODO: negative value?
 
