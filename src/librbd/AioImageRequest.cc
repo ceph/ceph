@@ -472,6 +472,8 @@ void AioImageFlush::send_request() {
   C_AioRequest *req_comp = new C_AioRequest(m_aio_comp);
   m_image_ctx.flush(req_comp);
 
+  // track flush op for block writes
+  m_aio_comp->start_op(true);
   m_aio_comp->put();
 
   m_image_ctx.perfcounter->inc(l_librbd_aio_flush);
