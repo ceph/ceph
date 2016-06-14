@@ -27,11 +27,12 @@ template<typename> class RefreshParentRequest;
 template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
-  static RefreshRequest *create(ImageCtxT &image_ctx, Context *on_finish) {
-    return new RefreshRequest(image_ctx, on_finish);
+  static RefreshRequest *create(ImageCtxT &image_ctx, bool acquiring_lock,
+                                Context *on_finish) {
+    return new RefreshRequest(image_ctx, acquiring_lock, on_finish);
   }
 
-  RefreshRequest(ImageCtxT &image_ctx, Context *on_finish);
+  RefreshRequest(ImageCtxT &image_ctx, bool acquiring_lock, Context *on_finish);
   ~RefreshRequest();
 
   void send();
@@ -97,6 +98,7 @@ private:
    */
 
   ImageCtxT &m_image_ctx;
+  bool m_acquiring_lock;
   Context *m_on_finish;
 
   int m_error_result;
@@ -129,6 +131,7 @@ private:
   bool m_exclusive_locked;
 
   bool m_blocked_writes = false;
+  bool m_incomplete_update = false;
 
   void send_v1_read_header();
   Context *handle_v1_read_header(int *result);

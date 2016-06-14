@@ -65,7 +65,7 @@ public:
   }
 
   void expect_refresh(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, refresh(_))
+    EXPECT_CALL(*mock_image_ctx.state, acquire_lock_refresh(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
