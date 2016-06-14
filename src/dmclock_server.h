@@ -403,6 +403,35 @@ namespace crimson {
 	return any_removed;
       }
 
+      // Collect must support calls to push_back(R), such as
+      // std::list<R>.
+      template<typename Collect>
+      void remove_by_client(const C& client, Collect* out = nullptr) {
+	DataGuard g(data_mtx);
+
+	auto i = client_map.find(client);
+
+	if (i == client_map.end()) return;
+
+	if (nullptr != out) {
+	  for (auto j = i->second->requests.begin();
+	       j != i->second->requests.end();
+	       ++j) {
+	    out->push_back(*j->request);
+	  }
+	}
+
+	i->second->requests.clear();
+
+	resv_heap.adjust(*i->second);
+	limit_heap.adjust(*i->second);
+	ready_heap.adjust(*i->second);
+#if USE_PROP_HEAP
+	resv_heap.adjust(*i->second);
+#endif
+      }
+
+
     protected:
 
       // The ClientCompare functor is essentially doing a precedes?

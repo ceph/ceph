@@ -8,6 +8,7 @@
 #include <memory>
 #include <chrono>
 #include <iostream>
+#include <list>
 
 
 #include "dmclock_server.h"
@@ -259,6 +260,73 @@ namespace crimson {
       pq.remove_by_req_filter([](MyReq r) -> bool {return 1 == r.id % 2;});
 
       EXPECT_EQ(5, pq.request_count());
+    } // TEST
+
+
+    TEST(dmclock_server, remove_by_client) {
+      struct MyReq {
+	int id;
+
+	MyReq(int _id) :
+	  id(_id)
+	{
+	  // empty
+	}
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      dmc::ClientInfo info1(0.0, 1.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info1;
+      };
+
+      Queue pq(client_info_f, true);
+
+      EXPECT_EQ(0, pq.client_count());
+      EXPECT_EQ(0, pq.request_count());
+
+      ReqParams req_params(1,1);
+
+      pq.add_request(MyReq(1), client1, req_params);
+      pq.add_request(MyReq(11), client1, req_params);
+      pq.add_request(MyReq(2), client2, req_params);
+      pq.add_request(MyReq(0), client2, req_params);
+      pq.add_request(MyReq(13), client2, req_params);
+      pq.add_request(MyReq(2), client2, req_params);
+      pq.add_request(MyReq(13), client2, req_params);
+      pq.add_request(MyReq(98), client2, req_params);
+      pq.add_request(MyReq(44), client1, req_params);
+
+      EXPECT_EQ(2, pq.client_count());
+      EXPECT_EQ(9, pq.request_count());
+
+      std::list<MyReq> removed;
+
+      pq.remove_by_client(client1, &removed);
+
+      EXPECT_EQ(3, removed.size());
+      EXPECT_EQ(1, removed.front().id);
+      removed.pop_front();
+      EXPECT_EQ(11, removed.front().id);
+      removed.pop_front();
+      EXPECT_EQ(44, removed.front().id);
+      removed.pop_front();
+
+      EXPECT_EQ(6, pq.request_count());
+
+      Queue::PullReq pr = pq.pull_request();
+      EXPECT_TRUE(pr.is_retn());
+      EXPECT_EQ(2, pr.get_retn().request->id);
+
+      pr = pq.pull_request();
+      EXPECT_TRUE(pr.is_retn());
+      EXPECT_EQ(0, pr.get_retn().request->id);
     } // TEST
 
 
