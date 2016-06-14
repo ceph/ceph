@@ -19,6 +19,7 @@
 #include <limits.h>
 #include <cstring>
 #include <boost/scope_exit.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "Monitor.h"
 #include "common/version.h"
@@ -294,7 +295,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     args += cmd_vartype_stringify(p->second);
   }
   args = "[" + args + "]";
- 
+
   bool read_only = (command == "mon_status" ||
                     command == "mon metadata" ||
                     command == "quorum_status" ||
@@ -336,6 +337,123 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     if (f) {
       f->flush(ss);
     }
+  } else if (boost::starts_with(command, "debug mon features")) {
+  
+    // check if unsupported feature is set
+    if (!cct->check_experimental_feature_enabled("mon_debug_features_commands")) {
+      ss << "error: this is an experimental feature and is not enabled.";
+      goto abort;
+    }
+
+    if (command == "debug mon features list") {
+
+      mon_feature_t supported = ceph::features::mon::get_supported();
+      mon_feature_t persistent = ceph::features::mon::get_persistent();
+
+      if (f) {
+
+        f->open_object_section("features");
+        f->open_object_section("ceph-mon");
+        supported.dump_with_value(f.get(), "supported");
+        persistent.dump_with_value(f.get(), "persistent");
+        f->close_section(); // ceph-mon
+        f->open_object_section("monmap");
+        monmap->persistent_features.dump_with_value(f.get(), "persistent");
+        monmap->optional_features.dump_with_value(f.get(), "optional");
+        mon_feature_t required = monmap->get_required_features();
+        required.dump_with_value(f.get(), "required");
+        f->close_section(); // monmap
+        f->close_section(); // features
+
+        f->flush(ss);
+      } else {
+        ss << "only structured formats allowed when listing";
+      }
+    } else if (command == "debug mon features set" ||
+               command == "debug mon features set_val" ||
+               command == "debug mon features unset" ||
+               command == "debug mon features unset_val") {
+
+      string n;
+      if (!cmd_getval(cct, cmdmap, "feature", n)) {
+        ss << "missing feature to set";
+        goto abort;
+      }
+
+      string f_type;
+      bool do_persistent = false, do_optional = false;
+
+      if (cmd_getval(cct, cmdmap, "feature_type", f_type)) {
+        if (f_type == "--persistent") {
+          do_persistent = true;
+        } else {
+          do_optional = true;
+        }
+      }
+
+      mon_feature_t feature;
+
+      if (command == "debug mon features set" ||
+          command == "debug mon features unset") {
+        feature = ceph::features::mon::get_feature_by_name(n);
+        if (feature == ceph::features::mon::FEATURE_NONE) {
+          ss << "no such feature '" << n << "'";
+          goto abort;
+        }
+      } else {
+        uint64_t feature_val;
+        string interr;
+        feature_val = strict_strtoll(n.c_str(), 10, &interr);
+        if (!interr.empty()) {
+          ss << "unable to parse feature value: " << interr;
+          goto abort;
+        }
+
+        feature = mon_feature_t(feature_val);
+      }
+
+      bool do_unset = false;
+      if (boost::ends_with(command, "unset") ||
+          boost::ends_with(command, "unset_val")) {
+        do_unset = true;
+      }
+
+      ss << (do_unset? "un" : "") << "setting feature '";
+      feature.print_with_value(ss);
+      ss << "' on current monmap\n";
+      ss << "please note this change is not persistent; "
+         << "changes to monmap will overwrite the changes\n";
+
+      if (!do_persistent && !do_optional) {
+        if (ceph::features::mon::get_persistent().contains_all(feature)) {
+          do_persistent = true;
+        } else {
+          do_optional = true;
+        }
+      }
+
+      ss << "\n" << (do_unset ? "un" : "") << "setting ";
+
+      mon_feature_t &target_feature = (do_persistent ?
+          monmap->persistent_features : monmap->optional_features);
+
+      if (do_persistent) {
+        ss << "persistent feature";
+      } else {
+        ss << "optional feature";
+      }
+
+      if (do_unset) {
+        target_feature.unset_feature(feature);
+      } else {
+        target_feature.set_feature(feature);
+      }
+
+    } else {
+
+      ss << "unrecognized command";
+    }
+
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
@@ -770,6 +888,46 @@ int Monitor::preinit()
                                      admin_hook,
                                      "show the ops currently in flight");
   assert(r == 0);
+
+  // debugging api
+  r = admin_socket->register_command("debug mon features list",
+                                     "debug mon features list",
+                                     admin_hook,
+                                     "list monmap features");
+  assert(r == 0);
+  r = admin_socket->register_command("debug mon features set",
+                                     "debug mon features set "
+                                     "name=feature,type=CephString "
+                                     "name=feature_type,type=CephChoices,req=false,"
+                                     "strings=--persistent|--optional",
+                                     admin_hook,
+                                     "set a given feature, by name, in the monmap");
+  assert(r == 0);
+  r = admin_socket->register_command("debug mon features set_val",
+                                     "debug mon features set_val "
+                                     "name=feature,type=CephString "
+                                     "name=feature_type,type=CephChoices,req=false,"
+                                     "strings=--persistent|--optional",
+                                     admin_hook,
+                                     "set a given feature, by value, in the monmap");
+  assert(r == 0);
+  r = admin_socket->register_command("debug mon features unset",
+                                     "debug mon features unset "
+                                     "name=feature,type=CephString "
+                                     "name=feature_type,type=CephChoices,req=false,"
+                                     "strings=--persistent|--optional",
+                                     admin_hook,
+                                     "unset a given feature, by name, in the monmap");
+  assert(r == 0);
+  r = admin_socket->register_command("debug mon features unset_val",
+                                     "debug mon features unset_val "
+                                     "name=feature,type=CephString "
+                                     "name=feature_type,type=CephChoices,req=false,"
+                                     "strings=--persistent|--optional",
+                                     admin_hook,
+                                     "unset a given feature, by value, in the monmap");
+  assert(r == 0);
+
   lock.Lock();
 
   // add ourselves as a conf observer
@@ -891,12 +1049,18 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum enter");
     admin_socket->unregister_command("quorum exit");
     admin_socket->unregister_command("ops");
+    // debugging api
+    admin_socket->unregister_command("debug mon features list");
+    admin_socket->unregister_command("debug mon features set");
+    admin_socket->unregister_command("debug mon features set_val");
+    admin_socket->unregister_command("debug mon features unset");
+    admin_socket->unregister_command("debug mon features unset_val");
     delete admin_hook;
     admin_hook = NULL;
   }
 
   elector.shutdown();
-  
+
   // clean up
   paxos->shutdown();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)

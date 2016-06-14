@@ -288,6 +288,20 @@ public:
     return (*this);
   }
 
+  /**
+   * Obtain raw features
+   *
+   * @remarks
+   *    Consumers should not assume this interface will never change.
+   * @remarks
+   *    As the number of features increase, so may the internal representation
+   *    of the raw features. When this happens, this interface will change
+   *    accordingly. So should consumers of this interface.
+   */
+  uint64_t get_raw() const {
+    return features;
+  }
+
   constexpr
   friend mon_feature_t operator&(const mon_feature_t a,
                                  const mon_feature_t b) {
@@ -379,15 +393,31 @@ public:
     features |= f.features;
   }
 
+  void unset_feature(const mon_feature_t f) {
+    features &= ~(f.features);
+  }
+
   void print(ostream& out) const {
     out << "[";
     print_bit_str(features, out, ceph::features::mon::get_feature_name);
     out << "]";
   }
 
+  void print_with_value(ostream& out) const {
+    out << "[";
+    print_bit_str(features, out, ceph::features::mon::get_feature_name, true);
+    out << "]";
+  }
+
   void dump(Formatter *f, const char *sec_name = NULL) const {
     f->open_array_section((sec_name ? sec_name : "features"));
     dump_bit_str(features, f, ceph::features::mon::get_feature_name);
+    f->close_section();
+  }
+
+  void dump_with_value(Formatter *f, const char *sec_name = NULL) const {
+    f->open_array_section((sec_name ? sec_name : "features"));
+    dump_bit_str(features, f, ceph::features::mon::get_feature_name, true);
     f->close_section();
   }
 
@@ -438,6 +468,8 @@ namespace ceph {
             FEATURE_NONE
             );
       }
+
+      static inline mon_feature_t get_feature_by_name(std::string n);
     }
   }
 }
@@ -451,6 +483,17 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "reserved";
   }
   return "unknown";
+}
+
+static inline
+mon_feature_t ceph::features::mon::get_feature_by_name(std::string n) {
+
+  if (n == "kraken") {
+    return FEATURE_KRAKEN;
+  } else if (n == "reserved") {
+    return FEATURE_RESERVED;
+  }
+  return FEATURE_NONE;
 }
 
 static inline ostream& operator<<(ostream& out, const mon_feature_t& f) {

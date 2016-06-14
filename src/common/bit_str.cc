@@ -14,12 +14,14 @@
 #include "common/bit_str.h"
 #include "common/Formatter.h"
 #include "include/assert.h"
+#include "common/debug.h"
 
 static void _dump_bit_str(
     uint64_t bits,
     std::ostream *out,
     ceph::Formatter *f,
-    std::function<const char*(uint64_t)> func)
+    std::function<const char*(uint64_t)> func,
+    bool dump_bit_val)
 {
   uint64_t b = bits;
   int cnt = 0;
@@ -32,9 +34,17 @@ static void _dump_bit_str(
         if (outted)
           *out << ",";
         *out << func(r);
+        if (dump_bit_val) {
+          *out << "(" << r << ")";
+        }
       } else {
         assert(f != NULL);
-        f->dump_stream("bit_flag") << func(r);
+        if (dump_bit_val) {
+          f->dump_stream("bit_flag") << func(r)
+                                     << "(" << r << ")";
+        } else {
+          f->dump_stream("bit_flag") << func(r);
+        }
       }
       outted = true;
     }
@@ -47,15 +57,17 @@ static void _dump_bit_str(
 void print_bit_str(
     uint64_t bits,
     std::ostream &out,
-    std::function<const char*(uint64_t)> func)
+    std::function<const char*(uint64_t)> func,
+    bool dump_bit_val)
 {
-  _dump_bit_str(bits, &out, NULL, func);
+  _dump_bit_str(bits, &out, NULL, func, dump_bit_val);
 }
 
 void dump_bit_str(
     uint64_t bits,
     ceph::Formatter *f,
-    std::function<const char*(uint64_t)> func)
+    std::function<const char*(uint64_t)> func,
+    bool dump_bit_val)
 {
-  _dump_bit_str(bits, NULL, f, func);
+  _dump_bit_str(bits, NULL, f, func, dump_bit_val);
 }
