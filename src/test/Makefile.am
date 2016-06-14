@@ -452,6 +452,16 @@ unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR) $(LIBCOMMON)
 check_PROGRAMS += unittest_async_compressor
 
+unittest_dns_resolve_SOURCES = test/common/dns_resolve.cc
+unittest_dns_resolve_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RESOLV_LIBS)
+unittest_dns_resolve_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_dns_resolve
+
+unittest_monmap_SOURCES = test/mon/MonMap.cc
+unittest_monmap_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RESOLV_LIBS)
+unittest_monmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_monmap
+
 if LINUX
 #
 # XXX FREEBSD
