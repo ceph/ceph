@@ -571,6 +571,8 @@ void Server::terminate_sessions()
 {
   dout(2) << "terminate_sessions" << dendl;
 
+  terminating_sessions = true;
+
   // kill them off.  clients will retry etc.
   set<Session*> sessions;
   mds->sessionmap.get_client_session_set(sessions);
