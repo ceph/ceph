@@ -1646,7 +1646,7 @@ int Client::make_request(MetaRequest *request,
 
     // choose mds
     mds_rank_t mds = choose_target_mds(request);
-    if (mds < MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
+    if (mds == MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
       wait_on_list(waiting_for_mdsmap);
       continue;
@@ -12507,7 +12507,7 @@ mds_rank_t Client::_get_random_up_mds() const
   mdsmap->get_up_mds_set(up);
 
   if (up.empty())
-    return -1;
+    return MDS_RANK_NONE;
   std::set<mds_rank_t>::const_iterator p = up.begin();
   for (int n = rand() % up.size(); n; n--)
     ++p;
