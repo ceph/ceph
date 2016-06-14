@@ -145,7 +145,7 @@ Context *AcquireRequest<I>::send_refresh() {
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_refresh>(this);
-  m_image_ctx.state->refresh(ctx);
+  m_image_ctx.state->acquire_lock_refresh(ctx);
   return nullptr;
 }
 

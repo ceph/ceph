@@ -118,7 +118,7 @@ namespace librbd {
     void finalize(ssize_t rval);
 
     void init_time(ImageCtx *i, aio_type_t t);
-    void start_op();
+    void start_op(bool ignore_type = false);
     void fail(int r);
 
     void complete();
