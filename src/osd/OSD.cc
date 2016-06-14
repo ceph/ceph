@@ -1739,6 +1739,41 @@ void OSD::handle_signal(int signum)
   shutdown();
 }
 
+void OSD::handle_signal(int signum, siginfo_t *info)
+{
+  assert(signum == SIGUSR1);
+
+  derr << "*** Got signal " << sig_str(signum) << " with info ***" << dendl;
+
+  if (signum == SIGUSR1 && info->si_pid == getpid() && info->si_value.sival_ptr) {
+
+    sig_pthread_info *p;
+
+    p = (sig_pthread_info *) info->si_value.sival_ptr;
+
+    if (pthread_self() == p->p_id) {
+      derr << "*** Loop singal detected, ignoring. ***" << dendl;
+      assert_release_lock();
+      return;
+    }
+
+    derr << "*** Got signal from: " << p->name << ", pthread_t: 0x" << std::hex << p->p_id << dendl;
+
+    if (monc) {
+      OSDMapRef osdmap = get_osdmap();
+      if (osdmap && osdmap->is_up(whoami)) {
+        monc->send_mon_message(
+            new MOSDMarkMeDown(monc->get_fsid(),
+                               osdmap->get_inst(whoami),
+                               osdmap->get_epoch(),
+                               true //wait for ack
+                               )
+        );
+      }
+    }
+  }
+}
+
 int OSD::pre_init()
 {
   Mutex::Locker lock(osd_lock);
@@ -5816,6 +5851,8 @@ bool OSD::heartbeat_dispatch(Message *m)
 bool OSD::ms_dispatch(Message *m)
 {
   if (m->get_type() == MSG_OSD_MARK_ME_DOWN) {
+    assert_release_lock();
+
     service.got_stop_ack();
     m->put();
     return true;

@@ -19,6 +19,7 @@
 #include "acconfig.h"
 
 typedef void (*signal_handler_t)(int);
+typedef void (*signal_handler_info_t)(int, siginfo_t *);
 
 #ifndef HAVE_REENTRANT_STRSIGNAL
 # define sig_str(signum) sys_siglist[signum]
@@ -29,7 +30,7 @@ typedef void (*signal_handler_t)(int);
 void install_sighandler(int signum, signal_handler_t handler, int flags);
 
 // handles SIGHUP
-void sighup_handler(int signum);
+void sighup_handler(int signum, siginfo_t *info);
 
 // Install the standard Ceph signal handlers
 void install_standard_sighandlers(void);
@@ -42,13 +43,22 @@ void init_async_signal_handler();
 void shutdown_async_signal_handler();
 
 /// queue an async signal
+void queue_async_signal(int signum, siginfo_t *info);
 void queue_async_signal(int signum);
 
 /// install a safe, async, callback for the given signal
+void register_async_signal_handler(int signum, signal_handler_info_t handler);
 void register_async_signal_handler(int signum, signal_handler_t handler);
+void register_async_signal_handler_oneshot(int signum, signal_handler_info_t handler);
 void register_async_signal_handler_oneshot(int signum, signal_handler_t handler);
 
 /// uninstall a safe async signal callback
+void unregister_async_signal_handler(int signum, signal_handler_info_t handler);
 void unregister_async_signal_handler(int signum, signal_handler_t handler);
+
+struct sig_pthread_info {
+  pthread_t p_id;
+  char name[16];
+};
 
 #endif

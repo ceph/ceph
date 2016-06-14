@@ -74,6 +74,8 @@ extern void __ceph_assertf_fail(const char *assertion, const char *file, int lin
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
+extern void assert_release_lock();
+
 #define ceph_assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\

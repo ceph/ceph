@@ -68,6 +68,13 @@ void handle_osd_signal(int signum)
     osd->handle_signal(signum);
 }
 
+void handle_osd_signal_info(int signum, siginfo_t *info)
+{
+  if (osd)
+    osd->handle_signal(signum, info);
+}
+
+
 void usage() 
 {
   cout << "usage: ceph-osd -i <osdid>\n"
@@ -616,6 +623,7 @@ int main(int argc, const char **argv)
   // install signal handlers
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler(SIGUSR1, handle_osd_signal_info);
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
@@ -632,6 +640,7 @@ int main(int argc, const char **argv)
   ms_objecter->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGUSR1, handle_osd_signal_info);
   unregister_async_signal_handler(SIGINT, handle_osd_signal);
   unregister_async_signal_handler(SIGTERM, handle_osd_signal);
   shutdown_async_signal_handler();

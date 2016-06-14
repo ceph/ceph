@@ -256,7 +256,7 @@ unittest_str_list_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_str_list
 
 unittest_log_SOURCES = log/test.cc
-unittest_log_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
+unittest_log_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(CRYPTO_LIBS) 
 unittest_log_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_TESTPROGRAMS += unittest_log
 
@@ -311,7 +311,7 @@ unittest_bufferlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_bufferlist
 
 unittest_xlist_SOURCES = test/test_xlist.cc
-unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON)
+unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON) $(CRYPTO_LIBS) 
 unittest_xlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_xlist
 
@@ -414,7 +414,7 @@ unittest_ipaddr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_ipaddr
 
 unittest_texttable_SOURCES = test/test_texttable.cc
-unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
+unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(CRYPTO_LIBS) 
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_texttable
 
@@ -443,7 +443,7 @@ unittest_interval_set_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_interval_set
 
 unittest_subprocess_SOURCES = test/test_subprocess.cc
-unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
+unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(CRYPTO_LIBS) 
 unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_subprocess
 

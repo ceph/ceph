@@ -58,7 +58,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
   }
 }
 
-void sighup_handler(int signum)
+void sighup_handler(int signum, siginfo_t *info)
 {
   g_ceph_context->reopen_logs();
 }
@@ -176,6 +176,7 @@ struct SignalHandler : public Thread {
   struct safe_handler {
     int pipefd[2];  // write to [1], read from [0]
     signal_handler_t handler;
+    signal_handler_info_t handler_info;
   };
 
   /// all handlers
@@ -240,6 +241,7 @@ struct SignalHandler : public Thread {
 	break;
       if (r > 0) {
 	char v;
+        siginfo_t s;
 
 	// consume byte from signal socket, if any.
 	r = read(pipefd[0], &v, 1);
@@ -247,10 +249,14 @@ struct SignalHandler : public Thread {
 	lock.Lock();
 	for (unsigned signum=0; signum<32; signum++) {
 	  if (handlers[signum]) {
-	    r = read(handlers[signum]->pipefd[0], &v, 1);
-	    if (r == 1) {
-	      handlers[signum]->handler(signum);
-	    }
+	    r = read(handlers[signum]->pipefd[0], (siginfo_t *) &s, sizeof(siginfo_t));
+            // TODO use of read siginfo_t is unlcear, once it sends siginfo_t other " "
+            // got to remember about it
+	    if (r == sizeof(siginfo_t)) {
+	      handlers[signum]->handler_info(signum, &s);
+	    } else if (r == 1) {
+              handlers[signum]->handler(signum);
+            }
 	  }
 	}
 	lock.Unlock();
@@ -259,6 +265,18 @@ struct SignalHandler : public Thread {
       }
     }
     return NULL;
+  }
+
+
+  // TODO change functions below, they only differ in two places
+  void queue_signal(int signum, siginfo_t *info) {
+    // If this signal handler is registered, the callback must be
+    // defined.  We can do this without the lock because we will never
+    // have the signal handler defined without the handlers entry also
+    // being filled in.
+    assert(handlers[signum]);
+    int r = write(handlers[signum]->pipefd[1], info, sizeof(siginfo_t));
+    assert(r == sizeof(siginfo_t));
   }
 
   void queue_signal(int signum) {
@@ -273,13 +291,58 @@ struct SignalHandler : public Thread {
 
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
   void unregister_handler(int signum, signal_handler_t handler);
+
+  void register_handler(int signum, signal_handler_info_t handler, bool oneshot);
+  void unregister_handler(int signum, signal_handler_info_t handler);
 };
 
 static SignalHandler *g_signal_handler = NULL;
 
+static void handler_hook(int signum, siginfo_t *info, void *ignored_ucontext_t)
+{
+  g_signal_handler->queue_signal(signum, info);
+}
+
 static void handler_hook(int signum)
 {
   g_signal_handler->queue_signal(signum);
+}
+
+// TODO change functions below, it only differ in two places looking on 
+// one without siginfo_t
+void SignalHandler::register_handler(int signum, signal_handler_info_t handler, bool oneshot)
+{
+  int r;
+
+  assert(signum >= 0 && signum < 32);
+
+  safe_handler *h = new safe_handler;
+
+  r = pipe(h->pipefd);
+  assert(r == 0);
+  r = fcntl(h->pipefd[0], F_SETFL, O_NONBLOCK);
+  assert(r == 0);
+
+  h->handler_info = handler;
+  lock.Lock();
+  handlers[signum] = h;
+  lock.Unlock();
+
+  // signal thread so that it sees our new handler
+  signal_thread();
+  
+  // install our handler
+  struct sigaction oldact;
+  struct sigaction act;
+  memset(&act, 0, sizeof(act));
+
+  act.sa_sigaction = handler_hook;
+  sigfillset(&act.sa_mask);  // mask all signals in the handler
+  act.sa_flags = oneshot ? SA_RESETHAND : 0;
+  act.sa_flags|=SA_SIGINFO;
+
+  int ret = sigaction(signum, &act, &oldact);
+  assert(ret == 0);
 }
 
 void SignalHandler::register_handler(int signum, signal_handler_t handler, bool oneshot)
@@ -314,6 +377,29 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 
   int ret = sigaction(signum, &act, &oldact);
   assert(ret == 0);
+}
+
+// TODO change functions below, it only differ in two places looking on 
+// one without siginfo_t
+void SignalHandler::unregister_handler(int signum, signal_handler_info_t handler)
+{
+  assert(signum >= 0 && signum < 32);
+  safe_handler *h = handlers[signum];
+  assert(h);
+  assert(h->handler_info == handler);
+
+  // restore to default
+  signal(signum, SIG_DFL);
+
+  // _then_ remove our handlers entry
+  lock.Lock();
+  handlers[signum] = NULL;
+  lock.Unlock();
+
+  // this will wake up select() so that worker thread sees our handler is gone
+  close(h->pipefd[0]);
+  close(h->pipefd[1]);
+  delete h;
 }
 
 void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
@@ -353,10 +439,22 @@ void shutdown_async_signal_handler()
   g_signal_handler = NULL;
 }
 
+void queue_async_signal(int signum, siginfo_t *info)
+{
+  assert(g_signal_handler);
+  g_signal_handler->queue_signal(signum, info);
+}
+
 void queue_async_signal(int signum)
 {
   assert(g_signal_handler);
   g_signal_handler->queue_signal(signum);
+}
+
+void register_async_signal_handler(int signum, signal_handler_info_t handler)
+{
+  assert(g_signal_handler);
+  g_signal_handler->register_handler(signum, handler, false);
 }
 
 void register_async_signal_handler(int signum, signal_handler_t handler)
@@ -365,10 +463,22 @@ void register_async_signal_handler(int signum, signal_handler_t handler)
   g_signal_handler->register_handler(signum, handler, false);
 }
 
+void register_async_signal_handler_oneshot(int signum, signal_handler_info_t handler)
+{
+  assert(g_signal_handler);
+  g_signal_handler->register_handler(signum, handler, true);
+}
+
 void register_async_signal_handler_oneshot(int signum, signal_handler_t handler)
 {
   assert(g_signal_handler);
   g_signal_handler->register_handler(signum, handler, true);
+}
+
+void unregister_async_signal_handler(int signum, signal_handler_info_t handler)
+{
+  assert(g_signal_handler);
+  g_signal_handler->unregister_handler(signum, handler);
 }
 
 void unregister_async_signal_handler(int signum, signal_handler_t handler)
@@ -376,6 +486,4 @@ void unregister_async_signal_handler(int signum, signal_handler_t handler)
   assert(g_signal_handler);
   g_signal_handler->unregister_handler(signum, handler);
 }
-
-
 
