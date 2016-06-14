@@ -81,7 +81,6 @@ def test_wait_success(m_get_jobs, caplog):
     assert 'fail http://UPLOAD_URL/name/2' in caplog.text()
 
     in_progress = deepcopy(results)
-    in_progress = deepcopy(results)
     assert 0 == suite.wait('name', 1, None)
     assert m_get_jobs.called_with('name', fields=['job_id', 'status'])
     assert 0 == len(in_progress)
@@ -100,9 +99,8 @@ def test_wait_fails(m_get_jobs):
     m_get_jobs.side_effect = get_jobs
     suite.Run.WAIT_PAUSE = 1
     suite.Run.WAIT_MAX_JOB_TIME = 1
-    with pytest.raises(suite.WaitException) as error:
+    with pytest.raises(suite.WaitException):
         suite.wait('name', 1, None)
-        assert 'abc' in str(error)
 
 
 class TestSuiteMain(object):
