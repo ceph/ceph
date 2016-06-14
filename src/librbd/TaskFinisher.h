@@ -63,13 +63,17 @@ public:
     }
   }
 
-  void cancel_all() {
-    Mutex::Locker l(*m_lock);
-    for (typename TaskContexts::iterator it = m_task_contexts.begin();
-         it != m_task_contexts.end(); ++it) {
-      delete it->second.first;
+  void cancel_all(Context *comp) {
+    {
+      Mutex::Locker l(*m_lock);
+      for (typename TaskContexts::iterator it = m_task_contexts.begin();
+           it != m_task_contexts.end(); ++it) {
+        delete it->second.first;
+        m_safe_timer->cancel_event(it->second.second);
+      }
+      m_task_contexts.clear();
     }
-    m_task_contexts.clear();
+    m_finisher->queue(comp);
   }
 
   bool add_event_after(const Task& task, double seconds, Context *ctx) {
