@@ -1012,6 +1012,7 @@ OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
 OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
 OPTION(bluestore_shard_finishers, OPT_BOOL, false)
+OPTION(bluestore_kv_sync_threads, OPT_INT, 4)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)

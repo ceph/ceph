@@ -318,9 +318,11 @@ void StupidAllocator::commit_start()
   std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " releasing " << num_uncommitted
 	   << " in extents " << uncommitted.num_intervals() << dendl;
-  assert(committing.empty());
-  committing.swap(uncommitted);
-  num_committing = num_uncommitted;
+  for (auto p = uncommitted.begin(); p != uncommitted.end(); ++p) {
+    committing.insert(p.get_start(), p.get_len());
+  }
+  uncommitted.clear();
+  num_committing += num_uncommitted;
   num_uncommitted = 0;
 }
 

@@ -1403,11 +1403,13 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
     m_finisher_num(1),
-    kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
-    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
+    sync_wal_apply(cct->_conf->bluestore_sync_wal_apply),
+    kv_threads(cct->_conf->bluestore_kv_sync_threads),
+    osr_id(0),
+    kv_sync_thread(this, 0)
 {
   _init_logger();
   g_ceph_context->_conf->add_observer(this);
@@ -1422,6 +1424,18 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     oss << "finisher-" << i;
     Finisher *f = new Finisher(cct, oss.str(), "finisher");
     finishers.push_back(f);
+  }
+
+  for (int i = 0; i < kv_threads; i++) {
+    kv_queues.push_back(new deque<TransContext*>);
+    kv_committings.push_back(new deque<TransContext*>);
+    wal_cleanup_queues.push_back(new deque<TransContext*>);
+    wal_cleanings.push_back(new deque<TransContext*>);
+
+    kv_sync_threads.push_back(new KVSyncThread(this, i));
+
+    kv_locks.push_back(new std::mutex);
+    kv_conds.push_back(new std::condition_variable);
   }
 }
 
@@ -2846,8 +2860,10 @@ int BlueStore::mount()
     f->start();
   }
   wal_tp.start();
-  kv_sync_thread.create("bstore_kv_sync");
-
+  //kv_sync_thread.create("bstore_kv_sync");
+  for (int i = 0; i < kv_threads; i++) {
+    kv_sync_threads[i]->create("kv_sync");
+  }
   r = _wal_replay();
   if (r < 0)
     goto out_stop;
@@ -3400,13 +3416,14 @@ void BlueStore::_sync()
   // flush aios in flight
   bdev->flush();
 
-  std::unique_lock<std::mutex> l(kv_lock);
-  while (!kv_committing.empty() ||
-	 !kv_queue.empty()) {
-    dout(20) << " waiting for kv to commit" << dendl;
-    kv_sync_cond.wait(l);
+  for (int i = 0; i < kv_threads; i++) {
+  std::unique_lock<std::mutex> l(*kv_locks[i]);
+    while(!kv_committings[i]->empty() ||
+	!kv_queues[i]->empty()) {
+      dout(20) << " waiting for kv to commit" << dendl;
+      kv_sync_cond.wait(l);
+    }
   }
-
   dout(10) << __func__ << " done" << dendl;
 }
 
@@ -4835,9 +4852,10 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	assert(r == 0);
       }
       {
-	std::lock_guard<std::mutex> l(kv_lock);
-	kv_queue.push_back(txc);
-	kv_cond.notify_one();
+	std::lock_guard<std::mutex> l(*kv_locks[txc->osr->id % kv_threads]);
+	//kv_queue.push_back(txc);
+	kv_queues[txc->osr->id % kv_threads]->push_back(txc);
+	kv_conds[txc->osr->id % kv_threads]->notify_one();
       }
       return;
     case TransContext::STATE_KV_QUEUED:
@@ -5124,30 +5142,27 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
   _txc_update_store_statfs(txc);
 }
 
-void BlueStore::_kv_sync_thread()
+void BlueStore::_kv_sync_thread(int id)
 {
-  dout(10) << __func__ << " start" << dendl;
-  std::unique_lock<std::mutex> l(kv_lock);
+  dout(10) << __func__ << " start" << " id " << id << dendl;
+  std::unique_lock<std::mutex> l(*kv_locks[id]);
   while (true) {
-    assert(kv_committing.empty());
-    assert(wal_cleaning.empty());
-    if (kv_queue.empty() && wal_cleanup_queue.empty()) {
+    assert(kv_committings[id]->empty());
+    assert(wal_cleanings[id]->empty());
+    if (kv_queues[id]->empty() && wal_cleanup_queues[id]->empty()) {
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
       kv_sync_cond.notify_all();
-      kv_cond.wait(l);
+      kv_conds[id]->wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
-      dout(20) << __func__ << " committing " << kv_queue.size()
-	       << " cleaning " << wal_cleanup_queue.size() << dendl;
-      kv_committing.swap(kv_queue);
-      wal_cleaning.swap(wal_cleanup_queue);
+      dout(20) << __func__ << " committing " << kv_queues[id]->size()
+	       << " cleaning " << wal_cleanup_queues[id]->size() << dendl;
+      kv_committings[id]->swap(*(kv_queues[id]));
+      wal_cleanings[id]->swap(*(wal_cleanup_queues[id]));
       utime_t start = ceph_clock_now(NULL);
       l.unlock();
-
-      dout(30) << __func__ << " committing txc " << kv_committing << dendl;
-      dout(30) << __func__ << " wal_cleaning txc " << wal_cleaning << dendl;
 
       alloc->commit_start();
 
@@ -5156,8 +5171,8 @@ void BlueStore::_kv_sync_thread()
 
       if (!g_conf->bluestore_sync_transaction &&
 	  !g_conf->bluestore_sync_submit_transaction) {
-	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
-	     it != kv_committing.end();
+	for (std::deque<TransContext *>::iterator it = kv_committings[id]->begin();
+	     it != kv_committings[id]->end();
 	     ++it) {
 	  _txc_finalize_kv((*it), (*it)->t);
 	  int r = db->submit_transaction((*it)->t);
@@ -5184,9 +5199,31 @@ void BlueStore::_kv_sync_thread()
 	}
       }
 
+      // allocations and deallocations
+      for (std::deque<TransContext *>::iterator it = wal_cleanings[id]->begin();
+	  it != wal_cleanings[id]->end();
+	  ++it) {
+	TransContext *txc = *it;
+	if (!txc->wal_txn->released.empty()) {
+	  dout(20) << __func__ << " txc " << txc
+	    << " (post-wal) released " << txc->wal_txn->released
+	    << dendl;
+	  for (interval_set<uint64_t>::iterator p =
+	      txc->wal_txn->released.begin();
+	      p != txc->wal_txn->released.end();
+	      ++p) {
+	    dout(20) << __func__ << " release " << p.get_start()
+	      << "~" << p.get_len() << dendl;
+	    fm->release(p.get_start(), p.get_len(), t);
+	    if (!g_conf->bluestore_debug_no_reuse_blocks)
+	      alloc->release(p.get_start(), p.get_len());
+	  }
+	}
+      }
+
       // cleanup sync wal keys
-      for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
-	    it != wal_cleaning.end();
+      for (std::deque<TransContext *>::iterator it = wal_cleanings[id]->begin();
+	    it != wal_cleanings[id]->end();
 	    ++it) {
 	bluestore_wal_transaction_t& wt =*(*it)->wal_txn;
 	// kv metadata updates
@@ -5201,18 +5238,16 @@ void BlueStore::_kv_sync_thread()
 
       utime_t finish = ceph_clock_now(NULL);
       utime_t dur = finish - start;
-      dout(20) << __func__ << " committed " << kv_committing.size()
-	       << " cleaned " << wal_cleaning.size()
-	       << " in " << dur << dendl;
-      while (!kv_committing.empty()) {
-	TransContext *txc = kv_committing.front();
+
+      while (!kv_committings[id]->empty()) {
+	TransContext *txc = kv_committings[id]->front();
 	_txc_state_proc(txc);
-	kv_committing.pop_front();
+	kv_committings[id]->pop_front();
       }
-      while (!wal_cleaning.empty()) {
-	TransContext *txc = wal_cleaning.front();
+      while (!wal_cleanings[id]->empty()) {
+	TransContext *txc = wal_cleanings[id]->front();
 	_txc_state_proc(txc);
-	wal_cleaning.pop_front();
+	wal_cleanings[id]->pop_front();
       }
 
       alloc->commit_finish();
@@ -5282,11 +5317,12 @@ int BlueStore::_wal_finish(TransContext *txc)
   assert(txc->wal_txn->released.empty());
 
   std::lock_guard<std::mutex> l2(txc->osr->qlock);
-  std::lock_guard<std::mutex> l(kv_lock);
+  std::lock_guard<std::mutex> l(*kv_locks[txc->osr->id % kv_threads]);
   txc->state = TransContext::STATE_WAL_CLEANUP;
   txc->osr->qcond.notify_all();
-  wal_cleanup_queue.push_back(txc);
-  kv_cond.notify_one();
+  //wal_cleanup_queue.push_back(txc);
+  wal_cleanup_queues[txc->osr->id % kv_threads]->push_back(txc);
+  kv_conds[txc->osr->id % kv_threads]->notify_one();
   return 0;
 }
 
@@ -5319,6 +5355,7 @@ int BlueStore::_wal_replay()
 {
   dout(10) << __func__ << " start" << dendl;
   OpSequencerRef osr = new OpSequencer;
+  osr->id = 0;
   int count = 0;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_WAL);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
@@ -5371,6 +5408,7 @@ int BlueStore::queue_transactions(
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
+    osr->id = osr_id.inc();
     dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
   }
 
