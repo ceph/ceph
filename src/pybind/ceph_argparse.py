@@ -350,6 +350,10 @@ class CephPgid(CephArgtype):
         if s.find('.') == -1:
             raise ArgumentFormat('pgid has no .')
         poolid, pgnum = s.split('.', 1)
+        try:
+            poolid = int(poolid)
+        except ValueError:
+            raise ArgumentFormat('pool {0} not integer'.format(poolid))
         if poolid < 0:
             raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
