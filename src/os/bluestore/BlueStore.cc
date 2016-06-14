@@ -4406,6 +4406,10 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     ::encode((*p)->onode, bl);
     dout(20) << "  onode " << (*p)->oid << " is " << bl.length() << dendl;
     t->set(PREFIX_OBJ, (*p)->key, bl);
+    dout(21) << "dump:\n";
+      bl.hexdump(*_dout);
+    *_dout << dendl;
+
 
     std::lock_guard<std::mutex> l((*p)->flush_lock);
     (*p)->flush_txns.insert(txc);
