@@ -3495,7 +3495,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(ceph_clock_now(g_ceph_context), dir, META_POP_IRD, -1, numfiles);
+  mds->balancer->hit_dir(now, dir, META_POP_IRD, -1, numfiles);
   
   // reply
   mdr->tracei = diri;
