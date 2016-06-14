@@ -281,7 +281,14 @@ bool ImageDeleter::process_image_delete() {
   mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
   r = cls_client::mirror_image_set(&ioctx, curr_deletion->local_image_id,
                                            mirror_image);
-  if (r == -EEXIST || r == -EINVAL) {
+  if (r == -ENOENT) {
+    dout(10) << "local image is not mirrored, aborting deletion..." << dendl;
+    m_delete_lock.Lock();
+    DeleteInfo *del_info = curr_deletion.release();
+    m_delete_lock.Unlock();
+    del_info->notify(r);
+    return true;
+  } else if (r == -EEXIST || r == -EINVAL) {
     derr << "cannot disable mirroring for image id" << curr_deletion->local_image_id
          << ": global_image_id has changed/reused, aborting deletion: "
          << cpp_strerror(r) << dendl;
