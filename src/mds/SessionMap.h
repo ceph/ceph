@@ -433,6 +433,12 @@ public:
                        loaded_legacy(false)
   { }
 
+  ~SessionMap()
+  {
+    for (auto p : by_state)
+      delete p.second;
+  }
+
   void set_version(const version_t v)
   {
     version = projected = v;
