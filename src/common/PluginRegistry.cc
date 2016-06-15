@@ -218,10 +218,11 @@ int PluginRegistry::preload(const std::string &plugins)
   list<string> plugins_list;
   get_str_list(plugins, plugins_list);
   for (list<string>::iterator i = plugins_list.begin();
-      i != plugins_list.end();
-      ++i) {
-    Plugin *plugin;
+       i != plugins_list.end();
+       ++i) {
+    loading = true;
     int r = load("", *i);
+    loading = false;
     if (r)
       return r;
   }

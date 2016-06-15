@@ -61,7 +61,7 @@ namespace ceph {
     Plugin *get_with_load(const std::string& type, const std::string& name);
 
     int load(const std::string& type, const std::string& name);
-    int preload(const std::string& name);
+    int preload(const std::string &plugins);
   };
 }
 
