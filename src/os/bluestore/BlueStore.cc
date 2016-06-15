@@ -2551,6 +2551,12 @@ int BlueStore::fsck()
       errors += r;
   }
 
+  // get expected statfs; fill unaffected fields to be able to compare
+  // structs
+  statfs(&actual_statfs);
+  expected_statfs.total = actual_statfs.total;
+  expected_statfs.available = actual_statfs.available;
+
   // walk collections, objects
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
        p != coll_map.end();
@@ -2751,11 +2757,6 @@ int BlueStore::fsck()
     hash_shared.clear();
     bnode.reset();
   }
-  statfs(&actual_statfs);
-  //fill unaffected fields to be able to compare structs
-  expected_statfs.blocks = actual_statfs.blocks;
-  expected_statfs.bsize = actual_statfs.bsize;
-  expected_statfs.available = actual_statfs.available;
   if (!(actual_statfs == expected_statfs)) {
     dout(30) << __func__ << "  actual statfs differs from the expected one:"
              << actual_statfs << " vs. "
@@ -2955,9 +2956,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     bluefs_len += p.get_len();
 
   buf->reset();
-
-  buf->blocks = bdev->get_size() / block_size;
-  buf->bsize = block_size;
+  buf->total = bdev->get_size();
   buf->available = (alloc->get_free() - bluefs_len);
 
   bufferlist bl;
