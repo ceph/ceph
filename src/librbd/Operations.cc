@@ -481,7 +481,18 @@ void Operations<I>::execute_rename(const char *dstname, Context *on_finish) {
                 << dendl;
 
   if (m_image_ctx.old_format) {
+    // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
+    on_finish = new FunctionContext([this, on_finish](int r) {
+	m_image_ctx.image_watcher->register_watch(on_finish);
+      });
+    on_finish = new FunctionContext([this, dstname, on_finish](int r) {
+	operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
+	  m_image_ctx, on_finish, dstname);
+	req->send();
+      });
+    m_image_ctx.image_watcher->unregister_watch(on_finish);
+    return;
   }
   operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
     m_image_ctx, on_finish, dstname);
