@@ -96,6 +96,8 @@ def get_gitbuilder_hash(project='ceph', branch='master', flavor='basic',
     #     'https://api.github.com/repos/ceph/ceph/git/refs/heads/master')
     # hash = .json()['object']['sha']
     (arch, release, _os) = get_distro_defaults(distro, machine_type)
+    if distro is None:
+        distro = _os.name
     gp = GitbuilderProject(
         project,
         dict(
