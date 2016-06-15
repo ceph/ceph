@@ -273,6 +273,7 @@ class Run(object):
         log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
             suite_name, suite_path, len(configs)))
 
+    def collect_jobs(self, arch, configs):
         # used as a local cache for package versions from gitbuilder
         package_versions = dict()
         jobs_to_schedule = []
@@ -369,7 +370,9 @@ class Run(object):
                     jobs_missing_packages.append(job)
 
             jobs_to_schedule.append(job)
+        return jobs_missing_packages, jobs_to_schedule
 
+    def schedule_jobs(self, jobs_missing_packages, jobs_to_schedule, name):
         for job in jobs_to_schedule:
             log.info(
                 'Scheduling %s', job['desc']
@@ -378,8 +381,10 @@ class Run(object):
             log_prefix = ''
             if job in jobs_missing_packages:
                 log_prefix = "Missing Packages: "
-                if (not self.args.dry_run and not
-                        config.suite_allow_missing_packages):
+                if (
+                    not self.args.dry_run and
+                    not config.suite_allow_missing_packages
+                ):
                     util.schedule_fail(
                         "At least one job needs packages that don't exist for "
                         "hash {sha1}.".format(sha1=self.base_config.sha1),
@@ -395,6 +400,28 @@ class Run(object):
             if not self.args.dry_run and throttle:
                 log.info("pause between jobs : --throttle " + str(throttle))
                 time.sleep(int(throttle))
+
+    def schedule_suite(self):
+        """
+        Schedule the suite-run. Returns the number of jobs scheduled.
+        """
+        name = self.name
+        arch = util.get_arch(self.base_config.machine_type)
+        suite_name = self.base_config.suite
+        suite_path = os.path.join(
+            self.suite_repo_path, 'suites',
+            self.base_config.suite.replace(':', '/'))
+        log.debug('Suite %s in %s' % (suite_name, suite_path))
+        configs = [
+            (combine_path(suite_name, item[0]), item[1]) for item in
+            build_matrix(suite_path, subset=self.args.subset)
+        ]
+        log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
+            suite_name, suite_path, len(configs)))
+
+        jobs_missing_packages, jobs_to_schedule = self.collect_jobs(arch, configs)
+
+        self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 
         count = len(jobs_to_schedule)
         missing_count = len(jobs_missing_packages)
