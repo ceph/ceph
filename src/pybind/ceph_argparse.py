@@ -1189,7 +1189,7 @@ def run_in_thread(target, *args, **kwargs):
     return t.retval
 
 
-def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
+def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
     """
     Send a command to a daemon using librados's
@@ -1271,7 +1271,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
 
 
 def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
-                 inbuf='', timeout=0, verbose=False):
+                 inbuf=b'', timeout=0, verbose=False):
     """
     Format up a JSON command and send it with send_command() above.
     Prefix may be supplied separately or in argdict.  Any bulk input
