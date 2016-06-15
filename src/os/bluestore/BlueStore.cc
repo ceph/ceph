@@ -5649,7 +5649,7 @@ void BlueStore::_do_write_small(
     }
   }
   while (ep != o->onode.extent_map.end()) {
-    if (ep->first >= offset + length) {
+    if (ep->first >= ep->second.offset + offset + length) {
       break;
     }
     int64_t blob = ep->second.blob;
@@ -5704,8 +5704,7 @@ void BlueStore::_do_write_small(
     if (b->get_ondisk_length() >= b_off + b_len &&
 	b->is_unused(b_off, b_len) &&
 	b->is_allocated(b_off, b_len) &&
-	(!b->has_csum_data() || (b_off % b->get_csum_block_size() == 0 &&
-				 b_len % b->get_csum_block_size() == 0))) {
+	(b_off % chunk_size == 0 && b_len % chunk_size == 0)) {
       dout(20) << __func__ << "  write to unused 0x" << std::hex
 	       << b_off << "~" << b_len
 	       << " pad 0x" << head_pad << " + 0x" << tail_pad
