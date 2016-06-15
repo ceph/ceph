@@ -1008,6 +1008,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     logger(NULL),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
     min_alloc_size(0),
+    max_alloc_size(0),
     sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
 {
   _init_logger();
@@ -1273,8 +1274,9 @@ int BlueStore::_check_or_set_bdev_label(
   return 0;
 }
 
-void BlueStore::_set_min_alloc(void)
+void BlueStore::_set_alloc_sizes(void)
 {
+  max_alloc_size = g_conf->bluestore_max_alloc_size;
   /*
    * Set device block size according to its media
    */
@@ -1290,6 +1292,7 @@ void BlueStore::_set_min_alloc(void)
   }
 
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
+	   << " max_alloc_size 0x" << max_alloc_size
 	   << std::dec << dendl;
 }
 
@@ -1317,7 +1320,8 @@ int BlueStore::_open_bdev(bool create)
     ++block_size_order;
   }
 
-  _set_min_alloc();
+  _set_alloc_sizes();
+  max_alloc_size = g_conf->bluestore_max_alloc_size;
   return 0;
 
  fail_close:
@@ -5929,7 +5933,8 @@ int BlueStore::_do_alloc_write(
     while (final_length > 0) {
       bluestore_pextent_t e;
       uint32_t l;
-      int r = alloc->allocate(final_length, min_alloc_size, hint,
+      uint64_t want = max_alloc_size ? MIN(final_length, max_alloc_size) : final_length;
+      int r = alloc->allocate(want, min_alloc_size, hint,
 			      &e.offset, &l);
       assert(r == 0);
       need -= l;
