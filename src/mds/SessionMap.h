@@ -186,7 +186,7 @@ public:
     ++importing_count;
   }
   void dec_importing() {
-    assert(importing_count);
+    assert(importing_count > 0);
     --importing_count;
   }
   bool is_importing() { return importing_count > 0; }
@@ -432,6 +432,12 @@ public:
 		       projected(0), committing(0), committed(0),
                        loaded_legacy(false)
   { }
+
+  ~SessionMap()
+  {
+    for (auto p : by_state)
+      delete p.second;
+  }
 
   void set_version(const version_t v)
   {
