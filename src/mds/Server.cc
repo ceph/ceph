@@ -2993,8 +2993,6 @@ void Server::handle_client_open(MDRequestRef& mdr)
   //  and that data itself is flushed so that we can read the snapped data off disk.
   if (mdr->snapid != CEPH_NOSNAP && !cur->is_dir()) {
     rdlocks.insert(&cur->filelock);
-    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-      return;
   }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
