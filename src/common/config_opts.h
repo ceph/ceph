@@ -960,6 +960,7 @@ OPTION(bluestore_max_csum_block, OPT_U32, 64*1024)
 OPTION(bluestore_min_alloc_size, OPT_U32, 0)
 OPTION(bluestore_min_alloc_size_hdd, OPT_U32, 64*1024)
 OPTION(bluestore_min_alloc_size_ssd, OPT_U32, 4*1024)
+OPTION(bluestore_max_alloc_size, OPT_U32, 0)
 OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
 OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
