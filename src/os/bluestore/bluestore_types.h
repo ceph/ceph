@@ -221,11 +221,12 @@ struct bluestore_blob_t {
 
   enum CSumType {
     CSUM_NONE = 0,
-    CSUM_CRC32C = 1,
-    CSUM_XXHASH32 = 2,
-    CSUM_XXHASH64 = 3,
+    CSUM_XXHASH32 = 1,
+    CSUM_XXHASH64 = 2,
+    CSUM_CRC32C = 3,
+    CSUM_CRC32C_16 = 4, // low 16 bits of crc32c
+    CSUM_CRC32C_8 = 5,  // low 8 bits of crc32c
     CSUM_MAX,
-    CSUM_CRC16,  // ** not yet implemented **
   };
   static const char *get_csum_type_string(unsigned t) {
     switch (t) {
@@ -233,7 +234,8 @@ struct bluestore_blob_t {
     case CSUM_XXHASH32: return "xxhash32";
     case CSUM_XXHASH64: return "xxhash64";
     case CSUM_CRC32C: return "crc32c";
-    case CSUM_CRC16: return "crc16";
+    case CSUM_CRC32C_16: return "crc32c_16";
+    case CSUM_CRC32C_8: return "crc32c_8";
     default: return "???";
     }
   }
@@ -246,8 +248,10 @@ struct bluestore_blob_t {
       return CSUM_XXHASH64;
     if (s == "crc32c")
       return CSUM_CRC32C;
-    if (s == "crc16")
-      return CSUM_CRC16;
+    if (s == "crc32c_16")
+      return CSUM_CRC32C_16;
+    if (s == "crc32c_8")
+      return CSUM_CRC32C_8;
     return -EINVAL;
   }
 
@@ -453,7 +457,8 @@ struct bluestore_blob_t {
     case CSUM_XXHASH32: return 4;
     case CSUM_XXHASH64: return 8;
     case CSUM_CRC32C: return 4;
-    case CSUM_CRC16: return 2;
+    case CSUM_CRC32C_16: return 2;
+    case CSUM_CRC32C_8: return 1;
     default: return 0;
     }
   }
