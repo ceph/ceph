@@ -223,6 +223,9 @@ For more information about the configuration options available in Glance please 
 
 Mitaka
 ~~~~~~
+
+For Openstack Mitaka and Ceph Jewel we need to configure store in the ``[glance_store]`` section::
+
     [glance_store]
     default_store = rbd
     stores = rbd
@@ -231,7 +234,7 @@ Mitaka
     rbd_store_ceph_conf = /etc/ceph/ceph.conf
     rbd_store_chunk_size = 8
 
-For Openstack Mitaka and Ceph Jewel we need to configure store in the glance_store section.
+
 
 Any OpenStack version
 ~~~~~~~~~~~~~~~~~~~~~
