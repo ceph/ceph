@@ -73,6 +73,8 @@ private:
   MirrorPeerClientMeta m_client_meta_copy;
   std::list<std::string> m_snap_names;
 
+  bool m_invalid_master_sync_point = false;
+
   void send_remove_snap();
   void handle_remove_snap(int r);
 
