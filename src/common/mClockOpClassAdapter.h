@@ -15,8 +15,10 @@
 
 #pragma once
 
+
 #include "common/config.h"
 #include "common/ceph_context.h"
+#include "osd/PGQueueable.h"
 
 #include "mClockPriorityQueue.h"
 
