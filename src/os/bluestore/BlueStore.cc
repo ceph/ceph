@@ -3374,7 +3374,8 @@ int BlueStore::_do_read(
   return r;
 }
 
-int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result)
+int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o,
+				bufferlist* result)
 {
   IOContext ioc(NULL);   // FIXME?
 
@@ -3408,7 +3409,8 @@ int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, buffer
   return 0;
 }
 
-int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const
+int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
+			    const bufferlist& bl) const
 {
   int bad;
   int r = blob->verify_csum(blob_xoffset, bl, &bad);
@@ -3433,7 +3435,8 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   ::decode(chdr, i);
   CompressorRef compressor = Compressor::create(cct, chdr.type);
   if (!compressor.get()) {
-    // if compressor isn't available - error, because cannot return decompressed data?
+    // if compressor isn't available - error, because cannot return
+    // decompressed data?
     derr << __func__ << " can't load decompressor " << chdr.type << dendl;
     r = -EIO;
   } else {
