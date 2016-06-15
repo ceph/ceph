@@ -1892,7 +1892,7 @@ int BlueStore::_reconcile_bluefs_freespace()
   return 0;
 }
 
-int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
+int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
 					 KeyValueDB::Transaction t)
 {
   int ret = 0;
@@ -1969,16 +1969,18 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
     int r = alloc->reserve(gift);
     assert(r == 0);
 
-    bluestore_extent_t e;
-    r = alloc->allocate(gift, min_alloc_size, 0, &e.offset, &e.length);
+    uint64_t eoffset;
+    uint32_t elength;
+    r = alloc->allocate(gift, min_alloc_size, 0, &eoffset, &elength);
     if (r < 0) {
       assert(0 == "allocate failed, wtf");
       return r;
     }
-    if (e.length < gift) {
-      alloc->unreserve(gift - e.length);
+    if (elength < gift) {
+      alloc->unreserve(gift - elength);
     }
 
+    bluestore_pextent_t e(eoffset, elength);
     dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
     extents->push_back(e);
     ret = 1;
@@ -2013,7 +2015,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents,
 }
 
 void BlueStore::_commit_bluefs_freespace(
-  const vector<bluestore_extent_t>& bluefs_gift_extents)
+  const vector<bluestore_pextent_t>& bluefs_gift_extents)
 {
   dout(10) << __func__ << dendl;
   for (auto& p : bluefs_gift_extents) {
@@ -4635,7 +4637,7 @@ void BlueStore::_kv_sync_thread()
       // one final transaction to force a sync
       KeyValueDB::Transaction t = db->get_transaction();
 
-      vector<bluestore_extent_t> bluefs_gift_extents;
+      vector<bluestore_pextent_t> bluefs_gift_extents;
       if (bluefs) {
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents, t);
 	assert(r >= 0);
