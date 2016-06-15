@@ -563,10 +563,10 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 
 void CDir::unlink_inode(CDentry *dn)
 {
-  if (dn->get_linkage()->is_remote()) {
-    dout(12) << "unlink_inode " << *dn << dendl;
-  } else {
+  if (dn->get_linkage()->is_primary()) {
     dout(12) << "unlink_inode " << *dn << " " << *dn->get_linkage()->get_inode() << dendl;
+  } else {
+    dout(12) << "unlink_inode " << *dn << dendl;
   }
 
   unlink_inode_work(dn);
@@ -614,10 +614,8 @@ void CDir::unlink_inode_work( CDentry *dn )
       dn->unlink_remote(dn->get_linkage());
 
     dn->get_linkage()->set_remote(0, 0);
-  } else {
+  } else if (dn->get_linkage()->is_primary()) {
     // primary
-    assert(dn->get_linkage()->is_primary());
- 
     // unpin dentry?
     if (in->get_num_ref())
       dn->put(CDentry::PIN_INODEPIN);
@@ -629,6 +627,8 @@ void CDir::unlink_inode_work( CDentry *dn )
     // detach inode
     in->remove_primary_parent(dn);
     dn->get_linkage()->inode = 0;
+  } else {
+    assert(!dn->get_linkage()->is_null());
   }
 }
 
@@ -2132,7 +2132,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     bl.append('L');         // remote link
     ::encode(ino, bl);
     ::encode(d_type, bl);
-  } else {
+  } else if (dn->linkage.is_primary()) {
     // primary link
     CInode *in = dn->linkage.get_inode();
     assert(in);
@@ -2154,6 +2154,8 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     bufferlist snap_blob;
     in->encode_snap_blob(snap_blob);
     in->encode_bare(bl, cache->mds->mdsmap->get_up_features(), &snap_blob);
+  } else {
+    assert(!dn->linkage.is_null());
   }
 }
 
