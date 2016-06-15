@@ -26,6 +26,7 @@ class Connection;
 class AuthAuthorizer;
 class CryptoKey;
 class CephContext;
+class KeyStore;
 
 class Dispatcher {
 public:
@@ -171,6 +172,16 @@ public:
    */
   virtual int ms_handle_authentication(Connection *con) {
     return 0;
+  }
+
+  /**
+   * get authentication keyring
+   *
+   * Return the keyring to use for authentication with msgr1.  Remove me
+   * someday.
+   */
+  virtual KeyStore* ms_get_auth1_authorizer_keystore() {
+    return nullptr;
   }
 
   /**
