@@ -385,7 +385,7 @@ class CephFSTestCase(unittest.TestCase):
 
     def wait_for_health(self, pattern, timeout):
         """
-        Wait until 'ceph health' contains a single message matching the pattern
+        Wait until 'ceph health' contains messages matching the pattern
         """
         def seen_health_warning():
             health = self.fs.mon_manager.get_mon_health()
@@ -393,10 +393,13 @@ class CephFSTestCase(unittest.TestCase):
             if len(summary_strings) == 0:
                 log.debug("Not expected number of summary strings ({0})".format(summary_strings))
                 return False
-            elif len(summary_strings) == 1 and pattern in summary_strings[0]:
-                return True
             else:
-                raise RuntimeError("Unexpected health messages: {0}".format(summary_strings))
+                for ss in summary_strings:
+                    if pattern in ss:
+                         return True
+                
+            log.debug("Not found expected summary strings yet ({0})".format(summary_strings))
+            return False
 
         self.wait_until_true(seen_health_warning, timeout)
 
