@@ -173,7 +173,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   }
 }
 
-bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
+bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *slow)
 {
   RWLock::RLocker l(lock);
   if (!tracking_enabled)
@@ -214,7 +214,11 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   //store summary message
   warning_vector.push_back("");
 
-  int slow = 0;     // total slow
+  int _slow = 0;    // total slow
+  if (!slow)
+    slow = &_slow; 
+  else
+    *slow = _slow;  // start from 0 anyway
   int warned = 0;   // total logged
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
@@ -224,7 +228,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
       continue;
     xlist<TrackedOp*>::iterator i = sdata->ops_in_flight_sharded.begin();    
     while (!i.end() && (*i)->get_initiated() < too_old) {
-      slow++;
+      (*slow)++;
 
       // exponential backoff of warning intervals
       if (warned < log_threshold &&
@@ -252,7 +256,7 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   // off, we will stay silent.
   if (warned > 0) {
     stringstream ss;
-    ss << slow << " slow requests, " << warned << " included below; oldest blocked for > "
+    ss << *slow << " slow requests, " << warned << " included below; oldest blocked for > "
        << oldest_secs << " secs";
     warning_vector[0] = ss.str();
   }
