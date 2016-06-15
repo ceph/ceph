@@ -489,6 +489,28 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapMap) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
+TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapSeqs) {
+  ASSERT_EQ(0, create_snap("snap1"));
+  ASSERT_EQ(0, create_snap("snap2"));
+  m_client_meta.snap_seqs = {};
+  m_client_meta.sync_points = {{"snap2", "snap1", boost::none}};
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  expect_get_snap_id(mock_remote_image_ctx);
+
+  C_SaferCond ctx;
+  MockImageCopyRequest *request = create_request(mock_remote_image_ctx,
+                                                 mock_local_image_ctx,
+                                                 mock_journaler,
+                                                 m_client_meta.sync_points.front(),
+                                                 &ctx);
+  request->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
 } // namespace image_sync
 } // namespace mirror
 } // namespace rbd
