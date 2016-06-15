@@ -256,7 +256,7 @@ done:
 			riter->second.c_str());
   }
 
-  if (op_ret == ERR_NOT_MODIFIED) {
+  if (op_ret == -ERR_NOT_MODIFIED) {
       end_header(s, this);
   } else {
       if (!content_type)
