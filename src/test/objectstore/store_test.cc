@@ -12,6 +12,7 @@
  *
  */
 
+#include <glob.h>
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
@@ -4485,6 +4486,15 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
+static bool plugin_exists(const string& compressor_dir)
+{
+  string pattern(compressor_dir + "/libceph*.so");
+  glob_t buf;
+  int ret = glob(pattern.c_str(), 0, nullptr, &buf);
+  globfree(&buf);
+  return ret == 0;
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -4495,20 +4505,35 @@ int main(int argc, char **argv) {
 
   const char* env = getenv("CEPH_LIB");
   std::string directory(env ? env : ".libs");
-  string mkdir_compressor = "mkdir -p " + directory + "/compressor";
-  int r = system(mkdir_compressor.c_str());
-  (void)r;
+  if (plugin_exists(directory)) {
+    string mkdir_compressor = "mkdir -p " + directory + "/compressor";
+    int r = system(mkdir_compressor.c_str());
+    (void)r;
 
-  string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
-  r = system(cp_libceph_snappy.c_str());
-  (void)r;
+    string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
+    r = system(cp_libceph_snappy.c_str());
+    (void)r;
 
-  string cp_libceph_zlib = "cp " + directory + "/libceph_zlib.so* " + directory + "/compressor/";
-  r = system(cp_libceph_zlib.c_str());
-  (void)r;
-
-  g_ceph_context->_conf->set_val("plugin_dir", directory, false, false);
-
+    string cp_libceph_zlib = "cp " + directory + "/libceph_zlib.so* " + directory + "/compressor/";
+    r = system(cp_libceph_zlib.c_str());
+    (void)r;
+    g_ceph_context->_conf->set_val("plugin_dir", directory, false, false);
+  } else {
+    char plugin_dir[PATH_MAX];
+    char *val = plugin_dir;
+    int r = g_ceph_context->_conf->get_val("plugin_dir", &val,
+					   sizeof(plugin_dir));
+    if (r)
+      return r;
+    string compressor_dir(val);
+    compressor_dir += "/compressor";
+    if (!plugin_exists(compressor_dir)) {
+      std::cerr << "compressor plugins not found in '"
+		<< directory << "' or '" << compressor_dir << "'"
+		<< std::endl;
+      return EINVAL;
+    }
+  }
 
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
@@ -4527,7 +4552,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
-  r = RUN_ALL_TESTS();
+  int r = RUN_ALL_TESTS();
   g_ceph_context->put();
   return r;
 }
