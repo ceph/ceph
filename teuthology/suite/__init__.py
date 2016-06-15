@@ -36,7 +36,7 @@ def process_args(args):
         key = rename_args.get(key) or key
         if key == 'suite':
             value = value.replace('/', ':')
-        elif key in ('limit', 'priority', 'num'):
+        elif key in ('limit', 'priority', 'num', 'newest'):
             value = int(value)
         elif key == 'subset' and value is not None:
             # take input string '2/3' and turn into (2, 3)

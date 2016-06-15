@@ -453,3 +453,37 @@ def teuthology_schedule(args, verbose, dry_run, log_prefix=''):
         ))
     if not dry_run or (dry_run and verbose > 1):
         subprocess.check_call(args=args)
+
+
+def find_git_parent(project, sha1):
+
+    base_url = config.githelper_base_url
+    if not base_url:
+        log.warning('githelper_base_url not set, --newest disabled')
+        return None
+
+    def refresh(project):
+        url = '%s/%s.git/refresh' % (base_url, project)
+        resp = requests.get(url)
+        if not resp.ok:
+            log.error('git refresh failed for %s: %s', project, resp.content)
+
+    def get_sha1s(project, commitish, count):
+        url = '/'.join((base_url, '%s.git' % project,
+                       'history/?commitish=%s&count=%d' % (commitish, count)))
+        resp = requests.get(url)
+        resp.raise_for_status()
+        sha1s = resp.json()['sha1s']
+        if len(sha1s) != count:
+            log.error('can''t find %d parents of %s in %s: %s',
+                       int(count), sha1, project, resp.json()['error'])
+        return sha1s
+
+    # XXX don't do this every time?..
+    refresh(project)
+    # we want the one just before sha1; list two, return the second
+    sha1s = get_sha1s(project, sha1, 2)
+    if len(sha1s) == 2:
+        return sha1s[1]
+    else:
+        return None

@@ -51,6 +51,10 @@ Here is a sample configuration with many of the options set and documented::
     # Gitbuilder archive that stores e.g. ceph packages
     gitbuilder_host: gitbuilder.example.com
 
+    # URL for 'gitserver' helper web application
+    # see http://github.com/ceph/gitserver
+    githelper_base_url: http://git.ceph.com:8080
+
     # Verify the packages signatures
     check_package_signatures: true
 
