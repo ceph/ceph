@@ -2911,6 +2911,8 @@ public:
 
   librados::Rados* get_rados_handle();
 
+  int delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket, RGWBucketInfo& info, RGWObjState *astate,
+                     list<librados::AioCompletion *>& handles, bool keep_index_consistent);
  private:
   /**
    * This is a helper method, it generates a list of bucket index objects with the given
