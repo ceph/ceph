@@ -43,7 +43,8 @@ namespace ceph {
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
     static unsigned filter_list_pairs(ListPairs *l,
-				      std::function<bool (T)> f) {
+				      std::function<bool (T)> f,
+				      std::list<T>* out = nullptr) {
       unsigned ret = 0;
       for (typename ListPairs::iterator i = l->end();
 	   i != l->begin();
@@ -52,6 +53,7 @@ namespace ceph {
 	--next;
 	if (f(next->second)) {
 	  ++ret;
+	  if (out) out->push_back(next->second);
 	  l->erase(next);
 	} else {
 	  i = next;
@@ -156,12 +158,12 @@ namespace ceph {
 	return q.empty();
       }
 
-      void remove_by_filter(
-	std::function<bool (T)> f) {
+      void remove_by_filter(std::function<bool (T)> f,
+			    std::list<T>* out = nullptr) {
 	for (typename Classes::iterator i = q.begin();
 	     i != q.end();
-	  ) {
-	  size -= filter_list_pairs(&(i->second), f);
+	     /* no-inc */) {
+	  size -= filter_list_pairs(&(i->second), f, out);
 	  if (i->second.empty()) {
 	    if (cur == i) {
 	      ++cur;
@@ -236,28 +238,39 @@ namespace ceph {
       return total;
     }
 
+    // we need this version to override pure virtual function
     void remove_by_filter(std::function<bool (T)> filter) override final {
-      queue.remove_by_req_filter(filter);
+      remove_by_filter(filter, nullptr);
+    }
 
-      queue_front.remove_if(
-	[&] (const std::pair<K,T>& p) { return filter(p.second); });
-      
+    // this offers more functionality than the pure virtual function
+    // we're overriding
+    void remove_by_filter(std::function<bool (T)> filter, std::list<T> *out) {
       for (typename SubQueues::iterator i = high_queue.begin();
 	   i != high_queue.end();
-	) {
-	i->second.remove_by_filter(filter);
+	   /* no-inc */ ) {
+	i->second.remove_by_filter(filter, out);
 	if (i->second.empty()) {
 	  high_queue.erase(i++);
 	} else {
 	  ++i;
 	}
       }
+
+      for (auto i = queue_front.begin(); i != queue_front.end(); /* no-inc */) {
+	if (filter(i->second)) {
+	  if (nullptr != out) out->push_back(i->second);
+	  i = queue_front.erase(i);
+	} else {
+	  ++i;
+	}
+      }
+
+      queue.remove_by_req_filter(filter, out);
     }
 
     void remove_by_class(K k, std::list<T> *out = nullptr) override final {
-      for (typename SubQueues::iterator i = high_queue.begin();
-	   i != high_queue.end();
-	) {
+      for (auto i = high_queue.begin(); i != high_queue.end(); /* no-inc */) {
 	i->second.remove_by_class(k, out);
 	if (i->second.empty()) {
 	  high_queue.erase(i++);
@@ -266,9 +279,14 @@ namespace ceph {
 	}
       }
 
-      // TODO: collect that which matches into out
-      queue_front.remove_if(
-	[&] (const std::pair<K,T>& p) { return k == p.first; });
+      for (auto i = queue_front.begin(); i != queue_front.end(); /* no-inc */) {
+	if (k == i->first) {
+	  if (nullptr != out) out->push_back(i->second);
+	  i = queue_front.erase(i);
+	} else {
+	  ++i;
+	}
+      }
 
       queue.remove_by_client(k, out);
     }
