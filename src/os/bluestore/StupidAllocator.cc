@@ -26,11 +26,7 @@ StupidAllocator::~StupidAllocator()
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
   uint64_t len = orig_len / g_conf->bdev_block_size;
-  int bin = 0;
-  while (len && bin + 1 < (int)free.size()) {
-    len >>= 1;
-    bin++;
-  }
+  int bin = std::min((int)cbits(len), (int)free.size() - 1);
   dout(30) << __func__ << " len " << orig_len << " -> " << bin << dendl;
   return bin;
 }
