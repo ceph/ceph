@@ -98,39 +98,6 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t(123));
 }
 
-// bluestore_extent_t
-
-string bluestore_extent_t::get_flags_string(unsigned flags)
-{
-  string s;
-  if (flags & FLAG_SHARED) {
-    s = "shared";
-  }
-  return s;
-}
-
-void bluestore_extent_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("offset", offset);
-  f->dump_unsigned("length", length);
-  f->dump_unsigned("flags", flags);
-}
-
-void bluestore_extent_t::generate_test_instances(list<bluestore_extent_t*>& o)
-{
-  o.push_back(new bluestore_extent_t());
-  o.push_back(new bluestore_extent_t(123, 456));
-  o.push_back(new bluestore_extent_t(789, 1024, 322));
-}
-
-ostream& operator<<(ostream& out, const bluestore_extent_t& e)
-{
-  out << e.offset << "~" << e.length;
-  if (e.flags)
-    out << ":" << bluestore_extent_t::get_flags_string(e.flags);
-  return out;
-}
-
 // bluestore_extent_ref_map_t
 
 void bluestore_extent_ref_map_t::_check() const

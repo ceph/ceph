@@ -54,52 +54,6 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
-/// extent: a byte extent back by the block device
-struct bluestore_extent_t {
-  enum {
-    FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
-  };
-  static string get_flags_string(unsigned flags);
-
-  uint64_t offset;
-  uint32_t length;
-  uint32_t flags;  /// or reserved
-
-  bluestore_extent_t(uint64_t o=0, uint32_t l=0, uint32_t f=0)
-    : offset(o), length(l), flags(f) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
-
-  bool has_flag(unsigned f) const {
-    return flags & f;
-  }
-  void set_flag(unsigned f) {
-    flags |= f;
-  }
-  void clear_flag(unsigned f) {
-    flags &= ~f;
-  }
-
-  void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
-    ::encode(flags, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
-    ::decode(flags, p);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_extent_t*>& o);
-};
-WRITE_CLASS_ENCODER(bluestore_extent_t)
-
-ostream& operator<<(ostream& out, const bluestore_extent_t& bp);
-
-
 /// pextent: physical extent
 struct bluestore_pextent_t {
   const static uint64_t INVALID_OFFSET = ~0ull;

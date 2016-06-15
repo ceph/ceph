@@ -119,7 +119,6 @@ TYPE(SequencerPosition)
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)
-TYPE(bluestore_extent_t)
 TYPE(bluestore_extent_ref_map_t)
 TYPE(bluestore_overlay_t)
 TYPE(bluestore_pextent_t)
