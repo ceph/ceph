@@ -740,7 +740,8 @@ int BlueFS::_read_random(
     }
     dout(20) << __func__ << " read buffered " << x_off << "~" << l << " of "
 	       << *p << dendl;
-    int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out, false);
+    int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
+				       g_conf->bluestore_bluefs_buffered_io);
     assert(r == 0);
     off += l;
     len -= l;
@@ -799,7 +800,7 @@ int BlueFS::_read(
       dout(20) << __func__ << " fetching " << x_off << "~" << l << " of "
 	       << *p << dendl;
       int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				  false);
+				  g_conf->bluestore_bluefs_buffered_io);
       assert(r == 0);
     }
     left = buf->get_buf_remaining(off);
@@ -1123,7 +1124,8 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       h->tail_block.substr_of(bl, bl.length() - tail, tail);
       t.append_zero(super.block_size - tail);
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], false);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev],
+			     g_conf->bluestore_bluefs_buffered_io);
     bloff += x_len;
     length -= x_len;
     ++p;
