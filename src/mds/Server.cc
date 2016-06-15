@@ -1064,7 +1064,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   }
 
 
-  MClientReply *reply = new MClientReply(mdr->client_request, 0);
+  MClientReply *reply = new MClientReply(req, 0);
   reply->set_unsafe();
 
   // mark xlocks "done", indicating that we are exposing uncommitted changes.
@@ -1072,7 +1072,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   //_rename_finish() does not send dentry link/unlink message to replicas.
   // so do not set xlocks on dentries "done", the xlocks prevent dentries
   // that have projected linkages from getting new replica.
-  mds->locker->set_xlocks_done(mdr.get(), mdr->client_request->get_op() == CEPH_MDS_OP_RENAME);
+  mds->locker->set_xlocks_done(mdr.get(), req->get_op() == CEPH_MDS_OP_RENAME);
 
   dout(10) << "early_reply " << reply->get_result() 
 	   << " (" << cpp_strerror(reply->get_result())
@@ -1085,8 +1085,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
 
     set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->snapid,
-		   mdr->client_request->get_dentry_wanted(),
-		   mdr);
+		   req->get_dentry_wanted(), mdr);
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -1095,7 +1094,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mdr->did_early_reply = true;
 
   mds->logger->inc(l_mds_reply);
-  utime_t lat = ceph_clock_now(g_ceph_context) - mdr->client_request->get_recv_stamp();
+  utime_t lat = ceph_clock_now(g_ceph_context) - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
   dout(20) << "lat " << lat << dendl;
 
@@ -1475,7 +1474,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   dout(7) << "dispatch_client_request " << *req << dendl;
 
   // we shouldn't be waiting on anyone.
-  assert(mdr->more()->waiting_on_slave.empty());
+  assert(!mdr->has_more() || mdr->more()->waiting_on_slave.empty());
 
   if (req->may_write()) {
     if (mdcache->is_readonly()) {
@@ -2728,7 +2727,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   mdr->getattr_caps = mask;
 
   mds->balancer->hit_inode(ceph_clock_now(g_ceph_context), ref, META_POP_IRD,
-			   mdr->client_request->get_source().num());
+			   req->get_source().num());
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;

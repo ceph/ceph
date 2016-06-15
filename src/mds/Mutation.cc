@@ -194,17 +194,17 @@ MDRequestImpl::More* MDRequestImpl::more()
 
 bool MDRequestImpl::has_more()
 {
-  return _more;
+  return _more != nullptr;
 }
 
 bool MDRequestImpl::has_witnesses()
 {
-  return _more && !_more->witnessed.empty();
+  return (_more != nullptr) && (!_more->witnessed.empty());
 }
 
 bool MDRequestImpl::slave_did_prepare()
 {
-  return more()->slave_commit;
+  return has_more() && more()->slave_commit;
 }
 
 bool MDRequestImpl::did_ino_allocation()
