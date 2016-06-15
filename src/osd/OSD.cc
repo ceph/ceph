@@ -6030,6 +6030,11 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   return true;
 }
 
+KeyStore *OSD::ms_get_auth1_authorizer_keystore()
+{
+  return monc->rotating_secrets;
+}
+
 int OSD::ms_handle_authentication(Connection *con)
 {
   int ret = 0;

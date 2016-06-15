@@ -203,6 +203,7 @@ class MLog;
 class MClass;
 class MOSDPGMissing;
 class Objecter;
+class KeyStore;
 
 class Watch;
 class Notification;
@@ -2397,6 +2398,7 @@ protected:
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key);
   int ms_handle_authentication(Connection *con) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
   void ms_handle_connect(Connection *con);
   void ms_handle_fast_connect(Connection *con);
   void ms_handle_fast_accept(Connection *con);
