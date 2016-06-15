@@ -1438,7 +1438,6 @@ public:
     return quota_max_objects;
   }
 
-  static int calc_bits_of(int t);
   void calc_pg_masks();
 
   /*
