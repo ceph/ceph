@@ -4755,38 +4755,6 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
-  const char* env = getenv("CEPH_LIB");
-  std::string directory(env ? env : ".libs");
-  if (plugin_exists(directory)) {
-    string mkdir_compressor = "mkdir -p " + directory + "/compressor";
-    int r = system(mkdir_compressor.c_str());
-    (void)r;
-
-    string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
-    r = system(cp_libceph_snappy.c_str());
-    (void)r;
-
-    string cp_libceph_zlib = "cp " + directory + "/libceph_zlib.so* " + directory + "/compressor/";
-    r = system(cp_libceph_zlib.c_str());
-    (void)r;
-    g_ceph_context->_conf->set_val("plugin_dir", directory, false, false);
-  } else {
-    char plugin_dir[PATH_MAX];
-    char *val = plugin_dir;
-    int r = g_ceph_context->_conf->get_val("plugin_dir", &val,
-					   sizeof(plugin_dir));
-    if (r)
-      return r;
-    string compressor_dir(val);
-    compressor_dir += "/compressor";
-    if (!plugin_exists(compressor_dir)) {
-      std::cerr << "compressor plugins not found in '"
-		<< directory << "' or '" << compressor_dir << "'"
-		<< std::endl;
-      return EINVAL;
-    }
-  }
-
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
