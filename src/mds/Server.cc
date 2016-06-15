@@ -453,7 +453,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      if (session->connection != NULL) {;
+      if (session->connection != NULL) {
         // Conditional because terminate_sessions will indiscrimately
         // put sessions in CLOSING whether they ever had a conn or not.
         session->connection->mark_disposable();
@@ -570,6 +570,8 @@ class C_MDS_TerminatedSessions : public ServerContext {
 void Server::terminate_sessions()
 {
   dout(2) << "terminate_sessions" << dendl;
+
+  terminating_sessions = true;
 
   // kill them off.  clients will retry etc.
   set<Session*> sessions;
@@ -3494,7 +3496,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
-  mds->balancer->hit_dir(ceph_clock_now(g_ceph_context), dir, META_POP_IRD, -1, numfiles);
+  mds->balancer->hit_dir(now, dir, META_POP_IRD, -1, numfiles);
   
   // reply
   mdr->tracei = diri;
