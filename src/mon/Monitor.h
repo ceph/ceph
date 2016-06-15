@@ -847,8 +847,8 @@ public:
 
           // if client drops we may not have a session to draw information from.
           if (s) {
-            ss << "from='" << s->inst << "' "
-              << "entity='" << s->entity_name << "' ";
+            ss << "from='" << s->con->get_peer_addr() << "' "
+	       << "entity='" << s->entity_name << "' ";
           } else {
             ss << "session dropped for command ";
           }

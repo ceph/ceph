@@ -2529,7 +2529,7 @@ void PGMonitor::check_subs()
   while (!p.end()) {
     Subscription *sub = *p;
     ++p;
-    dout(20) << __func__ << " .. " << sub->session->inst << dendl;
+    dout(20) << __func__ << " .. " << *sub->session << dendl;
     check_sub(sub);
   }
 }
@@ -2539,9 +2539,9 @@ void PGMonitor::check_sub(Subscription *sub)
   if (sub->type == "osd_pg_creates") {
     // only send these if the OSD is up.  we will check_subs() when they do
     // come up so they will get the creates then.
-    if (sub->session->inst.name.is_osd() &&
-        mon->osdmon()->osdmap.is_up(sub->session->inst.name.num())) {
-      sub->next = send_pg_creates(sub->session->inst.name.num(),
+    if (sub->session->con->get_peer_type() == CEPH_ENTITY_TYPE_OSD &&
+        mon->osdmon()->osdmap.is_up(sub->session->osd)) {
+      sub->next = send_pg_creates(sub->session->osd,
                                   sub->session->con.get(),
                                   sub->next);
     }

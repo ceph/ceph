@@ -1312,7 +1312,8 @@ void OSDMonitor::share_map_with_random_osd()
     return;
   }
 
-  dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+  dout(10) << "committed, telling random osd." << s->osd << " all about it"
+	   << dendl;
   // whatev, they'll request more if they need it
   MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
   s->con->send_message(m);
@@ -2556,10 +2557,11 @@ void OSDMonitor::send_incremental(epoch_t first,
 				  MonOpRequestRef req)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << session->inst << dendl;
+	  << " to " << session->con->get_peer_addr()
+	  << dendl;
 
   if (first <= session->osd_epoch) {
-    dout(10) << __func__ << session->inst << " should already have epoch "
+    dout(10) << __func__ << *session << " should already have epoch "
 	     << session->osd_epoch << dendl;
     first = session->osd_epoch + 1;
   }

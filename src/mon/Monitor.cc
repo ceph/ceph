@@ -2726,7 +2726,7 @@ void Monitor::handle_command(MonOpRequestRef op)
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->inst << "' "
+      << "from='" << session->con->get_peer_addr() << "' "
       << "entity='" << session->entity_name << "' "
       << "cmd=" << m->cmd << ":  access denied";
     reply_command(op, -EACCES, "access denied", 0);
@@ -2734,7 +2734,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-    << "from='" << session->inst << "' "
+    << "from='" << session->con->get_peer_addr() << "' "
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
 
@@ -3387,7 +3387,7 @@ void Monitor::resend_routed_requests()
 
 void Monitor::remove_session(MonSession *s)
 {
-  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  dout(10) << "remove_session " << s << " " << *s << dendl;
   assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
@@ -3509,8 +3509,7 @@ void Monitor::_ms_dispatch(Message *m)
     }
     s->put();
   } else {
-    dout(20) << __func__ << " existing session " << s << " for " << s->inst
-	     << dendl;
+    dout(20) << __func__ << " existing session " << s << " " << *s << dendl;
   }
 
   assert(s);
@@ -4377,7 +4376,7 @@ bool Monitor::ms_handle_reset(Connection *con)
 
   Mutex::Locker l(lock);
 
-  dout(10) << "reset/close on session " << s->inst << dendl;
+  dout(10) << "reset/close on session " << *s << dendl;
   if (!s->closed)
     remove_session(s);
   s->put();
@@ -4838,7 +4837,7 @@ void Monitor::tick()
     ++p;
     
     // don't trim monitors
-    if (s->inst.name.is_mon())
+    if (s->con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
       continue;
 
     if (s->session_timeout < now && s->con) {
@@ -4847,13 +4846,13 @@ void Monitor::tick()
       s->session_timeout += g_conf->mon_session_timeout;
     }
     if (s->session_timeout < now) {
-      dout(10) << " trimming session " << s->con << " " << s->inst
+      dout(10) << " trimming session " << s << " " << *s
 	       << " (timeout " << s->session_timeout
 	       << " < now " << now << ")" << dendl;
     } else if (out_for_too_long) {
       // boot the client Session because we've taken too long getting back in
-      dout(10) << " trimming session " << s->con << " " << s->inst
-        << " because we've been out of quorum too long" << dendl;
+      dout(10) << " trimming session " << s << " " << *s
+	       << " because we've been out of quorum too long" << dendl;
     } else {
       continue;
     }

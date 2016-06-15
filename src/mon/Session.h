@@ -209,8 +209,9 @@ struct MonSessionMap {
 
 inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession(" << s.inst << " is "
-      << (s.closed ? "closed" : "open");
+  out << "MonSession(" << s.con->get_peer_addr() << " "
+      << s.con->get_peer_entity_name()
+      << (s.closed ? " closed" : " open");
   out << s.caps << ")";
   return out;
 }
