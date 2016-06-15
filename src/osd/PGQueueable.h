@@ -77,7 +77,9 @@ class PGQueueable {
     void operator()(const PGScrub &op);
     void operator()(const PGRecovery &op);
   };
+
 public:
+
   // cppcheck-suppress noExplicitConstructor
   PGQueueable(OpRequestRef op)
     : qvariant(op), cost(op->get_req()->get_cost()),
@@ -116,4 +118,5 @@ public:
   int get_cost() const { return cost; }
   utime_t get_start_time() const { return start_time; }
   entity_inst_t get_owner() const { return owner; }
+  const QVariant& get_variant() const { return qvariant; }
 };

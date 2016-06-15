@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "boost/variant.hpp"
 
 #include "common/config.h"
 #include "common/ceph_context.h"
@@ -27,53 +28,23 @@ namespace ceph {
 
   namespace dmc = crimson::dmclock;
 
+  using Request = std::pair<PGRef, PGQueueable>;
+  using Client = entity_inst_t;
+
+  using T = Request;
+  using K = Client;
+
   enum class osd_op_type_t {
-    client, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
+    client_op, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
 
   struct mclock_op_tags_t {
-    const double client_op_res;
-    const double client_op_wgt;
-    const double client_op_lim;
+    dmc::ClientInfo client_op;
+    dmc::ClientInfo osd_subop;
+    dmc::ClientInfo snaptrim;
+    dmc::ClientInfo recov;
+    dmc::ClientInfo scrub;
 
-    const double osd_subop_res;
-    const double osd_subop_wgt;
-    const double osd_subop_lim;
-
-    const double snap_res;
-    const double snap_wgt;
-    const double snap_lim;
-
-    const double recov_res;
-    const double recov_wgt;
-    const double recov_lim;
-
-    const double scrub_res;
-    const double scrub_wgt;
-    const double scrub_lim;
-
-    mclock_op_tags_t(CephContext *cct) :
-      client_op_res(cct->_conf->osd_op_queue_mclock_client_op_res),
-      client_op_wgt(cct->_conf->osd_op_queue_mclock_client_op_wgt),
-      client_op_lim(cct->_conf->osd_op_queue_mclock_client_op_lim),
-
-      osd_subop_res(cct->_conf->osd_op_queue_mclock_osd_subop_res),
-      osd_subop_wgt(cct->_conf->osd_op_queue_mclock_osd_subop_wgt),
-      osd_subop_lim(cct->_conf->osd_op_queue_mclock_osd_subop_lim),
-
-      snap_res(cct->_conf->osd_op_queue_mclock_snap_res),
-      snap_wgt(cct->_conf->osd_op_queue_mclock_snap_wgt),
-      snap_lim(cct->_conf->osd_op_queue_mclock_snap_lim),
-
-      recov_res(cct->_conf->osd_op_queue_mclock_recov_res),
-      recov_wgt(cct->_conf->osd_op_queue_mclock_recov_wgt),
-      recov_lim(cct->_conf->osd_op_queue_mclock_recov_lim),
-
-      scrub_res(cct->_conf->osd_op_queue_mclock_scrub_res),
-      scrub_wgt(cct->_conf->osd_op_queue_mclock_scrub_wgt),
-      scrub_lim(cct->_conf->osd_op_queue_mclock_scrub_lim)
-    {
-      // empty
-    }
+    mclock_op_tags_t(CephContext *cct);
   };
 
 
@@ -82,7 +53,7 @@ namespace ceph {
   dmc::ClientInfo op_class_client_info_f(const osd_op_type_t& op_type);
 
 
-#if 0
+#if 0 // USE?
   // turn cost, which can range from 1000 to 50 * 2^20
   double cost_to_tag(unsigned cost) {
     static const double log_of_2 = std::log(2.0);
@@ -95,16 +66,15 @@ namespace ceph {
   // as the client, and the queue, where the class is
   // osd_op_type_t. So this adpater class will transform calls
   // appropriately.
-  template<typename T, typename K>
-  class mClockOpClassQueue : public OpQueue<T, K> {
-    using queue_t = mClockQueue<T, osd_op_type_t>;
+  class mClockOpClassQueue : public OpQueue<Request, Client> {
+    using queue_t = mClockQueue<Request, osd_op_type_t>;
 
     queue_t queue;
 
     double cost_factor;
 
   public:
-    
+
     mClockOpClassQueue(CephContext *cct) :
       queue(&op_class_client_info_f),
       cost_factor(cct->_conf->osd_op_queue_mclock_cost_factor)
@@ -123,8 +93,8 @@ namespace ceph {
 
     // Ops will be removed f evaluates to true, f may have sideeffects
     inline void remove_by_filter(
-      std::function<bool (T)> f) override final {
-      // FIX THIS
+      std::function<bool (Request)> f) override final {
+      return queue.remove_by_filter(f);
     }
 
 
@@ -136,7 +106,7 @@ namespace ceph {
 
     inline void enqueue_strict(K cl, unsigned priority, T item) override final {
       // TODO FIX
-      osd_op_type_t op_type = osd_op_type_t::client;
+      osd_op_type_t op_type = osd_op_type_t::client_op;
       queue.enqueue_strict(op_type, 0, item);
     }
 
@@ -173,10 +143,43 @@ namespace ceph {
 
     // Formatted output of the queue
     inline void dump(ceph::Formatter *f) const override final {
+      queue.dump(f);
     }
 
+  protected:
 
-    // Don't leak resources on destruction
+    class pg_queueable_visitor_t : public boost::static_visitor<osd_op_type_t> {
+    public:
+      osd_op_type_t operator()(const OpRequestRef& o) const {
+	// don't know if it's a client_op or a
+        return osd_op_type_t::client_op;
+      }
+
+      osd_op_type_t operator()(const PGSnapTrim& o) const {
+        return osd_op_type_t::bg_snaptrim;
+      }
+
+      osd_op_type_t operator()(const PGScrub& o) const {
+        return osd_op_type_t::bg_scrub;
+      }
+
+      osd_op_type_t operator()(const PGRecovery& o) const {
+        return osd_op_type_t::bg_recovery;
+      }
+    }; // class pg_queueable_visitor_t
+
+    pg_queueable_visitor_t pg_queueable_visitor;
+
+    osd_op_type_t get_osd_op_type(const T& request) {
+      osd_op_type_t type =
+	boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
+
+      if (osd_op_type_t::client_op == type) {
+	// TODO must distinguish between client_op and osd_subop
+      }
+
+      return type;
+    }
   }; // class mClockOpClassQueue
-  
+
 } // namespace ceph

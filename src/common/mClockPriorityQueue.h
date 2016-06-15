@@ -304,7 +304,10 @@ namespace ceph {
       queue.add_request(item, cl, cost);
     }
 
-    void enqueue_front(K cl, unsigned priority, unsigned cost, T item) override final {
+    void enqueue_front(K cl,
+		       unsigned priority,
+		       unsigned cost,
+		       T item) override final {
       queue_front.emplace_front(std::pair<K,T>(cl, item));
     }
 

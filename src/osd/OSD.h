@@ -1685,8 +1685,7 @@ private:
 		    max_tok_per_prio, min_cost));
 	    } else if (io_queue::mclock_opclass == opqueue) {
 	      pqueue = std::unique_ptr
-		<ceph::mClockOpClassQueue< pair<PGRef, PGQueueable>, entity_inst_t>>(
-		  new ceph::mClockOpClassQueue< pair<PGRef,PGQueueable>, entity_inst_t>(cct));
+		<ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(cct));
 	    }
 	  }
     };
