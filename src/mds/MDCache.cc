@@ -427,8 +427,6 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
 void MDCache::create_mydir_hierarchy(MDSGather *gather)
 {
   // create mds dir
-  char myname[10];
-  snprintf(myname, sizeof(myname), "mds%d", int(mds->get_nodeid()));
   CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR);
 
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
@@ -7224,8 +7222,9 @@ void MDCache::check_memory_usage()
 
   // check client caps
   int num_inodes = inode_map.size();
-  float caps_per_inode = (float)num_caps / (float)num_inodes;
-  //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
+  float caps_per_inode = 0.0;
+  if (num_inodes)
+    caps_per_inode = (float)num_caps / (float)num_inodes;
 
   dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
