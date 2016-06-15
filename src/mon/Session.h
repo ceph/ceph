@@ -51,6 +51,8 @@ struct MonSession : public RefCountedObject {
   map<string, Subscription*> sub_map;
   epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
 
+  int osd = -1;   ///< osd id (if known to be an osd)
+
   AuthServiceHandler *auth_handler;
   EntityName entity_name;
 
@@ -110,9 +112,9 @@ struct MonSessionMap {
     }
     s->sub_map.clear();
     s->item.remove_myself();
-    if (s->inst.name.is_osd()) {
-      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->inst.name.num());
-	   p->first == s->inst.name.num();
+    if (s->osd >= 0) {
+      for (multimap<int,MonSession*>::iterator p = by_osd.find(s->osd);
+	   p->first == s->osd;
 	   ++p)
 	if (p->second == s) {
 	  by_osd.erase(p);
@@ -127,10 +129,13 @@ struct MonSessionMap {
     MonSession *s = new MonSession(i, c);
     assert(s);
     sessions.push_back(&s->item);
-    if (i.name.is_osd())
-      by_osd.insert(pair<int,MonSession*>(i.name.num(), s));
     s->get();  // caller gets a ref
     return s;
+  }
+
+  void register_as_osd(MonSession *s, int id) {
+    s->osd = id;
+    by_osd.insert(pair<int,MonSession*>(id, s));
   }
 
   MonSession *get_random_osd_session(OSDMap *osdmap) {

@@ -3515,6 +3515,10 @@ void Monitor::_ms_dispatch(Message *m)
 
   assert(s);
 
+  if (m->get_source().is_osd() && s->osd < 0) {
+    session_map.register_as_osd(s, m->get_source().num());
+  }
+
   s->session_timeout = ceph_clock_now(NULL);
   s->session_timeout += g_conf->mon_session_timeout;
 
