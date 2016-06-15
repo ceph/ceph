@@ -5167,3 +5167,41 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   }
   return true;
 }
+
+int Monitor::ms_handle_authentication(Connection *con)
+{
+  MonSession *s = static_cast<MonSession*>(con->get_priv());
+  if (!s) {
+    // must be msgr2, otherwise dispatch would have set up the session.
+    s = session_map.new_session(con);
+    assert(s);
+    con->set_priv(s->get());
+    logger->set(l_mon_num_sessions, session_map.get_size());
+    logger->inc(l_mon_session_add);
+  }
+  dout(10) << __func__ << " session " << s << " con " << con
+	   << " addr " << s->con->get_peer_addr()
+	   << " " << *s << dendl;
+
+  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  if (caps_info.allow_all) {
+    s->caps.set_allow_all();
+  }
+  int ret = 1;
+  if (caps_info.caps.length()) {
+    bufferlist::iterator p = caps_info.caps.begin();
+    string str;
+    try {
+      ::decode(str, p);
+    } catch (const buffer::error &err) {
+      derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
+	   << " in auth db" << dendl;
+      str.clear();
+      ret = -EPERM;
+    }
+    s->caps.parse(str, NULL);
+    s->auid = con->get_peer_auid();
+  }
+
+  return ret;
+}
