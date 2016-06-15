@@ -167,7 +167,7 @@ done:
     s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
   }
 
-  if (ret == ERR_NOT_MODIFIED) {
+  if (ret == -ERR_NOT_MODIFIED) {
       end_header(s, this);
   } else {
       if (!content_type)
