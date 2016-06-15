@@ -147,6 +147,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid, CryptoKey& session_key);
+  int ms_handle_authentication(Connection *con) override;
   void ms_handle_accept(Connection *con);
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
