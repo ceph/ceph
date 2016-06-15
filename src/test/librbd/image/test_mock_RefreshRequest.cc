@@ -503,12 +503,22 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLock) {
     mock_image_ctx.journal = &mock_journal;
   }
 
-  ASSERT_EQ(0, update_features(ictx,
-                               RBD_FEATURE_EXCLUSIVE_LOCK |
-                               RBD_FEATURE_OBJECT_MAP |
-                               RBD_FEATURE_FAST_DIFF |
-                               RBD_FEATURE_JOURNALING, false));
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  }
 
+  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_FAST_DIFF , false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_OBJECT_MAP , false));
+  }
+  
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_EXCLUSIVE_LOCK , false));
+  }
+  
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
 
@@ -539,11 +549,21 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLockWhileAcquiringLock) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  ASSERT_EQ(0, update_features(ictx,
-                               RBD_FEATURE_EXCLUSIVE_LOCK |
-                               RBD_FEATURE_OBJECT_MAP |
-                               RBD_FEATURE_FAST_DIFF |
-                               RBD_FEATURE_JOURNALING, false));
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_FAST_DIFF , false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_OBJECT_MAP , false));
+  }
+  
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_EXCLUSIVE_LOCK , false));
+  }
 
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
@@ -567,9 +587,13 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithExclusiveLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, update_features(ictx,
-                               RBD_FEATURE_OBJECT_MAP |
-                               RBD_FEATURE_FAST_DIFF, false));
+  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_FAST_DIFF , false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_OBJECT_MAP , false));
+  }
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -603,9 +627,13 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, update_features(ictx,
-                               RBD_FEATURE_OBJECT_MAP |
-                               RBD_FEATURE_FAST_DIFF, false));
+  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_FAST_DIFF , false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_OBJECT_MAP , false));
+  }
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -651,7 +679,9 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   MockJournal *mock_journal = new MockJournal();
   mock_image_ctx.journal = mock_journal;
 
-  ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING , false));
+  }
 
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
@@ -679,7 +709,9 @@ TEST_F(TestMockImageRefreshRequest, EnableObjectMapWithExclusiveLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING , false));
+  }
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -713,7 +745,9 @@ TEST_F(TestMockImageRefreshRequest, EnableObjectMapWithoutExclusiveLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING , false));
+  }
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -758,9 +792,13 @@ TEST_F(TestMockImageRefreshRequest, DisableObjectMap) {
     mock_image_ctx.journal = &mock_journal;
   }
 
-  ASSERT_EQ(0, update_features(ictx,
-                               RBD_FEATURE_OBJECT_MAP |
-                               RBD_FEATURE_FAST_DIFF, false));
+  if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_FAST_DIFF , false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_OBJECT_MAP , false));
+  }
 
   expect_op_work_queue(mock_image_ctx);
   expect_test_features(mock_image_ctx);
@@ -785,7 +823,9 @@ TEST_F(TestMockImageRefreshRequest, OpenObjectMapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING, false));
+  if (ictx->test_features(RBD_FEATURE_JOURNALING)) {	
+    ASSERT_EQ(0, update_features(ictx, RBD_FEATURE_JOURNALING , false));
+  }
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
