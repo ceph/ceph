@@ -81,13 +81,13 @@ if MYDIR.endswith('src') and \
 
     python_libpath = os.path.join(MYDIR, 'build', get_pythonlib_dir())
     respawn_in_path(os.path.join(MYDIR, '.libs'), 'pybind', python_libpath)
-    if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
+    if 'PATH' in os.environ and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
 
 elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
      and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
     src_path = None
-    for l in open("./CMakeCache.txt").readlines():
+    for l in open("./CMakeCache.txt"):
         if l.startswith("ceph_SOURCE_DIR:STATIC="):
             src_path = l.split("=")[1].strip()
 
@@ -109,7 +109,7 @@ elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
 
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
-        if os.environ.has_key('PATH') and bin_path not in os.environ['PATH']:
+        if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
             os.environ['PATH'] += ':' + bin_path
 
 import argparse
@@ -122,7 +122,7 @@ import string
 import subprocess
 
 from ceph_argparse import \
-    concise_sig, descsort, parse_json_funcsigs, \
+    concise_sig, descsort_key, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
     send_command, json_command, run_in_thread
 
@@ -134,10 +134,18 @@ verbose = False
 cluster_handle = None
 
 # Always use Unicode (UTF-8) for stdout
-raw_stdout = sys.__stdout__
-raw_stderr = sys.__stderr__
-sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
-sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
+if sys.version_info[0] >= 3:
+    raw_stdout = sys.stdout.buffer
+    raw_stderr = sys.stderr.buffer
+else:
+    raw_stdout = sys.__stdout__
+    raw_stderr = sys.__stderr__
+    sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
+    sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
+
+def raw_write(buf):
+    sys.stdout.flush()
+    raw_stdout.write(buf)
 
 ############################################################################
 
@@ -282,7 +290,7 @@ def do_extended_help(parser, args):
         help_for_target(target=('mon', ''), partial=partial)
     return 0
 
-DONTSPLIT = string.letters + '{[<>]}'
+DONTSPLIT = string.ascii_letters + '{[<>]}'
 
 def wrap(s, width, indent):
     """
@@ -342,7 +350,7 @@ def format_help(cmddict, partial=None):
     """
 
     fullusage = ''
-    for cmd in sorted(cmddict.itervalues(), cmp=descsort):
+    for cmd in sorted(cmddict.values(), key=descsort_key):
 
         if not cmd['help']:
             continue
@@ -371,7 +379,7 @@ def ceph_conf(parsed_args, field, name):
         args.extend(['--name', name])
 
     # add any args in GLOBAL_ARGS
-    for key, val in GLOBAL_ARGS.iteritems():
+    for key, val in GLOBAL_ARGS.items():
         # ignore name in favor of argument name, if any
         if name and key == 'client_name':
             continue
@@ -499,7 +507,7 @@ def complete(sigdict, args, target):
 
     match_count = 0
     comps = []
-    for cmdtag, cmd in sigdict.iteritems():
+    for cmdtag, cmd in sigdict.items():
         sig = cmd['sig']
         j = 0
         # iterate over all arguments, except last one

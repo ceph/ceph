@@ -662,12 +662,19 @@ def concise_sig(sig):
     return ' '.join([d.helpstr() for d in sig])
 
 
-def descsort(sh1, sh2):
+def descsort_key(sh):
     """
     sort descriptors by prefixes, defined as the concatenation of all simple
     strings in the descriptor; this works out to just the leading strings.
     """
-    return cmp(concise_sig(sh1['sig']), concise_sig(sh2['sig']))
+    return concise_sig(sh['sig'])
+
+
+def descsort(sh1, sh2):
+    """
+    Deprecated; use (key=descsort_key) instead of (cmp=descsort)
+    """
+    return cmp(descsort_key(sh1), descsort_key(sh2))
 
 
 def parse_funcsig(sig):

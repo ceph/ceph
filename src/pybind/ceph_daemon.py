@@ -140,7 +140,7 @@ class DaemonWatcher(object):
         """
         units = [' ', 'k', 'M', 'G', 'T', 'P']
         unit = 0
-        while len("%s" % (int(n) / (1000**unit))) > width - 1:
+        while len("%s" % (int(n) // (1000**unit))) > width - 1:
             unit += 1
 
         if unit > 0:
@@ -177,7 +177,7 @@ class DaemonWatcher(object):
         for section_name, names in self._stats.items():
             section_width = sum([self.col_width(x)+1 for x in names.values()]) - 1
             pad = max(section_width - len(section_name), 0)
-            pad_prefix = pad / 2
+            pad_prefix = pad // 2
             header += (pad_prefix * '-')
             header += (section_name[0:section_width])
             header += ((pad - pad_prefix) * '-')
