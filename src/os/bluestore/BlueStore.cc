@@ -22,6 +22,7 @@
 #include "BlueStore.h"
 #include "kv.h"
 #include "include/compat.h"
+#include "include/intarith.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -48,7 +49,6 @@ const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 
 // for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
 #define BLUEFS_START  8192
-
 
 /*
  * object name key structure
@@ -882,7 +882,7 @@ BlueStore::BnodeRef BlueStore::Collection::get_bnode(
     get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
     BnodeRef e = new Bnode(hash, key, &bnode_set);
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " created " << e << " " << key << dendl;
+	     << " created " << e << dendl;
 
     bufferlist v;
     int r = store->db->get(PREFIX_OBJ, key, &v);
@@ -1007,8 +1007,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     kv_stop(false),
     logger(NULL),
     csum_type(bluestore_blob_t::CSUM_CRC32C),
-    min_alloc_size(0),
-    max_alloc_size(0),
     sync_wal_apply(cct->_conf->bluestore_sync_wal_apply)
 {
   _init_logger();
@@ -1276,7 +1274,6 @@ int BlueStore::_check_or_set_bdev_label(
 
 void BlueStore::_set_alloc_sizes(void)
 {
-  max_alloc_size = g_conf->bluestore_max_alloc_size;
   /*
    * Set device block size according to its media
    */
@@ -1290,9 +1287,14 @@ void BlueStore::_set_alloc_sizes(void)
       min_alloc_size = g_conf->bluestore_min_alloc_size_ssd;
     }
   }
+  min_alloc_size_order = ctz(min_alloc_size);
+  assert(min_alloc_size == 1u << min_alloc_size_order);
+
+  max_alloc_size = g_conf->bluestore_max_alloc_size;
 
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
-	   << " max_alloc_size 0x" << max_alloc_size
+	   << std::dec << " order " << min_alloc_size_order
+	   << " max_alloc_size 0x" << std::hex << max_alloc_size
 	   << std::dec << dendl;
 }
 
@@ -1315,10 +1317,8 @@ int BlueStore::_open_bdev(bool create)
   // initialize global block parameters
   block_size = bdev->get_block_size();
   block_mask = ~(block_size - 1);
-  block_size_order = 0;
-  for (uint64_t t = 1; t < block_size; t <<= 1) {
-    ++block_size_order;
-  }
+  block_size_order = ctz(block_size);
+  assert(block_size == 1u << block_size_order);
 
   _set_alloc_sizes();
   max_alloc_size = g_conf->bluestore_max_alloc_size;
@@ -3230,7 +3230,7 @@ int BlueStore::_do_read(
       l2read = MIN(l, lext->second.length - r_off);
       if (!ready_intervals_in_cache.contains( off, l2read)) {
 	regions2read_t& regions = blobs2read[bptr];
-	regions.push_back(region_t(off, r_off + lext->second.offset, 0, l2read));
+	regions.push_back(region_t(off, r_off + lext->second.offset, l2read));
       }
       ++lext;
     } else if (off >= lext->first + lext->second.length) {
@@ -3273,21 +3273,45 @@ int BlueStore::_do_read(
 	return r;
 
       while (r2r_it != r2r.end()) {
-	ready_regions[r2r_it->logical_offset].substr_of(raw_bl, r2r_it->blob_xoffset, r2r_it->length);
+	ready_regions[r2r_it->logical_offset].substr_of(
+	  raw_bl, r2r_it->blob_xoffset, r2r_it->length);
 	++r2r_it;
       }
     } else {
-      extents2read_t e2r;
-      int r = _blob2read_to_extents2read(bptr, r2r_it, r2r.cend(), ready_intervals_in_cache, &e2r);
-      if (r < 0)
-	return r;
+      dout(20) << __func__ << "  blob " << *bptr << dendl;
+      for (auto reg : b2r_it->second) {
+	// determine how much of the blob to read
+	unsigned chunk_size = MAX(block_size, bptr->get_csum_chunk_size());
+	uint64_t r_off = reg.blob_xoffset;
+	uint64_t r_len = reg.length;
+	unsigned front = r_off % chunk_size;
+	if (front) {
+	  r_off -= front;
+	  r_len += front;
+	}
+	unsigned tail = r_len % chunk_size;
+	if (tail) {
+	  r_len += chunk_size - tail;
+	}
+	dout(20) << __func__ << "   region loff 0x" << std::hex
+		 << reg.logical_offset
+		 << " blob_xoffset 0x" << reg.blob_xoffset << "~" << reg.length
+		 << " reading 0x" << r_off << "~" << r_len
+		 << dendl;
 
-      extents2read_t::const_iterator it = e2r.cbegin();
-      while (it != e2r.cend()) {
-	int r = _read_extent_sparse(bptr, it->first, it->second.cbegin(), it->second.cend(), o, &ready_regions);
-	if (r < 0)
-	  return r;
-	++it;
+	// read it
+	IOContext ioc(NULL);  // FIXME?
+	bufferlist bl;
+	bptr->map(r_off, r_len, [&](uint64_t offset, uint64_t length) {
+	    bufferlist t;
+	    int r = bdev->read(offset, length, &t, &ioc, false);
+	    assert(r == 0);
+	    bl.claim_append(t);
+	  });
+	_verify_csum(bptr, r_off, bl);
+
+	// prune and keep result
+	ready_regions[reg.logical_offset].substr_of(bl, front, reg.length);
       }
     }
     ++b2r_it;
@@ -3350,7 +3374,8 @@ int BlueStore::_do_read(
   return r;
 }
 
-int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result)
+int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o,
+				bufferlist* result)
 {
   IOContext ioc(NULL);   // FIXME?
 
@@ -3384,122 +3409,8 @@ int BlueStore::_read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, buffer
   return 0;
 }
 
-int BlueStore::_read_extent_sparse(
-  const bluestore_blob_t* blob,
-  const bluestore_pextent_t* extent,
-  BlueStore::regions2read_t::const_iterator cur,
-  BlueStore::regions2read_t::const_iterator end,
-  OnodeRef o,
-  BlueStore::ready_regions_t* result)
-{
-  // FIXME: this is a trivial implementation that reads each region
-  // independently - can be improved to read neighboring and/or close
-  // enough regions together.
-  dout(20) << __func__ << " " << *blob << " " << *extent << dendl;
-  IOContext ioc(NULL);   // FIXME?
-  uint64_t chunk_size = MAX(blob->get_csum_block_size(), block_size);
-
-  // all physical extents has to be aligned with read chunk size
-  assert((extent->length % chunk_size) == 0);
-
-  while (cur != end) {
-    assert(cur->ext_xoffset + cur->length <= extent->length);
-    uint64_t r_off = cur->ext_xoffset;
-    uint64_t front_extra = r_off % chunk_size;
-    r_off -= front_extra;
-
-    uint64_t x_len = cur->length;
-    uint64_t r_len = ROUND_UP_TO(x_len + front_extra, chunk_size);
-
-    bufferlist bl;
-    int r = bdev->read(r_off + extent->offset, r_len, &bl, &ioc, false);
-    if (r < 0) {
-      return r;
-    }
-    if (blob->csum_type) {
-      r = _verify_csum(blob, cur->blob_xoffset, bl);
-      if (r < 0) {
-	dout(20) << __func__ << "  blob reading 0x" << std::hex
-	  << cur->logical_offset << " 0x"
-	  << cur->blob_xoffset << "~" << bl.length()
-	  << " csum verification failed" << dendl;
-	return -EIO;
-      }
-    }
-
-    (*result)[cur->logical_offset].substr_of(bl, front_extra, x_len);
-
-    ++cur;
-  }
-  return 0;
-}
-
-int BlueStore::_blob2read_to_extents2read(
-  const bluestore_blob_t* blob,
-  BlueStore::regions2read_t::const_iterator cur,
-  BlueStore::regions2read_t::const_iterator end,
-  const interval_set<uint64_t>& ready_intervals_in_cache,
-  BlueStore::extents2read_t* result)
-{
-  result->clear();
-
-  auto ext_it = blob->extents.cbegin();
-  auto ext_end = blob->extents.cend();
-
-  uint64_t ext_pos = 0;
-  uint64_t l = 0;
-  while (cur != end && ext_it != ext_end) {
-
-    assert(cur->ext_xoffset == 0);
-
-    //bypass preceeding extents
-    while (cur->blob_xoffset >= ext_pos + ext_it->length && ext_it != ext_end) {
-      ext_pos += ext_it->length;
-      ++ext_it;
-    }
-    l = cur->length;
-    uint64_t r_offs = cur->blob_xoffset - ext_pos;
-    uint64_t l_offs = cur->logical_offset;
-    uint64_t x_offs = cur->blob_xoffset;
-    while (l > 0 && ext_it != ext_end) {
-
-      auto plen = blob->get_aligned_payload_length(block_size);
-      assert(plen >= ext_pos + r_offs);
-      uint64_t r_len = MIN(plen - ext_pos - r_offs, ext_it->length - r_offs);
-
-      if (r_len > 0) {
-	r_len = MIN(r_len, l);
-	const bluestore_pextent_t* eptr = &(*ext_it);
-	if (!ready_intervals_in_cache.contains(l_offs, r_len)) {
-	  regions2read_t& regions = (*result)[eptr];
-	  regions.push_back(region_t(l_offs, x_offs, r_offs, r_len));
-	}
-	l -= r_len;
-	l_offs += r_len;
-	x_offs += r_len;
-      }
-
-      //leave extent pointer as-is if current region's been fully processed - lookup will start from it for the next region
-      if (l != 0) {
-	ext_pos += ext_it->length;
-	r_offs = 0;
-	++ext_it;
-      }
-    }
-
-    ++cur;
-    assert(cur == end || l_offs <= cur->logical_offset); //region offsets to be ordered ascending and with no overlaps. Overwise ext_it(ext_pos) to be enumerated from the beginning on each region
-  }
-
-  if (cur != end || l > 0) {
-    assert(l == 0);
-    assert(cur == end);
-    return -EFAULT;
-  }
-  return 0;
-}
-
-int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const
+int BlueStore::_verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset,
+			    const bufferlist& bl) const
 {
   int bad;
   int r = blob->verify_csum(blob_xoffset, bl, &bad);
@@ -3524,7 +3435,8 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   ::decode(chdr, i);
   CompressorRef compressor = Compressor::create(cct, chdr.type);
   if (!compressor.get()) {
-    // if compressor isn't available - error, because cannot return decompressed data?
+    // if compressor isn't available - error, because cannot return
+    // decompressed data?
     derr << __func__ << " can't load decompressor " << chdr.type << dendl;
     r = -EIO;
   } else {
@@ -5303,10 +5215,10 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_SETALLOCHINT:
       {
-	r = _setallochint(txc, c, o,
-			  op->expected_object_size,
-			  op->expected_write_size,
-			  op->alloc_hint_flags);
+	r = _set_alloc_hint(txc, c, o,
+			    op->expected_object_size,
+			    op->expected_write_size,
+			    op->alloc_hint_flags);
       }
       break;
 
@@ -5702,7 +5614,7 @@ void BlueStore::_do_write_small(
 	     << " bstart 0x" << std::hex << bstart << std::dec << dendl;
 
     // can we pad our head/tail out with zeros?
-    uint64_t chunk_size = MAX(block_size, b->get_csum_block_size());
+    uint64_t chunk_size = MAX(block_size, b->get_csum_chunk_size());
     uint64_t head_pad = offset % chunk_size;
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
@@ -5919,13 +5831,16 @@ int BlueStore::_do_alloc_write(
     bufferlist *l = &wi.bl;
     uint64_t final_length = b->length;
     uint64_t csum_length = b->length;
+    unsigned csum_order;
     bufferlist compressed_bl;
     CompressorRef c;
-    if (b_off == 0 &&
-	wctx->compress &&
+    bool compressed = false;
+    if (wctx->compress &&
 	b->length > min_alloc_size &&
 	(c = compressor) != nullptr) {
       // compress
+      assert(b_off == 0);
+      assert(b->length == l->length());
       bluestore_compression_header_t chdr;
       chdr.type = c->get_type();
       // FIXME: memory alignment here is bad
@@ -5950,16 +5865,27 @@ int BlueStore::_do_alloc_write(
 	l = &compressed_bl;
 	final_length = newlen;
 	csum_length = newlen;
+	csum_order = ctz(newlen);
 	b->set_compressed(rawlen);
+	compressed = true;
       } else {
-	dout(20) << __func__ << hex << "  compressed 0x" << l->length() << " -> 0x"
-		 << rawlen << " with " << chdr.type
+	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
+		 << " -> 0x" << rawlen << " with " << chdr.type
 		 << ", leaving uncompressed"
 		 << dec << dendl;
-	b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
       }
-    } else {
+    }
+    if (!compressed) {
       b->set_flag(bluestore_blob_t::FLAG_MUTABLE);
+      if (l->length() != b->length) {
+	// hrm, maybe we could do better here, but let's not bother.
+	dout(20) << __func__ << " forcing csum_order to block_size_order "
+		 << block_size_order << dendl;
+	csum_order = block_size_order;
+      } else {
+	assert(b_off == 0);
+	csum_order = std::min(wctx->csum_order, ctz(l->length()));
+      }
     }
     while (final_length > 0) {
       bluestore_pextent_t e;
@@ -5976,11 +5902,14 @@ int BlueStore::_do_alloc_write(
       final_length -= e.length;
       hint = e.end();
     }
-    dout(20) << __func__ << " blob " << *b << dendl;
+    dout(20) << __func__ << " blob " << *b
+	     << " csum_order " << csum_order
+	     << " csum_length 0x" << std::hex << csum_length << std::dec
+	     << dendl;
 
     // checksum
     if (csum_type) {
-      b->init_csum(csum_type, 12, csum_length); // FIXME adjust b size
+      b->init_csum(csum_type, csum_order, csum_length);
       b->calc_csum(b_off, *l);
     }
 
@@ -6074,6 +6003,7 @@ int BlueStore::_do_write(
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
   }
+  wctx.csum_order = MAX(block_size_order, o->onode.get_preferred_csum_order());
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
@@ -6088,10 +6018,16 @@ int BlueStore::_do_write(
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
       (alloc_hints & (CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE|
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
-      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0)
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
+    dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
     wctx.comp_blob_size = comp_max_blob_size;
-  else
+    wctx.csum_order = min_alloc_size_order;
+  } else {
     wctx.comp_blob_size = comp_min_blob_size;
+  }
+  dout(20) << __func__ << " prefer csum_order " << wctx.csum_order
+	   << " comp_blob_size 0x" << std::hex << wctx.comp_blob_size
+	   << std::dec << dendl;
 
   // write in buffer cache
   o->bc.write(txc->seq, offset, bl, wctx.buffered ? 0 : Buffer::FLAG_NOCACHE);
@@ -6516,17 +6452,18 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   return r;
 }
 
-int BlueStore::_setallochint(TransContext *txc,
-			     CollectionRef& c,
-			     OnodeRef& o,
-			     uint64_t expected_object_size,
-			     uint64_t expected_write_size,
-			     uint32_t flags)
+int BlueStore::_set_alloc_hint(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& o,
+  uint64_t expected_object_size,
+  uint64_t expected_write_size,
+  uint32_t flags)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
-	   << " flags " << flags
+	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
 	   << dendl;
   int r = 0;
   o->onode.expected_object_size = expected_object_size;
@@ -6536,7 +6473,7 @@ int BlueStore::_setallochint(TransContext *txc,
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
-	   << " flags " << flags
+	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
 	   << " = " << r << dendl;
   return r;
 }

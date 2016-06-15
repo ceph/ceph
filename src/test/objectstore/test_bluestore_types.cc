@@ -491,6 +491,22 @@ TEST(bluestore_blob_t, put_ref)
     ASSERT_EQ(1u, b.extents.size());
     ASSERT_FALSE(b.extents[0].is_valid());
   }
+  // verify csum chunk size if factored in properly
+  {
+    bluestore_blob_t b;
+    vector<bluestore_pextent_t> r;
+    b.length = mas * 4;
+    b.extents.push_back(bluestore_pextent_t(0, mas*4));
+    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, b.length);
+    b.ref_map.get(0, mas*4);
+    ASSERT_TRUE(b.is_allocated(0, mas*4));
+    b.put_ref(0, mas*3, mrs, &r);
+    cout << "r " << r << " " << b << std::endl;
+    ASSERT_EQ(0u, r.size());
+    ASSERT_TRUE(b.is_allocated(0, mas*4));
+    ASSERT_TRUE(b.extents[0].is_valid());
+    ASSERT_EQ(mas*4, b.extents[0].length);
+  }
 }
 
 TEST(bluestore_blob_t, calc_csum)
@@ -584,6 +600,22 @@ TEST(bluestore_blob_t, csum_bench)
 	 << ", " << dur << " seconds, "
 	 << mbsec << " MB/sec" << std::endl;
   }
+}
+
+TEST(bluestore_onode_t, get_preferred_csum_order)
+{
+  bluestore_onode_t on;
+  ASSERT_EQ(0u, on.get_preferred_csum_order());
+  on.expected_write_size = 4096;
+  ASSERT_EQ(12u, on.get_preferred_csum_order());
+  on.expected_write_size = 4096;
+  ASSERT_EQ(12u, on.get_preferred_csum_order());
+  on.expected_write_size = 8192;
+  ASSERT_EQ(13u, on.get_preferred_csum_order());
+  on.expected_write_size = 8192 + 4096;
+  ASSERT_EQ(12u, on.get_preferred_csum_order());
+  on.expected_write_size = 1048576;
+  ASSERT_EQ(20u, on.get_preferred_csum_order());
 }
 
 TEST(bluestore_onode_t, find_lextent)
