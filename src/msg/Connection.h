@@ -126,6 +126,7 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m) = 0;
+
   /**
    * Send a "keepalive" ping along the given Connection, if it's working.
    * If the underlying connection has broken, this function does nothing.
@@ -133,6 +134,17 @@ public:
    * @return 0, or implementation-defined error numbers.
    */
   virtual void send_keepalive() = 0;
+
+  /**
+   * send an auth frame (msgr2)
+   */
+  virtual void send_auth(bufferlist &bl) { }
+
+  /**
+   * send an auth done frame (msgr2)
+   */
+  virtual void send_auth_done(uint64_t flags, bufferlist& sigbl) { }
+
   /**
    * Mark down the given Connection.
    *
