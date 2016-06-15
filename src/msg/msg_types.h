@@ -17,6 +17,7 @@
 
 #include <netinet/in.h>
 
+#include "include/ceph_features.h"
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
@@ -143,8 +144,6 @@ namespace std {
   };
 } // namespace std
 
-
-
 /*
  * an entity's network address.
  * includes a random value that prevents it from being reused.
@@ -196,10 +195,24 @@ struct ceph_sockaddr_storage {
     *this = ss;
   }
 } __attribute__ ((__packed__));
-
 WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
 struct entity_addr_t {
+  typedef enum {
+    TYPE_NONE = 0,
+    TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
+    TYPE_MSGR2 = 2,   ///< msgr2 protocol (new in ceph kraken)
+  } type_t;
+  static const type_t TYPE_DEFAULT = TYPE_LEGACY;
+  static const char *get_type_name(int t) {
+    switch (t) {
+    case TYPE_NONE: return "none";
+    case TYPE_LEGACY: return "legacy";
+    case TYPE_MSGR2: return "msgr2";
+    default: return "???";
+    }
+  };
+
   __u32 type;
   __u32 nonce;
   union {
@@ -209,6 +222,9 @@ struct entity_addr_t {
   } u;
 
   entity_addr_t() : type(0), nonce(0) { 
+    memset(&u, 0, sizeof(u));
+  }
+  entity_addr_t(__u32 _type, __u32 _nonce) : type(_type), nonce(_nonce) {
     memset(&u, 0, sizeof(u));
   }
   explicit entity_addr_t(const ceph_entity_addr &o) {
@@ -249,10 +265,8 @@ struct entity_addr_t {
     switch (u.sa.sa_family) {
     case AF_INET:
       return sizeof(u.sin);
-      break;
     case AF_INET6:
       return sizeof(u.sin6);
-      break;
     }
     return sizeof(u);
   }
@@ -365,28 +379,13 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
-  // Right now, these only deal with sockaddr_storage that have only family and content.
-  // Apparently on BSD there is also an ss_len that we need to handle; this requires
-  // broader study
-
-
-  void encode(bufferlist& bl, uint64_t features) const {
-    ::encode(type, bl);
-    ::encode(nonce, bl);
-    sockaddr_storage ss = get_sockaddr_storage();
-#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
-    ::encode(ss, bl);
-#else
-    ceph_sockaddr_storage wireaddr;
-    ::memset(&wireaddr, '\0', sizeof(wireaddr));
-    unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
-    // ceph_sockaddr_storage is in host byte order
-    ::memcpy(&wireaddr, &ss, copysize);
-    ::encode(wireaddr, bl);
-#endif
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(type, bl);
+  void decode_legacy_addr_after_marker(bufferlist::iterator& bl)
+  {
+    __u8 marker;
+    __u16 rest;
+    ::decode(marker, bl);
+    ::decode(rest, bl);
+    type = TYPE_LEGACY;
     ::decode(nonce, bl);
     sockaddr_storage ss;
 #if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
@@ -401,16 +400,65 @@ struct entity_addr_t {
     set_sockaddr((sockaddr*)&ss);
   }
 
+  // Right now, these only deal with sockaddr_storage that have only family and content.
+  // Apparently on BSD there is also an ss_len that we need to handle; this requires
+  // broader study
+
+  void encode(bufferlist& bl, uint64_t features) const {
+    if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+      ::encode((__u32)0, bl);
+      ::encode(nonce, bl);
+      sockaddr_storage ss = get_sockaddr_storage();
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
+      ::encode(ss, bl);
+#else
+      ceph_sockaddr_storage wireaddr;
+      ::memset(&wireaddr, '\0', sizeof(wireaddr));
+      unsigned copysize = MIN(sizeof(wireaddr), sizeof(ss));
+      // ceph_sockaddr_storage is in host byte order
+      ::memcpy(&wireaddr, &ss, copysize);
+      ::encode(wireaddr, bl);
+#endif
+      return;
+    }
+    ::encode((__u8)1, bl);
+    ENCODE_START(1, 1, bl);
+    ::encode(type, bl);
+    ::encode(nonce, bl);
+    __u32 elen = get_sockaddr_len();
+    ::encode(elen, bl);
+    if (elen) {
+      bl.append((char*)get_sockaddr(), elen);
+    }
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __u8 marker;
+    ::decode(marker, bl);
+    if (marker == 0) {
+      decode_legacy_addr_after_marker(bl);
+      return;
+    }
+    if (marker != 1)
+      throw buffer::malformed_input("entity_addr_t marker != 1");
+    DECODE_START(1, bl);
+    ::decode(type, bl);
+    ::decode(nonce, bl);
+    __u32 elen;
+    ::decode(elen, bl);
+    if (elen) {
+      bl.copy(elen, (char*)get_sockaddr());
+    }
+    DECODE_FINISH(bl);
+  }
+
   void dump(Formatter *f) const;
 
   static void generate_test_instances(list<entity_addr_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
-inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
-{
-  return out << addr.get_sockaddr() << '/' << addr.nonce;
-}
+ostream& operator<<(ostream& out, const entity_addr_t &addr);
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }
@@ -430,6 +478,18 @@ namespace std {
   };
 } // namespace std
 
+struct entity_addrvec_t {
+  vector<entity_addr_t> v;
+
+  unsigned size() const { return v.size(); }
+  bool empty() const { return v.empty(); }
+
+  void encode(bufferlist& bl, uint64_t features) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<entity_addrvec_t*>& ls);
+};
+WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 
 /*
  * a particular entity instance
@@ -499,9 +559,5 @@ inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
   entity_inst_t n = i;
   return out << n;
 }
-
-
-
-
 
 #endif

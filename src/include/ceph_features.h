@@ -85,6 +85,8 @@
 #define CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING (1ULL<<58) /* New, v7 encoding */
 #define CEPH_FEATURE_FS_FILE_LAYOUT_V2       (1ULL<<58) /* file_layout_t */
 
+#define CEPH_FEATURE_MSG_ADDR2 (1ULL<<59) /* ADDR2 feature */
+
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
 #define CEPH_FEATURE_RESERVED_BROKEN  (1ULL<<63)  /* DO NOT USE THIS; see below */
@@ -179,6 +181,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_CRUSH_TUNABLES5 |	    \
 	 CEPH_FEATURE_SERVER_JEWEL |  \
 	 CEPH_FEATURE_FS_FILE_LAYOUT_V2 |		 \
+	 CEPH_FEATURE_MSG_ADDR2 | \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
