@@ -66,6 +66,7 @@ MDSRank::MDSRank(
     stopping(false),
     progress_thread(this), dispatch_depth(0),
     hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
+    mds_slow_req_count(0),
     last_client_mdsmap_bcast(0),
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
@@ -2380,13 +2381,17 @@ void MDSRank::create_logger()
 void MDSRank::check_ops_in_flight()
 {
   vector<string> warnings;
-  if (op_tracker.check_ops_in_flight(warnings)) {
+  int slow = 0;
+  if (op_tracker.check_ops_in_flight(warnings, &slow)) {
     for (vector<string>::iterator i = warnings.begin();
         i != warnings.end();
         ++i) {
       clog->warn() << *i;
     }
   }
+ 
+  // set mds slow request count 
+  mds_slow_req_count = slow;
   return;
 }
 
