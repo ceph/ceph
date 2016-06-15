@@ -5996,7 +5996,6 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   return *authorizer != NULL;
 }
 
-
 bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid, CryptoKey& session_key)
@@ -6020,46 +6019,55 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     return true;
   }
 
-  AuthCapsInfo caps_info;
-  EntityName name;
-  uint64_t global_id;
-  uint64_t auid = CEPH_AUTH_UID_DEFAULT;
-
-  isvalid = authorize_handler->verify_authorizer(cct, monc->rotating_secrets,
-						 authorizer_data, authorizer_reply, name, global_id, caps_info, session_key, &auid);
-
+  isvalid = authorize_handler->verify_authorizer(
+    cct, monc->rotating_secrets,
+    authorizer_data, authorizer_reply,
+    con->peer_name, con->peer_global_id, con->peer_caps_info, session_key,
+    &con->peer_auid);
   if (isvalid) {
-    Session *s = static_cast<Session *>(con->get_priv());
-    if (!s) {
-      s = new Session(cct);
-      con->set_priv(s->get());
-      s->con = con;
-      dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
-    }
-
-    s->entity_name = name;
-    if (caps_info.allow_all)
-      s->caps.set_allow_all();
-    s->auid = auid;
-
-    if (caps_info.caps.length() > 0) {
-      bufferlist::iterator p = caps_info.caps.begin();
-      string str;
-      try {
-	::decode(str, p);
-      }
-      catch (buffer::error& e) {
-      }
-      bool success = s->caps.parse(str);
-      if (success)
-	dout(10) << " session " << s << " " << s->entity_name << " has caps " << s->caps << " '" << str << "'" << dendl;
-      else
-	dout(10) << " session " << s << " " << s->entity_name << " failed to parse caps '" << str << "'" << dendl;
-    }
-
-    s->put();
+    ms_handle_authentication(con);
   }
   return true;
+}
+
+int OSD::ms_handle_authentication(Connection *con)
+{
+  int ret = 0;
+  Session *s = static_cast<Session *>(con->get_priv());
+  assert(!s);
+  s = new Session(cct);
+  con->set_priv(s->get());
+  s->con = con;
+  s->entity_name = con->get_peer_entity_name();
+  dout(10) << __func__ << " session " << s << " con " << s->con
+	   << " addr " << s->con->get_peer_addr() << dendl;
+
+  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  if (caps_info.allow_all)
+    s->caps.set_allow_all();
+  s->auid = con->get_peer_auid();
+
+  if (caps_info.caps.length() > 0) {
+    bufferlist::iterator p = caps_info.caps.begin();
+    string str;
+    try {
+      ::decode(str, p);
+    }
+    catch (buffer::error& e) {
+    }
+    bool success = s->caps.parse(str);
+    if (success) {
+      dout(10) << " session " << s << " " << s->entity_name
+	       << " has caps " << s->caps << " '" << str << "'" << dendl;
+      ret = 1;
+    } else {
+      dout(10) << " session " << s << " " << s->entity_name
+	       << " failed to parse caps '" << str << "'" << dendl;
+      ret = -EPERM;
+    }
+  }
+  s->put();
+  return ret;
 }
 
 void OSD::do_waiters()

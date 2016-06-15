@@ -1709,6 +1709,9 @@ public:
       isvalid = true;
       return true;
     }
+    int ms_handle_authentication(Connection *con) override {
+      return true;
+    }
   } heartbeat_dispatcher;
 
 private:
@@ -2393,6 +2396,7 @@ protected:
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key);
+  int ms_handle_authentication(Connection *con) override;
   void ms_handle_connect(Connection *con);
   void ms_handle_fast_connect(Connection *con);
   void ms_handle_fast_accept(Connection *con);
