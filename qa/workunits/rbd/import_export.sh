@@ -137,7 +137,7 @@ rbd rm sparse
 
 echo "zeros export to sparse file"
 #  Must be tricky to make image "by hand" ; import won't create a zero image
-rbd create sparse --size 4
+rbd create $RBD_CREATE_ARGS sparse --size 4
 prefix=$(rbd info sparse | grep block_name_prefix | awk '{print $NF;}')
 # drop in 0 object directly
 dd if=/dev/zero bs=4M count=1 | rados -p rbd put ${prefix}.000000000000 -
