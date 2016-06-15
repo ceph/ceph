@@ -185,7 +185,7 @@ int pidfh::write()
     int err = errno;
     derr << __func__ << ": failed to ftruncate the pid file '"
 	 << pf_path << "': " << cpp_strerror(err) << dendl;
-    return err;
+    return -err;
   }
   ssize_t res = safe_write(pf_fd, buf, len);
   if (res < 0) {
