@@ -2,6 +2,79 @@
  Release Notes
 ===============
 
+v10.2.2 Jewel
+=============
+
+This point release fixes several important bugs in RBD mirroring, RGW multi-site, CephFS, and RADOS.
+
+We recommend that all v10.2.x users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v10.2.1.txt>`.
+
+Notable Changes
+---------------
+
+* ceph: cli: exception when pool name has non-ascii characters (`issue#15913 <http://tracker.ceph.com/issues/15913>`_, `pr#9320 <http://github.com/ceph/ceph/pull/9320>`_, Ricardo Dias)
+* ceph-disk: workaround gperftool hang (`issue#13522 <http://tracker.ceph.com/issues/13522>`_, `issue#16103 <http://tracker.ceph.com/issues/16103>`_, `pr#9427 <http://github.com/ceph/ceph/pull/9427>`_, Loic Dachary)
+* cephfs: backports needed for Manila (`issue#15599 <http://tracker.ceph.com/issues/15599>`_, `issue#15417 <http://tracker.ceph.com/issues/15417>`_, `issue#15045 <http://tracker.ceph.com/issues/15045>`_, `pr#9430 <http://github.com/ceph/ceph/pull/9430>`_, John Spray, Ramana Raja, Xiaoxi Chen)
+* ceph.spec.in: drop support for RHEL<7 and SUSE<1210 in jewel and above (`issue#15725 <http://tracker.ceph.com/issues/15725>`_, `issue#15627 <http://tracker.ceph.com/issues/15627>`_, `issue#13445 <http://tracker.ceph.com/issues/13445>`_, `issue#15822 <http://tracker.ceph.com/issues/15822>`_, `issue#15472 <http://tracker.ceph.com/issues/15472>`_, `issue#15987 <http://tracker.ceph.com/issues/15987>`_, `issue#15516 <http://tracker.ceph.com/issues/15516>`_, `issue#15549 <http://tracker.ceph.com/issues/15549>`_, `pr#8938 <http://github.com/ceph/ceph/pull/8938>`_, Boris Ranto, Sage Weil, Nathan Cutler, Lars Marowsky-Bree)
+* ceph_test_librbd_fsx crashes during journal replay shut down (`issue#16123 <http://tracker.ceph.com/issues/16123>`_, `pr#9556 <http://github.com/ceph/ceph/pull/9556>`_, Jason Dillaman)
+* client: fix bugs accidentally disabling readahead (`issue#16024 <http://tracker.ceph.com/issues/16024>`_, `pr#9656 <http://github.com/ceph/ceph/pull/9656>`_, Patrick Donnelly, Greg Farnum)
+* cls_journal: initialize empty commit position upon client register (`issue#15757 <http://tracker.ceph.com/issues/15757>`_, `pr#9376 <http://github.com/ceph/ceph/pull/9376>`_, runsisi, Venky Shankar)
+* cls::rbd: mirror_image_status_list returned max 64 items (`pr#9069 <http://github.com/ceph/ceph/pull/9069>`_, Mykola Golub)
+* cls_rbd: mirror image status summary should read full directory (`issue#16178 <http://tracker.ceph.com/issues/16178>`_, `pr#9608 <http://github.com/ceph/ceph/pull/9608>`_, Jason Dillaman)
+* common: BackoffThrottle spins unnecessarily with very small backoff while the throttle is full (`issue#15953 <http://tracker.ceph.com/issues/15953>`_, `pr#9579 <http://github.com/ceph/ceph/pull/9579>`_, Samuel Just)
+* common: Do not link lttng into libglobal (`pr#9194 <http://github.com/ceph/ceph/pull/9194>`_, Karol Mroz)
+* debian: install systemd target files (`issue#15573 <http://tracker.ceph.com/issues/15573>`_, `pr#8815 <http://github.com/ceph/ceph/pull/8815>`_, Kefu Chai, Sage Weil)
+* doc: update mirroring guide to include pool/image status commands (`issue#15746 <http://tracker.ceph.com/issues/15746>`_, `pr#9180 <http://github.com/ceph/ceph/pull/9180>`_, Mykola Golub)
+* librbd: Disabling journaling feature results in "Transport endpoint is not connected" error (`issue#15863 <http://tracker.ceph.com/issues/15863>`_, `pr#9548 <http://github.com/ceph/ceph/pull/9548>`_, Yuan Zhou)
+* librbd: do not shut down exclusive lock while acquiring' (`issue#16291 <http://tracker.ceph.com/issues/16291>`_, `issue#16260 <http://tracker.ceph.com/issues/16260>`_, `pr#9691 <http://github.com/ceph/ceph/pull/9691>`_, Jason Dillaman)
+* librbd: Initial python APIs to support mirroring (`issue#15656 <http://tracker.ceph.com/issues/15656>`_, `pr#9550 <http://github.com/ceph/ceph/pull/9550>`_, Mykola Golub)
+* librbd: journal IO error results in failed assertion in AioCompletion (`issue#16077 <http://tracker.ceph.com/issues/16077>`_, `issue#15034 <http://tracker.ceph.com/issues/15034>`_, `issue#15791 <http://tracker.ceph.com/issues/15791>`_, `pr#9611 <http://github.com/ceph/ceph/pull/9611>`_, Hector Martin, Jason Dillaman)
+* librbd: journal: live replay might skip entries from previous object set (`issue#15864 <http://tracker.ceph.com/issues/15864>`_, `issue#15665 <http://tracker.ceph.com/issues/15665>`_, `pr#9217 <http://github.com/ceph/ceph/pull/9217>`_, Jason Dillaman)
+* librbd: journal: support asynchronous shutdown (`issue#15949 <http://tracker.ceph.com/issues/15949>`_, `issue#14530 <http://tracker.ceph.com/issues/14530>`_, `issue#15993 <http://tracker.ceph.com/issues/15993>`_, `pr#9373 <http://github.com/ceph/ceph/pull/9373>`_, Jason Dillaman)
+* librbd: Metadata config overrides are applied synchronously (`issue#15928 <http://tracker.ceph.com/issues/15928>`_, `pr#9318 <http://github.com/ceph/ceph/pull/9318>`_, Jason Dillaman)
+* librbd: Object Map is showing as invalid, even when Object Map is disabled for that Image. (`issue#16076 <http://tracker.ceph.com/issues/16076>`_, `pr#9555 <http://github.com/ceph/ceph/pull/9555>`_, xinxin shu)
+* librbd: prevent error messages when journal externally disabled (`issue#16114 <http://tracker.ceph.com/issues/16114>`_, `pr#9610 <http://github.com/ceph/ceph/pull/9610>`_, Zhiqiang Wang, Jason Dillaman)
+* librbd: recursive lock possible when disabling journaling (`issue#16235 <http://tracker.ceph.com/issues/16235>`_, `pr#9654 <http://github.com/ceph/ceph/pull/9654>`_, Jason Dillaman)
+* librbd: refresh image if needed in mirror functions (`issue#16096 <http://tracker.ceph.com/issues/16096>`_, `pr#9609 <http://github.com/ceph/ceph/pull/9609>`_, Jon Bernard)
+* librbd: remove should ignore mirror errors from older OSDs (`issue#16268 <http://tracker.ceph.com/issues/16268>`_, `pr#9692 <http://github.com/ceph/ceph/pull/9692>`_, Jason Dillaman)
+* librbd: reuse ImageCtx::finisher and SafeTimer for lots of images case (`issue#13938 <http://tracker.ceph.com/issues/13938>`_, `pr#9580 <http://github.com/ceph/ceph/pull/9580>`_, Haomai Wang)
+* librbd: validate image metadata configuration overrides (`issue#15522 <http://tracker.ceph.com/issues/15522>`_, `pr#9554 <http://github.com/ceph/ceph/pull/9554>`_, zhuangzeqiang)
+* mds: order directories by hash and fix simultaneous readdir races (`issue#15508 <http://tracker.ceph.com/issues/15508>`_, `pr#9655 <http://github.com/ceph/ceph/pull/9655>`_, Yan, Zheng, Greg Farnum)
+* mon: Hammer (0.94.3) OSD does not delete old OSD Maps in a timely fashion (maybe at all?) (`issue#13990 <http://tracker.ceph.com/issues/13990>`_, `pr#9100 <http://github.com/ceph/ceph/pull/9100>`_, Kefu Chai)
+* mon/Monitor: memory leak on Monitor::handle_ping() (`issue#15793 <http://tracker.ceph.com/issues/15793>`_, `pr#9270 <http://github.com/ceph/ceph/pull/9270>`_, xie xingguo)
+* osd: acting_primary not updated on split (`issue#15523 <http://tracker.ceph.com/issues/15523>`_, `pr#8968 <http://github.com/ceph/ceph/pull/8968>`_, Sage Weil)
+* osd: boot race with noup being set (`issue#15678 <http://tracker.ceph.com/issues/15678>`_, `pr#9101 <http://github.com/ceph/ceph/pull/9101>`_, Sage Weil)
+* osd: deadlock in OSD::_committed_osd_maps (`issue#15701 <http://tracker.ceph.com/issues/15701>`_, `pr#9103 <http://github.com/ceph/ceph/pull/9103>`_, Xinze Chi)
+* osd: hobject_t::get_max() vs is_max() discrepancy (`issue#16113 <http://tracker.ceph.com/issues/16113>`_, `pr#9614 <http://github.com/ceph/ceph/pull/9614>`_, Samuel Just)
+* osd: LibRadosWatchNotifyPPTests/LibRadosWatchNotifyPP.WatchNotify2Timeout/1 segv (`issue#15760 <http://tracker.ceph.com/issues/15760>`_, `pr#9104 <http://github.com/ceph/ceph/pull/9104>`_, Sage Weil)
+* osd: remove reliance on FLAG_OMAP for reads (`pr#9638 <http://github.com/ceph/ceph/pull/9638>`_, Samuel Just)
+* osd valgrind invalid reads/writes (`issue#15870 <http://tracker.ceph.com/issues/15870>`_, `pr#9237 <http://github.com/ceph/ceph/pull/9237>`_, Samuel Just)
+* pybind: rbd API should default features parameter to None (`issue#15982 <http://tracker.ceph.com/issues/15982>`_, `pr#9553 <http://github.com/ceph/ceph/pull/9553>`_, Mykola Golub)
+* qa: dynamic_features.sh races with image deletion (`issue#15500 <http://tracker.ceph.com/issues/15500>`_, `pr#9552 <http://github.com/ceph/ceph/pull/9552>`_, Mykola Golub)
+* qa/workunits: ensure replay has started before checking position (`issue#16248 <http://tracker.ceph.com/issues/16248>`_, `pr#9674 <http://github.com/ceph/ceph/pull/9674>`_, Jason Dillaman)
+* qa/workunits/rbd: fixed rbd_mirror teuthology runtime errors (`pr#9232 <http://github.com/ceph/ceph/pull/9232>`_, Jason Dillaman)
+* radosgw-admin: fix 'period push' handling of --url (`issue#15926 <http://tracker.ceph.com/issues/15926>`_, `pr#9210 <http://github.com/ceph/ceph/pull/9210>`_, Casey Bodley)
+* rbd-mirror: Delete local image mirror when remote image mirroring is disabled (`issue#15916 <http://tracker.ceph.com/issues/15916>`_, `issue#14421 <http://tracker.ceph.com/issues/14421>`_, `pr#9372 <http://github.com/ceph/ceph/pull/9372>`_, runsisi, Mykola Golub, Ricardo Dias)
+* rbd-mirror: do not propagate deletions when pool unavailable (`issue#16229 <http://tracker.ceph.com/issues/16229>`_, `pr#9630 <http://github.com/ceph/ceph/pull/9630>`_, Jason Dillaman)
+* rbd-mirror: do not re-use image id from mirror directory if creating image (`issue#16253 <http://tracker.ceph.com/issues/16253>`_, `pr#9673 <http://github.com/ceph/ceph/pull/9673>`_, Jason Dillaman)
+* rbd-mirror: FAILED assert(!m_status_watcher) (`issue#16245 <http://tracker.ceph.com/issues/16245>`_, `issue#16290 <http://tracker.ceph.com/issues/16290>`_, `pr#9690 <http://github.com/ceph/ceph/pull/9690>`_, Mykola Golub)
+* rbd-mirror: fix deletion propagation edge cases (`issue#16226 <http://tracker.ceph.com/issues/16226>`_, `pr#9629 <http://github.com/ceph/ceph/pull/9629>`_, Jason Dillaman)
+* rbd-mirror: fix journal shut down ordering (`issue#16165 <http://tracker.ceph.com/issues/16165>`_, `pr#9628 <http://github.com/ceph/ceph/pull/9628>`_, Jason Dillaman)
+* rbd-mirror: potential crash during image status update (`issue#15909 <http://tracker.ceph.com/issues/15909>`_, `pr#9226 <http://github.com/ceph/ceph/pull/9226>`_, Mykola Golub, Jason Dillaman)
+* rbd-mirror: refresh image after creating sync point (`issue#16196 <http://tracker.ceph.com/issues/16196>`_, `pr#9627 <http://github.com/ceph/ceph/pull/9627>`_, Jason Dillaman)
+* rbd-mirror: replicate cloned images (`issue#14937 <http://tracker.ceph.com/issues/14937>`_, `pr#9423 <http://github.com/ceph/ceph/pull/9423>`_, Jason Dillaman)
+* rbd-mirror should disable the rbd cache for local images (`issue#15930 <http://tracker.ceph.com/issues/15930>`_, `pr#9317 <http://github.com/ceph/ceph/pull/9317>`_, Jason Dillaman)
+* rbd-mirror: support bootstrap canceling (`issue#16201 <http://tracker.ceph.com/issues/16201>`_, `pr#9612 <http://github.com/ceph/ceph/pull/9612>`_, Mykola Golub)
+* rbd-mirror: support multiple replicated pools (`issue#16045 <http://tracker.ceph.com/issues/16045>`_, `pr#9409 <http://github.com/ceph/ceph/pull/9409>`_, Jason Dillaman)
+* rgw: fix manager selection when APIs customized (`issue#15974 <http://tracker.ceph.com/issues/15974>`_, `issue#15973 <http://tracker.ceph.com/issues/15973>`_, `pr#9245 <http://github.com/ceph/ceph/pull/9245>`_, Robin H. Johnson)
+* rgw: keep track of written_objs correctly (`issue#15886 <http://tracker.ceph.com/issues/15886>`_, `pr#9239 <http://github.com/ceph/ceph/pull/9239>`_, Yehuda Sadeh)
+* rpm: ceph gid mismatch on upgrade from hammer with pre-existing ceph user (SUSE) (`issue#15869 <http://tracker.ceph.com/issues/15869>`_, `pr#9424 <http://github.com/ceph/ceph/pull/9424>`_, Nathan Cutler)
+* systemd: ceph-{mds,mon,osd,radosgw} systemd unit files need wants=time-sync.target (`issue#15419 <http://tracker.ceph.com/issues/15419>`_, `pr#8802 <http://github.com/ceph/ceph/pull/8802>`_, Nathan Cutler)
+* test: failure in journal.sh workunit test (`issue#16011 <http://tracker.ceph.com/issues/16011>`_, `pr#9377 <http://github.com/ceph/ceph/pull/9377>`_, Mykola Golub)
+* tests: rm -fr /tmp/*virtualenv* (`issue#16087 <http://tracker.ceph.com/issues/16087>`_, `pr#9403 <http://github.com/ceph/ceph/pull/9403>`_, Loic Dachary)
+
 v10.2.1 Jewel
 =============
 
