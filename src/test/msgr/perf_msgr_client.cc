@@ -63,6 +63,9 @@ class MessengerClient {
       isvalid = true;
       return true;
     }
+    int ms_handle_authentication(Connection *con) override {
+      return 1;
+    }
   };
 
   class ClientThread : public Thread {

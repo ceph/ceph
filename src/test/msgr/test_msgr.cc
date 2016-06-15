@@ -206,6 +206,10 @@ class FakeDispatcher : public Dispatcher {
     return true;
   }
 
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
+  }
+
   void reply_message(Message *m) {
     MPing *rm = new MPing();
     m->get_connection()->send_message(rm);
@@ -925,6 +929,10 @@ class SyntheticDispatcher : public Dispatcher {
     return true;
   }
 
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
+  }
+
   void reply_message(const Message *m, Payload& pl) {
     pl.who = Payload::PONG;
     bufferlist bl;
@@ -1470,6 +1478,9 @@ class MarkdownDispatcher : public Dispatcher {
 			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
     isvalid = true;
     return true;
+  }
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 };
 
