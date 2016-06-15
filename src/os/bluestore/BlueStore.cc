@@ -2428,7 +2428,8 @@ int BlueStore::_fsck_verify_blob_map(
   string what,
   const bluestore_blob_map_t& blob_map,
   map<int64_t,bluestore_extent_ref_map_t>& v,
-  interval_set<uint64_t> &used_blocks)
+  interval_set<uint64_t> &used_blocks,
+  store_statfs_t& expected_statfs)
 {
   int errors = 0;
   dout(20) << __func__ << " " << what << " " << v << dendl;
@@ -2447,10 +2448,24 @@ int BlueStore::_fsck_verify_blob_map(
     }
     v.erase(pv);
     interval_set<uint64_t> span;
+    bool compressed = b.second.is_compressed();
+    if (compressed) {
+      expected_statfs.compressed += b.second.compressed_length;
+      for (auto& r : b.second.ref_map.ref_map) {
+        expected_statfs.compressed_original += r.second.refs * r.second.length;
+      }
+    }
     for (auto& p : b.second.extents) {
+      if (!p.is_valid()) {
+        continue;
+      }
       interval_set<uint64_t> e, i;
       e.insert(p.offset, p.length);
       i.intersection_of(e, used_blocks);
+      expected_statfs.allocated += p.length;
+      if (compressed) {
+        expected_statfs.compressed_allocated += p.length;
+      }
       if (!i.empty()) {
 	derr << " " << what << " extent(s) " << i
 	     << " already allocated" << dendl;
@@ -2483,6 +2498,7 @@ int BlueStore::fsck()
   KeyValueDB::Iterator it;
   BnodeRef bnode;
   map<int64_t,bluestore_extent_ref_map_t> hash_shared;
+  store_statfs_t expected_statfs, actual_statfs;
 
   int r = _open_path();
   if (r < 0)
@@ -2567,7 +2583,8 @@ int BlueStore::fsck()
 	      "hash " + stringify(bnode->hash),
 	      bnode->blob_map,
 	      hash_shared,
-	      used_blocks);
+	      used_blocks,
+	      expected_statfs);
 	  bnode = c->get_bnode(o->oid.hobj.get_hash());
 	  hash_shared.clear();
 	}
@@ -2601,13 +2618,15 @@ int BlueStore::fsck()
 	  } else {
 	    hash_shared[-l.second.blob].get(l.second.offset, l.second.length);
 	  }
+	  expected_statfs.stored += l.second.length;
 	}
 	// blobs
 	errors += _fsck_verify_blob_map(
 	  "object " + stringify(oid),
 	  o->onode.blob_map,
 	  local_blobs,
-	  used_blocks);
+	  used_blocks,
+	  expected_statfs);
 	// overlays
 	set<string> overlay_keys;
 	map<uint64_t,int> refs;
@@ -2727,9 +2746,21 @@ int BlueStore::fsck()
       "hash " + stringify(bnode->hash),
       bnode->blob_map,
       hash_shared,
-      used_blocks);
+      used_blocks,
+      expected_statfs);
     hash_shared.clear();
     bnode.reset();
+  }
+  statfs(&actual_statfs);
+  //fill unaffected fields to be able to compare structs
+  expected_statfs.blocks = actual_statfs.blocks;
+  expected_statfs.bsize = actual_statfs.bsize;
+  expected_statfs.available = actual_statfs.available;
+  if (!(actual_statfs == expected_statfs)) {
+    dout(30) << __func__ << "  actual statfs differs from the expected one:"
+             << actual_statfs << " vs. "
+             << expected_statfs << dendl;
+    ++errors;
   }
 
   dout(1) << __func__ << " checking for stray bnodes and onodes" << dendl;
@@ -5853,7 +5884,7 @@ void BlueStore::_do_write_big(
     o->onode.punch_hole(offset, l, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(blob, 0, l, 0);
     b->ref_map.get(0, l);
-    txc->statfs_delta.stored() += length;
+    txc->statfs_delta.stored() += l;
     dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
 	     << o->onode.extent_map[offset] << dendl;
     dout(20) << __func__ << "  blob " << *b << dendl;
@@ -5913,9 +5944,10 @@ int BlueStore::_do_alloc_write(
 		 << " -> 0x" << rawlen << " => 0x" << newlen
 		 << " with " << chdr.type
 		 << dec << dendl;
-       txc->statfs_delta.compressed() += rawlen;
-       txc->statfs_delta.compressed_original() += l->length();
-       txc->statfs_delta.compressed_allocated() += newlen;	l = &compressed_bl;
+	txc->statfs_delta.compressed() += rawlen;
+	txc->statfs_delta.compressed_original() += l->length();
+	txc->statfs_delta.compressed_allocated() += newlen;
+	l = &compressed_bl;
 	final_length = newlen;
 	csum_length = newlen;
 	b->set_compressed(rawlen);
@@ -5975,18 +6007,23 @@ void BlueStore::_wctx_finish(
   for (auto &l : wctx->lex_old) {
     bluestore_blob_t *b = c->get_blob_ptr(o, l.blob);
     vector<bluestore_pextent_t> r;
+    bool compressed = b->is_compressed();
     b->put_ref(l.offset, l.length, min_alloc_size, &r);
     txc->statfs_delta.stored() -= l.length;
+    if (compressed) {
+      txc->statfs_delta.compressed_original() -= l.length;
+    }
     for (auto e : r) {
       dout(20) << __func__ << " release " << e << dendl;
       txc->released.insert(e.offset, e.length);
       txc->statfs_delta.allocated() -= e.length;
+      if (compressed) {
+        txc->statfs_delta.compressed_allocated() -= e.length;
+      }
     }
     if (b->ref_map.empty()) {
-      if (b->is_compressed()) {
-       txc->statfs_delta.compressed() -= b->get_payload_length();
-       txc->statfs_delta.compressed_original() -= b->length;
-       txc->statfs_delta.compressed_allocated() -= b->get_ondisk_length();
+      if (compressed) {
+        txc->statfs_delta.compressed() -= b->get_payload_length();
       }
       dout(20) << __func__ << " rm blob " << *b << dendl;
       if (l.blob >= 0) {

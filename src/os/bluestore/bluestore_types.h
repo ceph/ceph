@@ -273,6 +273,7 @@ struct bluestore_blob_t {
 
   bluestore_blob_t(uint32_t l, const bluestore_pextent_t& ext, uint32_t f = 0)
     : length(l),
+      compressed_length(0),
       flags(f),
       csum_type(CSUM_NONE),
       csum_block_order(12) {
