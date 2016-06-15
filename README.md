@@ -93,6 +93,38 @@ For RPM-based systems (Red Hat, SUSE, etc.),
 
 	rpmbuild
 
+Running unit tests
+==================
+
+Autotools
+---------
+
+To run all tests, a simple
+
+	cd src
+	make check
+
+will suffice.
+
+To run an individual test manually, you may want to clean up with
+
+	rm -rf testdir /tmp/*virtualenv
+	./stop.sh
+
+and then run a given test like so:
+
+	./unittest_addrs
+
+Many tests are bash scripts that spin up small test clusters, and must be run
+like so:
+
+	CEPH_DIR=. test/osd/osd-bench.sh   # or whatever the test is
+
+CMake
+-----
+
+???
+
 Building the Documentation
 ==========================
 
