@@ -5645,7 +5645,7 @@ void BlueStore::_do_write_small(
     }
   }
   while (ep != o->onode.extent_map.end()) {
-    if (ep->first >= offset + length) {
+    if (ep->first >= ep->second.offset + offset + length) {
       break;
     }
     int64_t blob = ep->second.blob;
