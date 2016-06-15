@@ -3524,7 +3524,7 @@ void Monitor::_ms_dispatch(Message *m)
   dout(20) << " caps " << s->caps.get_str() << dendl;
 
   if ((is_synchronizing() ||
-       (s->global_id == 0 && !exited_quorum.is_zero())) &&
+       (s->con->peer_global_id == 0 && !exited_quorum.is_zero())) &&
       !src_is_mon &&
       m->get_type() != CEPH_MSG_PING) {
     waitlist_or_zap_client(op);

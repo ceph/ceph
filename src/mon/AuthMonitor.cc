@@ -381,7 +381,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       ::decode(struct_v, indata);
       ::decode(supported, indata);
       ::decode(entity_name, indata);
-      ::decode(s->global_id, indata);
+      ::decode(s->con->peer_global_id, indata);
     } catch (const buffer::error &e) {
       dout(10) << "failed to decode initial auth message" << dendl;
       ret = -EINVAL;
@@ -438,9 +438,9 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   /* assign a new global_id? we assume this should only happen on the first
      request. If a client tries to send it later, it'll screw up its auth
      session */
-  if (!s->global_id) {
-    s->global_id = assign_global_id(op, paxos_writable);
-    if (!s->global_id) {
+  if (!s->con->peer_global_id) {
+    s->con->peer_global_id = assign_global_id(op, paxos_writable);
+    if (!s->con->peer_global_id) {
 
       delete s->auth_handler;
       s->auth_handler = NULL;
@@ -481,7 +481,10 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	s->caps.set_allow_all();
     } else {
       // request
-      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
+      ret = s->auth_handler->handle_request(
+	indata, response_bl,
+	s->con->peer_global_id,
+	caps_info, &auid);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
@@ -505,7 +508,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
 reply:
-  reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
+  reply = new MAuthReply(proto, &response_bl, ret, s->con->peer_global_id);
   mon->send_reply(op, reply);
 done:
   return true;

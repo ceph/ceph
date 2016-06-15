@@ -47,7 +47,6 @@ struct MonSession : public RefCountedObject {
   set<uint64_t> routed_request_tids;
   MonCap caps;
   uint64_t auid;
-  uint64_t global_id;
 
   map<string, Subscription*> sub_map;
   epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
@@ -62,7 +61,6 @@ struct MonSession : public RefCountedObject {
     RefCountedObject(g_ceph_context),
     con(c), inst(i), closed(false), item(this),
     auid(0),
-    global_id(0),
     osd_epoch(0),
     auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
