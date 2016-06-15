@@ -209,10 +209,8 @@ int PluginRegistry::load(const std::string &type,
   return 0;
 }
 
-/*
-int ErasureCodePluginRegistry::preload(const std::string &plugins,
-				       const std::string &directory,
-				       ostream &ss)
+int PluginRegistry::preload(const std::string &plugins,
+				       const std::string &type)
 {
   Mutex::Locker l(lock);
   list<string> plugins_list;
@@ -220,11 +218,12 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
   for (list<string>::iterator i = plugins_list.begin();
        i != plugins_list.end();
        ++i) {
-    ErasureCodePlugin *plugin;
-    int r = load(*i, directory, &plugin, ss);
+    loading = true;
+    int r = load(type, *i);
+    loading = false;
     if (r)
       return r;
   }
   return 0;
 }
-*/
+
