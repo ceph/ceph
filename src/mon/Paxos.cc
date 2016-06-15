@@ -1066,10 +1066,10 @@ void Paxos::handle_lease(MonOpRequestRef op)
 
   // extend lease
   if (lease_expire < lease->lease_timestamp) {
-    lease_expire = lease->lease_timestamp;
-
     utime_t now = ceph_clock_now(g_ceph_context);
-    if (lease_expire < now) {
+    lease_expire = now;
+    lease_expire += g_conf->mon_lease;
+    if (lease->lease_timestamp < now) {
       utime_t diff = now - lease_expire;
       derr << "lease_expire from " << lease->get_source_inst() << " is " << diff << " seconds in the past; mons are probably laggy (or possibly clocks are too skewed)" << dendl;
     }
