@@ -314,27 +314,35 @@ function TEST_list_missing_erasure_coded() {
 
     # Put an object and remove the two shards (including primary)
     add_something $dir $poolname OBJ0 || return 1
-    local -a osds=($(get_osds $poolname OBJ0))
-
-    pids=""
-    run_in_background pids objectstore_tool $dir ${osds[0]} OBJ0 remove
-    run_in_background pids objectstore_tool $dir ${osds[1]} OBJ0 remove
-    wait_background pids
-    return_code=$?
-    if [ $return_code -ne 0 ]; then return $return_code; fi
-
+    local -a osds0=($(get_osds $poolname OBJ0))
 
     # Put another object and remove two shards (excluding primary)
     add_something $dir $poolname OBJ1 || return 1
-    local -a osds=($(get_osds $poolname OBJ1))
+    local -a osds1=($(get_osds $poolname OBJ1))
 
-    pids=""
-    run_in_background pids objectstore_tool $dir ${osds[1]} OBJ1 remove
-    run_in_background pids objectstore_tool $dir ${osds[2]} OBJ1 remove
-    wait_background pids
-    return_code=$?
-    if [ $return_code -ne 0 ]; then return $return_code; fi
+    # Stop all osd daemons
+    for id in $(seq 0 2) ; do
+        kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
+    done
 
+    id=${osds0[0]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        OBJ0 remove || return 1
+    id=${osds0[1]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        OBJ0 remove || return 1
+
+    id=${osds1[1]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        OBJ1 remove || return 1
+    id=${osds1[2]}
+    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+        OBJ1 remove || return 1
+
+    for id in $(seq 0 2) ; do
+        activate_osd $dir $id >&2 || return 1
+    done
+    wait_for_clean >&2
 
     # Get get - both objects should in the same PG
     local pg=$(get_pg $poolname OBJ0)
