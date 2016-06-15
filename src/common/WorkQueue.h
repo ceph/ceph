@@ -649,8 +649,8 @@ public:
     ShardedThreadPool* sharded_pool;
 
   protected:
-    virtual void _enqueue(T) = 0;
-    virtual void _enqueue_front(T) = 0;
+    virtual void _enqueue(T &&) = 0;
+    virtual void _enqueue_front(T&&) = 0;
 
 
   public:
@@ -660,11 +660,11 @@ public:
     }
     virtual ~ShardedWQ() {}
 
-    void queue(T item) {
-      _enqueue(item);
+    void queue(T &&item) {
+      _enqueue(std::move(item));
     }
-    void queue_front(T item) {
-      _enqueue_front(item);
+    void queue_front(T &&item) {
+      _enqueue_front(std::move(item));
     }
     void drain() {
       sharded_pool->drain();
