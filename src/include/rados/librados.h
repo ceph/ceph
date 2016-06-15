@@ -19,7 +19,6 @@
 extern "C" {
 #endif
 
-#include "../compat.h"
 #include <netinet/in.h>
 #if defined(__linux__)
 #include <linux/types.h>
