@@ -340,6 +340,7 @@ TEST_F(TestMockImageSync, CancelImageCopy) {
   m_client_meta.sync_points = {{"snap1", boost::none}};
 
   InSequence seq;
+  expect_prune_sync_point(mock_sync_point_prune_request, false, 0);
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
 
   C_SaferCond image_copy_ctx;
