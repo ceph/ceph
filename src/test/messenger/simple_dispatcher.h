@@ -121,7 +121,9 @@ public:
     isvalid = true;
     return true;
   };
-
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
+  }
 };
 
 #endif /* SIMPLEDISPATCHER_H_ */

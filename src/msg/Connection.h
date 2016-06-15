@@ -20,6 +20,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 
+#include "auth/Auth.h"
 #include "common/RefCountedObj.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -49,6 +50,13 @@ public:
 
   int rx_buffers_version;
   map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
+
+  // authentication state
+  // FIXME make these private after ms_handle_authorizer is removed
+public:
+  AuthCapsInfo peer_caps_info;
+  EntityName peer_name;
+  uint64_t peer_global_id = 0;
 
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
@@ -144,6 +152,15 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  AuthCapsInfo& get_peer_caps_info() {
+    return peer_caps_info;
+  }
+  const EntityName& get_peer_entity_name() {
+    return peer_name;
+  }
+  uint64_t get_peer_global_id() {
+    return peer_global_id;
+  }
 
   int get_peer_type() const { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
