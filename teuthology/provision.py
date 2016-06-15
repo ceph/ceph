@@ -194,6 +194,14 @@ class Downburst(object):
                 ['sed', '-ie', 's/HWADDR=".*"/HWADDR="%s"/' % mac_address,
                  '/etc/sysconfig/network-scripts/ifcfg-eth0'],
             ])
+        # On Ubuntu, starting with 16.04, we need to install 'python' to get
+        # python2.7, which ansible needs
+        elif os_type == 'ubuntu':
+            if not 'packages' in user_info:
+                user_info['packages'] = list()
+            user_info['packages'].extend([
+                'python',
+            ])
         user_fd = tempfile.NamedTemporaryFile(delete=False)
         yaml.safe_dump(user_info, user_fd)
         self.user_path = user_fd.name
