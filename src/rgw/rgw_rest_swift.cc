@@ -1677,7 +1677,44 @@ RGWOp* RGWHandler_REST_Bucket_SWIFT::get_ws_index_op()
 
 RGWOp* RGWHandler_REST_Bucket_SWIFT::get_ws_listing_op()
 {
-  return nullptr;
+  class RGWWebsiteListing : public RGWListBucket_ObjStore_SWIFT {
+    void send_response() override {
+      /* Generate the header now. */
+      set_req_state_err(s, op_ret);
+      dump_errno(s);
+      dump_container_metadata(s, bucket, bucket_quota,
+                              s->bucket_info.website_conf);
+      end_header(s, this, "text/html");
+      if (op_ret < 0) {
+        return;
+      }
+
+      /* Now it's the time to start generating HTML bucket listing.
+       * All the crazy stuff with crafting tags will be delegated to
+       * RGWSwiftWebsiteListingFormatter. */
+      std::stringstream ss;
+      RGWSwiftWebsiteListingFormatter htmler(ss, prefix);
+
+      const auto& ws_conf = s->bucket_info.website_conf;
+      htmler.generate_header("",
+                             ws_conf.listing_css_doc);
+
+      for (const auto& pair : common_prefixes) {
+        const std::string& subdir_name = pair.first;
+
+        htmler.dump_subdir(subdir_name);
+      }
+
+      for (const RGWObjEnt& obj : objs) {
+        htmler.dump_object(obj);
+      }
+
+      htmler.generate_footer();
+      STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+    }
+  };
+
+  return new RGWWebsiteListing();
 }
 
 int RGWHandler_REST_Bucket_SWIFT::retarget(RGWOp* op, RGWOp** new_op)
