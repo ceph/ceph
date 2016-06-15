@@ -4196,9 +4196,11 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       if (r == -ENOENT) {
         epoch_t req_epoch = req->get_osdmap_epoch();
         if (req_epoch > epoch) {
-          if (!mds->objecter->wait_for_map(req_epoch,
-      	  new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher)))
-          return;
+          Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
+            new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
+          if (!mds->objecter->wait_for_map(req_epoch, fin))
+            return;
+          delete fin;
         } else  if (req_epoch == 0 && !mdr->waited_for_osdmap) {
           // For compatibility with client w/ old code, we still need get the latest map. 
           // One day if COMPACT_VERSION of MClientRequest >=3, we can remove those code.
@@ -4247,9 +4249,11 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       if (r == -ENOENT) {
         epoch_t req_epoch = req->get_osdmap_epoch();
         if (req_epoch > epoch) {
-          if (!mds->objecter->wait_for_map(req_epoch,
-      	new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher)))
-          return;
+          Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
+            new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
+          if (!mds->objecter->wait_for_map(req_epoch, fin))
+            return;
+          delete fin;
         } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
           // For compatibility with client w/ old code, we still need get the latest map. 
           // One day if COMPACT_VERSION of MClientRequest >=3, we can remove those code.
