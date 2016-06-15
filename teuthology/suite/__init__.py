@@ -38,6 +38,9 @@ def process_args(args):
             value = value.replace('/', ':')
         elif key in ('limit', 'priority', 'num'):
             value = int(value)
+        elif key == 'subset' and value is not None:
+            # take input string '2/3' and turn into (2, 3)
+            value = tuple(map(int, value.split('/')))
         conf[key] = value
     return conf
 
@@ -58,12 +61,6 @@ def main(args):
     if args['--archive-upload']:
         config.archive_upload = args['--archive-upload']
         log.info('Will upload archives to ' + args['--archive-upload'])
-
-    subset = None
-    if args['--subset']:
-        # take input string '2/3' and turn into (2, 3)
-        subset = tuple(map(int, args['--subset'].split('/')))
-        log.info('Passed subset=%s/%s' % (str(subset[0]), str(subset[1])))
 
     run = Run(fn)
     job_config = run.base_config
