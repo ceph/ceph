@@ -350,15 +350,11 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     string srv_domain = full_srv_name.substr(full_srv_name.find(protocol)
         + protocol.length());
 
-    const u_char *p = ns_rr_rdata(rr);
-    p += NS_INT16SZ; // priority
-    p += NS_INT16SZ; // weight
-
-    int port;
-    NS_GET16(port, p);
-
+    int port = ns_get16(ns_rr_rdata(rr) + (NS_INT16SZ * 2)); /* port = rdata + priority + weight */
     memset(full_target, 0, sizeof(full_target));
-    ns_name_ntop(p, full_target, NS_MAXDNAME);
+    ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
+                       ns_rr_rdata(rr) + (NS_INT16SZ * 3), /* comp_dn = rdata + priority + weight + port */
+                       full_target, sizeof(full_target));
 
     entity_addr_t addr;
 #ifdef HAVE_RES_NQUERY
