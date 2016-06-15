@@ -358,7 +358,7 @@ def get_package_versions(sha1, os_type, kernel_flavor, package_versions=None):
                              for all hashs and distros, not just for the given
                              hash and distro.
     """
-    if not package_versions:
+    if package_versions is None:
         package_versions = dict()
 
     os_type = str(os_type)
@@ -415,7 +415,7 @@ def has_packages_for_distro(sha1, os_type, kernel_flavor,
     :returns:                True, if packages are found. False otherwise.
     """
     os_type = str(os_type)
-    if not package_versions:
+    if package_versions is None:
         package_versions = get_package_versions(sha1, os_type, kernel_flavor)
 
     package_versions_for_hash = package_versions.get(sha1, dict()).get(
