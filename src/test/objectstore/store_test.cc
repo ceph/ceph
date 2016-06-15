@@ -846,6 +846,9 @@ TEST_P(StoreTest, CompressionTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  //force fsck
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
   {
     g_conf->set_val("bluestore_compression_min_blob_size", "262144");
     g_ceph_context->_conf->apply_changes(NULL);
@@ -860,9 +863,10 @@ TEST_P(StoreTest, CompressionTest) {
     cerr << "CompressibleData large blob" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
-    EXPECT_EQ(store->umount(), 0);
-    EXPECT_EQ(store->mount(), 0);
   }
+  //force fsck
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
 
   {
     ObjectStore::Transaction t;
@@ -1137,6 +1141,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0x1000u, statfs.bsize);
     ASSERT_EQ(g_conf->bluestore_block_size / 0x1000, statfs.blocks);
     ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
     available0 = statfs.available;
   }
   {
@@ -1157,6 +1164,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0, statfs.compressed);
     ASSERT_EQ(0, statfs.compressed_original);
     ASSERT_EQ(0, statfs.compressed_allocated);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
   {
     ObjectStore::Transaction t;
@@ -1177,6 +1187,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
   {
     ObjectStore::Transaction t;
@@ -1193,8 +1206,11 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0x20000, statfs.allocated);
     ASSERT_EQ(available0 - 0x20000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000, statfs.compressed_original);
+    ASSERT_EQ(0x30000 - 9, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
   {
     ObjectStore::Transaction t;
@@ -1214,8 +1230,11 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0x30000, statfs.allocated);
     ASSERT_EQ(available0 - 0x30000, statfs.available);
     ASSERT_LE(statfs.compressed, 0x10000);
-    ASSERT_EQ(0x30000, statfs.compressed_original);
+    ASSERT_EQ(0x30000 - 9 - 0x1000, statfs.compressed_original);
     ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
   {
     ObjectStore::Transaction t;
@@ -1237,6 +1256,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_LE(statfs.compressed, 0);
     ASSERT_EQ(0, statfs.compressed_original);
     ASSERT_EQ(0, statfs.compressed_allocated);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
   {
     ObjectStore::Transaction t;
@@ -1252,6 +1274,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(0u, statfs.compressed_original);
     ASSERT_EQ(0u, statfs.compressed);
     ASSERT_EQ(0u, statfs.compressed_allocated);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
   {
     ObjectStore::Transaction t;
@@ -1273,6 +1298,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_LE(statfs.compressed, 0x10000);
     ASSERT_EQ(0x30000, statfs.compressed_original);
     ASSERT_EQ(0x10000, statfs.compressed_allocated);
+    //force fsck
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
 
   {

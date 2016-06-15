@@ -4328,7 +4328,7 @@ struct store_statfs_t
   void reset() {
     *this = store_statfs_t();
   }
-
+  bool operator ==(const store_statfs_t& other) const;
   void dump(Formatter *f) const;
 };
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
