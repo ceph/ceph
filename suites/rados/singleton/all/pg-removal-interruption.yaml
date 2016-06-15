@@ -25,7 +25,4 @@ tasks:
     client.0:
       - sudo ceph osd down 0
 - ceph.restart: [osd.0]
-- exec:
-    client.0:
-      - sudo ceph tell osd.0 flush_pg_stats
 - ceph.healthy:

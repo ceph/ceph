@@ -23,6 +23,7 @@ overrides:
     - scrub mismatch
     - ScrubResult
     - failed to encode
+    - wrongly marked me down
 roles:
 - - mon.a
   - osd.0
