@@ -1472,7 +1472,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   dout(7) << "dispatch_client_request " << *req << dendl;
 
   // we shouldn't be waiting on anyone.
-  assert(mdr->more()->waiting_on_slave.empty());
+  assert(!mdr->has_more() || mdr->more()->waiting_on_slave.empty());
 
   if (req->may_write()) {
     if (mdcache->is_readonly()) {
