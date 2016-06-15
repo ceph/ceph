@@ -41,7 +41,6 @@ ImageCopyRequest<I>::ImageCopyRequest(I *local_image_ctx, I *remote_image_ctx,
     m_update_sync_point_interval(g_ceph_context->_conf->rbd_mirror_sync_point_update_age),
     m_client_meta_copy(*client_meta) {
   assert(!m_client_meta_copy.sync_points.empty());
-  assert(!m_client_meta_copy.snap_seqs.empty());
 }
 
 template <typename I>
