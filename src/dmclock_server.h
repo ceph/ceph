@@ -306,13 +306,16 @@ namespace crimson {
 
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
-	bool remove_by_req_filter(std::function<bool(R)> filter) {
+	template<typename Collect>
+	bool remove_by_req_filter(std::function<bool(R)> filter,
+				  Collect* out = nullptr) {
 	  bool any_removed = false;
 	  for (auto i = requests.begin();
 	       i != requests.end();
 	       /* no inc */) {
 	    if (filter(*i->request)) {
 	      any_removed = true;
+	      if (out) out->push_back(*i->request);
 	      i = requests.erase(i);
 	    } else {
 	      ++i;
@@ -385,11 +388,13 @@ namespace crimson {
       }
 
 
-      bool remove_by_req_filter(std::function<bool(R)> filter) {
+      template<typename Collect>
+      bool remove_by_req_filter(std::function<bool(R)> filter,
+				Collect* out = nullptr) {
 	bool any_removed = false;
 	DataGuard g(data_mtx);
 	for (auto i : client_map) {
-	  bool modified = i.second->remove_by_req_filter(filter);
+	  bool modified = i.second->remove_by_req_filter(filter, out);
 	  if (modified) {
 	    resv_heap.adjust(*i.second);
 	    limit_heap.adjust(*i.second);
