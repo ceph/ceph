@@ -85,23 +85,19 @@ public:
   struct region_t {
     uint64_t logical_offset;
     uint64_t blob_xoffset;   //region offset within the blob
-    uint64_t ext_xoffset;    //region offset within the pextent
     uint64_t length;
 
-    region_t(uint64_t offset, uint64_t b_offs, uint64_t x_offs, uint32_t len)
+    region_t(uint64_t offset, uint64_t b_offs, uint32_t len)
       : logical_offset(offset),
       blob_xoffset(b_offs),
-      ext_xoffset(x_offs),
       length(len) {}
     region_t(const region_t& from)
       : logical_offset(from.logical_offset),
       blob_xoffset(from.blob_xoffset),
-      ext_xoffset(from.ext_xoffset),
       length(from.length) {}
   };
   typedef list<region_t> regions2read_t;
   typedef map<const bluestore_blob_t*, regions2read_t> blobs2read_t;
-  typedef map<const bluestore_pextent_t*, regions2read_t> extents2read_t;
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
   struct BufferSpace;
@@ -906,7 +902,8 @@ private:
   uint64_t block_mask;     ///< mask to get just the block offset
   size_t block_size_order; ///< bits to shift to get block size
 
-  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
+  uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
+  size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
 
   uint64_t max_alloc_size; ///< maximum allocation unit (power of 2)
 
@@ -1232,21 +1229,6 @@ private:
   // --------------------------------------------------------
   // read processing internal methods
   int _read_whole_blob(const bluestore_blob_t* blob, OnodeRef o, bufferlist* result);
-  int _read_extent_sparse(
-    const bluestore_blob_t* blob,
-    const bluestore_pextent_t* extent,
-    regions2read_t::const_iterator cur,
-    regions2read_t::const_iterator end,
-    OnodeRef o,
-    ready_regions_t* result);
-
-  int _blob2read_to_extents2read(
-    const bluestore_blob_t* blob,
-    regions2read_t::const_iterator cur,
-    regions2read_t::const_iterator end,
-    const interval_set<uint64_t>& ready_intervals_in_cache,
-    extents2read_t* result);
-
   int _verify_csum(const bluestore_blob_t* blob, uint64_t blob_xoffset, const bufferlist& bl) const;
   int _decompress(bufferlist& source, bufferlist* result);
 
@@ -1259,6 +1241,7 @@ private:
     bool buffered = false;       ///< buffered write
     bool compress = false;       ///< compressed write
     uint64_t comp_blob_size = 0; ///< target compressed blob size
+    unsigned csum_order = 0;     ///< target checksum chunk order
 
     vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
 
@@ -1392,12 +1375,13 @@ private:
 			CollectionRef& c,
 			OnodeRef& o,
 			const string& first, const string& last);
-  int _setallochint(TransContext *txc,
-		    CollectionRef& c,
-		    OnodeRef& o,
-		    uint64_t expected_object_size,
-		    uint64_t expected_write_size,
-		    uint32_t flags);
+  int _set_alloc_hint(
+    TransContext *txc,
+    CollectionRef& c,
+    OnodeRef& o,
+    uint64_t expected_object_size,
+    uint64_t expected_write_size,
+    uint32_t flags);
   int _clone(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& oldo,
