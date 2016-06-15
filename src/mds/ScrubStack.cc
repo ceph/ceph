@@ -345,18 +345,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
       return;
     }
 
-    if (r < 0) {
-      // FIXME: how can I handle an error here?  I can't hold someone up
-      // forever, but I can't say "sure you're scrubbed"
-      //  -- should change scrub_dentry_next definition to never
-      //  give out IO errors (handle them some other way)
-      //     
-      derr << __func__ << " error from scrub_dentry_next: "
-           << r << dendl;
-      return;
-    }
-
-    // scrub_dentry_next defined to only give -ve, EAGAIN, ENOENT, 0 -- we should
+    // scrub_dentry_next defined to only give EAGAIN, ENOENT, 0 -- we should
     // never get random IO errors here.
     assert(r == 0);
 

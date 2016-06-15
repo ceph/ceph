@@ -2879,6 +2879,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if ((cmode & CEPH_FILE_MODE_WR) && mdcache->is_readonly()) {
     dout(7) << "read-only FS" << dendl;
     respond_to_request(mdr, -EROFS);
+    return;
   }
   
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -3680,8 +3681,8 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
     break;
 
   default:
-    dout(10) << "got unknown lock type " << checking_lock.type
-	     << ", dropping request!" << dendl;
+    dout(10) << "got unknown lock type " << checking_lock.type << dendl;
+    respond_to_request(mdr, -EINVAL);
     return;
   }
   lock_state->look_for_lock(checking_lock);
