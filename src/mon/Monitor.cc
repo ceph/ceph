@@ -3184,8 +3184,7 @@ void Monitor::handle_forward(MonOpRequestRef op)
     assert(req != NULL);
 
     ConnectionRef c(new AnonConnection(cct));
-    MonSession *s = new MonSession(req->get_source_inst(),
-				   static_cast<Connection*>(c.get()));
+    MonSession *s = new MonSession(static_cast<Connection*>(c.get()));
     c->set_priv(s->get());
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
@@ -3492,7 +3491,7 @@ void Monitor::_ms_dispatch(Message *m)
     }
 
     ConnectionRef con = m->get_connection();
-    s = session_map.new_session(m->get_source_inst(), con.get());
+    s = session_map.new_session(con.get());
     assert(s);
     con->set_priv(s->get());
     dout(10) << __func__ << " new session " << s << " " << *s << dendl;

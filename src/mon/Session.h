@@ -39,7 +39,6 @@ struct Subscription {
 
 struct MonSession : public RefCountedObject {
   ConnectionRef con;
-  entity_inst_t inst;
   utime_t session_timeout;
   utime_t time_established;
   bool closed;
@@ -59,9 +58,9 @@ struct MonSession : public RefCountedObject {
   ConnectionRef proxy_con;
   uint64_t proxy_tid;
 
-  MonSession(const entity_inst_t& i, Connection *c) :
+  MonSession(Connection *c) :
     RefCountedObject(g_ceph_context),
-    con(c), inst(i), closed(false), item(this),
+    con(c), closed(false), item(this),
     auid(0),
     osd_epoch(0),
     auth_handler(NULL),
@@ -125,8 +124,8 @@ struct MonSessionMap {
     s->put();
   }
 
-  MonSession *new_session(const entity_inst_t& i, Connection *c) {
-    MonSession *s = new MonSession(i, c);
+  MonSession *new_session(Connection *c) {
+    MonSession *s = new MonSession(c);
     assert(s);
     sessions.push_back(&s->item);
     s->get();  // caller gets a ref
