@@ -774,7 +774,7 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
     return;
   }
 
-  uint64_t bytes = stbuf.blocks * stbuf.bsize;
+  uint64_t bytes = stbuf.total;
   uint64_t used = bytes - stbuf.available;
   uint64_t avail = stbuf.available;
 
@@ -2799,7 +2799,7 @@ int OSD::update_crush_location()
     }
     snprintf(weight, sizeof(weight), "%.4lf",
 	     MAX((double).00001,
-		 (double)(st.blocks * st.bsize) /
+		 (double)(st.total) /
 		 (double)(1ull << 40 /* TB */)));
   }
 
