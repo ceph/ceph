@@ -204,7 +204,7 @@ bool MDRequestImpl::has_witnesses()
 
 bool MDRequestImpl::slave_did_prepare()
 {
-  return more()->slave_commit;
+  return has_more() && more()->slave_commit;
 }
 
 bool MDRequestImpl::did_ino_allocation()
