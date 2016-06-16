@@ -1049,6 +1049,7 @@ ssize_t AsyncConnection::_process_connection()
         got_bad_auth = false;
         delete authorizer;
         authorizer = NULL;
+        authorizer_buf.clear();
         memset(&connect_msg, 0, sizeof(connect_msg));
         memset(&connect_reply, 0, sizeof(connect_reply));
 
@@ -1482,17 +1483,19 @@ ssize_t AsyncConnection::_process_connection()
 
     case STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH:
       {
-        bufferlist authorizer_bl, authorizer_reply;
+        bufferlist authorizer_reply;
 
         if (connect_msg.authorizer_len) {
-          r = read_until(connect_msg.authorizer_len, state_buffer);
+          if (!authorizer_buf.length())
+            authorizer_buf.push_back(buffer::create(connect_msg.authorizer_len));
+
+          r = read_until(connect_msg.authorizer_len, authorizer_buf.c_str());
           if (r < 0) {
-            ldout(async_msgr->cct, 1) << __func__ << " read connect msg failed" << dendl;
+            ldout(async_msgr->cct, 1) << __func__ << " read connect authorizer failed" << dendl;
             goto fail;
           } else if (r > 0) {
             break;
           }
-          authorizer_bl.append(state_buffer, connect_msg.authorizer_len);
         }
 
         ldout(async_msgr->cct, 20) << __func__ << " accept got peer connect_seq "
@@ -1505,7 +1508,7 @@ ssize_t AsyncConnection::_process_connection()
                                    << policy.server << " policy.standby=" << policy.standby
                                    << " policy.resetcheck=" << policy.resetcheck << dendl;
 
-        r = handle_connect_msg(connect_msg, authorizer_bl, authorizer_reply);
+        r = handle_connect_msg(connect_msg, authorizer_buf, authorizer_reply);
         if (r < 0)
           goto fail;
 
