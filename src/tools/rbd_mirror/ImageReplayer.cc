@@ -465,9 +465,20 @@ template <typename I>
 void ImageReplayer<I>::start_replay() {
   dout(20) << dendl;
 
-  Context *ctx = create_context_callback<
-    ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
-  m_local_image_ctx->journal->start_external_replay(&m_local_replay, ctx);
+  assert(m_local_journal == nullptr);
+  {
+    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+    if (m_local_image_ctx->journal != nullptr) {
+      m_local_journal = m_local_image_ctx->journal;
+
+      Context *ctx = create_context_callback<
+        ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
+      m_local_journal->start_external_replay(&m_local_replay, ctx);
+      return;
+    }
+  }
+
+  on_start_fail(-EINVAL, "error starting journal replay");
 }
 
 template <typename I>
@@ -475,6 +486,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   dout(20) << "r=" << r << dendl;
 
   if (r < 0) {
+    m_local_journal = nullptr;
     derr << "error starting external replay on local image "
 	 <<  m_local_image_id << ": " << cpp_strerror(r) << dendl;
     on_start_fail(r, "error starting replay on local image");
@@ -864,7 +876,7 @@ void ImageReplayer<I>::allocate_local_tag() {
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_allocate_local_tag>(this);
-  m_local_image_ctx->journal->allocate_tag(
+  m_local_journal->allocate_tag(
     mirror_uuid, predecessor_mirror_uuid,
     m_replay_tag_data.predecessor_commit_valid,
     m_replay_tag_data.predecessor_tag_tid,
@@ -1178,7 +1190,8 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
         if (r < 0) {
           derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
         }
-        m_local_image_ctx->journal->stop_external_replay();
+        m_local_journal->stop_external_replay();
+        m_local_journal = nullptr;
         m_local_replay = nullptr;
         ctx->complete(0);
       });
