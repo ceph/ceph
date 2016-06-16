@@ -71,6 +71,22 @@ int NetHandler::set_nonblock(int sd)
   return 0;
 }
 
+void NetHandler::set_close_on_exec(int sd)
+{
+  int flags = fcntl(sd, F_GETFD, 0);
+  if (flags < 0) {
+    int r = errno;
+    lderr(cct) << __func__ << " fcntl(F_GETFD): "
+	       << cpp_strerror(r) << dendl;
+    return;
+  }
+  if (fcntl(sd, F_SETFD, flags | FD_CLOEXEC)) {
+    int r = errno;
+    lderr(cct) << __func__ << " fcntl(F_SETFD): "
+	       << cpp_strerror(r) << dendl;
+  }
+}
+
 void NetHandler::set_socket_options(int sd)
 {
   // disable Nagle algorithm?
