@@ -256,7 +256,6 @@ struct bluestore_blob_t {
   }
 
   vector<bluestore_pextent_t> extents; ///< raw data position on device
-  uint32_t length;                 ///< logical (decompressed) length
   uint32_t compressed_length;      ///< compressed length if any
   uint32_t flags;                  ///< FLAG_*
 
@@ -267,17 +266,15 @@ struct bluestore_blob_t {
   interval_set<uint32_t> unused;   ///< portion that has never been written to
   bufferptr csum_data;          ///< opaque vector of csum data
 
-  bluestore_blob_t(uint32_t l = 0, uint32_t f = 0)
-    : length(l),
-      compressed_length(0),
+  bluestore_blob_t(uint32_t f = 0)
+    : compressed_length(0),
       flags(f),
       csum_type(CSUM_NONE),
       csum_chunk_order(12) {
   }
 
-  bluestore_blob_t(uint32_t l, const bluestore_pextent_t& ext, uint32_t f = 0)
-    : length(l),
-      compressed_length(0),
+  bluestore_blob_t(const bluestore_pextent_t& ext, uint32_t f = 0)
+    : compressed_length(0),
       flags(f),
       csum_type(CSUM_NONE),
       csum_chunk_order(12) {
@@ -312,16 +309,8 @@ struct bluestore_blob_t {
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
   }
-  uint32_t get_payload_length() const {
-    return is_compressed() ? compressed_length : length;
-  }
-  uint32_t get_aligned_payload_length(uint64_t block_size) const {
-    uint32_t pl = get_payload_length();
-    pl = ROUND_UP_TO(pl, block_size);
-    if(csum_type != CSUM_NONE) {
-      pl = ROUND_UP_TO(pl, get_csum_chunk_size());
-    }
-    return pl;
+  uint32_t get_compressed_payload_length() const {
+    return is_compressed() ? compressed_length : 0;
   }
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
@@ -428,13 +417,6 @@ struct bluestore_blob_t {
     }
   }
 
-  uint64_t get_max_length() const {
-    if (has_flag(FLAG_COMPRESSED)) {
-      return length;
-    } else {
-      return get_ondisk_length();
-    }
-  }
   uint32_t get_ondisk_length() const {
     uint32_t len = 0;
     for (auto &p : extents) {

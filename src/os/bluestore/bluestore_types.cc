@@ -450,7 +450,6 @@ void bluestore_blob_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(extents, bl);
-  ::encode(length, bl);
   ::encode(compressed_length, bl);
   ::encode(flags, bl);
   ::encode(csum_type, bl);
@@ -465,7 +464,6 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(extents, p);
-  ::decode(length, p);
   ::decode(compressed_length, p);
   ::decode(flags, p);
   ::decode(csum_type, p);
@@ -483,7 +481,6 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
-  f->dump_unsigned("length", length);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
@@ -507,9 +504,9 @@ void bluestore_blob_t::dump(Formatter *f) const
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 {
   ls.push_back(new bluestore_blob_t);
-  ls.push_back(new bluestore_blob_t(4096, 0));
-  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
-  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
+  ls.push_back(new bluestore_blob_t(0));
+  ls.push_back(new bluestore_blob_t(bluestore_pextent_t(111, 222), 12));
+  ls.push_back(new bluestore_blob_t(bluestore_pextent_t(111, 222), 12));
   ls.back()->csum_type = CSUM_XXHASH32;
   ls.back()->csum_chunk_order = 16;
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
@@ -521,7 +518,6 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " len 0x" << std::hex << o.length << std::dec
       << " clen 0x" << std::hex << o.compressed_length << std::dec;
   if (o.flags) {
     out << " " << o.get_flags_string();
@@ -588,7 +584,7 @@ void bluestore_blob_t::put_ref(
     }
     uint64_t end;
     if (p == ref_map.ref_map.end()) {
-      end = this->length;
+      end = this->get_ondisk_length();
     } else {
       end = p->first;
     }
