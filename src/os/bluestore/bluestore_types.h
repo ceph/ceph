@@ -474,21 +474,16 @@ typedef int64_t bluestore_blob_id_t;
 
 /// lextent: logical data block back by the extent
 struct bluestore_lextent_t {
-  static string get_flags_string(unsigned flags);
-
   bluestore_blob_id_t blob;  ///< blob
   uint32_t offset;           ///< relative offset within the blob
   uint32_t length;           ///< length within the blob
-  uint32_t flags;            ///< FLAGS_*
 
   bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
 		      uint32_t o = 0,
-		      uint32_t l = 0,
-		      uint32_t f = 0)
+		      uint32_t l = 0)
     : blob(_blob),
       offset(o),
-      length(l),
-      flags(f) {}
+      length(l) {}
 
   uint64_t end() const {
     return offset + length;
@@ -498,27 +493,15 @@ struct bluestore_lextent_t {
     return blob < 0;
   }
 
-  bool has_flag(unsigned f) const {
-    return flags & f;
-  }
-  void set_flag(unsigned f) {
-    flags |= f;
-  }
-  void clear_flag(unsigned f) {
-    flags &= ~f;
-  }
-
   void encode(bufferlist& bl) const {
     ::encode(blob, bl);
     ::encode(offset, bl);
     ::encode(length, bl);
-    ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(blob, p);
     ::decode(offset, p);
     ::decode(length, p);
-    ::decode(flags, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_lextent_t*>& o);

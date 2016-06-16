@@ -696,34 +696,24 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 
 // bluestore_lextent_t
 
-string bluestore_lextent_t::get_flags_string(unsigned flags)
-{
-  string s;
-  return s;
-}
-
 void bluestore_lextent_t::dump(Formatter *f) const
 {
   f->dump_unsigned("blob", blob);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
-  f->dump_unsigned("flags", flags);
 }
 
 void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& ls)
 {
   ls.push_back(new bluestore_lextent_t);
-  ls.push_back(new bluestore_lextent_t(23232, 0, 4096, 0));
-  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192, 7));
+  ls.push_back(new bluestore_lextent_t(23232, 0, 4096));
+  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192));
 }
 
 ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
 {
-  out  << "0x" << std::hex << lb.offset << "~" << lb.length << std::dec
-       << "->" << lb.blob;
-  if (lb.flags)
-    out << ":" << bluestore_lextent_t::get_flags_string(lb.flags);
-  return out;
+  return out << "0x" << std::hex << lb.offset << "~" << lb.length << std::dec
+	     << "->" << lb.blob;
 }
 
 
@@ -866,13 +856,11 @@ void bluestore_onode_t::punch_hole(
 	  bluestore_lextent_t(
 	    p->second.blob,
 	    p->second.offset + front,
-	    length,
-	    p->second.flags));
+	    length));
 	extent_map[end] = bluestore_lextent_t(
 	  p->second.blob,
 	  p->second.offset + front + length,
-	  p->second.length - front - length,
-	  p->second.flags);
+	  p->second.length - front - length);
 	p->second.length = front;
 	break;
       } else {
@@ -883,8 +871,7 @@ void bluestore_onode_t::punch_hole(
 	  bluestore_lextent_t(
 	    p->second.blob,
 	    p->second.offset + keep,
-	    p->second.length - keep,
-	    p->second.flags));
+	    p->second.length - keep));
 	p->second.length = keep;
 	++p;
 	continue;
@@ -902,13 +889,11 @@ void bluestore_onode_t::punch_hole(
       bluestore_lextent_t(
 	p->second.blob,
 	p->second.offset,
-	p->second.length - keep,
-	p->second.flags));
+	p->second.length - keep));
     extent_map[end] = bluestore_lextent_t(
       p->second.blob,
       p->second.offset + p->second.length - keep,
-      keep,
-      p->second.flags);
+      keep);
     extent_map.erase(p++);
     break;
   }

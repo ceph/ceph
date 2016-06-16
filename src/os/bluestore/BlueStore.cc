@@ -5659,7 +5659,7 @@ void BlueStore::_do_write_small(
       dout(20) << __func__ << "  lexold 0x" << std::hex << offset << std::dec
 	       << ": " << ep->second << dendl;
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-	bluestore_lextent_t(blob, b_off + head_pad, length, 0);
+	bluestore_lextent_t(blob, b_off + head_pad, length);
       b->blob.ref_map.get(lex.offset, lex.length);
       b->blob.mark_used(lex.offset, lex.length);
       txc->statfs_delta.stored() += lex.length;
@@ -5732,7 +5732,7 @@ void BlueStore::_do_write_small(
 	       << " at " << op->extents << dendl;
       o->onode.punch_hole(offset, length, &wctx->lex_old);
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-	bluestore_lextent_t(blob, offset - bstart, length, 0);
+	bluestore_lextent_t(blob, offset - bstart, length);
       b->blob.ref_map.get(lex.offset, lex.length);
       b->blob.mark_used(lex.offset, lex.length);
       txc->statfs_delta.stored() += lex.length;
@@ -5792,7 +5792,7 @@ void BlueStore::_do_write_big(
     b->bc.write(txc->seq, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     wctx->write(b, 0, t);
     o->onode.punch_hole(offset, l, &wctx->lex_old);
-    o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l, 0);
+    o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l);
     b->blob.ref_map.get(0, l);
     txc->statfs_delta.stored() += l;
     dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec << ": "
