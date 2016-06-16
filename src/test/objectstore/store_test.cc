@@ -38,7 +38,36 @@ typedef boost::mt11213b gen_type;
 
 #if GTEST_HAS_PARAM_TEST
 
-static void dump_bl_mismatch(bufferlist& expected, bufferlist& actual);
+static bool bl_eq(bufferlist& expected, bufferlist& actual)
+{
+  if (expected.contents_equal(actual))
+    return true;
+
+  unsigned first = 0;
+  if(expected.length() != actual.length()) {
+    cout << "--- buffer lengths mismatch " << std::hex
+         << "expected 0x" << expected.length() << " != actual 0x"
+         << actual.length() << std::dec << std::endl;
+  }
+  auto len = MIN(expected.length(), actual.length());
+  while ( first<len && expected[first] == actual[first])
+    ++first;
+  unsigned last = len;
+  while (last > 0 && expected[last-1] == actual[last-1])
+    --last;
+  if(len > 0) {
+    cout << "--- buffer mismatch between offset 0x" << std::hex << first
+         << " and 0x" << last << ", total 0x" << len << std::dec
+         << std::endl;
+    cout << "--- expected:\n";
+    expected.hexdump(cout);
+    cout << "--- actual:\n";
+    actual.hexdump(cout);
+  }
+  return false;
+}
+
+
 
 template <typename T>
 int apply_transaction(
@@ -464,7 +493,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     r = store->read(cid, hoid, 0, 0x4000, in);
     ASSERT_EQ(0x1000, r);
     exp.append(a);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -477,7 +506,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     ASSERT_EQ(0x2000, r);
     exp.append(a);
     exp.append(b);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -492,7 +521,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(b);
     exp.append(z);
     exp.append(c);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -507,7 +536,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(b);
     exp.append(a);
     exp.append(c);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -523,7 +552,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(b);
     exp.append(a);
     exp.append(c);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -582,7 +611,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl);
       expected.append_zero(5);
       expected.append(bl);
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   //overwrite over the same extents
@@ -603,7 +632,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl);
       expected.append_zero(5);
       expected.append(bl);
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   //additional write to an unused region of some blob
@@ -627,10 +656,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append_zero(5);
       expected.append(bl2);
 
-      if (!newdata.contents_equal(expected)){
-        dump_bl_mismatch(expected, newdata);
-      }
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   //additional write to an unused region of some blob and partial owerite over existing extents
@@ -659,10 +685,7 @@ TEST_P(StoreTest, BufferCacheReadTest) {
       expected.append(bl2);
       expected.append(bl2);
 
-      if (!newdata.contents_equal(expected)){
-        dump_bl_mismatch(expected, newdata);
-      }
-     ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
 }
@@ -721,7 +744,7 @@ TEST_P(StoreTest, CompressionTest) {
     {
       bufferlist expected;
       expected.append(data);
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
     r = store->read(cid, hoid, 0, 711 , newdata);
@@ -729,7 +752,7 @@ TEST_P(StoreTest, CompressionTest) {
     {
       bufferlist expected;
       expected.append(data.substr(0,711));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
     r = store->read(cid, hoid, 0xf00f, data.size(), newdata);
@@ -737,7 +760,7 @@ TEST_P(StoreTest, CompressionTest) {
     {
       bufferlist expected;
       expected.append(data.substr(0xf00f));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   std::string data2;
@@ -759,7 +782,7 @@ TEST_P(StoreTest, CompressionTest) {
       bufferlist expected;
       expected.append(data.substr(0, 0x8000));
       expected.append(data2.substr(0, 0x8000));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
     r = store->read(cid, hoid, 0x9000, 711 , newdata);
@@ -767,7 +790,7 @@ TEST_P(StoreTest, CompressionTest) {
     {
       bufferlist expected;
       expected.append(data2.substr(0x1000,711));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
     r = store->read(cid, hoid, 0x0, 0x40000, newdata);
@@ -777,7 +800,7 @@ TEST_P(StoreTest, CompressionTest) {
       expected.append(data.substr(0, 0x8000));
       expected.append(data2.substr(0, 0x37000));
       expected.append(data.substr(0x3f000, 0x1000));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   data2.resize(0x3f000);
@@ -797,7 +820,7 @@ TEST_P(StoreTest, CompressionTest) {
     {
       bufferlist expected;
       expected.append(data2.substr(0, 0x3e000 - 1));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
     r = store->read(cid, hoid, 0x3e000-1, 0x2001, newdata);
@@ -806,7 +829,7 @@ TEST_P(StoreTest, CompressionTest) {
       bufferlist expected;
       expected.append(data2.substr(0x3e000-1, 0x1001));
       expected.append(data.substr(0x3f000, 0x1000));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
     r = store->read(cid, hoid, 0x0, 0x40000, newdata);
@@ -815,7 +838,7 @@ TEST_P(StoreTest, CompressionTest) {
       bufferlist expected;
       expected.append(data2.substr(0, 0x3f000));
       expected.append(data.substr(0x3f000, 0x1000));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   data.resize(0x1001);
@@ -836,7 +859,7 @@ TEST_P(StoreTest, CompressionTest) {
       bufferlist expected;
       expected.append(data2.substr(0x3e000, 0x1000 - 1));
       expected.append(data.substr(0, 0x1001));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
   }
   {
@@ -932,7 +955,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     bufferlist in;
     r = store->read(cid, hoid, 0, 5, in);
     ASSERT_EQ(5, r);
-    ASSERT_TRUE(in.contents_equal(orig));
+    ASSERT_TRUE(bl_eq(orig, in));
   }
   {
     ObjectStore::Transaction t;
@@ -948,7 +971,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     bufferlist in;
     r = store->read(cid, hoid, 0, 10, in);
     ASSERT_EQ(10, r);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -963,7 +986,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     bufferlist in;
     r = store->read(cid, hoid, 0, 10, in);
     ASSERT_EQ(10, r);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -979,7 +1002,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     r = store->read(cid, hoid, 0, 10, in);
     ASSERT_EQ(10, r);
     in.hexdump(cout);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     {
@@ -1007,7 +1030,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     r = store->read(cid, hoid, 0, 10, in);
     ASSERT_EQ(10, r);
     in.hexdump(cout);
-    ASSERT_TRUE(in.contents_equal(exp));
+    ASSERT_TRUE(bl_eq(exp, in));
   }
   {
     ObjectStore::Transaction t;
@@ -1022,7 +1045,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     r = store->read(cid, hoid, 0, bl.length(), in);
     ASSERT_EQ((int)bl.length(), r);
     in.hexdump(cout);
-    ASSERT_TRUE(in.contents_equal(bl));
+    ASSERT_TRUE(bl_eq(bl, in));
   }
   {
     bufferlist bl;
@@ -1033,7 +1056,7 @@ TEST_P(StoreTest, SimpleObjectTest) {
     r = store->read(cid, hoid, 0, 0, in);
     ASSERT_EQ((int)bl.length(), r);
     in.hexdump(cout);
-    ASSERT_TRUE(in.contents_equal(bl));
+    ASSERT_TRUE(bl_eq(bl, in));
   }
   {
     //verifying unaligned csums
@@ -1056,11 +1079,11 @@ TEST_P(StoreTest, SimpleObjectTest) {
     exp3.append(s3);
     r = store->read(cid, hoid, 0x1000-1, 1, in);
     ASSERT_EQ(1, r);
-    ASSERT_TRUE(in.contents_equal(exp1));
+    ASSERT_TRUE(bl_eq(exp1, in));
     in.clear();
     r = store->read(cid, hoid, 0x1000, 0x1000, in);
     ASSERT_EQ(0x1000, r);
-    ASSERT_TRUE(in.contents_equal(exp2));
+    ASSERT_TRUE(bl_eq(exp2, in));
 
     {
       ObjectStore::Transaction t;
@@ -1074,15 +1097,15 @@ TEST_P(StoreTest, SimpleObjectTest) {
     in.clear();
     r = store->read(cid, hoid, 1, 2, in);
     ASSERT_EQ(2, r);
-    ASSERT_TRUE(in.contents_equal(exp3));
+    ASSERT_TRUE(bl_eq(exp3, in));
     in.clear();
     r = store->read(cid, hoid, 0x1000-1, 1, in);
     ASSERT_EQ(1, r);
-    ASSERT_TRUE(in.contents_equal(exp1));
+    ASSERT_TRUE(bl_eq(exp1, in));
     in.clear();
     r = store->read(cid, hoid, 0x1000, 0x1000, in);
     ASSERT_EQ(0x1000, r);
-    ASSERT_TRUE(in.contents_equal(exp2));
+    ASSERT_TRUE(bl_eq(exp2, in));
 
   }
 
@@ -1389,7 +1412,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
       expected.append(data.substr(0, 0x10000));
       expected.append(string(0x10000, 0));
       expected.append(data.substr(0x20000, 0x10000));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
 
@@ -1400,7 +1423,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
       expected.append(data.substr(1, 0x10000-1));
       expected.append(string(0x10000, 0));
       expected.append(data.substr(0x20000, 0x10000 - 1));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
   }
@@ -1431,7 +1454,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
       expected.append(string(0x1, 0));
       expected.append(string(data2));
       expected.append(data.substr(0x20003, 21-4));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
   }
@@ -1465,7 +1488,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
       expected.append(string(0x10000-4, 0));
       expected.append(string(0x3, 'b'));
       expected.append(data.substr(0x20004, 21-3));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
   }
@@ -1493,7 +1516,7 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
       expected.append(string(0x10000, 0));
       expected.append(string(0x10000, 'c'));
       expected.append(string(0x10000, 0));
-      ASSERT_TRUE(newdata.contents_equal(expected));
+      ASSERT_TRUE(bl_eq(expected, newdata));
     }
     newdata.clear();
   }
@@ -1670,7 +1693,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
   {
     ASSERT_EQ((int)final.length(),
 	      store->read(cid, a, 0, final.length(), actual));
-    ASSERT_TRUE(final.contents_equal(actual));
+    ASSERT_TRUE(bl_eq(final, actual));
   }
   {
     ObjectStore::Transaction t;
@@ -1752,7 +1775,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
 	      store->read(cid, a, 0, final.length(), actual));
     final.hexdump(cout);
     actual.hexdump(cout);
-    ASSERT_TRUE(final.contents_equal(actual));
+    ASSERT_TRUE(bl_eq(final, actual));
   }
   {
     ObjectStore::Transaction t;
@@ -2003,7 +2026,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
     ASSERT_EQ(0, r);
     bufferlist bl;
     bl.append(bp);
-    ASSERT_TRUE(bl.contents_equal(val));
+    ASSERT_TRUE(bl_eq(val, bl));
 
     map<string,bufferptr> bm;
     r = store->getattrs(cid, hoid, bm);
@@ -2220,31 +2243,31 @@ TEST_P(StoreTest, SimpleCloneTest) {
 
     r = store->read(cid, hoid, 10, 5, newdata);
     ASSERT_EQ(r, 5);
-    ASSERT_TRUE(newdata.contents_equal(large));
+    ASSERT_TRUE(bl_eq(large, newdata));
 
     newdata.clear();
     r = store->read(cid, hoid, 0, 5, newdata);
     ASSERT_EQ(r, 5);
-    ASSERT_TRUE(newdata.contents_equal(small));
+    ASSERT_TRUE(bl_eq(small, newdata));
 
     newdata.clear();
     r = store->read(cid, hoid2, 10, 5, newdata);
     ASSERT_EQ(r, 5);
-    ASSERT_TRUE(newdata.contents_equal(small));
+    ASSERT_TRUE(bl_eq(small, newdata));
 
     r = store->getattr(cid, hoid2, "attr2", attr);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(attr.contents_equal(small));
+    ASSERT_TRUE(bl_eq(small, attr));
 
     attr.clear();
     r = store->getattr(cid, hoid2, "attr3", attr);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(attr.contents_equal(xlarge));
+    ASSERT_TRUE(bl_eq(xlarge, attr));
 
     attr.clear();
     r = store->getattr(cid, hoid, "attr1", attr);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(attr.contents_equal(large));
+    ASSERT_TRUE(bl_eq(large, attr));
   }
   {
     ObjectStore::Transaction t;
@@ -2273,7 +2296,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist rl;
     ASSERT_EQ((int)final.length(),
 	      store->read(cid, hoid, 0, final.length(), rl));
-    ASSERT_TRUE(final.contents_equal(rl));
+    ASSERT_TRUE(bl_eq(rl, final));
   }
   {
     ObjectStore::Transaction t;
@@ -2305,7 +2328,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     bufferlist rl;
     ASSERT_EQ((int)final.length(),
 	      store->read(cid, hoid, 0, final.length(), rl));
-    ASSERT_TRUE(final.contents_equal(rl));
+    ASSERT_TRUE(bl_eq(rl, final));
   }
   {
     ObjectStore::Transaction t;
@@ -2340,7 +2363,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     final.hexdump(cout);
     cout << "got:\n";
     rl.hexdump(cout);*/
-    ASSERT_TRUE(final.contents_equal(rl));
+    ASSERT_TRUE(bl_eq(rl, final));
   }
   {
     ObjectStore::Transaction t;
@@ -2375,7 +2398,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     final.hexdump(cout);
     cout << "got:\n";
     rl.hexdump(cout);*/
-    ASSERT_TRUE(final.contents_equal(rl));
+    ASSERT_TRUE(bl_eq(rl, final));
   }
   {
     ObjectStore::Transaction t;
@@ -2410,7 +2433,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     final.hexdump(cout);
     cout << "got:\n";
     rl.hexdump(cout);*/
-    ASSERT_TRUE(final.contents_equal(rl));
+    ASSERT_TRUE(bl_eq(rl, final));
   }
   {
     ObjectStore::Transaction t;
@@ -2445,7 +2468,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     final.hexdump(cout);
     cout << "got:\n";
     rl.hexdump(cout);*/
-    ASSERT_TRUE(final.contents_equal(rl));
+    ASSERT_TRUE(bl_eq(rl, final));
   }
   {
     ObjectStore::Transaction t;
@@ -2492,7 +2515,7 @@ TEST_P(StoreTest, OmapSimple) {
     bufferlist h;
     map<string,bufferlist> r;
     store->omap_get(cid, hoid, &h, &r);
-    ASSERT_TRUE(h.contents_equal(header));
+    ASSERT_TRUE(bl_eq(header, h));
     ASSERT_EQ(r.size(), km.size());
     cout << "r: " << r << std::endl;
   }
@@ -2568,7 +2591,7 @@ TEST_P(StoreTest, OmapCloneTest) {
     map<string,bufferlist> r;
     bufferlist h;
     store->omap_get(cid, hoid2, &h, &r);
-    ASSERT_TRUE(h.contents_equal(header));
+    ASSERT_TRUE(bl_eq(header, h));
     ASSERT_EQ(r.size(), km.size());
   }
   {
@@ -2614,7 +2637,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ASSERT_EQ(r, 0);
     r = store->read(cid, hoid2, 0, 5, newdata);
     ASSERT_EQ(r, 5);
-    ASSERT_TRUE(newdata.contents_equal(small));
+    ASSERT_TRUE(bl_eq(small, newdata));
   }
   {
     ObjectStore::Transaction t;
@@ -2886,32 +2909,6 @@ public:
   }
 };
 
-static void dump_bl_mismatch(bufferlist& expected, bufferlist& actual)
-{
-  cout << __func__ << std::endl;
-  unsigned first = 0;
-  if(expected.length() != actual.length()) {
-    cout << "--- buffer lengths mismatch " << std::hex
-         << "expected 0x" << expected.length() << " != actual 0x"
-         << actual.length() << std::dec << std::endl;
-  }
-  auto len = MIN(expected.length(), actual.length());
-  while ( first<len && expected[first] == actual[first])
-    ++first;
-  unsigned last = len;
-  while (last > 0 && expected[last-1] == actual[last-1])
-    --last;
-  if(len > 0) {
-    cout << "--- buffer mismatch between offset 0x" << std::hex << first
-         << " and 0x" << last << ", total 0x" << len << std::dec
-         << std::endl;
-    cout << "--- expected:\n";
-    expected.hexdump(cout);
-    cout << "--- actual:\n";
-    actual.hexdump(cout);
-  }
-}
-
 class SyntheticWorkloadState {
   struct Object {
     bufferlist data;
@@ -2970,11 +2967,7 @@ public:
 
       bufferlist r2;
       r = state->store->read(state->cid, hoid, 0, state->contents[hoid].data.length(), r2);
-      if (!state->contents[hoid].data.contents_equal(r2)) {
-	dump_bl_mismatch(state->contents[hoid].data, r2);
-	assert(0 == "mismatch in OnReadable");
-        ASSERT_TRUE(state->contents[hoid].data.contents_equal(r2));
-      }
+      assert(bl_eq(state->contents[hoid].data, r2));
       state->cond.Signal();
     }
   };
@@ -3003,11 +2996,7 @@ public:
       r = state->store->read(
 	state->cid, noid, 0,
 	state->contents[noid].data.length(), r2);
-      if (!state->contents[noid].data.contents_equal(r2)) {
-	dump_bl_mismatch(state->contents[noid].data, r2);
-	assert(0 == " mismatch after clone");
-        ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
-      }
+      assert(bl_eq(state->contents[noid].data, r2));
       state->cond.Signal();
     }
   };
@@ -3035,11 +3024,7 @@ public:
       --(state->in_flight);
       bufferlist r2;
       r = state->store->read(state->cid, noid, 0, state->contents[noid].data.length(), r2);
-      if (!state->contents[noid].data.contents_equal(r2)) {
-	dump_bl_mismatch(state->contents[noid].data, r2);
-	assert(0 == " mismatch after clone");
-        ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
-      }
+      assert(bl_eq(state->contents[noid].data, r2));
       state->cond.Signal();
     }
   };
@@ -3356,7 +3341,7 @@ public:
     ASSERT_TRUE(attrs.size() == expected.size());
     for (map<string, bufferlist>::iterator it = expected.begin();
          it != expected.end(); ++it) {
-      ASSERT_TRUE(it->second.contents_equal(attrs[it->first]));
+      ASSERT_TRUE(bl_eq(attrs[it->first], it->second));
     }
   }
 
@@ -3392,7 +3377,7 @@ public:
     bufferlist bl;
     r = store->getattr(cid, obj, it->first, bl);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(it->second.contents_equal(bl));
+    ASSERT_TRUE(bl_eq(it->second, bl));
   }
 
   int rmattr() {
@@ -3514,15 +3499,7 @@ public:
       ASSERT_EQ(len, result.length());
       expected.copy(offset, len, bl);
       ASSERT_EQ(r, (int)len);
-      if (!result.contents_equal(bl)) {
-	cout << " obj " << obj
-	 << " size " << expected.length()
-	 << " offset " << offset
-	 << " len " << len << std::endl;
-	dump_bl_mismatch(bl, result);
-	assert(0 == "mismatch after read");
-	ASSERT_TRUE(result.contents_equal(bl));
-      }
+      ASSERT_TRUE(bl_eq(bl, result));
     }
   }
 
@@ -4122,7 +4099,7 @@ TEST_P(StoreTest, OMapTest) {
     r = store->omap_get(cid, hoid, &bl3, &cur_attrs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(cur_attrs.size(), size_t(1));
-    ASSERT_TRUE(bl3.contents_equal(bl1));
+    ASSERT_TRUE(bl_eq(bl1, bl3));
  
     set<string> keys;
     r = store->omap_get_keys(cid, hoid, &keys);
@@ -4554,9 +4531,9 @@ TEST_P(StoreTest, Rename) {
   {
     bufferlist bl;
     store->read(cid, srcoid, 0, 3, bl);
-    ASSERT_TRUE(bl.contents_equal(b));
+    ASSERT_TRUE(bl_eq(b, bl));
     store->read(cid, dstoid, 0, 3, bl);
-    ASSERT_TRUE(bl.contents_equal(a));
+    ASSERT_TRUE(bl_eq(a, bl));
   }
   {
     ObjectStore::Transaction t;
@@ -4571,7 +4548,7 @@ TEST_P(StoreTest, Rename) {
   {
     bufferlist bl;
     store->read(cid, dstoid, 0, 3, bl);
-    ASSERT_TRUE(bl.contents_equal(b));
+    ASSERT_TRUE(bl_eq(b, bl));
   }
   {
     ObjectStore::Transaction t;
@@ -4625,11 +4602,11 @@ TEST_P(StoreTest, MoveRename) {
     bufferlist newdata;
     r = store->read(cid, oid, 0, 1000, newdata);
     ASSERT_GE(r, 0);
-    ASSERT_TRUE(newdata.contents_equal(data));
+    ASSERT_TRUE(bl_eq(data, newdata));
     bufferlist newattr;
     r = store->getattr(cid, oid, "attr", newattr);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(newattr.contents_equal(attr));
+    ASSERT_TRUE(bl_eq(attr, newattr));
     set<string> keys;
     keys.insert("omap_key");
     map<string, bufferlist> newomap;
@@ -4637,7 +4614,7 @@ TEST_P(StoreTest, MoveRename) {
     ASSERT_GE(r, 0);
     ASSERT_EQ(1u, newomap.size());
     ASSERT_TRUE(newomap.count("omap_key"));
-    ASSERT_TRUE(newomap["omap_key"].contents_equal(omap["omap_key"]));
+    ASSERT_TRUE(bl_eq(omap["omap_key"], newomap["omap_key"]));
   }
   {
     ObjectStore::Transaction t;

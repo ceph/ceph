@@ -584,7 +584,6 @@ struct bluestore_onode_t {
   map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
   map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
   map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
-  bluestore_blob_map_t blob_map;       ///< local blobs (this onode onode)
   uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
@@ -649,18 +648,6 @@ struct bluestore_onode_t {
 
   /// consolidate adjacent lextents in extent_map
   int compress_extent_map();
-
-  bluestore_blob_t *add_blob(int64_t *id) {
-    *id = blob_map.empty() ? 1 : blob_map.rbegin()->first + 1;
-    return &blob_map[*id];
-  }
-
-  bluestore_blob_t *get_blob_ptr(int64_t id) {
-    bluestore_blob_map_t::iterator p = blob_map.find(id);
-    if (p == blob_map.end())
-      return nullptr;
-    return &p->second;
-  }
 
   /// punch a logical hole.  add lextents to deref to target list.
   void punch_hole(uint64_t offset, uint64_t length,
