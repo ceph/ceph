@@ -197,7 +197,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 2;
     b.extents.push_back(bluestore_pextent_t(0, mas*2));
     b.ref_map.get(0, mas*2);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
@@ -215,7 +214,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 2;
     b.extents.push_back(bluestore_pextent_t(123, mas*2));
     b.ref_map.get(0, mas*2);
     b.put_ref(0, mas, mrs, &r);
@@ -234,7 +232,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 4;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
@@ -267,7 +264,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 6;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
@@ -303,7 +299,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 6;
     b.extents.push_back(bluestore_pextent_t(1, mas * 6));
     b.ref_map.get(0, mas*6);
     b.put_ref(mas, mas, mrs, &r);
@@ -330,7 +325,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 12;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -363,7 +357,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 12;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -411,7 +404,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 12;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -459,7 +451,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 8;
     b.extents.push_back(bluestore_pextent_t(1, mas * 8));
     b.ref_map.get(0, mas*8);
     b.put_ref(0, mas, mrs, &r);
@@ -495,9 +486,8 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 4;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
-    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, b.length);
+    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, mas * 4);
     b.ref_map.get(0, mas*4);
     ASSERT_TRUE(b.is_allocated(0, mas*4));
     b.put_ref(0, mas*3, mrs, &r);
