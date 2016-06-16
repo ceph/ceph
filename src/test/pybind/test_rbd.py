@@ -3,6 +3,7 @@ import functools
 import socket
 import os
 import time
+import sys
 
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises
@@ -717,6 +718,65 @@ class TestImage(object):
         check_diff(self.image, 0, IMG_SIZE, 'snap1', [(0, 512, False)])
         self.image.remove_snap('snap1')
         self.image.remove_snap('snap2')
+
+    def test_aio_read(self):
+        # this is a list so that the local cb() can modify it
+        retval = [None]
+        def cb(_, buf):
+            retval[0] = buf
+
+        # test1: success case
+        comp = self.image.aio_read(0, 20, cb)
+        comp.wait_for_complete_and_cb()
+        eq(retval[0], b'\0' * 20)
+        eq(comp.get_return_value(), 20)
+        eq(sys.getrefcount(comp), 2)
+
+        # test2: error case
+        retval[0] = 1
+        comp = self.image.aio_read(IMG_SIZE, 20, cb)
+        comp.wait_for_complete_and_cb()
+        eq(None, retval[0])
+        assert(comp.get_return_value() < 0)
+        eq(sys.getrefcount(comp), 2)
+
+    def test_aio_write(self):
+        retval = [None]
+        def cb(comp):
+            retval[0] = comp.get_return_value()
+
+        data = rand_data(256)
+        comp = self.image.aio_write(data, 256, cb)
+        comp.wait_for_complete_and_cb()
+        eq(retval[0], 0)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(self.image.read(256, 256), data)
+
+    def test_aio_discard(self):
+        retval = [None]
+        def cb(comp):
+            retval[0] = comp.get_return_value()
+
+        data = rand_data(256)
+        self.image.write(data, 0)
+        comp = self.image.aio_discard(0, 256, cb)
+        comp.wait_for_complete_and_cb()
+        eq(retval[0], 0)
+        eq(comp.get_return_value(), 0)
+        eq(sys.getrefcount(comp), 2)
+        eq(self.image.read(256, 256), b'\0' * 256)
+
+    def test_aio_flush(self):
+        retval = [None]
+        def cb(comp):
+            retval[0] = comp.get_return_value()
+
+        comp = self.image.aio_flush(cb)
+        comp.wait_for_complete_and_cb()
+        eq(retval[0], 0)
+        eq(sys.getrefcount(comp), 2)
+
 
 
 def check_diff(image, offset, length, from_snapshot, expected):
