@@ -584,7 +584,7 @@ def get_dev_size(dev, size='megabytes'):
     try:
         device_size = os.lseek(fd, 0, os.SEEK_END)
         divider = dividers.get(size, 1024 * 1024)  # default to megabytes
-        return device_size / divider
+        return device_size // divider
     except Exception as error:
         LOG.warning('failed to get size of %s: %s' % (dev, str(error)))
     finally:
