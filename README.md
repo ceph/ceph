@@ -74,10 +74,13 @@ Build instructions:
 
 	mkdir build
 	cd build
-	cmake [options] /path/to/ceph/src/dir
+	cmake [options] ..
 	make
 
-(Note that /path/to/ceph/src/dir can be in the tree and out of the tree)
+This assumes you make your build dir a subdirectory of the ceph.git
+checkout.  If you put it elsewhere, just replace .. above with a
+correct path to the checkout.
+
 
 Dependencies
 ------------
