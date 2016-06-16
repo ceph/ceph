@@ -599,7 +599,7 @@ void Replayer::set_sources(const ImageIds &image_ids)
     return;
   }
 
-  if (m_image_replayers.empty()) {
+  if (m_image_replayers.empty() && !existing_image_replayers) {
     // create entry for pool if it doesn't exist
     r = mirror_image_status_init();
     if (r < 0) {

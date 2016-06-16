@@ -3274,15 +3274,31 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
   // which frag?
   frag_t fg = (__u32)req->head.args.readdir.frag;
+  unsigned req_flags = (__u32)req->head.args.readdir.flags;
   string offset_str = req->get_path2();
-  dout(10) << " frag " << fg << " offset '" << offset_str << "'" << dendl;
+  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
+	   << " flags " << req_flags << dendl;
+
+  __u32 offset_hash = 0;
+  if (!offset_str.empty())
+    offset_hash = ceph_frag_value(diri->hash_dentry_name(offset_str));
 
   // does the frag exist?
   if (diri->dirfragtree[fg.value()] != fg) {
-    frag_t newfg = diri->dirfragtree[fg.value()];
+    frag_t newfg;
+    if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+      if (fg.contains((unsigned)offset_hash)) {
+	newfg = diri->dirfragtree[offset_hash];
+      } else {
+	// client actually wants next frag
+	newfg = diri->dirfragtree[fg.value()];
+      }
+    } else {
+      offset_str.clear();
+      newfg = diri->dirfragtree[fg.value()];
+    }
     dout(10) << " adjust frag " << fg << " -> " << newfg << " " << diri->dirfragtree << dendl;
     fg = newfg;
-    offset_str.clear();
   }
   
   CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);
@@ -3338,7 +3354,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   // build dir contents
   bufferlist dnbl;
   __u32 numfiles = 0;
-  __u8 end = (dir->begin() == dir->end());
+  bool end = (dir->begin() == dir->end());
   for (CDir::map_t::iterator it = dir->begin();
        !end && numfiles < max;
        end = (it == dir->end())) {
@@ -3359,8 +3375,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
       continue;
     }
 
-    if (!offset_str.empty() && dn->get_name().compare(offset_str) <= 0)
-      continue;
+    if (!offset_str.empty()) {
+      dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
+      if (!(offset_key < dn->key()))
+	continue;
+    }
 
     CInode *in = dnl->get_inode();
 
@@ -3428,12 +3447,22 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     mdcache->lru.lru_touch(dn);
   }
   
-  __u8 complete = (end && offset_str.empty());  // FIXME: what purpose does this serve
+  bool complete = false;
+  __u16 flags = 0;
+  if (end) {
+    flags = CEPH_READDIR_FRAG_END;
+    complete = offset_str.empty(); // FIXME: what purpose does this serve
+    if (complete)
+      flags |= CEPH_READDIR_FRAG_COMPLETE;
+  }
+  // client only understand END and COMPLETE flags ?
+  if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
+    flags |= CEPH_READDIR_HASH_ORDER;
+  }
   
   // finish final blob
   ::encode(numfiles, dirbl);
-  ::encode(end, dirbl);
-  ::encode(complete, dirbl);
+  ::encode(flags, dirbl);
   dirbl.claim_append(dnbl);
   
   // yay, reply
@@ -7888,10 +7917,13 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   }
 
   ::encode(num, dirbl);
-  __u8 end = (p == infomap.end());
-  ::encode(end, dirbl);  // end
-  __u8 complete = end && last_snapid == 0;
-  ::encode(complete, dirbl);  // complete
+  __u16 flags = 0;
+  if (p == infomap.end()) {
+    flags = CEPH_READDIR_FRAG_END;
+    if (last_snapid == 0)
+      flags |= CEPH_READDIR_FRAG_COMPLETE;
+  }
+  ::encode(flags, dirbl);
   dirbl.claim_append(dnbl);
   
   mdr->reply_extra_bl = dirbl;

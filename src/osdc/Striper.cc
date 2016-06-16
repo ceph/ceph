@@ -241,10 +241,9 @@ uint64_t Striper::object_truncate_size(CephContext *cct,
 uint64_t Striper::get_num_objects(const file_layout_t& layout,
 				  uint64_t size)
 {
-  __u32 object_size = layout.object_size;
   __u32 stripe_unit = layout.stripe_unit;
   __u32 stripe_count = layout.stripe_count;
-  uint64_t period = (uint64_t)stripe_count * object_size;
+  uint64_t period = layout.get_period();
   uint64_t num_periods = (size + period - 1) / period;
   uint64_t remainder_bytes = size % period;
   uint64_t remainder_objs = 0;

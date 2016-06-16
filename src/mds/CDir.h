@@ -448,16 +448,11 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last) {
-    map_t::iterator p = items.find(dentry_key_t(last, dname.c_str()));
-    if (p == items.end())
-      return NULL;
-    return p->second;
+  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last);
+  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP);
+  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
+    return lookup(std::string(n), snap);
   }
-  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(n.c_str(), snap);
-  }
-  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP);
 
   CDentry* add_null_dentry(const std::string& dname, 
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
