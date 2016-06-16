@@ -35,7 +35,8 @@ enum EventType {
   EVENT_TYPE_RENAME         = 10,
   EVENT_TYPE_RESIZE         = 11,
   EVENT_TYPE_FLATTEN        = 12,
-  EVENT_TYPE_DEMOTE         = 13
+  EVENT_TYPE_DEMOTE         = 13,
+  EVENT_TYPE_EXCLUSIVE_LOCK_RELEASE = 14
 };
 
 struct AioDiscardEvent {
@@ -269,6 +270,16 @@ struct DemoteEvent {
   void dump(Formatter *f) const;
 };
 
+struct ExclusiveLockReleaseEvent{
+  static const EventType TYPE = EVENT_TYPE_EXCLUSIVE_LOCK_RELEASE;
+  ExclusiveLockReleaseEvent(){
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownEvent {
   static const EventType TYPE = static_cast<EventType>(-1);
 
@@ -291,6 +302,7 @@ typedef boost::variant<AioDiscardEvent,
                        ResizeEvent,
                        FlattenEvent,
                        DemoteEvent,
+                       ExclusiveLockReleaseEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {

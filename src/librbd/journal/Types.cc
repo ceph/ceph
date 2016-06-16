@@ -200,6 +200,7 @@ void ResizeEvent::dump(Formatter *f) const {
   f->dump_unsigned("size", size);
 }
 
+
 void DemoteEvent::encode(bufferlist& bl) const {
 }
 
@@ -207,6 +208,15 @@ void DemoteEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
 void DemoteEvent::dump(Formatter *f) const {
+}
+
+void ExclusiveLockReleaseEvent::encode(bufferlist& bl) const {
+}
+
+void ExclusiveLockReleaseEvent::decode(__u8 version, bufferlist::iterator& it) {
+}
+
+void ExclusiveLockReleaseEvent::dump(Formatter *f) const {
 }
 
 void UnknownEvent::encode(bufferlist& bl) const {
@@ -279,6 +289,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_DEMOTE:
     event = DemoteEvent();
     break;
+  case EVENT_TYPE_EXCLUSIVE_LOCK_RELEASE:
+    event = ExclusiveLockReleaseEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -332,6 +345,9 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(FlattenEvent(123)));
 
   o.push_back(new EventEntry(DemoteEvent()));
+
+  o.push_back(new EventEntry(ExclusiveLockReleaseEvent()));
+
 }
 
 // Journal Client
@@ -569,6 +585,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_DEMOTE:
     out << "Demote";
+    break;
+  case EVENT_TYPE_EXCLUSIVE_LOCK_RELEASE:
+    out << "ExclusiveLockRelease";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

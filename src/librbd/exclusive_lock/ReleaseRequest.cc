@@ -13,6 +13,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/Types.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 
@@ -130,22 +131,51 @@ Context *ReleaseRequest<I>::handle_flush_notifies(int *ret_val) {
   ldout(cct, 10) << __func__ << dendl;
 
   assert(*ret_val == 0);
-  send_close_journal();
+
+  send_append_journal_event();
   return nullptr;
 }
 
 template <typename I>
+void ReleaseRequest<I>::send_append_journal_event(){
+    CephContext *cct = m_image_ctx.cct;
+    ldout(cct, 10) << __func__ << dendl;
+    {
+      RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+      std::swap(m_journal, m_image_ctx.journal);
+    }
+
+    if (m_journal == nullptr) {
+       send_close_object_map();
+       return;
+    }
+
+    using klass = ReleaseRequest<I>;
+    Context *ctx = create_context_callback<
+      klass, &klass::handle_append_journal_event>(this);
+    //append journal event
+    {
+      RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+      m_journal->append_lock_release_event(ctx);
+    }
+}
+
+template <typename I>
+Context *ReleaseRequest<I>::handle_append_journal_event(int *ret_val){
+    CephContext *cct = m_image_ctx.cct;
+    ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+
+    if (*ret_val < 0) {
+      lderr(cct) << "failed to append journal event: " << cpp_strerror(*ret_val)
+                 << dendl;
+    }
+
+    send_close_journal();
+    return nullptr;
+}
+
+template <typename I>
 void ReleaseRequest<I>::send_close_journal() {
-  {
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-    std::swap(m_journal, m_image_ctx.journal);
-  }
-
-  if (m_journal == nullptr) {
-    send_close_object_map();
-    return;
-  }
-
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << __func__ << dendl;
 
