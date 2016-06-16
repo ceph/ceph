@@ -278,18 +278,24 @@ protected:
     return s->op == OP_POST;
   }
 
+  RGWOp *get_ws_index_op();
+  RGWOp *get_ws_listing_op();
+
   RGWOp *get_obj_op(bool get_data);
-  RGWOp *op_get();
-  RGWOp *op_head();
-  RGWOp *op_put();
-  RGWOp *op_delete();
-  RGWOp *op_post();
-  RGWOp *op_copy();
-  RGWOp *op_options();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
+  RGWOp *op_put() override;
+  RGWOp *op_delete() override;
+  RGWOp *op_post() override;
+  RGWOp *op_copy() override;
+  RGWOp *op_options() override;
 
 public:
   RGWHandler_REST_Obj_SWIFT() {}
   virtual ~RGWHandler_REST_Obj_SWIFT() {}
+
+  int error_handler(int err_no, std::string *error_content) override;
+  int retarget(RGWOp* op, RGWOp** new_op) override;
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {

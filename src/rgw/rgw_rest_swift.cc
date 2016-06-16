@@ -1670,7 +1670,7 @@ RGWOp* RGWHandler_REST_Bucket_SWIFT::get_ws_index_op()
   s->object = s->bucket_info.website_conf.get_swift_index_doc();
 
   auto getop = new RGWGetObj_ObjStore_SWIFT;
-  getop->set_get_data(true);
+  getop->set_get_data(boost::string_ref("GET") == s->info.method);
 
   return getop;
 }
@@ -1723,7 +1723,7 @@ int RGWHandler_REST_Bucket_SWIFT::retarget(RGWOp* op, RGWOp** new_op)
   RGWOp* op_override = nullptr;
 
   /* In Swift static web content is served if the request is anonymous or
-   * has W-Web-Mode HTTP header specified to true. */
+   * has X-Web-Mode HTTP header specified to true. */
   if (can_be_website_req(s)) {
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
@@ -1792,6 +1792,153 @@ RGWOp *RGWHandler_REST_Bucket_SWIFT::op_post()
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_options()
 {
   return new RGWOptionsCORS_ObjStore_SWIFT;
+}
+
+
+RGWOp* RGWHandler_REST_Obj_SWIFT::get_ws_index_op()
+{
+  // retarget to get obj
+  s->object = s->object.name + s->bucket_info.website_conf.get_swift_index_doc();
+
+  auto getop = new RGWGetObj_ObjStore_SWIFT;
+  getop->set_get_data(true);
+
+  return getop;
+}
+
+RGWOp* RGWHandler_REST_Obj_SWIFT::get_ws_listing_op()
+{
+  class RGWWebsiteListing : public RGWListBucket_ObjStore_SWIFT {
+    const std::string prefix_override;
+
+    int get_params() override {
+      prefix = prefix_override;
+      max = default_max;
+      delimiter = "/";
+
+      return 0;
+    }
+
+    void send_response() override {
+      /* Generate the header now. */
+      set_req_state_err(s, op_ret);
+      dump_errno(s);
+      dump_container_metadata(s, bucket, bucket_quota,
+                              s->bucket_info.website_conf);
+      end_header(s, this, "text/html");
+      if (op_ret < 0) {
+        return;
+      }
+
+      /* Now it's the time to start generating HTML bucket listing.
+       * All the crazy stuff with crafting tags will be delegated to
+       * RGWSwiftWebsiteListingFormatter. */
+      std::stringstream ss;
+      RGWSwiftWebsiteListingFormatter htmler(ss, prefix);
+
+      const auto& ws_conf = s->bucket_info.website_conf;
+      htmler.generate_header(s->decoded_uri,
+                             ws_conf.listing_css_doc);
+
+      for (const auto& pair : common_prefixes) {
+        const std::string& subdir_name = pair.first;
+
+        htmler.dump_subdir(subdir_name);
+      }
+
+      for (const RGWObjEnt& obj : objs) {
+        htmler.dump_object(obj);
+      }
+
+      htmler.generate_footer();
+      STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+    }
+  public:
+    RGWWebsiteListing(const std::string& prefix) : prefix_override(prefix) {
+      //this->prefix = prefix;
+    }
+  };
+
+  const std::string prefix = std::move(s->object.name);
+  s->object = rgw_obj_key();
+
+  return new RGWWebsiteListing(prefix);
+}
+
+int RGWHandler_REST_Obj_SWIFT:: error_handler(
+  const int err_no,
+  std::string * const error_content)
+{
+  const auto& ws_conf = s->bucket_info.website_conf;
+
+  if (can_be_website_req(s) && ! ws_conf.error_doc.empty()) {
+    return serve_errordoc(store, this, s, 404, ws_conf.error_doc);
+  }
+
+  /* Let's go to the default, no-op handler. */
+  return RGWHandler_REST_SWIFT::error_handler(err_no, error_content);
+}
+
+static bool is_web_dir(RGWRados* store, req_state* const s)
+{
+  rgw_obj obj(s->bucket, s->object);
+
+  /* First, get attrset of the object we'll try to retrieve. */
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.set_atomic(obj);
+
+  RGWObjState* state = nullptr;
+  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+    return false;
+  }
+
+  /* A nonexistent object cannot be a considered as a marker representing
+   * the emulation of catalog in FS hierarchy. */
+  if (! state->exists) {
+    return true;
+  }
+
+  /* Decode the content type. */
+  std::string content_type;
+  get_contype_from_attrs(state->attrset, content_type);
+
+  const auto& ws_conf = s->bucket_info.website_conf;
+  const std::string subdir_marker = ws_conf.subdir_marker.empty()
+                                      ? "application/directory"
+                                      : ws_conf.subdir_marker;
+  return subdir_marker == content_type && state->size <= 1;
+}
+
+int RGWHandler_REST_Obj_SWIFT::retarget(RGWOp* op, RGWOp** new_op)
+{
+  ldout(s->cct, 10) << "Starting object retarget" << dendl;
+  RGWOp* op_override = nullptr;
+
+  /* In Swift static web content is served if the request is anonymous or
+   * has X-Web-Mode HTTP header specified to true. */
+  if (can_be_website_req(s) && is_web_dir(store, s)) {
+    const auto& ws_conf = s->bucket_info.website_conf;
+    const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
+
+    if (false && ! index.empty() /* && rgw_obj_exist()*/) {
+      op_override = get_ws_index_op();
+    } else if (ws_conf.listing_enabled) {
+      op_override = get_ws_listing_op();
+    }
+  }
+
+  if (op_override) {
+    put_op(op);
+    op_override->init(store, s, this);
+
+    *new_op = op_override;
+  } else {
+    *new_op = op;
+  }
+
+  /* Return 404 Not Found is the request has web mode enforced but we static web
+   * wasn't able to serve it accordingly. */
+  return 0;// ! op_override && is_web_mode(s) ? -ENOENT : 0;
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::get_obj_op(bool get_data)
