@@ -124,6 +124,28 @@ int extract_spec(const std::string &spec, std::string *pool_name,
   return 0;
 }
 
+int extract_group_spec(const std::string &spec,
+		       std::string *pool_name,
+		       std::string *group_name) {
+  boost::regex pattern;
+  pattern = "^(?:([^/]+)/)?(.+)?$";
+
+  boost::smatch match;
+  if (!boost::regex_match(spec, match, pattern)) {
+    std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
+    return -EINVAL;
+  }
+
+  if (pool_name != nullptr && match[1].matched) {
+    *pool_name = match[1];
+  }
+  if (group_name != nullptr) {
+    *group_name = match[2];
+  }
+
+  return 0;
+}
+
 std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   if (vm.count(at::POSITIONAL_ARGUMENTS) == 0) {
     return "";
@@ -154,6 +176,50 @@ std::string get_pool_name(const po::variables_map &vm,
     pool_name = at::DEFAULT_POOL_NAME;
   }
   return pool_name;
+}
+
+int get_pool_group_names(const po::variables_map &vm,
+			 at::ArgumentModifier mod,
+			 size_t *spec_arg_index,
+			 std::string *pool_name,
+			 std::string *group_name) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string group_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_GROUP_NAME : at::GROUP_NAME);
+
+  if (vm.count(pool_key) && pool_name != nullptr) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+  if (vm.count(group_key) && group_name != nullptr) {
+    *group_name = vm[group_key].as<std::string>();
+  }
+
+  int r;
+  if (group_name != nullptr && spec_arg_index != nullptr &&
+      group_name->empty()) {
+    std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
+    if (!spec.empty()) {
+      r = extract_group_spec(spec, pool_name, group_name);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (group_name != nullptr && group_name->empty()) {
+    std::string prefix = at::get_description_prefix(mod);
+    std::cerr << "rbd: "
+              << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
+              << "group name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 int get_pool_image_snapshot_names(const po::variables_map &vm,
