@@ -23,6 +23,22 @@ We do not require assignment of copyright to contribute code; code is
 contributed under the terms of the applicable license.
 
 
+Checking out the source
+=======================
+
+You can clone from github with
+
+        git clone git@github.com:ceph/ceph
+
+or, if you are not a github user,
+
+        git clone git://github.com/ceph/ceph
+
+Ceph contains many git submodules that need to be checked out with
+
+        git submodule update --init --recursive
+
+
 Build Prerequisites
 ===================
 
