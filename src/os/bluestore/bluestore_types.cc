@@ -726,9 +726,6 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(size, bl);
   ::encode(attrs, bl);
   ::encode(extent_map, bl);
-  ::encode(overlay_map, bl);
-  ::encode(overlay_refs, bl);
-  ::encode(last_overlay_key, bl);
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
@@ -743,9 +740,6 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(size, p);
   ::decode(attrs, p);
   ::decode(extent_map, p);
-  ::decode(overlay_map, p);
-  ::decode(overlay_refs, p);
-  ::decode(last_overlay_key, p);
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
@@ -774,25 +768,6 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_object_section("overlays");
-  for (map<uint64_t,bluestore_overlay_t>::const_iterator p = overlay_map.begin();
-       p != overlay_map.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-  f->open_array_section("overlay_refs");
-  for (map<uint64_t,uint16_t>::const_iterator p = overlay_refs.begin();
-       p != overlay_refs.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    f->dump_unsigned("refs", p->second);
-    f->close_section();
-  }
-  f->close_section();
-  f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
@@ -907,9 +882,6 @@ void bluestore_wal_op_t::encode(bufferlist& bl) const
   ::encode(op, bl);
   ::encode(extents, bl);
   ::encode(data, bl);
-  ::encode(nid, bl);
-  ::encode(overlays, bl);
-  ::encode(removed_overlays, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -919,9 +891,6 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
   ::decode(op, p);
   ::decode(extents, p);
   ::decode(data, p);
-  ::decode(nid, p);
-  ::decode(overlays, p);
-  ::decode(removed_overlays, p);
   DECODE_FINISH(p);
 }
 
@@ -932,17 +901,6 @@ void bluestore_wal_op_t::dump(Formatter *f) const
   f->open_array_section("extents");
   for (auto& e : extents) {
     f->dump_object("extent", e);
-  }
-  f->close_section();
-  f->dump_unsigned("nid", nid);
-  f->open_array_section("overlays");
-  for (auto& o : overlays) {
-    f->dump_object("overlay", o);
-  }
-  f->close_section();
-  f->open_array_section("removed_overlays");
-  for (auto key : removed_overlays) {
-    f->dump_unsigned("key", key);
   }
   f->close_section();
 }
