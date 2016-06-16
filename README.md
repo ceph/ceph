@@ -155,7 +155,10 @@ To run all tests, a simple
 	cd src
 	make check
 
-will suffice.
+will suffice.  Each test generates a log file that is the name of the
+test with .log appended.  For example, unittest_addrs generates a
+unittest_addrs.log and test/osd/osd-config.sh puts its output in
+test/osd/osd-config.sh.log.
 
 To run an individual test manually, you may want to clean up with
 
