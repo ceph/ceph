@@ -532,6 +532,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
 
       set_state_description(r, desc);
       update_mirror_image_status(false, boost::none);
+      reschedule_update_status_task(-1);
       shut_down(r, on_start_finish);
     });
   m_threads->work_queue->queue(ctx, 0);
@@ -612,6 +613,7 @@ void ImageReplayer<I>::on_stop_journal_replay()
 
   set_state_description(0, "");
   update_mirror_image_status(false, boost::none);
+  reschedule_update_status_task(-1);
   shut_down(0, nullptr);
 }
 
@@ -1147,6 +1149,18 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_STOPPING);
+
+    // if status updates are in-flight, wait for them to complete
+    // before proceeding
+    if (m_in_flight_status_updates > 0) {
+      dout(20) << "waiting for in-flight status update" << dendl;
+      assert(m_on_update_status_finish == nullptr);
+      m_on_update_status_finish = new FunctionContext(
+        [this, r, on_start](int _r) {
+          shut_down(r, on_start);
+        });
+      return;
+    }
   }
 
   // chain the shut down sequence (reverse order)
@@ -1212,7 +1226,7 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
       dout(20) << "waiting for in-flight status update" << dendl;
       assert(m_on_update_status_finish == nullptr);
       m_on_update_status_finish = new FunctionContext(
-        [this, r, on_start](int r) {
+        [this, r, on_start](int _r) {
           handle_shut_down(r, on_start);
         });
       return;
