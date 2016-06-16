@@ -1392,19 +1392,6 @@ private:
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
-  bool _can_overlay_write(OnodeRef o, uint64_t length);
-  int _do_overlay_trim(TransContext *txc,
-		       OnodeRef o,
-		       uint64_t offset,
-		       uint64_t length);
-  int _do_overlay_write(TransContext *txc,
-			OnodeRef o,
-			uint64_t offset,
-			uint64_t length,
-			const bufferlist& bl);
-  int _do_write_overlays(TransContext *txc, CollectionRef& c, OnodeRef o,
-			 uint64_t offset, uint64_t length);
-  void _do_read_all_overlays(bluestore_wal_op_t& wo);
   void _pad_zeros(bufferlist *bl, uint64_t *offset, uint64_t *length,
 		  uint64_t chunk_size);
   int _do_write(TransContext *txc,
