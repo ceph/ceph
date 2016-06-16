@@ -13,7 +13,7 @@ from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 FunctionNotSupported, ArgumentOutOfRange,
+                 FunctionNotSupported, ArgumentOutOfRange, DiskQuotaExceeded,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
@@ -506,6 +506,19 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
         assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
+
+    def test_limit_snaps(self):
+        self.image.set_snap_limit(2)
+        eq(2, self.image.get_snap_limit())
+        self.image.create_snap('snap1')
+        self.image.create_snap('snap2')
+        assert_raises(DiskQuotaExceeded, self.image.create_snap, 'snap3')
+        self.image.remove_snap_limit()
+        self.image.create_snap('snap3')
+
+        self.image.remove_snap('snap1')
+        self.image.remove_snap('snap2')
+        self.image.remove_snap('snap3')
 
     @require_features([RBD_FEATURE_EXCLUSIVE_LOCK])
     def test_remove_with_exclusive_lock(self):

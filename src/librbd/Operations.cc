@@ -22,6 +22,7 @@
 #include "librbd/operation/SnapshotRenameRequest.h"
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
+#include "librbd/operation/SnapshotLimitRequest.h"
 #include <set>
 #include <boost/bind.hpp>
 
@@ -1084,6 +1085,56 @@ void Operations<I>::execute_snap_unprotect(const char *snap_name,
   operation::SnapshotUnprotectRequest<I> *request =
     new operation::SnapshotUnprotectRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_name);
+  request->send();
+}
+
+template <typename I>
+int Operations<I>::snap_set_limit(uint64_t limit) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": limit=" << limit << dendl;
+
+  if (m_image_ctx.read_only) {
+    return -EROFS;
+  }
+
+  int r = m_image_ctx.state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  {
+    RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+    C_SaferCond limit_ctx;
+
+    if (m_image_ctx.exclusive_lock != nullptr &&
+	!m_image_ctx.exclusive_lock->is_lock_owner()) {
+      C_SaferCond lock_ctx;
+
+      m_image_ctx.exclusive_lock->request_lock(&lock_ctx);
+      r = lock_ctx.wait();
+      if (r < 0) {
+	return r;
+      }
+    }
+
+    execute_snap_set_limit(limit, &limit_ctx);
+    r = limit_ctx.wait();
+  }
+
+  return r;
+}
+
+template <typename I>
+void Operations<I>::execute_snap_set_limit(const uint64_t limit,
+					   Context *on_finish) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": limit=" << limit
+                << dendl;
+
+  operation::SnapshotLimitRequest<I> *request =
+    new operation::SnapshotLimitRequest<I>(m_image_ctx, on_finish, limit);
   request->send();
 }
 

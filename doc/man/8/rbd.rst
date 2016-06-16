@@ -159,6 +159,10 @@ Parameters
    by examining the in-memory object map instead of querying RADOS for each
    object within the image.
 
+.. option:: --limit
+
+   Specifies the limit for the number of snapshots permitted.
+
 Commands
 ========
 
@@ -312,6 +316,13 @@ Commands
   in different pools than the parent snapshot.)
 
   This requires image format 2.
+
+:command:`snap limit set` [--limit] *limit* *image-spec*
+  Set a limit for the number of snapshots allowed on an image.
+
+:command:`snap limit clear` *image-spec*
+  Remove any previously set limit on the number of snapshots allowed on
+  an image.
 
 :command:`map` [-o | --options *map-options* ] [--read-only] *image-spec* | *snap-spec*
   Maps the specified image to a block device via the rbd kernel module.

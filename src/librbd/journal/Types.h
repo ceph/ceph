@@ -35,7 +35,8 @@ enum EventType {
   EVENT_TYPE_RENAME         = 10,
   EVENT_TYPE_RESIZE         = 11,
   EVENT_TYPE_FLATTEN        = 12,
-  EVENT_TYPE_DEMOTE         = 13
+  EVENT_TYPE_DEMOTE         = 13,
+  EVENT_TYPE_SNAP_LIMIT     = 14
 };
 
 struct AioDiscardEvent {
@@ -202,6 +203,21 @@ struct SnapUnprotectEvent : public SnapEventBase {
   using SnapEventBase::dump;
 };
 
+struct SnapLimitEvent : public OpEventBase {
+  static const EventType TYPE = EVENT_TYPE_SNAP_LIMIT;
+  uint64_t limit;
+
+  SnapLimitEvent() {
+  }
+  SnapLimitEvent(uint64_t op_tid, const uint64_t _limit)
+    : OpEventBase(op_tid), limit(_limit) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+
 struct SnapRollbackEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_ROLLBACK;
 
@@ -291,6 +307,7 @@ typedef boost::variant<AioDiscardEvent,
                        ResizeEvent,
                        FlattenEvent,
                        DemoteEvent,
+		       SnapLimitEvent,
                        UnknownEvent> Event;
 
 struct EventEntry {

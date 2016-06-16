@@ -39,6 +39,8 @@ struct MockOperations {
                                           Context *on_finish));
   MOCK_METHOD2(execute_snap_unprotect, void(const char *snap_name,
                                             Context *on_finish));
+  MOCK_METHOD2(execute_snap_set_limit, void(uint64_t limit,
+					    Context *on_finish));
 };
 
 } // namespace librbd

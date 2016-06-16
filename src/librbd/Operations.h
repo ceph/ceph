@@ -66,6 +66,9 @@ public:
   int snap_unprotect(const char *snap_name);
   void execute_snap_unprotect(const char *snap_name, Context *on_finish);
 
+  int snap_set_limit(uint64_t limit);
+  void execute_snap_set_limit(uint64_t limit, Context *on_finish);
+
   int prepare_image_update();
 
 private:

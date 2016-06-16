@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_context.h"
@@ -512,6 +512,36 @@ TEST_F(TestClsRbd, protection_status)
   ASSERT_EQ(0, get_protection_status(&ioctx, oid,
 				     10, &status));
   ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTED, status);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 20));
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, snapshot_limits)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  librados::ObjectWriteOperation op;
+  string oid = get_temp_image_name();
+  uint64_t limit;
+  
+  ASSERT_EQ(-ENOENT, snapshot_get_limit(&ioctx, oid, &limit));
+  
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, RBD_FEATURE_LAYERING, oid));
+
+  snapshot_set_limit(&op, 2);
+
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  ASSERT_EQ(0, snapshot_get_limit(&ioctx, oid, &limit));
+  ASSERT_EQ(2, limit);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 10, "snap1"));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 20, "snap2"));
+  ASSERT_EQ(-EDQUOT, snapshot_add(&ioctx, oid, 30, "snap3"));
 
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 20));

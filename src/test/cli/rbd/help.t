@@ -70,6 +70,8 @@
       resize                      Resize (expand or shrink) image.
       showmapped                  Show the rbd images mapped by the kernel.
       snap create (snap add)      Create a snapshot.
+      snap limit clear            Remove snapshot limit.
+      snap limit set              Limit the number of snapshots.
       snap list (snap ls)         Dump list of image snapshots.
       snap protect                Prevent a snapshot from being deleted.
       snap purge                  Deletes all snapshots.
@@ -1130,6 +1132,35 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+  
+  rbd help snap limit clear
+  usage: rbd snap limit clear [--pool <pool>] [--image <image>] 
+                              <image-spec> 
+  
+  Remove snapshot limit.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+  
+  rbd help snap limit set
+  usage: rbd snap limit set [--pool <pool>] [--image <image>] [--limit <limit>] 
+                            <image-spec> 
+  
+  Limit the number of snapshots.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --limit arg          maximum allowed snapshot count
   
   rbd help snap list
   usage: rbd snap list [--pool <pool>] [--image <image>] [--format <format>] 

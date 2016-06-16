@@ -124,6 +124,10 @@ namespace librbd {
 			      snapid_t snap_id, uint8_t protection_status);
     void set_protection_status(librados::ObjectWriteOperation *op,
                                snapid_t snap_id, uint8_t protection_status);
+    int snapshot_get_limit(librados::IoCtx *ioctx, const std::string &oid,
+			   uint64_t *limit);
+    void snapshot_set_limit(librados::ObjectWriteOperation *op,
+			    uint64_t limit);
 
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op);
     int get_stripe_unit_count_finish(bufferlist::iterator *it,

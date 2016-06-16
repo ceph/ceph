@@ -289,6 +289,13 @@ void add_path_options(boost::program_options::options_description *pos,
     (PATH.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_limit_option(po::options_description *opt) {
+  std::string description = "maximum allowed snapshot count";
+
+  opt->add_options()
+    (LIMIT.c_str(), po::value<uint64_t>(), description.c_str());
+}
+
 void add_no_progress_option(boost::program_options::options_description *opt) {
   opt->add_options()
     (NO_PROGRESS.c_str(), po::bool_switch(), "disable progress output");
