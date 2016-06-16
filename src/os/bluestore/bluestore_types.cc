@@ -768,7 +768,6 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(nid, bl);
   ::encode(size, bl);
   ::encode(attrs, bl);
-  ::encode(blob_map, bl);
   ::encode(extent_map, bl);
   ::encode(overlay_map, bl);
   ::encode(overlay_refs, bl);
@@ -786,7 +785,6 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(nid, p);
   ::decode(size, p);
   ::decode(attrs, p);
-  ::decode(blob_map, p);
   ::decode(extent_map, p);
   ::decode(overlay_map, p);
   ::decode(overlay_refs, p);
@@ -808,14 +806,6 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->open_object_section("attr");
     f->dump_string("name", p->first);
     f->dump_unsigned("len", p->second.length());
-    f->close_section();
-  }
-  f->close_section();
-  f->open_object_section("blob_map");
-  for (const auto& p : blob_map) {
-    f->open_object_section("blob");
-    f->dump_unsigned("id", p.first);
-    p.second.dump(f);
     f->close_section();
   }
   f->close_section();
