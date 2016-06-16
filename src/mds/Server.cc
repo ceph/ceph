@@ -4157,6 +4157,76 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
   return 0;
 }
 
+/*
+ * Verify that the file layout attribute carried by client
+ * is well-formatted.
+ * Return 0 on success, otherwise this function takes
+ * responsibility for the passed mdr.
+ */
+int Server::check_layout_vxattr(MDRequestRef& mdr,
+                                string name,
+                                string value,
+                                file_layout_t *layout)
+{
+  MClientRequest *req = mdr->client_request;
+  epoch_t epoch;
+  int r;
+
+  mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
+      r = parse_layout_vxattr(name, value, osdmap, layout);
+      epoch = osdmap.get_epoch();
+    });
+
+  if (r == -ENOENT) {
+
+    // we don't have the specified pool, make sure our map
+    // is newer than or as new as the client.
+    epoch_t req_epoch = req->get_osdmap_epoch();
+
+    if (req_epoch > epoch) {
+
+      // well, our map is older. consult mds.
+      Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
+        new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
+
+      if (!mds->objecter->wait_for_map(req_epoch, fin))
+        return r; // wait, fin will retry this request later
+
+      delete fin;
+
+      // now we have at least as new a map as the client, try again.
+      mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
+          r = parse_layout_vxattr(name, value, osdmap, layout);
+          epoch = osdmap.get_epoch();
+        });
+
+      assert(epoch >= req_epoch); // otherwise wait_for_map() told a lie
+
+    } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
+
+      // For compatibility with client w/ old code, we still need get the
+      // latest map. One day if COMPACT_VERSION of MClientRequest >=3,
+      // we can remove those code.
+      mdr->waited_for_osdmap = true;
+      mds->objecter->wait_for_latest_osdmap(new C_OnFinisher(new C_IO_Wrapper(
+        mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
+      return r;
+    }
+  }
+
+  if (r < 0) {
+
+    if (r == -ENOENT)
+      r = -EINVAL;
+
+    respond_to_request(mdr, r);
+    return r;
+  }
+
+  // all is well
+  return 0;
+}
+
 void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			       file_layout_t *dir_layout,
 			       set<SimpleLock*> rdlocks,
@@ -4167,7 +4237,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
-  dout(10) << "handle_set_vxattr " << name << " val " << value.length() << " bytes on " << *cur << dendl;
+  dout(10) << "handle_set_vxattr " << name
+           << " val " << value.length()
+           << " bytes on " << *cur
+           << dendl;
 
   inode_t *pi = NULL;
   string rest;
@@ -4187,34 +4260,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       layout = mdcache->default_file_layout;
 
     rest = name.substr(name.find("layout"));
-    epoch_t epoch;
-    int r;
-    mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
-	r = parse_layout_vxattr(rest, value, osdmap, &layout);
-	epoch = osdmap.get_epoch();
-      });
-    if (r < 0) {
-      if (r == -ENOENT) {
-        epoch_t req_epoch = req->get_osdmap_epoch();
-        if (req_epoch > epoch) {
-          Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
-            new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
-          if (!mds->objecter->wait_for_map(req_epoch, fin))
-            return;
-          delete fin;
-        } else  if (req_epoch == 0 && !mdr->waited_for_osdmap) {
-          // For compatibility with client w/ old code, we still need get the latest map. 
-          // One day if COMPACT_VERSION of MClientRequest >=3, we can remove those code.
-          mdr->waited_for_osdmap = true;
-          mds->objecter->wait_for_latest_osdmap(
-	    new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
-          return;
-        }
-        r = -EINVAL;
-      }
-      respond_to_request(mdr, r);
+    if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
       return;
-    }
 
     xlocks.insert(&cur->policylock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -4240,34 +4287,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     }
     file_layout_t layout = cur->get_projected_inode()->layout;
     rest = name.substr(name.find("layout"));
-    int r;
-    epoch_t epoch;
-    mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
-	r = parse_layout_vxattr(rest, value, osdmap, &layout);
-	epoch = osdmap.get_epoch();
-      });
-    if (r < 0) {
-      if (r == -ENOENT) {
-        epoch_t req_epoch = req->get_osdmap_epoch();
-        if (req_epoch > epoch) {
-          Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
-            new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
-          if (!mds->objecter->wait_for_map(req_epoch, fin))
-            return;
-          delete fin;
-        } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
-          // For compatibility with client w/ old code, we still need get the latest map. 
-          // One day if COMPACT_VERSION of MClientRequest >=3, we can remove those code.
-          mdr->waited_for_osdmap = true;
-          mds->objecter->wait_for_latest_osdmap(
-            new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
-          return;
-        }
-        r = -EINVAL;
-      }
-      respond_to_request(mdr, r);
+    if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
       return;
-    }
 
     xlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
