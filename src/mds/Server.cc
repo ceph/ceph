@@ -3038,8 +3038,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
   
   // hit pop
-  if (cmode == CEPH_FILE_MODE_RDWR ||
-      cmode == CEPH_FILE_MODE_WR) 
+  if (cmode & CEPH_FILE_MODE_WR)
     mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IRD,
