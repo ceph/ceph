@@ -21,8 +21,9 @@ struct MockTestImageCtx : public MockImageCtx {
 };
 
 struct MockTestJournal : public MockJournal {
-  MOCK_METHOD2(start_external_replay, void(journal::Replay<MockTestImageCtx> **,
-                                           Context *on_finish));
+  MOCK_METHOD3(start_external_replay, void(journal::Replay<MockTestImageCtx> **,
+                                           Context *on_finish,
+                                           Context *on_close_request));
   MOCK_METHOD0(stop_external_replay, void());
 };
 

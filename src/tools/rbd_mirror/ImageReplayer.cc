@@ -471,9 +471,12 @@ void ImageReplayer<I>::start_replay() {
     if (m_local_image_ctx->journal != nullptr) {
       m_local_journal = m_local_image_ctx->journal;
 
-      Context *ctx = create_context_callback<
+      Context *start_ctx = create_context_callback<
         ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
-      m_local_journal->start_external_replay(&m_local_replay, ctx);
+      Context *stop_ctx = create_context_callback<
+        ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
+      m_local_journal->start_external_replay(&m_local_replay, start_ctx,
+                                             stop_ctx);
       return;
     }
   }
@@ -523,6 +526,19 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   }
 
   on_replay_interrupted();
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_stop_replay_request(int r) {
+  if (r < 0) {
+    // error starting or we requested the stop -- ignore
+    return;
+  }
+
+  // journal close has been requested, stop replay so the journal
+  // can be closed (since it will wait on replay to finish)
+  dout(20) << dendl;
+  on_stop_journal_replay();
 }
 
 template <typename I>
@@ -620,6 +636,7 @@ void ImageReplayer<I>::on_stop_journal_replay()
       // might be invoked multiple times while stopping
       return;
     }
+    m_stop_requested = true;
     m_state = STATE_STOPPING;
   }
 
