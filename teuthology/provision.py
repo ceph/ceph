@@ -113,6 +113,7 @@ class Downburst(object):
             self.executable,
             '-c', self.host,
             'create',
+            '--wait',
             '--meta-data=%s' % self.config_path,
             '--user-data=%s' % self.user_path,
             shortname,
