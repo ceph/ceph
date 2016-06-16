@@ -1001,7 +1001,7 @@ public:
       yield init_lease_cr();
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -1067,7 +1067,7 @@ public:
       yield init_lease_cr();
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -2170,7 +2170,7 @@ int RGWBucketShardFullSyncCR::operate()
     }
     while (!lease_cr->is_locked()) {
       if (lease_cr->is_done()) {
-        ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+        ldout(cct, 5) << "lease cr failed, done early " << dendl;
         set_status("lease lock failed, early abort");
         return set_cr_error(lease_cr->get_ret_status());
       }
@@ -2317,7 +2317,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
     }
     while (!lease_cr->is_locked()) {
       if (lease_cr->is_done()) {
-        ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+        ldout(cct, 5) << "lease cr failed, done early " << dendl;
         set_status("lease lock failed, early abort");
         return set_cr_error(lease_cr->get_ret_status());
       }
@@ -2530,7 +2530,7 @@ int RGWRunBucketSyncCoroutine::operate()
       }
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 0) << "ERROR: full sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
+      ldout(sync_env->cct, 5) << "full sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
       return set_cr_error(retcode);
     }
 
@@ -2541,7 +2541,7 @@ int RGWRunBucketSyncCoroutine::operate()
       }
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 0) << "ERROR: incremental sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
+      ldout(sync_env->cct, 5) << "incremental sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
       return set_cr_error(retcode);
     }
 
