@@ -588,25 +588,6 @@ librbd1 or libcephfs1 instead.
 
 %endif
 
-%package devel-compat
-Summary:	Compatibility package for Ceph headers
-Group:		Development/Libraries
-License:	LGPL-2.0
-Obsoletes:	ceph-devel
-Requires:	librados-devel = %{version}-%{release}
-Requires:	libradosstriper-devel = %{version}-%{release}
-Requires:	librbd-devel = %{version}-%{release}
-Requires:	libcephfs-devel = %{version}-%{release}
-%if 0%{with cephfs_java}
-Requires:	libcephfs_jni-devel = %{version}-%{release}
-%endif
-Provides:	ceph-devel
-%description devel-compat
-This is a compatibility package to accommodate ceph-devel split into
-librados-devel, librbd-devel and libcephfs-devel. Packages still depending
-on ceph-devel should be fixed to depend on librados-devel, librbd-devel,
-libcephfs-devel or libradosstriper-devel instead.
-
 %package -n python-ceph-compat
 Summary:	Compatibility package for Cephs python libraries
 Group:		System Environment/Libraries
@@ -1545,11 +1526,6 @@ exit 0
 # We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
 %endif
-
-#################################################################################
-%files devel-compat
-# We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
-# actually build this meta package.
 
 #################################################################################
 %files -n python-ceph-compat
