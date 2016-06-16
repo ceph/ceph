@@ -392,7 +392,8 @@ This package provides a library implementation of the RADOS gateway
 Summary:	RADOS gateway client library
 Group:		Development/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{version}-%{release}
+Requires:	librados-devel = %{version}-%{release}
+Requires:	librgw2 = %{version}-%{release}
 Obsoletes:	librgw2-devel
 %description -n librgw-devel
 This package contains libraries and headers needed to develop programs
