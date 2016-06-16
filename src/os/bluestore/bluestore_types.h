@@ -144,27 +144,6 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
   return !(l == r);
 }
 
-/// overlay: a byte extent backed by kv pair, logically overlaying other content
-struct bluestore_overlay_t {
-  uint64_t key;          ///< key (nid+key identify the kv pair in the kvdb)
-  uint32_t value_offset; ///< offset in associated value for this extent
-  uint32_t length;
-
-  bluestore_overlay_t() : key(0), value_offset(0), length(0) {}
-  bluestore_overlay_t(uint64_t k, uint32_t vo, uint32_t l)
-    : key(k), value_offset(vo), length(l) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_overlay_t*>& o);
-
-};
-WRITE_CLASS_ENCODER(bluestore_overlay_t)
-
-ostream& operator<<(ostream& out, const bluestore_overlay_t& o);
-
-
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
   enum {
