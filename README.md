@@ -23,6 +23,22 @@ We do not require assignment of copyright to contribute code; code is
 contributed under the terms of the applicable license.
 
 
+Checking out the source
+=======================
+
+You can clone from github with
+
+        git clone git@github.com:ceph/ceph
+
+or, if you are not a github user,
+
+        git clone git://github.com/ceph/ceph
+
+Ceph contains many git submodules that need to be checked out with
+
+        git submodule update --init --recursive
+
+
 Build Prerequisites
 ===================
 
@@ -30,8 +46,6 @@ The list of Debian or RPM packages dependencies can be installed with:
 
 	./install-deps.sh
 
-Note: libsnappy-dev and libleveldb-dev are not available upstream for
-Debian Squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
 
 Building Ceph
 =============
@@ -60,10 +74,13 @@ Build instructions:
 
 	mkdir build
 	cd build
-	cmake [options] /path/to/ceph/src/dir
+	cmake [options] ..
 	make
 
-(Note that /path/to/ceph/src/dir can be in the tree and out of the tree)
+This assumes you make your build dir a subdirectory of the ceph.git
+checkout.  If you put it elsewhere, just replace .. above with a
+correct path to the checkout.
+
 
 Dependencies
 ------------
@@ -92,6 +109,76 @@ systems with
 For RPM-based systems (Red Hat, SUSE, etc.),
 
 	rpmbuild
+
+
+Running a test cluster
+======================
+
+Autotools
+---------
+
+To run a functional test cluster,
+
+	cd src
+	./vstart.sh -d -n -x -l
+	./ceph -s
+
+Almost all of the usual commands are available in the src/ directory.
+For example,
+
+	./rados -p rbd bench 30 write
+	./rbd create foo --size 1000
+
+To shut down the test cluster,
+
+	./stop.sh
+
+To start or stop individual daemons, the sysvinit script should work:
+
+	./init-ceph restart osd.0
+	./init-ceph stop
+
+CMake
+-----
+
+???
+
+
+Running unit tests
+==================
+
+Autotools
+---------
+
+To run all tests, a simple
+
+	cd src
+	make check
+
+will suffice.  Each test generates a log file that is the name of the
+test with .log appended.  For example, unittest_addrs generates a
+unittest_addrs.log and test/osd/osd-config.sh puts its output in
+test/osd/osd-config.sh.log.
+
+To run an individual test manually, you may want to clean up with
+
+	rm -rf testdir /tmp/*virtualenv
+	./stop.sh
+
+and then run a given test like so:
+
+	./unittest_addrs
+
+Many tests are bash scripts that spin up small test clusters, and must be run
+like so:
+
+	CEPH_DIR=. test/osd/osd-bench.sh   # or whatever the test is
+
+CMake
+-----
+
+???
+
 
 Building the Documentation
 ==========================
