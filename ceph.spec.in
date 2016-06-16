@@ -16,7 +16,6 @@
 %bcond_with tests
 %bcond_with xio
 %bcond_without tcmalloc
-%bcond_without libs_compat
 %bcond_with lowmem_builder
 %bcond_with minimal_debugging_information
 %if 0%{?fedora} || 0%{?rhel}
@@ -564,27 +563,6 @@ Requires(postun): policycoreutils
 This package contains SELinux support for Ceph MON, OSD and MDS. The package
 also performs file-system relabelling which can take a long time on heavily
 populated file-systems.
-
-%endif
-
-%if 0%{with libs_compat}
-
-%package libs-compat
-Summary:	Meta package to include ceph libraries
-Group:		System Environment/Libraries
-License:	LGPL-2.0
-Obsoletes:	ceph-libs
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
-Provides:	ceph-libs
-
-%description libs-compat
-This is a meta package, that pulls in librados2, librbd1 and libcephfs1. It
-is included for backwards compatibility with distributions that depend on the
-former ceph-libs package, which is now split up into these three subpackages.
-Packages still depending on ceph-libs should be fixed to depend on librados2,
-librbd1 or libcephfs1 instead.
 
 %endif
 
@@ -1519,13 +1497,6 @@ fi
 exit 0
 
 %endif # with selinux
-
-#################################################################################
-%if 0%{with libs_compat}
-%files libs-compat
-# We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
-# build this meta package.
-%endif
 
 #################################################################################
 %files -n python-ceph-compat
