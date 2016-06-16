@@ -113,7 +113,6 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   std::vector<const char*> env_arguments;
   static vector<string> str_vec;
   std::vector<const char*> env;
-  str_vec.clear();
   get_str_vec(p, " ", str_vec);
   for (vector<string>::iterator i = str_vec.begin();
        i != str_vec.end();
