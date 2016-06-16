@@ -519,9 +519,6 @@ struct bluestore_onode_t {
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
   map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
-  map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
-  map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
-  uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
   uint32_t expected_object_size;
@@ -531,7 +528,6 @@ struct bluestore_onode_t {
   bluestore_onode_t()
     : nid(0),
       size(0),
-      last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
       expected_write_size(0),
@@ -590,24 +586,6 @@ struct bluestore_onode_t {
   void punch_hole(uint64_t offset, uint64_t length,
 		  vector<bluestore_lextent_t> *deref);
 
-  bool put_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      return true;
-    assert(q->second >= 2);
-    if (--q->second == 1) {
-      overlay_refs.erase(q);
-    }
-    return false;
-  }
-  void get_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      overlay_refs[key] = 2;
-    else
-      ++q->second;
-  }
-
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
@@ -625,10 +603,6 @@ struct bluestore_wal_op_t {
 
   vector<bluestore_pextent_t> extents;
   bufferlist data;
-
-  uint64_t nid;
-  vector<bluestore_overlay_t> overlays;
-  vector<uint64_t> removed_overlays;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
