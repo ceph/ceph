@@ -8515,6 +8515,7 @@ void MDCache::handle_open_ino_reply(MMDSOpenInoReply *m)
       dout(10) << " found ino " << ino << " on mds." << from << dendl;
       if (!info.want_replica) {
 	open_ino_finish(ino, info, from);
+        m->put();
 	return;
       }
 
