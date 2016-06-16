@@ -395,7 +395,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
   if (remove) {
     r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(cct) << "failed to remove image from mirroring directory: "
                  << cpp_strerror(r) << dendl;
       return r;
@@ -1827,7 +1827,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             }
           } else if (mirror_mode == RBD_MIRROR_MODE_POOL) {
             r = cls_client::mirror_image_remove(&ictx->md_ctx, ictx->id);
-            if (r < 0) {
+            if (r < 0 && r != -ENOENT) {
               lderr(cct) << "failed to remove image from mirroring directory: "
                          << cpp_strerror(r) << dendl;
               return r;
