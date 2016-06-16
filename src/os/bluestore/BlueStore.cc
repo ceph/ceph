@@ -37,7 +37,6 @@ const string PREFIX_SUPER = "S";   // field -> value
 const string PREFIX_STAT = "T";    // field -> value(int64 array)
 const string PREFIX_COLL = "C";    // collection name -> cnode_t
 const string PREFIX_OBJ = "O";     // object name -> onode_t
-const string PREFIX_OVERLAY = "V"; // u64 + offset -> data
 const string PREFIX_OMAP = "M";    // u64 + keyname -> value
 const string PREFIX_WAL = "L";     // id -> wal_transaction_t
 const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
@@ -392,12 +391,6 @@ static int get_key_object(const string& key, ghobject_t *oid)
   return 0;
 }
 
-
-static void get_overlay_key(uint64_t nid, uint64_t offset, string *out)
-{
-  _key_encode_u64(nid, out);
-  _key_encode_u64(offset, out);
-}
 
 // '-' < '.' < '~'
 static void get_omap_header(uint64_t id, string *out)
@@ -2659,82 +2652,6 @@ int BlueStore::fsck()
 	  local_blobs,
 	  used_blocks,
 	  expected_statfs);
-	// overlays
-	set<string> overlay_keys;
-	map<uint64_t,int> refs;
-	for (auto& v : o->onode.overlay_map) {
-	  if (v.first + v.second.length > o->onode.size) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " extends past end of object" << dendl;
-	    ++errors;
-            continue; // go for next overlay
-	  }
-	  if (v.second.key > o->onode.last_overlay_key) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " is > last_overlay_key " << o->onode.last_overlay_key
-		 << dendl;
-	    ++errors;
-            continue; // go for next overlay
-	  }
-	  ++refs[v.second.key];
-	  string key;
-	  bufferlist val;
-	  get_overlay_key(o->onode.nid, v.second.key, &key);
-	  if (overlay_keys.count(key)) {
-	    derr << " " << oid << " dup overlay key " << key << dendl;
-	    ++errors;
-	  }
-	  overlay_keys.insert(key);
-	  int r = db->get(PREFIX_OVERLAY, key, &val);
-	  if (r < 0) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " failed to fetch: " << cpp_strerror(r) << dendl;
-	    ++errors;
-            continue;
-	  }
-	  if (val.length() < v.second.value_offset + v.second.length) {
-	    derr << " " << oid << " overlay " << v.first << " " << v.second
-		 << " too short, " << val.length() << dendl;
-	    ++errors;
-	  }
-	}
-	for (auto& vr : o->onode.overlay_refs) {
-	  if (refs[vr.first] != vr.second) {
-	    derr << " " << oid << " overlay key " << vr.first
-		 << " says " << vr.second << " refs but we have "
-		 << refs[vr.first] << dendl;
-	    ++errors;
-	  }
-	  refs.erase(vr.first);
-	}
-	for (auto& p : refs) {
-	  if (p.second > 1) {
-	    derr << " " << oid << " overlay key " << p.first
-		 << " has " << p.second << " refs but they are not recorded"
-		 << dendl;
-	    ++errors;
-	  }
-	}
-	do {
-	  string start;
-	  get_overlay_key(o->onode.nid, 0, &start);
-	  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OVERLAY);
-	  if (!it)
-	    break;
-	  for (it->lower_bound(start); it->valid(); it->next()) {
-	    string k = it->key();
-	    const char *p = k.c_str();
-	    uint64_t nid;
-	    p = _key_decode_u64(p, &nid);
-	    if (nid != o->onode.nid)
-	      break;
-	    if (!overlay_keys.count(k)) {
-	      derr << " " << oid << " has stray overlay kv pair for "
-		   << k << dendl;
-	      ++errors;
-	    }
-	  }
-	} while (false);
 	// omap
 	while (o->onode.omap_head) {
 	  if (used_omap_head.count(o->onode.omap_head)) {
@@ -2854,21 +2771,6 @@ int BlueStore::fsck()
 	       << std::hex << expecting_hash << std::dec << dendl;
       ++errors;
       expecting_objects = false;
-    }
-  }
-
-  dout(1) << __func__ << " checking for stray overlay data" << dendl;
-  it = db->get_iterator(PREFIX_OVERLAY);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      string key = it->key();
-      const char *p = key.c_str();
-      uint64_t nid;
-      p = _key_decode_u64(p, &nid);
-      if (used_nids.count(nid) == 0) {
-	derr << __func__ << " found stray overlay data on nid " << nid << dendl;
-	++errors;
-      }
     }
   }
 
@@ -4661,14 +4563,6 @@ void BlueStore::_kv_sync_thread()
 	bluestore_wal_transaction_t& wt =*(*it)->wal_txn;
 	// kv metadata updates
 	_txc_finalize_kv(*it, t);
-	// cleanup the data in overlays
-	for (auto& p : wt.ops) {
-	  for (auto q : p.removed_overlays) {
-            string key;
-            get_overlay_key(p.nid, q, &key);
-	    t->rm_single_key(PREFIX_OVERLAY, key);
-	  }
-	}
 	// cleanup the wal
 	string key;
 	get_wal_key(wt.seq, &key);
@@ -4770,9 +4664,6 @@ int BlueStore::_wal_finish(TransContext *txc)
 
 int BlueStore::_do_wal_op(TransContext *txc, bluestore_wal_op_t& wo)
 {
-  // read all the overlay data first for apply
-  _do_read_all_overlays(wo);
-
   switch (wo.op) {
   case bluestore_wal_op_t::OP_WRITE:
     {
@@ -5292,131 +5183,6 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-int BlueStore::_do_overlay_trim(TransContext *txc,
-			       OnodeRef o,
-			       uint64_t offset,
-			       uint64_t length)
-{
-  dout(10) << __func__ << " " << o->oid << " 0x"
-	   << std::hex << offset << "~" << length << std::dec << dendl;
-  int changed = 0;
-
-  map<uint64_t,bluestore_overlay_t>::iterator p =
-    o->onode.overlay_map.lower_bound(offset);
-  if (p != o->onode.overlay_map.begin()) {
-    --p;
-  }
-  while (p != o->onode.overlay_map.end()) {
-    if (p->first >= offset + length) {
-      dout(20) << __func__ << " stop at " << p->first << " " << p->second
-	       << dendl;
-      break;
-    }
-    if (p->first + p->second.length <= offset) {
-      dout(20) << __func__ << " skip " << p->first << " " << p->second
-	       << dendl;
-      ++p;
-      continue;
-    }
-    if (p->first >= offset &&
-	p->first + p->second.length <= offset + length) {
-      dout(20) << __func__ << " rm " << p->first << " " << p->second
-	       << dendl;
-      if (o->onode.put_overlay_ref(p->second.key)) {
-	string key;
-	get_overlay_key(o->onode.nid, p->second.key, &key);
-	txc->t->rm_single_key(PREFIX_OVERLAY, key);
-      }
-      o->onode.overlay_map.erase(p++);
-      ++changed;
-      continue;
-    }
-    if (p->first >= offset) {
-      dout(20) << __func__ << " trim_front " << p->first << " " << p->second
-	       << dendl;
-      bluestore_overlay_t& ov = o->onode.overlay_map[offset + length] = p->second;
-      uint64_t by = offset + length - p->first;
-      ov.value_offset += by;
-      ov.length -= by;
-      o->onode.overlay_map.erase(p++);
-      ++changed;
-      continue;
-    }
-    if (p->first < offset &&
-	p->first + p->second.length <= offset + length) {
-      dout(20) << __func__ << " trim_tail " << p->first << " " << p->second
-	       << dendl;
-      p->second.length = offset - p->first;
-      ++p;
-      ++changed;
-      continue;
-    }
-    dout(20) << __func__ << " split " << p->first << " " << p->second
-	     << dendl;
-    assert(p->first < offset);
-    assert(p->first + p->second.length > offset + length);
-    bluestore_overlay_t& nov = o->onode.overlay_map[offset + length] = p->second;
-    p->second.length = offset - p->first;
-    uint64_t by = offset + length - p->first;
-    nov.value_offset += by;
-    nov.length -= by;
-    o->onode.get_overlay_ref(p->second.key);
-    ++p;
-    ++changed;
-  }
-  return changed;
-}
-
-int BlueStore::_do_overlay_write(TransContext *txc,
-				OnodeRef o,
-				uint64_t offset,
-				uint64_t length,
-				const bufferlist& bl)
-{
-  _do_overlay_trim(txc, o, offset, length);
-
-  dout(10) << __func__ << " " << o->oid << " 0x"
-	   << std::hex << offset << "~" << length << std::dec << dendl;
-  bluestore_overlay_t& ov = o->onode.overlay_map[offset] =
-    bluestore_overlay_t(++o->onode.last_overlay_key, 0, length);
-  dout(20) << __func__ << " added 0x" << std::hex << offset << std::dec
-	   << " " << ov << dendl;
-  string key;
-  get_overlay_key(o->onode.nid, o->onode.last_overlay_key, &key);
-  txc->t->set(PREFIX_OVERLAY, key, bl);
-  return 0;
-}
-
-int BlueStore::_do_write_overlays(TransContext *txc,
-				  CollectionRef& c,
-				 OnodeRef o,
-				 uint64_t orig_offset,
-				 uint64_t orig_length)
-{
-  if (o->onode.overlay_map.empty())
-    return 0;
-
-  assert(0 == "this is all broken");
-
-  txc->write_onode(o);
-  return 0;
-}
-
-void BlueStore::_do_read_all_overlays(bluestore_wal_op_t& wo)
-{
-  for (vector<bluestore_overlay_t>::iterator q = wo.overlays.begin();
-       q != wo.overlays.end(); ++q) {
-    string key;
-    get_overlay_key(wo.nid, q->key, &key);
-    bufferlist bl, bl_data;
-    int r = db->get(PREFIX_OVERLAY, key, &bl);
-    assert(r >= 0); 
-    bl_data.substr_of(bl, q->value_offset, q->length);
-    wo.data.claim_append(bl_data);
-  }
-  return;
-}
-
 void BlueStore::_dump_onode(OnodeRef o, int log_level)
 {
   if (!g_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
@@ -5441,18 +5207,6 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
 		    << dendl;
     assert(p.first >= pos);
     pos = p.first + p.second.length;
-  }
-  pos = 0;
-  for (auto& v : o->onode.overlay_map) {
-    dout(log_level) << __func__ << "  overlay 0x" << std::hex << v.first
-		    << std::dec << ": " << v.second
-		    << dendl;
-    assert(v.first >= pos);
-    pos = v.first + v.second.length;
-  }
-  if (!o->onode.overlay_refs.empty()) {
-    dout(log_level) << __func__ << "  overlay_refs " << o->onode.overlay_refs
-		    << dendl;
   }
   _dump_blob_map(o->blob_map, log_level);
   if (o->bnode) {
@@ -5550,13 +5304,6 @@ void BlueStore::_pad_zeros(
   *_dout << dendl;
   if (pad_count)
     logger->inc(l_bluestore_write_pad_bytes, pad_count);
-}
-
-bool BlueStore::_can_overlay_write(OnodeRef o, uint64_t length)
-{
-  return
-    (int)o->onode.overlay_map.size() < g_conf->bluestore_overlay_max &&
-    (int)length <= g_conf->bluestore_overlay_max_length;
 }
 
 void BlueStore::_do_write_small(
