@@ -345,6 +345,7 @@ class AsyncConnection : public Connection {
   // Connecting state
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
+  bufferlist authorizer_buf;
   ceph_msg_connect_reply connect_reply;
   // Accepting state
   entity_addr_t socket_addr;
