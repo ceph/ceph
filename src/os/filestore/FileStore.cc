@@ -870,6 +870,12 @@ int FileStore::mkfs()
   }
 
   // superblock
+  ret = KeyValueDB::test_init(g_conf->filestore_omap_backend, omap_dir);
+  if (ret < 0) {
+    derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
+    goto close_fsid_fd;
+  }
+
   superblock.omap_backend = g_conf->filestore_omap_backend;
   ret = write_superblock();
   if (ret < 0) {
@@ -930,11 +936,6 @@ int FileStore::mkfs()
       }
     }
     VOID_TEMP_FAILURE_RETRY(::close(fd));
-  }
-  ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
-  if (ret < 0) {
-    derr << "mkfs failed to create " << g_conf->filestore_omap_backend << dendl;
-    goto close_fsid_fd;
   }
   // create fsid under omap
   // open+lock fsid
