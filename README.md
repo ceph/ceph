@@ -110,6 +110,40 @@ For RPM-based systems (Red Hat, SUSE, etc.),
 
 	rpmbuild
 
+
+Running a test cluster
+======================
+
+Autotools
+---------
+
+To run a functional test cluster,
+
+	cd src
+	./vstart.sh -d -n -x -l
+	./ceph -s
+
+Almost all of the usual commands are available in the src/ directory.
+For example,
+
+	./rados -p rbd bench 30 write
+	./rbd create foo --size 1000
+
+To shut down the test cluster,
+
+	./stop.sh
+
+To start or stop individual daemons, the sysvinit script should work:
+
+	./init-ceph restart osd.0
+	./init-ceph stop
+
+CMake
+-----
+
+???
+
+
 Running unit tests
 ==================
 
@@ -141,6 +175,7 @@ CMake
 -----
 
 ???
+
 
 Building the Documentation
 ==========================
