@@ -306,6 +306,7 @@ private:
 
   void start_replay();
   void handle_start_replay(int r);
+  void handle_stop_replay_request(int r);
 
   void replay_flush();
   void handle_replay_flush(int r);
