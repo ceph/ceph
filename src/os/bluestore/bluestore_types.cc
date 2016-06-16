@@ -335,47 +335,6 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
   return out;
 }
 
-// bluestore_overlay_t
-
-void bluestore_overlay_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(key, bl);
-  ::encode(value_offset, bl);
-  ::encode(length, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_overlay_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(key, p);
-  ::decode(value_offset, p);
-  ::decode(length, p);
-  DECODE_FINISH(p);
-}
-
-void bluestore_overlay_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("key", key);
-  f->dump_unsigned("value_offset", value_offset);
-  f->dump_unsigned("length", length);
-}
-
-void bluestore_overlay_t::generate_test_instances(list<bluestore_overlay_t*>& o)
-{
-  o.push_back(new bluestore_overlay_t());
-  o.push_back(new bluestore_overlay_t(789, 1024, 1232232));
-}
-
-ostream& operator<<(ostream& out, const bluestore_overlay_t& o)
-{
-  out << "overlay(0x" << std::hex << o.value_offset << "~" << o.length
-      << std::dec << " key " << o.key << ")";
-  return out;
-}
-
-
 // bluestore_pextent_t
 
 void bluestore_pextent_t::dump(Formatter *f) const
