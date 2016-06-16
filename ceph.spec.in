@@ -566,21 +566,6 @@ populated file-systems.
 
 %endif
 
-%package -n python-ceph-compat
-Summary:	Compatibility package for Cephs python libraries
-Group:		System Environment/Libraries
-License:	LGPL-2.0
-Obsoletes:	python-ceph
-Requires:	python-rados = %{version}-%{release}
-Requires:	python-rbd = %{version}-%{release}
-Requires:	python-cephfs = %{version}-%{release}
-Provides:	python-ceph
-%description -n python-ceph-compat
-This is a compatibility package to accommodate python-ceph split into
-python-rados, python-rbd and python-cephfs. Packages still depending on
-python-ceph should be fixed to depend on python-rados, python-rbd or
-python-cephfs instead.
-
 #################################################################################
 # common
 #################################################################################
@@ -1497,11 +1482,6 @@ fi
 exit 0
 
 %endif # with selinux
-
-#################################################################################
-%files -n python-ceph-compat
-# We need an empty %%files list for python-ceph-compat, to tell rpmbuild to
-# actually build this meta package.
 
 
 %changelog
