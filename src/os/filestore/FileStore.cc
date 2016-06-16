@@ -1801,6 +1801,9 @@ close_fsid_fd:
   fsid_fd = -1;
 done:
   assert(!m_filestore_fail_eio || ret != -EIO);
+  delete backend;
+  backend = NULL;
+  object_map.reset();
   return ret;
 }
 
