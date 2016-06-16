@@ -31,6 +31,7 @@ namespace librbd {
 
 using namespace image_watcher;
 using namespace watch_notify;
+using util::create_async_context_callback;
 using util::create_context_callback;
 using util::create_rados_safe_callback;
 
@@ -120,7 +121,10 @@ void ImageWatcher::unregister_watch(Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << this << " unregistering image watcher" << dendl;
 
   cancel_async_requests();
-  m_task_finisher->cancel_all();
+
+  C_Gather *g = new C_Gather(m_image_ctx.cct, create_async_context_callback(
+          m_image_ctx, on_finish));
+  m_task_finisher->cancel_all(g->new_sub());
 
   {
     RWLock::WLocker l(m_watch_lock);
@@ -128,17 +132,17 @@ void ImageWatcher::unregister_watch(Context *on_finish) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
 
       librados::AioCompletion *aio_comp = create_rados_safe_callback(
-        new C_UnwatchAndFlush(m_image_ctx.md_ctx, on_finish));
+        new C_UnwatchAndFlush(m_image_ctx.md_ctx, g->new_sub()));
       int r = m_image_ctx.md_ctx.aio_unwatch(m_watch_handle, aio_comp);
       assert(r == 0);
       aio_comp->release();
+      g->activate();
       return;
     } else if (m_watch_state == WATCH_STATE_ERROR) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
     }
   }
-
-  on_finish->complete(0);
+  g->activate();
 }
 
 void ImageWatcher::flush(Context *on_finish) {
