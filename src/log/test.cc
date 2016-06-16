@@ -209,6 +209,8 @@ void do_segv()
 
 TEST(Log, InternalSegv)
 {
+  // To bypass the warning "Death tests use fork()"
+  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
   ASSERT_DEATH(do_segv(), ".*");
 }
 
