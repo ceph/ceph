@@ -69,7 +69,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   librbd::image_info_t info;
   std::string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
-  uint64_t overlap, features, flags;
+  uint64_t overlap, features, flags, snap_limit;
   bool snap_protected = false;
   librbd::mirror_image_info_t mirror_image;
   int r;
@@ -107,6 +107,10 @@ static int do_show_info(const char *imgname, librbd::Image& image,
       return r;
     }
   }
+
+  r = image.snap_get_limit(&snap_limit);
+  if (r < 0)
+    return r;
 
   char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
   strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
@@ -147,6 +151,14 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     } else {
       std::cout << "\tprotected: " << (snap_protected ? "True" : "False")
                 << std::endl;
+    }
+  }
+
+  if (snap_limit < UINT64_MAX) {
+    if (f) {
+      f->dump_unsigned("snapshot_limit", snap_limit);
+    } else {
+      std::cout << "\tsnapshot_limit: " << snap_limit << std::endl;
     }
   }
 

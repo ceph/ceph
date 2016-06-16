@@ -1025,6 +1025,25 @@ namespace librbd {
     return r;
   }
 
+  int Image::snap_get_limit(uint64_t *limit)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_get_limit_enter, ictx, ictx->name.c_str());
+    int r = librbd::snap_get_limit(ictx, limit);
+    tracepoint(librbd, snap_get_limit_exit, r, *limit);
+    return r;
+  }
+
+  int Image::snap_set_limit(uint64_t limit)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    tracepoint(librbd, snap_set_limit_enter, ictx, ictx->name.c_str(), limit);
+    int r = ictx->operations->snap_set_limit(limit);
+    tracepoint(librbd, snap_set_limit_exit, r);
+    return r;
+  }
+
   int Image::snap_set(const char *snap_name)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -2264,6 +2283,24 @@ extern "C" int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
   *is_protected = protected_snap ? 1 : 0;
   tracepoint(librbd, snap_is_protected_exit, 0, *is_protected ? 1 : 0);
   return 0;
+}
+
+extern "C" int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_get_limit_enter, ictx, ictx->name.c_str());
+  int r = librbd::snap_get_limit(ictx, limit);
+  tracepoint(librbd, snap_get_limit_exit, r, *limit);
+  return r;
+}
+
+extern "C" int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_set_limit_enter, ictx, ictx->name.c_str(), limit);
+  int r = librbd::snap_set_limit(ictx, limit);
+  tracepoint(librbd, snap_set_limit_exit, r);
+  return r;
 }
 
 extern "C" int rbd_snap_set(rbd_image_t image, const char *snap_name)

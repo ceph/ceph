@@ -86,6 +86,10 @@ struct ExecuteOp : public Context {
                                           on_op_complete);
   }
 
+  void execute(const journal::SnapLimitEvent &_) {
+    image_ctx.operations->execute_snap_set_limit(event.limit, on_op_complete);
+  }
+
   virtual void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     if (r < 0) {
@@ -612,6 +616,29 @@ void Replay<I>::handle_event(const journal::DemoteEvent &event,
   ldout(cct, 20) << this << " " << __func__ << ": Demote event" << dendl;
   on_ready->complete(0);
   on_safe->complete(0);
+}
+
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapLimitEvent &event,
+			     Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": Snap limit event"
+                 << dendl;
+
+  Mutex::Locker locker(m_lock);
+  OpEvent *op_event;
+  Context *on_op_complete = create_op_context_callback(event.op_tid, on_ready,
+                                                       on_safe, &op_event);
+  if (on_op_complete == nullptr) {
+    return;
+  }
+
+  op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
+    m_image_ctx, new ExecuteOp<I, journal::SnapLimitEvent>(m_image_ctx,
+							   event,
+							   on_op_complete));
+
+  on_ready->complete(0);
 }
 
 template <typename I>

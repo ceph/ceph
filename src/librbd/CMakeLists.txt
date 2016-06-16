@@ -60,6 +60,7 @@ set(librbd_internal_srcs
   operation/SnapshotRenameRequest.cc
   operation/SnapshotRollbackRequest.cc
   operation/SnapshotUnprotectRequest.cc
+  operation/SnapshotLimitRequest.cc
   operation/TrimRequest.cc)
 
 add_library(rbd_api STATIC librbd.cc)

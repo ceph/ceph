@@ -1290,6 +1290,46 @@ TRACEPOINT_EVENT(librbd, snap_exists_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, snap_get_limit_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_get_limit_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, limit),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, limit, limit)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_set_limit_enter,
+    TP_ARGS(
+        void*,imagectx,
+	const char*, name,
+        const int, limit),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+	ctf_string(name, name)
+        ctf_integer(int, limit, limit)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_set_limit_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, snap_set_enter,
     TP_ARGS(
         void*, imagectx,

@@ -138,6 +138,8 @@ namespace librbd {
 	     ProgressContext& prog_ctx, bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
+  int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
+  int snap_set_limit(ImageCtx *ictx, uint64_t limit);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,

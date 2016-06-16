@@ -154,6 +154,21 @@ void SnapEventBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void SnapLimitEvent::encode(bufferlist &bl) const {
+  OpEventBase::encode(bl);
+  ::encode(limit, bl);
+}
+
+void SnapLimitEvent::decode(__u8 version, bufferlist::iterator& it) {
+  OpEventBase::decode(version, it);
+  ::decode(limit, it);
+}
+
+void SnapLimitEvent::dump(Formatter *f) const {
+  OpEventBase::dump(f);
+  f->dump_unsigned("limit", limit);
+}
+
 void SnapRenameEvent::encode(bufferlist& bl) const {
   SnapEventBase::encode(bl);
   ::encode(snap_id, bl);

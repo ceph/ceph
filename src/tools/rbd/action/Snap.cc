@@ -148,6 +148,16 @@ int do_unprotect_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
+int do_set_limit(librbd::Image& image, uint64_t limit)
+{
+  return image.snap_set_limit(limit);
+}
+
+int do_clear_limit(librbd::Image& image)
+{
+  return image.snap_set_limit(UINT64_MAX);
+}
+
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -431,6 +441,80 @@ int execute_unprotect(const po::variables_map &vm) {
   return 0;
 }
 
+void get_set_limit_arguments(po::options_description *pos,
+			     po::options_description *opt) {
+  at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+  at::add_limit_option(opt);
+}
+
+int execute_set_limit(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string snap_name;
+  uint64_t limit;
+
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+
+  if (vm.count(at::LIMIT)) {
+    limit = vm[at::LIMIT].as<uint64_t>();
+  } else {
+    return -ERANGE;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+				 &io_ctx, &image);
+  if (r < 0) {
+      return r;
+  }
+
+  r = do_set_limit(image, limit);
+  if (r < 0) {
+    std::cerr << "rbd: setting snapshot limit failed: " << cpp_strerror(r)
+	      << std::endl;
+    return r;
+  }
+  return 0;
+}
+
+void get_clear_limit_arguments(po::options_description *pos,
+			       po::options_description *opt) {
+  at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+}
+
+int execute_clear_limit(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+				 &io_ctx, &image);
+  if (r < 0) {
+      return r;
+  }
+
+  r = do_clear_limit(image);
+  if (r < 0) {
+    std::cerr << "rbd: clearing snapshot limit failed: " << cpp_strerror(r)
+	      << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 void get_rename_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
@@ -510,6 +594,12 @@ Shell::Action action_protect(
 Shell::Action action_unprotect(
   {"snap", "unprotect"}, {}, "Allow a snapshot to be deleted.", "",
   &get_unprotect_arguments, &execute_unprotect);
+Shell::Action action_set_limit(
+  {"snap", "limit", "set"}, {}, "Limit the number of snapshots.", "",
+  &get_set_limit_arguments, &execute_set_limit);
+Shell::Action action_clear_limit(
+  {"snap", "limit", "clear"}, {}, "Remove snapshot limit.", "",
+  &get_clear_limit_arguments, &execute_clear_limit);
 Shell::Action action_rename(
   {"snap", "rename"}, {}, "Rename a snapshot.", "",
   &get_rename_arguments, &execute_rename);
