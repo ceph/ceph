@@ -95,8 +95,6 @@ int rgw_store_user_info(RGWRados *store,
                         bool exclusive,
                         map<string, bufferlist> *pattrs)
 {
-  bufferlist bl;
-  info.encode(bl);
   int ret;
   RGWObjVersionTracker ot;
 
