@@ -1936,8 +1936,12 @@ extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
-extern bool url_decode(const string& src_str, string& dest_str, bool in_query = false);
-extern void url_encode(const string& src, string& dst);
+extern bool url_decode(const std::string& src_str,
+                       std::string& dest_str,
+                       bool in_query = false);
+extern void url_encode(const std::string& src,
+                       string& dst);
+extern std::string url_encode(const std::string& src);
 
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
