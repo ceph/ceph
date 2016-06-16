@@ -538,7 +538,7 @@ namespace librbd {
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
     if (m_ictx->enable_alloc_hint &&
         (m_ictx->object_map == nullptr ||
-         !m_ictx->object_map->object_may_exist(m_object_no))) {
+         !m_object_exist)) {
       wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
     }
 
