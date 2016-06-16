@@ -1795,3 +1795,69 @@ TRACEPOINT_EVENT(librbd, stat_exit,
         ctf_array_text(char, parent_name, info->parent_name, RBD_MAX_IMAGE_NAME_SIZE)
     )
 )
+
+TRACEPOINT_EVENT(librbd, group_create_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, groupname),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(groupname, groupname)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_create_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_remove_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, groupname),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(groupname, groupname)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_list_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_list_entry,
+    TP_ARGS(
+        const char*, name),
+    TP_FIELDS(
+        ctf_string(name, name)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_list_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

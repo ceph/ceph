@@ -8,6 +8,11 @@
 namespace librbd {
 namespace util {
 
+const std::string group_header_name(const std::string &group_id)
+{
+  return RBD_GROUP_HEADER_PREFIX + group_id;
+}
+
 const std::string id_obj_name(const std::string &name)
 {
   return RBD_ID_PREFIX + name;
