@@ -92,42 +92,50 @@ namespace ceph {
 
 
     // Ops will be removed f evaluates to true, f may have sideeffects
-    inline void remove_by_filter(
-      std::function<bool (Request)> f) override final {
-      return queue.remove_by_filter(f);
+    inline void remove_by_filter(std::function<bool(Request)> f) override final {
+      queue.remove_by_filter(f);
     }
 
 
     // Ops of this priority should be deleted immediately
-    inline void remove_by_class(K k, std::list<T> *out) override final {
-      // FIX THIS
+    inline void remove_by_class(Client cl,
+				std::list<Request> *out) override final {
+      queue.remove_by_filter(
+	[&] (const Request& r) ->bool { return cl == r.second.get_owner(); },
+	out);
     }
 
 
-    inline void enqueue_strict(K cl, unsigned priority, T item) override final {
-      // TODO FIX
-      osd_op_type_t op_type = osd_op_type_t::client_op;
-      queue.enqueue_strict(op_type, 0, item);
+    inline void enqueue_strict(Client cl,
+			       unsigned priority,
+			       Request item) override final {
+      queue.enqueue_strict(get_osd_op_type(item), 0, item);
     }
 
 
     // Enqueue op in the front of the strict queue
-    inline void enqueue_strict_front(K cl, unsigned priority, T item) override final {
-      // FIX THIS
+    inline void enqueue_strict_front(Client cl,
+				     unsigned priority,
+				     Request item) override final {
+      queue.enqueue_strict_front(get_osd_op_type(item), priority, item);
     }
 
 
     // Enqueue op in the back of the regular queue
-    inline void enqueue(K cl, unsigned priority, unsigned cost, T item) override final {
-      // FIX THIS
+    inline void enqueue(Client cl,
+			unsigned priority,
+			unsigned cost,
+			Request item) override final {
+      queue.enqueue(get_osd_op_type(item), priority, cost, item);
     }
-
 
     // Enqueue the op in the front of the regular queue
-    inline void enqueue_front(K cl, unsigned priority, unsigned cost, T item) override final {
-      // FIX THIS
+    inline void enqueue_front(Client cl,
+			      unsigned priority,
+			      unsigned cost,
+			      Request item) override final {
+      queue.enqueue_front(get_osd_op_type(item), priority, cost, item);
     }
-
 
     // Returns if the queue is empty
     inline bool empty() const override final {
@@ -136,7 +144,7 @@ namespace ceph {
 
 
     // Return an op to be dispatch
-    inline T dequeue() override final {
+    inline Request dequeue() override final {
       return queue.dequeue();
     }
 
@@ -170,15 +178,22 @@ namespace ceph {
 
     pg_queueable_visitor_t pg_queueable_visitor;
 
-    osd_op_type_t get_osd_op_type(const T& request) {
+    osd_op_type_t get_osd_op_type(const Request& request) {
       osd_op_type_t type =
 	boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
 
-      if (osd_op_type_t::client_op == type) {
-	// TODO must distinguish between client_op and osd_subop
+      // if we got client_op back then we need to distinguish between
+      // a client op and an osd subop.
+      
+      if (osd_op_type_t::client_op != type) {
+	return type;
+      } else if (MSG_OSD_SUBOP ==
+		 boost::get<OpRequestRef>(
+		   request.second.get_variant())->get_req()->get_header().type) {
+	return osd_op_type_t::osd_subop;
+      } else {
+	return osd_op_type_t::client_op;
       }
-
-      return type;
     }
   }; // class mClockOpClassQueue
 
