@@ -720,6 +720,19 @@ function mds_exists()
     ceph auth list | grep "^mds"
 }
 
+# some of the commands are just not idempotent.
+function without_test_dup_command()
+{
+  if [ -z ${CEPH_CLI_TEST_DUP_COMMAND+x} ]; then
+    $@
+  else
+    local saved=${CEPH_CLI_TEST_DUP_COMMAND}
+    unset CEPH_CLI_TEST_DUP_COMMAND
+    $@
+    CEPH_CLI_TEST_DUP_COMMAND=saved
+  fi
+}
+
 function test_mds_tell()
 {
   FS_NAME=cephfs
@@ -744,7 +757,7 @@ function test_mds_tell()
   expect_false ceph tell mds.a injectargs mds_max_file_recover -1
 
   # Test respawn by rank
-  ceph tell mds.0 respawn
+  without_test_dup_command ceph tell mds.0 respawn
   new_mds_gids=$old_mds_gids
   while [ $new_mds_gids -eq $old_mds_gids ] ; do
       sleep 5
@@ -753,7 +766,7 @@ function test_mds_tell()
   echo New GIDs: $new_mds_gids
 
   # Test respawn by ID
-  ceph tell mds.a respawn
+  without_test_dup_command ceph tell mds.a respawn
   new_mds_gids=$old_mds_gids
   while [ $new_mds_gids -eq $old_mds_gids ] ; do
       sleep 5
