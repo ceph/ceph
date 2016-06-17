@@ -14,7 +14,7 @@
 
 #include "msg/Message.h"
 #include "DispatchQueue.h"
-#include "SimpleMessenger.h"
+#include "Messenger.h"
 #include "common/ceph_context.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -56,7 +56,7 @@ uint64_t DispatchQueue::pre_dispatch(Message *m)
 
 void DispatchQueue::post_dispatch(Message *m, uint64_t msize)
 {
-  msgr->dispatch_throttle_release(msize);
+  dispatch_throttle_release(msize);
   ldout(cct,20) << "done calling dispatch on " << m << dendl;
 }
 
@@ -95,7 +95,6 @@ void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 
 void DispatchQueue::local_delivery(Message *m, int priority)
 {
-  m->set_connection(msgr->local_connection.get());
   m->set_recv_stamp(ceph_clock_now(msgr->cct));
   Mutex::Locker l(local_delivery_lock);
   if (local_messages.empty())
@@ -130,11 +129,21 @@ void DispatchQueue::run_local_delivery()
   local_delivery_lock.Unlock();
 }
 
+void DispatchQueue::dispatch_throttle_release(uint64_t msize)
+{
+  if (msize) {
+    ldout(cct,10) << __func__ << " " << msize << " to dispatch throttler "
+	    << dispatch_throttler.get_current() << "/"
+	    << dispatch_throttler.get_max() << dendl;
+    dispatch_throttler.put(msize);
+  }
+}
+
 /*
  * This function delivers incoming messages to the Messenger.
- * Pipes with messages are kept in queues; when beginning a message
- * delivery the highest-priority queue is selected, the pipe from the
- * front of the queue is removed, and its message read. If the pipe
+ * Connections with messages are kept in queues; when beginning a message
+ * delivery the highest-priority queue is selected, the connection from the
+ * front of the queue is removed, and its message read. If the connection
  * has remaining messages at that priority level, it is re-placed on to the
  * end of the queue. If the queue is empty; it's removed.
  * The message is then delivered and the process starts again.
@@ -208,7 +217,7 @@ void DispatchQueue::discard_queue(uint64_t id) {
     assert(!(i->is_code())); // We don't discard id 0, ever!
     Message *m = i->get_message();
     remove_arrival(m);
-    msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
   }
 }

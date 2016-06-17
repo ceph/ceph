@@ -178,7 +178,7 @@ void Pipe::DelayedDelivery::discard()
   Mutex::Locker l(delay_lock);
   while (!delay_queue.empty()) {
     Message *m = delay_queue.front().second;
-    pipe->msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+    pipe->in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
     m->put();
     delay_queue.pop_front();
   }
@@ -1615,7 +1615,7 @@ void Pipe::reader()
 
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING) {
-	msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+	in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	continue;
       }
@@ -1629,7 +1629,7 @@ void Pipe::reader()
 	ldout(msgr->cct,0) << "reader got old message "
 		<< m->get_seq() << " <= " << in_seq << " " << m << " " << *m
 		<< ", discarding" << dendl;
-	msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
+	in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
 	if (connection_state->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
 	    msgr->cct->_conf->ms_die_on_old_message)
@@ -1980,9 +1980,9 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     // blocks indefinitely, which it shouldn't).  in contrast, the
     // policy throttle carries for the lifetime of the message.
     ldout(msgr->cct,10) << "reader wants " << message_size << " from dispatch throttler "
-	     << msgr->dispatch_throttler.get_current() << "/"
-	     << msgr->dispatch_throttler.get_max() << dendl;
-    msgr->dispatch_throttler.get(message_size);
+	     << in_q->dispatch_throttler.get_current() << "/"
+	     << in_q->dispatch_throttler.get_max() << dendl;
+    in_q->dispatch_throttler.get(message_size);
   }
 
   utime_t throttle_stamp = ceph_clock_now(msgr->cct);
@@ -2142,7 +2142,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       policy.throttler_bytes->put(message_size);
     }
 
-    msgr->dispatch_throttle_release(message_size);
+    in_q->dispatch_throttle_release(message_size);
   }
   return ret;
 }

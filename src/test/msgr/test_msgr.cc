@@ -62,6 +62,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }
   virtual void TearDown() {
+    ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
+    ASSERT_EQ(client_msgr->get_dispatch_queue_len(), 0);
     delete server_msgr;
     delete client_msgr;
   }
@@ -1019,6 +1021,7 @@ class SyntheticWorkload {
          it != available_servers.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
+      ASSERT_EQ((*it)->get_dispatch_queue_len(), 0);
       delete (*it);
     }
     available_servers.clear();
@@ -1027,6 +1030,7 @@ class SyntheticWorkload {
          it != available_clients.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
+      ASSERT_EQ((*it)->get_dispatch_queue_len(), 0);
       delete (*it);
     }
     available_clients.clear();
@@ -1104,8 +1108,10 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
 
 
 TEST_P(MessengerTest, SyntheticInjectTest) {
+  uint64_t dispatch_throttle_bytes = g_ceph_context->_conf->ms_dispatch_throttle_bytes;
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
+  g_ceph_context->_conf->set_val("ms_dispatch_throttle_bytes", "16777216");
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
                              Messenger::Policy::stateful_server(0, 0),
                              Messenger::Policy::lossless_client(0, 0));
@@ -1134,6 +1140,8 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
   test_msg.wait_for_done();
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
+  g_ceph_context->_conf->set_val(
+      "ms_dispatch_throttle_bytes", std::to_string(dispatch_throttle_bytes));
 }
 
 TEST_P(MessengerTest, SyntheticInjectTest2) {
