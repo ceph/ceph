@@ -479,23 +479,23 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 
   if (delete_children) {
     int max = 1000;
-    ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
-    if (ret < 0)
-      return ret;
 
-    while (!objs.empty()) {
+    do {
+      objs.clear();
+
+      ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
+      if (ret < 0)
+        return ret;
+
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (; it != objs.end(); ++it) {
         ret = rgw_remove_object(store, info, bucket, (*it).key);
         if (ret < 0)
           return ret;
       }
-      objs.clear();
 
-      ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
-      if (ret < 0)
-        return ret;
-    }
+    } while (!objs.empty());
+
   }
 
   ret = rgw_bucket_sync_user_stats(store, bucket.tenant, bucket.name);
