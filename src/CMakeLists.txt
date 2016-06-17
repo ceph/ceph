@@ -389,7 +389,7 @@ set(libcommon_files
   mon/MonClient.cc
   mon/MonMap.cc
   msg/simple/Accepter.cc
-  msg/simple/DispatchQueue.cc
+  msg/DispatchQueue.cc
   msg/Message.cc
   osd/ECMsgTypes.cc
   osd/HitSet.cc
