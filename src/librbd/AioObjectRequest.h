@@ -9,10 +9,10 @@
 
 #include "common/snap_types.h"
 #include "include/buffer.h"
-#include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "include/rbd/librbd.hpp"
 #include "librbd/ObjectMap.h"
+
+class Context;
 
 namespace librbd {
 
