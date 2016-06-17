@@ -150,10 +150,10 @@ struct bluestore_extent_ref_map_t {
   };
   WRITE_CLASS_ENCODER(record_t)
 
-  map<uint64_t,record_t> ref_map;
+  map<uint32_t,record_t> ref_map;
 
   void _check() const;
-  void _maybe_merge_left(map<uint64_t,record_t>::iterator& p);
+  void _maybe_merge_left(map<uint32_t,record_t>::iterator& p);
 
   void clear() {
     ref_map.clear();
@@ -162,11 +162,11 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
-  void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
+  void get(uint32_t offset, uint32_t len);
+  void put(uint32_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
-  bool contains(uint64_t offset, uint32_t len) const;
-  bool intersects(uint64_t offset, uint32_t len) const;
+  bool contains(uint32_t offset, uint32_t len) const;
+  bool intersects(uint32_t offset, uint32_t len) const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
