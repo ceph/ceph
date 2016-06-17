@@ -43,6 +43,7 @@
 #include "OpRequest.h"
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
+#include <atomic>
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -4290,24 +4291,26 @@ enum scrub_error_type {
 // PromoteCounter
 
 struct PromoteCounter {
-  atomic64_t attempts, objects, bytes;
+  std::atomic_ullong  attempts{0};
+  std::atomic_ullong  objects{0};
+  std::atomic_ullong  bytes{0};
 
   void attempt() {
-    attempts.inc();
+    attempts++;
   }
 
   void finish(uint64_t size) {
-    objects.inc();
-    bytes.add(size);
+    objects++;
+    bytes += size;
   }
 
   void sample_and_attenuate(uint64_t *a, uint64_t *o, uint64_t *b) {
-    *a = attempts.read();
-    *o = objects.read();
-    *b = bytes.read();
-    attempts.set(*a / 2);
-    objects.set(*o / 2);
-    bytes.set(*b / 2);
+    *a = attempts;
+    *o = objects;
+    *b = bytes;
+    attempts = *a / 2;
+    objects = *o / 2;
+    bytes = *b / 2;
   }
 };
 
