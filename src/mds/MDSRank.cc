@@ -227,7 +227,7 @@ void MDSRankDispatcher::shutdown()
   // shut down cache
   mdcache->shutdown();
 
-  if (objecter->initialized.read())
+  if (objecter->initialized)
     objecter->shutdown();
 
   monc->shutdown();

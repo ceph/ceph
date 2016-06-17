@@ -331,7 +331,7 @@ void librados::RadosClient::shutdown()
   }
 
   bool need_objecter = false;
-  if (objecter && objecter->initialized.read()) {
+  if (objecter && objecter->initialized) {
     need_objecter = true;
   }
 
