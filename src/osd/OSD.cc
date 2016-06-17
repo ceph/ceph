@@ -5328,6 +5328,7 @@ COMMAND("list_missing " \
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
+COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
@@ -5583,6 +5584,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
         goto out;
       }
     }
+
+    if (osize && bsize > osize)
+      bsize = osize;
 
     dout(1) << " bench count " << count
             << " bsize " << prettybyte_t(bsize) << dendl;
