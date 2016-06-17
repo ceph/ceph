@@ -21,6 +21,10 @@ set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
+endif()
+
 include(CheckCCompilerFlag)
 CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2 -Werror" HAS_FORTIFY_SOURCE)
 if(HAS_FORTIFY_SOURCE)
