@@ -1758,6 +1758,16 @@ bool MDSRankDispatcher::handle_asok_command(
     } else {
       mdcache->dump_cache(path);
     }
+  } else if (command == "dump tree") {
+    string root;
+    int64_t depth;
+    cmd_getval(g_ceph_context, cmdmap, "root", root);
+    if (!cmd_getval(g_ceph_context, cmdmap, "depth", depth))
+      depth = -1;
+    {
+      Mutex::Locker l(mds_lock);
+      mdcache->dump_cache(root, depth, f);
+    }
   } else if (command == "force_readonly") {
     mds_lock.Lock();
     mdcache->force_readonly();
