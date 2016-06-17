@@ -73,13 +73,16 @@ template <typename I>
 void ImageSync<I>::send_prune_catch_up_sync_point() {
   update_progress("PRUNE_CATCH_UP_SYNC_POINT");
 
-  if (m_client_meta->sync_points.size() <= 1) {
+  if (m_client_meta->sync_points.empty()) {
     send_create_sync_point();
     return;
   }
 
   dout(20) << dendl;
 
+  // prune will remove sync points with missing snapshots and
+  // ensure we have a maximum of one sync point (in case we
+  // restarted)
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_prune_catch_up_sync_point>(this);
   SyncPointPruneRequest<I> *request = SyncPointPruneRequest<I>::create(

@@ -31,6 +31,7 @@ namespace image_sync {
 
 using ::testing::_;
 using ::testing::InSequence;
+using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
@@ -49,6 +50,12 @@ public:
   void expect_update_client(journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, update_client(_, _))
       .WillOnce(WithArg<1>(CompleteContext(r)));
+  }
+
+  void expect_get_snap_id(librbd::MockImageCtx &mock_remote_image_ctx,
+                          const std::string &snap_name, uint64_t snap_id) {
+    EXPECT_CALL(mock_remote_image_ctx, get_snap_id(StrEq(snap_name)))
+      .WillOnce(Return(snap_id));
   }
 
   void expect_image_refresh(librbd::MockImageCtx &mock_remote_image_ctx, int r) {
@@ -82,6 +89,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressSuccess) {
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
+  expect_get_snap_id(mock_remote_image_ctx, "snap1", 123);
   expect_image_refresh(mock_remote_image_ctx, 0);
   expect_update_client(mock_journaler, 0);
 
@@ -103,6 +111,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncInProgressSuccess) {
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
+  expect_get_snap_id(mock_remote_image_ctx, "snap1", 123);
   expect_snap_remove(mock_remote_image_ctx, "snap2", 0);
   expect_image_refresh(mock_remote_image_ctx, 0);
   expect_update_client(mock_journaler, 0);
@@ -114,6 +123,57 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncInProgressSuccess) {
   ASSERT_EQ(0, ctx.wait());
 
   client_meta.sync_points.pop_back();
+  ASSERT_EQ(client_meta, m_client_meta);
+}
+
+TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressMissingSnapSuccess) {
+  librbd::journal::MirrorPeerClientMeta client_meta;
+  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
+  client_meta.sync_points.emplace_front("snap1", boost::none);
+  m_client_meta = client_meta;
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_get_snap_id(mock_remote_image_ctx, "snap1", CEPH_NOSNAP);
+  expect_snap_remove(mock_remote_image_ctx, "snap2", 0);
+  expect_snap_remove(mock_remote_image_ctx, "snap1", 0);
+  expect_image_refresh(mock_remote_image_ctx, 0);
+  expect_update_client(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  MockSyncPointPruneRequest *req = create_request(mock_remote_image_ctx,
+                                                  mock_journaler, false, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  client_meta.sync_points.clear();
+  ASSERT_EQ(client_meta, m_client_meta);
+}
+
+TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressUnexpectedFromSnapSuccess) {
+  librbd::journal::MirrorPeerClientMeta client_meta;
+  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
+  m_client_meta = client_meta;
+
+  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  journal::MockJournaler mock_journaler;
+
+  InSequence seq;
+  expect_get_snap_id(mock_remote_image_ctx, "snap2", 124);
+  expect_snap_remove(mock_remote_image_ctx, "snap2", 0);
+  expect_snap_remove(mock_remote_image_ctx, "snap1", 0);
+  expect_image_refresh(mock_remote_image_ctx, 0);
+  expect_update_client(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  MockSyncPointPruneRequest *req = create_request(mock_remote_image_ctx,
+                                                  mock_journaler, false, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  client_meta.sync_points.clear();
   ASSERT_EQ(client_meta, m_client_meta);
 }
 
