@@ -112,7 +112,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
                                  EventCenter *c, PerfCounters *p)
   : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
     logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
-    out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1), port(-1),
+    out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(STATE_NONE), sd(-1), port(-1),
     dispatch_queue(q), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
@@ -354,6 +354,9 @@ ssize_t AsyncConnection::_try_send(bool more)
   if (open_write && !is_queued()) {
     center->delete_file_event(sd, EVENT_WRITABLE);
     open_write = false;
+
+    if (state_after_send != STATE_NONE)
+      center->dispatch_event_external(read_handler);
   }
 
   return outcoming_bl.length();
@@ -962,7 +965,7 @@ ssize_t AsyncConnection::_process_connection()
         if (!outcoming_bl.length()) {
           assert(state_after_send);
           state = state_after_send;
-          state_after_send = 0;
+          state_after_send = STATE_NONE;
         }
         break;
       }
