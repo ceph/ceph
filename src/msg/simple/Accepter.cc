@@ -37,6 +37,18 @@
  * Accepter
  */
 
+static int set_close_on_exec(int fd)
+{
+  int flags = fcntl(fd, F_GETFD, 0);
+  if (flags < 0) {
+    return errno;
+  }
+  if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC)) {
+    return errno;
+  }
+  return 0;
+}
+
 int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
   const md_config_t *conf = msgr->cct->_conf;
@@ -61,6 +73,11 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     lderr(msgr->cct) << "accepter.bind unable to create socket: "
 		     << cpp_strerror(errno) << dendl;
     return -errno;
+  }
+
+  if (set_close_on_exec(listen_sd)) {
+    lderr(msgr->cct) << "accepter.bind unable to set_close_exec(): "
+		     << cpp_strerror(errno) << dendl;
   }
 
   // use whatever user specified (if anything)
@@ -240,6 +257,11 @@ void *Accepter::entry()
     socklen_t slen = sizeof(addr.ss_addr());
     int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
+      int r = set_close_on_exec(sd);
+      if (r) {
+	ldout(msgr->cct,0) << "accepter set_close_on_exec() failed "
+	      << cpp_strerror(r) << dendl;
+      }
       errors = 0;
       ldout(msgr->cct,10) << "accepted incoming on sd " << sd << dendl;
       
