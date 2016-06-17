@@ -1914,7 +1914,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       return;
     }
     dout(20) << __func__ << "find_object_context got error " << r << dendl;
-    if (op->may_write()) {
+    if (op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -2090,7 +2091,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   if (r) {
     dout(20) << __func__ << " returned an error: " << r << dendl;
     close_op_ctx(ctx);
-    if (op->may_write()) {
+    if (op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -6660,7 +6662,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0) {
-    if (ctx->op->may_write()) {
+    if (ctx->op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
       // need to save the error code in the pg log, to detect dup ops,
       // but do nothing else
       ctx->update_log_only = true;
