@@ -6,8 +6,6 @@
 
 #include "common/Thread.h"
 
-#include <pthread.h>
-
 #include "EntryQueue.h"
 
 namespace ceph {
