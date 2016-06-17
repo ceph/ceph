@@ -373,7 +373,8 @@ Group:		Development/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Obsoletes:	ceph-devel < %{version}-%{release}
-Obsoletes:	librados2-devel
+Provides:	librados2-devel = %{version}-%{release}
+Obsoletes:	librados2-devel < %{version}-%{release}
 %description -n librados-devel
 This package contains libraries and headers needed to develop programs
 that use RADOS object store.
@@ -393,7 +394,8 @@ Group:		Development/Libraries
 License:	LGPL-2.0
 Requires:	librados-devel = %{version}-%{release}
 Requires:	librgw2 = %{version}-%{release}
-Obsoletes:	librgw2-devel
+Provides:	librgw2-devel = %{version}-%{release}
+Obsoletes:	librgw2-devel < %{version}-%{release}
 %description -n librgw-devel
 This package contains libraries and headers needed to develop programs
 that use RADOS gateway client library.
@@ -425,7 +427,8 @@ License:	LGPL-2.0
 Requires:	libradosstriper1 = %{version}-%{release}
 Requires:	librados-devel = %{version}-%{release}
 Obsoletes:	ceph-devel < %{version}-%{release}
-Obsoletes:	libradosstriper1-devel
+Provides:	libradosstriper1-devel = %{version}-%{release}
+Obsoletes:	libradosstriper1-devel < %{version}-%{release}
 %description -n libradosstriper-devel
 This package contains libraries and headers needed to develop programs
 that use RADOS striping interface.
@@ -451,7 +454,8 @@ License:	LGPL-2.0
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados-devel = %{version}-%{release}
 Obsoletes:	ceph-devel < %{version}-%{release}
-Obsoletes:	librbd1-devel
+Provides:	librbd1-devel = %{version}-%{release}
+Obsoletes:	librbd1-devel < %{version}-%{release}
 %description -n librbd-devel
 This package contains libraries and headers needed to develop programs
 that use RADOS block device.
@@ -488,7 +492,8 @@ License:	LGPL-2.0
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	librados-devel = %{version}-%{release}
 Obsoletes:	ceph-devel < %{version}-%{release}
-Obsoletes:	libcephfs1-devel
+Provides:	libcephfs1-devel = %{version}-%{release}
+Obsoletes:	libcephfs1-devel < %{version}-%{release}
 %description -n libcephfs-devel
 This package contains libraries and headers needed to develop programs
 that use Cephs distributed file system.
@@ -532,7 +537,8 @@ License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{version}-%{release}
 Obsoletes:	ceph-devel < %{version}-%{release}
-Obsoletes:	libcephfs_jni1-devel
+Provides:	libcephfs_jni1-devel = %{version}-%{release}
+Obsoletes:	libcephfs_jni1-devel < %{version}-%{release}
 %description -n libcephfs_jni-devel
 This package contains the development files for CephFS Java Native Interface
 library.
