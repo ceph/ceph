@@ -1111,11 +1111,14 @@ public:
   void notify_osdmap_changed();
 
 protected:
-  void dump_cache(const char *fn, Formatter *f);
+  void dump_cache(const char *fn, Formatter *f,
+		  const std::string& dump_root = "",
+		  int depth = -1);
 public:
   void dump_cache() {dump_cache(NULL, NULL);}
   void dump_cache(const std::string &filename);
   void dump_cache(Formatter *f);
+  void dump_cache(const std::string& dump_root, int depth, Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;

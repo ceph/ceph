@@ -11601,11 +11601,17 @@ void MDCache::dump_cache(Formatter *f)
   dump_cache(NULL, f);
 }
 
+void MDCache::dump_cache(const string& dump_root, int depth, Formatter *f)
+{
+  dump_cache(NULL, f, dump_root, depth);
+}
+
 /**
  * Dump the metadata cache, either to a Formatter, if
  * provided, else to a plain text file.
  */
-void MDCache::dump_cache(const char *fn, Formatter *f)
+void MDCache::dump_cache(const char *fn, Formatter *f,
+			 const string& dump_root, int depth)
 {
   int r = 0;
   int fd = -1;
@@ -11627,11 +11633,28 @@ void MDCache::dump_cache(const char *fn, Formatter *f)
       return;
     }
   }
-  
+
   for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     CInode *in = it->second;
+
+    if (!dump_root.empty()) {
+      string ipath;
+      if (in->is_root())
+	ipath = "/";
+      else
+	in->make_path_string(ipath);
+
+      if (dump_root.length() > ipath.length() ||
+	  !equal(dump_root.begin(), dump_root.end(), ipath.begin()))
+	continue;
+
+      if (depth >= 0 &&
+	  count(ipath.begin() + dump_root.length(), ipath.end(), '/') > depth)
+	continue;
+    }
+
     if (f) {
       f->open_object_section("inode");
       in->dump(f);
@@ -11641,7 +11664,7 @@ void MDCache::dump_cache(const char *fn, Formatter *f)
       std::string s = ss.str();
       r = safe_write(fd, s.c_str(), s.length());
       if (r < 0) {
-        goto out;
+	goto out;
       }
     }
 
