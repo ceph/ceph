@@ -5,10 +5,8 @@
 
 #include "include/int_types.h"
 #include "include/Context.h"
-#include "common/RWLock.h"
 
 #include <boost/function.hpp>
-#include "include/assert.h"
 
 namespace librbd
 {

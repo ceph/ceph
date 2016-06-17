@@ -7,6 +7,7 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
+#include "include/Context.h"
 
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AioCompletion.h"
@@ -14,8 +15,6 @@
 #include "librbd/CopyupRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
-#include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 

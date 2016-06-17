@@ -2,10 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "common/WorkQueue.h"
-#include <boost/bind.hpp>
 
 namespace librbd
 {
