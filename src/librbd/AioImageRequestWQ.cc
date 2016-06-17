@@ -51,19 +51,11 @@ ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
   ldout(cct, 20) << "write: ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  m_image_ctx.snap_lock.get_read();
-  int r = clip_io(&m_image_ctx, off, &len);
-  m_image_ctx.snap_lock.put_read();
-  if (r < 0) {
-    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
   aio_write(c, off, len, buf, op_flags, false);
 
-  r = cond.wait();
+  int r = cond.wait();
   if (r < 0) {
     return r;
   }
@@ -75,19 +67,11 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
   ldout(cct, 20) << "discard: ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  m_image_ctx.snap_lock.get_read();
-  int r = clip_io(&m_image_ctx, off, &len);
-  m_image_ctx.snap_lock.put_read();
-  if (r < 0) {
-    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
   aio_discard(c, off, len, false);
 
-  r = cond.wait();
+  int r = cond.wait();
   if (r < 0) {
     return r;
   }
