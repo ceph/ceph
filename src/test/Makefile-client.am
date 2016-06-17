@@ -718,6 +718,13 @@ ceph_test_rgw_period_history_LDADD = \
 ceph_test_rgw_period_history_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_period_history
 
+ceph_test_http_manager_SOURCES = test/rgw/test_http_manager.cc
+ceph_test_http_manager_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) -lcurl -lexpat
+ceph_test_http_manager_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_http_manager
+
 ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
 ceph_test_rgw_obj_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
