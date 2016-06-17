@@ -277,13 +277,11 @@ int Processor::start(Worker *w)
 void Processor::accept()
 {
   ldout(msgr->cct, 10) << __func__ << " listen_sd=" << listen_sd << dendl;
-  int errors = 0;
-  while (errors < 4) {
+  while (true) {
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
     int sd = ::accept(listen_sd, (sockaddr*)&ss, &slen);
     if (sd >= 0) {
-      errors = 0;
       ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
 
       msgr->add_accept(sd);
@@ -293,10 +291,18 @@ void Processor::accept()
         continue;
       } else if (errno == EAGAIN) {
         break;
+      } else if (errno == EMFILE || errno == ENFILE) {
+        lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << sd
+                         << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        break;
+      } else if (errno == ECONNABORTED) {
+        ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << sd
+                            << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        continue;
       } else {
-        errors++;
-        ldout(msgr->cct, 20) << __func__ << " no incoming connection?  sd = " << sd
-                             << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        lderr(msgr->cct) << __func__ << " no incoming connection?  sd = " << sd
+                         << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        break;
       }
     }
   }
