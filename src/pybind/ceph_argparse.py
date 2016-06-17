@@ -904,6 +904,8 @@ def validate(args, signature, partial=False):
     reqsiglen = len([desc for desc in mysig if desc.req])
     matchcnt = 0
     d = dict()
+    save_exception = None
+
     for desc in mysig:
         setattr(desc, 'numseen', 0)
         while desc.numseen < desc.n:
