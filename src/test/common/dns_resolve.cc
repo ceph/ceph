@@ -11,6 +11,13 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <arpa/nameser.h>
+#include <arpa/inet.h>
+#include <resolv.h>
+
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
