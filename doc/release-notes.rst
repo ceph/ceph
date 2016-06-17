@@ -422,6 +422,7 @@ Upgrading from Hammer
       #. Fix the ownership::
 
 	   chown -R ceph:ceph /var/lib/ceph
+           chown -R ceph:ceph /var/log/ceph
 
       #. Restart the daemon(s).::
 
@@ -4032,6 +4033,7 @@ Upgrading from Hammer
       #. Fix the ownership::
 
 	   chown -R ceph:ceph /var/lib/ceph
+           chown -R ceph:ceph /var/log/ceph
 
       #. Restart the daemon(s).::
 
@@ -4721,6 +4723,7 @@ Upgrading from Hammer
       #. Fix the ownership::
 
 	   chown -R ceph:ceph /var/lib/ceph
+           chown -R ceph:ceph /var/log/ceph
 
       #. Restart the daemon(s).::
 
