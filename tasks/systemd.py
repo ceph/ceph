@@ -68,6 +68,7 @@ def task(ctx, config):
                              osd_service])
             remote.run(args=['sudo', 'systemctl', 'stop',
                              osd_service])
+            time.sleep(4) #immediate check will result in deactivating state
             r = remote.run(args=['sudo', 'systemctl', 'status', osd_service],
                            stdout=StringIO(), check_status=False)
             log.info(r.stdout.getvalue())
@@ -81,6 +82,7 @@ def task(ctx, config):
         if mon_role_name in roles:
             remote.run(args=['sudo', 'systemctl', 'status', mon_name])
             remote.run(args=['sudo', 'systemctl', 'stop', mon_name])
+            time.sleep(4) #immediate check will result in deactivating state
             r = remote.run(args=['sudo', 'systemctl', 'status', 'ceph.target'],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
@@ -92,6 +94,7 @@ def task(ctx, config):
         if mds_role_name in roles:
             remote.run(args=['sudo', 'systemctl', 'status', mds_name])
             remote.run(args=['sudo', 'systemctl', 'stop', mds_name])
+            time.sleep(4) #immediate check will result in deactivating state
             r = remote.run(args=['sudo', 'systemctl', 'status', 'ceph.target'],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
