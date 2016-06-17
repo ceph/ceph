@@ -720,7 +720,7 @@ void MDCache::open_foreign_mdsdir(inodeno_t ino, MDSInternalContextBase *fin)
   discover_base_ino(ino, fin, mds_rank_t(ino & (MAX_MDS-1)));
 }
 
-CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
+CDir *MDCache::get_stray_dir(CInode *in)
 {
   string straydname;
   in->name_stray_dentry(straydname);
@@ -730,6 +730,14 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   frag_t fg = strayi->pick_dirfrag(straydname);
   CDir *straydir = strayi->get_dirfrag(fg);
   assert(straydir);
+  return straydir;
+}
+
+CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
+{
+  CDir *straydir = get_stray_dir(in);
+  string straydname;
+  in->name_stray_dentry(straydname);
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
