@@ -308,3 +308,18 @@
 	fun:boost::detail::get_current_thread_data()
 	...
 }
+{
+	rocksdb thread local singletons
+	Memcheck:Leak
+	...
+	fun:rocksdb::Env::Default()
+	...
+}
+{
+	rocksdb column thread local leaks
+	Memcheck:Leak
+	...
+	fun:rocksdb::ThreadLocalPtr::StaticMeta::SetHandler*
+	fun:rocksdb::ColumnFamilyData::ColumnFamilyData*
+	...
+}
