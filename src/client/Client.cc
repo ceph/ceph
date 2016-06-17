@@ -2506,9 +2506,10 @@ void Client::handle_fs_map_user(MFSMapUser *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
-  if (m->get_epoch() < mdsmap->get_epoch()) {
-    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
-	    << mdsmap->get_epoch() << dendl;
+  if (m->get_epoch() <= mdsmap->get_epoch()) {
+    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch()
+                  << " is identical to or older than our "
+                  << mdsmap->get_epoch() << dendl;
     m->put();
     return;
   }  
