@@ -37,7 +37,7 @@ namespace crimson {
 	std::chrono::milliseconds wait_time;
 	struct {
 	  uint16_t count;
-	  std::chrono::milliseconds time_bw_reqs;
+	  std::chrono::microseconds time_bw_reqs;
 	  uint16_t max_outstanding;
 	} req_params;
       } args;
@@ -57,8 +57,8 @@ namespace crimson {
       {
 	args.req_params.count = count;
 	args.req_params.max_outstanding = max_outstanding;
-	uint32_t ms = uint32_t(0.5 + 1.0 / ops_per_sec * 1000);
-	args.req_params.time_bw_reqs = std::chrono::milliseconds(ms);
+	uint32_t us = uint32_t(0.5 + 1.0 / ops_per_sec * 1000000);
+	args.req_params.time_bw_reqs = std::chrono::microseconds(us);
       }
     };
 
