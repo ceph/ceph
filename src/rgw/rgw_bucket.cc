@@ -276,11 +276,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
   }
 
   ep.linked = false;
-  ret = store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), &attrs);
-  if (ret < 0)
-    return ret;
-
-  return ret;
+  return store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), &attrs);
 }
 
 int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
