@@ -5,10 +5,7 @@
 
 #include "librbd/AsyncOperation.h"
 #include "include/int_types.h"
-
-#include "common/Mutex.h"
 #include "include/buffer.h"
-#include "include/rados/librados.hpp"
 
 namespace librbd {
 
