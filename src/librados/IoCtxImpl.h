@@ -18,7 +18,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/snap_types.h"
-#include "include/atomic.h"
+#include <atomic>
 #include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -29,7 +29,7 @@
 class RadosClient;
 
 struct librados::IoCtxImpl {
-  atomic_t ref_cnt;
+  std::atomic_uint ref_cnt{0};
   RadosClient *client;
   int64_t poolid;
   snapid_t snap_seq;
@@ -73,11 +73,11 @@ struct librados::IoCtxImpl {
   int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps);
 
   void get() {
-    ref_cnt.inc();
+    ++ref_cnt;
   }
 
   void put() {
-    if (ref_cnt.dec() == 0)
+    if (--ref_cnt == 0)
       delete this;
   }
 
