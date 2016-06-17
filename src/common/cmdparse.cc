@@ -14,11 +14,37 @@
 
 #include <cxxabi.h>
 #include "common/cmdparse.h"
+#include "common/Formatter.h"
 #include "include/str_list.h"
 #include "json_spirit/json_spirit.h"
 #include "common/debug.h"
 
 using namespace std;
+
+/**
+ * Given a cmddesc like "foo baz name=bar,type=CephString",
+ * return the prefix "foo baz".
+ */
+std::string cmddesc_get_prefix(const std::string &cmddesc)
+{
+  stringstream ss(cmddesc);
+  std::string word;
+  std::ostringstream result;
+  bool first = true;
+  while (std::getline(ss, word, ' ')) {
+    if (word.find_first_of(",=") != string::npos) {
+      break;
+    }
+
+    if (!first) {
+      result << " ";
+    }
+    result << word;
+    first = false;
+  }
+
+  return result.str();
+}
 
 /**
  * Read a command description list out of cmd, and dump it to f.
@@ -109,6 +135,68 @@ dump_cmddesc_to_json(Formatter *jf,
       jf->dump_string("avail", avail.c_str());
       jf->close_section(); // cmd
 }
+
+
+void cmdmap_dump(const cmdmap_t &cmdmap, Formatter *f)
+{
+  assert(f != nullptr);
+
+  class dump_visitor : public boost::static_visitor<void>
+  {
+    Formatter *f;
+    std::string const &key;
+    public:
+    dump_visitor(Formatter *f_, std::string const &key_)
+      : f(f_), key(key_)
+    {
+    }
+
+    void operator()(const std::string &operand) const
+    {
+      f->dump_string(key.c_str(), operand);
+    }
+
+    void operator()(const bool &operand) const
+    {
+      f->dump_bool(key.c_str(), operand);
+    }
+
+    void operator()(const int64_t &operand) const
+    {
+      f->dump_int(key.c_str(), operand);
+    }
+
+    void operator()(const double &operand) const
+    {
+      f->dump_float(key.c_str(), operand);
+    }
+
+    void operator()(const std::vector<std::string> &operand) const
+    {
+      f->open_array_section(key.c_str());
+      for (const auto i : operand) {
+        f->dump_string("item", i);
+      }
+      f->close_section();
+    }
+
+    void operator()(const std::vector<int64_t> &operand) const
+    {
+      f->open_array_section(key.c_str());
+      for (const auto i : operand) {
+        f->dump_int("item", i);
+      }
+      f->close_section();
+    }
+  };
+
+  //f->open_object_section("cmdmap");
+  for (const auto &i : cmdmap) {
+    boost::apply_visitor(dump_visitor(f, i.first), i.second);
+  }
+  //f->close_section();
+}
+
 
 /** Parse JSON in vector cmd into a map from field to map of values
  * (use mValue/mObject)
