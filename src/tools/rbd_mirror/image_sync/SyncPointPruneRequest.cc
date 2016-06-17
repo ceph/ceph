@@ -53,14 +53,26 @@ void SyncPointPruneRequest<I>::send() {
       m_snap_names.push_back(sync_point.from_snap_name);
     }
   } else {
-    // if we have more than one sync point, trim the extras off
+    // if we have more than one sync point or invalid sync points,
+    // trim them off
+    RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
     std::set<std::string> snap_names;
     for (auto it = m_client_meta_copy.sync_points.rbegin();
          it != m_client_meta_copy.sync_points.rend(); ++it) {
-      MirrorPeerSyncPoint &sync_point =
-        m_client_meta_copy.sync_points.back();
+      MirrorPeerSyncPoint &sync_point = *it;
       if (&sync_point == &m_client_meta_copy.sync_points.front()) {
-        break;
+        if (m_remote_image_ctx->get_snap_id(sync_point.snap_name) ==
+              CEPH_NOSNAP) {
+          derr << ": failed to locate sync point snapshot: "
+               << sync_point.snap_name << dendl;
+        } else if (!sync_point.from_snap_name.empty()) {
+          derr << ": unexpected from_snap_name in primary sync point: "
+               << sync_point.from_snap_name << dendl;
+        } else {
+          // first sync point is OK -- keep it
+          break;
+        }
+        m_invalid_master_sync_point = true;
       }
 
       if (snap_names.count(sync_point.snap_name) == 0) {
@@ -155,6 +167,10 @@ void SyncPointPruneRequest<I>::send_update_client() {
   } else {
     while (m_client_meta_copy.sync_points.size() > 1) {
       m_client_meta_copy.sync_points.pop_back();
+    }
+    if (m_invalid_master_sync_point) {
+      // all subsequent sync points would have been pruned
+      m_client_meta_copy.sync_points.clear();
     }
   }
 

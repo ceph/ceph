@@ -3361,16 +3361,15 @@ void OSD::load_pgs()
  * follow the same logic, but do all pgs at the same time so that we
  * can make a single pass across the osdmap history.
  */
-struct pistate {
-  epoch_t start, end;
-  vector<int> old_acting, old_up;
-  epoch_t same_interval_since;
-  int primary;
-  int up_primary;
-};
-
 void OSD::build_past_intervals_parallel()
 {
+  struct pistate {
+    epoch_t start, end;
+    vector<int> old_acting, old_up;
+    epoch_t same_interval_since;
+    int primary;
+    int up_primary;
+  };
   map<PG*,pistate> pis;
 
   // calculate junction of map range
@@ -5329,6 +5328,7 @@ COMMAND("list_missing " \
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
+COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
@@ -5584,6 +5584,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
         goto out;
       }
     }
+
+    if (osize && bsize > osize)
+      bsize = osize;
 
     dout(1) << " bench count " << count
             << " bsize " << prettybyte_t(bsize) << dendl;

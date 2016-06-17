@@ -162,12 +162,12 @@ if(${WITH_RADOSGW})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
 
-  # test_cls_rgw_meta
+  # ceph_test_cls_rgw_meta
   set(test_cls_rgw_meta_srcs test_rgw_admin_meta.cc)
-  add_executable(test_cls_rgw_meta
+  add_executable(ceph_test_cls_rgw_meta
     ${test_cls_rgw_meta_srcs}
     )
-  target_link_libraries(test_cls_rgw_meta
+  target_link_libraries(ceph_test_cls_rgw_meta
     librados
     rgw_a
     global
@@ -183,17 +183,21 @@ if(${WITH_RADOSGW})
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
-  set_target_properties(test_cls_rgw_meta PROPERTIES COMPILE_FLAGS
-    ${UNITTEST_CXX_FLAGS})
+  set_target_properties(ceph_test_cls_rgw_meta PROPERTIES
+    COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
-  # test_cls_rgw_log
-  set(test_cls_rgw_log_srcs
+  install(TARGETS
+    ceph_test_cls_rgw_meta
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  # ceph_test_cls_rgw_log
+  set(ceph_test_cls_rgw_log_srcs
     test_rgw_admin_log.cc
     )
-  add_executable(test_cls_rgw_log
-    ${test_cls_rgw_log_srcs}
+  add_executable(ceph_test_cls_rgw_log
+    ${ceph_test_cls_rgw_log_srcs}
     )
-  target_link_libraries(test_cls_rgw_log
+  target_link_libraries(ceph_test_cls_rgw_log
     librados
     rgw_a
     global
@@ -213,15 +217,15 @@ if(${WITH_RADOSGW})
     ${EXTRALIBS}
     ${CRYPTO_LIBS}
     )
-  set_target_properties(test_cls_rgw_log PROPERTIES COMPILE_FLAGS
+  set_target_properties(ceph_test_cls_rgw_log PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
 
-  # test_cls_rgw_opstate
-  set(test_cls_rgw_opstate_srcs test_rgw_admin_opstate.cc)
-  add_executable(test_cls_rgw_opstate
-    ${test_cls_rgw_opstate_srcs}
+  # ceph_test_cls_rgw_opstate
+  set(ceph_test_cls_rgw_opstate_srcs test_rgw_admin_opstate.cc)
+  add_executable(ceph_test_cls_rgw_opstate
+    ${ceph_test_cls_rgw_opstate_srcs}
     )
-  target_link_libraries(test_cls_rgw_opstate
+  target_link_libraries(ceph_test_cls_rgw_opstate
     rgw_a
     librados
     cls_version_client
@@ -241,8 +245,8 @@ if(${WITH_RADOSGW})
     ${CRYPTO_LIBS}
     ${EXTRALIBS}
     )
-  set_target_properties(test_cls_rgw_opstate PROPERTIES COMPILE_FLAGS
-    ${UNITTEST_CXX_FLAGS})
+  set_target_properties(ceph_test_cls_rgw_opstate PROPERTIES
+    COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # ceph_test_librgw_file (nfs-like RGW interface)
 add_executable(ceph_test_librgw_file
@@ -428,6 +432,9 @@ target_link_libraries(ceph_test_stress_watch
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS
+  ceph_test_stress_watch
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(${HAVE_FUSE})
   add_executable(ceph_test_cfuse_cache_invalidate

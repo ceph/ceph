@@ -9,6 +9,8 @@ target_link_libraries(ceph_test_mon_workloadgen
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS ceph_test_mon_workloadgen
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_mon_msg
 add_executable(ceph_test_mon_msg 

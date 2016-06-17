@@ -77,73 +77,6 @@ class C_handle_write : public EventCallback {
   }
 };
 
-class C_handle_reset : public EventCallback {
-  AsyncMessenger *msgr;
-  AsyncConnectionRef conn;
-
- public:
-  C_handle_reset(AsyncMessenger *m, AsyncConnectionRef c): msgr(m), conn(c) {}
-  void do_request(int id) {
-    msgr->ms_deliver_handle_reset(conn.get());
-  }
-};
-
-class C_handle_remote_reset : public EventCallback {
-  AsyncMessenger *msgr;
-  AsyncConnectionRef conn;
-
- public:
-  C_handle_remote_reset(AsyncMessenger *m, AsyncConnectionRef c): msgr(m), conn(c) {}
-  void do_request(int id) {
-    msgr->ms_deliver_handle_remote_reset(conn.get());
-  }
-};
-
-class C_handle_dispatch : public EventCallback {
-  AsyncMessenger *msgr;
-  Message *m;
-
- public:
-  C_handle_dispatch(AsyncMessenger *msgr, Message *m): msgr(msgr), m(m) {}
-  void do_request(int id) {
-    msgr->ms_deliver_dispatch(m);
-    delete this;
-  }
-};
-
-class C_deliver_connect : public EventCallback {
-  AsyncMessenger *msgr;
-  AsyncConnectionRef conn;
-
- public:
-  C_deliver_connect(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
-  void do_request(int id) {
-    msgr->ms_deliver_handle_connect(conn.get());
-  }
-};
-
-class C_deliver_accept : public EventCallback {
-  AsyncMessenger *msgr;
-  AsyncConnectionRef conn;
-
- public:
-  C_deliver_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
-  void do_request(int id) {
-    msgr->ms_deliver_handle_accept(conn.get());
-    delete this;
-  }
-};
-
-class C_local_deliver : public EventCallback {
-  AsyncConnectionRef conn;
- public:
-  explicit C_local_deliver(AsyncConnectionRef c): conn(c) {}
-  void do_request(int id) {
-    conn->local_deliver();
-  }
-};
-
-
 class C_clean_handler : public EventCallback {
   AsyncConnectionRef conn;
  public:
@@ -175,10 +108,12 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), logger(p), global_seq(0), connect_seq(0), 
-    peer_global_seq(0), out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1),
-    port(-1), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
+                                 EventCenter *c, PerfCounters *p)
+  : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
+    logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
+    out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1), port(-1),
+    dispatch_queue(q), write_lock("AsyncConnection::write_lock"), can_write(WriteStatus::NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
@@ -186,10 +121,6 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
 {
   read_handler = new C_handle_read(this);
   write_handler = new C_handle_write(this);
-  reset_handler = new C_handle_reset(async_msgr, this);
-  remote_reset_handler = new C_handle_remote_reset(async_msgr, this);
-  connect_handler = new C_deliver_connect(async_msgr, this);
-  local_deliver_handler = new C_local_deliver(this);
   wakeup_handler = new C_time_wakeup(this);
   memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
@@ -215,7 +146,7 @@ void AsyncConnection::maybe_start_delay_thread()
   if (!delay_state &&
       async_msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(peer_type)) != string::npos) {
     ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
-    delay_state = new DelayedDelivery(async_msgr, center);
+    delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
   }
 }
 
@@ -223,10 +154,14 @@ void AsyncConnection::maybe_start_delay_thread()
  * return 0 means EAGAIN or EINTR */
 ssize_t AsyncConnection::read_bulk(int fd, char *buf, unsigned len)
 {
-  ssize_t nread = ::read(fd, buf, len);
+  ssize_t nread;
+ again:
+  nread = ::read(fd, buf, len);
   if (nread == -1) {
-    if (errno == EAGAIN || errno == EINTR) {
+    if (errno == EAGAIN) {
       nread = 0;
+    } else if (errno == EINTR) {
+      goto again;
     } else {
       ldout(async_msgr->cct, 1) << __func__ << " reading from fd=" << fd
                           << " : "<< strerror(errno) << dendl;
@@ -703,14 +638,14 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_THROTTLE_BYTES:
         {
-          uint64_t message_size = current_header.front_len + current_header.middle_len + current_header.data_len;
-          if (message_size) {
+          cur_msg_size = current_header.front_len + current_header.middle_len + current_header.data_len;
+          if (cur_msg_size) {
             if (policy.throttler_bytes) {
-              ldout(async_msgr->cct, 10) << __func__ << " wants " << message_size << " bytes from policy throttler "
+              ldout(async_msgr->cct, 10) << __func__ << " wants " << cur_msg_size << " bytes from policy throttler "
                                          << policy.throttler_bytes->get_current() << "/"
                                          << policy.throttler_bytes->get_max() << dendl;
-              if (!policy.throttler_bytes->get_or_fail(message_size)) {
-                ldout(async_msgr->cct, 10) << __func__ << " wants " << message_size << " bytes from policy throttler "
+              if (!policy.throttler_bytes->get_or_fail(cur_msg_size)) {
+                ldout(async_msgr->cct, 10) << __func__ << " wants " << cur_msg_size << " bytes from policy throttler "
                                            << policy.throttler_bytes->get_current() << "/"
                                            << policy.throttler_bytes->get_max() << " failed, just wait." << dendl;
                 // following thread pool deal with th full message queue isn't a
@@ -719,6 +654,25 @@ void AsyncConnection::process()
                   register_time_events.insert(center->create_time_event(1000, wakeup_handler));
                 break;
               }
+            }
+          }
+
+          state = STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE;
+          break;
+        }
+
+      case STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE:
+        {
+          if (cur_msg_size) {
+            if (!dispatch_queue->dispatch_throttler.get_or_fail(cur_msg_size)) {
+              ldout(async_msgr->cct, 10) << __func__ << " wants " << cur_msg_size << " bytes from dispatch throttle "
+                                         << dispatch_queue->dispatch_throttler.get_current() << "/"
+                                         << dispatch_queue->dispatch_throttler.get_max() << " failed, just wait." << dendl;
+              // following thread pool deal with th full message queue isn't a
+              // short time, so we can wait a ms.
+              if (register_time_events.empty())
+                register_time_events.insert(center->create_time_event(1000, wakeup_handler));
+              break;
             }
           }
 
@@ -884,8 +838,7 @@ void AsyncConnection::process()
 
           // store reservation size in message, so we don't get confused
           // by messages entering the dispatch queue through other paths.
-          uint64_t message_size = current_header.front_len + current_header.middle_len + current_header.data_len;
-          message->set_dispatch_throttle_size(message_size);
+          message->set_dispatch_throttle_size(cur_msg_size);
 
           message->set_recv_stamp(recv_stamp);
           message->set_throttle_stamp(throttle_stamp);
@@ -931,7 +884,7 @@ void AsyncConnection::process()
           state = STATE_OPEN;
 
           logger->inc(l_msgr_recv_messages);
-          logger->inc(l_msgr_recv_bytes, message_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
+          logger->inc(l_msgr_recv_bytes, cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
           async_msgr->ms_fast_preprocess(message);
           if (delay_state) {
@@ -946,11 +899,12 @@ void AsyncConnection::process()
             delay_state->queue(delay_period, release, message);
           } else if (async_msgr->ms_can_fast_dispatch(message)) {
             lock.Unlock();
-            async_msgr->ms_fast_dispatch(message);
+            dispatch_queue->fast_dispatch(message);
             lock.Lock();
           } else {
-            center->dispatch_event_external(EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
+            dispatch_queue->enqueue(message, message->get_priority(), conn_id);
           }
+
           break;
         }
 
@@ -994,34 +948,6 @@ void AsyncConnection::process()
   return;
 
  fail:
-  // clean up state internal variables and states
-  if (state >= STATE_CONNECTING_SEND_CONNECT_MSG &&
-      state <= STATE_CONNECTING_READY) {
-    delete authorizer;
-    authorizer = NULL;
-    got_bad_auth = false;
-  }
-
-  if (state > STATE_OPEN_MESSAGE_THROTTLE_MESSAGE &&
-      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH
-      && policy.throttler_messages) {
-    ldout(async_msgr->cct,10) << __func__ << " releasing " << 1
-                        << " message to policy throttler "
-                        << policy.throttler_messages->get_current() << "/"
-                        << policy.throttler_messages->get_max() << dendl;
-    policy.throttler_messages->put();
-  }
-  if (state > STATE_OPEN_MESSAGE_THROTTLE_BYTES &&
-      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH) {
-    uint64_t message_size = current_header.front_len + current_header.middle_len + current_header.data_len;
-    if (policy.throttler_bytes) {
-      ldout(async_msgr->cct,10) << __func__ << " releasing " << message_size
-                          << " bytes to policy throttler "
-                          << policy.throttler_bytes->get_current() << "/"
-                          << policy.throttler_bytes->get_max() << dendl;
-      policy.throttler_bytes->put(message_size);
-    }
-  }
   fault();
 }
 
@@ -1076,9 +1002,12 @@ ssize_t AsyncConnection::_process_connection()
           ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
           goto fail;
         } else if (r > 0) {
+          ldout(async_msgr->cct, 10) << __func__ << " nonblock connect inprogress" << dendl;
+          center->create_file_event(sd, EVENT_WRITABLE, read_handler);
           break;
         }
 
+        center->delete_file_event(sd, EVENT_WRITABLE);
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
@@ -1367,7 +1296,7 @@ ssize_t AsyncConnection::_process_connection()
           session_security.reset();
         }
 
-        center->dispatch_event_external(connect_handler);
+        dispatch_queue->queue_connect(this);
         async_msgr->ms_deliver_handle_fast_connect(this);
 
         // message may in queue between last _try_send and connection ready
@@ -1831,14 +1760,12 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   inject_delay();
   if (existing->policy.lossy) {
     // disconnect from the Connection
-    existing->center->dispatch_event_external(existing->reset_handler);
     ldout(async_msgr->cct, 1) << __func__ << " replacing on lossy channel, failing existing" << dendl;
     existing->_stop();
+    existing->dispatch_queue->queue_reset(existing.get());
   } else {
     assert(can_write == WriteStatus::NOWRITE);
     existing->write_lock.Lock(true);
-    // queue a reset on the new connection, which we're dumping for the old
-    center->dispatch_event_external(reset_handler);
 
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -1863,6 +1790,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       assert(!delay_state);
     }
     existing->requeue_sent();
+    existing->reset_recv_state();
 
     swap(existing->sd, sd);
     existing->can_write = WriteStatus::NOWRITE;
@@ -1884,6 +1812,8 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
 
     ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
     _stop();
+    // queue a reset on the new connection, which we're dumping for the old
+    dispatch_queue->queue_reset(this);
     existing->lock.Unlock();
     return 0;
   }
@@ -1960,7 +1890,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     goto fail_registered;
 
   // notify
-  center->dispatch_event_external(EventCallbackRef(new C_deliver_accept(async_msgr, this)));
+  dispatch_queue->queue_accept(this);
   async_msgr->ms_deliver_handle_fast_accept(this);
   once_ready = true;
 
@@ -2021,8 +1951,7 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
     Mutex::Locker l(write_lock);
     if (can_write != WriteStatus::CLOSED) {
-      local_messages.push_back(m);
-      center->dispatch_event_external(local_deliver_handler);
+      dispatch_queue->local_delivery(m, m->get_priority());
     } else {
       ldout(async_msgr->cct, 10) << __func__ << " loopback connection closed."
                                  << " Drop message " << m << dendl;
@@ -2054,7 +1983,7 @@ int AsyncConnection::send_message(Message *m)
                               << f << " != " << get_features() << dendl;
   }
   if (!is_queued() && can_write == WriteStatus::CANWRITE && async_msgr->cct->_conf->ms_async_send_inline) {
-    if (!can_fast_prepare)
+    if (!bl.length())
       prepare_send_message(get_features(), m, bl);
     logger->inc(l_msgr_send_messages_inline);
     if (write_message(m, bl, false) < 0) {
@@ -2160,8 +2089,8 @@ void AsyncConnection::fault()
 
   if (policy.lossy && !(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY)) {
     ldout(async_msgr->cct, 1) << __func__ << " on lossy channel, failing" << dendl;
-    center->dispatch_event_external(reset_handler);
     _stop();
+    dispatch_queue->queue_reset(this);
     return ;
   }
 
@@ -2189,12 +2118,12 @@ void AsyncConnection::fault()
       state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
     ldout(async_msgr->cct, 0) << __func__ << " with nothing to send and in the half "
                               << " accept state just closed" << dendl;
-    center->dispatch_event_external(reset_handler);
-
     write_lock.Unlock();
     _stop();
+    dispatch_queue->queue_reset(this);
     return ;
   }
+  reset_recv_state();
   if (policy.standby && !is_queued()) {
     ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
@@ -2239,9 +2168,10 @@ void AsyncConnection::was_session_reset()
   Mutex::Locker l(write_lock);
   if (delay_state)
     delay_state->discard();
+  dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
 
-  center->dispatch_event_external(remote_reset_handler);
+  dispatch_queue->queue_remote_reset(this);
 
   if (randomize_out_seq()) {
     ldout(async_msgr->cct, 15) << __func__ << " could not get random bytes to set seq number for session reset; set seq number to " << out_seq.read() << dendl;
@@ -2269,6 +2199,8 @@ void AsyncConnection::_stop()
   if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
+  reset_recv_state();
+  dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
   async_msgr->unregister_conn(this);
 
@@ -2411,6 +2343,45 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   return rc;
 }
 
+void AsyncConnection::reset_recv_state()
+{
+  // clean up state internal variables and states
+  if (state >= STATE_CONNECTING_SEND_CONNECT_MSG &&
+      state <= STATE_CONNECTING_READY) {
+    delete authorizer;
+    authorizer = NULL;
+    got_bad_auth = false;
+  }
+
+  if (state > STATE_OPEN_MESSAGE_THROTTLE_MESSAGE &&
+      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH
+      && policy.throttler_messages) {
+    ldout(async_msgr->cct, 10) << __func__ << " releasing " << 1
+                               << " message to policy throttler "
+                               << policy.throttler_messages->get_current() << "/"
+                               << policy.throttler_messages->get_max() << dendl;
+    policy.throttler_messages->put();
+  }
+  if (state > STATE_OPEN_MESSAGE_THROTTLE_BYTES &&
+      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH) {
+    if (policy.throttler_bytes) {
+      ldout(async_msgr->cct, 10) << __func__ << " releasing " << cur_msg_size
+                                 << " bytes to policy throttler "
+                                 << policy.throttler_bytes->get_current() << "/"
+                                 << policy.throttler_bytes->get_max() << dendl;
+      policy.throttler_bytes->put(cur_msg_size);
+    }
+  }
+  if (state > STATE_OPEN_MESSAGE_THROTTLE_DISPATCH_QUEUE &&
+      state <= STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH) {
+    ldout(async_msgr->cct, 10) << __func__ << " releasing " << cur_msg_size
+                               << " bytes to dispatch_queue throttler "
+                               << dispatch_queue->dispatch_throttler.get_current() << "/"
+                               << dispatch_queue->dispatch_throttler.get_max() << dendl;
+    dispatch_queue->dispatch_throttle_release(cur_msg_size);
+  }
+}
+
 void AsyncConnection::handle_ack(uint64_t seq)
 {
   ldout(async_msgr->cct, 15) << __func__ << " got ack seq " << seq << dendl;
@@ -2446,24 +2417,28 @@ void AsyncConnection::DelayedDelivery::do_request(int id)
     delay_queue.pop_front();
   }
   if (msgr->ms_can_fast_dispatch(m)) {
-    msgr->ms_fast_dispatch(m);
+    dispatch_queue->fast_dispatch(m);
   } else {
-    msgr->ms_deliver_dispatch(m);
+    dispatch_queue->enqueue(m, m->get_priority(), conn_id);
   }
 }
 
 class C_flush_messages : public EventCallback {
   std::deque<std::pair<utime_t, Message*> > delay_queue;
   AsyncMessenger *msgr;
+  DispatchQueue *dispatch_queue;
+  uint64_t conn_id;
  public:
-  C_flush_messages(std::deque<std::pair<utime_t, Message*> > &&q, AsyncMessenger *m): delay_queue(std::move(q)), msgr(m) {}
+  C_flush_messages(std::deque<std::pair<utime_t, Message*> > &&q, AsyncMessenger *m,
+                   DispatchQueue *dq, uint64_t cid)
+      : delay_queue(std::move(q)), msgr(m), dispatch_queue(dq), conn_id(cid) {}
   void do_request(int id) {
     while (!delay_queue.empty()) {
       Message *m = delay_queue.front().second;
       if (msgr->ms_can_fast_dispatch(m)) {
-        msgr->ms_fast_dispatch(m);
+        dispatch_queue->fast_dispatch(m);
       } else {
-        msgr->ms_deliver_dispatch(m);
+        dispatch_queue->enqueue(m, m->get_priority(), conn_id);
       }
       delay_queue.pop_front();
     }
@@ -2473,7 +2448,8 @@ class C_flush_messages : public EventCallback {
 
 void AsyncConnection::DelayedDelivery::flush() {
   Mutex::Locker l(delay_lock);
-  center->dispatch_event_external(new C_flush_messages(std::move(delay_queue), msgr));
+  center->dispatch_event_external(
+      new C_flush_messages(std::move(delay_queue), msgr, dispatch_queue, conn_id));
   for (auto i : register_time_events)
     center->delete_time_event(i);
   register_time_events.clear();
@@ -2611,25 +2587,4 @@ void AsyncConnection::wakeup_from(uint64_t id)
   register_time_events.erase(id);
   lock.Unlock();
   process();
-}
-
-void AsyncConnection::local_deliver()
-{
-  ldout(async_msgr->cct, 10) << __func__ << dendl;
-  Mutex::Locker l(write_lock);
-  while (!local_messages.empty()) {
-    Message *m = local_messages.front();
-    local_messages.pop_front();
-    m->set_connection(this);
-    m->set_recv_stamp(ceph_clock_now(async_msgr->cct));
-    ldout(async_msgr->cct, 10) << __func__ << " " << *m << " local deliver " << dendl;
-    async_msgr->ms_fast_preprocess(m);
-    write_lock.Unlock();
-    if (async_msgr->ms_can_fast_dispatch(m)) {
-      async_msgr->ms_fast_dispatch(m);
-    } else {
-      msgr->ms_deliver_dispatch(m);
-    }
-    write_lock.Lock();
-  }
 }
