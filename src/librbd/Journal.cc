@@ -424,7 +424,7 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
     return r;
   }
 
-  r = journaler.remove(false);
+  r = journaler.remove(true);
   if (r < 0) {
     lderr(cct) << "failed to remove journal: " << cpp_strerror(r) << dendl;
     return r;
