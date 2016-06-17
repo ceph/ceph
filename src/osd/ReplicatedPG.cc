@@ -8483,7 +8483,7 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
 	osd->op_wq.queue(
 	  make_pair(
 	    this,
-	    scrubber.active_rep_scrub));
+	    PGQueueable(scrubber.active_rep_scrub)));
 	scrubber.active_rep_scrub = OpRequestRef();
       }
     }
@@ -9726,7 +9726,7 @@ void ReplicatedPG::_applied_recovered_object_replica()
     osd->op_wq.queue(
       make_pair(
 	this,
-	scrubber.active_rep_scrub));
+	PGQueueable(scrubber.active_rep_scrub)));
     scrubber.active_rep_scrub = OpRequestRef();
   }
 

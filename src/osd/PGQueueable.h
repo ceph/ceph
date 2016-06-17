@@ -76,12 +76,11 @@ class PGQueueable {
     void operator()(const PGSnapTrim &op);
     void operator()(const PGScrub &op);
     void operator()(const PGRecovery &op);
-  };
+  }; // struct RunVis
 
 public:
 
-  // cppcheck-suppress noExplicitConstructor
-  PGQueueable(OpRequestRef op)
+  explicit PGQueueable(OpRequestRef op)
     : qvariant(op), cost(op->get_req()->get_cost()),
       priority(op->get_req()->get_priority()),
       start_time(op->get_req()->get_recv_stamp()),
