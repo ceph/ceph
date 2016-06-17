@@ -8,8 +8,6 @@
 #include "include/Context.h"
 #include <type_traits>
 
-class Context;
-
 namespace librbd {
 
 class ImageCtx;

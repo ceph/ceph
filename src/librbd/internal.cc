@@ -10,9 +10,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/ContextCompletion.h"
 #include "common/Throttle.h"
-#include "common/WorkQueue.h"
 #include "common/event_socket.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/stringify.h"
@@ -26,12 +24,10 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
-#include "librbd/CopyupRequest.h"
 #include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
@@ -45,7 +41,6 @@
 
 #include "journal/Journaler.h"
 
-#include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/variant.hpp>
 #include "include/assert.h"
