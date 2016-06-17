@@ -21,4 +21,6 @@ target_link_libraries(ceph_test_cls_rbd
   udev
   keyutils
   )
-
+install(TARGETS
+  ceph_test_cls_rbd
+  DESTINATION ${CMAKE_INSTALL_BINDIR})

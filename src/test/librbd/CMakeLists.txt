@@ -143,3 +143,8 @@ target_link_libraries(ceph_test_librbd_fsx
   keyutils
   )
 
+install(TARGETS
+  ceph_test_librbd
+  ceph_test_librbd_api
+  ceph_test_librbd_fsx
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
