@@ -12,4 +12,6 @@ target_link_libraries(ceph_test_cls_hello
   radostest
   ${UNITTEST_LIBS}
   )
-
+install(TARGETS
+  ceph_test_cls_hello
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
