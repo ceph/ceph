@@ -465,8 +465,11 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     return -EIO;
   }
 
-  if (signal_fd >= maxfd) {
-    maxfd = signal_fd + 1;
+  if (signal_fd > 0) {
+    FD_SET(signal_fd, &fdread);
+    if (signal_fd >= maxfd) {
+      maxfd = signal_fd + 1;
+    }
   }
 
   /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */
