@@ -49,7 +49,7 @@ int TestWatchNotify::list_watchers(const std::string& o,
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
-    strcpy(obj.addr, ":/0");
+    strcpy(obj.addr, "-");
     obj.watcher_id = static_cast<int64_t>(it->second.gid);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;
