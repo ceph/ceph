@@ -408,11 +408,11 @@ struct bluestore_blob_t {
     case 0:
       assert(0 == "no csum data, bad index");
     case 2:
-      return *reinterpret_cast<const __le16*>(p);
+      return reinterpret_cast<const __le16*>(p)[i];
     case 4:
-      return *reinterpret_cast<const __le32*>(p);
+      return reinterpret_cast<const __le32*>(p)[i];
     case 8:
-      return *reinterpret_cast<const __le64*>(p);
+      return reinterpret_cast<const __le64*>(p)[i];
     default:
       assert(0 == "unrecognized csum word size");
     }
