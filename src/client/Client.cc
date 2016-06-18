@@ -1706,10 +1706,11 @@ int Client::make_request(MetaRequest *request,
   if (!request->reply) {
     assert(request->aborted());
     assert(!request->got_unsafe);
+    r = request->get_abort_code();
     request->item.remove_myself();
     unregister_request(request);
     put_request(request); // ours
-    return request->get_abort_code();
+    return r;
   }
 
   // got it!
