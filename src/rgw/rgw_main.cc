@@ -53,6 +53,7 @@
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_frontend.h"
+#include "rgw_asio_frontend.h"
 
 #include <map>
 #include <string>
@@ -398,7 +399,12 @@ int main(int argc, const char **argv)
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
     RGWFrontend *fe;
-    if (framework == "fastcgi" || framework == "fcgi") {
+    if (framework == "asio") {
+      int port;
+      config->get_val("port", 80, &port);
+      RGWProcessEnv env{ store, &rest, olog, port };
+      fe = new RGWAsioFrontend(env);
+    } else if (framework == "fastcgi" || framework == "fcgi") {
       RGWProcessEnv fcgi_pe = { store, &rest, olog, 0 };
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);

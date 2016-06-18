@@ -4,9 +4,12 @@
 #ifndef RGW_ASIO_FRONTEND_H
 #define RGW_ASIO_FRONTEND_H
 
+#include <memory>
 #include "rgw_frontend.h"
 
 class RGWAsioFrontend : public RGWFrontend {
+  class Impl;
+  std::unique_ptr<Impl> impl;
 public:
   RGWAsioFrontend(const RGWProcessEnv& env);
   ~RGWAsioFrontend();
