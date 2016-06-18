@@ -98,39 +98,6 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t(123));
 }
 
-// bluestore_extent_t
-
-string bluestore_extent_t::get_flags_string(unsigned flags)
-{
-  string s;
-  if (flags & FLAG_SHARED) {
-    s = "shared";
-  }
-  return s;
-}
-
-void bluestore_extent_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("offset", offset);
-  f->dump_unsigned("length", length);
-  f->dump_unsigned("flags", flags);
-}
-
-void bluestore_extent_t::generate_test_instances(list<bluestore_extent_t*>& o)
-{
-  o.push_back(new bluestore_extent_t());
-  o.push_back(new bluestore_extent_t(123, 456));
-  o.push_back(new bluestore_extent_t(789, 1024, 322));
-}
-
-ostream& operator<<(ostream& out, const bluestore_extent_t& e)
-{
-  out << e.offset << "~" << e.length;
-  if (e.flags)
-    out << ":" << bluestore_extent_t::get_flags_string(e.flags);
-  return out;
-}
-
 // bluestore_extent_ref_map_t
 
 void bluestore_extent_ref_map_t::_check() const
@@ -367,47 +334,6 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
   out << ")";
   return out;
 }
-
-// bluestore_overlay_t
-
-void bluestore_overlay_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(key, bl);
-  ::encode(value_offset, bl);
-  ::encode(length, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_overlay_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(key, p);
-  ::decode(value_offset, p);
-  ::decode(length, p);
-  DECODE_FINISH(p);
-}
-
-void bluestore_overlay_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("key", key);
-  f->dump_unsigned("value_offset", value_offset);
-  f->dump_unsigned("length", length);
-}
-
-void bluestore_overlay_t::generate_test_instances(list<bluestore_overlay_t*>& o)
-{
-  o.push_back(new bluestore_overlay_t());
-  o.push_back(new bluestore_overlay_t(789, 1024, 1232232));
-}
-
-ostream& operator<<(ostream& out, const bluestore_overlay_t& o)
-{
-  out << "overlay(0x" << std::hex << o.value_offset << "~" << o.length
-      << std::dec << " key " << o.key << ")";
-  return out;
-}
-
 
 // bluestore_pextent_t
 
@@ -729,34 +655,24 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 
 // bluestore_lextent_t
 
-string bluestore_lextent_t::get_flags_string(unsigned flags)
-{
-  string s;
-  return s;
-}
-
 void bluestore_lextent_t::dump(Formatter *f) const
 {
   f->dump_unsigned("blob", blob);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
-  f->dump_unsigned("flags", flags);
 }
 
 void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& ls)
 {
   ls.push_back(new bluestore_lextent_t);
-  ls.push_back(new bluestore_lextent_t(23232, 0, 4096, 0));
-  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192, 7));
+  ls.push_back(new bluestore_lextent_t(23232, 0, 4096));
+  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192));
 }
 
 ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
 {
-  out  << "0x" << std::hex << lb.offset << "~" << lb.length << std::dec
-       << "->" << lb.blob;
-  if (lb.flags)
-    out << ":" << bluestore_lextent_t::get_flags_string(lb.flags);
-  return out;
+  return out << "0x" << std::hex << lb.offset << "~" << lb.length << std::dec
+	     << "->" << lb.blob;
 }
 
 
@@ -769,9 +685,6 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(size, bl);
   ::encode(attrs, bl);
   ::encode(extent_map, bl);
-  ::encode(overlay_map, bl);
-  ::encode(overlay_refs, bl);
-  ::encode(last_overlay_key, bl);
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
@@ -786,9 +699,6 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(size, p);
   ::decode(attrs, p);
   ::decode(extent_map, p);
-  ::decode(overlay_map, p);
-  ::decode(overlay_refs, p);
-  ::decode(last_overlay_key, p);
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
@@ -817,25 +727,6 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_object_section("overlays");
-  for (map<uint64_t,bluestore_overlay_t>::const_iterator p = overlay_map.begin();
-       p != overlay_map.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-  f->open_array_section("overlay_refs");
-  for (map<uint64_t,uint16_t>::const_iterator p = overlay_refs.begin();
-       p != overlay_refs.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    f->dump_unsigned("refs", p->second);
-    f->close_section();
-  }
-  f->close_section();
-  f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
@@ -899,13 +790,11 @@ void bluestore_onode_t::punch_hole(
 	  bluestore_lextent_t(
 	    p->second.blob,
 	    p->second.offset + front,
-	    length,
-	    p->second.flags));
+	    length));
 	extent_map[end] = bluestore_lextent_t(
 	  p->second.blob,
 	  p->second.offset + front + length,
-	  p->second.length - front - length,
-	  p->second.flags);
+	  p->second.length - front - length);
 	p->second.length = front;
 	break;
       } else {
@@ -916,8 +805,7 @@ void bluestore_onode_t::punch_hole(
 	  bluestore_lextent_t(
 	    p->second.blob,
 	    p->second.offset + keep,
-	    p->second.length - keep,
-	    p->second.flags));
+	    p->second.length - keep));
 	p->second.length = keep;
 	++p;
 	continue;
@@ -935,13 +823,11 @@ void bluestore_onode_t::punch_hole(
       bluestore_lextent_t(
 	p->second.blob,
 	p->second.offset,
-	p->second.length - keep,
-	p->second.flags));
+	p->second.length - keep));
     extent_map[end] = bluestore_lextent_t(
       p->second.blob,
       p->second.offset + p->second.length - keep,
-      keep,
-      p->second.flags);
+      keep);
     extent_map.erase(p++);
     break;
   }
@@ -955,9 +841,6 @@ void bluestore_wal_op_t::encode(bufferlist& bl) const
   ::encode(op, bl);
   ::encode(extents, bl);
   ::encode(data, bl);
-  ::encode(nid, bl);
-  ::encode(overlays, bl);
-  ::encode(removed_overlays, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -967,9 +850,6 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
   ::decode(op, p);
   ::decode(extents, p);
   ::decode(data, p);
-  ::decode(nid, p);
-  ::decode(overlays, p);
-  ::decode(removed_overlays, p);
   DECODE_FINISH(p);
 }
 
@@ -980,17 +860,6 @@ void bluestore_wal_op_t::dump(Formatter *f) const
   f->open_array_section("extents");
   for (auto& e : extents) {
     f->dump_object("extent", e);
-  }
-  f->close_section();
-  f->dump_unsigned("nid", nid);
-  f->open_array_section("overlays");
-  for (auto& o : overlays) {
-    f->dump_object("overlay", o);
-  }
-  f->close_section();
-  f->open_array_section("removed_overlays");
-  for (auto key : removed_overlays) {
-    f->dump_unsigned("key", key);
   }
   f->close_section();
 }
