@@ -29,7 +29,6 @@ extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
 extern ostream& operator<<(ostream& out, const sockaddr *sa);
 
 class entity_name_t {
-public:
   __u8 _type;
   int64_t _num;
 
