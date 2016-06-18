@@ -249,12 +249,12 @@ class FileLock(object):
         self.fn = fn
         self.fd = None
 
-    def acquire(self):
+    def __enter__(self):
         assert not self.fd
         self.fd = os.open(self.fn, os.O_WRONLY | os.O_CREAT)
         fcntl.lockf(self.fd, fcntl.LOCK_EX)
 
-    def release(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
         os.close(self.fd)
@@ -1779,9 +1779,8 @@ class Prepare(object):
         return parser
 
     def prepare(self):
-        prepare_lock.acquire()
-        self.prepare_locked()
-        prepare_lock.release()
+        with prepare_lock:
+            self.prepare_locked()
 
     @staticmethod
     def factory(args):
@@ -3302,8 +3301,7 @@ def main_activate(args):
         LOG.info('suppressed activate request on %s', args.path)
         return
 
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         mode = os.stat(args.path).st_mode
         if stat.S_ISBLK(mode):
             if (is_partition(args.path) and
@@ -3359,16 +3357,10 @@ def main_activate(args):
                 osd_id=osd_id,
             )
 
-    finally:
-        activate_lock.release()  # noqa
-
 
 def main_activate_lockbox(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_activate_lockbox_protected(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_activate_lockbox_protected(args):
@@ -3457,11 +3449,8 @@ def _remove_osd_directory_files(mounted_path, cluster):
 
 
 def main_deactivate(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_deactivate_locked(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_deactivate_locked(args):
@@ -3619,11 +3608,8 @@ def destroy_lookup_device(args, predicate, description):
 
 
 def main_destroy(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_destroy_locked(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_destroy_locked(args):
@@ -3725,8 +3711,7 @@ def main_activate_space(name, args):
     osd_id = None
     osd_uuid = None
     dev = None
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         if args.dmcrypt:
             dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
         else:
@@ -3762,9 +3747,6 @@ def main_activate_space(name, args):
             osd_id=osd_id,
         )
 
-    finally:
-        activate_lock.release()  # noqa
-
 
 ###########################
 
@@ -3792,31 +3774,29 @@ def main_activate_all(args):
                 continue
 
             LOG.info('Activating %s', path)
-            activate_lock.acquire()  # noqa
-            try:
-                # never map dmcrypt cyphertext devices
-                (cluster, osd_id) = mount_activate(
-                    dev=path,
-                    activate_key_template=args.activate_key_template,
-                    init=args.mark_init,
-                    dmcrypt=False,
-                    dmcrypt_key_dir='',
-                )
-                start_daemon(
-                    cluster=cluster,
-                    osd_id=osd_id,
-                )
+            with activate_lock:
+                try:
+                    # never map dmcrypt cyphertext devices
+                    (cluster, osd_id) = mount_activate(
+                        dev=path,
+                        activate_key_template=args.activate_key_template,
+                        init=args.mark_init,
+                        dmcrypt=False,
+                        dmcrypt_key_dir='',
+                    )
+                    start_daemon(
+                        cluster=cluster,
+                        osd_id=osd_id,
+                    )
 
-            except Exception as e:
-                print(
-                    '{prog}: {msg}'.format(prog=args.prog, msg=e),
-                    file=sys.stderr
-                )
+                except Exception as e:
+                    print(
+                        '{prog}: {msg}'.format(prog=args.prog, msg=e),
+                        file=sys.stderr
+                    )
 
-                err = True
+                    err = True
 
-            finally:
-                activate_lock.release()  # noqa
     if err:
         raise Error('One or more partitions failed to activate')
 
@@ -4190,11 +4170,8 @@ def list_devices():
 
 
 def main_list(args):
-    activate_lock.acquire()  # noqa
-    try:
+    with activate_lock:
         main_list_protected(args)
-    finally:
-        activate_lock.release()  # noqa
 
 
 def main_list_protected(args):
