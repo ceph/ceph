@@ -108,7 +108,6 @@ class fs_allocator {
    void addSlab(size_t slabSize) {
        size_t sz = sizeof(heapSlab_t) + slabSize * trueSlotSize;
        heapSlab_t *s = reinterpret_cast<heapSlab_t *>(::malloc(sz));
-std::cout << "addSlab " << slabSize << " sizeof:" << trueSlotSize << ',' << sizeof(T) << " sz = " << sz << " @ " << (void *)s << "\n";
        s->next = heapSlabs;
        heapSlabs = s;
        //
@@ -116,7 +115,6 @@ std::cout << "addSlab " << slabSize << " sizeof:" << trueSlotSize << ',' << size
        //
        char *raw = reinterpret_cast<char *>(s+1);
        for (size_t i = 0; i < slabSize; ++i) {
-std::cout << "Freeing Slot " << (void *)raw << "\n";
           freeslot(reinterpret_cast<slot_t *>(raw));
           raw += trueSlotSize;
           allocSlotCount++;
