@@ -54,52 +54,6 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
-/// extent: a byte extent back by the block device
-struct bluestore_extent_t {
-  enum {
-    FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
-  };
-  static string get_flags_string(unsigned flags);
-
-  uint64_t offset;
-  uint32_t length;
-  uint32_t flags;  /// or reserved
-
-  bluestore_extent_t(uint64_t o=0, uint32_t l=0, uint32_t f=0)
-    : offset(o), length(l), flags(f) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
-
-  bool has_flag(unsigned f) const {
-    return flags & f;
-  }
-  void set_flag(unsigned f) {
-    flags |= f;
-  }
-  void clear_flag(unsigned f) {
-    flags &= ~f;
-  }
-
-  void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
-    ::encode(flags, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
-    ::decode(flags, p);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_extent_t*>& o);
-};
-WRITE_CLASS_ENCODER(bluestore_extent_t)
-
-ostream& operator<<(ostream& out, const bluestore_extent_t& bp);
-
-
 /// pextent: physical extent
 struct bluestore_pextent_t {
   const static uint64_t INVALID_OFFSET = ~0ull;
@@ -189,27 +143,6 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
 			      const bluestore_extent_ref_map_t& r) {
   return !(l == r);
 }
-
-/// overlay: a byte extent backed by kv pair, logically overlaying other content
-struct bluestore_overlay_t {
-  uint64_t key;          ///< key (nid+key identify the kv pair in the kvdb)
-  uint32_t value_offset; ///< offset in associated value for this extent
-  uint32_t length;
-
-  bluestore_overlay_t() : key(0), value_offset(0), length(0) {}
-  bluestore_overlay_t(uint64_t k, uint32_t vo, uint32_t l)
-    : key(k), value_offset(vo), length(l) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_overlay_t*>& o);
-
-};
-WRITE_CLASS_ENCODER(bluestore_overlay_t)
-
-ostream& operator<<(ostream& out, const bluestore_overlay_t& o);
-
 
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
@@ -520,21 +453,16 @@ typedef int64_t bluestore_blob_id_t;
 
 /// lextent: logical data block back by the extent
 struct bluestore_lextent_t {
-  static string get_flags_string(unsigned flags);
-
   bluestore_blob_id_t blob;  ///< blob
   uint32_t offset;           ///< relative offset within the blob
   uint32_t length;           ///< length within the blob
-  uint32_t flags;            ///< FLAGS_*
 
   bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
 		      uint32_t o = 0,
-		      uint32_t l = 0,
-		      uint32_t f = 0)
+		      uint32_t l = 0)
     : blob(_blob),
       offset(o),
-      length(l),
-      flags(f) {}
+      length(l) {}
 
   uint64_t end() const {
     return offset + length;
@@ -544,27 +472,15 @@ struct bluestore_lextent_t {
     return blob < 0;
   }
 
-  bool has_flag(unsigned f) const {
-    return flags & f;
-  }
-  void set_flag(unsigned f) {
-    flags |= f;
-  }
-  void clear_flag(unsigned f) {
-    flags &= ~f;
-  }
-
   void encode(bufferlist& bl) const {
     ::encode(blob, bl);
     ::encode(offset, bl);
     ::encode(length, bl);
-    ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(blob, p);
     ::decode(offset, p);
     ::decode(length, p);
-    ::decode(flags, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_lextent_t*>& o);
@@ -582,9 +498,6 @@ struct bluestore_onode_t {
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
   map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
-  map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
-  map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
-  uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
   uint32_t expected_object_size;
@@ -594,7 +507,6 @@ struct bluestore_onode_t {
   bluestore_onode_t()
     : nid(0),
       size(0),
-      last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
       expected_write_size(0),
@@ -653,24 +565,6 @@ struct bluestore_onode_t {
   void punch_hole(uint64_t offset, uint64_t length,
 		  vector<bluestore_lextent_t> *deref);
 
-  bool put_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      return true;
-    assert(q->second >= 2);
-    if (--q->second == 1) {
-      overlay_refs.erase(q);
-    }
-    return false;
-  }
-  void get_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      overlay_refs[key] = 2;
-    else
-      ++q->second;
-  }
-
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
@@ -688,10 +582,6 @@ struct bluestore_wal_op_t {
 
   vector<bluestore_pextent_t> extents;
   bufferlist data;
-
-  uint64_t nid;
-  vector<bluestore_overlay_t> overlays;
-  vector<uint64_t> removed_overlays;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
