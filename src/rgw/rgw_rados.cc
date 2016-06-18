@@ -4772,8 +4772,9 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
 
 /** 
  * get listing of the objects in a bucket.
- * bucket: bucket to list contents of
+ *
  * max: maximum number of results to return
+ * bucket: bucket to list contents of
  * prefix: only return results that match this prefix
  * delim: do not include results that match this string.
  *     Any skipped results will have the matching portion of their name
@@ -4781,8 +4782,8 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
  * marker: if filled in, begin the listing with this object.
  * end_marker: if filled in, end the listing with this object.
  * result: the objects are put in here.
- * common_prefixes: if delim is filled in, any matching prefixes are placed
- *     here.
+ * common_prefixes: if delim is filled in, any matching prefixes are placed here.
+ * is_truncated: if number of objects in the bucket is bigger than max, then truncated.
  */
 int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
                                          map<string, bool> *common_prefixes,
