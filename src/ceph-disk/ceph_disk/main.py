@@ -244,19 +244,20 @@ CEPH_PREF_USER = None
 CEPH_PREF_GROUP = None
 
 
-class filelock(object):
+class FileLock(object):
     def __init__(self, fn):
         self.fn = fn
         self.fd = None
 
     def acquire(self):
         assert not self.fd
-        self.fd = open(self.fn, 'w')
+        self.fd = os.open(self.fn, os.O_WRONLY | os.O_CREAT)
         fcntl.lockf(self.fd, fcntl.LOCK_EX)
 
     def release(self):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
         self.fd = None
 
 
@@ -4433,10 +4434,10 @@ def setup_statedir(dir):
         os.mkdir(STATEDIR + "/tmp")
 
     global prepare_lock
-    prepare_lock = filelock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
+    prepare_lock = FileLock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
 
     global activate_lock
-    activate_lock = filelock(STATEDIR + '/tmp/ceph-disk.activate.lock')
+    activate_lock = FileLock(STATEDIR + '/tmp/ceph-disk.activate.lock')
 
     global SUPPRESS_PREFIX
     SUPPRESS_PREFIX = STATEDIR + '/tmp/suppress-activate.'
