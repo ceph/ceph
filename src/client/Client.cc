@@ -1614,7 +1614,7 @@ int Client::make_request(MetaRequest *request,
 
   // make note
   mds_requests[tid] = request->get();
-  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
+  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)
     oldest_tid = tid;
 
   if (uid < 0)
