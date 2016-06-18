@@ -149,6 +149,7 @@ LIBCIVETWEB_DEPS += ${SSL_LIBS}
 noinst_LTLIBRARIES += libcivetweb.la
 
 radosgw_SOURCES = \
+	rgw/rgw_asio_frontend.cc \
 	rgw/rgw_fcgi_process.cc \
 	rgw/rgw_loadgen_process.cc \
 	rgw/rgw_civetweb.cc \
@@ -191,6 +192,7 @@ noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
+	rgw/rgw_asio_frontend.h \
 	rgw/rgw_auth.h \
 	rgw/rgw_auth_decoimpl.h \
 	rgw/rgw_b64.h \
