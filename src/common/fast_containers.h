@@ -93,25 +93,40 @@ class fs_allocator {
    //
    struct heapSlab_t {
       heapSlab_t *next;
-      slot_t slots[heapSize];
-   };      
-   
+   };
+ 
    void freeslot(slot_t *s) {
       s->storage[0] = freelist;
       freelist = s;
       ++freeSlotCount;
    }
+
+   //
+   // Danger, because of the my_actual_allocator hack. You can't rely on T to be correct, nor any value or offset that's
+   // derived directly or indirectly from T.
+   //
+   void addSlab(size_t slabSize) {
+       size_t sz = sizeof(heapSlab_t) + slabSize * trueSlotSize;
+       heapSlab_t *s = reinterpret_cast<heapSlab_t *>(::malloc(sz));
+std::cout << "addSlab " << slabSize << " sizeof:" << trueSlotSize << ',' << sizeof(T) << " sz = " << sz << " @ " << (void *)s << "\n";
+       s->next = heapSlabs;
+       heapSlabs = s;
+       //
+       // Now, free the slots. This is a bit ugly because slotSize isn't known at compile time (because T is incorrect)
+       //
+       char *raw = reinterpret_cast<char *>(s+1);
+       for (size_t i = 0; i < slabSize; ++i) {
+std::cout << "Freeing Slot " << (void *)raw << "\n";
+          freeslot(reinterpret_cast<slot_t *>(raw));
+          raw += trueSlotSize;
+          allocSlotCount++;
+       }
+   }
    
    slot_t *allocslot() {
       if (freelist == nullptr) {
          // empty, alloc another slab
-  	 heapSlab_t *s = new heapSlab_t();
-         s->next = heapslabs;
-         heapslabs = s;
-         heapSlabCount++;
-         for (size_t i = 0; i < heapSize; ++i) {
-            freeslot(&s->slots[i]);
-         }
+         addSlab(heapSize);
       }
       slot_t *result = freelist;
       freelist = freelist->storage[0];
@@ -119,13 +134,24 @@ class fs_allocator {
       return result;
    }
 
-   slot_t *freelist;                            // list of slots that are free
-   heapSlab_t *heapslabs;		        // List of slabs to free on dtor
-   stackSlab_t stackslab; 			// stackSlab is always allocated with the object :)
-   size_t freeSlotCount;                        // # of slots currently in the freelist * Only used for debug integrity check *
-   size_t heapSlabCount;                        // # of slabs allocated on the heap     * Only used for debug integrity check *
+   void _reserve(size_t freeCount) {
+      if (freeSlotCount < freeCount) {
+         addSlab(freeCount - freeSlotCount);
+      }      
+   }
 
+   fs_allocator *selfPointer;                   // for selfCheck
+   slot_t *freelist;                            // list of slots that are free
+   heapSlab_t *heapSlabs;		        // List of slabs to free on dtor
+   size_t freeSlotCount;                        // # of slots currently in the freelist * Only used for debug integrity check *
+   size_t allocSlotCount;                       // # of slabs allocated                 * Only used for debug integrity check *
+   size_t trueSlotSize;	                        // Actual Slot Size
+
+   // Must always be last item declared, because of get_my_allocator hack which won't have the right types, hence it'll get the stack wrong....
+   stackSlab_t stackSlab; 			// stackSlab is always allocated with the object :)
+  
 public:
+   typedef fs_allocator<T,stackSize,heapSize> allocator_type;
    typedef T value_type;
    typedef value_type *pointer;
    typedef const value_type * const_pointer;
@@ -136,21 +162,22 @@ public:
 
    template<typename U> struct rebind { typedef fs_allocator<U,stackSize,heapSize> other; };
 
-   fs_allocator() : freelist(nullptr), heapslabs(nullptr), freeSlotCount(0), heapSlabCount(0) {
+   fs_allocator() : freelist(nullptr), heapSlabs(nullptr), freeSlotCount(0), allocSlotCount(stackSize), trueSlotSize(sizeof(slot_t)) {
       for (size_t i = 0; i < stackSize; ++i) {
-         freeslot(&stackslab.slots[i]);
+         freeslot(&stackSlab.slots[i]);
       }
+      selfPointer = this;
    }
    ~fs_allocator() {
       //
       // If you fail here, it's because you've allowed a node to escape the enclosing object. Something like a swap
       // or a splice operation. Probably the fast_xxx container is missing a "using" that serves to hide some operation.
       //
-      assert(freeSlotCount == ((heapSlabCount * heapSize) + stackSize));
-      while (heapslabs != nullptr) {
-         heapSlab_t *aslab = heapslabs;
-         heapslabs = heapslabs->next;
-         delete aslab;
+      assert(freeSlotCount == allocSlotCount);
+      while (heapSlabs != nullptr) {
+         heapSlab_t *aslab = heapSlabs;
+         heapSlabs = heapSlabs->next;
+         ::free(aslab);
       }     
    }
 
@@ -182,6 +209,17 @@ public:
    bool operator==(const fs_allocator&) { return true; }
    bool operator!=(const fs_allocator&) { return false; }
 
+   //
+   // Extra function for our use
+   //
+   void reserve(size_t freeCount) {
+      _reserve(freeCount);
+   }
+
+   void selfCheck() {
+      assert(this == selfPointer); // If you fail here, the horrible get_my_allocator hack is failing. 
+   }
+
 private:
 
    // Can't copy or assign this guy
@@ -202,12 +240,34 @@ template<
    size_t   heapCount = stackCount, 
    typename compare = std::less<key> >
    struct fast_map : public std::map<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount> > {
+   //
+   // Extended operator. reserve is now meaningful.
+   //
+   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::map<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount>> map_type;
    //
    // Disallowed operations
    //
    using map_type::swap;
+
+   //
+   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
+   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
+   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
+   // we do have a check for this :)
+   //
+   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
+   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
+   // additional members.
+   // But that doesn't matter for this hack...
+   //
+   typedef fs_allocator<std::pair<key,value>,stackCount,heapCount> my_alloc_type;
+   my_alloc_type * get_my_actual_allocator() {
+      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
+      alloc->selfCheck();
+      return alloc;
+   }
 };
 
 template<
@@ -217,12 +277,33 @@ template<
    size_t   heapCount = stackCount, 
    typename compare = std::less<key> >
    struct fast_multimap : public std::multimap<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount> > {
+   //
+   // Extended operator. reserve is now meaningful.
+   //
+   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::multimap<key,value,compare,fs_allocator<std::pair<key,value>,stackCount,heapCount>> map_type;
    //
    // Disallowed operations
    //
    using map_type::swap;
+   //
+   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
+   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
+   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
+   // we do have a check for this :)
+   //
+   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
+   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
+   // additional members.
+   // But that doesn't matter for this hack...
+   //
+   typedef fs_allocator<std::pair<key,value>,stackCount,heapCount> my_alloc_type;
+   my_alloc_type * get_my_actual_allocator() {
+      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
+      alloc->selfCheck();
+      return alloc;
+   }
 };
 
 template<
@@ -231,12 +312,33 @@ template<
    size_t   heapCount = stackCount, 
    typename compare = std::less<key> >
    struct fast_set : public std::set<key,compare,fs_allocator<key,stackCount,heapCount> > {
+   //
+   // Extended operator. reserve is now meaningful.
+   //
+   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::set<key,compare,fs_allocator<key,stackCount,heapCount>> set_type;
    //
    // Disallowed operations
    //
    using set_type::swap;
+   //
+   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
+   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
+   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
+   // we do have a check for this :)
+   //
+   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
+   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
+   // additional members.
+   // But that doesn't matter for this hack...
+   //
+   typedef fs_allocator<key,stackCount,heapCount> my_alloc_type;
+   my_alloc_type * get_my_actual_allocator() {
+      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
+      alloc->selfCheck();
+      return alloc;
+   }
 };
 
 template<
@@ -245,12 +347,33 @@ template<
    size_t   heapCount = stackCount, 
    typename compare = std::less<key> >
    struct fast_multiset : public std::multiset<key,compare,fs_allocator<key,stackCount,heapCount> > {
+   //
+   // Extended operator. reserve is now meaningful.
+   //
+   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::multiset<key,compare,fs_allocator<key,stackCount,heapCount>> set_type;
    //
    // Disallowed operations
    //
    using set_type::swap;
+   //
+   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
+   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
+   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
+   // we do have a check for this :)
+   //
+   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
+   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
+   // additional members.
+   // But that doesn't matter for this hack...
+   //
+   typedef fs_allocator<key,stackCount,heapCount> my_alloc_type;
+   my_alloc_type * get_my_actual_allocator() {
+      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
+      alloc->selfCheck();
+      return alloc;
+   }
 };
 
 template<
@@ -258,13 +381,47 @@ template<
    size_t   stackCount, 
    size_t   heapCount = stackCount >
    struct fast_list : public std::list<node,fs_allocator<node,stackCount,heapCount> > {
+
+   typedef typename std::list<node,fs_allocator<node,stackCount,heapCount>>::const_iterator ci;
+   //
+   // We support splice, but it requires actually copying each node, so it's O(N) not O(1)
+   //
+   void splice(ci pos, fast_list& other)        { this->splice(pos, other, other.begin(), other.end()); }
+   void splice(ci pos, fast_list& other, ci it) { this->splice(pos, other, it, std::next(it)); }
+   void splice(ci pos, fast_list& other, ci first, ci last) {
+      while (first != last) {
+         other.insert(pos,first);
+         pos++;
+         first++;
+      }
+   }
+   //
+   // Extended operator. reserve is now meaningful.
+   //
+   void reserve(size_t freeCount) { this->get_my_actual_allocator()->reserve(freeCount); }
 private:
    typedef std::list<node,fs_allocator<node,stackCount,heapCount>> list_type;
    //
    // Disallowed operations
    //
    using list_type::swap;
-   using list_type::splice;
+   //
+   // Unfortunately, the get_allocator operation returns a COPY of the allocator, not a reference :( :( :( :(
+   // We need the actual underlying object. This terrible hack accomplishes that because the STL library on
+   // all of the platforms we care about actually instantiate the allocator right at the start of the object :)
+   // we do have a check for this :)
+   //
+   // It's also the case that the instantiation type of the underlying allocator won't match the type of the allocator
+   // That's here (that's because the container instantiates the node type itself, i.e., with container-specific
+   // additional members.
+   // But that doesn't matter for this hack...
+   //
+   typedef fs_allocator<node,stackCount,heapCount> my_alloc_type;
+   my_alloc_type * get_my_actual_allocator() {
+      my_alloc_type *alloc = reinterpret_cast<my_alloc_type *>(this);
+      alloc->selfCheck();
+      return alloc;
+   }
 };
 
 };
