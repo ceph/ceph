@@ -103,6 +103,7 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
 set(radosgw_srcs
+  rgw_asio_frontend.cc
   rgw_fcgi_process.cc
   rgw_loadgen_process.cc
   rgw_civetweb.cc
