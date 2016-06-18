@@ -1243,6 +1243,38 @@ static int do_get_inconsistent_pg_cmd(const std::vector<const char*> &nargs,
   return 0;
 }
 
+static void dump_errors(const err_t &err, Formatter &f)
+{
+  f.open_array_section("errors");
+  if (err.has_attr_unexpected())
+    f.dump_string("error", "attr_unexpected");
+  if (err.has_shard_missing())
+    f.dump_string("error", "missing");
+  if (err.has_stat_error())
+    f.dump_string("error", "stat_error");
+  if (err.has_read_error())
+    f.dump_string("error", "read_error");
+  if (err.has_data_digest_mismatch())
+    f.dump_string("error", "data_digest_mismatch");
+  if (err.has_omap_digest_mismatch())
+    f.dump_string("error", "omap_digest_mismatch");
+  if (err.has_size_mismatch())
+    f.dump_string("error", "size_mismatch");
+  if (err.has_attr_mismatch())
+    f.dump_string("error", "attr_mismatch");
+  if (err.has_attr_missing())
+    f.dump_string("error", "attr_missing");
+  if (!err.has_read_error()) {
+    if (err.has_data_digest_mismatch_oi())
+      f.dump_string("error", "data_digest_mismatch_oi");
+    if (err.has_omap_digest_mismatch_oi())
+      f.dump_string("error", "omap_digest_mismatch_oi");
+    if (err.has_size_mismatch_oi())
+      f.dump_string("error", "size_mismatch_oi");
+  }
+  f.close_section();
+}
+
 static void dump_shard(const shard_info_t& shard,
 		       const inconsistent_obj_t& inc,
 		       Formatter &f)
@@ -1263,28 +1295,7 @@ static void dump_shard(const shard_info_t& shard,
     f.dump_format("data_digest", "0x%08x", shard.data_digest);
   }
 
-  f.open_array_section("errors");
-  if (shard.has_read_error())
-    f.dump_string("error", "read_error");
-  if (shard.has_data_digest_mismatch())
-    f.dump_string("error", "data_digest_mismatch");
-  if (shard.has_omap_digest_mismatch())
-    f.dump_string("error", "omap_digest_mismatch");
-  if (shard.has_size_mismatch())
-    f.dump_string("error", "size_mismatch");
-  if (!shard.has_read_error()) {
-    if (shard.has_data_digest_mismatch_oi())
-      f.dump_string("error", "data_digest_mismatch_oi");
-    if (shard.has_omap_digest_mismatch_oi())
-      f.dump_string("error", "omap_digest_mismatch_oi");
-    if (shard.has_size_mismatch_oi())
-      f.dump_string("error", "size_mismatch_oi");
-  }
-  if (shard.has_attr_missing())
-    f.dump_string("error", "attr_missing");
-  if (shard.has_attr_unexpected())
-    f.dump_string("error", "attr_unexpected");
-  f.close_section();
+  dump_errors(shard, f);
 
   if (inc.has_attr_mismatch()) {
     f.open_object_section("attrs");
@@ -1327,24 +1338,7 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
   dump_object_id(inc.object, f);
   f.close_section();
 
-  f.open_array_section("errors");
-  if (inc.has_attr_unexpected())
-    f.dump_string("error", "attr_unexpected");
-  if (inc.has_shard_missing())
-    f.dump_string("error", "missing");
-  if (inc.has_stat_error())
-    f.dump_string("error", "stat_error");
-  if (inc.has_read_error())
-    f.dump_string("error", "read_error");
-  if (inc.has_data_digest_mismatch())
-    f.dump_string("error", "data_digest_mismatch");
-  if (inc.has_omap_digest_mismatch())
-    f.dump_string("error", "omap_digest_mismatch");
-  if (inc.has_size_mismatch())
-    f.dump_string("error", "size_mismatch");
-  if (inc.has_attr_mismatch())
-    f.dump_string("error", "attr_mismatch");
-  f.close_section();
+  dump_errors(inc, f);
 
   f.open_array_section("shards");
   for (auto osd_shard : inc.shards) {
