@@ -225,6 +225,7 @@ int ObjBencher::aio_bench(
     return -EINVAL;
 
   int num_objects = 0;
+  int num_writes = 0;
   int r = 0;
   int prevPid = 0;
   utime_t runtime;
@@ -236,7 +237,7 @@ int ObjBencher::aio_bench(
   if (operation != OP_WRITE) {
     size_t prev_op_size, prev_object_size;
     r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
-			     &num_objects, &prevPid);
+			     &num_objects, &num_writes, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Must write data before running a read benchmark!" << std::endl;
@@ -271,17 +272,17 @@ int ObjBencher::aio_bench(
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = seq_read_bench(secondsToRun, num_objects, num_writes, concurrentios, prevPid, no_verify);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
-    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = rand_read_bench(secondsToRun, num_objects, num_writes, concurrentios, prevPid, no_verify);
     if (r != 0) goto out;
   }
 
   if (OP_WRITE == operation && cleanup) {
     r = fetch_bench_metadata(run_name_meta, &op_size, &object_size,
-			     &num_objects, &prevPid);
+			     &num_objects, &num_writes, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
@@ -352,12 +353,13 @@ static T vec_stddev(vector<T>& v)
 
 int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 				     size_t *op_size, size_t* object_size,
-				     int* num_objects, int* prevPid) {
+				     int* num_objects, int* num_writes,
+				     int* prevPid) {
   int r = 0;
   bufferlist object_data;
 
   r = sync_read(metadata_file, object_data,
-		sizeof(int) * 2 + sizeof(size_t) * 2);
+		sizeof(int) * 3 + sizeof(size_t) * 2);
   if (r <= 0) {
     // treat an empty file as a file that does not exist
     if (r == 0) {
@@ -373,6 +375,11 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
     ::decode(*op_size, p);
   } else {
     *op_size = *object_size;
+  }
+  if (!p.end()) {
+    ::decode(*num_writes, p);
+  } else {
+    *num_writes = *num_objects;
   }
 
   return 0;
@@ -607,6 +614,7 @@ int ObjBencher::write_bench(int secondsToRun,
   ::encode(num_objects, b_write);
   ::encode(getpid(), b_write);
   ::encode(data.op_size, b_write);
+  ::encode(data.started, b_write);
 
   // persist meta-data for further cleanup or read
   sync_write(run_name_meta, b_write, sizeof(int)*3);
@@ -629,7 +637,7 @@ int ObjBencher::write_bench(int secondsToRun,
   return r;
 }
 
-int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify) {
+int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int num_writes, int concurrentios, int pid, bool no_verify) {
   lock_cond lc(&lock);
 
   if (concurrentios <= 0) 
@@ -697,7 +705,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   slot = 0;
   while ((!seconds_to_run || ceph_clock_now(cct) < finish_time) &&
-	 num_objects > data.started) {
+	 num_writes > data.started) {
     lock.Lock();
     int old_slot = slot;
     bool found = false;
@@ -855,7 +863,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   return r;
 }
 
-int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid, bool no_verify)
+int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int num_writes, int concurrentios, int pid, bool no_verify)
 {
   lock_cond lc(&lock);
 
@@ -873,6 +881,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   time_to_run.set_from_double(seconds_to_run);
   double total_latency = 0;
   int r = 0;
+  int rand_id;
   utime_t runtime;
   sanitize_object_contents(&data, data.op_size); //clean it up once; subsequent
   //changes will be safe because string length should remain the same
@@ -889,7 +898,6 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name(i / writes_per_object, pid);
     contents[i] = new bufferlist();
   }
 
@@ -905,11 +913,13 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    index[i] = i;
+    rand_id = rand() % num_writes;
+    name[i] = generate_object_name(rand_id / writes_per_object, pid);
+    index[i] = rand_id;
     start_times[i] = ceph_clock_now(g_ceph_context);
     create_completion(i, _aio_cb, (void *)&lc);
     r = aio_read(name[i], i, contents[i], data.op_size,
-		 data.op_size * (i % writes_per_object));
+		 data.op_size * (rand_id % writes_per_object));
     if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
       cerr << "r = " << r << std::endl;
       goto ERR;
@@ -923,7 +933,6 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   //keep on adding new reads as old ones complete
   int slot;
   bufferlist *cur_contents;
-  int rand_id;
 
   slot = 0;
   while ((!seconds_to_run || ceph_clock_now(g_ceph_context) < finish_time)) {
@@ -980,7 +989,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
       }
     } 
 
-    rand_id = rand() % num_objects;
+    rand_id = rand() % num_writes;
     newName = generate_object_name(rand_id / writes_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);
@@ -1091,6 +1100,7 @@ int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, cons
   int r = 0;
   size_t op_size, object_size;
   int num_objects;
+  int num_writes;
   int prevPid;
 
   // default meta object if user does not specify one
@@ -1137,7 +1147,7 @@ int ObjBencher::clean_up(const std::string& orig_prefix, int concurrentios, cons
       continue;
     }
 
-    r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &prevPid);
+    r = fetch_bench_metadata(run_name_meta, &op_size, &object_size, &num_objects, &num_writes, &prevPid);
     if (r < 0) {
       return r;
     }
