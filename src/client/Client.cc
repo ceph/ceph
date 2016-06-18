@@ -5794,11 +5794,7 @@ void Client::tick()
   }
 
   if (mdsmap->get_epoch()) {
-    // renew caps?
-    utime_t el = now - last_cap_renew;
-    if (el > mdsmap->get_session_timeout() / 3.0)
-      renew_caps();
-
+    renew_caps();
     flush_cap_releases();
   }
 
@@ -5820,7 +5816,6 @@ void Client::tick()
 void Client::renew_caps()
 {
   ldout(cct, 10) << "renew_caps()" << dendl;
-  last_cap_renew = ceph_clock_now(cct);
   
   for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
@@ -5833,6 +5828,21 @@ void Client::renew_caps()
 
 void Client::renew_caps(MetaSession *session)
 {
+  utime_t cutoff = ceph_clock_now(cct);
+  cutoff += MAX(20.0, mdsmap->get_session_timeout() / 3.0);
+
+  if (session->cap_ttl > cutoff) {
+
+    // Session's current cap still has at least 1/3 of its lifetime to live,
+    // skipping renew.
+    ldout(cct, 10) << "session(" << session << ")"
+                   << " ttl(" << session->cap_ttl << ")"
+                   << " > cutoff(" << cutoff << "),"
+                   << "skipping renew"
+                   << dendl;
+    return;
+  }
+
   ldout(cct, 10) << "renew_caps mds." << session->mds_num << dendl;
   session->last_cap_renew_request = ceph_clock_now(cct);
   uint64_t seq = ++session->cap_renew_seq;

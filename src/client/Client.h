@@ -287,7 +287,6 @@ class Client : public Dispatcher, public md_config_obs_t {
   Finisher objecter_finisher;
 
   Context *tick_event;
-  utime_t last_cap_renew;
   void renew_caps();
   void renew_caps(MetaSession *session);
   void flush_cap_releases();
