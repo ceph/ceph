@@ -114,7 +114,7 @@ void bluestore_extent_ref_map_t::_check() const
   }
 }
 
-void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint64_t,record_t>::iterator& p)
+void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint32_t,record_t>::iterator& p)
 {
   if (p == ref_map.begin())
     return;
@@ -128,9 +128,9 @@ void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint64_t,record_t>::itera
   }
 }
 
-void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
+void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
 {
-  map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
@@ -146,9 +146,9 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     }
     if (p->first > offset) {
       // gap
-      uint64_t newlen = MIN(p->first - offset, length);
+      uint32_t newlen = MIN(p->first - offset, length);
       p = ref_map.insert(
-	map<uint64_t,record_t>::value_type(offset,
+	map<uint32_t,record_t>::value_type(offset,
 					   record_t(newlen, 1))).first;
       offset += newlen;
       length -= newlen;
@@ -159,9 +159,9 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     if (p->first < offset) {
       // split off the portion before offset
       assert(p->first + p->second.length > offset);
-      uint64_t left = p->first + p->second.length - offset;
+      uint32_t left = p->first + p->second.length - offset;
       p->second.length = offset - p->first;
-      p = ref_map.insert(map<uint64_t,record_t>::value_type(
+      p = ref_map.insert(map<uint32_t,record_t>::value_type(
 			   offset, record_t(left, p->second.refs))).first;
       // continue below
     }
@@ -186,10 +186,10 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 }
 
 void bluestore_extent_ref_map_t::put(
-  uint64_t offset, uint32_t length,
+  uint32_t offset, uint32_t length,
   vector<bluestore_pextent_t> *release)
 {
-  map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
       assert(0 == "put on missing extent (nothing before)");
@@ -200,9 +200,9 @@ void bluestore_extent_ref_map_t::put(
     }
   }
   if (p->first < offset) {
-    uint64_t left = p->first + p->second.length - offset;
+    uint32_t left = p->first + p->second.length - offset;
     p->second.length = offset - p->first;
-    p = ref_map.insert(map<uint64_t,record_t>::value_type(
+    p = ref_map.insert(map<uint32_t,record_t>::value_type(
 			 offset, record_t(left, p->second.refs))).first;
   }
   while (length > 0) {
@@ -239,9 +239,9 @@ void bluestore_extent_ref_map_t::put(
   _check();
 }
 
-bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const
+bool bluestore_extent_ref_map_t::contains(uint32_t offset, uint32_t length) const
 {
-  map<uint64_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
       return false; // nothing before
@@ -258,7 +258,7 @@ bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) cons
       return false;
     if (p->first + p->second.length >= offset + length)
       return true;
-    uint64_t overlap = p->first + p->second.length - offset;
+    uint32_t overlap = p->first + p->second.length - offset;
     offset += overlap;
     length -= overlap;
     ++p;
@@ -267,10 +267,10 @@ bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) cons
 }
 
 bool bluestore_extent_ref_map_t::intersects(
-  uint64_t offset,
+  uint32_t offset,
   uint32_t length) const
 {
-  map<uint64_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
@@ -376,7 +376,6 @@ void bluestore_blob_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(extents, bl);
-  ::encode(length, bl);
   ::encode(compressed_length, bl);
   ::encode(flags, bl);
   ::encode(csum_type, bl);
@@ -391,7 +390,6 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(extents, p);
-  ::decode(length, p);
   ::decode(compressed_length, p);
   ::decode(flags, p);
   ::decode(csum_type, p);
@@ -409,7 +407,6 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
-  f->dump_unsigned("length", length);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
@@ -433,9 +430,9 @@ void bluestore_blob_t::dump(Formatter *f) const
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 {
   ls.push_back(new bluestore_blob_t);
-  ls.push_back(new bluestore_blob_t(4096, 0));
-  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
-  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
+  ls.push_back(new bluestore_blob_t(0));
+  ls.push_back(new bluestore_blob_t(bluestore_pextent_t(111, 222), 12));
+  ls.push_back(new bluestore_blob_t(bluestore_pextent_t(111, 222), 12));
   ls.back()->csum_type = CSUM_XXHASH32;
   ls.back()->csum_chunk_order = 16;
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
@@ -447,7 +444,6 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " len 0x" << std::hex << o.length << std::dec
       << " clen 0x" << std::hex << o.compressed_length << std::dec;
   if (o.flags) {
     out << " " << o.get_flags_string();
@@ -514,7 +510,7 @@ void bluestore_blob_t::put_ref(
     }
     uint64_t end;
     if (p == ref_map.ref_map.end()) {
-      end = this->length;
+      end = this->get_ondisk_length();
     } else {
       end = p->first;
     }

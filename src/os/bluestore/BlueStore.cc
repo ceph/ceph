@@ -3153,7 +3153,6 @@ int BlueStore::_do_read(
     unsigned l_off = pos - lp->first;
     unsigned b_off = l_off + lp->second.offset;
     unsigned b_len = std::min(left, lp->second.length - l_off);
-    assert(b_len <= bptr->blob.length - b_off);
 
     ready_regions_t cache_res;
     interval_set<uint64_t> cache_interval;
@@ -5327,7 +5326,7 @@ void BlueStore::_do_write_small(
   if (ep != o->onode.extent_map.begin()) {
     --ep;
     b = c->get_blob(o, ep->second.blob);
-    if (ep->first + b->blob.get_max_length() <= offset) {
+    if (ep->first + b->blob.get_ondisk_length() <= offset) {
       ++ep;
     }
   }
@@ -5337,7 +5336,7 @@ void BlueStore::_do_write_small(
     }
     int64_t blob = ep->second.blob;
     b = c->get_blob(o, ep->second.blob);
-    if (!b->blob.is_mutable()) {
+    if (!b->blob.is_mutable() || b->blob.is_compressed()) {
       dout(20) << __func__ << " ignoring immutable " << blob << ": " << *b
 	       << dendl;
       ++ep;
@@ -5494,15 +5493,15 @@ void BlueStore::_do_write_small(
 
   // new blob.
   b = o->blob_map.new_blob(c->cache);
-  b->blob.length = min_alloc_size;
-  uint64_t b_off = offset % min_alloc_size;
+  unsigned alloc_len = min_alloc_size;
+  uint64_t b_off = offset % alloc_len;
   uint64_t b_len = length;
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, &b_len, block_size);
   if (b_off)
     b->blob.add_unused(0, b_off);
-  if (b_off + b_len < b->blob.length)
-    b->blob.add_unused(b_off + b_len, b->blob.length - (b_off + b_len));
+  if (b_off + b_len < alloc_len)
+    b->blob.add_unused(b_off + b_len, alloc_len - (b_off + b_len));
   o->onode.punch_hole(offset, length, &wctx->lex_old);
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
     bluestore_lextent_t(b->id, offset % min_alloc_size, length);
@@ -5511,7 +5510,7 @@ void BlueStore::_do_write_small(
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	   << ": " << lex << dendl;
   dout(20) << __func__ << "  new " << b->id << ": " << *b << dendl;
-  wctx->write(b, b_off, bl);
+  wctx->write(b, alloc_len, b_off, bl);
   return;
 }
 
@@ -5533,11 +5532,11 @@ void BlueStore::_do_write_big(
 	   << std::dec << dendl;
   while (length > 0) {
     Blob *b = o->blob_map.new_blob(c->cache);
-    auto l = b->blob.length = MIN(max_blob_len, length);
+    auto l = MIN(max_blob_len, length);
     bufferlist t;
     blp.copy(l, t);
     b->bc.write(txc->seq, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    wctx->write(b, 0, t);
+    wctx->write(b, l, 0, t);
     o->onode.punch_hole(offset, l, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l);
     b->blob.ref_map.get(0, l);
@@ -5560,7 +5559,7 @@ int BlueStore::_do_alloc_write(
 
   uint64_t need = 0;
   for (auto &wi : wctx->writes) {
-    need += wi.b->blob.length;
+    need += wi.blob_length;
   }
   int r = alloc->reserve(need);
   if (r < 0) {
@@ -5574,18 +5573,18 @@ int BlueStore::_do_alloc_write(
     Blob *b = wi.b;
     uint64_t b_off = wi.b_off;
     bufferlist *l = &wi.bl;
-    uint64_t final_length = b->blob.length;
-    uint64_t csum_length = b->blob.length;
+    uint64_t final_length = wi.blob_length;
+    uint64_t csum_length = wi.blob_length;
     unsigned csum_order;
     bufferlist compressed_bl;
     CompressorRef c;
     bool compressed = false;
     if (wctx->compress &&
-	b->blob.length > min_alloc_size &&
+	wi.blob_length > min_alloc_size &&
 	(c = compressor) != nullptr) {
       // compress
       assert(b_off == 0);
-      assert(b->blob.length == l->length());
+      assert(wi.blob_length == l->length());
       bluestore_compression_header_t chdr;
       chdr.type = c->get_type();
       // FIXME: memory alignment here is bad
@@ -5600,7 +5599,7 @@ int BlueStore::_do_alloc_write(
 	// pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
 	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
-	dout(20) << __func__ << hex << "  compressed 0x" << b->blob.length
+	dout(20) << __func__ << hex << "  compressed 0x" << wi.blob_length
 		 << " -> 0x" << rawlen << " => 0x" << newlen
 		 << " with " << chdr.type
 		 << dec << dendl;
@@ -5622,7 +5621,7 @@ int BlueStore::_do_alloc_write(
     }
     if (!compressed) {
       b->blob.set_flag(bluestore_blob_t::FLAG_MUTABLE);
-      if (l->length() != b->blob.length) {
+      if (l->length() != wi.blob_length) {
 	// hrm, maybe we could do better here, but let's not bother.
 	dout(20) << __func__ << " forcing csum_order to block_size_order "
 		 << block_size_order << dendl;
@@ -5697,9 +5696,7 @@ void BlueStore::_wctx_finish(
     }
     if (b->blob.ref_map.empty()) {
       dout(20) << __func__ << " rm blob " << *b << dendl;
-      if (compressed) {
-        txc->statfs_delta.compressed() -= b->blob.get_payload_length();
-      }
+      txc->statfs_delta.compressed() -= b->blob.get_compressed_payload_length();
       if (l.blob >= 0) {
 	o->blob_map.erase(b);
       } else {
