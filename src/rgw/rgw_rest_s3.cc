@@ -1227,19 +1227,20 @@ void RGWPutObj_ObjStore_S3::send_response()
 {
   if (op_ret) {
     set_req_state_err(s, op_ret);
+    dump_errno(s);
   } else {
     if (s->cct->_conf->rgw_s3_success_create_obj_status) {
       op_ret = get_success_retcode(
 	s->cct->_conf->rgw_s3_success_create_obj_status);
       set_req_state_err(s, op_ret);
     }
+    dump_errno(s);
     dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
   }
   if (s->system_request && !real_clock::is_zero(mtime)) {
     dump_epoch_header(s, "Rgwx-Mtime", mtime);
   }
-  dump_errno(s);
   end_header(s, this);
 }
 
