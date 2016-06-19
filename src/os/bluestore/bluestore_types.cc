@@ -286,16 +286,23 @@ bool bluestore_extent_ref_map_t::intersects(
 
 void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
-  ::encode(ref_map, bl);
-  ENCODE_FINISH(bl);
+  uint32_t n = ref_map.size();
+  small_encode_varint(n, bl);
+  for (auto& p : ref_map) {
+    small_encode_varint_lowz(p.first, bl);
+    p.second.encode(bl);
+  }
 }
 
 void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START(1, p);
-  ::decode(ref_map, p);
-  DECODE_FINISH(p);
+  uint32_t n;
+  small_decode_varint(n, p);
+  while (n--) {
+    uint64_t offset;
+    small_decode_varint_lowz(offset, p);
+    ref_map[offset].decode(p);
+  }
 }
 
 void bluestore_extent_ref_map_t::dump(Formatter *f) const
@@ -375,28 +382,28 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
 void bluestore_blob_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(extents, bl);
-  ::encode(compressed_length, bl);
-  ::encode(flags, bl);
-  ::encode(csum_type, bl);
-  ::encode(csum_chunk_order, bl);
+  small_encode_obj(extents, bl);
+  small_encode_varint_lowz(compressed_length, bl);
+  small_encode_varint(flags, bl);
+  small_encode_varint(csum_type, bl);
+  small_encode_varint(csum_chunk_order, bl);
   ::encode(ref_map, bl);
   ::encode(unused, bl);
-  ::encode(csum_data, bl);
+  small_encode_buf_lowz(csum_data, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluestore_blob_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(extents, p);
-  ::decode(compressed_length, p);
-  ::decode(flags, p);
-  ::decode(csum_type, p);
-  ::decode(csum_chunk_order, p);
+  small_decode_obj(extents, p);
+  small_decode_varint_lowz(compressed_length, p);
+  small_decode_varint(flags, p);
+  small_decode_varint(csum_type, p);
+  small_decode_varint(csum_chunk_order, p);
   ::decode(ref_map, p);
   ::decode(unused, p);
-  ::decode(csum_data, p);
+  small_decode_buf_lowz(csum_data, p);
   DECODE_FINISH(p);
 }
 

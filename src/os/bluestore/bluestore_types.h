@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
+#include "include/small_encoding.h"
 #include "common/hobject.h"
 
 namespace ceph {
@@ -72,12 +73,12 @@ struct bluestore_pextent_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
+    small_encode_lba(offset, bl);
+    small_encode_varint_lowz(length, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
+    small_decode_lba(offset, p);
+    small_decode_varint_lowz(length, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
@@ -94,12 +95,12 @@ struct bluestore_extent_ref_map_t {
     uint32_t refs;
     record_t(uint32_t l=0, uint32_t r=0) : length(l), refs(r) {}
     void encode(bufferlist& bl) const {
-      ::encode(length, bl);
-      ::encode(refs, bl);
+      small_encode_varint_lowz(length, bl);
+      small_encode_varint(refs, bl);
     }
     void decode(bufferlist::iterator& p) {
-      ::decode(length, p);
-      ::decode(refs, p);
+      small_decode_varint_lowz(length, p);
+      small_decode_varint(refs, p);
     }
   };
   WRITE_CLASS_ENCODER(record_t)
