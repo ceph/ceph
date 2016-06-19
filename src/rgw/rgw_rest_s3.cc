@@ -147,11 +147,20 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   map<string, string>::iterator riter;
   bufferlist metadata_bl;
 
-  if (op_ret)
-    goto done;
-
   if (sent_header)
     goto send_data;
+
+  if (custom_http_ret) {
+    set_req_state_err(s, 0);
+    dump_errno(s, custom_http_ret);
+  } else {
+    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
+          	  : op_ret);
+    dump_errno(s);
+  }
+
+  if (op_ret)
+    goto done;
 
   if (range_str)
     dump_range(s, start, end, s->obj_size);
@@ -251,15 +260,6 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   }
 
 done:
-  if (custom_http_ret) {
-    set_req_state_err(s, 0);
-    dump_errno(s, custom_http_ret);
-  } else {
-    set_req_state_err(s, (partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
-          	  : op_ret);
-    dump_errno(s);
-  }
-
   for (riter = response_attrs.begin(); riter != response_attrs.end();
        ++riter) {
     STREAM_IO(s)->print("%s: %s\r\n", riter->first.c_str(),
