@@ -27,6 +27,7 @@
 #include <string.h>
 #include <string>
 #include <map>
+#include <boost/utility/string_ref.hpp>
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
@@ -348,7 +349,7 @@ public:
   ~RGWEnv();
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
-  void set(const char *name, const char *val);
+  void set(const boost::string_ref& name, const boost::string_ref& val);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);

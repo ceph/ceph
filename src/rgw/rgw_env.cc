@@ -24,11 +24,9 @@ void RGWEnv::init(CephContext *cct)
   conf->init(cct, this);
 }
 
-void RGWEnv::set(const char *name, const char *val)
+void RGWEnv::set(const boost::string_ref& name, const boost::string_ref& val)
 {
-  if (!val)
-    val = "";
-  env_map[name] = val;
+  env_map[std::string{name}] = std::string{val};
 
   dout(20) << "RGWEnv::set(): " << name << ": " << val << dendl;
 }
