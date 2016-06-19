@@ -257,9 +257,21 @@ namespace crimson {
       EXPECT_EQ(2, pq.client_count());
       EXPECT_EQ(9, pq.request_count());
 
-      pq.remove_by_req_filter([](MyReq r) -> bool {return 1 == r.id % 2;});
+      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 1 == r.id % 2;});
 
       EXPECT_EQ(5, pq.request_count());
+
+      std::list<MyReq> capture;
+      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 0 == r.id % 2;},
+			      capture);
+      
+      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(5, capture.size());
+      int total = 0;
+      for (auto i : capture) {
+	total += i.id;
+      }
+      EXPECT_EQ(146, total) << " sum of captured items should be 146";
     } // TEST
 
 

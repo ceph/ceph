@@ -304,18 +304,26 @@ namespace crimson {
 	  return requests.size();
 	}
 
+	bool remove_by_req_filter(std::function<bool(const R&)> filter) {
+	  struct Sink {
+	    void push_back(const R& v) {}
+	  };
+	  static Sink my_sink;
+	  remove_by_req_filter(filter, my_sink);
+	}
+
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
 	template<typename Collect>
-	bool remove_by_req_filter(std::function<bool(R)> filter,
-				  Collect* out = nullptr) {
+	bool remove_by_req_filter(std::function<bool(const R&)> filter,
+				  Collect& out) {
 	  bool any_removed = false;
 	  for (auto i = requests.begin();
 	       i != requests.end();
 	       /* no inc */) {
 	    if (filter(*i->request)) {
 	      any_removed = true;
-	      if (out) out->push_back(*i->request);
+	      out.push_back(*i->request);
 	      i = requests.erase(i);
 	    } else {
 	      ++i;
@@ -388,9 +396,18 @@ namespace crimson {
       }
 
 
+      bool remove_by_req_filter(std::function<bool(const R&)> filter) {
+	struct Sink {
+	  void push_back(const R& v) {}
+	};
+	static Sink my_sink;
+	remove_by_req_filter(filter, my_sink);
+      }
+
+      
       template<typename Collect>
-      bool remove_by_req_filter(std::function<bool(R)> filter,
-				Collect* out = nullptr) {
+      bool remove_by_req_filter(std::function<bool(const R&)> filter,
+				Collect& out) {
 	bool any_removed = false;
 	DataGuard g(data_mtx);
 	for (auto i : client_map) {
