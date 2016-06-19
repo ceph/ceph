@@ -206,7 +206,7 @@ class EventCenter {
     assert(i < MAX_EVENTCENTER && global_centers);
     EventCenter *c = global_centers->centers[i];
     assert(c);
-    if (c->in_thread()) {
+    if (!nowait && c->in_thread()) {
       f();
       return ;
     }
