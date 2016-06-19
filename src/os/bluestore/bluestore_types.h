@@ -87,6 +87,8 @@ WRITE_CLASS_ENCODER(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl);
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p);
 
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {

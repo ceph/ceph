@@ -98,6 +98,29 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t(123));
 }
 
+// bluestore_pextent_t
+
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl)
+{
+  size_t n = v.size();
+  small_encode_varint(n, bl);
+  for (auto e : v) {
+    e.encode(bl);
+  }
+}
+
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p)
+{
+  size_t n;
+  small_decode_varint(n, p);
+  v.clear();
+  v.reserve(n);
+  while (n--) {
+    v.push_back(bluestore_pextent_t());
+    ::decode(v.back(), p);
+  }
+}
+
 // bluestore_extent_ref_map_t
 
 void bluestore_extent_ref_map_t::_check() const
@@ -382,28 +405,34 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
 void bluestore_blob_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  small_encode_obj(extents, bl);
-  small_encode_varint_lowz(compressed_length, bl);
+  small_encode(extents, bl);
   small_encode_varint(flags, bl);
+  if (is_compressed()) {
+    small_encode_varint_lowz(compressed_length, bl);
+  }
   small_encode_varint(csum_type, bl);
   small_encode_varint(csum_chunk_order, bl);
+  small_encode_buf_lowz(csum_data, bl);
   ::encode(ref_map, bl);
   ::encode(unused, bl);
-  small_encode_buf_lowz(csum_data, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluestore_blob_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  small_decode_obj(extents, p);
-  small_decode_varint_lowz(compressed_length, p);
+  small_decode(extents, p);
   small_decode_varint(flags, p);
+  if (is_compressed()) {
+    small_decode_varint_lowz(compressed_length, p);
+  } else {
+    compressed_length = 0;
+  }
   small_decode_varint(csum_type, p);
   small_decode_varint(csum_chunk_order, p);
+  small_decode_buf_lowz(csum_data, p);
   ::decode(ref_map, p);
   ::decode(unused, p);
-  small_decode_buf_lowz(csum_data, p);
   DECODE_FINISH(p);
 }
 
@@ -446,6 +475,10 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->ref_map.get(3, 5);
   ls.back()->add_unused(0, 3);
   ls.back()->add_unused(8, 8);
+  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
+  ls.back()->extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
+  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40120000, 0x10000));
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
