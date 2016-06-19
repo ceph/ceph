@@ -78,8 +78,9 @@ Build instructions:
 	make
 
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout.  If you put it elsewhere, just replace .. above with a
-correct path to the checkout.
+checkout.  If you put it elsewhere, just replace `..` above with a
+correct path to the checkout. For more detailed instructions about
+using CMake in Ceph, see [README.cmake.md](README.cmake.md).
 
 
 Dependencies
@@ -141,8 +142,20 @@ To start or stop individual daemons, the sysvinit script should work:
 CMake
 -----
 
-???
+To run a functional test cluster,
 
+	cd build
+    ../src/vstart.sh -d -n -x -l
+    bin/ceph -s
+
+Almost all of the usual commands are available in the bin directory.
+For example,
+
+    bin/rados lspools
+
+To shut down the test cluster,
+
+	../src/stop.sh
 
 Running unit tests
 ==================
@@ -177,7 +190,25 @@ like so:
 CMake
 -----
 
-???
+To run all tests, simply run
+
+    cd build
+    ctest
+
+But unlike `make check`, `ctest` does not **build** tests for you. So
+please make sure all the necessary pieces are in place before running
+a test
+
+    make unittest_addrs
+
+To run an individual test, you may want to
+
+    ctest -R unittest_addrs
+
+where `unittest_addrs` can be any regular expression. `ctest` is quite
+quiet by default, for more test output
+
+    ctest -R unittest_addrs -VV
 
 
 Building the Documentation
