@@ -415,9 +415,11 @@ void bluestore_blob_t::encode(bufferlist& bl) const
   if (is_compressed()) {
     small_encode_varint_lowz(compressed_length, bl);
   }
-  small_encode_varint(csum_type, bl);
-  small_encode_varint(csum_chunk_order, bl);
-  small_encode_buf_lowz(csum_data, bl);
+  if (has_csum()) {
+    small_encode_varint(csum_type, bl);
+    small_encode_varint(csum_chunk_order, bl);
+    small_encode_buf_lowz(csum_data, bl);
+  }
   ::encode(ref_map, bl);
   ::encode(unused, bl);
   ENCODE_FINISH(bl);
@@ -433,9 +435,14 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
   } else {
     compressed_length = 0;
   }
-  small_decode_varint(csum_type, p);
-  small_decode_varint(csum_chunk_order, p);
-  small_decode_buf_lowz(csum_data, p);
+  if (has_csum()) {
+    small_decode_varint(csum_type, p);
+    small_decode_varint(csum_chunk_order, p);
+    small_decode_buf_lowz(csum_data, p);
+  } else {
+    csum_type = CSUM_NONE;
+    csum_chunk_order = 0;
+  }
   ::decode(ref_map, p);
   ::decode(unused, p);
   DECODE_FINISH(p);
