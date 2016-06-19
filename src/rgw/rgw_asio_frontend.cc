@@ -10,6 +10,7 @@
 #include <boost/optional.hpp>
 
 #include "rgw_asio_frontend.h"
+#include "rgw_asio_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -125,6 +126,10 @@ void AsioFrontend::accept(boost::system::error_code ec)
                         });
 
   ldout(ctx(), 4) << "accept " << endpoint << dendl;
+
+  RGWRequest req{env.store->get_new_req_id()};
+  RGWAsioClientIO client{std::move(socket), std::move(endpoint)};
+  process_request(env.store, env.rest, &req, &client, env.olog);
 }
 
 int AsioFrontend::run()
