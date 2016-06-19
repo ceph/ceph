@@ -152,6 +152,7 @@ struct bluestore_blob_t {
   enum {
     FLAG_MUTABLE = 1,     ///< blob can be overwritten or split
     FLAG_COMPRESSED = 2,  ///< blob is compressed
+    FLAG_CSUM = 4,        ///< blob as checksums
   };
   static string get_flags_string(unsigned flags);
 
@@ -361,8 +362,8 @@ struct bluestore_blob_t {
     return len;
   }
 
-  bool has_csum_data() const {
-    return csum_data.length() > 0;
+  bool has_csum() const {
+    return has_flag(FLAG_CSUM);
   }
 
   uint32_t get_csum_chunk_size() const {
@@ -412,6 +413,7 @@ struct bluestore_blob_t {
   }
 
   void init_csum(unsigned type, unsigned order, unsigned len) {
+    flags |= FLAG_CSUM;
     csum_type = type;
     csum_chunk_order = order;
     csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());

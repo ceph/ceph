@@ -5227,7 +5227,7 @@ void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
 {
   for (auto& b : bm.blob_map) {
     dout(log_level) << __func__ << "  " << b << dendl;
-    if (b.blob.has_csum_data()) {
+    if (b.blob.has_csum()) {
       vector<uint64_t> v;
       unsigned n = b.blob.get_csum_count();
       for (unsigned i = 0; i < n; ++i)

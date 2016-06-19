@@ -399,6 +399,11 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "compressed";
   }
+  if (flags & FLAG_CSUM) {
+    if (s.length())
+      s += '+';
+    s += "csum";
+  }
   return s;
 }
 
@@ -533,7 +538,7 @@ void bluestore_blob_t::put_ref(
   }
 
   // we cannot release something smaller than our csum chunk size
-  if (has_csum_data() && get_csum_chunk_size() > min_release_size) {
+  if (has_csum() && get_csum_chunk_size() > min_release_size) {
     min_release_size = get_csum_chunk_size();
   }
 
