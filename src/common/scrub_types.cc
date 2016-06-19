@@ -113,7 +113,7 @@ inconsistent_obj_wrapper::set_auth_missing(const hobject_t& hoid,
     } else {
       shard.set_object(oid_object->second);
     }
-      shards[pg_map.first.osd] = shard;
+    shards[pg_map.first.osd] = shard;
   }
 }
 
