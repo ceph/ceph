@@ -1008,61 +1008,49 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         center->delete_file_event(sd, EVENT_WRITABLE);
-        state = STATE_CONNECTING_WAIT_BANNER;
-        break;
-      }
-
-    case STATE_CONNECTING_WAIT_BANNER:
-      {
-        r = read_until(strlen(CEPH_BANNER), state_buffer);
-        if (r < 0) {
-          ldout(async_msgr->cct, 1) << __func__ << " read banner failed" << dendl;
-          goto fail;
-        } else if (r > 0) {
-          break;
-        }
-
-        if (memcmp(state_buffer, CEPH_BANNER, strlen(CEPH_BANNER))) {
-          ldout(async_msgr->cct, 0) << __func__ << " connect protocol error (bad banner) on peer "
-                              << get_peer_addr() << dendl;
-          goto fail;
-        }
-
-        ldout(async_msgr->cct, 10) << __func__ << " get banner, ready to send banner" << dendl;
+        ldout(async_msgr->cct, 10) << __func__ << " connect successfully, ready to send banner" << dendl;
 
         bufferlist bl;
-        bl.append(state_buffer, strlen(CEPH_BANNER));
+        bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
         r = try_send(bl);
         if (r == 0) {
-          state = STATE_CONNECTING_WAIT_IDENTIFY_PEER;
+          state = STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY;
           ldout(async_msgr->cct, 10) << __func__ << " connect write banner done: "
-                               << get_peer_addr() << dendl;
+                                     << get_peer_addr() << dendl;
         } else if (r > 0) {
           state = STATE_WAIT_SEND;
-          state_after_send = STATE_CONNECTING_WAIT_IDENTIFY_PEER;
+          state_after_send = STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY;
           ldout(async_msgr->cct, 10) << __func__ << " connect wait for write banner: "
                                << get_peer_addr() << dendl;
         } else {
           goto fail;
         }
+
         break;
       }
 
-    case STATE_CONNECTING_WAIT_IDENTIFY_PEER:
+    case STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY:
       {
         entity_addr_t paddr, peer_addr_for_me;
         bufferlist myaddrbl;
-
-        r = read_until(sizeof(ceph_entity_addr)*2, state_buffer);
+        unsigned banner_len = strlen(CEPH_BANNER);
+        unsigned need_len = banner_len + sizeof(ceph_entity_addr)*2;
+        r = read_until(need_len, state_buffer);
         if (r < 0) {
-          ldout(async_msgr->cct, 1) << __func__ << " read identify peeraddr failed" << dendl;
+          ldout(async_msgr->cct, 1) << __func__ << " read banner and identify addresses failed" << dendl;
           goto fail;
         } else if (r > 0) {
           break;
         }
 
+        if (memcmp(state_buffer, CEPH_BANNER, banner_len)) {
+          ldout(async_msgr->cct, 0) << __func__ << " connect protocol error (bad banner) on peer "
+                                    << get_peer_addr() << dendl;
+          goto fail;
+        }
+
         bufferlist bl;
-        bl.append(state_buffer, sizeof(ceph_entity_addr)*2);
+        bl.append(state_buffer+banner_len, sizeof(ceph_entity_addr)*2);
         bufferlist::iterator p = bl.begin();
         try {
           ::decode(paddr, p);
@@ -1100,7 +1088,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         lock.Lock();
-        if (state != STATE_CONNECTING_WAIT_IDENTIFY_PEER) {
+        if (state != STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY) {
           ldout(async_msgr->cct, 1) << __func__ << " state changed while learned_addr, mark_down or "
                                     << " replacing must be happened just now" << dendl;
           return 0;
