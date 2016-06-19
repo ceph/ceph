@@ -20,7 +20,6 @@
 #include "include/types.h"
 #include "include/xlist.h"
 
-#include <list>
 #include <map>
 using namespace std;
 #include "include/unordered_map.h"
