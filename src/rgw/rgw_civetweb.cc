@@ -137,8 +137,12 @@ void RGWMongoose::init_env(CephContext *cct)
 
   env.set("REQUEST_METHOD", info->request_method);
   env.set("REQUEST_URI", info->uri);
-  env.set("QUERY_STRING", info->query_string);
-  env.set("REMOTE_USER", info->remote_user);
+  if (info->query_string) {
+    env.set("QUERY_STRING", info->query_string);
+  }
+  if (info->remote_user) {
+    env.set("REMOTE_USER", info->remote_user);
+  }
   env.set("SCRIPT_URI", info->uri); /* FIXME */
 
   char port_buf[16];
