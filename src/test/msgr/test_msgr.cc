@@ -828,6 +828,14 @@ class SyntheticDispatcher : public Dispatcher {
       sent.erase(*it);
     conn_sent.erase(con);
   }
+
+  void print() {
+    for (auto && p : conn_sent) {
+      if (!p.second.empty()) {
+        cerr << __func__ << " " << p.first << " wait " << p.second.size() << std::endl;
+      }
+    }
+  }
 };
 
 
@@ -1005,8 +1013,9 @@ class SyntheticWorkload {
          << " inflight messages: " << dispatcher.get_pending() << std::endl;
     if (detail && !available_connections.empty()) {
       for (auto &&c : available_connections)
-        cerr << "available connection: " << c.first;
+        cerr << "available connection: " << c.first << " ";
       cerr << std::endl;
+      dispatcher.print();
     }
   }
 
