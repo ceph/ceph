@@ -966,7 +966,7 @@ OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
 OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
-OPTION(bluestore_buffer_cache_size, OPT_U32, 256*1024*1024)
+OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
@@ -989,7 +989,7 @@ OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
 OPTION(bluestore_overlay_max, OPT_INT, 0)
 OPTION(bluestore_clone_cow, OPT_BOOL, false)  // do copy-on-write for clones
-OPTION(bluestore_default_buffered_read, OPT_BOOL, false)
+OPTION(bluestore_default_buffered_read, OPT_BOOL, true)
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
 OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
