@@ -1,5 +1,5 @@
-CXXFLAGS=-std=c++0x -I../../src/include
-CFLAGS=-I../../src/include
+CXXFLAGS=-std=c++0x -I../../src
+CFLAGS=-I../../src
 all: librados_hello_world librados_hello_world_c
 
 librados_hello_world: hello_world.cc

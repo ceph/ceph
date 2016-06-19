@@ -10,7 +10,7 @@
  * Copyright 2013 Inktank
  */
 
-// install the librados-dev package to get this
+// install the librados2-dev package to get this
 #include <rados/librados.hpp>
 #include <iostream>
 #include <string>

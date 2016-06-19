@@ -1,5 +1,5 @@
 This simple librados program can be built by running "make" (and cleaned up
-with "make clean"), assuming you have librados-dev already installed.
+with "make clean"), assuming you have librados2-dev already installed.
 
 And executed using
 ./librados_hello_world -c ../../src/ceph.conf
