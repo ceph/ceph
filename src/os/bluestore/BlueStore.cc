@@ -538,7 +538,7 @@ void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
 	       << " refs; stopping with " << num << " left to trim" << dendl;
       break;
     }
-    dout(30) << __func__ << "  trim " << o->oid << dendl;
+    dout(30) << __func__ << "  rm " << o->oid << dendl;
     if (p != onode_lru.begin()) {
       onode_lru.erase(p--);
     } else {
