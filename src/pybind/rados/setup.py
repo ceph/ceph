@@ -23,7 +23,7 @@ from distutils.sysconfig import customize_compiler
 # Bump this version, after every changeset
 # NOTE: This version is not the same as get_ceph_version()
 
-__version__ = '0.0.1'
+__version__ = '2.0.0'
 
 
 def get_ceph_version():
