@@ -2807,7 +2807,7 @@ int BlueStore::fsck()
       }
       dout(20) << __func__ << "  wal " << wt.seq
 	       << " ops " << wt.ops.size()
-	       << " released " << wt.released << dendl;
+	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       used_blocks.insert(wt.released);
     }
   }
@@ -2824,17 +2824,18 @@ int BlueStore::fsck()
 	interval_set<uint64_t> free, overlap;
 	free.insert(offset, length);
 	overlap.intersection_of(free, used_blocks);
-	derr << __func__ << " overlap: " << overlap << dendl;
+	derr << __func__ << " overlap: 0x" << std::hex << overlap
+	     << std::dec << dendl;
 	++errors;
 	continue;
       }
       used_blocks.insert(offset, length);
     }
     if (!used_blocks.contains(0, bdev->get_size())) {
-      derr << __func__ << " leaked some space; free+used = "
+      derr << __func__ << " leaked some space; free+used = 0x" << std::hex
 	   << used_blocks
-	   << " != expected 0~" << bdev->get_size()
-	   << dendl;
+	   << " != expected 0x0~" << bdev->get_size()
+	   << std::dec << dendl;
       ++errors;
     }
   }
