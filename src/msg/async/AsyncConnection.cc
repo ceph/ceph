@@ -1526,21 +1526,21 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
   }
   if (reply.tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
     global_seq = async_msgr->get_global_seq(reply.global_seq);
-    ldout(async_msgr->cct, 10) << __func__ << " connect got RETRY_GLOBAL "
-                         << reply.global_seq << " chose new "
-                         << global_seq << dendl;
+    ldout(async_msgr->cct, 5) << __func__ << " connect got RETRY_GLOBAL "
+                              << reply.global_seq << " chose new "
+                              << global_seq << dendl;
     state = STATE_CONNECTING_SEND_CONNECT_MSG;
   }
   if (reply.tag == CEPH_MSGR_TAG_RETRY_SESSION) {
     assert(reply.connect_seq > connect_seq);
-    ldout(async_msgr->cct, 10) << __func__ << " connect got RETRY_SESSION "
-                               << connect_seq << " -> "
-                               << reply.connect_seq << dendl;
+    ldout(async_msgr->cct, 5) << __func__ << " connect got RETRY_SESSION "
+                              << connect_seq << " -> "
+                              << reply.connect_seq << dendl;
     connect_seq = reply.connect_seq;
     state = STATE_CONNECTING_SEND_CONNECT_MSG;
   }
   if (reply.tag == CEPH_MSGR_TAG_WAIT) {
-    ldout(async_msgr->cct, 3) << __func__ << " connect got WAIT (connection race)" << dendl;
+    ldout(async_msgr->cct, 1) << __func__ << " connect got WAIT (connection race)" << dendl;
     state = STATE_WAIT;
   }
 
