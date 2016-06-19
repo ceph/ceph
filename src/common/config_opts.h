@@ -1398,7 +1398,7 @@ OPTION(rgw_bucket_quota_ttl, OPT_INT, 600) // time for cached bucket stats to be
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE, 0.95) // threshold from which we don't rely on cached info for quota decisions
 OPTION(rgw_bucket_quota_cache_size, OPT_INT, 10000) // number of entries in bucket quota cache
 OPTION(rgw_bucket_default_quota_max_objects, OPT_INT, -1) // number of objects allowed
-OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in kB
+OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in bytes
 
 OPTION(rgw_expose_bucket, OPT_BOOL, false) // Return the bucket name in the 'Bucket' response header
 
@@ -1409,7 +1409,7 @@ OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accu
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL, false) // whether stats for idle users be fully synced
 OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats sync for non-idle users
 OPTION(rgw_user_default_quota_max_objects, OPT_INT, -1) // number of objects allowed
-OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in kB
+OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object in bytes
 
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
