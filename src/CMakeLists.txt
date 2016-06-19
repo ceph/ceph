@@ -1414,12 +1414,17 @@ if(${WITH_RADOSGW})
   endif(HAVE_SSL)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
-  target_include_directories(rgw_a PUBLIC ${FCGI_INCLUDE_DIR})
+
+  target_include_directories(rgw_a PUBLIC
+    "Beast/include"
+    ${FCGI_INCLUDE_DIR})
+
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
     cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS})
 
   set(radosgw_srcs
+    rgw/rgw_asio_client.cc
     rgw/rgw_asio_frontend.cc
     rgw/rgw_fcgi_process.cc
     rgw/rgw_loadgen_process.cc
