@@ -10,7 +10,7 @@ machines but differ in the following ways:
 
 VPS Hosts:
 --------
-The following description is based on the Red Hat lab used by the Ceph
+The following description is based on the Red Hat lab used by the upstream Ceph
 development and quality assurance teams.
 
 The teuthology database of available machines contains a vpshost field.
@@ -78,22 +78,6 @@ ubuntu (precise).  A different vm installation can be set using the
 
 When a virtual machine is unlocked, downburst destroys the image on the
 machine.
-
-Temporary yaml files are used to downburst a virtual machine.  A typical
-yaml file will look like this::
-
-    downburst:
-      cpus: 1
-      disk-size: 30G
-      distro: centos
-      networks:
-      - {source: front}
-      ram: 4G
-
-These values are used by downburst to create the virtual machine.
-
-When locking a file, a downburst meta-data yaml file can be specified by using
-the downburst-conf parameter on the command line.
 
 To find the downburst executable, teuthology first checks the PATH environment
 variable.  If not defined, teuthology next checks for

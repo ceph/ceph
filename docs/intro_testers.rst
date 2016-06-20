@@ -18,7 +18,9 @@ Terminology
 
 In the abstract, each set of tests is defined by a `suite`. All of our suites
 live in the `ceph-qa-suite repository
-<https://github.com/ceph/ceph-qa-suite/>`__, in the `suites` subdirectory.
+<https://github.com/ceph/ceph-qa-suite/>`__, in the `suites` subdirectory. Each
+subdirectory in `suites` is a suite; they may also have "sub-suites" which may
+aid in scheduling, for example, tests for a specific feature.
 
 In concrete terms, a `run` is what is created by assembling the contents of a
 `suite` into a number of `jobs`. A `job` is created by assembling a number of
@@ -43,6 +45,9 @@ Most testing happens by scheduling `runs`. The way we do that is using the
 To get a preview of what `teuthology-suite` might do, try::
 
     teuthology-suite -v -s smoke -c master -m mira --dry-run
+
+The `-m mira` specifies `mira` as the machine type. Machine types are dependent
+on the specific lab in use.
 
 Assuming a build is available, that should pretend to schedule several jobs. If
 it complains about missing packages, try swapping `master` with `jewel` or one

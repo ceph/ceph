@@ -188,13 +188,13 @@ Some of the more important / commonly used tasks include:
   behaving like one.
   Sub-tasks can nest further information.  For example, overrides
   of install tasks are project specific, so the following section of a yaml
-  file would cause all ceph installations to default to using the cuttlefish
+  file would cause all ceph installations to default to using the jewel
   branch::
 
     overrides:
       install:
         ceph:
-          branch: cuttlefish
+          branch: jewel
 
 * ``workunit``: workunits are a way of grouping tasks and behavior on targets.
 * ``sequential``: group the sub-tasks into a unit where the sub-tasks run
@@ -214,7 +214,7 @@ tasks are not needed for teuthology to run, but do test specific independent
 features.  A user who wants to define a test for a new feature can implement
 new tasks in this directory.
 
-Many of these tasks are used to run shell scripts that are defined in the
+Many of these tasks are used to run python scripts that are defined in the
 ceph/ceph-qa-suite.
 
 If machines were locked as part of the run (with the --lock switch),

@@ -80,14 +80,6 @@ For 'vps' support using `downburst <https://github.com/ceph/downburst>`__, see
 Test Suites
 ===========
 
-Most of the current teuthology test suite execution scripts automatically
-download their tests from the master branch of the appropriate github
-repository.  People who want to run experimental test suites usually modify the
-download method in the ``teuthology/task`` script to use some other branch or
-repository. This should be generalized in later teuthology releases.
-Teuthology QA suites can be found in ``src/ceph-qa-suite``. Make sure that this
-directory exists in your source tree before running the test suites.
-
 Each suite name is determined by the name of the directory in ``ceph-qa-suite``
 that contains that suite. The directory contains subdirectories and yaml files,
 which, when assembled, produce valid tests that can be run. The test suite
@@ -111,12 +103,12 @@ where:
 
 For example, consider::
 
-     teuthology-suite -s rbd -c wip-fix -k cuttlefish -e bob.smith@foo.com -f basic -t cuttlefish -m plana
+     teuthology-suite -s rbd -c wip-fix -k jewel -e bob.smith@foo.com -f basic -t jewel -m mira
 
 The above command runs the rbd suite using the wip-fix branch of ceph, the
-cuttlefish kernel, with a 'basic' kernel flavor, and the teuthology
-cuttlefish branch will be used.  It will run on plana machines and send an email
-to bob.smith@foo.com when it's completed. For more details on
+jewel kernel, with a 'basic' kernel flavor, and the teuthology jewel branch
+will be used.  It will run on mira machines and send an email to
+bob.smith@foo.com when it's completed. For more details on
 ``teuthology-suite``, please consult the output of ``teuthology-suite --help``.
 
 In order for a queued task to be run, a teuthworker thread on
