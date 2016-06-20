@@ -688,19 +688,17 @@ void BlueStore::BufferSpace::read(
 	offset += gap;
 	length -= gap;
       }
+      cache->_touch_buffer(b);
       if (b->length > length) {
-	uint64_t l = MIN(length, b->length);
-	res[offset].substr_of(b->data, 0, l);
-	res_intervals.insert(offset, l);
-	offset += l;
-	length -= l;
+	res[offset].substr_of(b->data, 0, length);
+	res_intervals.insert(offset, length);
+        break;
       } else {
 	res[offset].append(b->data);
 	res_intervals.insert(offset, b->length);
 	offset += b->length;
 	length -= b->length;
       }
-      cache->_touch_buffer(b);
     }
   }
 }
