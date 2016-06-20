@@ -126,7 +126,7 @@ public:
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()
           << " status=" << op->get_http_status() << std::endl;
-      lsubdout(cct, rgw, 0) << "ERROR: failed to wait for op, ret=" << ret
+      lsubdout(cct, rgw, 5) << "failed to wait for op, ret=" << ret
           << ": " << op->to_str() << dendl;
       op->put();
       return ret;
