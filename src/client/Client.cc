@@ -8882,6 +8882,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   int rval = cond.wait();
   client_lock.Lock();
 
+  if (rval < 0) {
+    ldout(cct, 1) << "underlying call to statfs returned error: "
+                  << cpp_strerror(rval)
+                  << dendl;
+    return rval;
+  }
+
   memset(stbuf, 0, sizeof(*stbuf));
 
   /*
