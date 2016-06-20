@@ -22,6 +22,7 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
+  test_ConsistencyGroups.cc 
   test_main.cc
   test_mock_fixture.cc 
   test_mock_ExclusiveLock.cc 
