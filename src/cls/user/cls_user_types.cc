@@ -10,6 +10,7 @@ void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i)
   char buf[16];
   snprintf(buf, sizeof(buf), ".%d", i);
 
+  bucket->tenant = string("tenant") + buf;
   bucket->name = string("buck") + buf;
   bucket->data_pool = string(".data.pool") + buf;
   bucket->index_pool = string(".index.pool") + buf;
@@ -19,6 +20,7 @@ void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i)
 
 void cls_user_bucket::dump(Formatter *f) const
 {
+  encode_json("tenant", tenant, f);
   encode_json("name", name, f);
   encode_json("data_pool", data_pool,f);
   encode_json("data_extra_pool", data_extra_pool,f);

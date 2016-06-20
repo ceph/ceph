@@ -702,7 +702,7 @@ struct rgw_bucket {
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
-  rgw_bucket(const cls_user_bucket& b) : name(b.name), data_pool(b.data_pool),
+  rgw_bucket(const cls_user_bucket& b) : tenant(b.tenant), name(b.name), data_pool(b.data_pool),
 					 data_extra_pool(b.data_extra_pool),
 					 index_pool(b.index_pool), marker(b.marker),
 					 bucket_id(b.bucket_id) {}
@@ -718,6 +718,7 @@ struct rgw_bucket {
     tenant(t), name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
 
   void convert(cls_user_bucket *b) {
+    b->tenant = tenant;
     b->name = name;
     b->data_pool = data_pool;
     b->data_extra_pool = data_extra_pool;

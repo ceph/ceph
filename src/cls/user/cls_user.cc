@@ -45,12 +45,16 @@ static int remove_entry(cls_method_context_t hctx, const string& key)
   return 0;
 }
 
-static void get_key_by_bucket_name(const string& bucket_name, string *key)
+static void get_key_by_bucket_name(const string& bucket_tenant, const string& bucket_name, string *key)
 {
-  *key = bucket_name;
+    if (!bucket_tenant.empty()) {
+        *key = bucket_tenant + "/" + bucket_name;
+    } else {
+        *key = bucket_name;
+    }
 }
 
-static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_name,
+static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_tenant, const string& bucket_name,
                                      cls_user_bucket_entry& entry)
 {
   if (bucket_name.empty()) {
@@ -58,8 +62,8 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
   }
 
   string key;
-  get_key_by_bucket_name(bucket_name, &key);
 
+  get_key_by_bucket_name(bucket_tenant, bucket_name, &key);
   bufferlist bl;
   int rc = cls_cxx_map_get_val(hctx, key, &bl);
   if (rc < 0) {
@@ -146,10 +150,10 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
     string key;
 
-    get_key_by_bucket_name(update_entry.bucket.name, &key);
+    get_key_by_bucket_name(update_entry.bucket.tenant, update_entry.bucket.name, &key);
 
     cls_user_bucket_entry entry;
-    ret = get_existing_bucket_entry(hctx, key, entry);
+    ret = get_existing_bucket_entry(hctx, update_entry.bucket.tenant, update_entry.bucket.name, entry);
 
     if (ret == -ENOENT) {
      if (!op.add)
@@ -250,10 +254,10 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 
   string key;
 
-  get_key_by_bucket_name(op.bucket.name, &key);
+  get_key_by_bucket_name(op.bucket.tenant, op.bucket.name, &key);
 
   cls_user_bucket_entry entry;
-  ret = get_existing_bucket_entry(hctx, key, entry);
+  ret = get_existing_bucket_entry(hctx, op.bucket.tenant, op.bucket.name, entry);
   if (ret == -ENOENT) {
     return 0; /* idempotent removal */
   }

@@ -13,6 +13,7 @@
  * this needs to be compatible with rgw_bucket, as it replaces it
  */
 struct cls_user_bucket {
+  std::string tenant;
   std::string name;
   std::string data_pool;
   std::string index_pool;
@@ -22,6 +23,7 @@ struct cls_user_bucket {
 
   void encode(bufferlist& bl) const {
      ENCODE_START(7, 3, bl);
+     ::encode(tenant, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
@@ -32,6 +34,7 @@ struct cls_user_bucket {
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+    ::decode(tenant, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {
