@@ -364,7 +364,6 @@ function run() {
     CEPH_ARGS+=" --journal-dio=false"
     CEPH_ARGS+=" --erasure-code-dir=$CEPH_LIB"
     CEPH_ARGS+=" --plugin-dir=$CEPH_LIB"
-    CEPH_ARGS+=" --compression-dir=$CEPH_LIB"
     CEPH_ARGS+=" --log-file=$dir/\$name.log"
     CEPH_ARGS+=" --pid-file=$dir/\$name.pidfile"
     CEPH_ARGS+=" --osd-class-dir=$CEPH_LIB"
