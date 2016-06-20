@@ -431,6 +431,35 @@ static void get_wal_key(uint64_t seq, string *out)
 }
 
 
+// merge operators
+
+struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
+  virtual void merge_nonexistent(
+    const char *rdata, size_t rlen, std::string *new_value) override {
+    *new_value = std::string(rdata, rlen);
+  }
+  virtual void merge(
+    const char *ldata, size_t llen,
+    const char *rdata, size_t rlen,
+    std::string *new_value) {
+    assert(llen == rlen);
+    assert((rlen % 8) == 0);
+    new_value->resize(rlen);
+    const __le64* lv = (const __le64*)ldata;
+    const __le64* rv = (const __le64*)rdata;
+    __le64* nv = &(__le64&)new_value->at(0);
+    for (size_t i = 0; i < rlen >> 3; ++i) {
+      nv[i] = lv[i] + rv[i];
+    }
+  }
+  // We use each operator name and each prefix to construct the
+  // overall RocksDB operator name for consistency check at open time.
+  virtual string name() const {
+    return "int64_array";
+  }
+};
+
+
 // Buffer
 
 ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
@@ -560,31 +589,6 @@ void BlueStore::LRUCache::_audit(const char *when)
 }
 #endif
 
-struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
-  virtual void merge_nonexistent(
-    const char *rdata, size_t rlen, std::string *new_value) override {
-    *new_value = std::string(rdata, rlen);
-  }
-  virtual void merge(
-    const char *ldata, size_t llen,
-    const char *rdata, size_t rlen,
-    std::string *new_value) {
-    assert(llen == rlen);
-    assert((rlen % 8) == 0);
-    new_value->resize(rlen);
-    const __le64* lv = (const __le64*)ldata;
-    const __le64* rv = (const __le64*)rdata;
-    __le64* nv = &(__le64&)new_value->at(0);
-    for (size_t i = 0; i < rlen >> 3; ++i) {
-      nv[i] = lv[i] + rv[i];
-    }
-  }
-  // We use each operator name and each prefix to construct the
-  // overall RocksDB operator name for consistency check at open time.
-  virtual string name() const {
-    return "int64_array";
-  }
-};
 
 // BufferSpace
 
