@@ -10119,7 +10119,15 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
       C_SaferCond ctx;
       objecter->wait_for_latest_osdmap(&ctx);
       ctx.wait();
+
+      // Got the latest osdmap, try again.
+      r = objecter->with_osdmap([&](const OSDMap& o) {
+        return check_data_pool_exist(rest, v, &o);
+      });
     }
+
+    if (r < 0) // We tried, we failed.
+      return r;
   }
 
   Mutex::Locker lock(client_lock);
