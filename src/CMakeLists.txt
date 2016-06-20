@@ -1417,13 +1417,13 @@ if(${WITH_RADOSGW})
   add_library(civetweb_common_objs OBJECT ${civetweb_common_files})
   target_include_directories(civetweb_common_objs PUBLIC
 	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
-  if(HAVE_OPENSSL)
-  set_property(TARGET civetweb_common_objs
-	       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
-  target_include_directories(civetweb_common_objs PUBLIC
-	"${OPENSSL_INCLUDE_DIR}")
-  else(HAVE_OPENSSL)
-  endif(HAVE_OPENSSL)
+  if(HAVE_SSL)
+    set_property(TARGET civetweb_common_objs
+      APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
+    target_include_directories(civetweb_common_objs PUBLIC
+      "${SSL_INCLUDE_DIR}")
+  else(HAVE_SSL)
+  endif(HAVE_SSL)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
@@ -1482,8 +1482,8 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${OPENSSL_LIBRARIES} ${BLKID_LIBRARIES} ${OPENLDAP_LIBS}
-    ${ALLOC_LIBS})
+    curl expat global fcgi resolv ${SSL_LIBRARIES} ${BLKID_LIBRARIES}
+    ${OPENLDAP_LIBS} ${ALLOC_LIBS})
   # radosgw depends on cls libraries at runtime, but not as link dependencies
   add_dependencies(radosgw cls_rgw cls_lock cls_refcount
     cls_log cls_statelog cls_timeindex
@@ -1495,7 +1495,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client cls_lock_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client
     cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${OPENSSL_LIBRARIES} ${BLKID_LIBRARIES})
+    curl expat global fcgi resolv ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
 
   install(TARGETS radosgw-admin DESTINATION bin)
 
