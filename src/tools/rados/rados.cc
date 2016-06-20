@@ -1600,6 +1600,10 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     auto completion = librados::Rados::aio_create_completion();
     ret = do_get_inconsistent(rados, pg, start, max_item_num, completion,
 			      &items, &interval);
+    if (ret < 0) {
+      cerr << "cannot open pool of pg: " << pg << std::endl;
+      break;
+    }
     completion->wait_for_safe();
     ret = completion->get_return_value();
     completion->release();
