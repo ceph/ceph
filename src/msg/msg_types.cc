@@ -41,6 +41,7 @@ void entity_addr_t::generate_test_instances(list<entity_addr_t*>& o)
   a->set_nonce(1);
   o.push_back(a);
   entity_addr_t *b = new entity_addr_t();
+  b->set_type(entity_addr_t::TYPE_LEGACY);
   b->set_nonce(5);
   b->set_family(AF_INET);
   b->set_in4_quad(0, 127);

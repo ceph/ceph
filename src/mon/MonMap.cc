@@ -228,6 +228,7 @@ void MonMap::set_initial_members(CephContext *cct,
 	add(*p, my_addr);
       } else {
 	entity_addr_t a;
+	a.set_type(entity_addr_t::TYPE_LEGACY);
 	a.set_family(AF_INET);
 	for (int n=1; ; n++) {
 	  a.set_nonce(n);
