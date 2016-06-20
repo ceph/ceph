@@ -88,7 +88,7 @@ public:
     uint64_t blob_xoffset;   //region offset within the blob
     uint64_t length;
 
-    region_t(uint64_t offset, uint64_t b_offs, uint32_t len)
+    region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
       : logical_offset(offset),
       blob_xoffset(b_offs),
       length(len) {}
