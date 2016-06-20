@@ -432,19 +432,33 @@ public:
     typedef boost::intrusive::unordered_set<Bnode>::bucket_type bucket_type;
     typedef boost::intrusive::unordered_set<Bnode>::bucket_traits bucket_traits;
 
+    std::mutex lock;
     unsigned num_buckets;
     vector<bucket_type> buckets;
-
     boost::intrusive::unordered_set<Bnode> uset;
+
+    Bnode dummy;  ///< dummy entry used for lookups.  protected by lock.
 
     explicit BnodeSet(unsigned n)
       : num_buckets(n),
 	buckets(n),
-	uset(bucket_traits(buckets.data(), num_buckets)) {
+	uset(bucket_traits(buckets.data(), num_buckets)),
+	dummy(0, string(), NULL) {
       assert(n > 0);
     }
     ~BnodeSet() {
       assert(uset.empty());
+    }
+
+    BnodeRef get(uint32_t hash);
+
+    void add(Bnode *b) {
+      std::lock_guard<std::mutex> l(lock);
+      uset.insert(*b);
+    }
+    void remove(Bnode *b) {
+      std::lock_guard<std::mutex> l(lock);
+      uset.erase(*b);
     }
   };
 

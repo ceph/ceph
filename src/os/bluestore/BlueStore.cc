@@ -1070,9 +1070,25 @@ void BlueStore::Bnode::put()
 {
   if (--nref == 0) {
     dout(20) << __func__ << " removing self from set " << bnode_set << dendl;
-    bnode_set->uset.erase(*this);
+    bnode_set->remove(this);
     delete this;
   }
+}
+
+// BnodeSet
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.bnodeset(" << this << ") "
+
+BlueStore::BnodeRef BlueStore::BnodeSet::get(uint32_t hash)
+{
+  std::lock_guard<std::mutex> l(lock);
+  dummy.hash = hash;
+  auto p = uset.find(dummy);
+  if (p == uset.end()) {
+    return nullptr;
+  }
+  return &*p;
 }
 
 // Onode
@@ -1113,37 +1129,36 @@ BlueStore::BnodeRef BlueStore::Collection::get_bnode(
   uint32_t hash
   )
 {
-  Bnode dummy(hash, string(), NULL);
-  auto p = bnode_set.uset.find(dummy);
-  if (p == bnode_set.uset.end()) {
-    spg_t pgid;
-    if (!cid.is_pg(&pgid))
-      pgid = spg_t();  // meta
-    string key;
-    get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
-    BnodeRef e = new Bnode(hash, key, &bnode_set);
+  BnodeRef b = bnode_set.get(hash);
+  if (b) {
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " created " << e << dendl;
-
-    bufferlist v;
-    int r = store->db->get(PREFIX_OBJ, key, &v);
-    if (r >= 0) {
-      assert(v.length() > 0);
-      bufferlist::iterator p = v.begin();
-      e->blob_map.decode(p, cache);
-      dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	       << " loaded blob_map " << e->blob_map << dendl;
-    } else {
-      dout(10) << __func__ << " hash " <<std::hex << hash << std::dec
-	       << " missed, new blob_map" << dendl;
-    }
-    bnode_set.uset.insert(*e);
-    return e;
-  } else {
-    dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " had " << &*p << dendl;
-    return &*p;
+	     << " had " << b << dendl;
+    return b;
   }
+
+  spg_t pgid;
+  if (!cid.is_pg(&pgid))
+    pgid = spg_t();  // meta
+  string key;
+  get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
+  b = new Bnode(hash, key, &bnode_set);
+  dout(10) << __func__ << " hash " << std::hex << hash << std::dec
+	   << " created " << b << dendl;
+
+  bufferlist v;
+  int r = store->db->get(PREFIX_OBJ, key, &v);
+  if (r >= 0) {
+    assert(v.length() > 0);
+    bufferlist::iterator p = v.begin();
+    b->blob_map.decode(p, cache);
+    dout(10) << __func__ << " hash " << std::hex << hash << std::dec
+	     << " loaded blob_map " << b->blob_map << dendl;
+  } else {
+    dout(10) << __func__ << " hash " <<std::hex << hash << std::dec
+	     << " missed, new blob_map" << dendl;
+  }
+  bnode_set.add(b.get());
+  return b;
 }
 
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
