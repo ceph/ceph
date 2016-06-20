@@ -9514,7 +9514,7 @@ void MDCache::kick_discovers(mds_rank_t who)
 void MDCache::handle_discover(MDiscover *dis) 
 {
   mds_rank_t whoami = mds->get_nodeid();
-  mds_rank_t from = mds_rank_t(dis->get_source_inst().name.num());
+  mds_rank_t from = mds_rank_t(dis->get_source_inst().name._num);
 
   assert(from != whoami);
 
