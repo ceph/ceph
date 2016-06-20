@@ -287,7 +287,11 @@ int main(int argc, const char **argv)
   // claim the reference and release it after subsequent destructors have fired
   boost::intrusive_ptr<CephContext> cct(g_ceph_context, false);
 
-  rgw_tools_init(g_ceph_context);
+  int r = rgw_tools_init(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: unable to initialize rgw tools" << dendl;
+    return -r;
+  }
 
   rgw_init_resolver();
   
@@ -295,7 +299,6 @@ int main(int argc, const char **argv)
   
   FCGX_Init();
 
-  int r = 0;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads,
       g_conf->rgw_run_sync_thread);
