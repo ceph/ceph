@@ -187,7 +187,7 @@ Phase II
 --------
 
 This phase starts when C receives the message from A containing a new ticket and session key.
-The goal of this phase is to provide A with a session key and ticket allowing it to
+The goal of this phase is to provide C with a session key and ticket allowing it to
 communicate with S.
 
 The message A sent to C is dispatched to ``build_request()`` in ``CephxClientHandler.cc``, 
@@ -237,7 +237,7 @@ this message.  Use that session key to decrypt the rest of the message.
 Create a ``CephXAuthorizeReply`` to hold our reply.  Extract the nonce (which was in the stuff 
 we just decrypted), add 1 to it, and put the result in the reply.  Encrypt the reply and 
 put it in the buffer provided in the call to ``cephx_verify_authorizer()`` and return 
-to ``handle`_request()``.  This will be used to prove to C that A (rather than an attacker) 
+to ``handle_request()``.  This will be used to prove to C that A (rather than an attacker) 
 created this response.
 
 Having verified that the message is valid and from C, now we need to build it a ticket for S.
