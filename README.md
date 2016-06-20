@@ -140,9 +140,30 @@ To start or stop individual daemons, the sysvinit script should work:
 
 CMake
 -----
+Any commands or paths related to CMake are from the "build" 
+directory. This directory, known as ${CMAKE_BINARY_DIR} to cmake, was created
+in the section above titled "Building Ceph".
 
-???
+To run a functional test cluster,
 
+	cd build
+	./path/to/ceph/src/vstart.sh -d -n -x -l
+	./bin/ceph -s
+
+Almost all of the usual commands are available in the bin/ directory.
+For example,
+
+	./bin/rados -p rbd bench 30 write
+	./bin/rbd create foo --size 1000
+
+To shut down the test cluster,
+
+	./path/to/ceph/src/stop.sh
+
+To start or stop individual daemons, the sysvinit script should work:
+
+	./bin/init-ceph restart osd.0
+	./bin/init-ceph stop
 
 Running unit tests
 ==================
@@ -177,8 +198,36 @@ like so:
 CMake
 -----
 
-???
+Any commands or paths related to CMake are from the "build" 
+directory. This directory, known as ${CMAKE_BINARY_DIR} to cmake, was created
+in the section above titled "Building Ceph".
 
+To run build and run all tests, run `make check`. `make check` builds all the 
+unit tests, all the dependencies for other tests, and executes them with ctest 
+command.
+
+	cd build
+	cmake [options] ..
+	make check
+
+To run an individual test manually, run the ctest command with -R (regex matching):
+
+        ctest -R [test name]
+
+To run an individual test manually and see all the tests output, run the ctest
+command with the -V (verbose) flag:
+
+        ctest -V -R [test name]
+
+To run an tests manually and run the jobs in parallel, run the ctest
+command with the -j flag:
+
+        ctest -j [number of jobs]
+
+There are many other flags you can give the ctest command for better control
+over manual test execution. To view these options run:
+
+        man ctest
 
 Building the Documentation
 ==========================
