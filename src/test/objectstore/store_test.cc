@@ -1972,6 +1972,35 @@ TEST_P(StoreTest, MiscFragmentTests) {
 
 }
 
+TEST_P(StoreTest, ZeroLengthWrite) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist empty;
+    t.write(cid, hoid, 1048576, 0, empty);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  struct stat stat;
+  r = store->stat(cid, hoid, &stat);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, stat.st_size);
+
+  bufferlist newdata;
+  r = store->read(cid, hoid, 0, 1048576, newdata);
+  ASSERT_EQ(0, r);
+}
+
 TEST_P(StoreTest, SimpleAttrTest) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -3438,8 +3467,10 @@ public:
 
     bufferlist& data = contents[new_obj].data;
     if (data.length() <= offset) {
-      data.append_zero(offset-data.length());
-      data.append(bl);
+      if (len > 0) {
+        data.append_zero(offset-data.length());
+        data.append(bl);
+      }
     } else {
       bufferlist value;
       assert(data.length() > offset);
