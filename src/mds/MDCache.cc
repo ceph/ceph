@@ -10140,10 +10140,14 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       MDRequestRef null_ref;
       int r = path_traverse(null_ref, m, NULL, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
+      { 
+        m->put();
         return;
+      }
       assert(r == 0);
       open_remote_dirfrag(in, m->get_dirfrag().frag, 
 			  new C_MDS_RetryMessage(mds, m));
+      m->put();
       return;
     }
 
