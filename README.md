@@ -148,22 +148,20 @@ To run a functional test cluster,
 
 	cd build
 	./path/to/ceph/src/vstart.sh -d -n -x -l
-	./bin/ceph -s
+	./bin/ceph -c ceph.conf -s
+
+Note: vstart.sh generates a ceph.conf file in the build directory that should be used
+for subsequent commands.
 
 Almost all of the usual commands are available in the bin/ directory.
 For example,
 
-	./bin/rados -p rbd bench 30 write
-	./bin/rbd create foo --size 1000
+	./bin/rados -c ceph.conf -p rbd bench 30 write
+	./bin/rbd -c ceph.conf create foo --size 1000
 
 To shut down the test cluster,
 
 	./path/to/ceph/src/stop.sh
-
-To start or stop individual daemons, the sysvinit script should work:
-
-	./bin/init-ceph restart osd.0
-	./bin/init-ceph stop
 
 Running unit tests
 ==================
