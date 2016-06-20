@@ -238,6 +238,9 @@ struct entity_addr_t {
 #endif
   }
 
+  uint32_t get_type() const { return type; }
+  void set_type(uint32_t t) { type = t; }
+
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
 
