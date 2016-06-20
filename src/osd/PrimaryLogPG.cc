@@ -1511,7 +1511,7 @@ int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
   }
   int r = 0;
   scrub_ls_result_t result = {.interval = info.history.same_interval_since};
-  if (arg.interval != 0 && arg.interval != info.history.same_interval_since) {
+  if (arg.interval != 0 && arg.interval != result.interval) {
     r = -EAGAIN;
   } else if (!scrubber.store) {
     r = -ENOENT;
