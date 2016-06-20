@@ -7043,7 +7043,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
     fg = frag_t(dirp->offset_high());
   
   ldout(cct, 10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg
-		 << " offset " << hex << dirp->offset << dendl;
+		 << " offset " << hex << dirp->offset << dec << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
@@ -7226,7 +7226,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   }
 
   // can we read from our cache?
-  ldout(cct, 10) << "offset " << hex << dirp->offset
+  ldout(cct, 10) << "offset " << hex << dirp->offset << dec
 	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
