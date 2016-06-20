@@ -249,7 +249,7 @@ namespace ceph {
       for (typename SubQueues::iterator i = high_queue.begin();
 	   i != high_queue.end();
 	   /* no-inc */ ) {
-	i->second.remove_by_filter(filter, out);
+	  i->second.remove_by_filter(filter, out);
 	if (i->second.empty()) {
 	  high_queue.erase(i++);
 	} else {
@@ -266,7 +266,11 @@ namespace ceph {
 	}
       }
 
-      queue.remove_by_req_filter(filter, out);
+      if (out) {
+	queue.remove_by_req_filter(filter, *out);
+      } else {
+	queue.remove_by_req_filter(filter);
+      }
     }
 
     void remove_by_class(K k, std::list<T> *out = nullptr) override final {
@@ -288,7 +292,11 @@ namespace ceph {
 	}
       }
 
-      queue.remove_by_client(k, out);
+      if (out) {
+	queue.remove_by_client(k, *out);
+      } else {
+	queue.remove_by_client(k);
+      }
     }
 
     void enqueue_strict(K cl, unsigned priority, T item) override final {
