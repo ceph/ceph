@@ -967,7 +967,6 @@ OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
 OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
-OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
 OPTION(bluestore_freelist_type, OPT_STR, "bitmap")
