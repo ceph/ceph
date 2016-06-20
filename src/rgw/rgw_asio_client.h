@@ -4,6 +4,8 @@
 #define RGW_ASIO_CLIENT_H
 
 #include <boost/asio/ip/tcp.hpp>
+#include <beast/http/body_type.hpp>
+#include <beast/http/concepts.hpp>
 #include <beast/http/message_v1.hpp>
 #include "include/assert.h"
 
@@ -25,11 +27,10 @@ class RGWBufferlistBody {
 class RGWAsioClientIO : public RGWStreamIO {
   using tcp = boost::asio::ip::tcp;
   tcp::socket socket;
-  tcp::endpoint endpoint;
 
   using body_type = RGWBufferlistBody;
   using request_type = beast::http::request_v1<body_type>;
-  request_type req;
+  request_type request;
 
   bufferlist::const_iterator body_iter;
 
@@ -41,7 +42,7 @@ class RGWAsioClientIO : public RGWStreamIO {
   int read_data(char *buf, int max) override;
 
  public:
-  RGWAsioClientIO(tcp::socket&& socket, tcp::endpoint&& endpoint);
+  RGWAsioClientIO(tcp::socket&& socket, request_type&& request);
   ~RGWAsioClientIO();
 
   int complete_request() override;

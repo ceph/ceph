@@ -9,6 +9,13 @@
 #include <boost/asio.hpp>
 #include <boost/optional.hpp>
 
+#include <beast/core/placeholders.hpp>
+#include <beast/core/streambuf.hpp>
+#include <beast/http/empty_body.hpp>
+#include <beast/http/parse_error.hpp>
+#include <beast/http/read.hpp>
+#include <beast/http/write.hpp>
+
 #include "rgw_asio_frontend.h"
 #include "rgw_asio_client.h"
 
@@ -64,13 +71,68 @@ void Pauser::wait()
 
 using tcp = boost::asio::ip::tcp;
 
+class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
+  RGWProcessEnv& env;
+  boost::asio::io_service::strand strand;
+  tcp::socket socket;
+  tcp::endpoint endpoint;
+  beast::streambuf buf;
+  beast::http::request_v1<RGWBufferlistBody> request;
+
+ public:
+  void on_read(boost::system::error_code ec) {
+    auto cct = env.store->ctx();
+    if (ec) {
+      if (ec.category() == beast::http::get_parse_error_category()) {
+        ldout(cct, 1) << "parse failed with " << ec.message() << dendl;
+      } else {
+        ldout(cct, 1) << "read failed with " << ec.message() << dendl;
+      }
+      write_bad_request();
+      return;
+    }
+    RGWRequest req{env.store->get_new_req_id()};
+    RGWAsioClientIO client{std::move(socket), std::move(request)};
+    process_request(env.store, env.rest, &req, &client, env.olog);
+  }
+
+  void write_bad_request() {
+    beast::http::response_v1<beast::http::empty_body> response;
+    response.status = 400;
+    response.reason = "Bad Request";
+    response.version = request.version;
+    beast::http::prepare(response);
+    beast::http::async_write(socket, std::move(response),
+                             std::bind(&AsioConnection::on_write,
+                                       shared_from_this(),
+                                       beast::asio::placeholders::error));
+  }
+
+  void on_write(boost::system::error_code ec) {
+    auto cct = env.store->ctx();
+    if (ec) {
+      ldout(cct, 1) << "write failed with " << ec.message() << dendl;
+    }
+  }
+
+ public:
+  AsioConnection(RGWProcessEnv& env, tcp::socket&& socket)
+    : env(env), strand(socket.get_io_service()), socket(std::move(socket))
+  {}
+
+  void read() {
+    beast::http::async_read(socket, buf, request, strand.wrap(
+            std::bind(&AsioConnection::on_read, shared_from_this(),
+                      beast::asio::placeholders::error)));
+  }
+};
+
 class AsioFrontend {
   RGWProcessEnv env;
   boost::asio::io_service service;
 
   tcp::acceptor acceptor;
   tcp::socket peer_socket;
-  tcp::endpoint peer_endpoint;
 
   std::vector<std::thread> threads;
   Pauser pauser;
@@ -101,7 +163,7 @@ int AsioFrontend::init()
   acceptor.set_option(tcp::acceptor::reuse_address(true));
   acceptor.bind(ep);
   acceptor.listen(boost::asio::socket_base::max_connections);
-  acceptor.async_accept(peer_socket, peer_endpoint,
+  acceptor.async_accept(peer_socket,
                         [this] (boost::system::error_code ec) {
                           return accept(ec);
                         });
@@ -118,18 +180,13 @@ void AsioFrontend::accept(boost::system::error_code ec)
     throw ec;
   }
   auto socket = std::move(peer_socket);
-  auto endpoint = std::move(peer_endpoint);
 
-  acceptor.async_accept(peer_socket, peer_endpoint,
+  acceptor.async_accept(peer_socket,
                         [this] (boost::system::error_code ec) {
                           return accept(ec);
                         });
 
-  ldout(ctx(), 4) << "accept " << endpoint << dendl;
-
-  RGWRequest req{env.store->get_new_req_id()};
-  RGWAsioClientIO client{std::move(socket), std::move(endpoint)};
-  process_request(env.store, env.rest, &req, &client, env.olog);
+  std::make_shared<AsioConnection>(env, std::move(socket))->read();
 }
 
 int AsioFrontend::run()
@@ -192,7 +249,7 @@ void AsioFrontend::unpause(RGWRados *store)
   env.store = store;
   ldout(ctx(), 4) << "frontend unpaused" << dendl;
   service.reset();
-  acceptor.async_accept(peer_socket, peer_endpoint,
+  acceptor.async_accept(peer_socket,
                         [this] (boost::system::error_code ec) {
                           return accept(ec);
                         });
