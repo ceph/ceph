@@ -79,6 +79,9 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   // use whatever user specified (if anything)
   entity_addr_t listen_addr = bind_addr;
+  if (listen_addr.get_type() == entity_addr_t::TYPE_NONE) {
+    listen_addr.set_type(entity_addr_t::TYPE_LEGACY);
+  }
   listen_addr.set_family(family);
 
   /* bind to port */
