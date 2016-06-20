@@ -312,6 +312,10 @@ int main(int argc, const char **argv)
     return EIO;
   }
   r = rgw_perf_start(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: failed starting rgw perf" << dendl;
+    return -r;
+  }
 
   rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
 
@@ -319,9 +323,6 @@ int main(int argc, const char **argv)
   init_timer.cancel_all_events();
   init_timer.shutdown();
   mutex.Unlock();
-
-  if (r) 
-    return 1;
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
