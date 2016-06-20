@@ -187,9 +187,7 @@ public:
     } else {
       entity_name_t entity(locker_entity);
       entity_addr_t entity_addr;
-      entity_addr.set_family(AF_INET);
-      inet_pton(AF_INET, locker_address.c_str(),
-		&entity_addr.in4_addr().sin_addr);
+      entity_addr.parse(locker_address.c_str(), NULL);
 
       cls_lock_get_info_reply reply;
       if (r != -ENOENT) {
