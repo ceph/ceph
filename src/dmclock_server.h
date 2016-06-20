@@ -309,7 +309,7 @@ namespace crimson {
 	    void push_back(const R& v) {}
 	  };
 	  static Sink my_sink;
-	  remove_by_req_filter(filter, my_sink);
+	  return remove_by_req_filter(filter, my_sink);
 	}
 
 	// NB: because a deque is the underlying structure, this
@@ -401,7 +401,7 @@ namespace crimson {
 	  void push_back(const R& v) {}
 	};
 	static Sink my_sink;
-	remove_by_req_filter(filter, my_sink);
+	return remove_by_req_filter(filter, my_sink);
       }
 
       
@@ -425,22 +425,30 @@ namespace crimson {
 	return any_removed;
       }
 
+
+      void remove_by_client(const C& client) {
+	struct Sink {
+	  void push_back(const R& v) {}
+	};
+	static Sink my_sink;
+	remove_by_client(client, my_sink);
+      }
+
+
       // Collect must support calls to push_back(R), such as
       // std::list<R>.
       template<typename Collect>
-      void remove_by_client(const C& client, Collect* out = nullptr) {
+      void remove_by_client(const C& client, Collect& out) {
 	DataGuard g(data_mtx);
 
 	auto i = client_map.find(client);
 
 	if (i == client_map.end()) return;
 
-	if (nullptr != out) {
-	  for (auto j = i->second->requests.begin();
-	       j != i->second->requests.end();
-	       ++j) {
-	    out->push_back(*j->request);
-	  }
+	for (auto j = i->second->requests.begin();
+	     j != i->second->requests.end();
+	     ++j) {
+	  out.push_back(*j->request);
 	}
 
 	i->second->requests.clear();

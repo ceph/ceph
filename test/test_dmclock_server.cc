@@ -320,7 +320,7 @@ namespace crimson {
 
       std::list<MyReq> removed;
 
-      pq.remove_by_client(client1, &removed);
+      pq.remove_by_client(client1, removed);
 
       EXPECT_EQ(3, removed.size());
       EXPECT_EQ(1, removed.front().id);
@@ -339,6 +339,10 @@ namespace crimson {
       pr = pq.pull_request();
       EXPECT_TRUE(pr.is_retn());
       EXPECT_EQ(0, pr.get_retn().request->id);
+
+      pq.remove_by_client(client2);
+      EXPECT_EQ(0, pq.request_count()) <<
+	"after second client removed, none left";
     } // TEST
 
 
