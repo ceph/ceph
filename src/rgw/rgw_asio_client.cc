@@ -2,13 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/asio/read.hpp>
 #include <boost/asio/write.hpp>
-
-#include <beast/core/basic_streambuf.hpp>
-#include <beast/http/body_type.hpp>
-#include <beast/http/concepts.hpp>
-#include <beast/http/read.hpp>
 
 #include "rgw_asio_client.h"
 
@@ -18,19 +12,18 @@
 #define dout_prefix (*_dout << "asio: ")
 
 
-RGWAsioClientIO::RGWAsioClientIO(tcp::socket&& socket, tcp::endpoint&& endpoint)
-  : socket(std::move(socket)), endpoint(std::move(endpoint))
+RGWAsioClientIO::RGWAsioClientIO(tcp::socket&& socket, request_type&& request)
+  : socket(std::move(socket)), request(std::move(request))
 {}
 
 RGWAsioClientIO::~RGWAsioClientIO() = default;
 
 void RGWAsioClientIO::init_env(CephContext *cct)
 {
-  beast::basic_streambuf<std::allocator<char>> buf; // XXX: not sure what this is for
-  beast::http::read(socket, buf, req);
-  body_iter = req.body.begin();
+  env.init(cct);
+  body_iter = request.body.begin();
 
-  const auto& headers = req.headers;
+  const auto& headers = request.headers;
   for (auto header = headers.begin(); header != headers.end(); ++header) {
     const auto& name = header->name();
     const auto& value = header->value();
@@ -64,10 +57,10 @@ void RGWAsioClientIO::init_env(CephContext *cct)
     env.set(buf, value);
   }
 
-  env.set("REQUEST_METHOD", req.method);
+  env.set("REQUEST_METHOD", request.method);
 
   // split uri from query
-  auto url = boost::string_ref{req.url};
+  auto url = boost::string_ref{request.url};
   auto pos = url.find('?');
   auto query = url.substr(pos + 1);
   url = url.substr(0, pos);
