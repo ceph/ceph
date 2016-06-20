@@ -1997,6 +1997,10 @@ TEST_P(StoreTest, ZeroLengthWrite) {
   r = store->stat(cid, hoid, &stat);
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, stat.st_size);
+
+  bufferlist newdata;
+  r = store->read(cid, hoid, 0, 1048576, newdata);
+  ASSERT_EQ(0, r);
 }
 
 TEST_P(StoreTest, SimpleAttrTest) {
@@ -3465,8 +3469,10 @@ public:
 
     bufferlist& data = contents[new_obj].data;
     if (data.length() <= offset) {
-      data.append_zero(offset-data.length());
-      data.append(bl);
+      if (len > 0) {
+        data.append_zero(offset-data.length());
+        data.append(bl);
+      }
     } else {
       bufferlist value;
       assert(data.length() > offset);
