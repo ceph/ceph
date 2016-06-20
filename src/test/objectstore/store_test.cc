@@ -4806,15 +4806,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-static bool plugin_exists(const string& compressor_dir)
-{
-  string pattern(compressor_dir + "/libceph*.so");
-  glob_t buf;
-  int ret = glob(pattern.c_str(), 0, nullptr, &buf);
-  globfree(&buf);
-  return ret == 0;
-}
-
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
