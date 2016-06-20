@@ -1424,9 +1424,7 @@ bool Paxos::is_readable(version_t v)
     ret =
       (mon->is_peon() || mon->is_leader()) &&
       (is_active() || is_updating() || is_writing()) &&
-      last_committed > 0 &&           // must have a value
-      (mon->get_quorum().size() == 1 ||  // alone, or
-       is_lease_valid()); // have lease
+      last_committed > 0 && is_lease_valid(); // must have a value alone, or have lease
   dout(5) << __func__ << " = " << (int)ret
 	  << " - now=" << ceph_clock_now(g_ceph_context)
 	  << " lease_expire=" << lease_expire
