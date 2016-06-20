@@ -143,6 +143,7 @@ Replay<I>::~Replay() {
   assert(m_aio_modify_unsafe_contexts.empty());
   assert(m_aio_modify_safe_contexts.empty());
   assert(m_op_events.empty());
+  assert(m_in_flight_op_events == 0);
 }
 
 template <typename I>
@@ -208,7 +209,7 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
     }
 
     assert(m_flush_ctx == nullptr);
-    if (!m_op_events.empty() || flush_comp != nullptr) {
+    if (m_in_flight_op_events > 0 || flush_comp != nullptr) {
       std::swap(m_flush_ctx, on_finish);
     }
   }
@@ -664,7 +665,7 @@ void Replay<I>::handle_aio_flush_complete(Context *on_flush_safe,
     m_in_flight_aio_modify -= on_safe_ctxs.size();
 
     std::swap(on_aio_ready, m_on_aio_ready);
-    if (m_op_events.empty() &&
+    if (m_in_flight_op_events == 0 &&
         (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
       on_flush = m_flush_ctx;
     }
@@ -713,6 +714,7 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
     return nullptr;
   }
 
+  ++m_in_flight_op_events;
   *op_event = &m_op_events[op_tid];
   (*op_event)->on_start_safe = on_safe;
 
@@ -728,7 +730,6 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
                  << "r=" << r << dendl;
 
   OpEvent op_event;
-  Context *on_flush = nullptr;
   bool shutting_down = false;
   {
     Mutex::Locker locker(m_lock);
@@ -739,10 +740,6 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     m_op_events.erase(op_it);
 
     shutting_down = (m_flush_ctx != nullptr);
-    if (m_op_events.empty() &&
-        (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
-      on_flush = m_flush_ctx;
-    }
   }
 
   assert(op_event.on_start_ready == nullptr || (r < 0 && r != -ERESTART));
@@ -775,8 +772,15 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
   if (op_event.on_finish_safe != nullptr) {
     op_event.on_finish_safe->complete(r);
   }
-  if (on_flush != nullptr) {
-    on_flush->complete(0);
+
+  // shut down request might have occurred while lock was
+  // dropped -- handle if pending
+  Mutex::Locker locker(m_lock);
+  assert(m_in_flight_op_events > 0);
+  --m_in_flight_op_events;
+  if (m_flush_ctx != nullptr && m_in_flight_op_events == 0 &&
+      (m_in_flight_aio_flush + m_in_flight_aio_modify) == 0) {
+    m_image_ctx.op_work_queue->queue(m_flush_ctx, 0);
   }
 }
 

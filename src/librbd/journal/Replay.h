@@ -122,6 +122,7 @@ private:
   ContextSet m_aio_modify_safe_contexts;
 
   OpEvents m_op_events;
+  uint64_t m_in_flight_op_events = 0;
 
   Context *m_flush_ctx = nullptr;
   Context *m_on_aio_ready = nullptr;
