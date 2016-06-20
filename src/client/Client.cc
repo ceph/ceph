@@ -11669,8 +11669,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		      ceph::real_clock::now(cct),
 		      0, true, onfinish,
 		      new C_OnFinisher(onsafe, &objecter_finisher));
-      if (r < 0)
-	goto done;
+      assert(r == 0);
 
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
