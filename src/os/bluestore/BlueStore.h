@@ -223,6 +223,7 @@ public:
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->_audit_lru("_rm_buffer start");
+      assert(cache->buffer_size >= p->second->length);
       cache->buffer_size -= p->second->length;
       cache->buffer_lru.erase(cache->buffer_lru.iterator_to(*p->second));
       if (p->second->is_writing()) {
