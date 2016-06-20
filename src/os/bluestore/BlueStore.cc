@@ -5419,7 +5419,8 @@ void BlueStore::_do_write_small(
     uint64_t tail_read =
       ROUND_UP_TO(b_off + b_len, chunk_size) - (b_off + b_len);
     if ((head_read || tail_read) &&
-	(b->blob.get_ondisk_length() >= b_off + b_len + tail_read)) {
+	(b->blob.get_ondisk_length() >= b_off + b_len + tail_read) &&
+	head_read + tail_read < min_alloc_size) {
       dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
 	       << " and tail 0x" << tail_read << std::dec << dendl;
       if (head_read) {
