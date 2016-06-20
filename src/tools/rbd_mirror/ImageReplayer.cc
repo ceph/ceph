@@ -692,7 +692,7 @@ void ImageReplayer<I>::flush(Context *on_finish)
 
   {
     Mutex::Locker locker(m_lock);
-    if (m_state == STATE_REPLAYING || m_state == STATE_REPLAYING) {
+    if (m_state == STATE_REPLAYING) {
       Context *ctx = new FunctionContext(
         [on_finish](int r) {
           if (on_finish != nullptr) {
@@ -816,18 +816,46 @@ template <typename I>
 void ImageReplayer<I>::replay_flush() {
   dout(20) << dendl;
 
+  {
+    Mutex::Locker locker(m_lock);
+    m_state = STATE_REPLAY_FLUSHING;
+  }
+
+  // shut down the replay to flush all IO and ops and create a new
+  // replayer to handle the new tag epoch
   Context *ctx = create_context_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_replay_flush>(this);
-  flush(ctx);
+  ctx = new FunctionContext([this, ctx](int r) {
+      m_local_image_ctx->journal->stop_external_replay();
+      m_local_replay = nullptr;
+
+      if (r < 0) {
+        ctx->complete(r);
+        return;
+      }
+
+      Context *stop_ctx = create_context_callback<
+        ImageReplayer, &ImageReplayer<I>::handle_stop_replay_request>(this);
+      m_local_journal->start_external_replay(&m_local_replay, ctx, stop_ctx);
+    });
+  m_local_replay->shut_down(true, ctx);
 }
 
 template <typename I>
 void ImageReplayer<I>::handle_replay_flush(int r) {
   dout(20) << "r=" << r << dendl;
 
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_REPLAY_FLUSHING);
+    m_state = STATE_REPLAYING;
+  }
+
   if (r < 0) {
     derr << "replay flush encountered an error: " << cpp_strerror(r) << dendl;
     handle_replay_complete(r, "replay flush encountered an error");
+    return;
+  } else if (on_replay_interrupted()) {
     return;
   }
 
@@ -1054,6 +1082,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     }
     break;
   case STATE_REPLAYING:
+  case STATE_REPLAY_FLUSHING:
     status.state = cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING;
     {
       Context *on_req_finish = new FunctionContext(
@@ -1295,6 +1324,8 @@ std::string ImageReplayer<I>::to_string(const State state) {
     return "Starting";
   case ImageReplayer<I>::STATE_REPLAYING:
     return "Replaying";
+  case ImageReplayer<I>::STATE_REPLAY_FLUSHING:
+    return "ReplayFlushing";
   case ImageReplayer<I>::STATE_STOPPING:
     return "Stopping";
   case ImageReplayer<I>::STATE_STOPPED:
