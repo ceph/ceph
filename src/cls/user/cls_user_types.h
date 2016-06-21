@@ -77,7 +77,7 @@ struct cls_user_bucket_entry {
   uint64_t count;
   bool user_stats_sync;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), count(1), user_stats_sync(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(7, 5, bl);
