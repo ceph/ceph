@@ -765,11 +765,9 @@ target_link_libraries(unittest_heartbeatmap common global)
 
 if(${WITH_RADOSGW})
   # unittest_formatter
-  # why does this include rgw/rgw_formats.cc...?
   add_executable(unittest_formatter
     formatter.cc
-    ${CMAKE_SOURCE_DIR}/src/rgw/rgw_formats.cc
-  )
+    )
   add_ceph_unittest(unittest_formatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_formatter)
   target_link_libraries(unittest_formatter global)
 endif(${WITH_RADOSGW})
