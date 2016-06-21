@@ -1625,7 +1625,9 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
   const auto& ws_conf = s->bucket_info.website_conf;
 
   if (can_be_website_req() && ! ws_conf.error_doc.empty()) {
-    return serve_errordoc(404, ws_conf.error_doc);
+    struct rgw_err err;
+    set_req_state_err(err, err_no, s->prot_flags);
+    return serve_errordoc(err.http_ret, ws_conf.error_doc);
   }
 
   /* Let's go to the default, no-op handler. */
