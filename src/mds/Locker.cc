@@ -1751,8 +1751,11 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
       } else
 	++p;
     }
-    if (gather)
+    if (gather) {
+      if (in->client_snap_caps.empty())
+	in->item_open_file.remove_myself();
       eval_cap_gather(in, &need_issue);
+    }
   } else {
     if (cap && (cap->wanted() & ~cap->pending()) &&
 	need_issue.count(in) == 0) {  // if we won't issue below anyway
