@@ -1513,6 +1513,11 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
     }
 
+    if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+      lderr(cct) << "cloning image must support layering" << dendl;
+      return -ENOSYS;
+    }
+
     c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
     r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
                primary_mirror_uuid);
