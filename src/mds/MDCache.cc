@@ -1698,7 +1698,10 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
       oldin->inode.version = olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
-      metablob->add_primary_dentry(olddn, 0, true);
+      bool need_snapflush = !oldin->client_snap_caps.empty();
+      if (need_snapflush)
+	mut->ls->open_files.push_back(&oldin->item_open_file);
+      metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
     } else {
       assert(dnl->is_remote());
@@ -5497,14 +5500,21 @@ void MDCache::clean_open_file_lists()
        p != mds->mdlog->segments.end();
        ++p) {
     LogSegment *ls = p->second;
-    
+
     elist<CInode*>::iterator q = ls->open_files.begin(member_offset(CInode, item_open_file));
     while (!q.end()) {
       CInode *in = *q;
       ++q;
-      if (!in->is_any_caps_wanted()) {
-	dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
-	in->item_open_file.remove_myself();
+      if (in->last == CEPH_NOSNAP) {
+	if (!in->is_any_caps_wanted()) {
+	  dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
+	  in->item_open_file.remove_myself();
+	}
+      } else if (in->last != CEPH_NOSNAP) {
+	if (in->client_snap_caps.empty()) {
+	  dout(10) << " unlisting flushed snap inode " << *in << dendl;
+	  in->item_open_file.remove_myself();
+	}
       }
     }
   }
