@@ -1325,8 +1325,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if ((features & RBD_FEATURE_STRIPINGV2) == 0 &&
 	((stripe_unit && stripe_unit != (1ull << order)) ||
 	 (stripe_count && stripe_count != 1))) {
-      lderr(cct) << "STRIPINGV2 and format 2 or later required for non-default striping" << dendl;
-      return -EINVAL;
+      features |= RBD_FEATURE_STRIPINGV2;
     }
 
     if ((stripe_unit && !stripe_count) ||
@@ -1512,11 +1511,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     order = p_imctx->order;
     if (c_opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
       c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
-    }
-
-    if (c_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) == 0 ||
-	c_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) == 0) {
-      features |= RBD_FEATURE_STRIPINGV2;
     }
 
     c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
@@ -2284,14 +2278,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     uint64_t stripe_unit = src->stripe_unit;
     if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
       opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
-    } else {
-      features |= RBD_FEATURE_STRIPINGV2;
     }
     uint64_t stripe_count = src->stripe_count;
     if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
       opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
-    } else {
-      features |= RBD_FEATURE_STRIPINGV2;
     }
     uint64_t order = src->order;
     if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
