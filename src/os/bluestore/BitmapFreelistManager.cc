@@ -18,7 +18,7 @@ void make_offset_key(uint64_t offset, std::string *key)
 }
 
 struct XorMergeOperator : public KeyValueDB::MergeOperator {
-  virtual void merge_nonexistant(
+  virtual void merge_nonexistent(
     const char *rdata, size_t rlen, std::string *new_value) override {
     *new_value = std::string(rdata, rlen);
   }
