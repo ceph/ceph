@@ -6006,12 +6006,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	epoch_t pg_epoch = info.history.same_interval_since;
 	tracepoint(osd, do_osd_op_pre_assert_interval, soid.oid.name.c_str(), soid.snap.val, epoch);
 	dout(5) << "Check interval " << soid << " epoch " << epoch << " pg epoch " << pg_epoch << dendl;
-	if (epoch > pg_epoch) {
+	if (epoch != pg_epoch) {
 	  result = -ERANGE;
 	  break;
-	}
-	if (pg_has_reset_since(epoch)) {
-	  result = -EINVAL;
 	}
       }
       break;
