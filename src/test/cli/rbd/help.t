@@ -5,7 +5,7 @@
   
   Positional arguments:
     <command>
-      bench-write                 Simple write benchmark.
+      bench                       Simple benchmark.
       children                    Display children of snapshot.
       clone                       Clone a snapshot into a COW child image.
       copy (cp)                   Copy src image to dest.
@@ -96,13 +96,13 @@
   
   See 'rbd help <command>' for help on a specific command.
   $ rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g' | while read -r line; do echo rbd help $line ; rbd help $line; done
-  rbd help bench-write
-  usage: rbd bench-write [--pool <pool>] [--image <image>] [--io-size <io-size>] 
-                         [--io-threads <io-threads>] [--io-total <io-total>] 
-                         [--io-pattern <io-pattern>] 
-                         <image-spec> 
+  rbd help bench
+  usage: rbd bench [--pool <pool>] [--image <image>] [--io-size <io-size>] 
+                   [--io-threads <io-threads>] [--io-total <io-total>] 
+                   [--io-pattern <io-pattern>] --io-type <io-type> 
+                   <image-spec> 
   
-  Simple write benchmark.
+  Simple benchmark.
   
   Positional arguments
     <image-spec>         image specification
@@ -111,10 +111,11 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --io-size arg        write size (in B/K/M/G/T)
+    --io-size arg        IO size (in B/K/M/G/T)
     --io-threads arg     ios in flight
-    --io-total arg       total size to write (in B/K/M/G/T)
-    --io-pattern arg     write pattern (rand or seq)
+    --io-total arg       total size for IO (in B/K/M/G/T)
+    --io-pattern arg     IO pattern (rand or seq)
+    --io-type arg        IO type (read or write)
   
   rbd help children
   usage: rbd children [--pool <pool>] [--image <image>] [--snap <snap>] 
