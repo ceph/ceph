@@ -191,10 +191,6 @@ public:
   bmap_area_type_t level_to_type(int level);
   static int get_level(int64_t total_blocks);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
-  virtual bool is_allocated(int64_t *blocks, int64_t num_blocks, int blk_off) {
-    debug_assert(0);
-    return true;
-  }
   virtual bool is_exhausted() = 0;
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
       debug_assert(0);
@@ -370,7 +366,7 @@ protected:
   BitMapAreaList *m_child_list;
 
   bool is_allocated(int64_t start_block, int64_t num_blocks);
-  bool is_allocated(int64_t *blocks, int64_t num_blocks, int64_t blk_off);
+  virtual bool is_allocated(int64_t *blocks, int64_t num_blocks, int64_t blk_off);
   virtual bool is_exhausted();
   virtual bool child_check_n_lock(BitMapArea *child, int64_t required);
   virtual void child_unlock(BitMapArea *child);
