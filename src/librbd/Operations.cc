@@ -233,6 +233,8 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r != -ETIMEDOUT && r != -ERESTART) {
+      image_ctx.state->handle_update_notification();
+
       complete(r);
       return;
     }
