@@ -73,7 +73,7 @@ class RocksDBStore::MergeOperatorRouter : public rocksdb::AssociativeMergeOperat
 			  value.data(), value.size(),
 			  new_value);
         } else {
-          p.second->merge_nonexistant(value.data(), value.size(), new_value);
+          p.second->merge_nonexistent(value.data(), value.size(), new_value);
         }
         break;
       }
