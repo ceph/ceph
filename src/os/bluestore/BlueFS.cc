@@ -46,18 +46,36 @@ void BlueFS::_init_logger()
 {
   PerfCountersBuilder b(g_ceph_context, "BlueFS",
                         l_bluefs_first, l_bluefs_last);
-  b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes", "Bytes gifted from BlueStore");
-  b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes", "Bytes reclaimed by BlueStore");
-  b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes", "Total bytes (main db device)");
-  b.add_u64(l_bluefs_db_free_bytes, "db_free_bytes", "Free bytes (main db device)");
-  b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes", "Total bytes (wal device)");
-  b.add_u64(l_bluefs_wal_free_bytes, "wal_free_bytes", "Free bytes (wal device)");
-  b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes", "Total bytes (slow device)");
-  b.add_u64(l_bluefs_slow_free_bytes, "slow_free_bytes", "Free bytes (slow device)");
+  b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes",
+		    "Bytes gifted from BlueStore");
+  b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes",
+		    "Bytes reclaimed by BlueStore");
+  b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes",
+	    "Total bytes (main db device)");
+  b.add_u64(l_bluefs_db_free_bytes, "db_free_bytes",
+	    "Free bytes (main db device)");
+  b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
+	    "Total bytes (wal device)");
+  b.add_u64(l_bluefs_wal_free_bytes, "wal_free_bytes",
+	    "Free bytes (wal device)");
+  b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes",
+	    "Total bytes (slow device)");
+  b.add_u64(l_bluefs_slow_free_bytes, "slow_free_bytes",
+	    "Free bytes (slow device)");
   b.add_u64(l_bluefs_num_files, "num_files", "File count");
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log");
-  b.add_u64_counter(l_bluefs_log_compactions, "log_compactions", "Compactions of the metadata log");
-  b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes", "Bytes written to the metadata log");
+  b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
+		    "Compactions of the metadata log");
+  b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
+		    "Bytes written to the metadata log");
+  b.add_u64_counter(l_bluefs_files_written_wal, "files_written_wal",
+		    "Files written to WAL");
+  b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
+		    "Files written to SSTs");
+  b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
+		    "Bytes written to WAL");
+  b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
+		    "Bytes written to SSTs");
   logger = b.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -1105,6 +1123,15 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   assert(bl.length() == length);
 
+  switch (h->writer_type) {
+  case WRITER_WAL:
+    logger->inc(l_bluefs_bytes_written_wal, length);
+    break;
+  case WRITER_SST:
+    logger->inc(l_bluefs_bytes_written_sst, length);
+    break;
+  }
+
   dout(30) << "dump:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
@@ -1399,6 +1426,19 @@ int BlueFS::open_for_write(
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
 
   *h = _create_writer(file);
+
+  if (0 == filename.compare(filename.length() - 4, 4, ".log")) {
+    (*h)->writer_type = BlueFS::WRITER_WAL;
+    if (logger) {
+      logger->inc(l_bluefs_files_written_wal);
+    }
+  } else if (0 == filename.compare(filename.length() - 4, 4, ".sst")) {
+    (*h)->writer_type = BlueFS::WRITER_SST;
+    if (logger) {
+      logger->inc(l_bluefs_files_written_sst);
+    }
+  }
+
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
@@ -1418,7 +1458,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 
 void BlueFS::_close_writer(FileWriter *h)
 {
-  dout(10) << __func__ << " " << h << dendl;
+  dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
   for (unsigned i=0; i<MAX_BDEV; ++i) {
     if (bdev[i]) {
       assert(h->iocv[i]);
