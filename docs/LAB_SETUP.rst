@@ -1,3 +1,5 @@
+.. _lab_setup:
+
 ==========================
 Teuthology Lab Setup Notes
 ==========================
