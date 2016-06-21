@@ -238,7 +238,7 @@ void get_arguments(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   // TODO
   options->add_options()
-    ("io-size", po::value<Size>(), "write size (in B/K/M/G/T)")
+    ("io-size", po::value<Size>(), "write size (in B/K/M) [1B <= object size <= 100M]")
     ("io-threads", po::value<uint32_t>(), "ios in flight")
     ("io-total", po::value<Size>(), "total size to write (in B/K/M/G/T)")
     ("io-pattern", po::value<IOPattern>(), "write pattern (rand or seq)");
@@ -261,6 +261,11 @@ int execute(const po::variables_map &vm) {
     bench_io_size = vm["io-size"].as<uint64_t>();
   } else {
     bench_io_size = 4096;
+  }
+  if ((bench_io_size > 100*1024*1024) || (bench_io_size < 1))
+  {
+    std::cerr << "rbd: the argument for option '--io-size' is invalid " << std::endl;
+    return -EINVAL;
   }
 
   uint32_t bench_io_threads;
