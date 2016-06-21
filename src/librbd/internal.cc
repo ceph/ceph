@@ -593,6 +593,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     {RBD_IMAGE_OPTION_JOURNAL_ORDER, UINT64},
     {RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, UINT64},
     {RBD_IMAGE_OPTION_JOURNAL_POOL, STR},
+    {RBD_IMAGE_OPTION_FEATURES_SET, UINT64},
+    {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -613,6 +615,10 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return "journal_splay_width";
     case RBD_IMAGE_OPTION_JOURNAL_POOL:
       return "journal_pool";
+    case RBD_IMAGE_OPTION_FEATURES_SET:
+      return "features_set";
+    case RBD_IMAGE_OPTION_FEATURES_CLEAR:
+      return "features_clear";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -1259,6 +1265,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
       features = old_format ? 0 : cct->_conf->rbd_default_features;
     }
+
+    uint64_t features_clear = 0;
+    uint64_t features_set = 0;
+    opts.get(RBD_IMAGE_OPTION_FEATURES_CLEAR, &features_clear);
+    opts.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
+
+    uint64_t conflict = features_clear & features_set;
+    features_clear &= ~conflict;
+    features_set &= ~conflict;
+
+    features |= features_set;
+    features &= ~features_clear;
+
     uint64_t stripe_unit = 0;
     uint64_t stripe_count = 0;
     if (!old_format) {
