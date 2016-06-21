@@ -2363,6 +2363,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWBucketInfo *bucket_info;
   list<rgw_bi_log_entry> list_result;
   list<rgw_bi_log_entry>::iterator entries_iter;
+  map<string, pair<real_time, RGWModifyOp> > squash_map;
   rgw_bucket_shard_inc_sync_marker inc_marker;
   rgw_obj_key key;
   rgw_bi_log_entry *entry;
@@ -2440,9 +2441,23 @@ int RGWBucketShardIncrementalSyncCR::operate()
                                          inc_marker.position, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
+        drain_all_but(1);
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
+      }
+      squash_map.clear();
+      for (auto& e : list_result) {
+        if (e.state != CLS_RGW_STATE_COMPLETE) {
+          continue;
+        }
+        auto& squash_entry = squash_map[e.object];
+        if (squash_entry.first == e.timestamp &&
+            e.op == CLS_RGW_OP_DEL) {
+          squash_entry.second = e.op;
+        } else if (squash_entry.first < e.timestamp) {
+          squash_entry = make_pair<>(e.timestamp, e.op);
+        }
       }
       entries_iter = list_result.begin();
       for (; entries_iter != list_result.end(); ++entries_iter) {
@@ -2485,6 +2500,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
           set_status() << "non-complete operation, skipping";
           ldout(sync_env->cct, 20) << "[inc sync] skipping object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << ": non-complete operation" << dendl;
           marker_tracker->try_update_high_marker(cur_id, 0, entry->timestamp);
+          continue;
+        }
+        if (make_pair<>(entry->timestamp, entry->op) != squash_map[entry->object]) {
+          set_status() << "squashed operation, skipping";
+          ldout(sync_env->cct, 20) << "[inc sync] skipping object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << ": squashed operation" << dendl;
+          /* not updating high marker though */
           continue;
         }
         ldout(sync_env->cct, 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
@@ -2544,11 +2565,13 @@ int RGWBucketShardIncrementalSyncCR::operate()
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "ERROR: marker_tracker->flush() returned retcode=" << retcode << dendl;
+      drain_all_but(1);
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
     }
 
+    drain_all_but(1);
     lease_cr->go_down();
     /* wait for all operations to complete */
     drain_all();
