@@ -1,6 +1,7 @@
 #include "common/config.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/small_encoding.h"
 
 #include "gtest/gtest.h"
 
@@ -222,4 +223,178 @@ TEST(EncodingException, Macros) {
       ASSERT_EQ(string(expected_what[i]), string(e.what()));
     }
   }
+}
+
+
+TEST(small_encoding, varint) {
+  uint32_t v[][4] = {
+    /* value, varint bytes, signed varint bytes, signed varint bytes (neg) */
+    {0, 1, 1, 1},
+    {1, 1, 1, 1},
+    {2, 1, 1, 1},
+    {31, 1, 1, 1},
+    {32, 1, 1, 1},
+    {0xff, 2, 2, 2},
+    {0x100, 2, 2, 2},
+    {0xfff, 2, 2, 2},
+    {0x1000, 2, 2, 2},
+    {0x2000, 2, 3, 3},
+    {0x3fff, 2, 3, 3},
+    {0x4000, 3, 3, 3},
+    {0x4001, 3, 3, 3},
+    {0x10001, 3, 3, 3},
+    {0x20001, 3, 3, 3},
+    {0x40001, 3, 3, 3},
+    {0x80001, 3, 3, 3},
+    {0x7f0001, 4, 4, 4},
+    {0xff00001, 4, 5, 5},
+    {0x1ff00001, 5, 5, 5},
+    {0xffff0001, 5, 5, 5},
+    {0xffffffff, 5, 5, 5},
+    {1074790401, 5, 5, 5},
+    {0, 0, 0, 0}
+  };
+  for (unsigned i=0; v[i][1]; ++i) {
+    {
+      bufferlist bl;
+      small_encode_varint(v[i][0], bl);
+      cout << std::hex << v[i][0] << "\t" << v[i][1] << "\t";
+      bl.hexdump(cout, false);
+      cout << std::endl;
+      ASSERT_EQ(bl.length(), v[i][1]);
+      uint32_t u;
+      auto p = bl.begin();
+      small_decode_varint(u, p);
+      ASSERT_EQ(v[i][0], u);
+    }
+    {
+      bufferlist bl;
+      small_encode_signed_varint(v[i][0], bl);
+      cout << std::hex << v[i][0] << "\t" << v[i][2] << "\t";
+      bl.hexdump(cout, false);
+      cout << std::endl;
+      ASSERT_EQ(bl.length(), v[i][2]);
+      int32_t u;
+      auto p = bl.begin();
+      small_decode_signed_varint(u, p);
+      ASSERT_EQ((int32_t)v[i][0], u);
+    }
+    {
+      bufferlist bl;
+      int64_t x = -(int64_t)v[i][0];
+      small_encode_signed_varint(x, bl);
+      cout << std::dec << x << std::hex << "\t" << v[i][3] << "\t";
+      bl.hexdump(cout, false);
+      cout << std::endl;
+      ASSERT_EQ(bl.length(), v[i][3]);
+      int64_t u;
+      auto p = bl.begin();
+      small_decode_signed_varint(u, p);
+      ASSERT_EQ(x, u);
+    }
+  }
+}
+
+TEST(small_encoding, varint_lowz) {
+  uint32_t v[][4] = {
+    /* value, bytes encoded */
+    {0, 1, 1, 1},
+    {1, 1, 1, 1},
+    {2, 1, 1, 1},
+    {15, 1, 1, 1},
+    {16, 1, 1, 1},
+    {31, 1, 2, 2},
+    {63, 2, 2, 2},
+    {64, 1, 1, 1},
+    {0xff, 2, 2, 2},
+    {0x100, 1, 1, 1},
+    {0x7ff, 2, 2, 2},
+    {0xfff, 2, 3, 3},
+    {0x1000, 1, 1, 1},
+    {0x4000, 1, 1, 1},
+    {0x8000, 1, 1, 1},
+    {0x10000, 1, 2, 2},
+    {0x20000, 2, 2, 2},
+    {0x40000, 2, 2, 2},
+    {0x80000, 2, 2, 2},
+    {0x7f0000, 2, 2, 2},
+    {0xffff0000, 4, 4, 4},
+    {0xffffffff, 5, 5, 5},
+    {0, 0, 0, 0}
+  };
+  for (unsigned i=0; v[i][1]; ++i) {
+    {
+      bufferlist bl;
+      small_encode_varint_lowz(v[i][0], bl);
+      cout << std::hex << v[i][0] << "\t" << v[i][1] << "\t";
+      bl.hexdump(cout, false);
+      cout << std::endl;
+      ASSERT_EQ(bl.length(), v[i][1]);
+      uint32_t u;
+      auto p = bl.begin();
+      small_decode_varint_lowz(u, p);
+      ASSERT_EQ(v[i][0], u);
+    }
+    {
+      bufferlist bl;
+      int64_t x = v[i][0];
+      small_encode_signed_varint_lowz(x, bl);
+      cout << std::hex << x << "\t" << v[i][1] << "\t";
+      bl.hexdump(cout, false);
+      cout << std::endl;
+      ASSERT_EQ(bl.length(), v[i][2]);
+      int64_t u;
+      auto p = bl.begin();
+      small_decode_signed_varint_lowz(u, p);
+      ASSERT_EQ(x, u);
+    }
+    {
+      bufferlist bl;
+      int64_t x = -(int64_t)v[i][0];
+      small_encode_signed_varint_lowz(x, bl);
+      cout << std::dec << x << "\t" << v[i][1] << "\t";
+      bl.hexdump(cout, false);
+      cout << std::endl;
+      ASSERT_EQ(bl.length(), v[i][3]);
+      int64_t u;
+      auto p = bl.begin();
+      small_decode_signed_varint_lowz(u, p);
+      ASSERT_EQ(x, u);
+    }    
+  }
+}
+
+TEST(small_encoding, lba) {
+  uint64_t v[][2] = {
+    /* value, bytes encoded */
+    {0, 4},
+    {1, 4},
+    {0xff, 4},
+    {0x10000, 4},
+    {0x7f0000, 4},
+    {0xffff0000, 4},
+    {0x0fffffff, 4},
+    {0x1fffffff, 5},
+    {0xffffffff, 5},
+    {0x3fffffff000, 4},
+    {0x7fffffff000, 5},
+    {0x1fffffff0000, 4},
+    {0x3fffffff0000, 5},
+    {0xfffffff00000, 4},
+    {0x1fffffff00000, 5},
+    {0, 0}
+  };
+  for (unsigned i=0; v[i][1]; ++i) {
+    bufferlist bl;
+    small_encode_lba(v[i][0], bl);
+    cout << std::hex << v[i][0] << "\t" << v[i][1] << "\t";
+    bl.hexdump(cout, false);
+    cout << std::endl;
+    ASSERT_EQ(bl.length(), v[i][1]);
+    uint64_t u;
+    auto p = bl.begin();
+    small_decode_lba(u, p);
+    ASSERT_EQ(v[i][0], u);
+  }
+
 }

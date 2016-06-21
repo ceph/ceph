@@ -98,6 +98,29 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t(123));
 }
 
+// bluestore_pextent_t
+
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl)
+{
+  size_t n = v.size();
+  small_encode_varint(n, bl);
+  for (auto e : v) {
+    e.encode(bl);
+  }
+}
+
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p)
+{
+  size_t n;
+  small_decode_varint(n, p);
+  v.clear();
+  v.reserve(n);
+  while (n--) {
+    v.push_back(bluestore_pextent_t());
+    ::decode(v.back(), p);
+  }
+}
+
 // bluestore_extent_ref_map_t
 
 void bluestore_extent_ref_map_t::_check() const
@@ -286,16 +309,38 @@ bool bluestore_extent_ref_map_t::intersects(
 
 void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
-  ::encode(ref_map, bl);
-  ENCODE_FINISH(bl);
+  uint32_t n = ref_map.size();
+  small_encode_varint(n, bl);
+  if (n) {
+    auto p = ref_map.begin();
+    small_encode_varint_lowz(p->first, bl);
+    p->second.encode(bl);
+    int32_t pos = p->first;
+    while (--n) {
+      ++p;
+      small_encode_signed_varint_lowz((int64_t)p->first - pos, bl);
+      p->second.encode(bl);
+      pos = p->first;
+    }
+  }
 }
 
 void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START(1, p);
-  ::decode(ref_map, p);
-  DECODE_FINISH(p);
+  uint32_t n;
+  small_decode_varint(n, p);
+  if (n) {
+    int64_t pos;
+    small_decode_varint_lowz(pos, p);
+    ref_map[pos].decode(p);
+    while (--n) {
+      int64_t delta;
+      uint64_t length;
+      small_decode_signed_varint_lowz(delta, p);
+      pos += delta;
+      ref_map[pos].decode(p);
+    }
+  }
 }
 
 void bluestore_extent_ref_map_t::dump(Formatter *f) const
@@ -369,34 +414,52 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "compressed";
   }
+  if (flags & FLAG_CSUM) {
+    if (s.length())
+      s += '+';
+    s += "csum";
+  }
   return s;
 }
 
 void bluestore_blob_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(extents, bl);
-  ::encode(compressed_length, bl);
-  ::encode(flags, bl);
-  ::encode(csum_type, bl);
-  ::encode(csum_chunk_order, bl);
+  small_encode(extents, bl);
+  small_encode_varint(flags, bl);
+  if (is_compressed()) {
+    small_encode_varint_lowz(compressed_length, bl);
+  }
+  if (has_csum()) {
+    small_encode_varint(csum_type, bl);
+    small_encode_varint(csum_chunk_order, bl);
+    small_encode_buf_lowz(csum_data, bl);
+  }
   ::encode(ref_map, bl);
   ::encode(unused, bl);
-  ::encode(csum_data, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluestore_blob_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(extents, p);
-  ::decode(compressed_length, p);
-  ::decode(flags, p);
-  ::decode(csum_type, p);
-  ::decode(csum_chunk_order, p);
+  small_decode(extents, p);
+  small_decode_varint(flags, p);
+  if (is_compressed()) {
+    small_decode_varint_lowz(compressed_length, p);
+  } else {
+    compressed_length = 0;
+  }
+  if (has_csum()) {
+    small_decode_varint(csum_type, p);
+    small_decode_varint(csum_chunk_order, p);
+    small_decode_buf_lowz(csum_data, p);
+  } else {
+    csum_type = CSUM_NONE;
+    csum_chunk_order = 0;
+  }
   ::decode(ref_map, p);
   ::decode(unused, p);
-  ::decode(csum_data, p);
   DECODE_FINISH(p);
 }
 
@@ -439,6 +502,10 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->ref_map.get(3, 5);
   ls.back()->add_unused(0, 3);
   ls.back()->add_unused(8, 8);
+  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
+  ls.back()->extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
+  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40120000, 0x10000));
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
@@ -493,7 +560,7 @@ void bluestore_blob_t::put_ref(
   }
 
   // we cannot release something smaller than our csum chunk size
-  if (has_csum_data() && get_csum_chunk_size() > min_release_size) {
+  if (has_csum() && get_csum_chunk_size() > min_release_size) {
     min_release_size = get_csum_chunk_size();
   }
 

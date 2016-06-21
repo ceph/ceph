@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
+#include "include/small_encoding.h"
 #include "common/hobject.h"
 
 namespace ceph {
@@ -72,12 +73,12 @@ struct bluestore_pextent_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
+    small_encode_lba(offset, bl);
+    small_encode_varint_lowz(length, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
+    small_decode_lba(offset, p);
+    small_decode_varint_lowz(length, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
@@ -86,6 +87,8 @@ WRITE_CLASS_ENCODER(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl);
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p);
 
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {
@@ -94,12 +97,12 @@ struct bluestore_extent_ref_map_t {
     uint32_t refs;
     record_t(uint32_t l=0, uint32_t r=0) : length(l), refs(r) {}
     void encode(bufferlist& bl) const {
-      ::encode(length, bl);
-      ::encode(refs, bl);
+      small_encode_varint_lowz(length, bl);
+      small_encode_varint(refs, bl);
     }
     void decode(bufferlist::iterator& p) {
-      ::decode(length, p);
-      ::decode(refs, p);
+      small_decode_varint_lowz(length, p);
+      small_decode_varint(refs, p);
     }
   };
   WRITE_CLASS_ENCODER(record_t)
@@ -149,6 +152,7 @@ struct bluestore_blob_t {
   enum {
     FLAG_MUTABLE = 1,     ///< blob can be overwritten or split
     FLAG_COMPRESSED = 2,  ///< blob is compressed
+    FLAG_CSUM = 4,        ///< blob as checksums
   };
   static string get_flags_string(unsigned flags);
 
@@ -358,8 +362,8 @@ struct bluestore_blob_t {
     return len;
   }
 
-  bool has_csum_data() const {
-    return csum_data.length() > 0;
+  bool has_csum() const {
+    return has_flag(FLAG_CSUM);
   }
 
   uint32_t get_csum_chunk_size() const {
@@ -409,6 +413,7 @@ struct bluestore_blob_t {
   }
 
   void init_csum(unsigned type, unsigned order, unsigned len) {
+    flags |= FLAG_CSUM;
     csum_type = type;
     csum_chunk_order = order;
     csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
