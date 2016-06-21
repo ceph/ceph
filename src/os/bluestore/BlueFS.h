@@ -31,6 +31,10 @@ enum {
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
   l_bluefs_logged_bytes,
+  l_bluefs_files_written_wal,
+  l_bluefs_files_written_sst,
+  l_bluefs_bytes_written_wal,
+  l_bluefs_bytes_written_sst,
   l_bluefs_last,
 };
 
@@ -40,6 +44,12 @@ public:
   static constexpr unsigned BDEV_WAL = 0;
   static constexpr unsigned BDEV_DB = 1;
   static constexpr unsigned BDEV_SLOW = 2;
+
+  enum {
+    WRITER_UNKNOWN,
+    WRITER_WAL,
+    WRITER_SST,
+  };
 
   struct File : public RefCountedObject {
     bluefs_fnode_t fnode;
@@ -102,6 +112,7 @@ public:
     uint64_t pos;           ///< start offset for buffer
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
+    int writer_type = 0;    ///< WRITER_*
 
     std::mutex lock;
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
