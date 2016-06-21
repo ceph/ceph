@@ -5,6 +5,9 @@
 #define CEPH_RGW_REST_SWIFT_H
 #define TIME_BUF_SIZE 128
 
+#include <boost/optional.hpp>
+#include <boost/utility/typed_in_place_factory.hpp>
+
 #include "rgw_op.h"
 #include "rgw_rest.h"
 
@@ -214,6 +217,36 @@ public:
   static bool is_expired(const std::string& expires, CephContext* cct);
 };
 
+
+class RGWSwiftWebsiteHandler {
+  RGWRados* const store;
+  req_state* const s;
+  RGWHandler_REST* const handler;
+
+  bool is_web_mode() const;
+  bool can_be_website_req() const;
+  bool is_web_dir() const;
+
+  int serve_errordoc(int http_ret, std::string error_doc);
+
+  RGWOp* get_ws_index_op();
+  RGWOp* get_ws_listing_op();
+public:
+  RGWSwiftWebsiteHandler(RGWRados* const store,
+                         req_state* const s,
+                         RGWHandler_REST* const handler)
+    : store(store),
+      s(s),
+      handler(handler) {
+  }
+
+  int error_handler(const int err_no,
+                    std::string* const error_content);
+  int retarget_bucket(RGWOp* op, RGWOp** new_op);
+  int retarget_object(RGWOp* op, RGWOp** new_op);
+};
+
+
 class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
   friend class RGWRESTMgr_SWIFT_Info;
@@ -230,8 +263,8 @@ public:
   static int validate_bucket_name(const string& bucket);
 
   int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
-  int authorize();
-  int postauth_init();
+  int authorize() override;
+  int postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
@@ -239,47 +272,59 @@ public:
 
 class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
-  RGWOp *op_get();
-  RGWOp *op_head();
-  RGWOp *op_post();
-  RGWOp *op_delete();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
+  RGWOp *op_post() override;
+  RGWOp *op_delete() override;
 public:
   RGWHandler_REST_Service_SWIFT() {}
   virtual ~RGWHandler_REST_Service_SWIFT() {}
 };
 
 class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
+  /* We need the boost::optional here only because of handler's late
+   * initialization (see the init() method). */
+  boost::optional<RGWSwiftWebsiteHandler> website_handler;
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
   }
 
-  RGWOp *get_ws_index_op();
-  RGWOp *get_ws_listing_op();
-
   RGWOp *get_obj_op(bool get_data);
-  RGWOp *op_get();
-  RGWOp *op_head();
-  RGWOp *op_put();
-  RGWOp *op_delete();
-  RGWOp *op_post();
-  RGWOp *op_options();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
+  RGWOp *op_put() override;
+  RGWOp *op_delete() override;
+  RGWOp *op_post() override;
+  RGWOp *op_options() override;
 public:
   RGWHandler_REST_Bucket_SWIFT() {}
   virtual ~RGWHandler_REST_Bucket_SWIFT() {}
 
-  int error_handler(int err_no, std::string *error_content) override;
-  int retarget(RGWOp* op, RGWOp** new_op) override;
+  int error_handler(int err_no, std::string *error_content) override {
+    return website_handler->error_handler(err_no, error_content);
+  }
+
+  int retarget(RGWOp* op, RGWOp** new_op) override {
+    return website_handler->retarget_bucket(op, new_op);
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const s,
+           RGWClientIO* const cio) override {
+    website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
+    return RGWHandler_REST_SWIFT::init(store, s, cio);
+  }
 };
 
 class RGWHandler_REST_Obj_SWIFT : public RGWHandler_REST_SWIFT {
+  /* We need the boost::optional here only because of handler's late
+   * initialization (see the init() method). */
+  boost::optional<RGWSwiftWebsiteHandler> website_handler;
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
   }
-
-  RGWOp *get_ws_index_op();
-  RGWOp *get_ws_listing_op();
 
   RGWOp *get_obj_op(bool get_data);
   RGWOp *op_get() override;
@@ -294,8 +339,20 @@ public:
   RGWHandler_REST_Obj_SWIFT() {}
   virtual ~RGWHandler_REST_Obj_SWIFT() {}
 
-  int error_handler(int err_no, std::string *error_content) override;
-  int retarget(RGWOp* op, RGWOp** new_op) override;
+  int error_handler(int err_no, std::string *error_content) override {
+    return website_handler->error_handler(err_no, error_content);
+  }
+
+  int retarget(RGWOp* op, RGWOp** new_op) override {
+    return website_handler->retarget_object(op, new_op);
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const s,
+           RGWClientIO* const cio) override {
+    website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
+    return RGWHandler_REST_SWIFT::init(store, s, cio);
+  }
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
