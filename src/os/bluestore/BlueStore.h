@@ -88,7 +88,7 @@ public:
     uint64_t blob_xoffset;   //region offset within the blob
     uint64_t length;
 
-    region_t(uint64_t offset, uint64_t b_offs, uint32_t len)
+    region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
       : logical_offset(offset),
       blob_xoffset(b_offs),
       length(len) {}
@@ -223,6 +223,7 @@ public:
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
       cache->_audit_lru("_rm_buffer start");
+      assert(cache->buffer_size >= p->second->length);
       cache->buffer_size -= p->second->length;
       cache->buffer_lru.erase(cache->buffer_lru.iterator_to(*p->second));
       if (p->second->is_writing()) {
