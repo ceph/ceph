@@ -289,6 +289,9 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   bool flush_required;
   AioCompletion *aio_comp = create_aio_modify_completion(on_ready, on_safe,
                                                          &flush_required);
+  aio_comp->init_time(&static_cast<ImageCtx&>(m_image_ctx),
+                      librbd::AIO_TYPE_DISCARD);
+
   AioImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
                                   event.length);
   if (flush_required) {
@@ -310,6 +313,9 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
   bool flush_required;
   AioCompletion *aio_comp = create_aio_modify_completion(on_ready, on_safe,
                                                          &flush_required);
+  aio_comp->init_time(&static_cast<ImageCtx&>(m_image_ctx),
+                      librbd::AIO_TYPE_WRITE);
+
   AioImageRequest<I>::aio_write(&m_image_ctx, aio_comp, event.offset,
                                 event.length, data.c_str(), 0);
   if (flush_required) {
@@ -867,6 +873,8 @@ AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_safe) {
       new C_AioFlushComplete(this, on_safe,
                              std::move(m_aio_modify_unsafe_contexts)));
   m_aio_modify_unsafe_contexts.clear();
+  aio_comp->init_time(&static_cast<ImageCtx&>(m_image_ctx),
+                      librbd::AIO_TYPE_FLUSH);
   return aio_comp;
 }
 

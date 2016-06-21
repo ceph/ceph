@@ -632,7 +632,7 @@ void ImageReplayer<I>::on_stop_journal_replay()
 
   {
     Mutex::Locker locker(m_lock);
-    if (m_state != STATE_REPLAYING) {
+    if (m_state != STATE_REPLAYING || m_pending_flushes > 0) {
       // might be invoked multiple times while stopping
       return;
     }
@@ -690,42 +690,42 @@ void ImageReplayer<I>::flush(Context *on_finish)
 {
   dout(20) << "enter" << dendl;
 
+  Context *on_flush = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    if (m_state == STATE_REPLAYING || m_state == STATE_REPLAYING) {
-      Context *ctx = new FunctionContext(
-        [on_finish](int r) {
+    if (m_state == STATE_REPLAYING) {
+      ++m_pending_flushes;
+      on_flush = new FunctionContext(
+        [this, on_finish](int r) {
+          {
+            Mutex::Locker locker(m_lock);
+            assert(m_pending_flushes > 0);
+            --m_pending_flushes;
+          }
+
           if (on_finish != nullptr) {
             on_finish->complete(r);
           }
+
+          // stop might be waiting on flush
+          on_replay_interrupted();
         });
-      on_flush_local_replay_flush_start(ctx);
-      return;
     }
   }
 
-  if (on_finish) {
+  if (on_flush != nullptr) {
+    FunctionContext *ctx = new FunctionContext(
+      [this, on_flush](int r) {
+        handle_flush(r, on_flush);
+      });
+    m_local_replay->flush(ctx);
+  } else if (on_finish != nullptr) {
     on_finish->complete(0);
   }
 }
 
 template <typename I>
-void ImageReplayer<I>::on_flush_local_replay_flush_start(Context *on_flush)
-{
-  dout(20) << "enter" << dendl;
-  FunctionContext *ctx = new FunctionContext(
-    [this, on_flush](int r) {
-      on_flush_local_replay_flush_finish(on_flush, r);
-    });
-
-  assert(m_lock.is_locked());
-  assert(m_state == STATE_REPLAYING);
-  m_local_replay->flush(ctx);
-}
-
-template <typename I>
-void ImageReplayer<I>::on_flush_local_replay_flush_finish(Context *on_flush,
-                                                          int r)
+void ImageReplayer<I>::handle_flush(int r, Context *on_flush)
 {
   dout(20) << "r=" << r << dendl;
   if (r < 0) {
@@ -734,24 +734,15 @@ void ImageReplayer<I>::on_flush_local_replay_flush_finish(Context *on_flush,
     return;
   }
 
-  on_flush_flush_commit_position_start(on_flush);
-}
-
-template <typename I>
-void ImageReplayer<I>::on_flush_flush_commit_position_start(Context *on_flush)
-{
   FunctionContext *ctx = new FunctionContext(
     [this, on_flush](int r) {
-      on_flush_flush_commit_position_finish(on_flush, r);
+      handle_flush_commit_position(r, on_flush);
     });
-
   m_remote_journaler->flush_commit_position(ctx);
 }
 
 template <typename I>
-void ImageReplayer<I>::on_flush_flush_commit_position_finish(Context *on_flush,
-                                                             int r)
-{
+void ImageReplayer<I>::handle_flush_commit_position(int r, Context *on_flush) {
   if (r < 0) {
     derr << "error flushing remote journal commit position: "
 	 << cpp_strerror(r) << dendl;

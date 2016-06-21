@@ -91,12 +91,12 @@ namespace ceph {
 
       set<event,
 	  member_hook<event, sh, &event::schedule_link>,
-	  constant_time_size<false>,
+	  constant_time_size<true>,
 	  compare<SchedCompare> > schedule;
 
       set<event,
 	  member_hook<event, sh, &event::event_link>,
-	  constant_time_size<false>,
+	  constant_time_size<true>,
 	  compare<EventCompare> > events;
 
       std::mutex lock;

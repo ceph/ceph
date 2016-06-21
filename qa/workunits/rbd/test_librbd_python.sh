@@ -7,6 +7,7 @@ wget -O test_rbd.py "https://git.ceph.com/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;
 
 if [ -n "${VALGRIND}" ]; then
   valgrind --tool=${VALGRIND} --suppressions=${TESTDIR}/valgrind.supp \
+    --error-limit=no --error-exitcode=140 ${VALGRIND_ARGUMENTS} \
     nosetests -v test_rbd
 else
   nosetests -v test_rbd

@@ -190,11 +190,6 @@ protected:
 
   virtual void on_stop_journal_replay();
 
-  virtual void on_flush_local_replay_flush_start(Context *on_flush);
-  virtual void on_flush_local_replay_flush_finish(Context *on_flush, int r);
-  virtual void on_flush_flush_commit_position_start(Context *on_flush);
-  virtual void on_flush_flush_commit_position_finish(Context *on_flush, int r);
-
   bool on_replay_interrupted();
 
   void close_local_image(Context *on_finish); // for tests
@@ -245,6 +240,8 @@ private:
   librados::AioCompletion *m_update_status_comp = nullptr;
   bool m_stop_requested = false;
   bool m_manual_stop = false;
+
+  uint32_t m_pending_flushes = 0;
 
   AdminSocketHook *m_asok_hook = nullptr;
 
@@ -321,6 +318,8 @@ private:
   void handle_process_entry_ready(int r);
   void handle_process_entry_safe(const ReplayEntry& replay_entry, int r);
 
+  void handle_flush(int r, Context *on_flush);
+  void handle_flush_commit_position(int r, Context *on_flush);
 };
 
 } // namespace mirror
