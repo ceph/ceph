@@ -35,7 +35,6 @@
 
 class CDentry;
 class MDCache;
-class MDCluster;
 class bloom_filter;
 
 struct ObjectOperation;
