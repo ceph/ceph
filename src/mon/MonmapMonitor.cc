@@ -188,18 +188,17 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     epoch = epochnum;
 
     MonMap *p = mon->monmap;
-    if (epoch) {
-      bufferlist bl;
-      r = get_version(epoch, bl);
-      if (r == -ENOENT) {
-        ss << "there is no map for epoch " << epoch;
-        goto reply;
-      }
-      assert(r == 0);
-      assert(bl.length() > 0);
-      p = new MonMap;
-      p->decode(bl);
+      
+    bufferlist bl;
+    r = get_version(epoch, bl);
+    if (r == -ENOENT) {
+      ss << "there is no map for epoch " << epoch;
+      goto reply;
     }
+    assert(r == 0);
+    assert(bl.length() > 0);
+    p = new MonMap;
+    p->decode(bl);
 
     assert(p != NULL);
 
