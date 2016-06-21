@@ -15,6 +15,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "journal/ReplayEntry.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "ProgressContext.h"
@@ -231,6 +232,8 @@ private:
     nullptr;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
+
+  decltype(ImageCtxT::journal) m_local_journal = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
   Journaler* m_remote_journaler = nullptr;
   ::journal::ReplayHandler *m_replay_handler = nullptr;
@@ -303,6 +306,7 @@ private:
 
   void start_replay();
   void handle_start_replay(int r);
+  void handle_stop_replay_request(int r);
 
   void replay_flush();
   void handle_replay_flush(int r);
