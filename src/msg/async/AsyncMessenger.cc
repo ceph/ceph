@@ -428,6 +428,12 @@ void WorkerPool::barrier()
   pthread_t cur = pthread_self();
   for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
     assert(cur != (*it)->center.get_owner());
+    if ((*it)->center.already_wakeup.read()) {
+      ldout(cct, 10) << __func__ << " worker Event=" << &((*it)->center) 
+        << " already_wakeup" << dendl;
+      continue;
+    }
+
     barrier_count.inc();
     (*it)->center.dispatch_event_external(EventCallbackRef(new C_barrier(this)));
   }
