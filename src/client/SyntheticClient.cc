@@ -1702,6 +1702,7 @@ int SyntheticClient::dump_placement(string& fn) {
   int lstat_result = client->lstat(fn.c_str(), &stbuf);
   if (lstat_result < 0) {
     dout(0) << "lstat error for file " << fn << dendl;
+    client->close(fd);
     return lstat_result;
   }
     
