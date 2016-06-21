@@ -528,8 +528,7 @@ void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
     return; // don't even try
 
   auto p = onode_lru.end();
-  if (num)
-    --p;
+  --p;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
