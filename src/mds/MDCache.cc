@@ -1546,7 +1546,21 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   if (in->last != CEPH_NOSNAP) {
     CInode *head_in = get_inode(in->ino());
     assert(head_in);
-    head_in->split_need_snapflush(oldin, in);
+    if (head_in->split_need_snapflush(oldin, in)) {
+      oldin->client_snap_caps = in->client_snap_caps;
+      for (compact_map<int,set<client_t> >::iterator p = in->client_snap_caps.begin();
+	   p != in->client_snap_caps.end();
+	   ++p) {
+	SimpleLock *lock = oldin->get_lock(p->first);
+	assert(lock);
+	for (auto q = p->second.begin(); q != p->second.end(); ++q) {
+	  oldin->auth_pin(lock);
+	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
+	  lock->get_wrlock(true);
+	}
+      }
+    }
+    return oldin;
   }
 
   // clone caps?
