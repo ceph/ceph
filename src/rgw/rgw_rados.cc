@@ -3195,6 +3195,7 @@ void RGWRados::finalize()
     cr_registry->put();
   }
   delete binfo_cache;
+  delete obj_tombstone_cache;
 }
 
 /** 
@@ -3780,6 +3781,12 @@ int RGWRados::init_complete()
 
   binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
   binfo_cache->init(this);
+
+  bool need_tombstone_cache = !zone_conn_map.empty();
+
+  if (need_tombstone_cache) {
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+  }
 
   return ret;
 }
@@ -6658,7 +6665,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (ret < 0)
       return ret;
 
-    if (dest_state->exists) {
+    if (!real_clock::is_zero(dest_state->mtime)) {
       dest_mtime_weight.init(dest_state);
       pmod = &dest_mtime_weight.mtime;
     }
@@ -7749,6 +7756,11 @@ int RGWRados::Object::Delete::delete_obj()
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0) {
+    tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
+    pair<ceph::real_time, uint32_t> tombstone_entry = make_pair<>(state->mtime, state->zone_short_id);
+    if (obj_tombstone_cache) {
+      obj_tombstone_cache->add(obj, tombstone_entry);
+    }
     r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), state->mtime, params.remove_objs);
   } else {
     int ret = index_op.cancel();
@@ -7969,7 +7981,14 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
-    s->mtime = real_time();
+    pair<ceph::real_time, uint32_t> tombstone_entry;
+    if (obj_tombstone_cache && obj_tombstone_cache->find(obj, tombstone_entry)) {
+      s->mtime = tombstone_entry.first;
+      s->zone_short_id = tombstone_entry.second;
+      ldout(cct, 20) << __func__ << "(): found obj in tombstone cache: obj=" << obj << " mtime=" << s->mtime << dendl;
+    } else {
+      s->mtime = real_time();
+    }
     return 0;
   }
   if (r < 0)
@@ -11475,6 +11494,8 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_
   librados::IoCtx index_ctx;
   string dir_oid;
 
+  uint8_t suggest_flag = (get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+
   int r = open_bucket_index(bucket, index_ctx, dir_oid);
   if (r < 0)
     return r;
@@ -11489,7 +11510,7 @@ int RGWRados::remove_objs_from_index(rgw_bucket& bucket, list<rgw_obj_key>& oid_
     rgw_bucket_dir_entry entry;
     entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
     key.transform(&entry.key);
-    updates.append(CEPH_RGW_REMOVE);
+    updates.append(CEPH_RGW_REMOVE | suggest_flag);
     ::encode(entry, updates);
   }
 
@@ -11506,6 +11527,8 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
                                RGWObjEnt& object,
                                bufferlist& suggested_updates)
 {
+  uint8_t suggest_flag = (get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+
   rgw_obj obj;
   std::string oid, instance, loc, ns;
   rgw_obj_key key;
@@ -11602,7 +11625,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   list_state.meta.owner_display_name = owner.get_display_name();
 
   list_state.exists = true;
-  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, list_state, suggested_updates);
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE | suggest_flag, list_state, suggested_updates);
   return 0;
 }
 
