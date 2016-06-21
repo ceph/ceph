@@ -1911,17 +1911,22 @@ int RGWCreateBucket::verify_permission()
   }
 
   if (s->user->max_buckets) {
-    RGWUserBuckets buckets;
-    string marker;
-    bool is_truncated;
-    op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
-				   marker, string(), s->user->max_buckets,
-				   false, &is_truncated);
+    // TODO: improve me! Right now we check the quota here
+    // we can defer this upto user_link_bucket time where the header is read
+    // anyway
+    cls_user_header header;
+    string user_str = s->user->user_id.to_str();
+    op_ret = store->cls_user_get_header(user_str, &header);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT && s->user->max_buckets != 0) {
+	// no buckets object exists yet, which means we haven't exceeded Quota
+	op_ret = 0;
+      } else {
+	ldout(store->ctx(), 0) << "ERROR: can't read user header: " << op_ret << dendl;
+      }
       return op_ret;
     }
-
-    if ((int)buckets.count() >= s->user->max_buckets) {
+    if ((int)header.stats.total_entries >= s->user->max_buckets){
       return -ERR_TOO_MANY_BUCKETS;
     }
   }
