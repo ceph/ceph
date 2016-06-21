@@ -54,27 +54,24 @@ static void get_key_by_bucket_name(const string& bucket_tenant, const string& bu
     }
 }
 
-static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_tenant, const string& bucket_name,
+static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bucket_key,
                                      cls_user_bucket_entry& entry)
 {
-  if (bucket_name.empty()) {
+  if (bucket_key.empty()) {
     return -EINVAL;
   }
 
-  string key;
-
-  get_key_by_bucket_name(bucket_tenant, bucket_name, &key);
   bufferlist bl;
-  int rc = cls_cxx_map_get_val(hctx, key, &bl);
+  int rc = cls_cxx_map_get_val(hctx, bucket_key, &bl);
   if (rc < 0) {
-    CLS_LOG(10, "could not read entry %s", key.c_str());
+    CLS_LOG(10, "could not read entry %s", bucket_key.c_str());
     return rc;
   }
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(entry, iter);
   } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
+    CLS_LOG(0, "ERROR: failed to decode entry %s", bucket_key.c_str());
     return -EIO;
   }
 
@@ -153,7 +150,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     get_key_by_bucket_name(update_entry.bucket.tenant, update_entry.bucket.name, &key);
 
     cls_user_bucket_entry entry;
-    ret = get_existing_bucket_entry(hctx, update_entry.bucket.tenant, update_entry.bucket.name, entry);
+    ret = get_existing_bucket_entry(hctx, key, entry);
 
     if (ret == -ENOENT) {
      if (!op.add)
@@ -257,7 +254,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   get_key_by_bucket_name(op.bucket.tenant, op.bucket.name, &key);
 
   cls_user_bucket_entry entry;
-  ret = get_existing_bucket_entry(hctx, op.bucket.tenant, op.bucket.name, entry);
+  ret = get_existing_bucket_entry(hctx, key, entry);
   if (ret == -ENOENT) {
     return 0; /* idempotent removal */
   }
