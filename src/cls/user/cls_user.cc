@@ -177,8 +177,11 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0)
       return ret;
 
-    add_header_stats(&header.stats, entry);
+    if (op.add)
+      add_header_stats(&header.stats, entry);
+
   }
+
 
   bufferlist bl;
 
@@ -262,16 +265,20 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return ret;
   }
 
-  if (entry.user_stats_sync) {
-    dec_header_stats(&header.stats, entry);
-  }
+
+  /* if (entry.user_stats_sync) { */
+  /*   dec_header_stats(&header.stats, entry); */
+  /* } */
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
   ret = remove_entry(hctx, key);
   if (ret < 0)
     return ret;
-  
+
+  // decrease stats after removal actually succeeds
+  dec_header_stats(&header.stats, entry);
+
   return 0;
 }
 
