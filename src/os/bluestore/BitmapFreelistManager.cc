@@ -160,7 +160,7 @@ void BitmapFreelistManager::_init_misc()
 
   block_mask = ~(bytes_per_block - 1);
 
-  uint64_t bytes_per_key = bytes_per_block * blocks_per_key;
+  bytes_per_key = bytes_per_block * blocks_per_key;
   key_mask = ~(bytes_per_key - 1);
   dout(10) << __func__ << std::hex << " bytes_per_key 0x" << bytes_per_key
 	   << ", key_mask 0x" << key_mask << std::dec
@@ -251,14 +251,14 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     enumerate_p->next();
     enumerate_bl.clear();
     if (!enumerate_p->valid()) {
-      enumerate_offset += bytes_per_block * blocks_per_key;
+      enumerate_offset += bytes_per_key;
       enumerate_bl_pos = 0;
       *offset = get_offset(enumerate_offset, enumerate_bl_pos);
       break;
     }
     string k = enumerate_p->key();
     const char *p = k.c_str();
-    uint64_t next = enumerate_offset + bytes_per_block * blocks_per_key;
+    uint64_t next = enumerate_offset + bytes_per_key;
     _key_decode_u64(p, &enumerate_offset);
     enumerate_bl = enumerate_p->value();
     enumerate_bl_pos = 0;
@@ -384,7 +384,7 @@ void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
 	  ++errors;
 	}
       }
-      first_key += bytes_per_block * blocks_per_key;
+      first_key += bytes_per_key;
     }
     // middle keys
     if (first_key < last_key) {
@@ -411,7 +411,7 @@ void BitmapFreelistManager::_verify_range(uint64_t offset, uint64_t length,
 	    ++errors;
 	  }
 	}
-	first_key += bytes_per_block * blocks_per_key;
+	first_key += bytes_per_key;
       }
     }
     assert(first_key == last_key);
@@ -516,7 +516,7 @@ void BitmapFreelistManager::_xor(
       bl.hexdump(*_dout, false);
       *_dout << dendl;
       txn->merge(bitmap_prefix, k, bl);
-      first_key += bytes_per_block * blocks_per_key;
+      first_key += bytes_per_key;
     }
     // middle keys
     if (first_key < last_key) {
@@ -528,7 +528,7 @@ void BitmapFreelistManager::_xor(
 	all_set_bl.hexdump(*_dout, false);
 	*_dout << dendl;
 	txn->merge(bitmap_prefix, k, all_set_bl);
-	first_key += bytes_per_block * blocks_per_key;
+	first_key += bytes_per_key;
       }
     }
     assert(first_key == last_key);
