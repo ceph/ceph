@@ -7006,7 +7006,17 @@ int PrimaryLogPG::fill_in_copy_get(
       cursor.data_complete = true;
       dout(20) << " got data" << dendl;
     }
-    assert(cursor.data_offset <= oi.size);
+    if (cursor.data_offset > oi.size) {
+      dout(5) << __func__ << " read after oi.size: "
+	      << cursor.data_offset << "/"
+	      << oi.size << dendl;
+      assert(osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK);
+      dout(5) << __func__ << " truncated" << dendl;
+      bufferlist truncated;
+      truncated.substr_of(bl, 0, oi.size);
+      swap(bl, truncated);
+      cursor.data_complete = true;
+    }
   }
 
   // omap
