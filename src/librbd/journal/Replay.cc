@@ -736,8 +736,11 @@ Context *Replay<I>::create_op_context_callback(uint64_t op_tid,
   assert(m_lock.is_locked());
   if (m_op_events.count(op_tid) != 0) {
     lderr(cct) << "duplicate op tid detected: " << op_tid << dendl;
+
+    // on_ready is already async but on failure invoke on_safe async
+    // as well
     on_ready->complete(0);
-    on_safe->complete(-EINVAL);
+    m_image_ctx.op_work_queue->queue(on_safe, -EINVAL);
     return nullptr;
   }
 
