@@ -68,50 +68,36 @@ def corrupt_file(osd_remote, path):
     )
 
 
-def deep_scrub(manager, victim):
+def get_pgnum(pgid):
+    pos = pgid.find('.')
+    assert pos != -1
+    return pgid[pos+1:]
+
+
+def deep_scrub(manager, victim, pool):
     # scrub, verify inconsistent
-    manager.raw_cluster_cmd('pg', 'deep-scrub', victim)
-    # Give deep-scrub a chance to start
-    time.sleep(60)
+    pgnum = get_pgnum(victim)
+    manager.do_pg_scrub(pool, pgnum, 'deep-scrub')
 
-    while True:
-        stats = manager.get_single_pg_stats(victim)
-        state = stats['state']
-
-        # wait for the scrub to finish
-        if 'scrubbing' in state:
-            time.sleep(3)
-            continue
-
-        inconsistent = stats['state'].find('+inconsistent') != -1
-        assert inconsistent
-        break
+    stats = manager.get_single_pg_stats(victim)
+    inconsistent = stats['state'].find('+inconsistent') != -1
+    assert inconsistent
 
 
-def repair(manager, victim):
+def repair(manager, victim, pool):
     # repair, verify no longer inconsistent
-    manager.raw_cluster_cmd('pg', 'repair', victim)
-    # Give repair a chance to start
-    time.sleep(60)
+    pgnum = get_pgnum(victim)
+    manager.do_pg_scrub(pool, pgnum, 'repair')
 
-    while True:
-        stats = manager.get_single_pg_stats(victim)
-        state = stats['state']
-
-        # wait for the scrub to finish
-        if 'scrubbing' in state:
-            time.sleep(3)
-            continue
-
-        inconsistent = stats['state'].find('+inconsistent') != -1
-        assert not inconsistent
-        break
+    stats = manager.get_single_pg_stats(victim)
+    inconsistent = stats['state'].find('+inconsistent') != -1
+    assert not inconsistent
 
 
-def test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path):
+def test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path, pool):
     corrupt_file(osd_remote, obj_path)
-    deep_scrub(manager, pg)
-    repair(manager, pg)
+    deep_scrub(manager, pg, pool)
+    repair(manager, pg, pool)
 
 
 def test_repair_bad_omap(ctx, manager, pg, osd, objname):
@@ -123,7 +109,7 @@ def test_repair_bad_omap(ctx, manager, pg, osd, objname):
                                    'badkey', 'badval'])
     manager.osd_admin_socket(osd, ['setomapheader', 'rbd', objname, 'badhdr'])
 
-    deep_scrub(manager, pg)
+    deep_scrub(manager, pg, 'rbd')
     # please note, the repair here is errnomous, it rewrites the correct omap
     # digest and data digest on the replicas with the corresponding digests
     # from the primary osd which is hosting the victim object, see
@@ -136,7 +122,7 @@ def test_repair_bad_omap(ctx, manager, pg, osd, objname):
     manager.osd_admin_socket(osd, ['rmomapkey', 'rbd', objname, 'badkey'])
     manager.osd_admin_socket(osd, ['setomapval', 'rbd', objname,
                                    'key', 'val'])
-    repair(manager, pg)
+    repair(manager, pg, 'rbd')
 
 
 class MessUp:
@@ -313,7 +299,7 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
                  messup.append, messup.truncate, messup.change_obj,
                  messup.remove]:
         with test() as checks:
-            deep_scrub(manager, pg)
+            deep_scrub(manager, pg, pool)
             cmd = 'rados list-inconsistent-pg {pool} ' \
                   '--format=json'.format(pool=pool)
             with contextlib.closing(StringIO()) as out:
@@ -395,7 +381,7 @@ def task(ctx, config):
     log.info('err is %d' % p.exitstatus)
 
     log.info('messing with PG %s on osd %d' % (pg, osd))
-    test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path)
+    test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path, 'rbd')
     test_repair_bad_omap(ctx, manager, pg, osd, obj_name)
     test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd,
                                obj_name, obj_path)
