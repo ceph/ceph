@@ -117,8 +117,21 @@ class TestUtil(object):
         assert util.git_ls_remote('ceph', 'nobranch') is None
         assert util.git_ls_remote('ceph', 'master') is not None
 
+    @patch('teuthology.suite.util.requests.get')
+    def test_find_git_parent(self, m_requests_get):
+        refresh_resp = Mock()
+        refresh_resp.ok = True
+        history_resp = Mock()
+        history_resp.ok = True
+        history_resp.json.return_value = {'sha1s': ['sha1', 'sha1_p']}
+        m_requests_get.side_effect = [refresh_resp, history_resp]
+        parent_sha1 = util.find_git_parent('ceph', 'sha1')
+        assert len(m_requests_get.mock_calls) == 2
+        assert parent_sha1 == 'sha1_p'
+
 
 class TestFlavor(object):
+
     def test_get_install_task_flavor_bare(self):
         config = dict(
             tasks=[
