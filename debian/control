@@ -108,7 +108,6 @@ Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.92-1223),
 	  ceph-test (<< 0.94-1322), ceph (<< 10)
 Breaks: python-ceph (<< 0.92-1223), ceph-test (<< 0.94-1322), 
         ceph (<< 10)
-X-Python-Version: >= 2.6
 Description: common ceph daemon libraries and management tools
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -429,7 +428,7 @@ Description: debugging symbols for librados
 Package: librados-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Conflicts: librados1-dev, librados2-dev
 Replaces: librados1-dev, librados2-dev
 Description: RADOS distributed object store client library (development files)
@@ -638,7 +637,7 @@ Section: debug
 Priority: extra
 Depends: ceph-test (= ${binary:Version}), ceph-common (= ${binary:Version}),
          curl, xml2,
-         ${misc:Depends}, ${shlibs:Depends}
+         ${misc:Depends}
 Description: Ceph test and benchmarking tools
  .
  This package contains the debugging symbols for ceph-test.
@@ -649,7 +648,6 @@ Section: python
 Depends: python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
          python-cephfs (= ${binary:Version})
-X-Python-Version: >= 2.6
 Description: Meta-package for python libraries for the Ceph libraries
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -660,10 +658,9 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph librados library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -675,10 +672,9 @@ Description: Python libraries for the Ceph librados library
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph librbd library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -690,10 +686,9 @@ Description: Python libraries for the Ceph librbd library
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
+Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
-X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph libcephfs library
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -710,7 +705,7 @@ Description: Java libraries for the Ceph File System
 
 Package: libcephfs-jni
 Architecture: linux-any
-Section: libs
+Section: java
 Depends: libcephfs1 (= ${binary:Version}), ${java:Depends},
          ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings

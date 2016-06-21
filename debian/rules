@@ -89,6 +89,7 @@ binary-indep: build install
 	dh_testdir
 	dh_testroot
 	jh_installlibs -v -i
+	jh_depends -i
 	dh_installchangelogs -i
 	dh_installdocs -i --all ChangeLog
 	dh_installexamples -i
