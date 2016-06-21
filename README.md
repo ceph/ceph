@@ -147,11 +147,11 @@ in the section above titled "Building Ceph".
 To run a functional test cluster,
 
 	cd build
-	./path/to/ceph/src/vstart.sh -d -n -x -l
+	../src/vstart.sh -d -n -x -l
 	./bin/ceph -c ceph.conf -s
 
-Note: vstart.sh generates a ceph.conf file in the build directory that should be used
-for subsequent commands.
+Note: vstart.sh generates a ceph.conf file in the build directory that should be 
+used for subsequent commands. 
 
 Almost all of the usual commands are available in the bin/ directory.
 For example,
@@ -161,7 +161,7 @@ For example,
 
 To shut down the test cluster,
 
-	./path/to/ceph/src/stop.sh
+	../src/stop.sh
 
 Running unit tests
 ==================
