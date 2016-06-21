@@ -287,22 +287,20 @@ class CephFSVolumeClient(object):
                     continue
 
                 for volume in auth_meta['volumes']:
-                    volume_path = VolumePath(volume['volume_id'],
-                                             volume['group_id'])
-                    access_level = volume['access_level']
+                    if not auth_meta['volumes'][volume]['dirty']:
+                        continue
+
+                    (group_id, volume_id) = volume.split('/')
+                    volume_path = VolumePath(group_id, volume_id)
+                    access_level = auth_meta['volumes'][volume]['access_level']
 
                     with self._volume_lock(volume_path):
-                        volume_meta = self._volume_metadata_get(volume_path)
+                        vol_meta = self._volume_metadata_get(volume_path)
+                        readonly = True if access_level is 'r' else False
+                        self._authorize_volume(volume_path, auth_id, readonly)
 
-                        auth = {
-                            'id': auth_id,
-                            'access_level': access_level
-                        }
-
-                        if (auth not in volume_meta['auths'] or
-                            volume_meta['dirty']):
-                            readonly = True if access_level is 'r' else False
-                            self._authorize_volume(volume_path, auth_id, readonly)
+                    auth_meta['volumes'][volume]['dirty'] = False
+                    self._auth_metadata_set(auth_id, auth_meta)
 
                 auth_meta['dirty'] = False
                 self._auth_metadata_set(auth_id, auth_meta)
@@ -768,12 +766,14 @@ class CephFSVolumeClient(object):
             auth_meta = self._auth_metadata_get(auth_id)
 
             # volume data to be inserted
+            volume_path_str = str(volume_path)
             volume = {
-                'group_id': volume_path.group_id,
-                'volume_id': volume_path.volume_id,
-                # The access level at which the auth_id is authorized to
-                # access the volume.
-                'access_level': 'r' if readonly else 'rw'
+                volume_path_str : {
+                    # The access level at which the auth_id is authorized to
+                    # access the volume.
+                    'access_level': 'r' if readonly else 'rw',
+                    'dirty': True,
+                }
             }
             if auth_meta is None:
                 sys.stderr.write("Creating meta for ID {0} with tenant {1}\n".format(
@@ -783,7 +783,7 @@ class CephFSVolumeClient(object):
                 auth_meta = {
                     'dirty': True,
                     'tenant_id': tenant_id.__str__() if tenant_id else None,
-                    'volumes': [volume]
+                    'volumes': volume
                 }
 
                 # Note: this is *not* guaranteeing that the key doesn't already
@@ -798,8 +798,7 @@ class CephFSVolumeClient(object):
                     tenant=auth_meta['tenant_id']
                 ))
                 auth_meta['dirty'] = True
-                if volume not in auth_meta['volumes']:
-                    auth_meta['volumes'].append(volume)
+                auth_meta['volumes'].update(volume)
 
             self._auth_metadata_set(auth_id, auth_meta)
 
@@ -807,6 +806,7 @@ class CephFSVolumeClient(object):
                 key = self._authorize_volume(volume_path, auth_id, readonly)
 
             auth_meta['dirty'] = False
+            auth_meta['volumes'][volume_path_str]['dirty'] = False
             self._auth_metadata_set(auth_id, auth_meta)
 
             if tenant_id:
@@ -828,25 +828,25 @@ class CephFSVolumeClient(object):
     def _authorize_volume(self, volume_path, auth_id, readonly):
         vol_meta = self._volume_metadata_get(volume_path)
 
+        access_level = 'r' if readonly else 'rw'
         auth = {
-            'id': auth_id,
-            'access_level': 'r' if readonly else 'rw'
+            auth_id: {
+                'access_level': access_level,
+                'dirty': True,
+            }
         }
 
         if vol_meta is None:
             vol_meta = {
-                'dirty': True,
-                'auths': [auth]
+                'auths': auth
             }
         else:
-            vol_meta['dirty'] = True
-
-            if auth not in vol_meta['auths']:
-                vol_meta['auths'].append(auth)
+            vol_meta['auths'].update(auth)
+            self._volume_metadata_set(volume_path, vol_meta)
 
         key = self._authorize_ceph(volume_path, auth_id, readonly)
 
-        vol_meta['dirty'] = False
+        vol_meta['auths'][auth_id]['dirty'] = False
         self._volume_metadata_set(volume_path, vol_meta)
 
         return key
@@ -945,60 +945,59 @@ class CephFSVolumeClient(object):
         assert caps[0]['entity'] == client_entity
         return caps[0]['key']
 
-    def deauthorize(self, volume_path, auth_id, readonly=False):
+    def deauthorize(self, volume_path, auth_id):
         with self._auth_lock(auth_id):
             # Existing meta, or None, to be updated
             auth_meta = self._auth_metadata_get(auth_id)
 
-            if auth_meta is None:
+            volume_path_str = str(volume_path)
+            if (auth_meta is None) or (volume_path_str not in auth_meta['volumes']):
                 # Non-existent auth metadata is a clean state that means
                 # nothing authorized under this name: we must have already
                 # deauthorized.  Be idempotent and return without an error.
                 log.warn("deauthorized called for already-removed auth"
-                         "ID '{auth_id}'".format(
-                    auth_id=auth_id
+                         "ID '{auth_id}' for volume ID '{volume}'".format(
+                    auth_id=auth_id, volume=volume_path.volume_id
                 ))
                 return
 
-            volume = {
-                'group_id': volume_path.group_id,
-                'volume_id': volume_path.volume_id,
-                'access_level': 'r' if readonly else 'rw'
-            }
-
             auth_meta['dirty'] = True
-
+            auth_meta['volumes'][volume_path_str]['dirty'] = True
             self._auth_metadata_set(auth_id, auth_meta)
 
-            with self._volume_lock(volume_path):
-                vol_meta = self._volume_metadata_get(volume_path)
-                vol_meta['dirty'] = True
-                self._volume_metadata_set(volume_path, vol_meta)
-
-                auth = {
-                    'id': auth_id,
-                    'access_level': 'r' if readonly else 'rw'
-                }
-
-                self._deauthorize(volume_path, auth_id, readonly)
-
-                # Remove the auth_id from the metadata *after* removing it
-                # from ceph, so that if we crashed here, we would actually
-                # recreate the auth ID during recovery (i.e. end up with
-                # a consistent state).
-
-                # Filter out the auth we're removing
-                vol_meta['auths'] =\
-                    [a for a in vol_meta['auths'] if a != auth]
-                vol_meta['dirty'] = False
-                self._volume_metadata_set(volume_path, vol_meta)
+            self._deauthorize_volume(volume_path, auth_id)
 
             # Filter out the volume we're deauthorizing
-            auth_meta['volumes'] = [v for v in auth_meta['volumes'] if v != volume]
+            del auth_meta['volumes'][volume_path_str]
             auth_meta['dirty'] = False
             self._auth_metadata_set(auth_id, auth_meta)
 
-    def _deauthorize(self, volume_path, auth_id, readonly):
+    def _deauthorize_volume(self, volume_path, auth_id):
+        with self._volume_lock(volume_path):
+            vol_meta = self._volume_metadata_get(volume_path)
+
+            if (vol_meta is None) or (auth_id not in vol_meta['auths']):
+                log.warn("deauthorized called for already-removed auth"
+                         "ID '{auth_id}' for volume ID '{volume}'".format(
+                    auth_id=auth_id, volume=volume_path.volume_id
+                ))
+                return
+
+            vol_meta['auths'][auth_id]['dirty'] = True
+            self._volume_metadata_set(volume_path, vol_meta)
+
+            self._deauthorize(volume_path, auth_id)
+
+            # Remove the auth_id from the metadata *after* removing it
+            # from ceph, so that if we crashed here, we would actually
+            # recreate the auth ID during recovery (i.e. end up with
+            # a consistent state).
+
+            # Filter out the auth we're removing
+            del vol_meta['auths'][auth_id]
+            self._volume_metadata_set(volume_path, vol_meta)
+
+    def _deauthorize(self, volume_path, auth_id):
         """
         The volume must still exist.
         """
@@ -1050,9 +1049,25 @@ class CephFSVolumeClient(object):
             return
 
     def get_authorized_ids(self, volume_path):
+        """
+        Expose a list of auth IDs that have access to a volume.
+
+        return: a list of (auth_id, access_level) tuples, where
+                the access_level can be 'r' , or 'rw'.
+                None if no auth ID is given access to the volume.
+        """
         with self._volume_lock(volume_path):
             meta = self._volume_metadata_get(volume_path)
-            return meta['auths']
+            auths = []
+            if not meta or not meta['auths']:
+                return None
+
+            for auth, auth_data in meta['auths'].items():
+                # Skip partial auth updates.
+                if not auth_data['dirty']:
+                    auths.append((auth, auth_data['access_level']))
+
+            return auths
 
     def _rados_command(self, prefix, args=None, decode=True):
         """
