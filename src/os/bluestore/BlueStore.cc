@@ -606,14 +606,14 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
   uint64_t end = offset + length;
   while (i != buffer_map.end()) {
     Buffer *b = i->second.get();
-    if (b->offset >= offset + length) {
+    if (b->offset >= end) {
       break;
     }
     if (b->offset < offset) {
       uint64_t front = offset - b->offset;
-      if (b->offset + b->length > offset + length) {
+      if (b->end() > end) {
 	// drop middle (split)
-	uint64_t tail = b->offset + b->length - (offset + length);
+	uint64_t tail = b->end() - end;
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
@@ -621,12 +621,14 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 	} else {
 	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail));
 	}
+        assert(cache->buffer_size >= b->length - front);
 	cache->buffer_size -= b->length - front;
 	b->truncate(front);
 	cache->_audit_lru("discard end 1");
 	return;
       } else {
 	// drop tail
+	assert(cache->buffer_size >= b->length - front);
 	cache->buffer_size -= b->length - front;
 	b->truncate(front);
 	++i;
@@ -686,19 +688,17 @@ void BlueStore::BufferSpace::read(
 	offset += gap;
 	length -= gap;
       }
+      cache->_touch_buffer(b);
       if (b->length > length) {
-	uint64_t l = MIN(length, b->length);
-	res[offset].substr_of(b->data, 0, l);
-	res_intervals.insert(offset, l);
-	offset += l;
-	length -= l;
+	res[offset].substr_of(b->data, 0, length);
+	res_intervals.insert(offset, length);
+        break;
       } else {
 	res[offset].append(b->data);
 	res_intervals.insert(offset, b->length);
 	offset += b->length;
 	length -= b->length;
       }
-      cache->_touch_buffer(b);
     }
   }
 }
