@@ -380,6 +380,8 @@ struct bluestore_blob_t {
     switch (cs) {
     case 0:
       assert(0 == "no csum data, bad index");
+    case 1:
+      return reinterpret_cast<const uint8_t*>(p)[i];
     case 2:
       return reinterpret_cast<const __le16*>(p)[i];
     case 4:

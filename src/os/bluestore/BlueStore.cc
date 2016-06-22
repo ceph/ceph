@@ -431,11 +431,40 @@ static void get_wal_key(uint64_t seq, string *out)
 }
 
 
+// merge operators
+
+struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
+  virtual void merge_nonexistent(
+    const char *rdata, size_t rlen, std::string *new_value) override {
+    *new_value = std::string(rdata, rlen);
+  }
+  virtual void merge(
+    const char *ldata, size_t llen,
+    const char *rdata, size_t rlen,
+    std::string *new_value) {
+    assert(llen == rlen);
+    assert((rlen % 8) == 0);
+    new_value->resize(rlen);
+    const __le64* lv = (const __le64*)ldata;
+    const __le64* rv = (const __le64*)rdata;
+    __le64* nv = &(__le64&)new_value->at(0);
+    for (size_t i = 0; i < rlen >> 3; ++i) {
+      nv[i] = lv[i] + rv[i];
+    }
+  }
+  // We use each operator name and each prefix to construct the
+  // overall RocksDB operator name for consistency check at open time.
+  virtual string name() const {
+    return "int64_array";
+  }
+};
+
+
 // Buffer
 
 ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 {
-  out << "buffer(space " << b.space << " 0x" << std::hex
+  out << "buffer(" << &b << " space " << b.space << " 0x" << std::hex
       << b.offset << "~" << b.length << std::dec
       << " " << BlueStore::Buffer::get_state_name(b.state);
   if (b.flags)
@@ -445,17 +474,28 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
 
 
 // Cache
-#undef dout_prefix
-#define dout_prefix *_dout << "bluestore.Cache(" << this << ") "
 
-void BlueStore::Cache::_touch_onode(OnodeRef& o)
+BlueStore::Cache *BlueStore::Cache::create(string type)
+{
+  if (type == "lru")
+    return new LRUCache;
+  if (type == "2q")
+    return new TwoQCache;
+  assert(0 == "unrecognized cache type");
+}
+
+// LRUCache
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.LRUCache(" << this << ") "
+
+void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
 {
   auto p = onode_lru.iterator_to(*o);
   onode_lru.erase(p);
   onode_lru.push_front(*o);
 }
 
-void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
+void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
   std::lock_guard<std::mutex> l(lock);
 
@@ -463,7 +503,7 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 	   << " buffers " << buffer_size << " / " << buffer_max
 	   << dendl;
 
-  _audit_lru("trim start");
+  _audit("trim start");
 
   // buffers
   auto i = buffer_lru.end();
@@ -473,21 +513,13 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
   }
   while (buffer_size > buffer_max) {
     Buffer *b = &*i;
-    if (b->is_clean()) {
-      auto p = b->space->buffer_map.find(b->offset);
-      if (i != buffer_lru.begin()) {
-	--i;
-      }
-      dout(20) << __func__ << " rm " << *b << dendl;
-      b->space->_rm_buffer(p);
-    } else {
-      if (i != buffer_lru.begin()) {
-	--i;
-	continue;
-      } else {
-	break;
-      }
+    assert(b->is_clean());
+    auto p = b->space->buffer_map.find(b->offset);
+    if (i != buffer_lru.begin()) {
+      --i;
     }
+    dout(20) << __func__ << " rm " << *b << dendl;
+    b->space->_rm_buffer(p);
   }
 
   // onodes
@@ -496,8 +528,7 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
     return; // don't even try
 
   auto p = onode_lru.end();
-  if (num)
-    --p;
+  --p;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
@@ -506,7 +537,7 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 	       << " refs; stopping with " << num << " left to trim" << dendl;
       break;
     }
-    dout(30) << __func__ << "  trim " << o->oid << dendl;
+    dout(30) << __func__ << "  rm " << o->oid << dendl;
     if (p != onode_lru.begin()) {
       onode_lru.erase(p--);
     } else {
@@ -522,7 +553,7 @@ void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
 }
 
 #ifdef DEBUG_CACHE
-void BlueStore::Cache::_audit_lru(const char *when)
+void BlueStore::LRUCache::_audit(const char *when)
 {
   if (true) {
     dout(10) << __func__ << " " << when << " start" << dendl;
@@ -559,31 +590,195 @@ void BlueStore::Cache::_audit_lru(const char *when)
 }
 #endif
 
-struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
-  virtual void merge_nonexistent(
-    const char *rdata, size_t rlen, std::string *new_value) override {
-    *new_value = std::string(rdata, rlen);
-  }
-  virtual void merge(
-    const char *ldata, size_t llen,
-    const char *rdata, size_t rlen,
-    std::string *new_value) {
-    assert(llen == rlen);
-    assert((rlen % 8) == 0);
-    new_value->resize(rlen);
-    const __le64* lv = (const __le64*)ldata;
-    const __le64* rv = (const __le64*)rdata;
-    __le64* nv = &(__le64&)new_value->at(0);
-    for (size_t i = 0; i < rlen >> 3; ++i) {
-      nv[i] = lv[i] + rv[i];
+// TwoQCache
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.2QCache(" << this << ") "
+
+
+void BlueStore::TwoQCache::_touch_onode(OnodeRef& o)
+{
+  auto p = onode_lru.iterator_to(*o);
+  onode_lru.erase(p);
+  onode_lru.push_front(*o);
+}
+
+void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
+{
+  dout(20) << __func__ << " level " << level << " near " << near
+	   << " on " << *b
+	   << " which has level " << b->cache_private << dendl;
+  if (near) {
+    b->cache_private = near->cache_private;
+    switch (b->cache_private) {
+    case BUFFER_WARM_IN:
+      buffer_warm_in.insert(buffer_warm_in.iterator_to(*near), *b);
+      break;
+    case BUFFER_WARM_OUT:
+      buffer_warm_out.insert(buffer_warm_out.iterator_to(*near), *b);
+      break;
+    case BUFFER_HOT:
+      buffer_hot.insert(buffer_hot.iterator_to(*near), *b);
+      break;
+    default:
+      assert(0 == "bad cache_private");
+    }
+  } else if (b->cache_private == BUFFER_NEW) {
+    b->cache_private = BUFFER_WARM_IN;
+    if (level > 0) {
+      buffer_warm_in.push_front(*b);
+    } else {
+      // take caller hint to start at the back of the warm queue
+      buffer_warm_in.push_back(*b);
+    }
+  } else {
+    // ew got a hint from discard
+    switch (b->cache_private) {
+    case BUFFER_WARM_IN:
+      // stay in warm_in.  move to front, even though 2Q doesn't actually
+      // do this.
+      dout(20) << __func__ << " move to front of warm " << *b << dendl;
+      buffer_warm_in.push_front(*b);
+      break;
+    case BUFFER_WARM_OUT:
+      // move to hot.  fall-thru
+    case BUFFER_HOT:
+      dout(20) << __func__ << " move to hot " << *b << dendl;
+      b->cache_private = BUFFER_HOT;
+      buffer_hot.push_front(*b);
+      break;
+    default:
+      assert(0 == "bad cache_private");
     }
   }
-  // We use each operator name and each prefix to construct the
-  // overall RocksDB operator name for consistency check at open time.
-  virtual string name() const {
-    return "int64_array";
+  if (!b->is_empty()) {
+    buffer_bytes += b->length;
   }
-};
+}
+
+void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
+{
+  std::lock_guard<std::mutex> l(lock);
+
+  dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
+	   << " buffers " << buffer_bytes << " / " << buffer_max
+	   << dendl;
+
+  _audit("trim start");
+
+  // buffers
+  uint64_t num_buffers = buffer_hot.size() + buffer_warm_in.size();
+  if (num_buffers) {
+    // for simplicity, we assume buffer sizes are uniform across hot
+    // and warm_in.  FIXME?
+    uint64_t avg_buffer_size = buffer_bytes / num_buffers;
+    uint64_t kin = buffer_max / avg_buffer_size / 2;
+    uint64_t khot = kin;
+    uint64_t kout = buffer_max / avg_buffer_size;
+    // if hot is small, give slack to warm_in.
+    if (buffer_hot.size() < kin) {
+      kin += kin - buffer_hot.size();
+    }
+    dout(20) << __func__ << " num_buffers " << num_buffers
+	     << " (hot " << buffer_hot.size()
+	     << " + warm_in " << buffer_warm_in.size() << ")"
+	     << " avg size " << avg_buffer_size
+	     << " warm_out " << buffer_warm_out.size()
+	     << " khot " << khot << " kin " << kin << " kout " << kout
+	     << dendl;
+    while (buffer_hot.size() > khot) {
+      Buffer *b = &*buffer_hot.rbegin();
+      assert(b->is_clean());
+      dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
+      b->space->_rm_buffer(b);
+    }
+    while (buffer_warm_in.size() > kin) {
+      Buffer *b = &*buffer_warm_in.rbegin();
+      assert(b->is_clean());
+      dout(20) << __func__ << " buffer_warm_in -> out " << *b << dendl;
+      buffer_bytes -= b->length;
+      b->state = Buffer::STATE_EMPTY;
+      b->data.clear();
+      buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
+      buffer_warm_out.push_front(*b);
+      b->cache_private = BUFFER_WARM_OUT;
+    }
+    while (buffer_warm_out.size() > kout) {
+      Buffer *b = &*buffer_warm_out.rbegin();
+      assert(b->is_empty());
+      dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
+      b->space->_rm_buffer(b);
+    }
+  }
+
+  // onodes
+  int num = onode_lru.size() - onode_max;
+  if (num <= 0)
+    return; // don't even try
+
+  auto p = onode_lru.end();
+  if (num)
+    --p;
+  while (num > 0) {
+    Onode *o = &*p;
+    int refs = o->nref.load();
+    if (refs > 1) {
+      dout(20) << __func__ << "  " << o->oid << " has " << refs
+	       << " refs; stopping with " << num << " left to trim" << dendl;
+      break;
+    }
+    dout(30) << __func__ << "  trim " << o->oid << dendl;
+    if (p != onode_lru.begin()) {
+      onode_lru.erase(p--);
+    } else {
+      onode_lru.erase(p);
+      assert(num == 1);
+    }
+    o->get();  // paranoia
+    o->space->onode_map.erase(o->oid);
+    o->blob_map._clear();    // clear blobs and their buffers, too
+    o->put();
+    --num;
+  }
+}
+
+#ifdef DEBUG_CACHE
+void BlueStore::TwoQCache::_audit(const char *when)
+{
+  if (true) {
+    dout(10) << __func__ << " " << when << " start" << dendl;
+    uint64_t s = 0;
+    for (auto i = buffer_hot.begin(); i != buffer_hot.end(); ++i) {
+      s += i->length;
+    }
+    for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
+      s += i->length;
+    }
+    if (s != buffer_bytes) {
+      derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
+	   << dendl;
+      assert(s == buffer_bytes);
+    }
+    dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
+	     << " ok" << dendl;
+  }
+  if (false) {
+    uint64_t lc = 0, oc = 0;
+    set<OnodeSpace*> spaces;
+    for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
+      assert(i->space->onode_map.count(i->oid));
+      if (spaces.count(i->space) == 0) {
+	spaces.insert(i->space);
+	oc += i->space->onode_map.size();
+      }
+      ++lc;
+    }
+    if (lc != oc) {
+      derr << " lc " << lc << " oc " << oc << dendl;
+    }
+  }
+}
+#endif
+
 
 // BufferSpace
 
@@ -599,9 +794,11 @@ void BlueStore::BufferSpace::_clear()
   }
 }
 
-void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
+int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 {
-  cache->_audit_lru("discard start");
+  // note: we already hold cache->lock
+  int cache_private = 0;
+  cache->_audit("discard start");
   auto i = _data_lower_bound(offset);
   uint64_t end = offset + length;
   while (i != buffer_map.end()) {
@@ -609,27 +806,28 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
     if (b->offset >= end) {
       break;
     }
+    if (b->cache_private > cache_private) {
+      cache_private = b->cache_private;
+    }
     if (b->offset < offset) {
-      uint64_t front = offset - b->offset;
+      int64_t front = offset - b->offset;
       if (b->end() > end) {
 	// drop middle (split)
 	uint64_t tail = b->end() - end;
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  _add_buffer(new Buffer(this, b->state, b->seq, end, bl));
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
 	} else {
-	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail));
+	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail), 0, b);
 	}
-        assert(cache->buffer_size >= b->length - front);
-	cache->buffer_size -= b->length - front;
+	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	b->truncate(front);
-	cache->_audit_lru("discard end 1");
-	return;
+	cache->_audit("discard end 1");
+	break;
       } else {
 	// drop tail
-	assert(cache->buffer_size >= b->length - front);
-	cache->buffer_size -= b->length - front;
+	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
 	b->truncate(front);
 	++i;
 	continue;
@@ -645,15 +843,16 @@ void BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      _add_buffer(new Buffer(this, b->state, b->seq, end, bl));
+      _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
       _rm_buffer(i);
     } else {
-      _add_buffer(new Buffer(this, b->state, b->seq, end, keep));
+      _add_buffer(new Buffer(this, b->state, b->seq, end, keep), 0, b);
       _rm_buffer(i);
     }
-    cache->_audit_lru("discard end 2");
-    return;
+    cache->_audit("discard end 2");
+    break;
   }
+  return cache_private;
 }
 
 void BlueStore::BufferSpace::read(
@@ -677,7 +876,9 @@ void BlueStore::BufferSpace::read(
 	res_intervals.insert(offset, l);
 	offset += l;
 	length -= l;
-	cache->_touch_buffer(b);
+	if (!b->is_writing()) {
+	  cache->_touch_buffer(b);
+	}
 	continue;
       }
       if (b->offset > offset) {
@@ -688,7 +889,9 @@ void BlueStore::BufferSpace::read(
 	offset += gap;
 	length -= gap;
       }
-      cache->_touch_buffer(b);
+      if (!b->is_writing()) {
+	cache->_touch_buffer(b);
+      }
       if (b->length > length) {
 	res[offset].substr_of(b->data, 0, length);
 	res_intervals.insert(offset, length);
@@ -718,12 +921,13 @@ void BlueStore::BufferSpace::finish_write(uint64_t seq)
       } else {
 	b->state = Buffer::STATE_CLEAN;
 	writing.erase(i++);
+	cache->_add_buffer(b, 1, nullptr);
       }
     } else {
       ++i;
     }
   }
-  cache->_audit_lru("finish_write end");
+  cache->_audit("finish_write end");
 }
 
 // OnodeSpace
@@ -737,7 +941,7 @@ void BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
   dout(30) << __func__ << " " << oid << " " << o << dendl;
   assert(onode_map.count(oid) == 0);
   onode_map[oid] = o;
-  cache->onode_lru.push_front(*o);
+  cache->_add_onode(o, 1);
 }
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
@@ -759,8 +963,7 @@ void BlueStore::OnodeSpace::clear()
   std::lock_guard<std::mutex> l(cache->lock);
   dout(10) << __func__ << dendl;
   for (auto &p : onode_map) {
-    auto q = cache->onode_lru.iterator_to(*p.second);
-    cache->onode_lru.erase(q);
+    cache->_rm_onode(p.second);
 
     // clear blobs and their buffers too, while we have cache->lock
     p.second->blob_map._clear();
@@ -782,8 +985,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   assert(po != onode_map.end());
   if (pn != onode_map.end()) {
     dout(30) << __func__ << "  removing target " << pn->second << dendl;
-    auto p = cache->onode_lru.iterator_to(*pn->second);
-    cache->onode_lru.erase(p);
+    cache->_rm_onode(pn->second);
     onode_map.erase(pn);
   }
   OnodeRef o = po->second;
@@ -791,7 +993,7 @@ void BlueStore::OnodeSpace::rename(OnodeRef& oldo,
   // install a non-existent onode at old location
   oldo.reset(new Onode(this, old_oid, o->key));
   po->second = oldo;
-  cache->onode_lru.push_back(*po->second);
+  cache->_add_onode(po->second, 1);
 
   // add at new position and fix oid, key
   onode_map.insert(make_pair(new_oid, o));
@@ -867,9 +1069,28 @@ void BlueStore::Bnode::put()
 {
   if (--nref == 0) {
     dout(20) << __func__ << " removing self from set " << bnode_set << dendl;
-    bnode_set->uset.erase(*this);
-    delete this;
+    if (bnode_set->remove(this)) {
+      delete this;
+    } else {
+      dout(20) << __func__ << " lost race to remove myself from set" << dendl;
+    }
   }
+}
+
+// BnodeSet
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.bnodeset(" << this << ") "
+
+BlueStore::BnodeRef BlueStore::BnodeSet::get(uint32_t hash)
+{
+  std::lock_guard<std::mutex> l(lock);
+  dummy.hash = hash;
+  auto p = uset.find(dummy);
+  if (p == uset.end()) {
+    return nullptr;
+  }
+  return &*p;
 }
 
 // Onode
@@ -910,37 +1131,36 @@ BlueStore::BnodeRef BlueStore::Collection::get_bnode(
   uint32_t hash
   )
 {
-  Bnode dummy(hash, string(), NULL);
-  auto p = bnode_set.uset.find(dummy);
-  if (p == bnode_set.uset.end()) {
-    spg_t pgid;
-    if (!cid.is_pg(&pgid))
-      pgid = spg_t();  // meta
-    string key;
-    get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
-    BnodeRef e = new Bnode(hash, key, &bnode_set);
+  BnodeRef b = bnode_set.get(hash);
+  if (b) {
     dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " created " << e << dendl;
-
-    bufferlist v;
-    int r = store->db->get(PREFIX_OBJ, key, &v);
-    if (r >= 0) {
-      assert(v.length() > 0);
-      bufferlist::iterator p = v.begin();
-      e->blob_map.decode(p, cache);
-      dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	       << " loaded blob_map " << e->blob_map << dendl;
-    } else {
-      dout(10) << __func__ << " hash " <<std::hex << hash << std::dec
-	       << " missed, new blob_map" << dendl;
-    }
-    bnode_set.uset.insert(*e);
-    return e;
-  } else {
-    dout(10) << __func__ << " hash " << std::hex << hash << std::dec
-	     << " had " << &*p << dendl;
-    return &*p;
+	     << " had " << b << dendl;
+    return b;
   }
+
+  spg_t pgid;
+  if (!cid.is_pg(&pgid))
+    pgid = spg_t();  // meta
+  string key;
+  get_bnode_key(pgid.shard, pgid.pool(), hash, &key);
+  b = new Bnode(hash, key, &bnode_set);
+  dout(10) << __func__ << " hash " << std::hex << hash << std::dec
+	   << " created " << b << dendl;
+
+  bufferlist v;
+  int r = store->db->get(PREFIX_OBJ, key, &v);
+  if (r >= 0) {
+    assert(v.length() > 0);
+    bufferlist::iterator p = v.begin();
+    b->blob_map.decode(p, cache);
+    dout(10) << __func__ << " hash " << std::hex << hash << std::dec
+	     << " loaded blob_map " << b->blob_map << dendl;
+  } else {
+    dout(10) << __func__ << " hash " <<std::hex << hash << std::dec
+	     << " missed, new blob_map" << dendl;
+  }
+  bnode_set.add(b.get());
+  return b;
 }
 
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
@@ -2309,7 +2529,7 @@ void BlueStore::set_cache_shards(unsigned num)
   assert(num >= old);
   cache_shards.resize(num);
   for (unsigned i = old; i < num; ++i) {
-    cache_shards[i] = new Cache;
+    cache_shards[i] = Cache::create(g_conf->bluestore_cache_type);
   }
 }
 
@@ -5250,6 +5470,7 @@ void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
       dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
 		      << dendl;
     }
+    std::lock_guard<std::mutex> l(b.bc.cache->lock);
     if (!b.bc.empty()) {
       for (auto& i : b.bc.buffer_map) {
 	dout(log_level) << __func__ << "       0x" << std::hex << i.first

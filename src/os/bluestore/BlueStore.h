@@ -111,14 +111,14 @@ public:
   /// cached buffer
   struct Buffer {
     enum {
-      STATE_UNDEF = 0,
-      STATE_CLEAN,
-      STATE_WRITING,
+      STATE_EMPTY,     ///< empty buffer -- used for cache history
+      STATE_CLEAN,     ///< clean data that is up to date
+      STATE_WRITING,   ///< data that is being written (io not yet complete)
       STATE_READING,
     };
     static const char *get_state_name(int s) {
       switch (s) {
-      case STATE_UNDEF: return "undef";
+      case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
       case STATE_WRITING: return "writing";
       case STATE_READING: return "reading";
@@ -137,8 +137,9 @@ public:
     }
 
     BufferSpace *space;
-    uint32_t state;            ///< STATE_*
-    uint32_t flags;            ///< FLAG_*
+    uint16_t state;             ///< STATE_*
+    uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
+    uint32_t flags;             ///< FLAG_*
     uint64_t seq;
     uint64_t offset, length;
     bufferlist data;
@@ -154,6 +155,9 @@ public:
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
 
+    bool is_empty() const {
+      return state == STATE_EMPTY;
+    }
     bool is_clean() const {
       return state == STATE_CLEAN;
     }
@@ -208,29 +212,28 @@ public:
       assert(writing.empty());
     }
 
-    void _add_buffer(Buffer *b) {
-      cache->_audit_lru("_add_buffer start");
+    void _add_buffer(Buffer *b, int level, Buffer *near) {
+      cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
-      cache->buffer_lru.push_front(*b);
-      cache->buffer_size += b->length;
       if (b->is_writing()) {
 	writing.push_back(*b);
+      } else {
+	cache->_add_buffer(b, level, near);
       }
-      cache->_audit_lru("_add_buffer end");
+      cache->_audit("_add_buffer end");
     }
     void _rm_buffer(Buffer *b) {
       _rm_buffer(buffer_map.find(b->offset));
     }
     void _rm_buffer(map<uint64_t,std::unique_ptr<Buffer>>::iterator p) {
-      cache->_audit_lru("_rm_buffer start");
-      assert(cache->buffer_size >= p->second->length);
-      cache->buffer_size -= p->second->length;
-      cache->buffer_lru.erase(cache->buffer_lru.iterator_to(*p->second));
+      cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
 	writing.erase(writing.iterator_to(*p->second));
+      } else {
+	cache->_rm_buffer(p->second.get());
       }
       buffer_map.erase(p);
-      cache->_audit_lru("_rm_buffer end");
+      cache->_audit("_rm_buffer end");
     }
 
     map<uint64_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
@@ -251,23 +254,26 @@ public:
     // must be called under protection of the Cache lock
     void _clear();
 
-    void discard(uint64_t offset, uint64_t length) {
+    // return value is the highest cache_private of a trimmed buffer, or 0.
+    int discard(uint64_t offset, uint64_t length) {
       std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, length);
+      return _discard(offset, length);
     }
-    void _discard(uint64_t offset, uint64_t length);
+    int _discard(uint64_t offset, uint64_t length);
 
     void write(uint64_t seq, uint64_t offset, bufferlist& bl, unsigned flags) {
       std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags));
+      Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+			     flags);
+      b->cache_private = _discard(offset, bl.length());
+      _add_buffer(b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
     }
     void finish_write(uint64_t seq);
     void did_read(uint64_t offset, bufferlist& bl) {
       std::lock_guard<std::mutex> l(cache->lock);
-      _discard(offset, bl.length());
-      _add_buffer(new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl));
+      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
+      b->cache_private = _discard(offset, bl.length());
+      _add_buffer(b, 1, nullptr);
     }
 
     void read(uint64_t offset, uint64_t length,
@@ -426,19 +432,37 @@ public:
     typedef boost::intrusive::unordered_set<Bnode>::bucket_type bucket_type;
     typedef boost::intrusive::unordered_set<Bnode>::bucket_traits bucket_traits;
 
+    std::mutex lock;
     unsigned num_buckets;
     vector<bucket_type> buckets;
-
     boost::intrusive::unordered_set<Bnode> uset;
+
+    Bnode dummy;  ///< dummy entry used for lookups.  protected by lock.
 
     explicit BnodeSet(unsigned n)
       : num_buckets(n),
 	buckets(n),
-	uset(bucket_traits(buckets.data(), num_buckets)) {
+	uset(bucket_traits(buckets.data(), num_buckets)),
+	dummy(0, string(), NULL) {
       assert(n > 0);
     }
     ~BnodeSet() {
       assert(uset.empty());
+    }
+
+    BnodeRef get(uint32_t hash);
+
+    void add(Bnode *b) {
+      std::lock_guard<std::mutex> l(lock);
+      uset.insert(*b);
+    }
+    bool remove(Bnode *b) {
+      std::lock_guard<std::mutex> l(lock);
+      if (b->nref == 0) {
+	uset.erase(*b);
+	return true;
+      }
+      return false;
     }
   };
 
@@ -494,39 +518,190 @@ public:
 
   /// a cache (shard) of onodes and buffers
   struct Cache {
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_lru_list_t;
+    std::mutex lock;                ///< protect lru and other structures
+
+    static Cache *create(string type);
+
+    virtual ~Cache() {}
+
+    virtual void _add_onode(OnodeRef& o, int level) = 0;
+    virtual void _rm_onode(OnodeRef& o) = 0;
+    virtual void _touch_onode(OnodeRef& o) = 0;
+
+    virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
+    virtual void _rm_buffer(Buffer *b) = 0;
+    virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
+    virtual void _touch_buffer(Buffer *b) = 0;
+
+    virtual void trim(uint64_t onode_max, uint64_t buffer_max) = 0;
+
+#ifdef DEBUG_CACHE
+    virtual void _audit(const char *s) = 0;
+#else
+    void _audit(const char *s) { /* no-op */ }
+#endif
+  };
+
+  /// simple LRU cache for onodes and buffers
+  struct LRUCache : public Cache {
+  private:
     typedef boost::intrusive::list<
       Onode,
       boost::intrusive::member_hook<
         Onode,
 	boost::intrusive::list_member_hook<>,
 	&Onode::lru_item> > onode_lru_list_t;
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+	Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::lru_item> > buffer_lru_list_t;
 
-    std::mutex lock;                ///< protect lru and other structures
-    buffer_lru_list_t buffer_lru;
-    uint64_t buffer_size = 0;
     onode_lru_list_t onode_lru;
 
-    void _touch_onode(OnodeRef& o);
+    buffer_lru_list_t buffer_lru;
+    uint64_t buffer_size = 0;
 
-    void _touch_buffer(Buffer *b) {
+  public:
+    void _add_onode(OnodeRef& o, int level) override {
+      if (level > 0)
+	onode_lru.push_front(*o);
+      else
+	onode_lru.push_back(*o);
+    }
+    void _rm_onode(OnodeRef& o) override {
+      auto q = onode_lru.iterator_to(*o);
+      onode_lru.erase(q);
+    }
+    void _touch_onode(OnodeRef& o) override;
+
+    void _add_buffer(Buffer *b, int level, Buffer *near) override {
+      if (near) {
+	auto q = buffer_lru.iterator_to(*near);
+	buffer_lru.insert(q, *b);
+      } else if (level > 0) {
+	buffer_lru.push_front(*b);
+      } else {
+	buffer_lru.push_back(*b);
+      }
+      buffer_size += b->length;
+    }
+    void _rm_buffer(Buffer *b) override {
+      assert(buffer_size >= b->length);
+      buffer_size -= b->length;
+      auto q = buffer_lru.iterator_to(*b);
+      buffer_lru.erase(q);
+    }
+    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
+      assert((int64_t)buffer_size + delta >= 0);
+      buffer_size += delta;
+    }
+    void _touch_buffer(Buffer *b) override {
       auto p = buffer_lru.iterator_to(*b);
       buffer_lru.erase(p);
       buffer_lru.push_front(*b);
-      _audit_lru("_touch_buffer end");
+      _audit("_touch_buffer end");
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max);
+    void trim(uint64_t onode_max, uint64_t buffer_max) override;
 
 #ifdef DEBUG_CACHE
-    void _audit_lru(const char *s);
-#else
-    void _audit_lru(const char *s) { /* no-op */ }
+    void _audit(const char *s) override;
+#endif
+  };
+
+  // 2Q cache for buffers, LRU for onodes
+  struct TwoQCache : public Cache {
+  private:
+    // stick with LRU for onodes for now (fixme?)
+    typedef boost::intrusive::list<
+      Onode,
+      boost::intrusive::member_hook<
+        Onode,
+	boost::intrusive::list_member_hook<>,
+	&Onode::lru_item> > onode_lru_list_t;
+    typedef boost::intrusive::list<
+      Buffer,
+      boost::intrusive::member_hook<
+	Buffer,
+	boost::intrusive::list_member_hook<>,
+	&Buffer::lru_item> > buffer_list_t;
+
+    onode_lru_list_t onode_lru;
+
+    buffer_list_t buffer_hot;      //< "Am" hot buffers
+    buffer_list_t buffer_warm_in;  //< "A1in" newly warm buffers
+    buffer_list_t buffer_warm_out; //< "A1out" empty buffers we've evicted
+    uint64_t buffer_bytes = 0;        //< bytes
+
+    enum {
+      BUFFER_NEW = 0,
+      BUFFER_WARM_IN,   ///< in buffer_warm_in
+      BUFFER_WARM_OUT,  ///< in buffer_warm_out
+      BUFFER_HOT,       ///< in buffer_hot
+    };
+
+  public:
+    void _add_onode(OnodeRef& o, int level) override {
+      if (level > 0)
+	onode_lru.push_front(*o);
+      else
+	onode_lru.push_back(*o);
+    }
+    void _rm_onode(OnodeRef& o) override {
+      auto q = onode_lru.iterator_to(*o);
+      onode_lru.erase(q);
+    }
+    void _touch_onode(OnodeRef& o) override;
+
+    void _add_buffer(Buffer *b, int level, Buffer *near) override;
+
+    void _rm_buffer(Buffer *b) override {
+      if (!b->is_empty()) {
+	buffer_bytes -= b->length;
+      }
+      switch (b->cache_private) {
+      case BUFFER_WARM_IN:
+	buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
+	break;
+      case BUFFER_WARM_OUT:
+	buffer_warm_out.erase(buffer_warm_out.iterator_to(*b));
+	break;
+      case BUFFER_HOT:
+	buffer_hot.erase(buffer_hot.iterator_to(*b));
+	break;
+      default:
+	assert(0 == "bad cache_private");
+      }
+    }
+    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
+      if (!b->is_empty()) {
+	buffer_bytes += delta;
+      }
+    }
+    void _touch_buffer(Buffer *b) override {
+      switch (b->cache_private) {
+      case BUFFER_WARM_IN:
+	// do nothing (somewhat counter-intuitively!)
+	break;
+      case BUFFER_WARM_OUT:
+	// move from warm_out to hot LRU
+	assert(0 == "this happens via discard hint");
+	break;
+      case BUFFER_HOT:
+	// move to front of hot LRU
+	buffer_hot.erase(buffer_hot.iterator_to(*b));
+	buffer_hot.push_front(*b);
+	break;
+      }
+      _audit("_touch_buffer end");
+    }
+
+    void trim(uint64_t onode_max, uint64_t buffer_max) override;
+
+#ifdef DEBUG_CACHE
+    void _audit(const char *s) override;
 #endif
   };
 
@@ -541,7 +716,8 @@ public:
 
     void add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
-    void rename(OnodeRef& o, const ghobject_t& old_oid, const ghobject_t& new_oid);
+    void rename(OnodeRef& o, const ghobject_t& old_oid,
+		const ghobject_t& new_oid);
     void clear();
 
     /// return true if f true for any item
