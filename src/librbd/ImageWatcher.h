@@ -33,7 +33,7 @@ public:
 
   void notify_flatten(uint64_t request_id, ProgressContext &prog_ctx,
                       Context *on_finish);
-  void notify_resize(uint64_t request_id, uint64_t size,
+  void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
   void notify_snap_create(const std::string &snap_name, Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,

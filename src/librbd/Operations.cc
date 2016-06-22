@@ -558,7 +558,7 @@ void Operations<I>::execute_rename(const char *dstname, Context *on_finish) {
 }
 
 template <typename I>
-int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
+int Operations<I>::resize(uint64_t size, bool allow_shrink, ProgressContext& prog_ctx) {
   CephContext *cct = m_image_ctx.cct;
 
   m_image_ctx.snap_lock.get_read();
@@ -581,10 +581,10 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
   uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("resize", false,
                            boost::bind(&Operations<I>::execute_resize, this,
-                                       size, boost::ref(prog_ctx), _1, 0),
+                                       size, allow_shrink, boost::ref(prog_ctx), _1, 0),
                            boost::bind(&ImageWatcher::notify_resize,
                                        m_image_ctx.image_watcher, request_id,
-                                       size, boost::ref(prog_ctx), _1));
+                                       size, allow_shrink, boost::ref(prog_ctx), _1));
 
   m_image_ctx.perfcounter->inc(l_librbd_resize);
   ldout(cct, 2) << "resize finished" << dendl;
@@ -592,7 +592,7 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
 }
 
 template <typename I>
-void Operations<I>::execute_resize(uint64_t size, ProgressContext &prog_ctx,
+void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressContext &prog_ctx,
                                    Context *on_finish,
                                    uint64_t journal_op_tid) {
   assert(m_image_ctx.owner_lock.is_locked());
@@ -619,8 +619,8 @@ void Operations<I>::execute_resize(uint64_t size, ProgressContext &prog_ctx,
   m_image_ctx.snap_lock.put_read();
 
   operation::ResizeRequest<I> *req = new operation::ResizeRequest<I>(
-    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), size, prog_ctx,
-    journal_op_tid, false);
+    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), size, allow_shrink,
+    prog_ctx, journal_op_tid, false);
   req->send();
 }
 

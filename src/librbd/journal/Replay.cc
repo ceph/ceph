@@ -76,7 +76,7 @@ struct ExecuteOp : public Context {
   }
 
   void execute(const journal::ResizeEvent &_) {
-    image_ctx.operations->execute_resize(event.size, no_op_progress_callback,
+    image_ctx.operations->execute_resize(event.size, true, no_op_progress_callback,
                                          on_op_complete, event.op_tid);
   }
 
