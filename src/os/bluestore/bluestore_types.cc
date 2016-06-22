@@ -423,7 +423,6 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "has_unused";
   }
-
   return s;
 }
 

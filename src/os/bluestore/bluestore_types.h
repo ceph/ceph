@@ -295,6 +295,14 @@ struct bluestore_blob_t {
     assert(0 == "we should not get here");
   }
 
+  uint32_t get_csum_chunk_size() const {
+    return 1 << csum_chunk_order;
+  }
+
+  /// return chunk (i.e. min readable block) size for the blob
+  uint64_t get_chunk_size(uint64_t dev_block_size) {
+    return has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+  }
   /// return true if the logical range has never been used
   bool is_unused(uint64_t offset, uint64_t length, uint64_t min_alloc_size) const {
     if (!has_unused()) {
@@ -398,7 +406,6 @@ struct bluestore_blob_t {
     }
     return len;
   }
-
 
   size_t get_csum_value_size() const {
     switch (csum_type) {
