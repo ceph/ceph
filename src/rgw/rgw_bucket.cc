@@ -203,7 +203,8 @@ int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket
   if (update_entrypoint) {
     ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, ep, &ot, NULL, &attrs);
     if (ret < 0 && ret != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned " << ret << dendl;
+      ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned: "
+                             << cpp_strerror(-ret) << dendl;
     }
   }
 
@@ -214,7 +215,7 @@ int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket
   ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
-        << cpp_strerror(-ret)<< dendl;
+                           << cpp_strerror(-ret) << dendl;
     goto done_err;
   }
 
@@ -231,7 +232,8 @@ int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket
 done_err:
   int r = rgw_unlink_bucket(store, user_id, bucket.tenant, bucket.name);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed unlinking bucket on error cleanup: " << cpp_strerror(-r) << dendl;
+    ldout(store->ctx(), 0) << "ERROR: failed unlinking bucket on error cleanup: "
+                           << cpp_strerror(-r) << dendl;
   }
   return ret;
 }
