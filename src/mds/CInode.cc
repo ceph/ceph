@@ -2817,18 +2817,18 @@ void CInode::move_to_realm(SnapRealm *realm)
   containing_realm = realm;
 }
 
-Capability *CInode::reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session)
+Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session)
 {
   Capability *cap = get_client_cap(client);
   if (cap) {
     // FIXME?
-    cap->merge(icr.wanted, icr.issued);
+    cap->merge(icr.capinfo.wanted, icr.capinfo.issued);
   } else {
     cap = add_client_cap(client, session);
-    cap->set_wanted(icr.wanted);
-    cap->issue_norevoke(icr.issued);
+    cap->set_cap_id(icr.capinfo.cap_id);
+    cap->set_wanted(icr.capinfo.wanted);
+    cap->issue_norevoke(icr.capinfo.issued);
     cap->reset_seq();
-    cap->set_cap_id(icr.cap_id);
   }
   cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
   return cap;
