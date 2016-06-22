@@ -17,6 +17,7 @@ BlueFS::BlueFS()
   : logger(NULL),
     ino_last(0),
     log_seq(0),
+    log_seq_stable(0),
     log_writer(NULL),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
@@ -1023,7 +1024,7 @@ void BlueFS::_pad_bl(bufferlist& bl)
 
 int BlueFS::_flush_and_sync_log()
 {
-  log_t.seq = ++log_seq;
+  uint64_t seq = log_t.seq = ++log_seq;
   log_t.uuid = super.uuid;
   dout(10) << __func__ << " " << log_t << dendl;
   assert(!log_t.empty());
@@ -1059,6 +1060,8 @@ int BlueFS::_flush_and_sync_log()
   _flush_bdev();
 
   // clean dirty files
+  dout(20) << __func__ << " log_seq_stable " << seq << dendl;
+  log_seq_stable = seq;
   dirty_file_list_t::iterator p = dirty_files.begin();
   while (p != dirty_files.end()) {
     File *file = &(*p);

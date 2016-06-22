@@ -201,6 +201,7 @@ private:
   bluefs_super_t super;       ///< latest superblock (as last written)
   uint64_t ino_last;          ///< last assigned ino (this one is in use)
   uint64_t log_seq;           ///< last used log seq (by current pending log_t)
+  uint64_t log_seq_stable;    ///< last stable/synced log seq
   FileWriter *log_writer;     ///< writer for the log
   bluefs_transaction_t log_t; ///< pending, unwritten log transaction
 
