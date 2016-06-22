@@ -99,4 +99,4 @@ if(ENABLE_SHARED)
     SOVERSION 1
     COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
 endif(ENABLE_SHARED)
-install(TARGETS librbd DESTINATION lib)
+install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
