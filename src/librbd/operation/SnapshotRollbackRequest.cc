@@ -137,7 +137,7 @@ void SnapshotRollbackRequest<I>::send_resize_image() {
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_resize_image>(this);
   ResizeRequest<I> *req = ResizeRequest<I>::create(image_ctx, ctx, m_snap_size,
-                                                   m_no_op_prog_ctx, 0, true);
+                                                   true, m_no_op_prog_ctx, 0, true);
   req->send();
 }
 

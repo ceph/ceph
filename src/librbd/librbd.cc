@@ -628,7 +628,16 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
     librbd::NoOpProgressContext prog_ctx;
-    int r = ictx->operations->resize(size, prog_ctx);
+    int r = ictx->operations->resize(size, true, prog_ctx);
+    tracepoint(librbd, resize_exit, r);
+    return r;
+  }
+
+  int Image::resize2(uint64_t size, bool allow_shrink, librbd::ProgressContext& pctx)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
+    int r = ictx->operations->resize(size, allow_shrink, pctx);
     tracepoint(librbd, resize_exit, r);
     return r;
   }
@@ -637,7 +646,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
-    int r = ictx->operations->resize(size, pctx);
+    int r = ictx->operations->resize(size, true, pctx);
     tracepoint(librbd, resize_exit, r);
     return r;
   }
@@ -1998,7 +2007,18 @@ extern "C" int rbd_resize(rbd_image_t image, uint64_t size)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
   librbd::NoOpProgressContext prog_ctx;
-  int r = ictx->operations->resize(size, prog_ctx);
+  int r = ictx->operations->resize(size, true, prog_ctx);
+  tracepoint(librbd, resize_exit, r);
+  return r;
+}
+
+extern "C" int rbd_resize2(rbd_image_t image, uint64_t size, bool allow_shrink,
+					librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  int r = ictx->operations->resize(size, allow_shrink, prog_ctx);
   tracepoint(librbd, resize_exit, r);
   return r;
 }
@@ -2009,7 +2029,7 @@ extern "C" int rbd_resize_with_progress(rbd_image_t image, uint64_t size,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, resize_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, size);
   librbd::CProgressContext prog_ctx(cb, cbdata);
-  int r = ictx->operations->resize(size, prog_ctx);
+  int r = ictx->operations->resize(size, true, prog_ctx);
   tracepoint(librbd, resize_exit, r);
   return r;
 }

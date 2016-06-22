@@ -39,8 +39,8 @@ public:
   int rename(const char *dstname);
   void execute_rename(const char *dstname, Context *on_finish);
 
-  int resize(uint64_t size, ProgressContext& prog_ctx);
-  void execute_resize(uint64_t size, ProgressContext &prog_ctx,
+  int resize(uint64_t size, bool allow_shrink, ProgressContext& prog_ctx);
+  void execute_resize(uint64_t size, bool allow_shrink, ProgressContext &prog_ctx,
                       Context *on_finish, uint64_t journal_op_tid);
 
   int snap_create(const char *snap_name);
