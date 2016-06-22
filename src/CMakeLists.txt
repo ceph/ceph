@@ -541,11 +541,11 @@ set(osdc_rbd_files
 add_library(osdc_rbd_objs OBJECT ${osdc_rbd_files})
 add_library(osdc STATIC ${osdc_files} $<TARGET_OBJECTS:osdc_rbd_objs>)
 
+add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 set(librados_srcs
   librados/librados.cc
   librados/RadosClient.cc
   librados/IoCtxImpl.cc
-  librados/snap_set_diff.cc
   librados/RadosXattrIter.cc
   )
 add_library(librados ${CEPH_SHARED} ${librados_srcs}
@@ -1230,7 +1230,9 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
-  add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
+  add_library(rbd_mirror_internal STATIC
+    ${rbd_mirror_internal}
+    $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 
   if(WITH_FUSE)
     add_executable(rbd-fuse
