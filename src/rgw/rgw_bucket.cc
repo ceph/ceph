@@ -192,6 +192,11 @@ int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket
 
   bucket.convert(&new_bucket.bucket);
   new_bucket.size = 0;
+
+  // we set the bucket_count here, this is the only method that shall
+  // update  the count
+  new_bucket.bucket_count = 1;
+
   if (real_clock::is_zero(creation_time))
     new_bucket.creation_time = real_clock::now();
   else
