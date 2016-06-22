@@ -102,6 +102,10 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   FILE *fp = fopen(fname.c_str(), "r");
   if (!fp) {
     ret = -errno;
+    ostringstream oss;
+    oss << __func__ << ":" << __LINE__ << ": failed to fopen '"
+        << fname << "': " << cpp_strerror(ret);
+    errors->push_back(oss.str());
     return ret;
   }
 
@@ -109,15 +113,16 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   if (fstat(fileno(fp), &st_buf)) {
     ret = -errno;
     ostringstream oss;
-    oss << "read_conf: failed to fstat '" << fname << "': " << cpp_strerror(ret);
+    oss << __func__ << ":" << __LINE__ << ": failed to fstat '"
+        << fname << "': " << cpp_strerror(ret);
     errors->push_back(oss.str());
     goto done;
   }
 
   if (st_buf.st_size > MAX_CONFIG_FILE_SZ) {
     ostringstream oss;
-    oss << "read_conf: config file '" << fname << "' is " << st_buf.st_size
-	<< " bytes, but the maximum is " << MAX_CONFIG_FILE_SZ;
+    oss << __func__ << ":" << __LINE__ << ": config file '" << fname << "' is "
+        << st_buf.st_size << " bytes, but the maximum is " << MAX_CONFIG_FILE_SZ;
     errors->push_back(oss.str());
     ret = -EINVAL;
     goto done;
@@ -127,6 +132,9 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   buf = (char*)malloc(sz);
   if (!buf) {
     ret = -ENOMEM;
+    ostringstream oss;
+    oss << __func__ << ":" << __LINE__ << ": failed to malloc buf : " << sz << " bytes";
+    errors->push_back(oss.str());
     goto done;
   }
 
@@ -134,15 +142,15 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
     if (ferror(fp)) {
       ret = -errno;
       ostringstream oss;
-      oss << "read_conf: fread error while reading '" << fname << "': "
-	  << cpp_strerror(ret);
+      oss << __func__ << ":" << __LINE__ << ": fread error while reading '"
+          << fname << "': " << cpp_strerror(ret);
       errors->push_back(oss.str());
       goto done;
     }
     else {
       ostringstream oss;
-      oss << "read_conf: unexpected EOF while reading '" << fname << "': "
-	  << "possible concurrent modification?";
+      oss << __func__ << ":" << __LINE__ << ": unexpected EOF while reading '"
+          << fname << "': " << "possible concurrent modification?";
       errors->push_back(oss.str());
       ret = -EIO;
       goto done;
@@ -306,8 +314,8 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
     const char *end = (const char*)memchr(b, '\n', rem);
     if (!end) {
       ostringstream oss;
-      oss << "read_conf: ignoring line " << line_no << " because it doesn't "
-	  << "end with a newline! Please end the config file with a newline.";
+      oss << __func__ << ":" << __LINE__ << ": ignoring line " << line_no
+          << " because it doesn't end with a newline! Please end the config file with a newline.";
       errors->push_back(oss.str());
       break;
     }
@@ -324,8 +332,8 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
 
     if (found_null) {
       ostringstream oss;
-      oss << "read_conf: ignoring line " << line_no << " because it has "
-	  << "an embedded null.";
+      oss << __func__ << ":" << __LINE__ << ": ignoring line " << line_no
+          << " because it has an embedded null.";
       errors->push_back(oss.str());
       acc.clear();
       continue;
@@ -333,8 +341,8 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
 
     if (check_utf8(b, line_len)) {
       ostringstream oss;
-      oss << "read_conf: ignoring line " << line_no << " because it is not "
-	  << "valid UTF8.";
+      oss << __func__ << ":" << __LINE__ << ": ignoring line " << line_no
+          << " because it is not valid UTF8.";
       errors->push_back(oss.str());
       acc.clear();
       continue;
@@ -382,7 +390,7 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
 
   if (!acc.empty()) {
     ostringstream oss;
-    oss << "read_conf: don't end with lines that end in backslashes!";
+    oss << __func__ << ":" << __LINE__ << ": don't end with lines that end in backslashes!";
     errors->push_back(oss.str());
   }
 }
