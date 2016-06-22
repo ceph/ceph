@@ -2644,19 +2644,25 @@ void Client::send_reconnect(MetaSession *session)
       cap->issue_seq = 0;  // reset seq.
       cap->mseq = 0;  // reset seq.
       cap->issued = cap->implemented;
+
+      snapid_t snap_follows = 0;
+      if (!in->cap_snaps.empty())
+	snap_follows = in->cap_snaps.begin()->first;
+
       m->add_cap(p->first.ino, 
 		 cap->cap_id,
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
 		 cap->issued,     // issued
 		 in->snaprealm->ino,
+		 snap_follows,
 		 flockbl);
 
       if (did_snaprealm.count(in->snaprealm->ino) == 0) {
 	ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 	m->add_snaprealm(in->snaprealm->ino, in->snaprealm->seq, in->snaprealm->parent);
 	did_snaprealm.insert(in->snaprealm->ino);
-      }	
+      }
     }
   }
 
