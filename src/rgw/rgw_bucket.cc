@@ -240,8 +240,6 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
 {
   int ret;
 
-  bufferlist bl;
-
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
