@@ -235,7 +235,7 @@ private:
   void _flush_wait(FileWriter *h);
   void _fsync(FileWriter *h);
 
-  int _flush_log();
+  int _flush_and_sync_log();
   uint64_t _estimate_log_size();
   void _maybe_compact_log();
   void _compact_log();
