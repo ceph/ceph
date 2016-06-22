@@ -918,7 +918,8 @@ uint64_t BlueFS::_estimate_log_size()
   return ROUND_UP_TO(size, super.block_size);
 }
 
-void BlueFS::_maybe_compact_log()
+
+bool BlueFS::_should_compact_log()
 {
   uint64_t current = log_writer->file->fnode.size;
   uint64_t expected = _estimate_log_size();
@@ -928,13 +929,11 @@ void BlueFS::_maybe_compact_log()
 	   << " ratio " << ratio << dendl;
   if (current < g_conf->bluefs_log_compact_min_size ||
       ratio < g_conf->bluefs_log_compact_min_ratio)
-    return;
-  _compact_log();
-  dout(20) << __func__ << " done, actual " << log_writer->file->fnode.size
-	   << " vs expected " << expected << dendl;
+    return false;
+  return true;
 }
 
-void BlueFS::_compact_log()
+void BlueFS::_compact_log_sync()
 {
   // FIXME: we currently hold the lock while writing out the compacted log,
   // which may mean a latency spike.  we could drop the lock while writing out
@@ -1448,7 +1447,9 @@ void BlueFS::sync_metadata()
       p->commit_finish();
     }
   }
-  _maybe_compact_log();
+  if (_should_compact_log()) {
+    _compact_log_sync();
+  }
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
   dout(10) << __func__ << " done in " << dur << dendl;
