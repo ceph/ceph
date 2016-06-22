@@ -479,6 +479,7 @@ int BlueFS::_replay(bool noop)
       int r = _read(log_reader, &log_reader->buf, pos, super.block_size,
 		    &bl, NULL);
       assert(r == (int)super.block_size);
+      pos += r;
     }
     uint64_t more = 0;
     uint64_t seq;
@@ -522,6 +523,7 @@ int BlueFS::_replay(bool noop)
       }
       assert(r == (int)more);
       bl.claim_append(t);
+      pos += r;
     }
     bluefs_transaction_t t;
     try {
@@ -549,6 +551,29 @@ int BlueFS::_replay(bool noop)
 	dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                  << ":  op_init" << dendl;
 	assert(t.seq == 1);
+	break;
+
+      case bluefs_transaction_t::OP_JUMP:
+        {
+	  uint64_t next_seq;
+	  uint64_t offset;
+	  ::decode(next_seq, p);
+	  ::decode(offset, p);
+	  dout(20) << __func__ << " " << pos << ":  op_jump "
+		   << next_seq << dendl;
+	  assert(next_seq >= log_seq);
+	  log_seq = next_seq - 1; // we will increment it below
+	  uint64_t skip = offset - pos;
+	  if (skip) {
+	    bufferlist junk;
+	    int r = _read(log_reader, &log_reader->buf, pos, skip, &junk, NULL);
+	    if (r != (int)skip) {
+	      dout(10) << __func__ << " " << pos << ": stop: failed to skip to "
+		       << offset << dendl;
+	      assert(0 == "problem");
+	    }
+	  }
+	}
 	break;
 
       case bluefs_transaction_t::OP_JUMP_SEQ:
