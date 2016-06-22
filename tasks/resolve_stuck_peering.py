@@ -90,6 +90,7 @@ def task(ctx, config):
     while 'down' not in stats['state']:
         assert time.time() - start < timeout, \
             'failed to reach down state before timeout expired'
+        stats = manager.get_single_pg_stats(pgstr)
 
     #mark primary as lost
     manager.raw_cluster_cmd('osd', 'lost', '%d' % primary,\
