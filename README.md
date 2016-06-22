@@ -4,6 +4,7 @@ Ceph - a scalable distributed storage system
 
 Please see http://ceph.com/ for current info.
 
+
 Contributing Code
 =================
 
@@ -72,9 +73,8 @@ Prerequisite:
 
 Build instructions:
 
-	mkdir build
+        ./do_cmake.sh
 	cd build
-	cmake [options] ..
 	make
 
 This assumes you make your build dir a subdirectory of the ceph.git
@@ -126,14 +126,11 @@ To start or stop individual daemons, the sysvinit script should work:
 
 CMake
 -----
-Any commands or paths related to CMake are from the "build" 
-directory. This directory, known as ${CMAKE_BINARY_DIR} to cmake, was created
-in the section above titled "Building Ceph".
 
 To run a functional test cluster,
 
 	cd build
-	./path/to/ceph/src/vstart.sh -d -n -x -l
+	../src/vstart.sh -d -n -x -l
 	./bin/ceph -s
 
 Almost all of the usual commands are available in the bin/ directory.
@@ -144,12 +141,13 @@ For example,
 
 To shut down the test cluster,
 
-	./path/to/ceph/src/stop.sh
+	../src/stop.sh
 
-To start or stop individual daemons, the sysvinit script should work:
+To start or stop individual daemons, the sysvinit script can be used:
 
 	./bin/init-ceph restart osd.0
 	./bin/init-ceph stop
+
 
 Running unit tests
 ==================
@@ -184,24 +182,18 @@ like so:
 CMake
 -----
 
-Any commands or paths related to CMake are from the "build" 
-directory. This directory, known as ${CMAKE_BINARY_DIR} to cmake, was created
-in the section above titled "Building Ceph".
-
-To run build and run all tests, run `make check`. `make check` builds all the 
-unit tests, all the dependencies for other tests, and executes them with ctest 
-command.
+To run build and run all tests, use ctest:
 
 	cd build
-	cmake [options] ..
-	make check
+	ctest -j$(nproc)
 
-To run an individual test manually, run the ctest command with -R (regex matching):
+To run an individual test manually, run the ctest command with -R
+(regex matching):
 
         ctest -R [test name]
 
-To run an individual test manually and see all the tests output, run the ctest
-command with the -V (verbose) flag:
+To run an individual test manually and see all the tests output, run
+the ctest command with the -V (verbose) flag:
 
         ctest -V -R [test name]
 
@@ -214,6 +206,7 @@ There are many other flags you can give the ctest command for better control
 over manual test execution. To view these options run:
 
         man ctest
+
 
 Building the Documentation
 ==========================
