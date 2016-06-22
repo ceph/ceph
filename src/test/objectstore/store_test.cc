@@ -3715,14 +3715,16 @@ public:
   }
 };
 
-void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store)
+void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
+		     uint64_t max_obj, uint64_t max_wr, uint64_t align)
 {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen(555);
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 400*1024, 40*1024, 0);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid,
+				  max_obj, max_wr, align);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
@@ -3760,38 +3762,164 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store)
 }
 
 TEST_P(StoreTest, Synthetic) {
-  doSyntheticTest(store);
+  doSyntheticTest(store, 400*1024, 40*1024, 0);
 }
 
-TEST_P(StoreTest, SyntheticCompressed) {
-  if (string(GetParam()) != "bluestore")
-    return;
-  g_conf->set_val("bluestore_compression", "force");
-  g_ceph_context->_conf->apply_changes(NULL);
 
-  doSyntheticTest(store);
+// bluestore matrix testing
+uint64_t max_write = 40 * 1024;
+uint64_t max_size = 400 * 1024;
+uint64_t alignment = 0;
 
-  g_conf->set_val("bluestore_compression_algorithm", "zlib");
-  g_ceph_context->_conf->apply_changes(NULL);
+string matrix_get(const char *k) {
+  if (string(k) == "max_write") {
+    return stringify(max_write);
+  } else if (string(k) == "max_size") {
+    return stringify(max_size);
+  } else if (string(k) == "alignment") {
+    return stringify(alignment);
+  } else {
+    char *buf;
+    g_conf->get_val(k, &buf, -1);
+    string v = buf;
+    free(buf);
+    return v;
+  }
+}
 
-  doSyntheticTest(store);
+void matrix_set(const char *k, const char *v) {
+  if (string(k) == "max_write") {
+    max_write = atoll(v);
+  } else if (string(k) == "max_size") {
+    max_size = atoll(v);
+  } else if (string(k) == "alignment") {
+    alignment = atoll(v);
+  } else {
+    g_conf->set_val(k, v);
+  }
+}
 
-  g_conf->set_val("bluestore_compression", "none");
-  g_conf->set_val("bluestore_compression_algorithm", "snappy");
+void do_matrix_choose(const char *matrix[][10],
+		      int i, int pos, int num,
+		      boost::scoped_ptr<ObjectStore>& store) {
+  if (matrix[i][0]) {
+    int count;
+    for (count = 0; matrix[i][count+1]; ++count) ;
+    for (int j = 1; matrix[i][j]; ++j) {
+      matrix_set(matrix[i][0], matrix[i][j]);
+      do_matrix_choose(matrix, i + 1, pos * count + j - 1, num * count, store);
+    }
+  } else {
+    cout << "---------------------- " << (pos + 1) << " / " << num
+	 << " ----------------------" << std::endl;
+    for (unsigned k=0; matrix[k][0]; ++k) {
+      cout << "  " << matrix[k][0] << " = " << matrix_get(matrix[k][0])
+	   << std::endl;
+    }
+    g_ceph_context->_conf->apply_changes(NULL);
+    doSyntheticTest(store, max_size, max_write, alignment);
+  }
+}
+
+void do_matrix(const char *matrix[][10],
+	       boost::scoped_ptr<ObjectStore>& store)
+{
+  map<string,string> old;
+  for (unsigned i=0; matrix[i][0]; ++i) {
+    old[matrix[i][0]] = matrix_get(matrix[i][0]);
+  }
+  cout << "saved config options " << old << std::endl;
+
+  do_matrix_choose(matrix, 0, 0, 1, store);
+
+  cout << "restoring config options " << old << std::endl;
+  for (auto p : old) {
+    cout << "  " << p.first << " = " << p.second << std::endl;
+    matrix_set(p.first.c_str(), p.second.c_str());
+  }
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
-TEST_P(StoreTest, SyntheticNoCSum) {
+TEST_P(StoreTest, SyntheticMatrixCsumAlgorithm) {
   if (string(GetParam()) != "bluestore")
     return;
-  g_conf->set_val("bluestore_csum", "false");
-  g_conf->set_val("bluestore_csum_type", "none");
-  g_ceph_context->_conf->apply_changes(NULL);
 
-  doSyntheticTest(store);
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "1048576", 0 },
+    { "alignment", "16", 0 },
+    { "bluestore_min_alloc_size", "65536", 0 },
+    { "bluestore_csum", "true", 0 },
+    { "bluestore_csum_type", "crc32c", "crc32c_16", "crc32c_8", "xxhash32",
+      "xxhash64", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
 
-  g_conf->set_val("bluestore_csum", "true");
-  g_conf->set_val("bluestore_csum_type", "crc32c");
+TEST_P(StoreTest, SyntheticMatrixCsumVsCompression) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "262144", 0 },
+    { "alignment", "512", 0 },
+    { "bluestore_min_alloc_size", "32768", "4096", 0 },
+    { "bluestore_compression", "force", "none", 0},
+    { "bluestore_csum", "true", 0 },
+    { "bluestore_csum_type", "crc32c", 0 },
+    { "bluestore_default_buffered_read", "true", "false", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
+TEST_P(StoreTest, SyntheticMatrixCompression) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "1048576", 0 },
+    { "max_size", "4194304", 0 },
+    { "alignment", "65536", 0 },
+    { "bluestore_min_alloc_size", "4096", "65536", 0 },
+    { "bluestore_compression", "force", "aggressive", "passive", "none", 0},
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
+TEST_P(StoreTest, SyntheticMatrixCompressionAlgorithm) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "1048576", 0 },
+    { "max_size", "4194304", 0 },
+    { "alignment", "65536", 0 },
+    { "bluestore_compression_algorithm", "zlib", "snappy", 0 },
+    { "bluestore_compression", "force", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
+TEST_P(StoreTest, SyntheticMatrixNoCsum) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "1048576", 0 },
+    { "alignment", "512", 0 },
+    { "bluestore_min_alloc_size", "65536", "4096", 0 },
+    { "bluestore_compression", "force", "none", 0},
+    { "bluestore_csum", "false", 0 },
+    { "bluestore_default_buffered_read", "true", "false", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
 }
 
 TEST_P(StoreTest, AttrSynthetic) {
