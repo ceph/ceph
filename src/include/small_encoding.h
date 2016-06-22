@@ -183,6 +183,7 @@ inline void small_encode_lba(uint64_t v, bufferlist& bl) {
     pos = t + 1;
     word = (1 << t) - 1;
   } else {
+    v >>= 20;
     pos = 3;
     word = 0x3;
   }

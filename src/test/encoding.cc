@@ -320,6 +320,7 @@ TEST(small_encoding, varint_lowz) {
     {0x7f0000, 2, 2, 2},
     {0xffff0000, 4, 4, 4},
     {0xffffffff, 5, 5, 5},
+    {0x41000000, 3, 4, 4},
     {0, 0, 0, 0}
   };
   for (unsigned i=0; v[i][1]; ++i) {
@@ -382,6 +383,7 @@ TEST(small_encoding, lba) {
     {0x3fffffff0000, 5},
     {0xfffffff00000, 4},
     {0x1fffffff00000, 5},
+    {0x41000000, 4},
     {0, 0}
   };
   for (unsigned i=0; v[i][1]; ++i) {
