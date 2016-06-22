@@ -699,6 +699,11 @@ bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
     return true;
   }
 
+  if (stats->fsid != mon->monmap->fsid) {
+    dout(0) << "preprocess_pg_stats on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
+    return true;
+  }
+
   // First, just see if they need a new osdmap. But
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 &&
@@ -1612,6 +1617,11 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
   stringstream ss, ds;
   bool primary = false;
 
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << "preprocess_command on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    return true;
+  }
+
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
@@ -1927,6 +1937,10 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << "prepare_command on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    return true;
+  }
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
