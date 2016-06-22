@@ -1285,6 +1285,7 @@ if(${WITH_RBD})
     tools/rbd/action/ExportDiff.cc
     tools/rbd/action/Feature.cc
     tools/rbd/action/Flatten.cc
+    tools/rbd/action/Group.cc
     tools/rbd/action/ImageMeta.cc
     tools/rbd/action/Import.cc
     tools/rbd/action/ImportDiff.cc
