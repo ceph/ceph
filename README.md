@@ -51,22 +51,6 @@ The list of Debian or RPM packages dependencies can be installed with:
 Building Ceph
 =============
 
-Autotools
----------
-
-Developers, please refer to the [Developer
-Guide](doc/dev/quick_guide.rst) for more information, otherwise, you
-can build the server daemons, and FUSE client, by executing the
-following:
-
-	./autogen.sh
-	./configure
-	make
-
-(Note that the FUSE client will only be built if libfuse is present.)
-
-CMake
------
 
 Prerequisite:
         CMake 2.8.11
@@ -100,33 +84,6 @@ For RPM-based systems (Red Hat, SUSE, etc.),
 Running a test cluster
 ======================
 
-Autotools
----------
-
-To run a functional test cluster,
-
-	cd src
-	./vstart.sh -d -n -x -l
-	./ceph -s
-
-Almost all of the usual commands are available in the src/ directory.
-For example,
-
-	./rados -p rbd bench 30 write
-	./rbd create foo --size 1000
-
-To shut down the test cluster,
-
-	./stop.sh
-
-To start or stop individual daemons, the sysvinit script should work:
-
-	./init-ceph restart osd.0
-	./init-ceph stop
-
-CMake
------
-
 To run a functional test cluster,
 
 	cd build
@@ -151,36 +108,6 @@ To start or stop individual daemons, the sysvinit script can be used:
 
 Running unit tests
 ==================
-
-Autotools
----------
-
-To run all tests, a simple
-
-	cd src
-	make check
-
-will suffice.  Each test generates a log file that is the name of the
-test with .log appended.  For example, unittest_addrs generates a
-unittest_addrs.log and test/osd/osd-config.sh puts its output in
-test/osd/osd-config.sh.log.
-
-To run an individual test manually, you may want to clean up with
-
-	rm -rf testdir /tmp/*virtualenv
-	./stop.sh
-
-and then run a given test like so:
-
-	./unittest_addrs
-
-Many tests are bash scripts that spin up small test clusters, and must be run
-like so:
-
-	CEPH_DIR=. test/osd/osd-bench.sh   # or whatever the test is
-
-CMake
------
 
 To run build and run all tests, use ctest:
 
