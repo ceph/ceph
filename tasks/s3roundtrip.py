@@ -28,13 +28,17 @@ def download(ctx, config):
     The context passed in should be identical to the context
     passed in to the main task.
     """
-    assert isinstance(config, list)
+    assert isinstance(config, dict)
     log.info('Downloading s3-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for client in config:
+    for (client, cconf) in config.iteritems():
+        branch = cconf.get('force-branch', None)
+        if not branch:
+            branch = cconf.get('branch', 'master')
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
+                '-b', branch,
                 teuth_config.ceph_git_base_url + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
@@ -287,7 +291,7 @@ def task(ctx, config):
                 })
 
     with contextutil.nested(
-        lambda: download(ctx=ctx, config=clients),
+        lambda: download(ctx=ctx, config=config),
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 s3tests_conf=s3tests_conf,
