@@ -5250,6 +5250,7 @@ void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
       dout(log_level) << __func__ << "       csum: " << std::hex << v << std::dec
 		      << dendl;
     }
+    std::lock_guard<std::mutex> l(b.bc.cache->lock);
     if (!b.bc.empty()) {
       for (auto& i : b.bc.buffer_map) {
 	dout(log_level) << __func__ << "       0x" << std::hex << i.first
