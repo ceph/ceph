@@ -29,10 +29,6 @@ def task(ctx, config):
         logger=log.getChild('ceph_manager'),
         )
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.3', 'flush_pg_stats')
     manager.wait_for_clean()
 
     profile = config.get('erasure_code_profile', {
