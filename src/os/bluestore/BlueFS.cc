@@ -340,7 +340,7 @@ int BlueFS::mount()
   block_total.resize(MAX_BDEV, 0);
   _init_alloc();
 
-  r = _replay();
+  r = _replay(false);
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
     _stop_alloc();
@@ -452,13 +452,18 @@ int BlueFS::_open_super()
   return 0;
 }
 
-int BlueFS::_replay()
+int BlueFS::_replay(bool noop)
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __func__ << (noop ? " NO-OP" : "") << dendl;
   ino_last = 1;  // by the log
   log_seq = 0;
 
-  FileRef log_file = _get_file(1);
+  FileRef log_file;
+  if (noop) {
+    log_file = new File;
+  } else {
+    log_file = _get_file(1);
+  }
   log_file->fnode = super.log_fnode;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
 
@@ -568,9 +573,11 @@ int BlueFS::_replay()
                    << ":  op_alloc_add " << " " << (int)id
                    << ":0x" << std::hex << offset << "~" << length << std::dec
                    << dendl;
-	  block_all[id].insert(offset, length);
-	  block_total[id] += length;
-	  alloc[id]->init_add_free(offset, length);
+	  if (!noop) {
+	    block_all[id].insert(offset, length);
+	    block_total[id] += length;
+	    alloc[id]->init_add_free(offset, length);
+	  }
 	}
 	break;
 
@@ -585,9 +592,11 @@ int BlueFS::_replay()
                    << ":  op_alloc_rm " << " " << (int)id
                    << ":0x" << std::hex << offset << "~" << length << std::dec
                    << dendl;
-	  block_all[id].erase(offset, length);
-	  block_total[id] -= length;
-	  alloc[id]->init_rm_free(offset, length);
+	  if (!noop) {
+	    block_all[id].erase(offset, length);
+	    block_total[id] -= length;
+	    alloc[id]->init_rm_free(offset, length);
+	  }
 	}
 	break;
 
@@ -602,14 +611,16 @@ int BlueFS::_replay()
                    << ":  op_dir_link " << " " << dirname << "/" << filename
                    << " to " << ino
 		   << dendl;
-	  FileRef file = _get_file(ino);
-	  assert(file->fnode.ino);
-	  map<string,DirRef>::iterator q = dir_map.find(dirname);
-	  assert(q != dir_map.end());
-	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
-	  assert(r == q->second->file_map.end());
-	  q->second->file_map[filename] = file;
-	  ++file->refs;
+	  if (!noop) {
+	    FileRef file = _get_file(ino);
+	    assert(file->fnode.ino);
+	    map<string,DirRef>::iterator q = dir_map.find(dirname);
+	    assert(q != dir_map.end());
+	    map<string,FileRef>::iterator r = q->second->file_map.find(filename);
+	    assert(r == q->second->file_map.end());
+	    q->second->file_map[filename] = file;
+	    ++file->refs;
+	  }
 	}
 	break;
 
@@ -621,12 +632,14 @@ int BlueFS::_replay()
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_unlink " << " " << dirname << "/" << filename
                    << dendl;
-	  map<string,DirRef>::iterator q = dir_map.find(dirname);
-	  assert(q != dir_map.end());
-	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
-	  assert(r != q->second->file_map.end());
-	  --r->second->refs;
-	  q->second->file_map.erase(r);
+	  if (!noop) {
+	    map<string,DirRef>::iterator q = dir_map.find(dirname);
+	    assert(q != dir_map.end());
+	    map<string,FileRef>::iterator r = q->second->file_map.find(filename);
+	    assert(r != q->second->file_map.end());
+	    --r->second->refs;
+	    q->second->file_map.erase(r);
+	  }
 	}
 	break;
 
@@ -636,9 +649,11 @@ int BlueFS::_replay()
 	  ::decode(dirname, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_create " << dirname << dendl;
-	  map<string,DirRef>::iterator q = dir_map.find(dirname);
-	  assert(q == dir_map.end());
-	  dir_map[dirname] = new Dir;
+	  if (!noop) {
+	    map<string,DirRef>::iterator q = dir_map.find(dirname);
+	    assert(q == dir_map.end());
+	    dir_map[dirname] = new Dir;
+	  }
 	}
 	break;
 
@@ -648,10 +663,12 @@ int BlueFS::_replay()
 	  ::decode(dirname, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_remove " << dirname << dendl;
-	  map<string,DirRef>::iterator q = dir_map.find(dirname);
-	  assert(q != dir_map.end());
-	  assert(q->second->file_map.empty());
-	  dir_map.erase(q);
+	  if (!noop) {
+	    map<string,DirRef>::iterator q = dir_map.find(dirname);
+	    assert(q != dir_map.end());
+	    assert(q->second->file_map.empty());
+	    dir_map.erase(q);
+	  }
 	}
 	break;
 
@@ -661,10 +678,12 @@ int BlueFS::_replay()
 	  ::decode(fnode, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_update " << " " << fnode << dendl;
-	  FileRef f = _get_file(fnode.ino);
-	  f->fnode = fnode;
-	  if (fnode.ino > ino_last) {
-	    ino_last = fnode.ino;
+	  if (!noop) {
+	    FileRef f = _get_file(fnode.ino);
+	    f->fnode = fnode;
+	    if (fnode.ino > ino_last) {
+	      ino_last = fnode.ino;
+	    }
 	  }
 	}
 	break;
@@ -675,9 +694,11 @@ int BlueFS::_replay()
 	  ::decode(ino, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_remove " << ino << dendl;
-	  auto p = file_map.find(ino);
-	  assert(p != file_map.end());
-	  file_map.erase(p);
+	  if (!noop) {
+	    auto p = file_map.find(ino);
+	    assert(p != file_map.end());
+	    file_map.erase(p);
+	  }
 	}
 	break;
 
@@ -699,13 +720,15 @@ int BlueFS::_replay()
            << std::hex << log_file->fnode.size << std::dec << dendl;
   delete log_reader;
 
-  // verify file link counts are all >0
-  for (auto& p : file_map) {
-    if (p.second->refs == 0 &&
-	p.second->fnode.ino > 1) {
-      derr << __func__ << " file with link count 0: " << p.second->fnode
-	   << dendl;
-      return -EIO;
+  if (!noop) {
+    // verify file link counts are all >0
+    for (auto& p : file_map) {
+      if (p.second->refs == 0 &&
+	  p.second->fnode.ino > 1) {
+	derr << __func__ << " file with link count 0: " << p.second->fnode
+	     << dendl;
+	return -EIO;
+      }
     }
   }
 

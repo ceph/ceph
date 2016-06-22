@@ -268,7 +268,7 @@ private:
 
   int _open_super();
   int _write_super();
-  int _replay(); ///< replay journal
+  int _replay(bool noop); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
@@ -290,6 +290,7 @@ public:
   int mkfs(uuid_d osd_uuid);
   int mount();
   void umount();
+  void dump_logfile(ostream &out);
 
   int fsck();
 
