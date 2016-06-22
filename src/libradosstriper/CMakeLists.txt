@@ -2,7 +2,7 @@ set(libradosstriper_srcs
   libradosstriper.cc
   RadosStriperImpl.cc
   MultiAioCompletionImpl.cc)
-add_library(radosstriper ${libradosstriper_srcs})
+add_library(radosstriper ${CEPH_SHARED} ${libradosstriper_srcs})
 target_link_libraries(radosstriper librados cls_lock_client osdc common pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 set_target_properties(radosstriper PROPERTIES
   OUPUT_NAME radosstriper
