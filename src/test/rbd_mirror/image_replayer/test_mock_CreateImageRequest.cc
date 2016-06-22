@@ -12,6 +12,7 @@
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/OpenLocalImageRequest.h"
+#include "librbd/image/CreateRequest.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/Threads.h"
 
@@ -27,6 +28,44 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 
 } // anonymous namespace
 
+namespace image {
+
+template<>
+struct CreateRequest<librbd::MockTestImageCtx> {
+  static CreateRequest *s_instance;
+  Context *on_finish = nullptr;
+
+  static CreateRequest *create(IoCtx &ioctx, std::string &imgname,
+                               std::string &imageid, uint64_t size, int order,
+                               uint64_t features, uint64_t stripe_unit,
+                               uint64_t stripe_count, uint8_t journal_order,
+                               uint8_t journal_splay_width,
+                               const std::string &journal_pool,
+                               const std::string &non_primary_global_image_id,
+                               const std::string &primary_mirror_uuid,
+                               MockContextWQ *op_work_queue, Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    s_instance->construct(ioctx);
+    return s_instance;
+  }
+
+  CreateRequest() {
+    s_instance = this;
+  }
+
+  ~CreateRequest() {
+    s_instance = nullptr;
+  }
+
+  MOCK_METHOD0(send, void());
+  MOCK_METHOD1(construct, void(librados::IoCtx &ioctx));
+};
+
+CreateRequest<librbd::MockTestImageCtx>*
+  CreateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+} // namespace image
 } // namespace librbd
 
 namespace rbd {
@@ -48,9 +87,6 @@ struct CreateCloneImage {
     s_instance = nullptr;
   }
 
-  MOCK_METHOD3(create, int(const std::string &image_name,
-                           const std::string &non_primary_global_image_id,
-                           const std::string &primary_mirror_uuid));
   MOCK_METHOD3(clone, int(const std::string &image_name,
                           const std::string &non_primary_global_image_id,
                           const std::string &primary_mirror_uuid));
@@ -59,24 +95,6 @@ struct CreateCloneImage {
 CreateCloneImage *CreateCloneImage::s_instance = nullptr;
 
 namespace utils {
-
-template <>
-int create_image<librbd::MockTestImageCtx>(librados::IoCtx& io_ctx,
-                                           librbd::MockTestImageCtx *_image_ctx,
-                                           const char *imgname, uint64_t bid,
-                                           uint64_t size, int order,
-                                           uint64_t features,
-                                           uint64_t stripe_unit,
-                                           uint64_t stripe_count,
-                                           uint8_t journal_order,
-                                           uint8_t journal_splay_width,
-                                           const std::string &journal_pool,
-                                           const std::string &non_primary_global_image_id,
-                                           const std::string &primary_mirror_uuid) {
-  return CreateCloneImage::get_instance()->create(imgname,
-                                                  non_primary_global_image_id,
-                                                  primary_mirror_uuid);
-}
 
 template <>
 int clone_image<librbd::MockTestImageCtx>(librbd::MockTestImageCtx *p_imctx,
@@ -180,6 +198,7 @@ MATCHER_P(IsSameIoCtx, io_ctx, "") {
 
 class TestMockImageReplayerCreateImageRequest : public TestMockFixture {
 public:
+  typedef librbd::image::CreateRequest<librbd::MockTestImageCtx> MockCreateRequest;
   typedef CreateImageRequest<librbd::MockTestImageCtx> MockCreateImageRequest;
   typedef OpenImageRequest<librbd::MockTestImageCtx> MockOpenImageRequest;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
@@ -213,13 +232,13 @@ public:
                          &order, 0, 0);
   }
 
-  void expect_create_image(CreateCloneImage &create_clone_image,
-                           const std::string &local_image_name,
-                           const std::string &global_image_id,
-                           const std::string &remote_mirror_uuid, int r) {
-    EXPECT_CALL(create_clone_image, create(local_image_name, global_image_id,
-                                           remote_mirror_uuid))
-      .WillOnce(Return(r));
+  void expect_create_image(MockCreateRequest &mock_create_request,
+                           librados::IoCtx &ioctx, int r) {
+    EXPECT_CALL(mock_create_request, construct(IsSameIoCtx(&ioctx)));
+    EXPECT_CALL(mock_create_request, send())
+      .WillOnce(Invoke([this, &mock_create_request, r]() {
+            m_threads->work_queue->queue(mock_create_request.on_finish, r);
+          }));
   }
 
   void expect_ioctx_create(librados::IoCtx &io_ctx) {
@@ -309,12 +328,10 @@ public:
 
 TEST_F(TestMockImageReplayerCreateImageRequest, Create) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-
-  CreateCloneImage create_clone_image;
+  MockCreateRequest mock_create_request;
 
   InSequence seq;
-  expect_create_image(create_clone_image, "image name", "global uuid",
-                      "remote uuid", 0);
+  expect_create_image(mock_create_request, m_local_io_ctx, 0);
 
   C_SaferCond ctx;
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
@@ -326,12 +343,10 @@ TEST_F(TestMockImageReplayerCreateImageRequest, Create) {
 
 TEST_F(TestMockImageReplayerCreateImageRequest, CreateError) {
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-
-  CreateCloneImage create_clone_image;
+  MockCreateRequest mock_create_request;
 
   InSequence seq;
-  expect_create_image(create_clone_image, "image name", "global uuid",
-                      "remote uuid", -EINVAL);
+  expect_create_image(mock_create_request, m_local_io_ctx, -EINVAL);
 
   C_SaferCond ctx;
   MockCreateImageRequest *request = create_request("global uuid", "remote uuid",
