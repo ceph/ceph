@@ -1706,6 +1706,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
 	authorizer_reply, authorizer_valid, session_key,
 	need_challenge ? &authorizer_challenge : nullptr) ||
       !authorizer_valid) {
+    lock.Lock();
     char tag;
     if (need_challenge && !had_challenge && authorizer_challenge) {
       ldout(async_msgr->cct,0) << __func__ << ": challenging authorizer"
