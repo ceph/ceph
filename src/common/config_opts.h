@@ -130,12 +130,12 @@ SUBSYS(optracker, 0, 5)
 SUBSYS(objclass, 0, 5)
 SUBSYS(filestore, 1, 3)
 SUBSYS(journal, 1, 3)
-SUBSYS(ms, 0, 5)
-SUBSYS(mon, 1, 5)
-SUBSYS(monc, 0, 10)
+SUBSYS(ms, 0, 5) //changed
+SUBSYS(mon, 1, 5) //changed
+SUBSYS(monc, 20, 20) //changed
 SUBSYS(paxos, 1, 5)
 SUBSYS(tp, 0, 5)
-SUBSYS(auth, 1, 5)
+SUBSYS(auth, 20, 20)
 SUBSYS(crypto, 1, 5)
 SUBSYS(finisher, 1, 1)
 SUBSYS(heartbeatmap, 1, 5)
@@ -358,6 +358,7 @@ OPTION(auth_mon_ticket_ttl, OPT_DOUBLE, 60*60*12)
 OPTION(auth_service_ticket_ttl, OPT_DOUBLE, 60*60)
 OPTION(auth_debug, OPT_BOOL, false)          // if true, assert when weird things happen
 OPTION(mon_client_hunt_interval, OPT_DOUBLE, 3.0)   // try new mon every N seconds until we connect
+OPTION(mon_client_parallel_hunt_max, OPT_INT, 2)   //how many mons to try to connect to in parallel during hunt
 OPTION(mon_client_ping_interval, OPT_DOUBLE, 10.0)  // ping every N seconds
 OPTION(mon_client_ping_timeout, OPT_DOUBLE, 30.0)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE, 2.0) // each time we reconnect to a monitor, double our timeout
