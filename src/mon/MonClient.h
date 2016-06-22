@@ -107,6 +107,7 @@ public:
   MonMap monmap;
 private:
   MonClientState state;
+  map<string, MonClientState> state_map; //REFNEW
 
   Messenger *messenger;
 

@@ -124,6 +124,9 @@ int MonClient::get_monmap_privately()
 
   while (monmap.fsid.is_zero()) {
     cur_mon = _pick_random_mon();
+    if (state_map.count(cur_mon) == 0) {
+      state_map[cur_mon] = MC_STATE_NONE;
+    }
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     if (cur_con) {
       ldout(cct, 10) << "querying mon." << cur_mon << " "
@@ -439,9 +442,11 @@ int MonClient::authenticate(double timeout)
 {
   Mutex::Locker lock(monc_lock);
 
-  if (state == MC_STATE_HAVE_SESSION) {
-    ldout(cct, 5) << "already authenticated" << dendl;
-    return 0;
+  if (!cur_mon.empty()) {
+    if (state_map[cur_mon] == MC_STATE_HAVE_SESSION) {
+      ldout(cct, 5) << "already authenticated" << dendl;
+      return 0;
+    }
   }
 
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
@@ -452,7 +457,7 @@ int MonClient::authenticate(double timeout)
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
-  while (state != MC_STATE_HAVE_SESSION && !authenticate_err) {
+  while (state_map[cur_mon] != MC_STATE_HAVE_SESSION && !authenticate_err) {
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
       if (r == ETIMEDOUT) {
@@ -464,7 +469,7 @@ int MonClient::authenticate(double timeout)
     }
   }
 
-  if (state == MC_STATE_HAVE_SESSION) {
+  if (state_map[cur_mon] == MC_STATE_HAVE_SESSION) {
     ldout(cct, 5) << "authenticate success, global_id " << global_id << dendl;
   }
 
@@ -479,7 +484,7 @@ void MonClient::handle_auth(MAuthReply *m)
 {
   Context *cb = NULL;
   bufferlist::iterator p = m->result_bl.begin();
-  if (state == MC_STATE_NEGOTIATING) {
+  if (state_map[cur_mon] == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
       delete auth;
       auth = get_auth_client_handler(cct, m->protocol, rotating_secrets);
@@ -500,7 +505,7 @@ void MonClient::handle_auth(MAuthReply *m)
     } else {
       auth->reset();
     }
-    state = MC_STATE_AUTHENTICATING;
+    state_map[cur_mon] = MC_STATE_AUTHENTICATING;
   }
   assert(auth);
   if (m->global_id && m->global_id != global_id) {
@@ -525,8 +530,8 @@ void MonClient::handle_auth(MAuthReply *m)
 
   authenticate_err = ret;
   if (ret == 0) {
-    if (state != MC_STATE_HAVE_SESSION) {
-      state = MC_STATE_HAVE_SESSION;
+    if (state_map[cur_mon] != MC_STATE_HAVE_SESSION) {
+      state_map[cur_mon] = MC_STATE_HAVE_SESSION;
       last_rotating_renew_sent = utime_t();
       while (!waiting_for_session.empty()) {
 	_send_mon_message(waiting_for_session.front());
@@ -562,7 +567,7 @@ void MonClient::_send_mon_message(Message *m, bool force)
 {
   assert(monc_lock.is_locked());
   assert(!cur_mon.empty());
-  if (force || state == MC_STATE_HAVE_SESSION) {
+  if (force || state_map[cur_mon] == MC_STATE_HAVE_SESSION) {
     assert(cur_con);
     ldout(cct, 10) << "_send_mon_message to mon." << cur_mon
 		   << " at " << cur_con->get_peer_addr() << dendl;
@@ -606,6 +611,10 @@ void MonClient::_reopen_session(int rank, string name)
     cur_mon = monmap.get_name(rank);
   }
 
+  if (state_map.count(cur_mon) == 0) {
+    state_map[cur_mon] = MC_STATE_NONE;
+  }
+
   if (cur_con) {
     cur_con->mark_down();
   }
@@ -638,7 +647,7 @@ void MonClient::_reopen_session(int rank, string name)
   }
 
   // restart authentication handshake
-  state = MC_STATE_NEGOTIATING;
+  state_map[cur_mon] = MC_STATE_NEGOTIATING;
   hunting = true;
 
   // send an initial keepalive to ensure our timestamp is valid by the
@@ -723,7 +732,7 @@ void MonClient::tick()
 
     cur_con->send_keepalive();
 
-    if (state == MC_STATE_HAVE_SESSION) {
+    if (state_map[cur_mon] == MC_STATE_HAVE_SESSION) {
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
@@ -796,7 +805,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 int MonClient::_check_auth_tickets()
 {
   assert(monc_lock.is_locked());
-  if (state == MC_STATE_HAVE_SESSION && auth) {
+  if (state_map[cur_mon] == MC_STATE_HAVE_SESSION && auth) {
     if (auth->need_tickets()) {
       ldout(cct, 10) << "_check_auth_tickets getting new tickets!" << dendl;
       MAuth *m = new MAuth;
@@ -820,7 +829,7 @@ int MonClient::_check_auth_rotating()
     return 0;
   }
 
-  if (!auth || state != MC_STATE_HAVE_SESSION) {
+  if (!auth || state_map[cur_mon] != MC_STATE_HAVE_SESSION) {
     ldout(cct, 10) << "_check_auth_rotating waiting for auth session" << dendl;
     return 0;
   }
