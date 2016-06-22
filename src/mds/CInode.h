@@ -987,7 +987,7 @@ public:
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
-  Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session);
+  Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
 

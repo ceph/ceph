@@ -3941,17 +3941,13 @@ void MDCache::rejoin_send_rejoins()
 
   if (mds->is_rejoin()) {
     map<client_t, set<mds_rank_t> > client_exports;
-    for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = cap_exports.begin();
-         p != cap_exports.end();
-	 ++p) {
+    for (auto p = cap_exports.begin(); p != cap_exports.end(); ++p) {
       assert(cap_export_targets.count(p->first));
       mds_rank_t target = cap_export_targets[p->first];
       if (rejoins.count(target) == 0)
 	continue;
       rejoins[target]->cap_exports[p->first] = p->second;
-      for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q)
+      for (auto q = p->second.begin(); q != p->second.end(); ++q)
 	client_exports[q->first].insert(target);
     }
     for (map<client_t, set<mds_rank_t> >::iterator p = client_exports.begin();
@@ -4278,14 +4274,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     map<inodeno_t,map<client_t,Capability::Import> > imported_caps;
 
     // check cap exports
-    for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
-	 p != weak->cap_exports.end();
-	 ++p) {
+    for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
       assert(!in || in->is_auth());
-      for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
+      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << " on " << *in << dendl;
 	Capability *cap = rejoin_import_cap(in, q->first, q->second, from);
 	Capability::Import& im = imported_caps[p->first][q->first];
@@ -4307,15 +4299,11 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     // check cap exports.
     rejoin_client_map.insert(weak->client_map.begin(), weak->client_map.end());
 
-    for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
-	 p != weak->cap_exports.end();
-	 ++p) {
+    for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
       assert(in && in->is_auth());
       // note
-      for (map<client_t,ceph_mds_cap_reconnect>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
+      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << dendl;
 	cap_imports[p->first][q->first][from] = q->second;
       }
@@ -5070,7 +5058,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
-				       cap_exports[p->first][q->first].cap_id, 0,
+				       cap_exports[p->first][q->first].capinfo.cap_id, 0,
                                        mds->get_osd_epoch_barrier());
       m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, from, 0);
       mds->send_message_client_counted(m, session);
@@ -5210,12 +5198,9 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
   } else if (ret == mds->get_nodeid()) {
     assert(get_inode(ino));
   } else {
-    map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > >::iterator p;
-    p = cap_imports.find(ino);
+    auto p = cap_imports.find(ino);
     assert(p != cap_imports.end());
-    for (map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
-	q != p->second.end();
-	++q) {
+    for (auto q = p->second.begin(); q != p->second.end(); ++q) {
       assert(q->second.count(MDS_RANK_NONE));
       assert(q->second.size() == 1);
       rejoin_export_caps(p->first, q->first, q->second[MDS_RANK_NONE], ret);
@@ -5260,9 +5245,7 @@ bool MDCache::process_imported_caps()
 {
   dout(10) << "process_imported_caps" << dendl;
 
-  for (map<inodeno_t,map<client_t, map<mds_rank_t,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
-       p != cap_imports.end();
-       ++p) {
+  for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
     CInode *in = get_inode(p->first);
     if (in) {
       assert(in->is_auth());
@@ -5329,8 +5312,7 @@ bool MDCache::process_imported_caps()
 
     // process cap imports
     //  ino -> client -> frommds -> capex
-    for (map<inodeno_t,map<client_t, map<mds_rank_t,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
-	 p != cap_imports.end(); ) {
+    for (auto p = cap_imports.begin(); p != cap_imports.end(); ) {
       CInode *in = get_inode(p->first);
       if (!in) {
 	dout(10) << " still missing ino " << p->first
@@ -5339,20 +5321,16 @@ bool MDCache::process_imported_caps()
 	continue;
       }
       assert(in->is_auth());
-      for (map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
+      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
 	assert(session);
-	for (map<mds_rank_t,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
-	     r != q->second.end();
-	     ++r) {
-	  add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
+	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	  add_reconnected_cap(in, q->first, inodeno_t(r->second.capinfo.snaprealm));
 	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
 	  if (r->first >= 0) {
 	    if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
 	      cap->inc_mseq();
-	    do_cap_import(session, in, cap, r->second.cap_id, 0, 0, r->first, 0);
+	    do_cap_import(session, in, cap, r->second.capinfo.cap_id, 0, 0, r->first, 0);
 
 	    Capability::Import& im = rejoin_imported_caps[r->first][p->first][q->first];
 	    im.cap_id = cap->get_cap_id();
@@ -5526,7 +5504,7 @@ void MDCache::clean_open_file_lists()
 
 
 
-Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, mds_rank_t frommds)
+Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds)
 {
   dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
@@ -5538,7 +5516,7 @@ Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap
   if (frommds >= 0) {
     if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
       cap->inc_mseq();
-    do_cap_import(session, in, cap, icr.cap_id, 0, 0, frommds, 0);
+    do_cap_import(session, in, cap, icr.capinfo.cap_id, 0, 0, frommds, 0);
   }
 
   return cap;
@@ -5550,13 +5528,9 @@ void MDCache::export_remaining_imported_caps()
 
   stringstream warn_str;
 
-  for (map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
-       p != cap_imports.end();
-       ++p) {
+  for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
     warn_str << " ino " << p->first << "\n";
-    for (map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
-	q != p->second.end();
-	++q) {
+    for (auto q = p->second.begin(); q != p->second.end(); ++q) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
 	// mark client caps stale.
@@ -5585,12 +5559,12 @@ void MDCache::export_remaining_imported_caps()
 void MDCache::try_reconnect_cap(CInode *in, Session *session)
 {
   client_t client = session->info.get_client();
-  ceph_mds_cap_reconnect *rc = get_replay_cap_reconnect(in->ino(), client);
+  const cap_reconnect_t *rc = get_replay_cap_reconnect(in->ino(), client);
   if (rc) {
     in->reconnect_cap(client, *rc, session);
     dout(10) << "try_reconnect_cap client." << client
-	     << " reconnect wanted " << ccap_string(rc->wanted)
-	     << " issue " << ccap_string(rc->issued)
+	     << " reconnect wanted " << ccap_string(rc->capinfo.wanted)
+	     << " issue " << ccap_string(rc->capinfo.issued)
 	     << " on " << *in << dendl;
     remove_replay_cap_reconnect(in->ino(), client);
 

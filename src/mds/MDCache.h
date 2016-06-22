@@ -491,10 +491,10 @@ protected:
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
   map<client_t,entity_inst_t> rejoin_client_map;
 
-  map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
+  map<inodeno_t,map<client_t,cap_reconnect_t> > cap_exports; // ino -> client -> capex
   map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
-  map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
+  map<inodeno_t,map<client_t,map<mds_rank_t,cap_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
   map<inodeno_t, list<MDSInternalContextBase*> > cap_reconnect_waiters;
@@ -531,16 +531,16 @@ public:
   void rejoin_start(MDSInternalContext *rejoin_done_);
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
-  void rejoin_export_caps(inodeno_t ino, client_t client, ceph_mds_cap_reconnect& capinfo,
+  void rejoin_export_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr,
 			  int target=-1) {
-    cap_exports[ino][client] = capinfo;
+    cap_exports[ino][client] = icr;
     cap_export_targets[ino] = target;
   }
-  void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
+  void rejoin_recovered_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
-    cap_imports[ino][client][frommds] = icr.capinfo;
+    cap_imports[ino][client][frommds] = icr;
   }
-  ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
+  const cap_reconnect_t *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
 	cap_imports[ino].count(client) &&
 	cap_imports[ino][client].count(MDS_RANK_NONE)) {
@@ -582,7 +582,7 @@ public:
 			   map<client_t,MClientSnap*>& splits);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend=false);
   void send_snaps(map<client_t,MClientSnap*>& splits);
-  Capability* rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, mds_rank_t frommds);
+  Capability* rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq);
   void try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
