@@ -81,6 +81,14 @@ AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
 AM_CONDITIONAL(SOLARIS, test x"$solaris" = x"yes")
 AM_CONDITIONAL(AIX, test x"$aix" = x"yes")
 
+# Platform
+case "${host_cpu}" in
+i?86|x86_64)
+  intel="yes"
+  ;;
+esac
+AM_CONDITIONAL(INTEL, test x"$intel" = x"yes")
+
 # Checks for programs.
 AC_PROG_CXX
 if test "$CXX" = no || test "$CXX:$GXX" = "g++:"; then
