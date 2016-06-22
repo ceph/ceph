@@ -1069,8 +1069,11 @@ void BlueStore::Bnode::put()
 {
   if (--nref == 0) {
     dout(20) << __func__ << " removing self from set " << bnode_set << dendl;
-    bnode_set->remove(this);
-    delete this;
+    if (bnode_set->remove(this)) {
+      delete this;
+    } else {
+      dout(20) << __func__ << " lost race to remove myself from set" << dendl;
+    }
   }
 }
 

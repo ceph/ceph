@@ -456,9 +456,13 @@ public:
       std::lock_guard<std::mutex> l(lock);
       uset.insert(*b);
     }
-    void remove(Bnode *b) {
+    bool remove(Bnode *b) {
       std::lock_guard<std::mutex> l(lock);
-      uset.erase(*b);
+      if (b->nref == 0) {
+	uset.erase(*b);
+	return true;
+      }
+      return false;
     }
   };
 
