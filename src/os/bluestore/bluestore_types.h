@@ -193,30 +193,17 @@ struct bluestore_blob_t {
   }
 
   vector<bluestore_pextent_t> extents; ///< raw data position on device
-  uint32_t compressed_length;      ///< compressed length if any
-  uint32_t flags;                  ///< FLAG_*
+  uint32_t compressed_length = 0;      ///< compressed length if any
+  uint32_t flags = 0;                  ///< FLAG_*
 
-  uint8_t csum_type;               ///< CSUM_*
-  uint8_t csum_chunk_order;        ///< csum block size is 1<<block_order bytes
+  uint8_t csum_type = CSUM_NONE;     ///< CSUM_*
+  uint8_t csum_chunk_order = 0;      ///< csum block size is 1<<block_order bytes
 
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   interval_set<uint32_t> unused;   ///< portion that has never been written to
   bufferptr csum_data;          ///< opaque vector of csum data
 
-  bluestore_blob_t(uint32_t f = 0)
-    : compressed_length(0),
-      flags(f),
-      csum_type(CSUM_NONE),
-      csum_chunk_order(12) {
-  }
-
-  bluestore_blob_t(const bluestore_pextent_t& ext, uint32_t f = 0)
-    : compressed_length(0),
-      flags(f),
-      csum_type(CSUM_NONE),
-      csum_chunk_order(12) {
-    extents.push_back(ext);
-  }
+  bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

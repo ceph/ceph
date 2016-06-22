@@ -493,10 +493,10 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 {
   ls.push_back(new bluestore_blob_t);
   ls.push_back(new bluestore_blob_t(0));
-  ls.push_back(new bluestore_blob_t(bluestore_pextent_t(111, 222), 12));
-  ls.push_back(new bluestore_blob_t(bluestore_pextent_t(111, 222), 12));
-  ls.back()->csum_type = CSUM_XXHASH32;
-  ls.back()->csum_chunk_order = 16;
+  ls.push_back(new bluestore_blob_t);
+  ls.back()->extents.push_back(bluestore_pextent_t(111, 222));
+  ls.push_back(new bluestore_blob_t);
+  ls.back()->init_csum(CSUM_XXHASH32, 16, 65536);
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->ref_map.get(3, 5);
   ls.back()->add_unused(0, 3);
