@@ -80,6 +80,7 @@ class TestPoolPerm(CephFSTestCase):
 
         self.mount_a.umount_wait()
         self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
 
         with self.assertRaises(CommandFailedError):
             self.mount_a.run_shell(["setfattr",
@@ -100,6 +101,7 @@ class TestPoolPerm(CephFSTestCase):
                 self.fs.get_data_pool_names()[1],
             ))
         self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
         self.mount_a.run_shell(["setfattr",
                                 "-n", "ceph.file.layout.pool",
                                 "-v", new_pool_name, "layoutfile"])
