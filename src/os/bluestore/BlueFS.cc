@@ -984,6 +984,39 @@ bool BlueFS::_should_compact_log()
   return true;
 }
 
+void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t)
+{
+  t->seq = 1;
+  t->uuid = super.uuid;
+  dout(20) << __func__ << " op_init" << dendl;
+
+  t->op_init();
+  for (unsigned bdev = 0; bdev < MAX_BDEV; ++bdev) {
+    interval_set<uint64_t>& p = block_all[bdev];
+    for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
+      dout(20) << __func__ << " op_alloc_add " << bdev << " 0x"
+               << std::hex << q.get_start() << "~" << q.get_len() << std::dec
+               << dendl;
+      t->op_alloc_add(bdev, q.get_start(), q.get_len());
+    }
+  }
+  for (auto& p : file_map) {
+    if (p.first == 1)
+      continue;
+    dout(20) << __func__ << " op_file_update " << p.second->fnode << dendl;
+    t->op_file_update(p.second->fnode);
+  }
+  for (auto& p : dir_map) {
+    dout(20) << __func__ << " op_dir_create " << p.first << dendl;
+    t->op_dir_create(p.first);
+    for (auto& q : p.second->file_map) {
+      dout(20) << __func__ << " op_dir_link " << p.first << "/" << q.first
+	       << " to " << q.second->fnode.ino << dendl;
+      t->op_dir_link(p.first, q.first, q.second->fnode.ino);
+    }
+  }
+}
+
 void BlueFS::_compact_log_sync()
 {
   // FIXME: we currently hold the lock while writing out the compacted log,
@@ -997,34 +1030,8 @@ void BlueFS::_compact_log_sync()
   log_t.clear();
 
   bluefs_transaction_t t;
-  t.seq = 1;
-  t.uuid = super.uuid;
-  dout(20) << __func__ << " op_init" << dendl;
-  t.op_init();
-  for (unsigned bdev = 0; bdev < MAX_BDEV; ++bdev) {
-    interval_set<uint64_t>& p = block_all[bdev];
-    for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
-      dout(20) << __func__ << " op_alloc_add " << bdev << " 0x"
-               << std::hex << q.get_start() << "~" << q.get_len() << std::dec
-               << dendl;
-      t.op_alloc_add(bdev, q.get_start(), q.get_len());
-    }
-  }
-  for (auto& p : file_map) {
-    if (p.first == 1)
-      continue;
-    dout(20) << __func__ << " op_file_update " << p.second->fnode << dendl;
-    t.op_file_update(p.second->fnode);
-  }
-  for (auto& p : dir_map) {
-    dout(20) << __func__ << " op_dir_create " << p.first << dendl;
-    t.op_dir_create(p.first);
-    for (auto& q : p.second->file_map) {
-      dout(20) << __func__ << " op_dir_link " << p.first << "/" << q.first
-	       << " to " << q.second->fnode.ino << dendl;
-      t.op_dir_link(p.first, q.first, q.second->fnode.ino);
-    }
-  }
+  _compact_log_dump_metadata(&t);
+
   dout(20) << __func__ << " op_jump_seq " << log_seq << dendl;
   t.op_jump_seq(log_seq);
 
