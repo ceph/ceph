@@ -145,7 +145,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 
   if (alloc.size()) {
     log_t.op_alloc_add(id, offset, length);
-    int r = _flush_log();
+    int r = _flush_and_sync_log();
     assert(r == 0);
     alloc[id]->init_add_free(offset, length);
   }
@@ -175,7 +175,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   block_all[id].erase(*offset, *length);
   block_total[id] -= *length;
   log_t.op_alloc_rm(id, *offset, *length);
-  r = _flush_log();
+  r = _flush_and_sync_log();
   assert(r == 0);
 
   if (logger)
@@ -271,7 +271,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
       log_t.op_alloc_add(bdev, q.get_start(), q.get_len());
     }
   }
-  _flush_log();
+  _flush_and_sync_log();
 
   // write supers
   super.log_fnode = log_file->fnode;
@@ -1021,7 +1021,7 @@ void BlueFS::_pad_bl(bufferlist& bl)
   }
 }
 
-int BlueFS::_flush_log()
+int BlueFS::_flush_and_sync_log()
 {
   log_t.seq = ++log_seq;
   log_t.uuid = super.uuid;
@@ -1279,7 +1279,7 @@ void BlueFS::_fsync(FileWriter *h)
   if (h->file->dirty) {
     dout(20) << __func__ << " file metadata is dirty, flushing log on "
 	     << h->file->fnode << dendl;
-    _flush_log();
+    _flush_and_sync_log();
     assert(!h->file->dirty);
   }
 }
@@ -1375,7 +1375,7 @@ void BlueFS::sync_metadata()
       p->commit_start();
     }
   }
-  _flush_log();
+  _flush_and_sync_log();
   for (auto p : alloc) {
     if (p) {
       p->commit_finish();
