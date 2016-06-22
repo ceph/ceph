@@ -114,14 +114,14 @@ tasks:
   - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
   - ceph_manager.wait_for_clean: null
   - ceph.restart: [osd.0, osd.1, osd.2]
+  - ceph_manager.wait_for_clean: null
   - exec:
       osd.0:
         - sudo grep -c 'unable to peek at' /var/log/ceph/ceph-osd.0.log
   - radosbench:
       clients: [client.0]
-      time: 30
+      time: 5
       size: 1
-  - ceph_manager.wait_for_clean: null
   - ceph.restart: [osd.0, osd.1, osd.2]
   - ceph_manager.wait_for_clean: null
   - print: '**** done verifying final upgrade'
