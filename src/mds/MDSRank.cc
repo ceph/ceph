@@ -1694,13 +1694,11 @@ bool MDSRankDispatcher::handle_asok_command(
       cond.wait();
     }
   } else if (command == "session ls") {
-    mds_lock.Lock();
+    Mutex::Locker l(mds_lock);
 
     heartbeat_reset();
 
     dump_sessions(SessionFilter(), f);
-
-    mds_lock.Unlock();
   } else if (command == "session evict") {
     std::string client_id;
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
@@ -1759,9 +1757,8 @@ bool MDSRankDispatcher::handle_asok_command(
       mdcache->dump_cache(path);
     }
   } else if (command == "force_readonly") {
-    mds_lock.Lock();
+    Mutex::Locker l(mds_lock);
     mdcache->force_readonly();
-    mds_lock.Unlock();
   } else if (command == "dirfrag split") {
     Mutex::Locker l(mds_lock);
     command_dirfrag_split(cmdmap, ss);
