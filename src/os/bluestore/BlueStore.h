@@ -318,6 +318,9 @@ public:
     friend ostream& operator<<(ostream& out, const Blob &b) {
       return out << b.id << ":" << b.blob;
     }
+
+    /// discard buffers for unallocated regions
+    void discard_unallocated();
   };
 
   /// a map of blobs, indexed by int64_t
