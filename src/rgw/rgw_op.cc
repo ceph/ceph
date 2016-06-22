@@ -1926,7 +1926,7 @@ int RGWCreateBucket::verify_permission()
       }
       return op_ret;
     }
-    if ((int)header.stats.total_entries >= s->user->max_buckets){
+    if ((int)header.stats.total_buckets >= s->user->max_buckets){
       return -ERR_TOO_MANY_BUCKETS;
     }
   }
