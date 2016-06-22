@@ -1021,15 +1021,20 @@ public:
     set<string> *log_keys_debug
     );
 
-  void read_log_and_missing(ObjectStore *store, coll_t pg_coll,
-		coll_t log_coll, ghobject_t log_oid,
-		const pg_info_t &info, ostringstream &oss) {
+  void read_log_and_missing(
+    ObjectStore *store, coll_t pg_coll,
+    coll_t log_coll, ghobject_t log_oid,
+    const pg_info_t &info,
+    ostringstream &oss,
+    bool debug_verify_stored_missing = false
+    ) {
     return read_log_and_missing(
       store, pg_coll, log_coll, log_oid, info,
       log, missing, oss,
       &clear_divergent_priors,
       this,
-      (pg_log_debug ? &log_keys_debug : 0));
+      (pg_log_debug ? &log_keys_debug : 0),
+      debug_verify_stored_missing);
   }
 
   template <typename missing_type>
@@ -1040,7 +1045,8 @@ public:
     missing_type &missing, ostringstream &oss,
     bool *clear_divergent_priors = NULL,
     const DoutPrefixProvider *dpp = NULL,
-    set<string> *log_keys_debug = 0
+    set<string> *log_keys_debug = 0,
+    bool debug_verify_stored_missing = false
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll " << pg_coll
 		       << " log_oid " << log_oid << dendl;
@@ -1070,6 +1076,7 @@ public:
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
 			     << " divergent_priors" << dendl;
 	  has_divergent_priors = true;
+	  debug_verify_stored_missing = false;
 	} else if (p->key() == "can_rollback_to") {
 	  ::decode(log.can_rollback_to, bp);
 	} else if (p->key() == "rollback_info_trimmed_to") {
@@ -1097,18 +1104,19 @@ public:
     log.head = info.last_update;
     log.reset_rollback_info_trimmed_to_riter();
 
-    if (has_divergent_priors) {
+    if (has_divergent_priors || debug_verify_stored_missing) {
       // build missing
-      if (info.last_complete < info.last_update) {
+      if (debug_verify_stored_missing || info.last_complete < info.last_update) {
 	ldpp_dout(dpp, 10) << "read_log_and_missing checking for missing items over interval ("
 			   << info.last_complete
 			   << "," << info.last_update << "]" << dendl;
 
 	set<hobject_t, hobject_t::BitwiseComparator> did;
+	set<hobject_t, hobject_t::BitwiseComparator> checked;
 	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	     i != log.log.rend();
 	     ++i) {
-	  if (i->version <= info.last_complete) break;
+	  if (!debug_verify_stored_missing && i->version <= info.last_complete) break;
 	  if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
 	    continue;
 	  if (i->is_error())
@@ -1129,51 +1137,96 @@ public:
 	    if (oi.version < i->version) {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i
 				 << " (have " << oi.version << ")" << dendl;
-	      missing.add(i->soid, i->version, oi.version);
+	      if (debug_verify_stored_missing) {
+		auto miter = missing.get_items().find(i->soid);
+		assert(miter != missing.get_items().end());
+		assert(miter->second.need == i->version);
+		assert(miter->second.have == oi.version);
+		checked.insert(i->soid);
+	      } else {
+		missing.add(i->soid, i->version, oi.version);
+	      }
 	    }
 	  } else {
 	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
-	    missing.add(i->soid, i->version, eversion_t());
+	    if (debug_verify_stored_missing) {
+	      auto miter = missing.get_items().find(i->soid);
+	      assert(miter != missing.get_items().end());
+	      assert(miter->second.need == i->version);
+	      assert(miter->second.have == eversion_t());
+	      checked.insert(i->soid);
+	    } else {
+	      missing.add(i->soid, i->version, eversion_t());
+	    }
 	  }
 	}
-	for (map<eversion_t, hobject_t>::reverse_iterator i =
-	       divergent_priors.rbegin();
-	     i != divergent_priors.rend();
-	     ++i) {
-	  if (i->first <= info.last_complete) break;
-	  if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
-	    continue;
-	  if (did.count(i->second)) continue;
-	  did.insert(i->second);
-	  bufferlist bv;
-	  int r = store->getattr(
-	    pg_coll,
-	    ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
-	    OI_ATTR,
-	    bv);
-	  if (r >= 0) {
-	    object_info_t oi(bv);
-	    /**
-	     * 1) we see this entry in the divergent priors mapping
-	     * 2) we didn't see an entry for this object in the log
-	     *
-	     * From 1 & 2 we know that either the object does not exist
-	     * or it is at the version specified in the divergent_priors
-	     * map since the object would have been deleted atomically
-	     * with the addition of the divergent_priors entry, an older
-	     * version would not have been recovered, and a newer version
-	     * would show up in the log above.
-	     */
-	    assert(oi.version == i->first);
-	  } else {
-	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
-	    missing.add(i->second, i->first, eversion_t());
+	if (debug_verify_stored_missing) {
+	  for (auto &&i: missing.get_items()) {
+	    if (checked.count(i.first))
+	      continue;
+	    if (i.second.need > log.tail ||
+	      cmp(i.first, info.last_backfill, info.last_backfill_bitwise) > 0) {
+	      derr << __func__ << ": invalid missing set entry found "
+		   << i.first
+		   << dendl;
+	      assert(0 == "invalid missing set entry found");
+	    }
+	    bufferlist bv;
+	    int r = store->getattr(
+	      pg_coll,
+	      ghobject_t(i.first, ghobject_t::NO_GEN, info.pgid.shard),
+	      OI_ATTR,
+	      bv);
+	    if (r >= 0) {
+	      object_info_t oi(bv);
+	      assert(oi.version == i.second.have);
+	    } else {
+	      assert(eversion_t() == i.second.have);
+	    }
+	  }
+	} else {
+	  assert(has_divergent_priors);
+	  for (map<eversion_t, hobject_t>::reverse_iterator i =
+		 divergent_priors.rbegin();
+	       i != divergent_priors.rend();
+	       ++i) {
+	    if (i->first <= info.last_complete) break;
+	    if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
+	      continue;
+	    if (did.count(i->second)) continue;
+	    did.insert(i->second);
+	    bufferlist bv;
+	    int r = store->getattr(
+	      pg_coll,
+	      ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
+	      OI_ATTR,
+	      bv);
+	    if (r >= 0) {
+	      object_info_t oi(bv);
+	      /**
+		 * 1) we see this entry in the divergent priors mapping
+		 * 2) we didn't see an entry for this object in the log
+		 *
+		 * From 1 & 2 we know that either the object does not exist
+		 * or it is at the version specified in the divergent_priors
+		 * map since the object would have been deleted atomically
+		 * with the addition of the divergent_priors entry, an older
+		 * version would not have been recovered, and a newer version
+		 * would show up in the log above.
+		 */
+	      assert(oi.version == i->first);
+	    } else {
+	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
+	      missing.add(i->second, i->first, eversion_t());
+	    }
 	  }
 	}
+	if (clear_divergent_priors)
+	  (*clear_divergent_priors) = true;
       }
-      if (clear_divergent_priors)
-	(*clear_divergent_priors) = true;
-    } else {
+    }
+
+    if (!has_divergent_priors) {
       if (clear_divergent_priors)
 	(*clear_divergent_priors) = false;
       missing.flush();
