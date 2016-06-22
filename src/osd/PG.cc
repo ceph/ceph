@@ -3119,11 +3119,14 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   assert(r >= 0);
 
   ostringstream oss;
-  pg_log.read_log_and_missing(store,
-		  coll,
-		  info_struct_v < 8 ? coll_t::meta() : coll,
-		  ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
-		  info, oss);
+  pg_log.read_log_and_missing(
+    store,
+    coll,
+    info_struct_v < 8 ? coll_t::meta() : coll,
+    ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
+    info,
+    oss,
+    cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
 
