@@ -1726,15 +1726,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       RWLock::WLocker snap_locker(ictx->snap_lock);
       uint64_t new_features;
       if (enabled) {
+      	if ((features & ictx->features) != 0) {
+	  lderr(cct) << "one or more requested features are already enabled" << dendl;
+	  return -EINVAL;
+      	}
         features &= ~ictx->features;
         new_features = ictx->features | features;
       } else {
+        if ((features & ~ictx->features) != 0) {
+	  lderr(cct) << "one or more requested features are already disabled" << dendl;
+	  return -EINVAL;
+        }
         features &= ictx->features;
         new_features = ictx->features & ~features;
-      }
-
-      if (features == 0) {
-        return 0;
       }
 
       bool enable_mirroring = false;
