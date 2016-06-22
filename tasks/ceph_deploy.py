@@ -27,9 +27,38 @@ def download_ceph_deploy(ctx, config):
     will use that instead. The `bootstrap` script is ran, with the argument
     obtained from `python_version`, if specified.
     """
+    ceph_admin = ctx.cluster.only(teuthology.get_first_mon(ctx, config))
+
+    try:
+        py_ver = str(config['python_version'])
+    except KeyError:
+        pass
+    else:
+        supported_versions = ['2', '3']
+        if py_ver not in supported_versions:
+            raise ValueError("python_version must be: {}, not {}".format(
+                ' or '.join(supported_versions), py_ver
+            ))
+
+        log.info("Installing Python")
+        for admin in ceph_admin.remotes:
+            system_type = teuthology.get_system_type(admin)
+
+        if system_type == 'rpm':
+            package = 'python34' if py_ver == '3' else 'python'
+            ctx.cluster.run(args=[
+                'sudo', 'yum', '-y', 'install',
+                package, 'python-virtualenv'
+            ])
+        else:
+            package = 'python3' if py_ver == '3' else 'python'
+            ctx.cluster.run(args=[
+                'sudo', 'apt-get', '-y', '--force-yes', 'install',
+                package, 'python-virtualenv'
+            ])
+
     log.info('Downloading ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
-    ceph_admin = ctx.cluster.only(teuthology.get_first_mon(ctx, config))
     ceph_deploy_branch = config.get('ceph-deploy-branch', 'master')
 
     ceph_admin.run(
