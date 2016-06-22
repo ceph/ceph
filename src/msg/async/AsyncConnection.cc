@@ -1599,6 +1599,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   bool authorizer_valid;
   if (!async_msgr->verify_authorizer(this, peer_type, connect.authorizer_protocol, authorizer_bl,
                                authorizer_reply, authorizer_valid, session_key) || !authorizer_valid) {
+    lock.Lock();
     ldout(async_msgr->cct,0) << __func__ << ": got bad authorizer" << dendl;
     session_security.reset();
     return _reply_accept(CEPH_MSGR_TAG_BADAUTHORIZER, connect, reply, authorizer_reply);
