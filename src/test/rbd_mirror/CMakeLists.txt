@@ -82,6 +82,7 @@ target_link_libraries(ceph_test_rbd_mirror_random_write
 
 add_executable(ceph_test_rbd_mirror_image_replay
   image_replay.cc
+  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:parse_secret_objs>)
 set_target_properties(ceph_test_rbd_mirror_image_replay PROPERTIES
   COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
