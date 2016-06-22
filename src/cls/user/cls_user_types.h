@@ -76,11 +76,12 @@ struct cls_user_bucket_entry {
   real_time creation_time;
   uint64_t count;
   bool user_stats_sync;
+  uint64_t bucket_count;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), count(1), user_stats_sync(false) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false), bucket_count(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 5, bl);
+    ENCODE_START(8, 5, bl);
     uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     string empty_str;  // originally had the bucket name here, but we encode bucket later
@@ -93,10 +94,11 @@ struct cls_user_bucket_entry {
     ::encode(s, bl);
     ::encode(user_stats_sync, bl);
     ::encode(creation_time, bl);
+    ::encode(bucket_count, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     string empty_str;  // backward compatibility
@@ -118,6 +120,8 @@ struct cls_user_bucket_entry {
       ::decode(user_stats_sync, bl);
     if (struct_v >= 7)
       ::decode(creation_time, bl);
+    if (struct_v >= 8)
+      ::decode(bucket_count, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -129,24 +133,29 @@ struct cls_user_stats {
   uint64_t total_entries;
   uint64_t total_bytes;
   uint64_t total_bytes_rounded;
+  uint64_t total_buckets;
 
   cls_user_stats()
     : total_entries(0),
       total_bytes(0),
-      total_bytes_rounded(0) {}
+      total_bytes_rounded(0),
+      total_buckets(0){}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(1, 1, bl);
+     ENCODE_START(2, 1, bl);
     ::encode(total_entries, bl);
     ::encode(total_bytes, bl);
     ::encode(total_bytes_rounded, bl);
+    ::encode(total_buckets, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
     ::decode(total_entries, bl);
     ::decode(total_bytes, bl);
     ::decode(total_bytes_rounded, bl);
+    if (struct_v >=2)
+      ::decode(total_buckets, bl);
     DECODE_FINISH(bl);
   }
 

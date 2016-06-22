@@ -43,6 +43,7 @@ void cls_user_bucket_entry::dump(Formatter *f) const
   encode_json("creation_time", utime_t(creation_time), f);
   encode_json("count", count, f);
   encode_json("user_stats_sync", user_stats_sync, f);
+  encode_json("bucket_count", bucket_count, f);
 }
 
 void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i)
@@ -53,6 +54,7 @@ void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i)
   entry->creation_time = real_clock::from_time_t(i + 3);
   entry->count = i + 4;
   entry->user_stats_sync = true;
+  entry->bucket_count = i;
 }
 
 void cls_user_bucket_entry::generate_test_instances(list<cls_user_bucket_entry*>& ls)
@@ -68,6 +70,7 @@ void cls_user_gen_test_stats(cls_user_stats *s)
   s->total_entries = 1;
   s->total_bytes = 2;
   s->total_bytes_rounded = 3;
+  s->total_buckets = 1;
 }
 
 void cls_user_stats::dump(Formatter *f) const
@@ -75,6 +78,7 @@ void cls_user_stats::dump(Formatter *f) const
   f->dump_int("total_entries", total_entries);
   f->dump_int("total_bytes", total_bytes);
   f->dump_int("total_bytes_rounded", total_bytes_rounded);
+  f->dump_int("total_buckets", total_buckets);
 }
 
 void cls_user_stats::generate_test_instances(list<cls_user_stats*>& ls)
