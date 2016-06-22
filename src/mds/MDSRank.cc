@@ -1760,13 +1760,10 @@ bool MDSRankDispatcher::handle_asok_command(
     Mutex::Locker l(mds_lock);
     mdcache->force_readonly();
   } else if (command == "dirfrag split") {
-    Mutex::Locker l(mds_lock);
     command_dirfrag_split(cmdmap, ss);
   } else if (command == "dirfrag merge") {
-    Mutex::Locker l(mds_lock);
     command_dirfrag_merge(cmdmap, ss);
   } else if (command == "dirfrag ls") {
-    Mutex::Locker l(mds_lock);
     command_dirfrag_ls(cmdmap, ss, f);
   } else {
     return false;
@@ -2157,6 +2154,7 @@ bool MDSRank::command_dirfrag_split(
     cmdmap_t cmdmap,
     std::ostream &ss)
 {
+  Mutex::Locker l(mds_lock);
   if (!mdsmap->allows_dirfrags()) {
     ss << "dirfrags are disallowed by the mds map!";
     return false;
@@ -2187,6 +2185,7 @@ bool MDSRank::command_dirfrag_merge(
     cmdmap_t cmdmap,
     std::ostream &ss)
 {
+  Mutex::Locker l(mds_lock);
   std::string path;
   bool got = cmd_getval(g_ceph_context, cmdmap, "path", path);
   if (!got) {
@@ -2222,6 +2221,7 @@ bool MDSRank::command_dirfrag_ls(
     std::ostream &ss,
     Formatter *f)
 {
+  Mutex::Locker l(mds_lock);
   std::string path;
   bool got = cmd_getval(g_ceph_context, cmdmap, "path", path);
   if (!got) {
