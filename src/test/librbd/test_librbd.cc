@@ -420,6 +420,16 @@ TEST_F(TestLibRBD, ResizeAndStat)
   ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
   ASSERT_EQ(info.size, size / 2);
 
+  // downsizing without allowing shrink should fail
+  // and image size should not change
+  ASSERT_EQ(-EINVAL, rbd_resize2(image, size / 4, false, NULL, NULL));
+  ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
+  ASSERT_EQ(info.size, size / 2);
+
+  ASSERT_EQ(0, rbd_resize2(image, size / 4, true, NULL, NULL));
+  ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
+  ASSERT_EQ(info.size, size / 4);
+
   ASSERT_PASSED(validate_object_map, image);
   ASSERT_EQ(0, rbd_close(image));
 
