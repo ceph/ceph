@@ -335,7 +335,6 @@ void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
     ref_map[pos].decode(p);
     while (--n) {
       int64_t delta;
-      uint64_t length;
       small_decode_signed_varint_lowz(delta, p);
       pos += delta;
       ref_map[pos].decode(p);
