@@ -265,7 +265,9 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.info("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[1])
-
+        log.info("No match for {0} {1}: {2}".format(
+            self.daemon_type, self.daemon_id, ps_txt
+            ))
         return None
 
     def wait(self, timeout):
@@ -330,9 +332,7 @@ class LocalFuseMount(FuseMount):
 
     @property
     def _prefix(self):
-        # FuseMount only uses the prefix for running ceph, which in cmake or autotools is in
-        # the present path
-        return "./"
+        return BIN_PREFIX
 
     def _asok_path(self):
         # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
