@@ -7372,7 +7372,7 @@ struct dirent *Client::readdir(dir_result_t *d)
   // call, and returns -1 the second time around.
   ret = readdir_r_cb(d, _readdir_single_dirent_cb, (void *)&sr);
   if (ret < -1) {
-    errno = -ret;  // this sucks.
+    errno = ret;
     return (dirent *) NULL;
   }
   if (sr.full) {
