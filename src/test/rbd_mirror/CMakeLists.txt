@@ -10,7 +10,7 @@ add_library(rbd_mirror STATIC ${rbd_mirror_test_srcs})
 set_target_properties(rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-add_executable(unittest_rbd_mirror EXCLUDE_FROM_ALL
+add_executable(unittest_rbd_mirror
   test_main.cc
   test_mock_fixture.cc
   test_mock_ImageReplayer.cc
