@@ -82,20 +82,6 @@ checkout.  If you put it elsewhere, just replace .. above with a
 correct path to the checkout.
 
 
-Dependencies
-------------
-
-The configure script will complain about any missing dependencies as
-it goes.  You can also refer to debian/control or ceph.spec.in for the
-package build dependencies on those platforms.  In many cases,
-dependencies can be avoided with --with-foo or --without-bar switches.
-For example,
-
-	./configure --with-nss         # use libnss instead of libcrypto++
-	./configure --without-radosgw  # do not build radosgw
-	./configure --without-tcmalloc # avoid google-perftools dependency
-
-
 Building packages
 -----------------
 
