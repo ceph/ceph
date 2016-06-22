@@ -10,4 +10,4 @@ set_target_properties(radosstriper PROPERTIES
   SOVERSION 1
   COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
 
-install(TARGETS radosstriper DESTINATION lib)
+install(TARGETS radosstriper DESTINATION ${CMAKE_INSTALL_LIBDIR})

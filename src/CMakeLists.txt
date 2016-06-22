@@ -581,7 +581,7 @@ install(FILES include/rados/librados.h
   include/page.h
   include/crc32c.h
   DESTINATION include/rados)
-install(TARGETS librados DESTINATION lib)
+install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_subdirectory(libradosstriper)
 install(FILES
@@ -1155,7 +1155,7 @@ if(WITH_LIBCEPHFS)
       SOVERSION 1
       COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
   endif(ENABLE_SHARED)
-  install(TARGETS cephfs DESTINATION lib)
+  install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
     DESTINATION include)
