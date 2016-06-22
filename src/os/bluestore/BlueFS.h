@@ -241,8 +241,8 @@ private:
   int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
 			  uint64_t want_seq = 0);
   uint64_t _estimate_log_size();
-  void _maybe_compact_log();
-  void _compact_log();
+  bool _should_compact_log();
+  void _compact_log_sync();
 
   //void _aio_finish(void *priv);
 
