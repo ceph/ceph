@@ -74,6 +74,7 @@ add_library(librbd ${CEPH_SHARED}
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:krbd_objs>
   $<TARGET_OBJECTS:parse_secret_objs>
+  $<TARGET_OBJECTS:rados_snap_set_diff_obj>
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
 target_link_libraries(librbd LINK_PRIVATE 
@@ -92,7 +93,10 @@ target_link_libraries(librbd LINK_PRIVATE
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(ENABLE_SHARED)
-  set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
-    OUTPUT_NAME rbd)
+  set_target_properties(librbd PROPERTIES
+    OUTPUT_NAME rbd
+    VERSION 1.0.0
+    SOVERSION 1
+    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
 endif(ENABLE_SHARED)
-install(TARGETS librbd DESTINATION lib)
+install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
