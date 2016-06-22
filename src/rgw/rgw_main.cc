@@ -85,7 +85,6 @@ static atomic_t disable_signal_fd;
 static void signal_shutdown();
 
 
-#define SOCKET_BACKLOG 1024
 
 struct RGWRequest
 {
@@ -278,10 +277,12 @@ void RGWFCGXProcess::run()
   string socket_path;
   string socket_port;
   string socket_host;
+  int socket_backlog;
 
   conf->get_val("socket_path", "", &socket_path);
   conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
   conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
+  socket_backlog = g_conf->rgw_socket_backlog;
 
   if (socket_path.empty() && socket_port.empty() && socket_host.empty()) {
     socket_path = g_conf->rgw_socket_path;
@@ -308,7 +309,7 @@ void RGWFCGXProcess::run()
     }
 
     const char *path = path_str.c_str();
-    sock_fd = FCGX_OpenSocket(path, SOCKET_BACKLOG);
+    sock_fd = FCGX_OpenSocket(path, socket_backlog);
     if (sock_fd < 0) {
       dout(0) << "ERROR: FCGX_OpenSocket (" << path << ") returned " << sock_fd << dendl;
       return;
@@ -318,7 +319,7 @@ void RGWFCGXProcess::run()
     }
   } else if (!socket_port.empty()) {
     string bind = socket_host + ":" + socket_port;
-    sock_fd = FCGX_OpenSocket(bind.c_str(), SOCKET_BACKLOG);
+    sock_fd = FCGX_OpenSocket(bind.c_str(), socket_backlog);
     if (sock_fd < 0) {
       dout(0) << "ERROR: FCGX_OpenSocket (" << bind.c_str() << ") returned " << sock_fd << dendl;
       return;
