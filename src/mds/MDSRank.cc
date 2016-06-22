@@ -1750,6 +1750,7 @@ bool MDSRankDispatcher::handle_asok_command(
     }
     command_export_dir(f, path, (mds_rank_t)rank);
   } else if (command == "dump cache") {
+    Mutex::Locker l(mds_lock);
     string path;
     if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
       mdcache->dump_cache(f);
@@ -2042,6 +2043,7 @@ int MDSRank::_command_flush_journal(std::stringstream *ss)
 void MDSRank::command_get_subtrees(Formatter *f)
 {
   assert(f != NULL);
+  Mutex::Locker l(mds_lock);
 
   std::list<CDir*> subtrees;
   mdcache->list_subtrees(subtrees);
@@ -2079,6 +2081,7 @@ int MDSRank::_command_export_dir(
     const std::string &path,
     mds_rank_t target)
 {
+  Mutex::Locker l(mds_lock);
   filepath fp(path.c_str());
 
   if (target == whoami || !mdsmap->is_up(target) || !mdsmap->is_in(target)) {
