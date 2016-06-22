@@ -36,8 +36,6 @@ function add_something() {
     local poolname=$2
     local obj=${3:-SOMETHING}
 
-    wait_for_clean || return 1
-
     ceph osd set noscrub || return 1
     ceph osd set nodeep-scrub || return 1
 
@@ -57,6 +55,7 @@ function TEST_corrupt_and_repair_replicated() {
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
+    wait_for_clean || return 1
 
     add_something $dir $poolname
     corrupt_and_repair_one $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
@@ -127,8 +126,6 @@ function corrupt_and_repair_one() {
     objectstore_tool $dir $osd SOMETHING list-attrs || return 1
     rados --pool $poolname get SOMETHING $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
-
-    wait_for_clean || return 1
 }
 
 function corrupt_and_repair_erasure_coded() {
@@ -170,17 +167,18 @@ function TEST_auto_repair_erasure_coded() {
             --osd-scrub-min-interval=5 \
             --osd-scrub-interval-randomize-ratio=0
     done
+    wait_for_clean || return 1
 
     # Create an EC pool
     ceph osd erasure-code-profile set myprofile \
         k=2 m=1 ruleset-failure-domain=osd || return 1
     ceph osd pool create $poolname 8 8 erasure myprofile || return 1
+    wait_for_clean || return 1
 
     # Put an object
     local payload=ABCDEF
     echo $payload > $dir/ORIGINAL
     rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
-    wait_for_clean || return 1
 
     # Remove the object from one shard physically
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
