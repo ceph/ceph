@@ -656,31 +656,8 @@ public:
     void _touch_onode(OnodeRef& o) override;
 
     void _add_buffer(Buffer *b, int level, Buffer *near) override;
-
-    void _rm_buffer(Buffer *b) override {
-      if (!b->is_empty()) {
-        assert(buffer_bytes >= b->length);
-	buffer_bytes -= b->length;
-      }
-      switch (b->cache_private) {
-      case BUFFER_WARM_IN:
-	buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
-	break;
-      case BUFFER_WARM_OUT:
-	buffer_warm_out.erase(buffer_warm_out.iterator_to(*b));
-	break;
-      case BUFFER_HOT:
-	buffer_hot.erase(buffer_hot.iterator_to(*b));
-	break;
-      default:
-	assert(0 == "bad cache_private");
-      }
-    }
-    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
-      if (!b->is_empty()) {
-	buffer_bytes += delta;
-      }
-    }
+    void _rm_buffer(Buffer *b) override;
+    void _adjust_buffer_size(Buffer *b, int64_t delta) override;
     void _touch_buffer(Buffer *b) override {
       switch (b->cache_private) {
       case BUFFER_WARM_IN:

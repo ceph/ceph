@@ -656,6 +656,36 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
   }
 }
 
+void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
+{
+  dout(20) << __func__ << " " << *b << dendl;
+ if (!b->is_empty()) {
+    assert(buffer_bytes >= b->length);
+    buffer_bytes -= b->length;
+  }
+  switch (b->cache_private) {
+  case BUFFER_WARM_IN:
+    buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
+    break;
+  case BUFFER_WARM_OUT:
+    buffer_warm_out.erase(buffer_warm_out.iterator_to(*b));
+    break;
+  case BUFFER_HOT:
+    buffer_hot.erase(buffer_hot.iterator_to(*b));
+    break;
+  default:
+    assert(0 == "bad cache_private");
+  }
+}
+
+void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
+{
+  dout(20) << __func__ << " delta " << delta << " on " << *b << dendl;
+  if (!b->is_empty()) {
+    buffer_bytes += delta;
+  }
+}
+
 void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
 {
   std::lock_guard<std::mutex> l(lock);
