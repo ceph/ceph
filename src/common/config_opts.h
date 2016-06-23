@@ -968,8 +968,8 @@ OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
 OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
-OPTION(bluestore_allocator, OPT_STR, "stupid")  // or "bitmap"
-OPTION(bluestore_freelist_type, OPT_STR, "bitmap")
+OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
+OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
