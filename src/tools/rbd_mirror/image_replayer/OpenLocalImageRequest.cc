@@ -141,6 +141,9 @@ void OpenLocalImageRequest<I>::send_lock_image() {
     return;
   }
 
+  // disallow any proxied maintenance operations before grabbing lock
+  (*m_local_image_ctx)->exclusive_lock->block_requests(-EROFS);
+
   Context *ctx = create_context_callback<
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_lock_image>(
       this);

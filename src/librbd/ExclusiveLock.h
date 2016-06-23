@@ -30,9 +30,9 @@ public:
   ~ExclusiveLock();
 
   bool is_lock_owner() const;
-  bool accept_requests() const;
+  bool accept_requests(int *ret_val) const;
 
-  void block_requests();
+  void block_requests(int r);
   void unblock_requests();
 
   void init(uint64_t features, Context *on_init);
@@ -130,7 +130,8 @@ private:
 
   ActionsContexts m_actions_contexts;
 
-  uint32_t m_request_blockers = 0;
+  bool m_request_blocked = false;
+  int m_request_blocked_ret_val = 0;
 
   std::string encode_lock_cookie() const;
 

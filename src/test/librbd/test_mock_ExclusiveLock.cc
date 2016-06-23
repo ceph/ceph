@@ -589,5 +589,43 @@ TEST_F(TestMockExclusiveLock, ConcurrentRequests) {
   ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
 }
 
+TEST_F(TestMockExclusiveLock, BlockRequests) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockExclusiveLockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock exclusive_lock(mock_image_ctx);
+
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_block_writes(mock_image_ctx);
+  ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
+
+  MockAcquireRequest try_lock_acquire;
+  expect_acquire_lock(mock_image_ctx, try_lock_acquire, 0);
+  ASSERT_EQ(0, when_try_lock(mock_image_ctx, exclusive_lock));
+  ASSERT_TRUE(is_lock_owner(mock_image_ctx, exclusive_lock));
+
+  int ret_val;
+  ASSERT_TRUE(exclusive_lock.accept_requests(&ret_val));
+  ASSERT_EQ(0, ret_val);
+
+  exclusive_lock.block_requests(-EROFS);
+  ASSERT_FALSE(exclusive_lock.accept_requests(&ret_val));
+  ASSERT_EQ(-EROFS, ret_val);
+
+  exclusive_lock.unblock_requests();
+  ASSERT_TRUE(exclusive_lock.accept_requests(&ret_val));
+  ASSERT_EQ(0, ret_val);
+
+  MockReleaseRequest shutdown_release;
+  expect_release_lock(mock_image_ctx, shutdown_release, 0, true);
+  ASSERT_EQ(0, when_shut_down(mock_image_ctx, exclusive_lock));
+  ASSERT_FALSE(is_lock_owner(mock_image_ctx, exclusive_lock));
+}
+
 } // namespace librbd
 
