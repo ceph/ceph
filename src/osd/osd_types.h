@@ -3056,6 +3056,25 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
 // -----------------------------------------
 
 class ObjectExtent {
+  /**
+   * ObjectExtents are used for specifying IO behavior against RADOS
+   * objects when one is using the ObjectCacher.
+   *
+   * To use this in a real system, *every member* must be filled
+   * out correctly. In particular, make sure to initialize the
+   * oloc correctly, as its default values are deliberate poison
+   * and will cause internal ObjectCacher asserts.
+   *
+   * Similarly, your buffer_extents vector *must* specify a total
+   * size equal to your length. If the buffer_extents inadvertently
+   * contain less space than the length member specifies, you
+   * will get unintelligible asserts deep in the ObjectCacher.
+   *
+   * If you are trying to do testing and don't care about actual
+   * RADOS function, the simplest thing to do is to initialize
+   * the ObjectExtent (truncate_size can be 0), create a single entry
+   * in buffer_extents matching the length, and set oloc.pool to 0.
+   */
  public:
   object_t    oid;       // object id
   uint64_t    objectno;
