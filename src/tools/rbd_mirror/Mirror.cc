@@ -218,7 +218,7 @@ int Mirror::init()
   // TODO: make interval configurable
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
-  m_image_deleter.reset(new ImageDeleter(m_local, m_threads->work_queue,
+  m_image_deleter.reset(new ImageDeleter(m_threads->work_queue,
                                          m_threads->timer,
                                          &m_threads->timer_lock));
 
