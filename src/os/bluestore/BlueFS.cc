@@ -235,6 +235,7 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
 
 int BlueFS::mkfs(uuid_d osd_uuid)
 {
+  std::lock_guard<std::mutex> l(lock);
   dout(1) << __func__
 	  << " osd_uuid " << osd_uuid
 	  << dendl;
