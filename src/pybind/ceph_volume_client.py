@@ -231,7 +231,6 @@ class CephFSVolumeClient(object):
         # UUID
         self._id = struct.unpack(">Q", uuid.uuid1().get_bytes()[0:8])[0]
 
-        # TODO: remove .meta files on volume deletion
         # TODO: remove .meta files on last rule for an auth ID deletion
         # TODO: version the on-disk structures
 
@@ -608,6 +607,12 @@ class CephFSVolumeClient(object):
         log.info("create_volume: {0}, using rados namespace {1} to isolate data.".format(volume_path, namespace))
         self.fs.setxattr(path, 'ceph.dir.layout.pool_namespace', namespace, 0)
 
+        # Create a volume meta file, if it does not already exist, to store
+        # data about auth ids having access to the volume
+        fd = self.fs.open(self._volume_metadata_path(volume_path),
+                          os.O_CREAT, 0755)
+        self.fs.close(fd)
+
         return {
             'mount_path': path
         }
@@ -640,6 +645,13 @@ class CephFSVolumeClient(object):
                 path))
         else:
             self.fs.rename(path, trashed_volume)
+
+        # Delete the volume meta file, if it's not already deleted
+        vol_meta_path = self._volume_metadata_path(volume_path)
+        try:
+            self.fs.unlink(vol_meta_path)
+        except cephfs.ObjectNotFound:
+            pass
 
     def purge_volume(self, volume_path, data_isolated=False):
         """
