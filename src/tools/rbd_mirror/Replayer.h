@@ -35,7 +35,7 @@ class Replayer {
 public:
   Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
            ImageSyncThrottlerRef<> image_sync_throttler,
-           RadosRef local_cluster, int64_t local_pool_id, const peer_t &peer,
+           int64_t local_pool_id, const peer_t &peer,
            const std::vector<const char*> &args);
   ~Replayer();
   Replayer(const Replayer&) = delete;
@@ -65,6 +65,9 @@ private:
   int mirror_image_status_init();
   void mirror_image_status_shut_down();
 
+  int init_rados(const std::string &cluser_name, const std::string &client_name,
+                 const std::string &description, RadosRef *rados_ref);
+
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
@@ -75,8 +78,8 @@ private:
 
   peer_t m_peer;
   std::vector<const char*> m_args;
-  RadosRef m_local;
-  RadosRef m_remote;
+  RadosRef m_local_rados;
+  RadosRef m_remote_rados;
 
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
