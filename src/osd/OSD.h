@@ -1579,9 +1579,9 @@ private:
 
 private:
   /**
-   *  @defgroup monc helpers
-   *
-   *  Right now we only have the one
+   * @defgroup monc helpers
+   * @{
+   * Right now we only have the one
    */
 
   /**
