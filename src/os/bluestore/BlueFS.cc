@@ -106,19 +106,12 @@ void BlueFS::_update_logger_stats()
   }
 }
 
-/*static void aio_cb(void *priv, void *priv2)
-{
-  BlueFS *fs = static_cast<BlueFS*>(priv);
-  if (priv2)
-    fs->_aio_finish(priv2);
-    }*/
-
 int BlueFS::add_block_device(unsigned id, string path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
   assert(bdev[id] == NULL);
-  BlockDevice *b = BlockDevice::create(path, NULL, NULL); //aio_cb, this);
+  BlockDevice *b = BlockDevice::create(path, NULL, NULL);
   int r = b->open(path);
   if (r < 0) {
     delete b;
