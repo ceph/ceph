@@ -4,6 +4,7 @@ Ceph - a scalable distributed storage system
 
 Please see http://ceph.com/ for current info.
 
+
 Contributing Code
 =================
 
@@ -50,50 +51,24 @@ The list of Debian or RPM packages dependencies can be installed with:
 Building Ceph
 =============
 
-Autotools
----------
-
-Developers, please refer to the [Developer
-Guide](doc/dev/quick_guide.rst) for more information, otherwise, you
-can build the server daemons, and FUSE client, by executing the
-following:
-
-	./autogen.sh
-	./configure
-	make
-
-(Note that the FUSE client will only be built if libfuse is present.)
-
-CMake
------
+Note that these instructions are meant for developers who are
+compiling the code for development and testing.  To build binaries
+suitable for installation we recommend you build deb or rpm packages,
+or refer to the ceph.spec.in or debian/rules to see which
+configuration options are specified for production builds.
 
 Prerequisite:
         CMake 2.8.11
 
 Build instructions:
 
-	mkdir build
+        ./do_cmake.sh
 	cd build
-	cmake [options] ..
 	make
 
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout.  If you put it elsewhere, just replace .. above with a
 correct path to the checkout.
-
-
-Dependencies
-------------
-
-The configure script will complain about any missing dependencies as
-it goes.  You can also refer to debian/control or ceph.spec.in for the
-package build dependencies on those platforms.  In many cases,
-dependencies can be avoided with --with-foo or --without-bar switches.
-For example,
-
-	./configure --with-nss         # use libnss instead of libcrypto++
-	./configure --without-radosgw  # do not build radosgw
-	./configure --without-tcmalloc # avoid google-perftools dependency
 
 
 Building packages
@@ -114,40 +89,10 @@ For RPM-based systems (Red Hat, SUSE, etc.),
 Running a test cluster
 ======================
 
-Autotools
----------
-
-To run a functional test cluster,
-
-	cd src
-	./vstart.sh -d -n -x -l
-	./ceph -s
-
-Almost all of the usual commands are available in the src/ directory.
-For example,
-
-	./rados -p rbd bench 30 write
-	./rbd create foo --size 1000
-
-To shut down the test cluster,
-
-	./stop.sh
-
-To start or stop individual daemons, the sysvinit script should work:
-
-	./init-ceph restart osd.0
-	./init-ceph stop
-
-CMake
------
-Any commands or paths related to CMake are from the "build" 
-directory. This directory, known as ${CMAKE_BINARY_DIR} to cmake, was created
-in the section above titled "Building Ceph".
-
 To run a functional test cluster,
 
 	cd build
-	./path/to/ceph/src/vstart.sh -d -n -x -l
+	../src/vstart.sh -d -n -x -l
 	./bin/ceph -s
 
 Almost all of the usual commands are available in the bin/ directory.
@@ -158,64 +103,29 @@ For example,
 
 To shut down the test cluster,
 
-	./path/to/ceph/src/stop.sh
+	../src/stop.sh
 
-To start or stop individual daemons, the sysvinit script should work:
+To start or stop individual daemons, the sysvinit script can be used:
 
 	./bin/init-ceph restart osd.0
 	./bin/init-ceph stop
 
+
 Running unit tests
 ==================
 
-Autotools
----------
-
-To run all tests, a simple
-
-	cd src
-	make check
-
-will suffice.  Each test generates a log file that is the name of the
-test with .log appended.  For example, unittest_addrs generates a
-unittest_addrs.log and test/osd/osd-config.sh puts its output in
-test/osd/osd-config.sh.log.
-
-To run an individual test manually, you may want to clean up with
-
-	rm -rf testdir /tmp/*virtualenv
-	./stop.sh
-
-and then run a given test like so:
-
-	./unittest_addrs
-
-Many tests are bash scripts that spin up small test clusters, and must be run
-like so:
-
-	CEPH_DIR=. test/osd/osd-bench.sh   # or whatever the test is
-
-CMake
------
-
-Any commands or paths related to CMake are from the "build" 
-directory. This directory, known as ${CMAKE_BINARY_DIR} to cmake, was created
-in the section above titled "Building Ceph".
-
-To run build and run all tests, run `make check`. `make check` builds all the 
-unit tests, all the dependencies for other tests, and executes them with ctest 
-command.
+To run build and run all tests, use ctest:
 
 	cd build
-	cmake [options] ..
-	make check
+	ctest -j$(nproc)
 
-To run an individual test manually, run the ctest command with -R (regex matching):
+To run an individual test manually, run the ctest command with -R
+(regex matching):
 
         ctest -R [test name]
 
-To run an individual test manually and see all the tests output, run the ctest
-command with the -V (verbose) flag:
+To run an individual test manually and see all the tests output, run
+the ctest command with the -V (verbose) flag:
 
         ctest -V -R [test name]
 
@@ -228,6 +138,7 @@ There are many other flags you can give the ctest command for better control
 over manual test execution. To view these options run:
 
         man ctest
+
 
 Building the Documentation
 ==========================
