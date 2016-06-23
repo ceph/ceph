@@ -168,7 +168,8 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
-    } else if (ret >= 0 && entry.user_stats_sync) {      // only delete if we are actually doing an op.add which means that this is a rewrite
+    } else if (ret >= 0 && entry.user_stats_sync) {
+      // only delete if we are actually doing an op.add which means that this is a rewrite
       dec_header_stats(&header.stats, entry, op.add);
     }
 
