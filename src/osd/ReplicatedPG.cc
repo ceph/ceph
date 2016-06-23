@@ -2084,8 +2084,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   if (r) {
     dout(20) << __func__ << " returned an error: " << r << dendl;
-    close_op_ctx(ctx);
-    osd->reply_op_error(op, r);
+    reply_ctx(ctx, r);
     return;
   }
 
@@ -2245,37 +2244,23 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       }
       return cache_result_t::HANDLED_PROXY;
     } else {
-      bool did_proxy_read = false;
       do_proxy_read(op);
-      did_proxy_read = true;
 
       // Avoid duplicate promotion
       if (obc.get() && obc->is_blocked()) {
-	if (!did_proxy_read) {
-	  wait_for_blocked_object(obc->obs.oi.soid, op);
-	}
 	if (promote_obc)
 	  *promote_obc = obc;
         return cache_result_t::BLOCKED_PROMOTE;
       }
 
       // Promote too?
-      bool promoted = false;
       if (!op->need_skip_promote()) {
-        promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
-                                 pool.info.min_read_recency_for_promote,
-                                 promote_op, promote_obc);
+        (void)maybe_promote(obc, missing_oid, oloc, in_hit_set,
+                            pool.info.min_read_recency_for_promote,
+                            promote_op, promote_obc);
       }
-      if (!promoted && !did_proxy_read) {
-	// redirect the op if it's not proxied and not promoting
-	do_cache_redirect(op);
-	return cache_result_t::HANDLED_REDIRECT;
-      } else if (did_proxy_read) {
-	return cache_result_t::HANDLED_PROXY;
-      } else {
-	assert(promoted);
-	return cache_result_t::BLOCKED_PROMOTE;
-      }
+
+      return cache_result_t::HANDLED_PROXY;
     }
     assert(0 == "unreachable");
     return cache_result_t::NOOP;
@@ -3166,15 +3151,15 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
 
-  OSDOp *first = NULL;
-  if (m->ops.size() >= 1) {
-    first = &m->ops[0];
-  }
-
   if (!is_peered()) {
     waiting_for_peered.push_back(op);
     op->mark_delayed("waiting for active");
     return;
+  }
+
+  OSDOp *first = NULL;
+  if (m->ops.size() >= 1) {
+    first = &m->ops[0];
   }
 
   if (first) {
@@ -9322,15 +9307,6 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
     obc->requeue_scrub_on_unblock = false;
     requeue_scrub();
   }
-}
-
-SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
-{
-  Mutex::Locker l(snapset_contexts_lock);
-  SnapSetContext *ssc = new SnapSetContext(oid.get_snapdir());
-  _register_snapset_context(ssc);
-  ssc->ref++;
-  return ssc;
 }
 
 SnapSetContext *ReplicatedPG::get_snapset_context(
