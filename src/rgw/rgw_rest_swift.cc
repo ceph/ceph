@@ -1781,6 +1781,23 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   return subdir_marker == content_type && state->size <= 1;
 }
 
+bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
+{
+  rgw_obj obj(s->bucket, index);
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.set_atomic(obj);
+
+  RGWObjState* state = nullptr;
+  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+    return false;
+  }
+
+  /* A nonexistent object cannot be a considered as a viable index. We will
+   * try to list the bucket or - if this is impossible - return an error. */
+  return state->exists;
+}
+
 int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
 {
   ldout(s->cct, 10) << "Starting retarget" << dendl;
@@ -1792,7 +1809,7 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
 
-    if (! index.empty() /* && rgw_obj_exist()*/) {
+    if (! index.empty() && is_index_present(index)) {
       op_override = get_ws_index_op();
     } else if (ws_conf.listing_enabled) {
       op_override = get_ws_listing_op();
@@ -1824,7 +1841,7 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
 
-    if (! index.empty() /* && rgw_obj_exist()*/) {
+    if (! index.empty() && is_index_present(index)) {
       op_override = get_ws_index_op();
     } else if (ws_conf.listing_enabled) {
       op_override = get_ws_listing_op();
