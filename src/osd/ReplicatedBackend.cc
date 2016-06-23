@@ -1985,7 +1985,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 	 iter->valid();
 	 iter->next(false)) {
       if (!out_op->omap_entries.empty() &&
-	  available <= (iter->key().size() + iter->value().length()))
+	  ((cct->_conf->osd_recovery_max_omap_entries_per_chunk > 0 &&
+	    out_op->omap_entries.size() >= cct->_conf->osd_recovery_max_omap_entries_per_chunk) ||
+	   available <= iter->key().size() + iter->value().length()))
 	break;
       out_op->omap_entries.insert(make_pair(iter->key(), iter->value()));
 
