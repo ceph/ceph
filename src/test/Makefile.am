@@ -473,7 +473,8 @@ endif
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \
-	test/osdc/FakeWriteback.cc
+	test/osdc/FakeWriteback.cc \
+	test/osdc/MemWriteback.cc
 ceph_test_objectcacher_stress_LDADD = $(LIBOSDC) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 
@@ -510,6 +511,7 @@ noinst_HEADERS += \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
+	test/osdc/MemWriteback.h \
 	test/osd/Object.h \
 	test/osd/RadosModel.h \
 	test/osd/TestOpStat.h \
