@@ -35,6 +35,11 @@ Standard arguments:
                               If both -S and -c are supplied, -S wins, and
                               there is no validation that sha1 is contained
                               in branch
+  -n <newest>, --newest <newest>
+                              Search for the newest revision built on all
+                              required distro/versions, starting from
+                              either --ceph or --sha1, backtracking
+                              up to <newest> commits [default: 10]
   -k <kernel>, --kernel <kernel>
                               The kernel branch to run against; if not
                               supplied, the installed kernel is unchanged

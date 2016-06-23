@@ -8,7 +8,9 @@ import yaml
 from datetime import datetime
 
 from ..config import config, JobConfig
-from ..exceptions import (BranchNotFoundError, CommitNotFoundError,)
+from ..exceptions import (
+    BranchNotFoundError, CommitNotFoundError, VersionNotFoundError
+)
 from ..misc import deep_merge, get_results_url
 
 from . import util
@@ -23,7 +25,7 @@ class Run(object):
     WAIT_PAUSE = 5 * 60
     __slots__ = (
         'args', 'name', 'base_config', 'suite_repo_path', 'base_yaml_paths',
-        'base_args',
+        'base_args', 'package_versions',
     )
 
     def __init__(self, args):
@@ -33,6 +35,8 @@ class Run(object):
         self.args = args
         self.name = self.make_run_name()
         self.base_config = self.create_initial_config()
+        # caches package versions to minimize requests to gbs
+        self.package_versions = dict()
 
         if self.args.suite_dir:
             self.suite_repo_path = self.args.suite_dir
@@ -148,7 +152,8 @@ class Run(object):
         return ceph_hash
 
     def choose_ceph_version(self, ceph_hash):
-        if config.suite_verify_ceph_hash:
+        if config.suite_verify_ceph_hash and not self.args.newest:
+            # don't bother if newest; we'll search for an older one
             # Get the ceph package version
             ceph_version = util.package_version_for_hash(
                 ceph_hash, self.args.kernel_flavor, self.args.distro,
@@ -255,26 +260,8 @@ class Run(object):
             if results_url:
                 log.info("Test results viewable at %s", results_url)
 
-    def schedule_suite(self):
-        """
-        Schedule the suite run. Returns the number of jobs scheduled.
-        """
-        name = self.name
-        arch = util.get_arch(self.base_config.machine_type)
-        suite_name = self.base_config.suite
-        suite_path = os.path.join(
-            self.suite_repo_path, 'suites',
-            self.base_config.suite.replace(':', '/'))
-        log.debug('Suite %s in %s' % (suite_name, suite_path))
-        configs = [
-            (combine_path(suite_name, item[0]), item[1]) for item in
-            build_matrix(suite_path, subset=self.args.subset)
-        ]
-        log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
-            suite_name, suite_path, len(configs)))
 
-        # used as a local cache for package versions from gitbuilder
-        package_versions = dict()
+    def collect_jobs(self, arch, configs, newest=False):
         jobs_to_schedule = []
         jobs_missing_packages = []
         for description, fragment_paths in configs:
@@ -345,31 +332,40 @@ class Run(object):
                 args=arg
             )
 
+            sha1 = self.base_config.sha1
             if config.suite_verify_ceph_hash:
                 full_job_config = dict()
                 deep_merge(full_job_config, self.base_config.to_dict())
                 deep_merge(full_job_config, parsed_yaml)
                 flavor = util.get_install_task_flavor(full_job_config)
-                sha1 = self.base_config.sha1
                 # Get package versions for this sha1, os_type and flavor. If
                 # we've already retrieved them in a previous loop, they'll be
                 # present in package_versions and gitbuilder will not be asked
                 # again for them.
-                package_versions = util.get_package_versions(
-                    sha1,
-                    os_type,
-                    flavor,
-                    package_versions
-                )
+                try:
+                    self.package_versions = util.get_package_versions(
+                        sha1,
+                        os_type,
+                        flavor,
+                        self.package_versions
+                    )
+                except VersionNotFoundError:
+                    pass
                 if not util.has_packages_for_distro(sha1, os_type, flavor,
-                                                    package_versions):
+                                                    self.package_versions):
                     m = "Packages for os_type '{os}', flavor {flavor} and " + \
                         "ceph hash '{ver}' not found"
                     log.error(m.format(os=os_type, flavor=flavor, ver=sha1))
                     jobs_missing_packages.append(job)
+                    # optimization: one missing package causes backtrack in newest mode;
+                    # no point in continuing the search
+                    if newest:
+                        return jobs_missing_packages, None
 
             jobs_to_schedule.append(job)
+        return jobs_missing_packages, jobs_to_schedule
 
+    def schedule_jobs(self, jobs_missing_packages, jobs_to_schedule, name):
         for job in jobs_to_schedule:
             log.info(
                 'Scheduling %s', job['desc']
@@ -378,8 +374,10 @@ class Run(object):
             log_prefix = ''
             if job in jobs_missing_packages:
                 log_prefix = "Missing Packages: "
-                if (not self.args.dry_run and not
-                        config.suite_allow_missing_packages):
+                if (
+                    not self.args.dry_run and
+                    not config.suite_allow_missing_packages
+                ):
                     util.schedule_fail(
                         "At least one job needs packages that don't exist for "
                         "hash {sha1}.".format(sha1=self.base_config.sha1),
@@ -395,6 +393,52 @@ class Run(object):
             if not self.args.dry_run and throttle:
                 log.info("pause between jobs : --throttle " + str(throttle))
                 time.sleep(int(throttle))
+
+    def schedule_suite(self):
+        """
+        Schedule the suite-run. Returns the number of jobs scheduled.
+        """
+        name = self.name
+        arch = util.get_arch(self.base_config.machine_type)
+        suite_name = self.base_config.suite
+        suite_path = os.path.join(
+            self.suite_repo_path, 'suites',
+            self.base_config.suite.replace(':', '/'))
+        log.debug('Suite %s in %s' % (suite_name, suite_path))
+        configs = [
+            (combine_path(suite_name, item[0]), item[1]) for item in
+            build_matrix(suite_path, subset=self.args.subset)
+        ]
+        log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
+            suite_name, suite_path, len(configs)))
+
+        # if newest, do this until there are no missing packages
+        # if not, do it once
+        backtrack = 0
+        limit = self.args.newest
+        while backtrack < limit:
+            jobs_missing_packages, jobs_to_schedule = \
+                self.collect_jobs(arch, configs, self.args.newest)
+            if jobs_missing_packages and self.args.newest:
+                self.base_config.sha1 = \
+                    util.find_git_parent('ceph', self.base_config.sha1)
+                if self.base_config.sha1 is None:
+                    util.schedule_fail(
+                        name, message='Backtrack for --newest failed'
+                    )
+                backtrack += 1
+                continue
+            if backtrack:
+                log.info("--newest supplied, backtracked %d commits to %s" %
+                         (backtrack, self.base_config.sha1))
+            break
+        else:
+            util.schedule_fail(
+                name,
+                message='Exceeded %d backtracks; raise --newest value' % limit
+            )
+
+        self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 
         count = len(jobs_to_schedule)
         missing_count = len(jobs_missing_packages)
