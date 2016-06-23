@@ -3120,7 +3120,6 @@ void BlueStore::_sync()
 
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
-  memset(buf, 0, sizeof(*buf));
   uint64_t bluefs_len = 0;
   for (interval_set<uint64_t>::iterator p = bluefs_extents.begin();
       p != bluefs_extents.end(); p++)
