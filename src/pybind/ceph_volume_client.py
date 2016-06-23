@@ -738,8 +738,24 @@ class CephFSVolumeClient(object):
     def _lock(self, path):
         @contextmanager
         def fn():
-            fd = self.fs.open(path, os.O_CREAT, 0755)
-            self.fs.flock(fd, fcntl.LOCK_EX, self._id)
+            while(1):
+                fd = self.fs.open(path, os.O_CREAT, 0755)
+                self.fs.flock(fd, fcntl.LOCK_EX, self._id)
+
+                # The locked file will be cleaned up sometime. It could be
+                # unlinked e.g., by an another manila share instance, before
+                # lock was applied on it. Perform checks to ensure that this
+                # does not happen.
+                try:
+                    statbuf = self.fs.stat(path)
+                except cephfs.ObjectNotFound:
+                    self.fs.close(fd)
+                    continue
+
+                fstatbuf = self.fs.fstat(fd)
+                if statbuf.st_ino == fstatbuf.st_ino:
+                    break
+
             try:
                 yield
             finally:
