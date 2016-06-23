@@ -54,7 +54,7 @@ public:
   struct File : public RefCountedObject {
     bluefs_fnode_t fnode;
     int refs;
-    bool dirty;
+    uint64_t dirty_seq;
     bool locked;
     bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
@@ -65,7 +65,7 @@ public:
     File()
       : RefCountedObject(NULL, 0),
 	refs(0),
-	dirty(false),
+	dirty_seq(0),
 	locked(false),
 	deleted(false),
 	num_readers(0),

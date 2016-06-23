@@ -738,8 +738,9 @@ void BlueFS::_drop_link(FileRef file)
     }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
-    if (file->dirty) {
-      file->dirty = false;
+    if (file->dirty_seq) {
+      assert(file->dirty_seq > log_seq_stable);
+      file->dirty_seq = 0;
       dirty_files.erase(dirty_files.iterator_to(*file));
     }
   }
@@ -1065,10 +1066,14 @@ int BlueFS::_flush_and_sync_log()
   dirty_file_list_t::iterator p = dirty_files.begin();
   while (p != dirty_files.end()) {
     File *file = &(*p);
-    assert(file->dirty);
-    dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
-    file->dirty = false;
-    dirty_files.erase(p++);
+    assert(file->dirty_seq > 0);
+    if (file->dirty_seq <= log_seq_stable) {
+      dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
+      file->dirty_seq = 0;
+      dirty_files.erase(p++);
+    } else {
+      ++p;
+    }
   }
 
   _update_logger_stats();
@@ -1120,10 +1125,15 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   if (must_dirty) {
     h->file->fnode.mtime = ceph_clock_now(NULL);
     log_t.op_file_update(h->file->fnode);
-    if (!h->file->dirty) {
-      h->file->dirty = true;
+    if (h->file->dirty_seq == 0) {
       dirty_files.push_back(*h->file);
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	       << " (was clean)" << dendl;
+    } else {
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	       << " (was " << h->file->dirty_seq << ")" << dendl;
     }
+    h->file->dirty_seq = log_seq + 1;
   }
   dout(20) << __func__ << " file now " << h->file->fnode << dendl;
 
@@ -1284,11 +1294,13 @@ void BlueFS::_fsync(FileWriter *h)
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   _flush(h, true);
   _flush_wait(h);
-  if (h->file->dirty) {
+  if (h->file->dirty_seq) {
+    uint64_t s = log_seq;
     dout(20) << __func__ << " file metadata is dirty, flushing log on "
 	     << h->file->fnode << dendl;
     _flush_and_sync_log();
-    assert(!h->file->dirty);
+    assert(h->file->dirty_seq == 0 ||  // cleaned
+	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
 }
 
