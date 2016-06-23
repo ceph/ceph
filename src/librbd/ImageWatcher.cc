@@ -321,6 +321,14 @@ void ImageWatcher::notify_header_update(Context *on_finish) {
   m_notifier.notify(bl, nullptr, on_finish);
 }
 
+void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
+				        const std::string &oid) {
+  // supports legacy (empty buffer) clients
+  bufferlist bl;
+  ::encode(NotifyMessage(HeaderUpdatePayload()), bl);
+  io_ctx.notify2(oid, bl, image_watcher::Notifier::NOTIFY_TIMEOUT, nullptr);
+}
+
 void ImageWatcher::schedule_cancel_async_requests() {
   FunctionContext *ctx = new FunctionContext(
     boost::bind(&ImageWatcher::cancel_async_requests, this));
