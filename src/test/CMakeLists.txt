@@ -1640,6 +1640,7 @@ target_link_libraries(test_stress_watch
 add_executable(test_objectcacher_stress
   osdc/object_cacher_stress.cc
   osdc/FakeWriteback.cc
+  osdc/MemWriteback.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 target_link_libraries(test_objectcacher_stress
