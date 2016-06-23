@@ -1518,12 +1518,14 @@ add_subdirectory(brag)
 add_custom_target(vstart DEPENDS
     ceph-osd
     ceph-mon
-    ceph-mds
     ceph-authtool
     ceph-conf
     monmaptool
     crushtool
     cython_rados)
+if(WITH_MDS)
+  add_dependencies(vstart ceph-mds)
+endif(WITH_MDS)
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
