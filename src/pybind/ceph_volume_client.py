@@ -192,6 +192,13 @@ class EvictionError(Exception):
     pass
 
 
+class CephFSVolumeClientError(Exception):
+    """
+    Something went wrong talking to Ceph using CephFSVolumeClient.
+    """
+    pass
+
+
 class CephFSVolumeClient(object):
     """
     Combine libcephfs and librados interfaces to implement a
@@ -878,6 +885,12 @@ class CephFSVolumeClient(object):
                 # have mon auth caps that prevent it from accessing those keys
                 # (e.g. limit it to only access keys with a manila.* prefix)
             else:
+                # Disallow tenants to share auth IDs
+                if auth_meta['tenant_id'].__str__() != tenant_id.__str__():
+                    msg = "auth ID: {0} is already in use".format(auth_id)
+                    log.error(msg)
+                    raise CephFSVolumeClientError(msg)
+
                 if auth_meta['dirty']:
                     self._recover_auth_meta(auth_id, auth_meta)
 
@@ -897,14 +910,9 @@ class CephFSVolumeClient(object):
             self._auth_metadata_set(auth_id, auth_meta)
 
             if tenant_id:
-                if auth_meta['tenant_id'] == tenant_id.__str__():
-                    return {
-                        'auth_key': key
-                    }
-                else:
-                    return {
-                        'auth_key': None
-                    }
+                return {
+                    'auth_key': key
+                }
             else:
                 # Caller wasn't multi-tenant aware: be safe and don't give
                 # them a key
