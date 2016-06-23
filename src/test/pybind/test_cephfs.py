@@ -41,6 +41,13 @@ def test_version():
     cephfs.version()
 
 @with_setup(setup_test)
+def test_fstat():
+    fd = cephfs.open('file-1', 'w', 0755)
+    stat = cephfs.fstat(fd)
+    assert(len(stat) == 13)
+    cephfs.close(fd)
+
+@with_setup(setup_test)
 def test_statfs():
     stat = cephfs.statfs('/')
     assert(len(stat) == 11)
