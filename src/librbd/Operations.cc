@@ -178,8 +178,9 @@ struct C_InvokeAsyncRequest : public Context {
       return;
     }
 
+    int r;
     if (image_ctx.exclusive_lock->is_lock_owner() &&
-        image_ctx.exclusive_lock->accept_requests()) {
+        image_ctx.exclusive_lock->accept_requests(&r)) {
       send_local_request();
       owner_lock.put_read();
       return;
@@ -1168,7 +1169,7 @@ int Operations<I>::prepare_image_update() {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
-         !m_image_ctx.exclusive_lock->accept_requests())) {
+         !m_image_ctx.exclusive_lock->accept_requests(&r))) {
       m_image_ctx.exclusive_lock->try_lock(&ctx);
       trying_lock = true;
     }
