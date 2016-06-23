@@ -659,6 +659,7 @@ public:
 
     void _rm_buffer(Buffer *b) override {
       if (!b->is_empty()) {
+        assert(buffer_bytes >= b->length);
 	buffer_bytes -= b->length;
       }
       switch (b->cache_private) {
