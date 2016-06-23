@@ -17,10 +17,11 @@
 
 #include "osd/mClockOpClassAdapter.h"
 
-namespace ceph {
-  std::unique_ptr<mclock_op_tags_t> mclock_op_tags(nullptr);
+namespace dmc = crimson::dmclock;
 
-  mclock_op_tags_t::mclock_op_tags_t(CephContext *cct) :
+namespace ceph {
+
+  mClockOpClassQueue::mclock_op_tags_t::mclock_op_tags_t(CephContext *cct) :
     client_op(cct->_conf->osd_op_queue_mclock_client_op_res,
 	      cct->_conf->osd_op_queue_mclock_client_op_wgt,
 	      cct->_conf->osd_op_queue_mclock_client_op_lim),
@@ -41,7 +42,8 @@ namespace ceph {
   }
 
 
-  dmc::ClientInfo op_class_client_info_f(const osd_op_type_t& op_type) {
+  dmc::ClientInfo
+  mClockOpClassQueue::op_class_client_info_f(const osd_op_type_t& op_type) {
     switch(op_type) {
     case osd_op_type_t::client_op:
       return mclock_op_tags->client_op;
@@ -59,10 +61,18 @@ namespace ceph {
     }
   }
 
-  mClockOpClassQueue::pg_queueable_visitor_t mClockOpClassQueue::pg_queueable_visitor;
+  /*
+   * class mClockOpClassQueue
+   */
+
+  std::unique_ptr<mClockOpClassQueue::mclock_op_tags_t>
+  mClockOpClassQueue::mclock_op_tags(nullptr);
+
+  mClockOpClassQueue::pg_queueable_visitor_t
+  mClockOpClassQueue::pg_queueable_visitor;
 
   mClockOpClassQueue::mClockOpClassQueue(CephContext *cct) :
-    queue(&op_class_client_info_f),
+    queue(&mClockOpClassQueue::op_class_client_info_f),
     cost_factor(cct->_conf->osd_op_queue_mclock_cost_factor)
   {
     // manage the singleton
@@ -71,21 +81,28 @@ namespace ceph {
     }
   }
 
-  osd_op_type_t mClockOpClassQueue::get_osd_op_type(const Request& request) {
-      osd_op_type_t type =
-	boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
+  mClockOpClassQueue::osd_op_type_t
+  mClockOpClassQueue::get_osd_op_type(const Request& request) {
+    osd_op_type_t type =
+      boost::apply_visitor(pg_queueable_visitor, request.second.get_variant());
 
-      // if we got client_op back then we need to distinguish between
-      // a client op and an osd subop.
+    // if we got client_op back then we need to distinguish between
+    // a client op and an osd subop.
 
-      if (osd_op_type_t::client_op != type) {
-	return type;
-      } else if (MSG_OSD_SUBOP ==
-		 boost::get<OpRequestRef>(
-		   request.second.get_variant())->get_req()->get_header().type) {
-	return osd_op_type_t::osd_subop;
-      } else {
-	return osd_op_type_t::client_op;
-      }
+    if (osd_op_type_t::client_op != type) {
+      return type;
+    } else if (MSG_OSD_SUBOP ==
+	       boost::get<OpRequestRef>(
+		 request.second.get_variant())->get_req()->get_header().type) {
+      return osd_op_type_t::osd_subop;
+    } else {
+      return osd_op_type_t::client_op;
     }
+  }
+
+  // Formatted output of the queue
+  void mClockOpClassQueue::dump(ceph::Formatter *f) const {
+    queue.dump(f);
+  }
+
 } // namespace ceph

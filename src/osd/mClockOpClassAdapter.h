@@ -28,28 +28,8 @@
 
 namespace ceph {
 
-  namespace dmc = crimson::dmclock;
-
   using Request = std::pair<PGRef, PGQueueable>;
   using Client = entity_inst_t;
-
-  enum class osd_op_type_t {
-    client_op, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
-
-  struct mclock_op_tags_t {
-    dmc::ClientInfo client_op;
-    dmc::ClientInfo osd_subop;
-    dmc::ClientInfo snaptrim;
-    dmc::ClientInfo recov;
-    dmc::ClientInfo scrub;
-
-    mclock_op_tags_t(CephContext *cct);
-  };
-
-
-  extern std::unique_ptr<mclock_op_tags_t> mclock_op_tags;
-
-  dmc::ClientInfo op_class_client_info_f(const osd_op_type_t& op_type);
 
 
 #if 0 // USE?
@@ -66,15 +46,34 @@ namespace ceph {
   // osd_op_type_t. So this adpater class will transform calls
   // appropriately.
   class mClockOpClassQueue : public OpQueue<Request, Client> {
+
+    enum class osd_op_type_t {
+      client_op, osd_subop, bg_snaptrim, bg_recovery, bg_scrub };
+
     using queue_t = mClockQueue<Request, osd_op_type_t>;
 
     queue_t queue;
 
     double cost_factor;
 
+    struct mclock_op_tags_t {
+      crimson::dmclock::ClientInfo client_op;
+      crimson::dmclock::ClientInfo osd_subop;
+      crimson::dmclock::ClientInfo snaptrim;
+      crimson::dmclock::ClientInfo recov;
+      crimson::dmclock::ClientInfo scrub;
+
+      mclock_op_tags_t(CephContext *cct);
+    };
+
+    static std::unique_ptr<mclock_op_tags_t> mclock_op_tags;
+
   public:
 
     mClockOpClassQueue(CephContext *cct);
+
+    static crimson::dmclock::ClientInfo
+    op_class_client_info_f(const osd_op_type_t& op_type);
 
     inline unsigned length() const override final {
       return queue.length();
@@ -133,9 +132,7 @@ namespace ceph {
     }
 
     // Formatted output of the queue
-    inline void dump(ceph::Formatter *f) const override final {
-      queue.dump(f);
-    }
+    void dump(ceph::Formatter *f) const override final;
 
   protected:
 
