@@ -518,6 +518,7 @@ $CMDSDEBUG
 $extra_conf
 [osd]
 $DAEMONOPTS
+        osd_check_max_object_name_len_on_startup = false
         osd data = $CEPH_DEV_DIR/osd\$id
         osd journal = $CEPH_DEV_DIR/osd\$id/journal
         osd journal size = 100
