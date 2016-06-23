@@ -582,8 +582,8 @@ class CephFSVolumeClient(object):
         :param data_isolated: If true, create a separate OSD pool for this volume
         :return:
         """
-        log.info("create_volume: {0}".format(volume_path))
         path = self._get_path(volume_path)
+        log.info("create_volume: {0}".format(path))
 
         self._mkdir_p(path)
 
@@ -627,7 +627,8 @@ class CephFSVolumeClient(object):
         :return:
         """
 
-        log.info("delete_volume: {0}".format(volume_path))
+        path = self._get_path(volume_path)
+        log.info("delete_volume: {0}".format(path))
 
         # Create the trash folder if it doesn't already exist
         trash = os.path.join(self.volume_prefix, "_deleting")
@@ -637,7 +638,6 @@ class CephFSVolumeClient(object):
         trashed_volume = os.path.join(trash, volume_path.volume_id)
 
         # Move the volume's data to the trash folder
-        path = self._get_path(volume_path)
         try:
             self.fs.stat(path)
         except cephfs.ObjectNotFound:
