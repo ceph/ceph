@@ -99,11 +99,12 @@ namespace crimson {
 
       void add_servers(uint count,
 		       std::function<TS*(ServerId)> create_server_f) {
-	for (uint i = 0; i < count; ++i) {
-	  server_ids.push_back(server_count + i);
-	  servers[i] = create_server_f(server_count + i);
-	}
+	uint i = server_count;
 	server_count += count;
+	for (; i < server_count; ++i) {
+	  server_ids.push_back(i);
+	  servers[i] = create_server_f(i);
+	}
 
 	servers_created_time = now();
       }
@@ -111,10 +112,11 @@ namespace crimson {
 
       void add_clients(uint count,
 		       std::function<TC*(ClientId)> create_client_f) {
-	for (uint i = 0; i < count; ++i) {
-	  clients[i] = create_client_f(client_count + i);
-	}
+	uint i = client_count;
 	client_count += count;
+	for (; i < client_count; ++i) {
+	  clients[i] = create_client_f(i);
+	}
 
 	clients_created_time = now();
       }
