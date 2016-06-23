@@ -35,9 +35,8 @@ def find_victim_object(ctx, pg, osd):
     data_path = os.path.join(
         '/var/lib/ceph/osd',
         'ceph-{id}'.format(id=osd),
-        'fuse',
-        '{pg}_head'.format(pg=pg),
-        'all',
+        'current',
+        '{pg}_head'.format(pg=pg)
         )
 
     # fuzz time
@@ -48,13 +47,14 @@ def find_victim_object(ctx, pg, osd):
         )
         ls_out = ls_fp.getvalue()
 
-    # find an object file we can mess with (and not the pg info object)
+    # find an object file we can mess with
     osdfilename = next(line for line in ls_out.split('\n')
-                       if not line.endswith('::::head#'))
+                       if not line.startswith('__'))
     assert osdfilename is not None
 
     # Get actual object name from osd stored filename
-    objname = osdfilename.split(':')[4]
+    objname, _ = osdfilename.split('__', 1)
+    objname = objname.replace(r'\u', '_')
     return osd_remote, os.path.join(data_path, osdfilename), objname
 
 
@@ -63,7 +63,7 @@ def corrupt_file(osd_remote, path):
     osd_remote.run(
         args=['sudo', 'dd',
               'if=/dev/zero',
-              'of=%s/data' % path,
+              'of=%s' % path,
               'bs=1', 'count=1', 'conv=notrunc']
     )
 
@@ -140,34 +140,32 @@ class MessUp:
     @contextlib.contextmanager
     def _test_with_file(self, messup_cmd, *checks):
         temp = tempfile.mktemp()
-        backup_cmd = ['sudo', 'cp', os.path.join(self.path, 'data'), temp]
+        backup_cmd = ['sudo', 'cp', self.path, temp]
         self.osd.run(args=backup_cmd)
         self.osd.run(args=messup_cmd.split())
         yield checks
-        create_cmd = ['sudo', 'mkdir', self.path]
-        self.osd.run(args=create_cmd, check_status=False)
-        restore_cmd = ['sudo', 'cp', temp, os.path.join(self.path, 'data')]
+        restore_cmd = ['sudo', 'mv', temp, self.path]
         self.osd.run(args=restore_cmd)
 
     def remove(self):
-        cmd = 'sudo rmdir {path}'.format(path=self.path)
+        cmd = 'sudo rm {path}'.format(path=self.path)
         return self._test_with_file(cmd, 'missing')
 
     def append(self):
-        cmd = 'sudo dd if=/dev/zero of={path}/data bs=1 count=1 ' \
+        cmd = 'sudo dd if=/dev/zero of={path} bs=1 count=1 ' \
               'conv=notrunc oflag=append'.format(path=self.path)
         return self._test_with_file(cmd,
                                     'data_digest_mismatch',
                                     'size_mismatch')
 
     def truncate(self):
-        cmd = 'sudo dd if=/dev/null of={path}/data'.format(path=self.path)
+        cmd = 'sudo dd if=/dev/null of={path}'.format(path=self.path)
         return self._test_with_file(cmd,
                                     'data_digest_mismatch',
                                     'size_mismatch')
 
     def change_obj(self):
-        cmd = 'sudo dd if=/dev/zero of={path}/data bs=1 count=1 ' \
+        cmd = 'sudo dd if=/dev/zero of={path} bs=1 count=1 ' \
               'conv=notrunc'.format(path=self.path)
         return self._test_with_file(cmd,
                                     'data_digest_mismatch')
@@ -359,9 +357,6 @@ def task(ctx, config):
         time.sleep(10)
 
     for i in range(num_osds):
-        manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'injectargs',
-                                '--', '--osd-objectstore-fuse')
-    for i in range(num_osds):
         manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'flush_pg_stats')
     manager.wait_for_clean()
 
@@ -386,10 +381,3 @@ def task(ctx, config):
     test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd,
                                obj_name, obj_path)
     log.info('test successful!')
-
-    # shut down fuse mount
-    for i in range(num_osds):
-        manager.raw_cluster_cmd('tell', 'osd.%d' % i, 'injectargs',
-                                '--', '--no-osd-objectstore-fuse')
-    time.sleep(5)
-    log.info('done')
