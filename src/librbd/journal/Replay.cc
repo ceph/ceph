@@ -340,6 +340,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
                  << "op_tid=" << event.op_tid << dendl;
 
   bool op_in_progress;
+  bool filter_ret_val;
   Context *on_op_complete = nullptr;
   Context *on_op_finish_event = nullptr;
   {
@@ -360,6 +361,10 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
     op_in_progress = op_event.op_in_progress;
     std::swap(on_op_complete, op_event.on_op_complete);
     std::swap(on_op_finish_event, op_event.on_op_finish_event);
+
+    // special errors which indicate op never started but was recorded
+    // as failed in the journal
+    filter_ret_val = (op_event.op_finish_error_codes.count(event.r) != 0);
   }
 
   if (event.r < 0) {
@@ -373,7 +378,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
       // creating the op event
       delete on_op_complete;
       delete on_op_finish_event;
-      handle_op_complete(event.op_tid, event.r);
+      handle_op_complete(event.op_tid, filter_ret_val ? 0 : event.r);
     }
     return;
   }
@@ -502,6 +507,9 @@ void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
     m_image_ctx, new ExecuteOp<I, journal::SnapUnprotectEvent>(m_image_ctx,
                                                                event,
                                                                on_op_complete));
+
+  // ignore errors recorded in the journal
+  op_event->op_finish_error_codes = {-EBUSY};
 
   // ignore errors caused due to replay
   op_event->ignore_error_codes = {-EINVAL};
