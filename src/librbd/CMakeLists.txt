@@ -64,7 +64,9 @@ set(librbd_internal_srcs
   operation/TrimRequest.cc)
 
 add_library(rbd_api STATIC librbd.cc)
-add_library(rbd_internal STATIC ${librbd_internal_srcs})
+add_library(rbd_internal STATIC
+  ${librbd_internal_srcs}
+  $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
   add_dependencies(rbd_internal rbd-tp)
 endif()
@@ -73,8 +75,7 @@ add_library(librbd ${CEPH_SHARED}
   $<TARGET_OBJECTS:osdc_rbd_objs>
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:krbd_objs>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  $<TARGET_OBJECTS:rados_snap_set_diff_obj>
+  $<TARGET_OBJECTS:parse_secret_objs>  
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   librbd.cc)
 target_link_libraries(librbd LINK_PRIVATE 
