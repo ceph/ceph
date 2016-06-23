@@ -99,11 +99,20 @@ namespace crimson {
 
       void add_servers(uint count,
 		       std::function<TS*(ServerId)> create_server_f) {
-	for (uint i = 0; i < count; ++i) {
-	  server_ids.push_back(server_count + i);
-	  servers[i] = create_server_f(server_count + i);
-	}
+	uint i = server_count;
+
+	// increment server_count before creating servers since they
+	// will start running immediately and may use the server_count
+	// value; NB: this could still be an issue if servers are
+	// added with multiple add_servers calls; consider using a
+	// separate start function after all servers (and clients?)
+	// have been added
 	server_count += count;
+
+	for (; i < server_count; ++i) {
+	  server_ids.push_back(i);
+	  servers[i] = create_server_f(i);
+	}
 
 	servers_created_time = now();
       }
@@ -111,10 +120,19 @@ namespace crimson {
 
       void add_clients(uint count,
 		       std::function<TC*(ClientId)> create_client_f) {
-	for (uint i = 0; i < count; ++i) {
-	  clients[i] = create_client_f(client_count + i);
-	}
+	uint i = client_count;
+
+	// increment client_count before creating clients since they
+	// will start running immediately and may use the client_count
+	// value (e.g., in the server selection function); NB: this could
+	// still be an issue if clients are added with multiple
+	// add_clients calls; consider using a separate start function
+	// after all clients have been added
 	client_count += count;
+
+	for (; i < client_count; ++i) {
+	  clients[i] = create_client_f(i);
+	}
 
 	clients_created_time = now();
       }
