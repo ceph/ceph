@@ -108,24 +108,29 @@ struct C_RefreshIfRequired : public Context {
   C_RefreshIfRequired(I &image_ctx, Context *on_finish)
     : image_ctx(image_ctx), on_finish(on_finish) {
   }
+  virtual ~C_RefreshIfRequired() {
+    delete on_finish;
+  }
 
   virtual void finish(int r) override {
     CephContext *cct = image_ctx.cct;
+    Context *ctx = on_finish;
+    on_finish = nullptr;
 
     if (r < 0) {
       lderr(cct) << "C_RefreshIfRequired: " << __func__ << ": r=" << r << dendl;
-      image_ctx.op_work_queue->queue(on_finish, r);
+      image_ctx.op_work_queue->queue(ctx, r);
       return;
     }
 
     if (image_ctx.state->is_refresh_required()) {
       ldout(cct, 20) << "C_RefreshIfRequired: " << __func__ << ": "
                      << "refresh required" << dendl;
-      image_ctx.state->refresh(on_finish);
+      image_ctx.state->refresh(ctx);
       return;
     }
 
-    image_ctx.op_work_queue->queue(on_finish, 0);
+    image_ctx.op_work_queue->queue(ctx, 0);
   }
 };
 
