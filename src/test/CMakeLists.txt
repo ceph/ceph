@@ -416,7 +416,8 @@ target_link_libraries(ceph_test_keys mon global ${CMAKE_DL_LIBS})
 add_executable(ceph_test_snap_mapper EXCLUDE_FROM_ALL
   test_snap_mapper.cc
   )
-target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES})
+target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES} ${UNITTEST_LIBS})
+set_target_properties(ceph_test_snap_mapper PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 add_executable(ceph_test_stress_watch
   test_stress_watch.cc

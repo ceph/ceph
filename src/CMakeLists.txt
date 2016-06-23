@@ -548,12 +548,14 @@ set(librados_srcs
   librados/IoCtxImpl.cc
   librados/RadosXattrIter.cc
   )
-add_library(librados ${CEPH_SHARED} ${librados_srcs}
+add_library(librados_objs OBJECT ${librados_srcs})
+add_library(librados ${CEPH_SHARED}
+  $<TARGET_OBJECTS:librados_objs>
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
-  add_dependencies(librados rados-tp)
+  add_dependencies(librados_objs rados-tp)
 endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
@@ -1152,8 +1154,7 @@ if(WITH_LIBCEPHFS)
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs
       VERSION 1.0.0
-      SOVERSION 1
-      COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+      SOVERSION 1)
   endif(ENABLE_SHARED)
   install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
@@ -1240,8 +1241,7 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
   add_library(rbd_mirror_internal STATIC
-    ${rbd_mirror_internal}
-    $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
+    ${rbd_mirror_internal})
 
   if(WITH_FUSE)
     add_executable(rbd-fuse
