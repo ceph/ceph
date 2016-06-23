@@ -226,6 +226,7 @@ class RGWSwiftWebsiteHandler {
   bool is_web_mode() const;
   bool can_be_website_req() const;
   bool is_web_dir() const;
+  bool is_index_present(const std::string& index);
 
   int serve_errordoc(int http_ret, std::string error_doc);
 
