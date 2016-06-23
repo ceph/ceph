@@ -273,9 +273,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   }
 
 
-  /* if (entry.user_stats_sync) { */
-  /*   dec_header_stats(&header.stats, entry); */
-  /* } */
+  entry.bucket_count = 1;
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
@@ -283,8 +281,22 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   if (ret < 0)
     return ret;
 
-  // decrease stats after removal actually succeeds
-  dec_header_stats(&header.stats, entry);
+  // TODO: find better ways to handle this user_stats_sync isn't set in all
+  // buckets but we need to always decrement the header count anyway since we
+  // use that instead of all the entries
+  dec_header_stats(&header.stats, entry, true);
+
+  CLS_LOG(20, "header: total bytes=%lld entries=%lld buckets=%lld",
+	  (long long)header.stats.total_bytes, (long long)header.stats.total_entries,
+	  (long long)header.stats.total_buckets);
+
+  bufferlist bl;
+
+  ::encode(header, bl);
+
+  ret = cls_cxx_map_write_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
 
   return 0;
 }
