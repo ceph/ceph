@@ -318,7 +318,10 @@ void BlueFS::_stop_alloc()
 {
   dout(20) << __func__ << dendl;
   for (auto p : alloc) {
-    delete p;
+    if (p != nullptr)  {
+      p->shutdown();
+      delete p;
+    }
   }
   alloc.clear();
 }
