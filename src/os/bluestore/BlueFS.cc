@@ -277,7 +277,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   // write supers
   super.log_fnode = log_file->fnode;
   _write_super();
-  _flush_bdev();
+  flush_bdev();
 
   // clean up
   super = bluefs_super_t();
@@ -1003,7 +1003,7 @@ void BlueFS::_compact_log()
   super.log_fnode = log_file->fnode;
   ++super.version;
   _write_super();
-  _flush_bdev();
+  flush_bdev();
 
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
   for (auto& r : old_extents) {
@@ -1054,11 +1054,11 @@ int BlueFS::_flush_and_sync_log()
   log_t.clear();
   log_t.seq = 0;  // just so debug output is less confusing
 
-  _flush_bdev();
+  flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
   wait_for_aio(log_writer);
-  _flush_bdev();
+  flush_bdev();
 
   // clean dirty files
   dout(20) << __func__ << " log_seq_stable " << seq << dendl;
@@ -1309,8 +1309,9 @@ void BlueFS::_fsync(FileWriter *h)
   }
 }
 
-void BlueFS::_flush_bdev()
+void BlueFS::flush_bdev()
 {
+  // NOTE: this is safe to call without a lock.
   dout(20) << __func__ << dendl;
   for (auto p : bdev) {
     if (p)

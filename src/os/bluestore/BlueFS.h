@@ -243,7 +243,7 @@ private:
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev();
+  void flush_bdev();  // this is safe to call without a lock
 
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
