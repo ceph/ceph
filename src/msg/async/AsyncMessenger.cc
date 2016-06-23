@@ -281,8 +281,6 @@ void Worker::stop()
 }
 
 class WorkerPool {
-  WorkerPool(const WorkerPool &);
-  WorkerPool& operator=(const WorkerPool &);
   CephContext *cct;
   vector<Worker*> workers;
   vector<int> coreids;
@@ -307,6 +305,8 @@ class WorkerPool {
   friend class C_barrier;
   public:
   explicit WorkerPool(CephContext *c);
+  WorkerPool(const WorkerPool &) = delete;
+  WorkerPool& operator=(const WorkerPool &) = delete;
   virtual ~WorkerPool();
   void start();
   Worker *get_worker();
