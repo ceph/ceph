@@ -375,8 +375,7 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
         dout(20) << "starting replayer for " << peer << dendl;
         unique_ptr<Replayer> replayer(new Replayer(m_threads, m_image_deleter,
                                                    m_image_sync_throttler,
-                                                   m_local, kv.first, peer,
-                                                   m_args));
+                                                   kv.first, peer, m_args));
         // TODO: make async, and retry connecting within replayer
         int r = replayer->init();
         if (r < 0) {

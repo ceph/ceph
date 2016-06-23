@@ -8,6 +8,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "global/global_context.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/ExclusiveLock.h"
@@ -288,8 +289,8 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
   }
   m_name = pool_name + "/" + m_global_image_id;
 
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+  m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                    this);
 }
 
 template <typename I>
@@ -462,8 +463,8 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
       }
     }
     if (!m_asok_hook) {
-      CephContext *cct = static_cast<CephContext *>(m_local->cct());
-      m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+      m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                        this);
     }
   }
 
