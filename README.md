@@ -51,6 +51,11 @@ The list of Debian or RPM packages dependencies can be installed with:
 Building Ceph
 =============
 
+Note that these instructions are meant for developers who are
+compiling the code for development and testing.  To build binaries
+suitable for installation we recommend you build deb or rpm packages,
+or refer to the ceph.spec.in or debian/rules to see which
+configuration options are specified for production builds.
 
 Prerequisite:
         CMake 2.8.11
