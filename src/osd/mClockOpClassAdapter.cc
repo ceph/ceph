@@ -16,8 +16,16 @@
 #include <memory>
 
 #include "osd/mClockOpClassAdapter.h"
+#include "common/dout.h"
+
 
 namespace dmc = crimson::dmclock;
+
+
+#define dout_subsys ceph_subsys_osd
+#undef dout_prefix
+#define dout_prefix *_dout
+
 
 namespace ceph {
 
@@ -38,7 +46,14 @@ namespace ceph {
 	  cct->_conf->osd_op_queue_mclock_scrub_wgt,
 	  cct->_conf->osd_op_queue_mclock_scrub_lim)
   {
-    // empty
+    dout(20) <<
+      "mClockOpClassQueue settings:: " <<
+      "client_op:" << client_op <<
+      "; osd_subop:" << osd_subop <<
+      "; snaptrim:" << snaptrim <<
+      "; recov:" << recov <<
+      "; scrub:" << scrub <<
+      dendl;
   }
 
 
