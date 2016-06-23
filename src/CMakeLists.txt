@@ -1524,6 +1524,9 @@ add_custom_target(vstart DEPENDS
     monmaptool
     crushtool
     cython_rados)
+if(WITH_RADOSGW)
+  add_dependencies(vstart radosgw radosgw-admin)
+endif(WITH_RADOSGW)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
