@@ -231,7 +231,6 @@ class CephFSVolumeClient(object):
         # UUID
         self._id = struct.unpack(">Q", uuid.uuid1().get_bytes()[0:8])[0]
 
-        # TODO: remove .meta files on last rule for an auth ID deletion
         # TODO: version the on-disk structures
 
     def recover(self):
@@ -288,7 +287,11 @@ class CephFSVolumeClient(object):
         for auth_id in auth_ids:
             with self._auth_lock(auth_id):
                 auth_meta = self._auth_metadata_get(auth_id)
-                if not auth_meta or not auth_meta['dirty']:
+                if not auth_meta or not auth_meta['volumes']:
+                    # Clean up auth meta file
+                    self.fs.unlink(self._auth_metadata_path(auth_id))
+                    continue
+                if not auth_meta['dirty']:
                     continue
                 self._recover_auth_meta(auth_id, auth_meta)
 
@@ -337,6 +340,11 @@ class CephFSVolumeClient(object):
 
         for volume in remove_volumes:
             del auth_meta['volumes'][volume]
+
+        if not auth_meta['volumes']:
+            # Clean up auth meta file
+            self.fs.unlink(self._auth_metadata_path(auth_id))
+            return
 
         # Recovered from all partial auth updates for the auth ID.
         auth_meta['dirty'] = False
@@ -1030,10 +1038,16 @@ class CephFSVolumeClient(object):
             auth_meta = self._auth_metadata_get(auth_id)
 
             volume_path_str = str(volume_path)
-            if (auth_meta is None) or (volume_path_str not in auth_meta['volumes']):
-                # Non-existent auth metadata is a clean state that means
-                # nothing authorized under this name: we must have already
-                # deauthorized.  Be idempotent and return without an error.
+            if (auth_meta is None) or (not auth_meta['volumes']):
+                log.warn("deauthorized called for already-removed auth"
+                         "ID '{auth_id}' for volume ID '{volume}'".format(
+                    auth_id=auth_id, volume=volume_path.volume_id
+                ))
+                # Clean up the auth meta file of an auth ID
+                self.fs.unlink(self._auth_metadata_path(auth_id))
+                return
+
+            if volume_path_str not in auth_meta['volumes']:
                 log.warn("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for volume ID '{volume}'".format(
                     auth_id=auth_id, volume=volume_path.volume_id
@@ -1051,6 +1065,12 @@ class CephFSVolumeClient(object):
 
             # Filter out the volume we're deauthorizing
             del auth_meta['volumes'][volume_path_str]
+
+            # Clean up auth meta file
+            if not auth_meta['volumes']:
+                self.fs.unlink(self._auth_metadata_path(auth_id))
+                return
+
             auth_meta['dirty'] = False
             self._auth_metadata_set(auth_id, auth_meta)
 
