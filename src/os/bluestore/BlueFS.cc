@@ -997,7 +997,7 @@ void BlueFS::_compact_log()
   log_writer->append(bl);
   int r = _flush(log_writer, true);
   assert(r == 0);
-  _flush_wait(log_writer);
+  wait_for_aio(log_writer);
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
@@ -1057,7 +1057,7 @@ int BlueFS::_flush_and_sync_log()
   _flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
-  _flush_wait(log_writer);
+  wait_for_aio(log_writer);
   _flush_bdev();
 
   // clean dirty files
@@ -1220,8 +1220,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   return 0;
 }
 
-void BlueFS::_flush_wait(FileWriter *h)
+void BlueFS::wait_for_aio(FileWriter *h)
 {
+  // NOTE: this is safe to call without a lock, as long as our reference is
+  // stable.
   dout(10) << __func__ << " " << h << dendl;
   utime_t start = ceph_clock_now(NULL);
   for (auto p : h->iocv) {
@@ -1293,11 +1295,14 @@ void BlueFS::_fsync(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   _flush(h, true);
-  _flush_wait(h);
-  if (h->file->dirty_seq) {
+  uint64_t old_dirty_seq = h->file->dirty_seq;
+  lock.unlock();
+  wait_for_aio(h);
+  lock.lock();
+  if (old_dirty_seq) {
     uint64_t s = log_seq;
-    dout(20) << __func__ << " file metadata is dirty, flushing log on "
-	     << h->file->fnode << dendl;
+    dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
+	     << ") on " << h->file->fnode << ", flushing log" << dendl;
     _flush_and_sync_log();
     assert(h->file->dirty_seq == 0 ||  // cleaned
 	   h->file->dirty_seq > s);    // or redirtied by someone else
