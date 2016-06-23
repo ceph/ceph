@@ -797,6 +797,7 @@ void BlueStore::BufferSpace::_clear()
 int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 {
   // note: we already hold cache->lock
+  dout(20) << __func__ << std::hex << " 0x" << offset << "~" << length << dendl;
   int cache_private = 0;
   cache->_audit("discard start");
   auto i = _data_lower_bound(offset);
@@ -821,13 +822,17 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
 	} else {
 	  _add_buffer(new Buffer(this, b->state, b->seq, end, tail), 0, b);
 	}
-	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
+	if (!b->is_writing()) {
+	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
+	}
 	b->truncate(front);
 	cache->_audit("discard end 1");
 	break;
       } else {
 	// drop tail
-	cache->_adjust_buffer_size(b, front - (int64_t)b->length);
+	if (!b->is_writing()) {
+	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
+	}
 	b->truncate(front);
 	++i;
 	continue;
