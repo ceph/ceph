@@ -1258,7 +1258,8 @@ class CephManager:
             self.raw_cluster_cmd(*args)
 
     def create_pool_with_unique_name(self, pg_num=16,
-                                     erasure_code_profile_name=None):
+                                     erasure_code_profile_name=None,
+                                     min_size=None):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -1269,7 +1270,8 @@ class CephManager:
             self.create_pool(
                 name,
                 pg_num,
-                erasure_code_profile_name=erasure_code_profile_name)
+                erasure_code_profile_name=erasure_code_profile_name,
+                min_size=min_size)
         return name
 
     @contextlib.contextmanager
@@ -1279,7 +1281,8 @@ class CephManager:
         self.remove_pool(pool_name)
 
     def create_pool(self, pool_name, pg_num=16,
-                    erasure_code_profile_name=None):
+                    erasure_code_profile_name=None,
+                    min_size=None):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -1299,6 +1302,11 @@ class CephManager:
             else:
                 self.raw_cluster_cmd('osd', 'pool', 'create',
                                      pool_name, str(pg_num))
+            if min_size is not None:
+                self.raw_cluster_cmd(
+                    'osd', 'pool', 'set', pool_name,
+                    'min_size',
+                    str(min_size))
             self.pools[pool_name] = pg_num
         time.sleep(1)
 
