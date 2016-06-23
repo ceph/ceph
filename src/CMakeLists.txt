@@ -1472,6 +1472,10 @@ if(${WITH_RADOSGW})
     cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv ${OPENSSL_LIBRARIES} ${BLKID_LIBRARIES} ${OPENLDAP_LIBS}
     ${ALLOC_LIBS})
+  # radosgw depends on cls libraries at runtime, but not as link dependencies
+  add_dependencies(radosgw cls_rgw cls_lock cls_refcount
+    cls_log cls_statelog cls_timeindex
+    cls_version cls_replica_log cls_user)
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs})
