@@ -5325,8 +5325,8 @@ bool MDCache::process_imported_caps()
 	Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
 	assert(session);
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
-	  add_reconnected_cap(in, q->first, inodeno_t(r->second.capinfo.snaprealm));
 	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
+	  add_reconnected_cap(in, q->first, r->second);
 	  if (r->first >= 0) {
 	    if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
 	      cap->inc_mseq();
@@ -5372,6 +5372,42 @@ void MDCache::check_realm_past_parents(SnapRealm *realm)
   }
 }
 
+void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
+				     client_t client, snapid_t snap_follows)
+{
+  dout(10) << "rebuild_need_snapflush " << snap_follows << " on " << *head_in << dendl;
+
+  const set<snapid_t>& snaps = realm->get_snaps();
+  snapid_t follows = snap_follows;
+
+  while (true) {
+    CInode *in = pick_inode_snap(head_in, follows);
+    if (in == head_in)
+      break;
+    dout(10) << " need snapflush from client." << client << " on " << *in << dendl;
+
+    /* TODO: we can check the reconnected/flushing caps to find 
+     *       which locks need gathering */
+    for (int i = 0; i < num_cinode_locks; i++) {
+      int lockid = cinode_lock_info[i].lock;
+      SimpleLock *lock = in->get_lock(lockid);
+      assert(lock);
+      in->client_snap_caps[lockid].insert(client);
+      in->auth_pin(lock);
+      lock->set_state(LOCK_SNAP_SYNC);
+      lock->get_wrlock(true);
+    }
+
+    for (auto p = snaps.lower_bound(in->first);
+	 p != snaps.end() && *p <= in->last;
+	 ++p) {
+      head_in->add_need_snapflush(in, *p, client);
+    }
+
+    follows = in->last;
+  }
+}
+
 /*
  * choose lock states based on reconnected caps
  */
@@ -5385,6 +5421,9 @@ void MDCache::choose_lock_states_and_reconnect_caps()
        i != inode_map.end();
        ++i) {
     CInode *in = i->second;
+
+    if (in->last != CEPH_NOSNAP)
+      continue;
  
     if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
       in->mark_dirty_rstat();
@@ -5400,30 +5439,37 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 
     check_realm_past_parents(realm);
 
-    map<CInode*,map<client_t,inodeno_t> >::iterator p = reconnected_caps.find(in);
+    auto p = reconnected_caps.find(in);
     if (p != reconnected_caps.end()) {
-
+      bool missing_snap_parent = false;
       // also, make sure client's cap is in the correct snaprealm.
-      for (map<client_t,inodeno_t>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
-	if (q->second == realm->inode->ino()) {
-	  dout(15) << "  client." << q->first << " has correct realm " << q->second << dendl;
+      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
+	if (q->second.snap_follows > 0 && q->second.snap_follows < in->first - 1) {
+	  if (realm->have_past_parents_open()) {
+	    rebuild_need_snapflush(in, realm, q->first, q->second.snap_follows);
+	  } else {
+	    missing_snap_parent = true;
+	  }
+	}
+
+	if (q->second.realm_ino == realm->inode->ino()) {
+	  dout(15) << "  client." << q->first << " has correct realm " << q->second.realm_ino << dendl;
 	} else {
-	  dout(15) << "  client." << q->first << " has wrong realm " << q->second
+	  dout(15) << "  client." << q->first << " has wrong realm " << q->second.realm_ino
 		   << " != " << realm->inode->ino() << dendl;
 	  if (realm->have_past_parents_open()) {
 	    // ok, include in a split message _now_.
 	    prepare_realm_split(realm, q->first, in->ino(), splits);
 	  } else {
 	    // send the split later.
-	    missing_snap_parents[realm->inode][q->first].insert(in->ino());
+	    missing_snap_parent = true;
 	  }
 	}
       }
+      if (missing_snap_parent)
+	missing_snap_parents[realm->inode].insert(in);
     }
   }    
-  reconnected_caps.clear();
 
   send_snaps(splits);
 }
@@ -5647,21 +5693,26 @@ void MDCache::open_snap_parents()
   map<client_t,MClientSnap*> splits;
   MDSGatherBuilder gather(g_ceph_context);
 
-  map<CInode*,map<client_t,set<inodeno_t> > >::iterator p = missing_snap_parents.begin();
+  auto p = missing_snap_parents.begin();
   while (p != missing_snap_parents.end()) {
     CInode *in = p->first;
     assert(in->snaprealm);
     if (in->snaprealm->open_parents(gather.new_sub())) {
       dout(10) << " past parents now open on " << *in << dendl;
-      
-      // include in a (now safe) snap split?
-      for (map<client_t,set<inodeno_t> >::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q)
-	for (set<inodeno_t>::iterator r = q->second.begin();
-	     r != q->second.end();
-	     ++r) 
-	  prepare_realm_split(in->snaprealm, q->first, *r, splits);
+
+      for (CInode *child : p->second) {
+	auto q = reconnected_caps.find(child);
+	assert(q != reconnected_caps.end());
+	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	  if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
+	    rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	  }
+	  // make sure client's cap is in the correct snaprealm.
+	  if (r->second.realm_ino != in->ino()) {
+	    prepare_realm_split(in->snaprealm, r->first, child->ino(), splits);
+	  }
+	}
+      }
 
       missing_snap_parents.erase(p++);
 
@@ -5713,6 +5764,7 @@ void MDCache::open_snap_parents()
     assert(rejoin_done != NULL);
     rejoin_done->complete(0);
     rejoin_done = NULL;
+    reconnected_caps.clear();
   }
 }
 
@@ -6042,6 +6094,9 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
        ++p) {
     CInode *in = p->second;
     if (!in->is_auth())
+      continue;
+
+    if (in->last != CEPH_NOSNAP)
       continue;
 
     // Only normal files need file size recovery
