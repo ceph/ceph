@@ -172,8 +172,9 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       dec_header_stats(&header.stats, entry, op.add);
     }
 
-    CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
-            key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
+    CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld bucket_count=%lld",
+            key.c_str(), (long long)update_entry.size, (long long)update_entry.count,
+	    (long long)update_entry.bucket_count);
 
     apply_entry_stats(update_entry, &entry);
     entry.user_stats_sync = true;
@@ -189,7 +190,9 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   bufferlist bl;
 
-  CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
+  CLS_LOG(20, "header: total bytes=%lld entries=%lld buckets=%lld",
+	  (long long)header.stats.total_bytes, (long long)header.stats.total_entries,
+	  (long long)header.stats.total_buckets);
 
   if (header.last_stats_update < op.time)
     header.last_stats_update = op.time;
