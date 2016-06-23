@@ -100,20 +100,22 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
   return 0;
 }
 
-static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool need_bucket_add=false)
 {
   stats->total_entries += entry.count;
   stats->total_bytes += entry.size;
   stats->total_bytes_rounded += entry.size_rounded;
-  stats->total_buckets += entry.bucket_count;
+  if (need_bucket_add)
+    stats->total_buckets += entry.bucket_count;
 }
 
-static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool need_delete=false)
 {
   stats->total_bytes -= entry.size;
   stats->total_bytes_rounded -= entry.size_rounded;
   stats->total_entries -= entry.count;
-  stats->total_buckets -= entry.bucket_count;
+  if (need_delete)
+    stats->total_buckets -= entry.bucket_count;
 }
 
 static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
