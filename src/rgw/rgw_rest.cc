@@ -1629,8 +1629,9 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri,
     }
   }
 
-  if (default_mgr)
-    return default_mgr;
+  if (default_mgr) {
+    return default_mgr->get_resource_mgr_as_default(s, uri, out_uri);
+  }
 
   return this;
 }

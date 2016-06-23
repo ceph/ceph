@@ -1709,43 +1709,52 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
   s->info.args.set(p);
   s->info.args.parse();
 
-  if (*req_name != '/')
+  /* Skip the leading slash of URL hierarchy. */
+  if (req_name[0] != '/') {
     return 0;
+  } else {
+    req_name++;
+  }
 
-  req_name++;
-
-  if (!*req_name)
-    return 0;
+  if ('\0' == req_name[0]) {
+    return g_conf->rgw_swift_url_prefix == "/" ? -ERR_BAD_URL : 0;
+  }
 
   req = req_name;
 
-  int pos = req.find('/');
-  if (pos >= 0) {
+  size_t pos = req.find('/');
+  if (std::string::npos != pos && g_conf->rgw_swift_url_prefix != "/") {
     bool cut_url = g_conf->rgw_swift_url_prefix.length();
     first = req.substr(0, pos);
+
     if (first.compare(g_conf->rgw_swift_url_prefix) == 0) {
       if (cut_url) {
+        /* Rewind to the "v1/..." part. */
         next_tok(req, first, '/');
       }
     }
+  } else if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
+    s->formatter = new RGWFormatter_Plain;
+    return -ERR_BAD_URL;
   } else {
-    if (req.compare(g_conf->rgw_swift_url_prefix) == 0) {
-      s->formatter = new RGWFormatter_Plain;
-      return -ERR_BAD_URL;
-    }
     first = req;
   }
 
-  string tenant_path;
-  if (!g_conf->rgw_swift_tenant_name.empty()) {
+  std::string tenant_path;
+  if (! g_conf->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
   }
 
   /* verify that the request_uri conforms with what's expected */
   char buf[g_conf->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
-  int blen = sprintf(buf, "/%s/v1%s",
-		    g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
+  int blen;
+  if (g_conf->rgw_swift_url_prefix == "/") {
+    blen = sprintf(buf, "/v1%s", tenant_path.c_str());
+  } else {
+    blen = sprintf(buf, "/%s/v1%s",
+                   g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
+  }
   if (s->decoded_uri[0] != '/' ||
     s->decoded_uri.compare(0, blen, buf) !=  0) {
     return -ENOENT;

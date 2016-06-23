@@ -796,6 +796,9 @@ Swift Settings
               on the same host. For compatibility, setting this configuration
               variable to empty causes the default "/swift" to be used.
               Use explicit prefix "/" to start StorageURL at the root.
+              WARNING: setting this option to "/" will NOT work if S3 API is
+              enabled. From the other side disabling S3 will make impossible
+              to deploy RadosGW in the multi-site configuration!
 :Default: ``swift``
 :Example: "/swift-testing"
 
