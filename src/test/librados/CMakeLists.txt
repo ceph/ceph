@@ -153,14 +153,14 @@ target_link_libraries(ceph_test_rados_api_tmap_migrate
   librados mds osdc global cls_cephfs_client ${UNITTEST_LIBS} radostest)
 
 # unittest_librados
-add_executable(unittest_librados EXCLUDE_FROM_ALL
+add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados)
 target_link_libraries(unittest_librados librados global ${BLKID_LIBRARIES})
 
 # unittest_librados_config
-add_executable(unittest_librados_config EXCLUDE_FROM_ALL
+add_executable(unittest_librados_config
   librados_config.cc
   )
 add_ceph_unittest(unittest_librados_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_librados_config)

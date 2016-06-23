@@ -17,7 +17,7 @@ set(unittest_journal_srcs
   RadosTestFixture.cc
   )
 
-add_executable(unittest_journal EXCLUDE_FROM_ALL
+add_executable(unittest_journal
   ${unittest_journal_srcs} 
   )
 add_ceph_unittest(unittest_journal ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_journal)
