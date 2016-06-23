@@ -72,6 +72,11 @@ bool SnapshotRemoveRequest::should_complete(int r) {
   bool finished = false;
   switch (m_state) {
   case STATE_LOAD_MAP:
+    if (r == -ENOENT) {
+      finished = true;
+      break;
+    }
+
     if (r == 0) {
       bufferlist::iterator it = m_out_bl.begin();
       r = cls_client::object_map_load_finish(&it, &m_snap_object_map);
