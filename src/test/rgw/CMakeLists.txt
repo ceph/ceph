@@ -1,10 +1,10 @@
 #unitttest_rgw_period_history
-add_executable(unittest_rgw_period_history EXCLUDE_FROM_ALL test_rgw_period_history.cc)
+add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history rgw_a)
 
 # unitttest_http_manager
-add_executable(unittest_http_manager EXCLUDE_FROM_ALL test_http_manager.cc)
+add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_http_manager)
 target_link_libraries(unittest_http_manager rgw_a)
 

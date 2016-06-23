@@ -48,7 +48,7 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRollbackRequest.cc 
   operation/test_mock_SnapshotUnprotectRequest.cc
   )
-add_executable(unittest_librbd EXCLUDE_FROM_ALL
+add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
   $<TARGET_OBJECTS:common_texttable_obj>
