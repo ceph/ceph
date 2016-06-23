@@ -1240,8 +1240,7 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
   add_library(rbd_mirror_internal STATIC
-    ${rbd_mirror_internal}
-    $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
+    ${rbd_mirror_internal})
 
   if(WITH_FUSE)
     add_executable(rbd-fuse
