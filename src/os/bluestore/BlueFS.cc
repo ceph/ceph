@@ -1110,7 +1110,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   if (h->file->fnode.size < offset + length) {
     h->file->fnode.size = offset + length;
-    must_dirty = true;
+    if (h->file->fnode.ino != 1) {
+      // we do not need to dirty the log file when the file size
+      // changes because replay is smart enough to discover it on its
+      // own.
+      must_dirty = true;
+    }
   }
   if (must_dirty) {
     h->file->fnode.mtime = ceph_clock_now(NULL);
