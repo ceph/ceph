@@ -34,7 +34,7 @@
 #include <sys/socket.h>
 
 #include <iostream>
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "mon/MonClient.h"
 #include "common/config.h"
@@ -685,9 +685,9 @@ static int do_unmap()
 
 static int parse_imgpath(const std::string &imgpath)
 {
-  boost::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
-  boost::smatch match;
-  if (!boost::regex_match(imgpath, match, pattern)) {
+  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+  std::smatch match;
+  if (!std::regex_match(imgpath, match, pattern)) {
     std::cerr << "rbd-nbd: invalid spec '" << imgpath << "'" << std::endl;
     return -EINVAL;
   }

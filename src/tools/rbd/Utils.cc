@@ -13,7 +13,7 @@
 #include "common/safe_io.h"
 #include "global/global_context.h"
 #include <iostream>
-#include <boost/regex.hpp>
+#include <regex>
 
 namespace rbd {
 namespace utils {
@@ -86,7 +86,7 @@ int extract_spec(const std::string &spec, std::string *pool_name,
     spec_validation = SPEC_VALIDATION_NONE;
   }
 
-  boost::regex pattern;
+  std::regex pattern;
   switch (spec_validation) {
   case SPEC_VALIDATION_FULL:
     // disallow "/" and "@" in image and snap name
@@ -106,8 +106,8 @@ int extract_spec(const std::string &spec, std::string *pool_name,
     break;
   }
 
-  boost::smatch match;
-  if (!boost::regex_match(spec, match, pattern)) {
+  std::smatch match;
+  if (!std::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
     return -EINVAL;
   }
@@ -127,11 +127,11 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 int extract_group_spec(const std::string &spec,
 		       std::string *pool_name,
 		       std::string *group_name) {
-  boost::regex pattern;
+  std::regex pattern;
   pattern = "^(?:([^/]+)/)?(.+)?$";
 
-  boost::smatch match;
-  if (!boost::regex_match(spec, match, pattern)) {
+  std::smatch match;
+  if (!std::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
     return -EINVAL;
   }

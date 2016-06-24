@@ -74,7 +74,7 @@ rbd_LDADD = \
 	libjournal.la libcls_journal_client.la \
 	libcls_rbd_client.la libcls_lock_client.la \
 	$(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
-	$(BOOST_REGEX_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS)
+	$(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
 rbd_LDADD += $(LIBKRBD)
 endif # LINUX
@@ -83,7 +83,7 @@ bin_PROGRAMS += rbd
 if LINUX
 rbd_nbd_SOURCES = tools/rbd_nbd/rbd-nbd.cc
 rbd_nbd_CXXFLAGS = $(AM_CXXFLAGS)
-rbd_nbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) $(BOOST_REGEX_LIBS)
+rbd_nbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += rbd-nbd
 
 endif # LINUX

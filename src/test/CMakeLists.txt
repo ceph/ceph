@@ -180,7 +180,6 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
-    ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
   set_target_properties(ceph_test_cls_rgw_meta PROPERTIES
@@ -210,7 +209,6 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
-    ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${UNITTEST_LIBS}

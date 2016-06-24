@@ -8,25 +8,20 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 #include <iostream>
 #include <string>
-
-using namespace std;
+#include <regex>
 
 #include "common/config.h"
-#include "boost/regex.hpp"
-
 #include "common/address_helper.h"
 
-#include <arpa/inet.h>
+using namespace std;
 
 // decode strings like "tcp://<host>:<port>"
 int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 {
-	using namespace boost;
-	using std::endl;
-
 	regex expr("(tcp|rdma)://([^:]*):([\\d]+)");
 	cmatch m;
 
