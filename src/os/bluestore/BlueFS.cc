@@ -134,7 +134,7 @@ uint64_t BlueFS::get_block_device_size(unsigned id)
 
 void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id
           << " 0x" << std::hex << offset << "~" << length << std::dec
 	  << dendl;
@@ -146,7 +146,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 
   if (alloc.size()) {
     log_t.op_alloc_add(id, offset, length);
-    int r = _flush_and_sync_log();
+    int r = _flush_and_sync_log(l);
     assert(r == 0);
     alloc[id]->init_add_free(offset, length);
   }
@@ -159,7 +159,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 			   uint64_t *offset, uint32_t *length)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id
           << " want 0x" << std::hex << want << std:: dec << dendl;
   assert(id < alloc.size());
@@ -176,7 +176,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   block_all[id].erase(*offset, *length);
   block_total[id] -= *length;
   log_t.op_alloc_rm(id, *offset, *length);
-  r = _flush_and_sync_log();
+  r = _flush_and_sync_log(l);
   assert(r == 0);
 
   if (logger)
@@ -235,7 +235,7 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
 
 int BlueFS::mkfs(uuid_d osd_uuid)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__
 	  << " osd_uuid " << osd_uuid
 	  << dendl;
@@ -273,7 +273,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
       log_t.op_alloc_add(bdev, q.get_start(), q.get_len());
     }
   }
-  _flush_and_sync_log();
+  _flush_and_sync_log(l);
 
   // write supers
   super.log_fnode = log_file->fnode;
@@ -1024,7 +1024,7 @@ void BlueFS::_pad_bl(bufferlist& bl)
   }
 }
 
-int BlueFS::_flush_and_sync_log()
+int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l)
 {
   uint64_t seq = log_t.seq = ++log_seq;
   log_t.uuid = super.uuid;
@@ -1292,7 +1292,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   return 0;
 }
 
-void BlueFS::_fsync(FileWriter *h)
+void BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   _flush(h, true);
@@ -1304,7 +1304,7 @@ void BlueFS::_fsync(FileWriter *h)
     uint64_t s = log_seq;
     dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
 	     << ") on " << h->file->fnode << ", flushing log" << dendl;
-    _flush_and_sync_log();
+    _flush_and_sync_log(l);
     assert(h->file->dirty_seq == 0 ||  // cleaned
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
@@ -1390,7 +1390,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 
 void BlueFS::sync_metadata()
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::unique_lock<std::mutex> l(lock);
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
     return;
@@ -1402,7 +1402,7 @@ void BlueFS::sync_metadata()
       p->commit_start();
     }
   }
-  _flush_and_sync_log();
+  _flush_and_sync_log(l);
   for (auto p : alloc) {
     if (p) {
       p->commit_finish();
