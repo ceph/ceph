@@ -41,6 +41,8 @@ public:
   Replayer(const Replayer&) = delete;
   Replayer& operator=(const Replayer&) = delete;
 
+  bool is_blacklisted() const;
+
   int init();
   void run();
 
@@ -71,10 +73,11 @@ private:
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
-  Mutex m_lock;
+  mutable Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;
   bool m_manual_stop = false;
+  bool m_blacklisted = false;
 
   peer_t m_peer;
   std::vector<const char*> m_args;

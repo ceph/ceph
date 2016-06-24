@@ -358,8 +358,12 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
   for (auto it = m_replayers.begin(); it != m_replayers.end();) {
     auto &peer = it->first.second;
     auto pool_peer_it = pool_peers.find(it->first.first);
-    if (pool_peer_it == pool_peers.end() ||
-        pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
+    if (it->second->is_blacklisted()) {
+      derr << "removing blacklisted replayer for " << peer << dendl;
+      // TODO: make async
+      it = m_replayers.erase(it);
+    } else if (pool_peer_it == pool_peers.end() ||
+               pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
       dout(20) << "removing replayer for " << peer << dendl;
       // TODO: make async
       it = m_replayers.erase(it);
