@@ -323,3 +323,17 @@
 	fun:rocksdb::ColumnFamilyData::ColumnFamilyData*
 	...
 }
+{
+	rocksdb thread crap
+	Memcheck:Leak
+	...
+	fun:rocksdb::ThreadLocalPtr::StaticMeta::SetHandler*
+	...
+}
+{
+	rocksdb thread crap
+	Memcheck:Leak
+	...
+	fun:rocksdb::ThreadLocalPtr::Instance*
+	...
+}
