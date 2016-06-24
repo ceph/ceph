@@ -31,7 +31,6 @@ SimpleDispatcher::~SimpleDispatcher() {
 
 bool SimpleDispatcher::ms_dispatch(Message *m)
 {
-  ConnectionRef conn;
   uint64_t dc = 0;
 
   dc = dcount++;
