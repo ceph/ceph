@@ -5522,10 +5522,11 @@ void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
 }
 
 void BlueStore::_pad_zeros(
-  bufferlist *bl, uint64_t *offset, uint64_t *length,
+  bufferlist *bl, uint64_t *offset,
   uint64_t chunk_size)
 {
-  dout(30) << __func__ << " 0x" << std::hex << *offset << "~" << *length
+  auto length = bl->length();
+  dout(30) << __func__ << " 0x" << std::hex << *offset << "~" << length
 	   << " chunk_size 0x" << chunk_size << std::dec << dendl;
   dout(40) << "before:\n";
   bl->hexdump(*_dout);
@@ -5535,51 +5536,52 @@ void BlueStore::_pad_zeros(
   size_t back_pad = 0;
   size_t pad_count = 0;
   if (front_pad) {
-    size_t front_copy = MIN(chunk_size - front_pad, *length);
+    size_t front_copy = MIN(chunk_size - front_pad, length);
     bufferptr z = buffer::create_page_aligned(chunk_size);
     memset(z.c_str(), 0, front_pad);
     pad_count += front_pad;
     memcpy(z.c_str() + front_pad, bl->get_contiguous(0, front_copy), front_copy);
     if (front_copy + front_pad < chunk_size) {
-      back_pad = chunk_size - (*length + front_pad);
-      memset(z.c_str() + front_pad + *length, 0, back_pad);
+      back_pad = chunk_size - (length + front_pad);
+      memset(z.c_str() + front_pad + length, 0, back_pad);
       pad_count += back_pad;
     }
     bufferlist old, t;
     old.swap(*bl);
-    t.substr_of(old, front_copy, *length - front_copy);
+    t.substr_of(old, front_copy, length - front_copy);
     bl->append(z);
     bl->claim_append(t);
     *offset -= front_pad;
-    *length += front_pad + back_pad;
+    length += front_pad + back_pad;
   }
 
   // back
-  uint64_t end = *offset + *length;
+  uint64_t end = *offset + length;
   unsigned back_copy = end % chunk_size;
   if (back_copy) {
     assert(back_pad == 0);
     back_pad = chunk_size - back_copy;
-    assert(back_copy <= *length);
+    assert(back_copy <= length);
     bufferptr tail(chunk_size);
-    memcpy(tail.c_str(), bl->get_contiguous(*length - back_copy, back_copy),
+    memcpy(tail.c_str(), bl->get_contiguous(length - back_copy, back_copy),
 	   back_copy);
     memset(tail.c_str() + back_copy, 0, back_pad);
     bufferlist old;
     old.swap(*bl);
-    bl->substr_of(old, 0, *length - back_copy);
+    bl->substr_of(old, 0, length - back_copy);
     bl->append(tail);
-    *length += back_pad;
+    length += back_pad;
     pad_count += back_pad;
   }
   dout(20) << __func__ << " pad 0x" << std::hex << front_pad << " + 0x"
 	   << back_pad << " on front/back, now 0x" << *offset << "~"
-	   << *length << std::dec << dendl;
+	   << length << std::dec << dendl;
   dout(40) << "after:\n";
   bl->hexdump(*_dout);
   *_dout << dendl;
   if (pad_count)
     logger->inc(l_bluestore_write_pad_bytes, pad_count);
+  assert(bl->length() == length);
 }
 
 void BlueStore::_do_write_small(
@@ -5773,9 +5775,9 @@ void BlueStore::_do_write_small(
   b = o->blob_map.new_blob(c->cache);
   unsigned alloc_len = min_alloc_size;
   uint64_t b_off = offset % alloc_len;
-  uint64_t b_len = length;
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-  _pad_zeros(&bl, &b_off, &b_len, block_size);
+  _pad_zeros(&bl, &b_off, block_size);
+  uint64_t b_len = bl.length();
   if (b_off)
     b->blob.add_unused(0, b_off);
   if (b_off + b_len < alloc_len)
