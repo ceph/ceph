@@ -813,8 +813,6 @@ set(libos_srcs
   os/filestore/WBThrottle.cc
   os/filestore/ZFSFileStoreBackend.cc
   os/memstore/MemStore.cc
-  os/kstore/KStore.cc
-  os/kstore/kstore_types.cc
   os/bluestore/kv.cc
   os/bluestore/Allocator.cc
   os/bluestore/BitmapFreelistManager.cc

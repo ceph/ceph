@@ -23,7 +23,6 @@
 #if defined(HAVE_LIBAIO)
 #include "bluestore/BlueStore.h"
 #endif
-#include "kstore/KStore.h"
 
 void decode_str_str_map_to_bl(bufferlist::iterator& p,
 			      bufferlist *out)
@@ -78,10 +77,6 @@ ObjectStore *ObjectStore::create(CephContext *cct,
     return new BlueStore(cct, data);
   }
 #endif
-  if (type == "kstore" &&
-      cct->check_experimental_feature_enabled("kstore")) {
-    return new KStore(cct, data);
-  }
   return NULL;
 }
 

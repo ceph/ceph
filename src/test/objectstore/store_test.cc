@@ -4919,8 +4919,7 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "memstore",
     "filestore",
-    "bluestore",
-    "kstore"));
+    "bluestore"));
 
 #else
 
