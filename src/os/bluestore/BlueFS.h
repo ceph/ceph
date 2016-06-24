@@ -238,7 +238,8 @@ private:
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
   void _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
 
-  int _flush_and_sync_log(std::unique_lock<std::mutex>& l);
+  int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
+			  uint64_t want_seq = 0);
   uint64_t _estimate_log_size();
   void _maybe_compact_log();
   void _compact_log();
