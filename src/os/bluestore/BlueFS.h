@@ -204,6 +204,8 @@ private:
   uint64_t log_seq_stable;    ///< last stable/synced log seq
   FileWriter *log_writer;     ///< writer for the log
   bluefs_transaction_t log_t; ///< pending, unwritten log transaction
+  bool log_flushing = false;  ///< true while flushing the log
+  std::condition_variable log_cond;
 
   /*
    * There are up to 3 block devices:
