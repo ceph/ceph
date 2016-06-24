@@ -121,9 +121,11 @@ int MonClient::get_monmap_privately()
 
   ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
 
+  string mon;
   while (monmap.fsid.is_zero()) {
-    cur_mon = _pick_random_mon();
-    safe_set_state(cur_mon, MC_STATE_NONE);
+    mon = _pick_random_mon();
+    safe_set_state(mon, MC_STATE_NONE);
+    cur_mon = mon;
 
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     if (cur_con) {
@@ -160,7 +162,6 @@ int MonClient::get_monmap_privately()
   }
 
   hunting = true;  // reset this to true!
-  safe_set_state(cur_mon, MC_STATE_NONE);
   cur_mon.clear();
   cur_con.reset(NULL);
 
@@ -482,8 +483,19 @@ int MonClient::authenticate(double timeout)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
+  int COMPILER_WARNING;
   Context *cb = NULL;
   bufferlist::iterator p = m->result_bl.begin();
+
+  string mon;
+  if (!monmap.get_addr_name(m->get_connection()->get_peer_addr(), mon)) {
+    ldout(cct, 10) << "discarding stray mon message from " <<
+      m->get_connection()->get_peer_addr() << dendl;
+    return;
+  }
+
+  assert(!mon.empty());
+  ldout(cct, 10) << "have auth from mon " << mon << dendl;
 
   if (safe_check_state(DEFAULT__mon, MC_STATE_NEGOTIATING)) { //WORKREF
     if (!auth || (int)m->protocol != auth->get_protocol()) {
@@ -508,7 +520,7 @@ void MonClient::handle_auth(MAuthReply *m)
     }
 
     safe_set_state(DEFAULT__mon, MC_STATE_AUTHENTICATING, true); //WORKREF
-    safe_set_state(cur_mon, MC_STATE_AUTHENTICATING, true);
+    safe_set_state(mon, MC_STATE_AUTHENTICATING, true);
   }
   assert(auth); //FAILREF
   if (m->global_id && m->global_id != global_id) {
@@ -533,9 +545,9 @@ void MonClient::handle_auth(MAuthReply *m)
 
   authenticate_err = ret;
   if (ret == 0) {
-    if (!safe_check_state(DEFAULT__mon, MC_STATE_HAVE_SESSION)) { //WORKREF
+    if (!safe_check_state(mon, MC_STATE_HAVE_SESSION)) { //WORKREF
       safe_set_state(DEFAULT__mon, MC_STATE_HAVE_SESSION, true); //WORKREF
-      safe_set_state(cur_mon, MC_STATE_HAVE_SESSION, true);
+      safe_set_state(mon, MC_STATE_HAVE_SESSION, true);
 
       last_rotating_renew_sent = utime_t();
       while (!waiting_for_session.empty()) {
@@ -607,21 +619,22 @@ void MonClient::_reopen_session(int rank, string name)
   assert(monc_lock.is_locked());
   ldout(cct, 10) << "_reopen_session rank " << rank << " name " << name << dendl;
 
+  string mon;
   if (rank < 0 && name.length() == 0) {
-    cur_mon = _pick_random_mon();
+    mon = _pick_random_mon();
   } else if (name.length()) {
-    cur_mon = name;
+    mon = name;
   } else {
-    cur_mon = monmap.get_name(rank);
+    mon = monmap.get_name(rank);
   }
-  safe_set_state(cur_mon, MC_STATE_NONE);
+  safe_set_state(mon, MC_STATE_NONE);
 
   if (cur_con) {
     cur_con->mark_down();
   }
-  cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
+  cur_con = messenger->get_connection(monmap.get_inst(mon));
 	
-  ldout(cct, 10) << "picked mon." << cur_mon << " con " << cur_con
+  ldout(cct, 10) << "picked mon." << mon << " con " << cur_con
 		 << " addr " << cur_con->get_peer_addr()
 		 << dendl;
 
@@ -649,9 +662,11 @@ void MonClient::_reopen_session(int rank, string name)
 
   // restart authentication handshake
   safe_set_state(DEFAULT__mon, MC_STATE_NEGOTIATING, true); //WORKREF
-  safe_set_state(cur_mon, MC_STATE_NEGOTIATING, true);
+  safe_set_state(mon, MC_STATE_NEGOTIATING, true);
   //state = MC_STATE_NEGOTIATING;
   hunting = true;
+
+  cur_mon = mon;
 
   // send an initial keepalive to ensure our timestamp is valid by the
   // time we are in an OPENED state (by sequencing this before
