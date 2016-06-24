@@ -1,5 +1,4 @@
 libos_types_a_SOURCES = \
-	os/kstore/kstore_types.cc \
 	os/Transaction.cc
 libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos_types.a
@@ -25,8 +24,6 @@ libos_a_SOURCES = \
 	os/filestore/LFNIndex.cc \
 	os/filestore/WBThrottle.cc \
 	os/fs/FS.cc \
-	os/kstore/kv.cc \
-	os/kstore/KStore.cc \
 	os/memstore/MemStore.cc \
 	os/ObjectStore.cc
 
@@ -95,9 +92,6 @@ noinst_HEADERS += \
 	os/fs/btrfs_ioctl.h \
 	os/fs/FS.h \
 	os/fs/XFS.h \
-	os/kstore/kstore_types.h \
-	os/kstore/KStore.h \
-	os/kstore/kv.h \
 	os/memstore/MemStore.h \
 	os/memstore/PageSet.h \
 	os/FuseStore.h \
