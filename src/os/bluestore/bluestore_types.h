@@ -233,6 +233,17 @@ struct bluestore_blob_t {
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
   }
+  bool has_csum() const {
+    return has_flag(FLAG_CSUM);
+  }
+
+  /// return chunk (i.e. min readable block) size for the blob
+  uint64_t get_chunk_size(uint64_t dev_block_size) {
+    return has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+  }
+  uint32_t get_csum_chunk_size() const {
+    return 1 << csum_chunk_order;
+  }
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
   }
@@ -349,13 +360,6 @@ struct bluestore_blob_t {
     return len;
   }
 
-  bool has_csum() const {
-    return has_flag(FLAG_CSUM);
-  }
-
-  uint32_t get_csum_chunk_size() const {
-    return 1 << csum_chunk_order;
-  }
 
   size_t get_csum_value_size() const {
     switch (csum_type) {
