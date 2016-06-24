@@ -2966,8 +2966,13 @@ int BlueStore::fsck()
 		   << std::hex << expecting_hash << std::dec << dendl;
 	  ++errors;
 	}
-	get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
+	int r = get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
 		      &expecting_hash);
+        if (r < 0) {
+          dout(30) << __func__ << "  bad bnode key "
+                   << pretty_binary_string(it->key()) << dendl;
+          ++errors;
+        }
 	continue;
       }
       int r = get_key_object(it->key(), &oid);
