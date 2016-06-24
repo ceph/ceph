@@ -4754,6 +4754,7 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(omap_digest, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
+  ::encode(alloc_hint_flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4836,9 +4837,11 @@ void object_info_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 16) {
     ::decode(expected_object_size, bl);
     ::decode(expected_write_size, bl);
+    ::decode(alloc_hint_flags, bl);
   } else {
     expected_object_size = 0;
     expected_write_size = 0;
+    alloc_hint_flags = 0;
   }
   DECODE_FINISH(bl);
 }

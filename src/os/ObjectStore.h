@@ -1718,6 +1718,8 @@ public:
       data.ops++;
     }
 
+    /// Set allocation hint for an object
+    /// make 0 values(expected_object_size, expected_write_size) noops for all implementations
     void set_alloc_hint(
       coll_t cid,
       const ghobject_t &oid,
