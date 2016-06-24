@@ -1023,17 +1023,26 @@ void BlueFS::_pad_bl(bufferlist& bl)
   }
 }
 
-int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l)
+int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
+				uint64_t want_seq)
 {
   while (log_flushing) {
-    dout(10) << __func__ << " log is currently flushing, waiting" << dendl;
+    dout(10) << __func__ << " want_seq " << want_seq
+	     << " log is currently flushing, waiting" << dendl;
     log_cond.wait(l);
   }
+  if (want_seq && want_seq <= log_seq_stable) {
+    dout(10) << __func__ << " want_seq " << want_seq << " <= log_seq_stable "
+	     << log_seq_stable << ", done" << dendl;
+    return 0;
+  }
   if (log_t.empty()) {
-    dout(10) << __func__ << " " << log_t << " not dirty, no-op" << dendl;
+    dout(10) << __func__ << " want_seq " << want_seq
+	     << " " << log_t << " not dirty, no-op" << dendl;
     return 0;
   }
   uint64_t seq = log_t.seq = ++log_seq;
+  assert(want_seq == 0 || want_seq <= seq);
   log_t.uuid = super.uuid;
   dout(10) << __func__ << " " << log_t << dendl;
   assert(!log_t.empty());
@@ -1325,7 +1334,7 @@ void BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
     uint64_t s = log_seq;
     dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
 	     << ") on " << h->file->fnode << ", flushing log" << dendl;
-    _flush_and_sync_log(l);
+    _flush_and_sync_log(l, old_dirty_seq);
     assert(h->file->dirty_seq == 0 ||  // cleaned
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
