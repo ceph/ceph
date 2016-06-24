@@ -302,7 +302,6 @@ class WorkerPool {
       delete this;
     }
   };
-  friend class C_barrier;
   public:
   explicit WorkerPool(CephContext *c);
   WorkerPool(const WorkerPool &) = delete;
