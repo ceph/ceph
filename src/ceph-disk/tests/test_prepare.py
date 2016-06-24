@@ -124,11 +124,11 @@ class TestDevice(Base):
     @mock.patch('ceph_disk.main.get_free_partition_index')
     @mock.patch('ceph_disk.main.update_partition')
     @mock.patch('ceph_disk.main.get_dm_uuid')
-    @mock.patch('ceph_disk.main.get_dev_size')
+    @mock.patch('ceph_disk.main.get_free_partition_size')
     @mock.patch('ceph_disk.main.command_check_call')
     def test_create_partition(self,
                               m_command_check_call,
-                              m_get_dev_size,
+                              m_get_free_partition_size,
                               m_get_dm_uuid,
                               m_update_partition,
                               m_get_free_partition_index,
@@ -141,7 +141,7 @@ class TestDevice(Base):
         uuid = 'UUID'
         m_get_dm_uuid.return_value = uuid
         size = 200
-        m_get_dev_size.return_value = size + 100
+        m_get_free_partition_size.return_value = size + 100
         name = 'journal'
         actual_partition_number = device.create_partition(
             uuid=uuid, name=name, size=size)
