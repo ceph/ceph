@@ -259,6 +259,11 @@ Replayer::~Replayer()
   }
 }
 
+bool Replayer::is_blacklisted() const {
+  Mutex::Locker locker(m_lock);
+  return m_blacklisted;
+}
+
 int Replayer::init()
 {
   dout(20) << "replaying for " << m_peer << dendl;
@@ -440,9 +445,16 @@ void Replayer::run()
                                                 m_asok_hook_name, this);
     }
 
-    Mutex::Locker l(m_lock);
-    if (!m_manual_stop) {
+    Mutex::Locker locker(m_lock);
+    if (m_pool_watcher->is_blacklisted()) {
+      m_blacklisted = true;
+      m_stopping.set(1);
+    } else if (!m_manual_stop) {
       set_sources(m_pool_watcher->get_images());
+    }
+
+    if (m_blacklisted) {
+      break;
     }
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
@@ -697,6 +709,11 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer
            << dendl;
 
   if (!image_replayer->is_stopped()) {
+    return;
+  } else if (image_replayer->is_blacklisted()) {
+    derr << "blacklisted detected during image replay" << dendl;
+    m_blacklisted = true;
+    m_stopping.set(1);
     return;
   }
 
