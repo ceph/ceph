@@ -270,9 +270,10 @@ static int get_key_bnode(const string& key, shard_id_t *shard,
 {
   const char *p = key.c_str();
   if (key.length() < 2 + 8 + 4)
-    return -2;
+    return -1;
   p = _key_decode_shard(p, shard);
   p = _key_decode_u64(p, (uint64_t*)pool);
+  pool -= 0x8000000000000000ull;
   p = _key_decode_u32(p, hash);
   return 0;
 }
@@ -335,7 +336,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
   const char *p = key.c_str();
 
   if (key.length() < 2 + 8 + 4)
-    return -2;
+    return -1;
   p = _key_decode_shard(p, &oid->shard_id);
 
   uint64_t pool;
@@ -347,12 +348,12 @@ static int get_key_object(const string& key, ghobject_t *oid)
 
   oid->hobj.set_bitwise_key_u32(hash);
   if (*p != '.')
-    return -5;
+    return -2;
   ++p;
 
   r = decode_escaped(p, &oid->hobj.nspace);
   if (r < 0)
-    return -6;
+    return -3;
   p += r + 1;
 
   if (*p == '=') {
@@ -360,7 +361,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     ++p;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -7;
+      return -4;
     p += r + 1;
   } else if (*p == '<' || *p == '>') {
     // key + name
@@ -368,16 +369,16 @@ static int get_key_object(const string& key, ghobject_t *oid)
     string okey;
     r = decode_escaped(p, &okey);
     if (r < 0)
-      return -8;
+      return -5;
     p += r + 1;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -9;
+      return -6;
     p += r + 1;
     oid->hobj.set_key(okey);
   } else {
     // malformed
-    return -10;
+    return -7;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
@@ -385,7 +386,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
   if (*p) {
     // if we get something other than a null terminator here, 
     // something goes wrong.
-    return -12;
+    return -8;
   }  
 
   return 0;
@@ -2965,8 +2966,13 @@ int BlueStore::fsck()
 		   << std::hex << expecting_hash << std::dec << dendl;
 	  ++errors;
 	}
-	get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
+	int r = get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
 		      &expecting_hash);
+        if (r < 0) {
+          dout(30) << __func__ << "  bad bnode key "
+                   << pretty_binary_string(it->key()) << dendl;
+          ++errors;
+        }
 	continue;
       }
       int r = get_key_object(it->key(), &oid);
