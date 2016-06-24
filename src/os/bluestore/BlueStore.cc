@@ -5664,10 +5664,10 @@ void BlueStore::_do_write_small(
     // direct write into unused blocks of an existing mutable blob?
     uint64_t b_off = offset - head_pad - bstart;
     uint64_t b_len = length + head_pad + tail_pad;
-    if (b->blob.get_ondisk_length() >= b_off + b_len &&
-	b->blob.is_unused(b_off, b_len) &&
-	b->blob.is_allocated(b_off, b_len) &&
-	(b_off % chunk_size == 0 && b_len % chunk_size == 0)) {
+    if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
+	b->blob.get_ondisk_length() >= b_off + b_len &&
+	b->blob.is_unused(b_off, b_len, min_alloc_size) &&
+	b->blob.is_allocated(b_off, b_len)) {
       dout(20) << __func__ << "  write to unused 0x" << std::hex
 	       << b_off << "~" << b_len
 	       << " pad 0x" << head_pad << " + 0x" << tail_pad
@@ -5688,7 +5688,7 @@ void BlueStore::_do_write_small(
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
 	bluestore_lextent_t(blob, b_off + head_pad, length);
       b->blob.ref_map.get(lex.offset, lex.length);
-      b->blob.mark_used(lex.offset, lex.length);
+      b->blob.mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	       << ": " << lex << dendl;
@@ -5762,7 +5762,7 @@ void BlueStore::_do_write_small(
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
 	bluestore_lextent_t(blob, offset - bstart, length);
       b->blob.ref_map.get(lex.offset, lex.length);
-      b->blob.mark_used(lex.offset, lex.length);
+      b->blob.mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset
 	       << std::dec << ": " << lex << dendl;
@@ -5937,9 +5937,9 @@ int BlueStore::_do_alloc_write(
       auto b_off = wi.b_off;
       auto b_len = wi.bl.length();
       if (b_off)
-        b->blob.add_unused(0, b_off);
+        b->blob.add_unused(0, b_off, min_alloc_size);
       if (b_off + b_len < wi.blob_length)
-        b->blob.add_unused(b_off + b_len, wi.blob_length - (b_off + b_len));
+        b->blob.add_unused(b_off + b_len, wi.blob_length - (b_off + b_len), min_alloc_size);
     }
 
     // queue io
