@@ -50,7 +50,7 @@ class PrioritizedQueue : public OpQueue <T, K> {
   typedef std::list<std::pair<unsigned, T> > ListPairs;
   static unsigned filter_list_pairs(
     ListPairs *l,
-    std::function<bool (T)> f) {
+    std::function<bool (const T&)> f) {
     unsigned ret = 0;
     for (typename ListPairs::iterator i = l->end();
 	 i != l->begin();
@@ -146,7 +146,7 @@ class PrioritizedQueue : public OpQueue <T, K> {
       return q.empty();
     }
     void remove_by_filter(
-      std::function<bool (T)> f) {
+      std::function<bool (const T&)> f) {
       for (typename Classes::iterator i = q.begin();
 	   i != q.end();
 	   ) {
@@ -255,7 +255,7 @@ public:
   }
 
   void remove_by_filter(
-      std::function<bool (T)> f) override final {
+      std::function<bool (const T&)> f) override final {
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {

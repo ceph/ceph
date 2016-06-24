@@ -80,7 +80,8 @@ namespace ceph {
     }
 
     // Ops will be removed f evaluates to true, f may have sideeffects
-    inline void remove_by_filter(std::function<bool(Request)> f) override final {
+    inline void
+    remove_by_filter(std::function<bool(const Request&)> f) override final {
       queue.remove_by_filter(f);
     }
 

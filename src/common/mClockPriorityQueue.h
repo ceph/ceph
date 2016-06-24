@@ -43,7 +43,7 @@ namespace ceph {
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
     static unsigned filter_list_pairs(ListPairs *l,
-				      std::function<bool (T)> f,
+				      std::function<bool (const T&)> f,
 				      std::list<T>* out = nullptr) {
       unsigned ret = 0;
       for (typename ListPairs::iterator i = l->end();
@@ -158,7 +158,7 @@ namespace ceph {
 	return q.empty();
       }
 
-      void remove_by_filter(std::function<bool (T)> f,
+      void remove_by_filter(std::function<bool (const T&)> f,
 			    std::list<T>* out = nullptr) {
 	for (typename Classes::iterator i = q.begin();
 	     i != q.end();
@@ -239,13 +239,14 @@ namespace ceph {
     }
 
     // we need this version to override pure virtual function
-    void remove_by_filter(std::function<bool (T)> filter) override final {
+    void remove_by_filter(std::function<bool (const T&)> filter) override final {
       remove_by_filter(filter, nullptr);
     }
 
     // this offers more functionality than the pure virtual function
     // we're overriding
-    void remove_by_filter(std::function<bool (T)> filter, std::list<T> *out) {
+    void remove_by_filter(std::function<bool (const T&)> filter,
+			  std::list<T> *out) {
       for (typename SubQueues::iterator i = high_queue.begin();
 	   i != high_queue.end();
 	   /* no-inc */ ) {

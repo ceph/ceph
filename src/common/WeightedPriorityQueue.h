@@ -99,7 +99,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned get_size() const {
 	return lp.size();
       }
-      unsigned filter_list_pairs(std::function<bool (T)>& f) {
+      unsigned filter_list_pairs(std::function<bool (const T&)>& f) {
         unsigned count = 0;
         // intrusive containers can't erase with a reverse_iterator
         // so we have to walk backwards on our own. Since there is
@@ -180,7 +180,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         check_end();
 	return ret;
       }
-      unsigned filter_list_pairs(std::function<bool (T)>& f) {
+      unsigned filter_list_pairs(std::function<bool (const T&)>& f) {
 	unsigned count = 0;
         // intrusive containers can't erase with a reverse_iterator
         // so we have to walk backwards on our own. Since there is
@@ -291,7 +291,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  }
 	  return ret;
 	}
-       void filter_list_pairs(std::function<bool (T)>& f) {
+       void filter_list_pairs(std::function<bool (const T&)>& f) {
 	  for (Sit i = queues.begin(); i != queues.end();) {
             size -= i->filter_list_pairs(f);
 	    if (i->empty()) {
@@ -338,7 +338,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
     unsigned length() const override final {
       return strict.size + normal.size;
     }
-    void remove_by_filter(std::function<bool (T)> f) override final {
+    void remove_by_filter(std::function<bool (const T&)> f) override final {
       strict.filter_list_pairs(f);
       normal.filter_list_pairs(f);
     }
