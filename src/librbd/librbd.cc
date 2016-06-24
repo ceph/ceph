@@ -1160,6 +1160,10 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
+    if (len > std::numeric_limits<int32_t>::max()) {
+        tracepoint(librbd, discard_exit, -EINVAL);
+        return -EINVAL;
+    }
     int r = ictx->aio_work_queue->discard(ofs, len);
     tracepoint(librbd, discard_exit, r);
     return r;
