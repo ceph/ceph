@@ -12,7 +12,7 @@ def link_target(source, destination):
         try:
             os.symlink(source, destination)
         except (IOError, OSError) as error:
-            print 'Ignoring linking of target: %s' % str(error)
+            print('Ignoring linking of target: %s' % str(error))
 
 link_target(script_path, 'ceph.py')
 
