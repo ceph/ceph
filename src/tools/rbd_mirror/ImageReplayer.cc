@@ -1358,8 +1358,6 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
     m_stop_requested = false;
     assert(m_state == STATE_STOPPING);
     m_state = STATE_STOPPED;
-    m_state_desc.clear();
-    m_last_r = 0;
   }
   dout(20) << "stop complete" << dendl;
 
