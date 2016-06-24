@@ -1507,14 +1507,15 @@ private:
       uint64_t blob_length;
       uint64_t b_off;
       bufferlist bl;
+      bool mark_unused;
 
-      write_item(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl)
-	: b(b), blob_length(blob_len), b_off(o), bl(bl) {}
+      write_item(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused)
+       : b(b), blob_length(blob_len), b_off(o), bl(bl), mark_unused(_mark_unused) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
-    void write(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl) {
-      writes.emplace_back(write_item(b, blob_len, o, bl));
+    void write(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused) {
+      writes.emplace_back(write_item(b, blob_len, o, bl, _mark_unused));
     }
   };
 

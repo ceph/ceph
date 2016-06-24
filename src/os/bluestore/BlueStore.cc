@@ -5777,11 +5777,6 @@ void BlueStore::_do_write_small(
   uint64_t b_off = offset % alloc_len;
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
-  uint64_t b_len = bl.length();
-  if (b_off)
-    b->blob.add_unused(0, b_off);
-  if (b_off + b_len < alloc_len)
-    b->blob.add_unused(b_off + b_len, alloc_len - (b_off + b_len));
   o->onode.punch_hole(offset, length, &wctx->lex_old);
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
     bluestore_lextent_t(b->id, offset % min_alloc_size, length);
@@ -5790,7 +5785,7 @@ void BlueStore::_do_write_small(
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	   << ": " << lex << dendl;
   dout(20) << __func__ << "  new " << b->id << ": " << *b << dendl;
-  wctx->write(b, alloc_len, b_off, bl);
+  wctx->write(b, alloc_len, b_off, bl, true);
   return;
 }
 
@@ -5816,7 +5811,7 @@ void BlueStore::_do_write_big(
     bufferlist t;
     blp.copy(l, t);
     b->bc.write(txc->seq, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    wctx->write(b, l, 0, t);
+    wctx->write(b, l, 0, t, false);
     o->onode.punch_hole(offset, l, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l);
     b->blob.ref_map.get(0, l);
@@ -5935,6 +5930,14 @@ int BlueStore::_do_alloc_write(
     if (csum_type) {
       b->blob.init_csum(csum_type, csum_order, csum_length);
       b->blob.calc_csum(b_off, *l);
+    }
+    if (wi.mark_unused) {
+      auto b_off = wi.b_off;
+      auto b_len = wi.bl.length();
+      if (b_off)
+        b->blob.add_unused(0, b_off);
+      if (b_off + b_len < wi.blob_length)
+        b->blob.add_unused(b_off + b_len, wi.blob_length - (b_off + b_len));
     }
 
     // queue io
