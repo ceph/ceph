@@ -101,6 +101,31 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, Success) {
   expect_unlock_exclusive_lock(*ictx);
 }
 
+TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapMissing) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
+
+  uint64_t snap_id = ictx->snap_info.rbegin()->first;
+  expect_load_map(ictx, snap_id, -ENOENT);
+
+  ceph::BitVector<2> object_map;
+  C_SaferCond cond_ctx;
+  AsyncRequest<> *request = new SnapshotRemoveRequest(
+    *ictx, &object_map, snap_id, &cond_ctx);
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::WLocker snap_locker(ictx->snap_lock);
+    request->send();
+  }
+  ASSERT_EQ(0, cond_ctx.wait());
+
+  expect_unlock_exclusive_lock(*ictx);
+}
+
 TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapError) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
