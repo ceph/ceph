@@ -85,7 +85,6 @@ static atomic_t disable_signal_fd;
 static void signal_shutdown();
 
 
-#define SOCKET_BACKLOG 1024
 
 struct RGWRequest
 {
