@@ -246,6 +246,8 @@ namespace crimson {
 	ClientInfo            info;
 	bool                  idle;
 	Counter               last_tick;
+	uint32_t              cur_rho;
+	uint32_t              cur_delta;
 
 	ClientRec(C _client,
 		  const ClientInfo& _info,
@@ -254,7 +256,9 @@ namespace crimson {
 	  prev_tag(0.0, 0.0, 0.0),
 	  info(_info),
 	  idle(true),
-	  last_tick(current_tick)
+	  last_tick(current_tick),
+	  cur_rho(1),
+	  cur_delta(1)
 	{
 	  // empty
 	}
@@ -678,11 +682,21 @@ namespace crimson {
 	  client.idle = false;
 	} // if this client was idle
 
-	RequestTag tag(client.get_req_tag(), client.info, req_params, time, cost);
+	RequestTag tag(0,0,0);
+
+	if (!client.has_request())
+	{
+	  tag = RequestTag(client.get_req_tag(), client.info,
+			   req_params, time, cost);
+
+	  // copy tag to previous tag for client
+	  client.update_req_tag(tag, tick);
+	}
+
 	client.add_request(tag, client.client, std::move(request));
 
-	// copy tag to previous tag for client
-	client.update_req_tag(tag, tick);
+	client.cur_rho = req_params.rho;
+	client.cur_delta = req_params.delta;
 
 	resv_heap.adjust(client);
 	limit_heap.adjust(client);
@@ -706,6 +720,18 @@ namespace crimson {
 
 	// pop request and adjust heaps
 	top.pop_request();
+
+	if (top.has_request())
+	{
+	  ClientReq& next_first = top.next_request();
+	  next_first.tag = RequestTag(first.tag, top.info,
+	                              ReqParams(top.cur_delta, top.cur_rho),
+				      get_time());
+
+  	  // copy tag to previous tag for client
+	  top.update_req_tag(next_first.tag, tick);
+	}
+
 	resv_heap.demote(top);
 	limit_heap.demote(top);
 #if USE_PROP_HEAP
@@ -745,6 +771,9 @@ namespace crimson {
       void reduce_reservation_tags(ClientRec& client) {
 	for (auto& r : client.requests) {
 	  r.tag.reservation -= client.info.reservation_inv;
+
+	  // reduce only for front tag. because next tags' value are invalid
+	  break;
 	}
 	// don't forget to update previous tag
 	client.prev_tag.reservation -= client.info.reservation_inv;
