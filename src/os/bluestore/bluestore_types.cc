@@ -418,6 +418,12 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "csum";
   }
+  if (flags & FLAG_HAS_UNUSED) {
+    if (s.length())
+      s += '+';
+    s += "has_unused";
+  }
+
   return s;
 }
 
@@ -435,7 +441,9 @@ void bluestore_blob_t::encode(bufferlist& bl) const
     small_encode_buf_lowz(csum_data, bl);
   }
   ::encode(ref_map, bl);
-  ::encode(unused, bl);
+  if (has_unused()) {
+    ::encode( unused_uint_t(unused.to_ullong()), bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -458,7 +466,11 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
     csum_chunk_order = 0;
   }
   ::decode(ref_map, p);
-  ::decode(unused, p);
+  if (has_unused()) {
+    unused_uint_t val;
+    ::decode(val, p);
+    unused = unused_t(val);
+  }
   DECODE_FINISH(p);
 }
 
@@ -479,14 +491,7 @@ void bluestore_blob_t::dump(Formatter *f) const
   for (unsigned i = 0; i < n; ++i)
     f->dump_unsigned("csum", get_csum_item(i));
   f->close_section();
-  f->open_array_section("unused");
-  for (auto p = unused.begin(); p != unused.end(); ++p) {
-    f->open_object_section("range");
-    f->dump_unsigned("offset", p.get_start());
-    f->dump_unsigned("length", p.get_len());
-    f->close_section();
-  }
-  f->close_section();
+  f->dump_unsigned("unused", unused.to_ullong());
 }
 
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
@@ -499,8 +504,9 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->init_csum(CSUM_XXHASH32, 16, 65536);
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->ref_map.get(3, 5);
-  ls.back()->add_unused(0, 3);
-  ls.back()->add_unused(8, 8);
+  ls.back()->add_unused(0, 3, 4096);
+  ls.back()->add_unused(8, 8, 4096);
+  ls.back()->add_unused(80, 8192-1, 4096);
   ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
   ls.back()->extents.emplace_back(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
@@ -521,8 +527,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   if (!o.ref_map.empty()) {
     out << " " << o.ref_map;
   }
-  if (!o.unused.empty())
-    out << " unused=0x" << std::hex << o.unused << std::dec;
+  if (o.has_unused())
+    out << " unused=0x" << std::hex << o.unused.to_ullong() << std::dec;
   out << ")";
   return out;
 }
