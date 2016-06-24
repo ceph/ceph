@@ -1551,7 +1551,7 @@ private:
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
-  void _pad_zeros(bufferlist *bl, uint64_t *offset, uint64_t *length,
+  void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
   int _do_write(TransContext *txc,
 		CollectionRef &c,
