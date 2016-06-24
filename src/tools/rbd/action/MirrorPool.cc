@@ -11,8 +11,8 @@
 #include "common/TextTable.h"
 #include "global/global_context.h"
 #include <iostream>
+#include <regex>
 #include <boost/program_options.hpp>
-#include <boost/regex.hpp>
 
 namespace rbd {
 namespace action {
@@ -24,10 +24,10 @@ namespace po = boost::program_options;
 namespace {
 
 int validate_uuid(const std::string &uuid) {
-  boost::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
-                       boost::regex::icase);
-  boost::smatch match;
-  if (!boost::regex_match(uuid, match, pattern)) {
+  std::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
+                       std::regex::icase);
+  std::smatch match;
+  if (!std::regex_match(uuid, match, pattern)) {
     std::cerr << "rbd: invalid uuid '" << uuid << "'" << std::endl;
     return -EINVAL;
   }
@@ -61,9 +61,9 @@ int get_remote_cluster_spec(const po::variables_map &vm,
   }
 
   if (!spec.empty()) {
-    boost::regex pattern("^(?:(client\\.[^@]+)@)?([^/@]+)$");
-    boost::smatch match;
-    if (!boost::regex_match(spec, match, pattern)) {
+    std::regex pattern("^(?:(client\\.[^@]+)@)?([^/@]+)$");
+    std::smatch match;
+    if (!std::regex_match(spec, match, pattern)) {
       std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
       return -EINVAL;
     }

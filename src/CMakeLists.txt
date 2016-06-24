@@ -1215,8 +1215,7 @@ if(${WITH_RBD})
 
   add_executable(rbd-nbd tools/rbd_nbd/rbd-nbd.cc
     $<TARGET_OBJECTS:parse_secret_objs>)
-  target_link_libraries(rbd-nbd librbd librados global keyutils
-    ${Boost_REGEX_LIBRARY})
+  target_link_libraries(rbd-nbd librbd librados global keyutils)
 
   set(rbd_mirror_internal
     tools/rbd_mirror/ClusterWatcher.cc
@@ -1312,7 +1311,7 @@ if(${WITH_RBD})
     $<TARGET_OBJECTS:krbd_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
-    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
   install(TARGETS rbd rbd-nbd rbd-mirror DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
