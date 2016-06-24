@@ -5960,19 +5960,13 @@ void BlueStore::_wctx_finish(
     vector<bluestore_pextent_t> r;
     bool compressed = b->blob.is_compressed();
     b->blob.put_ref(l.offset, l.length, min_alloc_size, &r);
-    if (l.blob > 0) {
-      // blob is owned by the onode; invalidate buffers as *we* drop
-      // logical refs.
-      b->bc.discard(l.offset, l.length);
-    } else {
-      // blob is shared.  we can't invalidate our logical extents as
-      // we drop them because other onodes may still reference them.
-      // but we can throw out anything that is no longer allocated.
-      // Note that this will leave behind edge bits that are no
-      // longer referenced but not deallocated (until they age out
-      // of the cache naturally).
-      b->discard_unallocated();
-    }
+    // we can't invalidate our logical extents as we drop them because
+    // other lextents (either in our onode or others) may still
+    // reference them.  but we can throw out anything that is no
+    // longer allocated.  Note that this will leave behind edge bits
+    // that are no longer referenced but not deallocated (until they
+    // age out of the cache naturally).
+    b->discard_unallocated();
     txc->statfs_delta.stored() -= l.length;
     if (compressed) {
       txc->statfs_delta.compressed_original() -= l.length;
