@@ -83,6 +83,11 @@ public:
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
 
+  inline bool is_blacklisted() const {
+    Mutex::Locker locker(m_lock);
+    return (m_last_r == -EBLACKLISTED);
+  }
+
   inline int64_t get_local_pool_id() const {
     return m_local_pool_id;
   }
@@ -218,7 +223,7 @@ private:
   std::string m_remote_image_id, m_local_image_id, m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
-  Mutex m_lock;
+  mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
   int m_last_r = 0;
   std::string m_state_desc;
