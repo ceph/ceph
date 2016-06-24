@@ -106,7 +106,8 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  MonClientState state;
+  MonClientState state__; //deprecated
+  string DEFAULT__mon = "com.redhat.sdieffen.mon/default-mon/str_23062016@13:15:02";
   map<string, MonClientState> state_map; //REFNEW
 
   Messenger *messenger;
@@ -185,6 +186,22 @@ private:
   void _reopen_session(int rank, string name);
   void _reopen_session() {
     _reopen_session(-1, string());
+  }
+  void safe_set_state(string name, MonClientState new_state, bool force=false) {
+    if (!name.empty() && state_map.count(name) == 0) {
+      state_map[name] = new_state;
+    } else if (!name.empty() && force) {
+      state_map[name] = new_state;
+    }
+  }
+  bool safe_check_state(string name, MonClientState compare_state) {
+    if (name.empty() || state_map.count(name) == 0) {
+      if (state_map.count(name) != 0)
+        state_map[name] = MC_STATE_NONE;
+      return compare_state == MC_STATE_NONE;
+    } else {
+      return compare_state == state_map[name];
+    }
   }
   void _send_mon_message(Message *m, bool force=false);
 
