@@ -1025,6 +1025,14 @@ void BlueFS::_pad_bl(bufferlist& bl)
 
 int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l)
 {
+  while (log_flushing) {
+    dout(10) << __func__ << " log is currently flushing, waiting" << dendl;
+    log_cond.wait(l);
+  }
+  if (log_t.empty()) {
+    dout(10) << __func__ << " " << log_t << " not dirty, no-op" << dendl;
+    return 0;
+  }
   uint64_t seq = log_t.seq = ++log_seq;
   log_t.uuid = super.uuid;
   dout(10) << __func__ << " " << log_t << dendl;
@@ -1053,27 +1061,41 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l)
 
   log_t.clear();
   log_t.seq = 0;  // just so debug output is less confusing
+  log_flushing = true;
 
   flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
+
+  // drop lock while we wait for io
+  l.unlock();
   wait_for_aio(log_writer);
   flush_bdev();
+  l.lock();
+
+  log_flushing = false;
+  log_cond.notify_all();
 
   // clean dirty files
-  dout(20) << __func__ << " log_seq_stable " << seq << dendl;
-  log_seq_stable = seq;
-  dirty_file_list_t::iterator p = dirty_files.begin();
-  while (p != dirty_files.end()) {
-    File *file = &(*p);
-    assert(file->dirty_seq > 0);
-    if (file->dirty_seq <= log_seq_stable) {
-      dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
-      file->dirty_seq = 0;
-      dirty_files.erase(p++);
-    } else {
-      ++p;
+  if (seq > log_seq_stable) {
+    log_seq_stable = seq;
+    dout(20) << __func__ << " log_seq_stable " << log_seq_stable << dendl;
+    dirty_file_list_t::iterator p = dirty_files.begin();
+    while (p != dirty_files.end()) {
+      File *file = &(*p);
+      assert(file->dirty_seq > 0);
+      if (file->dirty_seq <= log_seq_stable) {
+	dout(20) << __func__ << " cleaned file " << file->fnode << dendl;
+	file->dirty_seq = 0;
+	dirty_files.erase(p++);
+      } else {
+	++p;
+      }
     }
+  } else {
+    dout(20) << __func__ << " log_seq_stable " << log_seq_stable
+	     << " already > out seq " << seq
+	     << ", we lost a race against another log flush, done" << dendl;
   }
 
   _update_logger_stats();
