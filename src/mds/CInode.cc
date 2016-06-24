@@ -92,9 +92,8 @@ struct cinode_lock_info_t cinode_lock_info[] = {
   { CEPH_LOCK_IAUTH, CEPH_CAP_AUTH_EXCL },
   { CEPH_LOCK_ILINK, CEPH_CAP_LINK_EXCL },
   { CEPH_LOCK_IXATTR, CEPH_CAP_XATTR_EXCL },
-  { CEPH_LOCK_IFLOCK, CEPH_CAP_FLOCK_EXCL }  
 };
-int num_cinode_locks = 5;
+int num_cinode_locks = sizeof(cinode_lock_info) / sizeof(cinode_lock_info[0]);
 
 
 
