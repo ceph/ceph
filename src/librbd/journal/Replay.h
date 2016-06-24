@@ -52,6 +52,7 @@ private:
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
     Context *on_op_complete = nullptr;
+    ReturnValues op_finish_error_codes;
     ReturnValues ignore_error_codes;
   };
 
