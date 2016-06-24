@@ -304,19 +304,11 @@ namespace crimson {
 	  return requests.size();
 	}
 
-	bool remove_by_req_filter(std::function<bool(const R&)> filter) {
-	  struct Sink {
-	    void push_back(const R& v) {}
-	  };
-	  static Sink my_sink;
-	  return remove_by_req_filter(filter, my_sink);
-	}
-
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
 	template<typename Collect>
-	bool remove_by_req_filter(std::function<bool(const R&)> filter,
-				  Collect& out) {
+	bool remove_by_req_filter_forwards(std::function<bool(const R&)> filter,
+					   Collect& out) {
 	  bool any_removed = false;
 	  for (auto i = requests.begin();
 	       i != requests.end();
@@ -332,6 +324,36 @@ namespace crimson {
 	  return any_removed;
 	}
 
+	// NB: because a deque is the underlying structure, this
+	// operation might be expensive
+	template<typename Collect>
+	bool remove_by_req_filter_backwards(std::function<bool(const R&)> filter,
+					    Collect& out) {
+	  bool any_removed = false;
+	  for (auto i = --requests.end();
+	       /* no cond */;
+	       --i) {
+	    if (filter(*i->request)) {
+	      any_removed = true;
+	      out.push_back(*i->request);
+	      i = requests.erase(i);
+	    }
+	    if (requests.begin() == i) break;
+	  }
+	  return any_removed;
+	}
+
+	template<typename Collect>
+	inline bool remove_by_req_filter(std::function<bool(const R&)> filter,
+					 Collect& out,
+					 bool visit_backwards) {
+	  if (visit_backwards) {
+	    return remove_by_req_filter_backwards(filter, out);
+	  } else {
+	    return remove_by_req_filter_forwards(filter, out);
+	  }
+	}
+	
 	friend std::ostream&
 	operator<<(std::ostream& out,
 		   const typename PriorityQueueBase<C,R>::ClientRec& e) {
@@ -396,22 +418,25 @@ namespace crimson {
       }
 
 
-      bool remove_by_req_filter(std::function<bool(const R&)> filter) {
+      bool remove_by_req_filter(std::function<bool(const R&)> filter,
+				bool visit_backwards = false) {
 	struct Sink {
-	  void push_back(const R& v) {}
+	  void push_back(const R& v) {} // do nothing
 	};
 	static Sink my_sink;
-	return remove_by_req_filter(filter, my_sink);
+	return remove_by_req_filter(filter, my_sink, visit_backwards);
       }
 
       
       template<typename Collect>
       bool remove_by_req_filter(std::function<bool(const R&)> filter,
-				Collect& out) {
+				Collect& out,
+				bool visit_backwards = false) {
 	bool any_removed = false;
 	DataGuard g(data_mtx);
 	for (auto i : client_map) {
-	  bool modified = i.second->remove_by_req_filter(filter, out);
+	  bool modified =
+	    i.second->remove_by_req_filter(filter, out, visit_backwards);
 	  if (modified) {
 	    resv_heap.adjust(*i.second);
 	    limit_heap.adjust(*i.second);
