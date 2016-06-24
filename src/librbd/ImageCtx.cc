@@ -181,9 +181,7 @@ struct C_InvalidateCache : public Context {
 
     memset(&header, 0, sizeof(header));
 
-    ThreadPoolSingleton *thread_pool_singleton;
-    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::thread_pool");
+    ThreadPool *thread_pool_singleton = get_thread_pool_instance(cct);
     aio_work_queue = new AioImageRequestWQ(this, "librbd::aio_work_queue",
                                            cct->_conf->rbd_op_thread_timeout,
                                            thread_pool_singleton);
@@ -1043,5 +1041,12 @@ struct C_InvalidateCache : public Context {
     assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
+  }
+
+  ThreadPool *ImageCtx::get_thread_pool_instance(CephContext *cct) {
+    ThreadPoolSingleton *thread_pool_singleton;
+    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      thread_pool_singleton, "librbd::thread_pool");
+    return thread_pool_singleton;
   }
 }

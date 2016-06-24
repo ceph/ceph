@@ -32,6 +32,7 @@ class CephContext;
 class ContextWQ;
 class Finisher;
 class PerfCounters;
+class ThreadPool;
 
 namespace librbd {
 
@@ -300,6 +301,8 @@ namespace librbd {
 
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
+
+    static ThreadPool *get_thread_pool_instance(CephContext *cct);
   };
 }
 
