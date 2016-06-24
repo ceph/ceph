@@ -5423,7 +5423,10 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
   dout(15) << "set_alloc_hint " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << dendl;
 
   FDRef fd;
-  int ret;
+  int ret = 0;
+
+  if (expected_object_size == 0 || expected_write_size == 0)
+    goto out;
 
   ret = lfn_open(cid, oid, false, &fd);
   if (ret < 0)
