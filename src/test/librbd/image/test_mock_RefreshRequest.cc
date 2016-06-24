@@ -151,6 +151,9 @@ public:
                   exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_parent"), _, _, _))
                     .WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("image_get_group"), _, _, _))
+                    .WillOnce(DoDefault());
+      EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                   exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("get_info"), _, _, _))
                     .WillOnce(DoDefault());
     }
