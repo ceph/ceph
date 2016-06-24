@@ -10853,9 +10853,9 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
       map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = (hiter->second.stats).find((uint8_t)category);
       if (iter != hiter->second.stats.end()) {
         struct rgw_bucket_category_stats& stats = iter->second;
-        ent.count += stats.num_entries;
-        ent.size += stats.total_size;
-        ent.size_rounded += stats.total_size_rounded;
+        ent.count = stats.num_entries;
+        ent.size = stats.total_size;
+        ent.size_rounded = stats.total_size_rounded;
       }
     }
   }
