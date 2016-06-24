@@ -60,7 +60,6 @@ function run() {
     else
         echo "WARNING: Don't know how to install packages" >&2
     fi
-    sudo /sbin/modprobe rbd
 
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
