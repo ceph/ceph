@@ -434,8 +434,8 @@ class Run(object):
             break
         else:
             util.schedule_fail(
-                name,
-                message='Exceeded %d backtracks; raise --newest value' % limit
+                'Exceeded %d backtracks; raise --newest value' % limit,
+                name=name,
             )
 
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
