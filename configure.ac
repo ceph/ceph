@@ -732,10 +732,6 @@ if test "x$enable_xio" = x"yes"; then
    AC_CHECK_HEADER([libxio.h], [], AC_MSG_ERROR([Cannot find header 'libxio.h'.]))
    AC_CHECK_LIB([xio], [xio_init], [], AC_MSG_FAILURE([Accelio libxio not found]))
 
-   # Also require boost-regex, used in address_helper
-   AC_CHECK_LIB(boost_regex, main, [],
-      AC_MSG_FAILURE(["Boost regex library not found."]))
-
    AC_DEFINE([HAVE_XIO], [1], [Accelio conditional compilation])
 
    XIO_LIBS="-lxio"
