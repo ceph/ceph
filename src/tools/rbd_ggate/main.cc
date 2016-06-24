@@ -15,7 +15,7 @@
 #include <iostream>
 #include <memory>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "common/Formatter.h"
 #include "common/Preforker.h"
@@ -253,9 +253,10 @@ static int do_unmap()
 
 static int parse_imgpath(const std::string &imgpath, std::string *poolname,
                          std::string *imgname, std::string *snapname) {
-  boost::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
-  boost::smatch match;
-  if (!boost::regex_match(imgpath, match, pattern)) {
+{
+  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+  std::smatch match;
+  if (!std::regex_match(imgpath, match, pattern)) {
     std::cerr << "rbd-ggate: invalid spec '" << imgpath << "'" << std::endl;
     return -EINVAL;
   }
