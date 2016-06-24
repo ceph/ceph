@@ -119,10 +119,8 @@ class TestUtil(object):
 
     @patch('teuthology.suite.util.requests.get')
     def test_find_git_parent(self, m_requests_get):
-        refresh_resp = Mock()
-        refresh_resp.ok = True
-        history_resp = Mock()
-        history_resp.ok = True
+        refresh_resp = Mock(ok=True)
+        history_resp = Mock(ok=True)
         history_resp.json.return_value = {'sha1s': ['sha1', 'sha1_p']}
         m_requests_get.side_effect = [refresh_resp, history_resp]
         parent_sha1 = util.find_git_parent('ceph', 'sha1')

@@ -468,9 +468,9 @@ def find_git_parent(project, sha1):
         if not resp.ok:
             log.error('git refresh failed for %s: %s', project, resp.content)
 
-    def get_sha1s(project, commitish, count):
+    def get_sha1s(project, committish, count):
         url = '/'.join((base_url, '%s.git' % project,
-                       'history/?commitish=%s&count=%d' % (commitish, count)))
+                       'history/?committish=%s&count=%d' % (committish, count)))
         resp = requests.get(url)
         resp.raise_for_status()
         sha1s = resp.json()['sha1s']
