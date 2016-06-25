@@ -248,7 +248,6 @@ int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
   if (r < 0) {
     lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                << dendl;
-    return r;
   }
 
   ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
@@ -341,7 +340,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   if (r < 0) {
     lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                << dendl;
-    return r;
   }
 
   header_oid = ::journal::Journaler::header_oid(ictx->id);
@@ -3214,7 +3212,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       if (r < 0) {
         lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                    << dendl;
-        return r;
       }
     }
 
@@ -3370,7 +3367,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                  << dendl;
-      return r;
     }
     return 0;
   }
