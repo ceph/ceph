@@ -423,6 +423,7 @@ TEST(BitAllocator, test_bmap_alloc)
       alloc->free_blocks(i, 1);
     }
   }
+  delete alloc;
 
   // Make three > 3 levels tree and check allocations and dealloc
   // in a loop
