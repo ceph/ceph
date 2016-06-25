@@ -669,6 +669,406 @@ TEST(LibRadosAio, RoundTripAppendPP) {
   delete my_completion3;
 }
 
+TEST(LibRadosAio, RemoveTest) {
+  char buf[128];
+  char buf2[sizeof(buf)];
+  rados_completion_t my_completion;
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ(0, rados_append(test_data.m_ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_aio_remove(test_data.m_ioctx, "foo", my_completion));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  memset(buf2, 0, sizeof(buf2));
+  ASSERT_EQ(-ENOENT, rados_read(test_data.m_ioctx, "foo", buf2, sizeof(buf2), 0));
+  rados_aio_release(my_completion);
+}
+
+TEST(LibRadosAioPP, RemoveTestPP) {
+  char buf[128];
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, test_data.m_ioctx.append("foo", bl1, sizeof(buf)));
+  boost::scoped_ptr<AioCompletion> my_completion
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_remove("foo", my_completion.get()));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  bufferlist bl2;
+  ASSERT_EQ(-ENOENT, test_data.m_ioctx.read("foo", bl2, sizeof(buf), 0));
+}
+
+TEST(LibRadosAio, XattrsRoundTrip) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  // append
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ(0, rados_append(test_data.m_ioctx, "foo", buf, sizeof(buf)));
+  // async getxattr
+  rados_completion_t my_completion;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  ASSERT_EQ(0, rados_aio_getxattr(test_data.m_ioctx, "foo", my_completion, attr1, buf, sizeof(buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(-ENODATA, rados_aio_get_return_value(my_completion));
+  rados_aio_release(my_completion);
+  // async setxattr
+  rados_completion_t my_completion2;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+  ASSERT_EQ(0, rados_aio_setxattr(test_data.m_ioctx, "foo", my_completion2, attr1, attr1_buf, sizeof(attr1_buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
+  rados_aio_release(my_completion2);
+  // async getxattr
+  rados_completion_t my_completion3;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion3));
+  ASSERT_EQ(0, rados_aio_getxattr(test_data.m_ioctx, "foo", my_completion3, attr1, buf, sizeof(buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
+  }
+  ASSERT_EQ((int)sizeof(attr1_buf), rados_aio_get_return_value(my_completion3));
+  rados_aio_release(my_completion3);
+  // check content of attribute
+  ASSERT_EQ(0, memcmp(attr1_buf, buf, sizeof(attr1_buf)));
+}
+
+TEST(LibRadosAioPP, XattrsRoundTripPP) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, test_data.m_ioctx.append("foo", bl1, sizeof(buf)));
+  bufferlist bl2;
+  // async getxattr
+  boost::scoped_ptr<AioCompletion> my_completion
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_getxattr("foo", my_completion.get(), attr1, bl2));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(-ENODATA, my_completion->get_return_value());
+  // append
+  bufferlist bl3;
+  bl3.append(attr1_buf, sizeof(attr1_buf));
+  // async setxattr
+  AioTestDataPP test_data2;
+  ASSERT_EQ("", test_data2.init());
+  boost::scoped_ptr<AioCompletion> my_completion2
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data2, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_setxattr("foo", my_completion2.get(), attr1, bl3));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  // async getxattr
+  bufferlist bl4;
+  AioTestDataPP test_data3;
+  ASSERT_EQ("", test_data3.init());
+  boost::scoped_ptr<AioCompletion> my_completion3
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data3, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_getxattr("foo", my_completion3.get(), attr1, bl4));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion3->wait_for_complete());
+  }
+  ASSERT_EQ((int)sizeof(attr1_buf), my_completion3->get_return_value());
+  // check content of attribute
+  ASSERT_EQ(0, memcmp(bl4.c_str(), attr1_buf, sizeof(attr1_buf)));
+}
+
+TEST(LibRadosAio, RmXattr) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  // append
+  memset(buf, 0xaa, sizeof(buf));
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_append(test_data.m_ioctx, "foo", buf, sizeof(buf)));  
+  // async setxattr
+  rados_completion_t my_completion;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  ASSERT_EQ(0, rados_aio_setxattr(test_data.m_ioctx, "foo", my_completion, attr1, attr1_buf, sizeof(attr1_buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  rados_aio_release(my_completion);
+  // async rmxattr
+  rados_completion_t my_completion2;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+            set_completion_complete, set_completion_safe, &my_completion2));
+  ASSERT_EQ(0, rados_aio_rmxattr(test_data.m_ioctx, "foo", my_completion2, attr1));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
+  rados_aio_release(my_completion2);
+  // async getxattr after deletion
+  rados_completion_t my_completion3;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+            set_completion_complete, set_completion_safe, &my_completion3));
+  ASSERT_EQ(0, rados_aio_getxattr(test_data.m_ioctx, "foo", my_completion3, attr1, buf, sizeof(buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
+  }
+  ASSERT_EQ(-ENODATA, rados_aio_get_return_value(my_completion3));
+  rados_aio_release(my_completion3);
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  ASSERT_EQ(0, rados_write(test_data.m_ioctx, "foo_rmxattr", buf2, sizeof(buf2), 0));
+  // asynx setxattr
+  rados_completion_t my_completion4;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+            set_completion_complete, set_completion_safe, &my_completion4));
+  ASSERT_EQ(0, rados_aio_setxattr(test_data.m_ioctx, "foo_rmxattr", my_completion4, attr2, attr2_buf, sizeof(attr2_buf)));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion4));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion4));
+  rados_aio_release(my_completion4);
+  // remove object
+  ASSERT_EQ(0, rados_remove(test_data.m_ioctx, "foo_rmxattr"));
+  // async rmxattr on non existing object
+  rados_completion_t my_completion5;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+            set_completion_complete, set_completion_safe, &my_completion5));
+  ASSERT_EQ(0, rados_aio_rmxattr(test_data.m_ioctx, "foo_rmxattr", my_completion5, attr2));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion5));
+  }
+  ASSERT_EQ(-ENOENT, rados_aio_get_return_value(my_completion5));
+  rados_aio_release(my_completion5);
+}
+
+TEST(LibRadosAioPP, RmXattrPP) {
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, test_data.m_ioctx.append("foo", bl1, sizeof(buf)));
+  // async setxattr
+  bufferlist bl2;
+  bl2.append(attr1_buf, sizeof(attr1_buf));
+  boost::scoped_ptr<AioCompletion> my_completion
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_setxattr("foo", my_completion.get(), attr1, bl2));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  // async rmxattr
+  AioTestDataPP test_data2;
+  ASSERT_EQ("", test_data2.init());
+  boost::scoped_ptr<AioCompletion> my_completion2
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data2, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_rmxattr("foo", my_completion2.get(), attr1));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  // async getxattr
+  AioTestDataPP test_data3;
+  ASSERT_EQ("", test_data3.init());
+  boost::scoped_ptr<AioCompletion> my_completion3
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data3, set_completion_completePP, set_completion_safePP));
+  bufferlist bl3;
+  ASSERT_EQ(0, test_data.m_ioctx.aio_getxattr("foo", my_completion3.get(), attr1, bl3));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion3->wait_for_complete());
+  }
+  ASSERT_EQ(-ENODATA, my_completion3->get_return_value());
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  bufferlist bl21;
+  bl21.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.write("foo_rmxattr", bl21, sizeof(buf2), 0));
+  bufferlist bl22;
+  bl22.append(attr2_buf, sizeof(attr2_buf));
+  // async setxattr
+  AioTestDataPP test_data4;
+  ASSERT_EQ("", test_data4.init());
+  boost::scoped_ptr<AioCompletion> my_completion4
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data4, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_setxattr("foo_rmxattr", my_completion4.get(), attr2, bl22));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion4->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion4->get_return_value());
+  // remove object
+  ASSERT_EQ(0, test_data.m_ioctx.remove("foo_rmxattr"));
+  // async rmxattr on non existing object
+  AioTestDataPP test_data5;
+  ASSERT_EQ("", test_data5.init());
+  boost::scoped_ptr<AioCompletion> my_completion5
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data5, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_rmxattr("foo_rmxattr", my_completion5.get(), attr2));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion5->wait_for_complete());
+  }
+  ASSERT_EQ(-ENOENT, my_completion5->get_return_value());
+}
+
+TEST(LibRadosAio, XattrIter) {
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+  // Create an object with 2 attributes
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  char attr2[] = "attr2";
+  char attr2_buf[256];
+  for (size_t j = 0; j < sizeof(attr2_buf); ++j) {
+    attr2_buf[j] = j % 0xff;
+  }
+  memset(buf, 0xaa, sizeof(buf));
+  ASSERT_EQ(0, rados_append(test_data.m_ioctx, "foo", buf, sizeof(buf)));
+  ASSERT_EQ(0, rados_setxattr(test_data.m_ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
+  ASSERT_EQ(0, rados_setxattr(test_data.m_ioctx, "foo", attr2, attr2_buf, sizeof(attr2_buf)));
+  // call async version of getxattrs and wait for completion
+  rados_completion_t my_completion;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+            set_completion_complete, set_completion_safe, &my_completion));
+  rados_xattrs_iter_t iter;
+  ASSERT_EQ(0, rados_aio_getxattrs(test_data.m_ioctx, "foo", my_completion, &iter));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  // loop over attributes
+  int num_seen = 0;
+  while (true) {
+    const char *name;
+    const char *val;
+    size_t len;
+    ASSERT_EQ(0, rados_getxattrs_next(iter, &name, &val, &len));
+    if (name == NULL) {
+      break;
+    }
+    ASSERT_LT(num_seen, 2);
+    if ((strcmp(name, attr1) == 0) && (val != NULL) && (memcmp(val, attr1_buf, len) == 0)) {
+      num_seen++;
+      continue;
+    }
+    else if ((strcmp(name, attr2) == 0) && (val != NULL) && (memcmp(val, attr2_buf, len) == 0)) {
+      num_seen++;
+      continue;
+    }
+    else {
+      ASSERT_EQ(0, 1);
+    }
+  }
+  rados_getxattrs_end(iter);
+}
+
+TEST(LibRadosIoPP, XattrListPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  // create an object with 2 attributes
+  char buf[128];
+  char attr1[] = "attr1";
+  char attr1_buf[] = "foo bar baz";
+  char attr2[] = "attr2";
+  char attr2_buf[256];
+  for (size_t j = 0; j < sizeof(attr2_buf); ++j) {
+    attr2_buf[j] = j % 0xff;
+  }
+  memset(buf, 0xaa, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.append("foo", bl1, sizeof(buf)));
+  bufferlist bl2;
+  bl2.append(attr1_buf, sizeof(attr1_buf));
+  ASSERT_EQ(0, test_data.m_ioctx.setxattr("foo", attr1, bl2));
+  bufferlist bl3;
+  bl3.append(attr2_buf, sizeof(attr2_buf));
+  ASSERT_EQ(0, test_data.m_ioctx.setxattr("foo", attr2, bl3));
+  // call async version of getxattrs
+  boost::scoped_ptr<AioCompletion> my_completion
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data, set_completion_completePP, set_completion_safePP));
+  std::map<std::string, bufferlist> attrset;
+  ASSERT_EQ(0, test_data.m_ioctx.aio_getxattrs("foo", my_completion.get(), attrset));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(-ENODATA, my_completion->get_return_value());
+  for (std::map<std::string, bufferlist>::iterator i = attrset.begin();
+       i != attrset.end(); ++i) {
+    if (i->first == string(attr1)) {
+      ASSERT_EQ(0, memcmp(i->second.c_str(), attr1_buf, sizeof(attr1_buf)));
+    }
+    else if (i->first == string(attr2)) {
+      ASSERT_EQ(0, memcmp(i->second.c_str(), attr2_buf, sizeof(attr2_buf)));
+    }
+    else {
+      ASSERT_EQ(0, 1);
+    }
+  }
+}
+
 TEST(LibRadosAio, IsComplete) {
   AioTestData test_data;
   rados_completion_t my_completion;
@@ -1884,6 +2284,38 @@ TEST(LibRadosAio, MultiWritePP) {
   delete my_completion;
   delete my_completion2;
   delete my_completion3;
+}
+
+TEST(LibRadosAio, AioUnlock) {
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_lock_exclusive(test_data.m_ioctx, "foo", "TestLock", "Cookie", "", NULL, 0));
+  rados_completion_t my_completion;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+            set_completion_complete, set_completion_safe, &my_completion));
+  ASSERT_EQ(0, rados_aio_unlock(test_data.m_ioctx, "foo", "TestLock", "Cookie", my_completion));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  ASSERT_EQ(0, rados_lock_exclusive(test_data.m_ioctx, "foo", "TestLock", "Cookie", "", NULL,  0));
+}
+
+TEST(LibRadosAio, AioUnlockPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ(0, test_data.m_ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
+  boost::scoped_ptr<AioCompletion> my_completion
+    (test_data.m_cluster.aio_create_completion
+     ((void*)&test_data, set_completion_completePP, set_completion_safePP));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_unlock("foo", "TestLock", "Cookie", my_completion.get()));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  bufferlist bl2;
+  ASSERT_EQ(0, test_data.m_ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
 }
 
 // EC test cases
