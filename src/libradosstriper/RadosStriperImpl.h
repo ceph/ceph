@@ -25,6 +25,7 @@
 #include "include/radosstriper/libradosstriper.hpp"
 
 #include "librados/IoCtxImpl.h"
+#include "librados/AioCompletionImpl.h"
 #include "common/RefCountedObj.h"
 
 struct libradosstriper::RadosStriperImpl {
@@ -118,6 +119,61 @@ struct libradosstriper::RadosStriperImpl {
     uint64_t m_expectedBytes;
     /// the bufferlist object where data have been written
     bufferlist *m_bl;
+  };
+
+  /**
+   * struct handling (most of) the data needed to pass to the call back
+   * function in asynchronous stat operations.
+   * Inherited by the actual type for adding time information in different
+   * versions (time_t or struct timespec)
+   */
+  struct BasicStatCompletionData : CompletionData {
+    /// constructor
+    BasicStatCompletionData(libradosstriper::RadosStriperImpl* striper,
+			    const std::string& soid,
+			    librados::AioCompletionImpl *userCompletion,
+			    libradosstriper::MultiAioCompletionImpl *multiCompletion,
+			    uint64_t *psize) :
+      CompletionData(striper, soid, "", userCompletion),
+      m_multiCompletion(multiCompletion), m_psize(psize),
+      m_statRC(0), m_getxattrRC(0) {};
+    // MultiAioCompletionImpl used to handle the double aysnc
+    // call in the back (stat + getxattr)
+    libradosstriper::MultiAioCompletionImpl *m_multiCompletion;
+    // where to store the size of first objct
+    // this will be ignored but we need a place to store it when
+    // async stat is called
+    uint64_t m_objectSize;
+    // where to store the file size
+    uint64_t *m_psize;
+    /// the bufferlist object used for the getxattr call
+    bufferlist m_bl;
+    /// return code of the stat
+    int m_statRC;
+    /// return code of the getxattr
+    int m_getxattrRC;
+  };
+
+  /**
+   * struct handling the data needed to pass to the call back
+   * function in asynchronous stat operations.
+   * Simple templated extension of BasicStatCompletionData.
+   * The template parameter is the type of the time information
+   * (used with time_t for stat and struct timespec for stat2)
+   */
+  template<class TimeType>
+  struct StatCompletionData : BasicStatCompletionData {
+    /// constructor
+    StatCompletionData(libradosstriper::RadosStriperImpl* striper,
+		       const std::string& soid,
+		       librados::AioCompletionImpl *userCompletion,
+		       libradosstriper::MultiAioCompletionImpl *multiCompletion,
+		       uint64_t *psize,
+		       TimeType *pmtime) :
+      BasicStatCompletionData(striper, soid, userCompletion, multiCompletion, psize),
+      m_pmtime(pmtime) {};
+    // where to store the file time
+    TimeType *m_pmtime;
   };
 
   /**
@@ -239,6 +295,21 @@ struct libradosstriper::RadosStriperImpl {
 
   // stat, deletion and truncation
   int stat(const std::string& soid, uint64_t *psize, time_t *pmtime);
+  int stat2(const std::string& soid, uint64_t *psize, struct timespec *pts);
+  template<class TimeType>
+  struct StatFunction {
+    typedef int (librados::IoCtxImpl::*Type) (const object_t& oid,
+					      librados::AioCompletionImpl *c,
+					      uint64_t *psize, TimeType *pmtime);
+  };
+  template<class TimeType>
+  int aio_generic_stat(const std::string& soid, librados::AioCompletionImpl *c,
+		       uint64_t *psize, TimeType *pmtime,
+		       typename StatFunction<TimeType>::Type statFunction);
+  int aio_stat(const std::string& soid, librados::AioCompletionImpl *c,
+	       uint64_t *psize, time_t *pmtime);
+  int aio_stat2(const std::string& soid, librados::AioCompletionImpl *c,
+		uint64_t *psize, struct timespec *pts);
   int remove(const std::string& soid, int flags=0);
   int trunc(const std::string& soid, uint64_t size);
 
