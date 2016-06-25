@@ -1393,7 +1393,7 @@ int64_t BitAllocator::alloc_blocks_res(int64_t num_blocks, int64_t *start_block)
 
   if (!allocated) {
     /*
-     * Could not find anything in two scans.
+     * Could not find anything in concurrent scan.
      * Go in serial manner.
      */
     serial_unlock();
@@ -1448,7 +1448,7 @@ int64_t BitAllocator::alloc_blocks(int64_t num_blocks, int64_t *start_block)
 
   if (!allocated) {
     /*
-     * Could not find anything in two scans.
+     * Could not find anything in concurrent scan.
      * Go in serial manner.
      */
     serial_unlock();
@@ -1551,7 +1551,7 @@ int64_t BitAllocator::alloc_blocks_dis(int64_t num_blocks, int64_t *block_list)
 
   if (allocated < num_blocks) {
     /*
-     * Could not find anything in two scans.
+     * Could not find anything in concurrent scan.
      * Go in serial manner to get something for sure
      * if available.
      */
