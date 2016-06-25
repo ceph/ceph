@@ -1246,10 +1246,6 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
   zone_size_block = (zone_size_block / BmapEntry::size()) *
         BmapEntry::size();
 
-  if (total_blocks < zone_size_block) {
-    debug_assert(0);
-  }
-
   unaligned_blocks = total_blocks % zone_size_block;
   total_blocks = ROUND_UP_TO(total_blocks, zone_size_block);
 
