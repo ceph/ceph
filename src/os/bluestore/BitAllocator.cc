@@ -23,8 +23,6 @@
 #include <math.h>
 
 #define debug_assert assert
-#define MAX_INT16 ((uint16_t) -1 >> 1)
-#define MAX_INT32 ((uint32_t) -1 >> 1)
 
 int64_t BitMapAreaLeaf::count = 0;
 int64_t BitMapZone::count = 0;
@@ -353,8 +351,8 @@ void BitMapZone::init(int64_t zone_num, int64_t total_blocks, bool def)
   m_used_blocks = def? total_blocks: 0;
 
   int64_t num_bmaps = total_blocks / BmapEntry::size();
-  debug_assert(num_bmaps < MAX_INT16);
-  debug_assert(total_blocks < MAX_INT32);
+  debug_assert(num_bmaps < std::numeric_limits<int16_t>::max());
+  debug_assert(total_blocks < std::numeric_limits<int32_t>::max());
   debug_assert(!(total_blocks % BmapEntry::size()));
 
   std::vector<BmapEntry> *bmaps = new std::vector<BmapEntry> (num_bmaps, BmapEntry(def));
@@ -702,7 +700,7 @@ void BitMapAreaIN::init(int64_t total_blocks, int64_t area_idx, bool def)
   int64_t level_factor = pow(BitMapArea::get_span_size(), m_level);
 
   num_child = (total_blocks + level_factor - 1) / level_factor;
-  debug_assert(num_child < MAX_INT16);
+  debug_assert(num_child < std::numeric_limits<int16_t>::max());
 
   m_child_size_blocks = level_factor;
 
