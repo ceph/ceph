@@ -38,8 +38,8 @@ foreach(python_version 3 2)  # Keep the default version last
     ${CMAKE_CURRENT_SOURCE_DIR}/ceph_daemon.py
     ${CMAKE_CURRENT_SOURCE_DIR}/ceph_volume_client.py
     DESTINATION ${PYTHON${PYTHON_VERSION}_INSTDIR})
-endforeach()
 
-install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_rest_api.py
-  DESTINATION ${PYTHON_INSTDIR})
+  install(DIRECTORY
+    ${CMAKE_CURRENT_SOURCE_DIR}/ceph_rest_api
+    DESTINATION ${PYTHON${PYTHON_VERSION}_INSTDIR})
+endforeach()
