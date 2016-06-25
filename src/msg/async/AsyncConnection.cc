@@ -2008,6 +2008,7 @@ void AsyncConnection::requeue_sent()
     ldout(async_msgr->cct, 10) << __func__ << " " << *m << " for resend "
                                << " (" << m->get_seq() << ")" << dendl;
     rq.push_front(make_pair(bufferlist(), m));
+    out_seq.dec();
   }
 }
 
@@ -2026,6 +2027,7 @@ void AsyncConnection::discard_requeued_up_to(uint64_t seq)
                          << " <= " << seq << ", discarding" << dendl;
     p.second->put();
     rq.pop_front();
+    out_seq.inc();
   }
   if (rq.empty())
     out_q.erase(CEPH_MSG_PRIO_HIGHEST);
