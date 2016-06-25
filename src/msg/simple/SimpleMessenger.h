@@ -305,6 +305,9 @@ private:
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
+  Cond  stop_cond;
+  bool stopped = true;
+
   bool reaper_started, reaper_stop;
   Cond reaper_cond;
 
