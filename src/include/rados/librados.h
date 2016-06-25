@@ -2060,6 +2060,76 @@ CEPH_RADOS_API int rados_aio_cancel(rados_ioctx_t io,
 /** @} Asynchronous I/O */
 
 /**
+ * @name Asynchronous Xattrs
+ * Extended attributes are stored as extended attributes on the files
+ * representing an object on the OSDs. Thus, they have the same
+ * limitations as the underlying filesystem. On ext4, this means that
+ * the total data stored in xattrs cannot exceed 4KB.
+ *
+ * @{
+ */
+
+/**
+ * Asynchronously get the value of an extended attribute on an object.
+ *
+ * @param io the context in which the attribute is read
+ * @param o name of the object
+ * @param completion what to do when the getxattr completes
+ * @param name which extended attribute to read
+ * @param buf where to store the result
+ * @param len size of buf in bytes
+ * @returns length of xattr value on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_getxattr(rados_ioctx_t io, const char *o,
+				      rados_completion_t completion,
+				      const char *name, char *buf, size_t len);
+
+/**
+ * Asynchronously set an extended attribute on an object.
+ *
+ * @param io the context in which xattr is set
+ * @param o name of the object
+ * @param completion what to do when the setxattr completes
+ * @param name which extended attribute to set
+ * @param buf what to store in the xattr
+ * @param len the number of bytes in buf
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_setxattr(rados_ioctx_t io, const char *o,
+				      rados_completion_t completion,
+				      const char *name, const char *buf,
+				      size_t len);
+
+/**
+ * Asynchronously delete an extended attribute from an object.
+ *
+ * @param io the context in which to delete the xattr
+ * @param o the name of the object
+ * @param completion what to do when the rmxattr completes
+ * @param name which xattr to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_rmxattr(rados_ioctx_t io, const char *o,
+				     rados_completion_t completion,
+				     const char *name);
+
+/**
+ * Asynchronously start iterating over xattrs on an object.
+ *
+ * @post iter is a valid iterator
+ *
+ * @param io the context in which to list xattrs
+ * @param oid name of the object
+ * @param iter where to store the iterator
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_getxattrs(rados_ioctx_t io, const char *oid,
+				       rados_completion_t completion,
+				       rados_xattrs_iter_t *iter);
+
+/** @} Asynchronous Xattrs */
+
+/**
  * @name Watch/Notify
  *
  * Watch/notify is a protocol to help communicate among clients. It

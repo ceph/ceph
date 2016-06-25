@@ -968,7 +968,10 @@ namespace librados
      * @returns 0 on success, negative error code on failure
      */
     int aio_flush_async(AioCompletion *c);
-
+    int aio_getxattr(const std::string& oid, AioCompletion *c, const char *name, bufferlist& bl);
+    int aio_getxattrs(const std::string& oid, AioCompletion *c, std::map<std::string, bufferlist>& attrset);
+    int aio_setxattr(const std::string& oid, AioCompletion *c, const char *name, bufferlist& bl);
+    int aio_rmxattr(const std::string& oid, AioCompletion *c, const char *name);
     int aio_stat(const std::string& oid, AioCompletion *c, uint64_t *psize, time_t *pmtime);
     int aio_stat2(const std::string& oid, AioCompletion *c, uint64_t *psize, struct timespec *pts);
 
