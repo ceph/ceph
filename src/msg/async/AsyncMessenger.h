@@ -107,7 +107,7 @@ class Worker : public Thread {
  * and listens for incoming connections.
  */
 class Processor {
-  AsyncMessenger *msgr;
+  AsyncMessenger &msgr;
   NetHandler net;
   Worker *worker;
   int listen_sd;
@@ -117,7 +117,7 @@ class Processor {
   class C_processor_accept;
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n);
+  Processor(AsyncMessenger &r, CephContext *c, uint64_t n);
   ~Processor() { delete listen_handler; };
 
   void stop();
