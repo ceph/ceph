@@ -246,6 +246,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
   cls_user_bucket bucket;
+  bucket.tenant = tenant_name;
   bucket.name = bucket_name;
   rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_remove_bucket(obj, bucket);
