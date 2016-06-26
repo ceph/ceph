@@ -390,7 +390,6 @@ TEST(BitAllocator, test_bmap_alloc)
   delete alloc;
   alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
 
-  int64_t blocks[2048] = {0};
   for (int64_t i = 0; i < alloc->size(); i++) {
     allocated = alloc->alloc_blocks(1, &start_block);
     bmap_test_assert(allocated == 1);
@@ -399,6 +398,8 @@ TEST(BitAllocator, test_bmap_alloc)
     alloc->free_blocks(i, 1);
   }
 
+  int64_t blocks[alloc->size() / 2];
+  memset(blocks, 0, sizeof(blocks));
   allocated = alloc->alloc_blocks_dis(alloc->size()/2, blocks);
   bmap_test_assert(allocated == alloc->size() / 2);
 
