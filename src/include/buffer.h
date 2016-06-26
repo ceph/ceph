@@ -48,6 +48,7 @@
 #include "page.h"
 #include "crc32c.h"
 #include "buffer_fwd.h"
+#include "include/fast_containers.h"
 
 #ifdef __CEPH__
 # include "include/assert.h"
@@ -252,6 +253,9 @@ namespace buffer CEPH_BUFFER_API {
 
   };
 
+//  typedef ceph::fast_list<ptr,10> ptrlist;
+  typedef std::list<ptr> ptrlist;
+
 
   /*
    * list - the useful bit!
@@ -259,7 +263,7 @@ namespace buffer CEPH_BUFFER_API {
 
   class CEPH_BUFFER_API list {
     // my private bits
-    std::list<ptr> _buffers;
+    ptrlist  _buffers;
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
@@ -276,11 +280,11 @@ namespace buffer CEPH_BUFFER_API {
 					const list,
 					list>::type bl_t;
       typedef typename std::conditional<is_const,
-					const std::list<ptr>,
-					std::list<ptr> >::type list_t;
+					const ptrlist ,
+					ptrlist >::type list_t;
       typedef typename std::conditional<is_const,
-					typename std::list<ptr>::const_iterator,
-					typename std::list<ptr>::iterator>::type list_iter_t;
+					typename ptrlist::const_iterator,
+					typename ptrlist::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
       unsigned off; // in bl
@@ -420,7 +424,8 @@ namespace buffer CEPH_BUFFER_API {
     const ptr& back() const { return _buffers.back(); }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
-    const std::list<ptr>& buffers() const { return _buffers; }
+    const ptrlist& buffers() const { return _buffers; }
+          ptrlist& buffers()       { return _buffers; }
     void swap(list& other);
     unsigned length() const {
 #if 0
