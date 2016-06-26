@@ -464,25 +464,48 @@ void dump_redirect(struct req_state *s, const string& redirect)
   STREAM_IO(s)->print("Location: %s\r\n", redirect.c_str());
 }
 
+static bool dump_time_header_impl(char (&timestr)[TIME_BUF_SIZE],
+                                  const real_time t)
+{
+  const utime_t ut(t);
+  time_t secs = static_cast<time_t>(ut.sec());
+
+  struct tm result;
+  const struct tm * const tmp = gmtime_r(&secs, &result);
+  if (tmp == nullptr) {
+    return false;
+  }
+
+  if (strftime(timestr, sizeof(timestr),
+               "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0) {
+    return false;
+  }
+
+  return true;
+}
+
 void dump_time_header(struct req_state *s, const char *name, real_time t)
 {
-  utime_t ut(t);
-  time_t secs = (time_t)ut.sec();
-
   char timestr[TIME_BUF_SIZE];
-  struct tm result;
-  struct tm *tmp = gmtime_r(&secs, &result);
-  if (tmp == NULL)
-    return;
 
-  if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
+  if (! dump_time_header_impl(timestr, t)) {
     return;
+  }
 
   int r = STREAM_IO(s)->print("%s: %s\r\n", name, timestr);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
 }
+
+std::string dump_time_to_str(const real_time& t)
+{
+  char timestr[TIME_BUF_SIZE];
+  dump_time_header_impl(timestr, t);
+
+  return timestr;
+}
+
 
 void dump_last_modified(struct req_state *s, real_time t)
 {
