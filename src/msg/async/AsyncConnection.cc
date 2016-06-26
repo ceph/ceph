@@ -1832,15 +1832,18 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     _stop();
     // queue a reset on the new connection, which we're dumping for the old
     dispatch_queue->queue_reset(this);
-    existing->lock.Unlock();
-
-    center->submit_to(existing->center->get_id(), [existing, connect, reply, authorizer_reply]() mutable {
+    int new_fd = existing->sd;
+    center->submit_to(existing->center->get_id(), [existing, new_fd, connect, reply, authorizer_reply]() mutable {
       Mutex::Locker l(existing->lock);
+      if (new_fd != existing->sd)
+        return ;
+
       if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
         // handle error
         existing->fault();
       }
     }, true);
+    existing->lock.Unlock();
 
     return 0;
   }
