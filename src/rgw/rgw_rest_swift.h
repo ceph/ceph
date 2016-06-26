@@ -230,6 +230,7 @@ class RGWSwiftWebsiteHandler {
 
   int serve_errordoc(int http_ret, std::string error_doc);
 
+  RGWOp* get_ws_redirect_op();
   RGWOp* get_ws_index_op();
   RGWOp* get_ws_listing_op();
 public:

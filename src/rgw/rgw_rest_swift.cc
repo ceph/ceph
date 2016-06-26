@@ -1664,6 +1664,40 @@ bool RGWSwiftWebsiteHandler::can_be_website_req() const
   return false;
 }
 
+RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
+{
+  class RGWMovedPermanently: public RGWOp {
+    const std::string location;
+  public:
+    RGWMovedPermanently(const std::string& location)
+      : location(location) {
+    }
+
+    int verify_permission() override {
+      return 0;
+    }
+
+    void execute() override {
+      op_ret = -ERR_PERMANENT_REDIRECT;
+      return;
+    }
+
+    void send_response() override {
+      set_req_state_err(s, op_ret);
+      dump_errno(s);
+      dump_content_length(s, 0);
+      dump_redirect(s, location);
+      end_header(s, this);
+    }
+
+    const string name() override {
+      return "RGWMovedPermanently";
+    }
+  };
+
+  return new RGWMovedPermanently(s->info.request_uri + '/');
+}
+
 RGWOp* RGWSwiftWebsiteHandler::get_ws_index_op()
 {
   /* Retarget to get obj on requested index file. */
@@ -1809,7 +1843,9 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
 
-    if (! index.empty() && is_index_present(index)) {
+    if (s->info.request_uri.back() != '/') {
+      op_override = get_ws_redirect_op();
+    } else if (! index.empty() && is_index_present(index)) {
       op_override = get_ws_index_op();
     } else if (ws_conf.listing_enabled) {
       op_override = get_ws_listing_op();
@@ -1841,7 +1877,9 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
     const auto& ws_conf = s->bucket_info.website_conf;
     const auto& index = s->bucket_info.website_conf.get_swift_index_doc();
 
-    if (! index.empty() && is_index_present(index)) {
+    if (s->info.request_uri.back() != '/') {
+      op_override = get_ws_redirect_op();
+    } else if (! index.empty() && is_index_present(index)) {
       op_override = get_ws_index_op();
     } else if (ws_conf.listing_enabled) {
       op_override = get_ws_listing_op();
