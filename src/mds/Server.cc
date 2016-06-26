@@ -6099,7 +6099,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       return;
     }
 
-    // non-empty dir?
+    // non-empty dir? do trivial fast unlocked check, do another check later with read locks
     if (oldin->is_dir() && _dir_is_nonempty_unlocked(mdr, oldin)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
@@ -6309,6 +6309,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (!check_access(mdr, srci, MAY_WRITE))
     return;
 
+  // with read lock, really verify oldin is empty
   if (oldin &&
       oldin->is_dir() &&
       _dir_is_nonempty(mdr, oldin)) {

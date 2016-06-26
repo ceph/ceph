@@ -197,7 +197,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 2;
     b.extents.push_back(bluestore_pextent_t(0, mas*2));
     b.ref_map.get(0, mas*2);
     ASSERT_TRUE(b.is_allocated(0, mas*2));
@@ -215,7 +214,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 2;
     b.extents.push_back(bluestore_pextent_t(123, mas*2));
     b.ref_map.get(0, mas*2);
     b.put_ref(0, mas, mrs, &r);
@@ -234,7 +232,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 4;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
@@ -267,7 +264,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 6;
     b.extents.push_back(bluestore_pextent_t(1, mas));
     b.extents.push_back(bluestore_pextent_t(2, mas));
     b.extents.push_back(bluestore_pextent_t(3, mas));
@@ -303,7 +299,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 6;
     b.extents.push_back(bluestore_pextent_t(1, mas * 6));
     b.ref_map.get(0, mas*6);
     b.put_ref(mas, mas, mrs, &r);
@@ -330,7 +325,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 12;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -363,7 +357,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 12;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -411,7 +404,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 12;
     b.extents.push_back(bluestore_pextent_t(1, mas * 4));
     b.extents.push_back(bluestore_pextent_t(2, mas * 4));
     b.extents.push_back(bluestore_pextent_t(3, mas * 4));
@@ -459,7 +451,6 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 8;
     b.extents.push_back(bluestore_pextent_t(1, mas * 8));
     b.ref_map.get(0, mas*8);
     b.put_ref(0, mas, mrs, &r);
@@ -495,9 +486,8 @@ TEST(bluestore_blob_t, put_ref)
   {
     bluestore_blob_t b;
     vector<bluestore_pextent_t> r;
-    b.length = mas * 4;
     b.extents.push_back(bluestore_pextent_t(0, mas*4));
-    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, b.length);
+    b.init_csum(bluestore_blob_t::CSUM_CRC32C, 14, mas * 4);
     b.ref_map.get(0, mas*4);
     ASSERT_TRUE(b.is_allocated(0, mas*4));
     b.put_ref(0, mas*3, mrs, &r);
@@ -624,7 +614,7 @@ TEST(bluestore_onode_t, find_lextent)
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(0));
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(100));
 
-  on.extent_map[100] = bluestore_lextent_t(1, 0, 100, 0);
+  on.extent_map[100] = bluestore_lextent_t(1, 0, 100);
   map<uint64_t,bluestore_lextent_t>::iterator a = on.extent_map.find(100);
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(0));
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(99));
@@ -633,7 +623,7 @@ TEST(bluestore_onode_t, find_lextent)
   ASSERT_EQ(a, on.find_lextent(199));
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(200));
 
-  on.extent_map[200] = bluestore_lextent_t(2, 0, 100, 0);
+  on.extent_map[200] = bluestore_lextent_t(2, 0, 100);
   map<uint64_t,bluestore_lextent_t>::iterator b = on.extent_map.find(200);
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(0));
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(99));
@@ -644,7 +634,7 @@ TEST(bluestore_onode_t, find_lextent)
   ASSERT_EQ(b, on.find_lextent(299));
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(300));
 
-  on.extent_map[400] = bluestore_lextent_t(4, 0, 100, 0);
+  on.extent_map[400] = bluestore_lextent_t(4, 0, 100);
   map<uint64_t,bluestore_lextent_t>::iterator d = on.extent_map.find(400);
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(0));
   ASSERT_EQ(on.extent_map.end(), on.find_lextent(99));
@@ -666,7 +656,7 @@ TEST(bluestore_onode_t, seek_lextent)
   ASSERT_EQ(on.extent_map.end(), on.seek_lextent(0));
   ASSERT_EQ(on.extent_map.end(), on.seek_lextent(100));
 
-  on.extent_map[100] = bluestore_lextent_t(1, 0, 100, 0);
+  on.extent_map[100] = bluestore_lextent_t(1, 0, 100);
   map<uint64_t,bluestore_lextent_t>::iterator a = on.extent_map.find(100);
   ASSERT_EQ(a, on.seek_lextent(0));
   ASSERT_EQ(a, on.seek_lextent(99));
@@ -675,7 +665,7 @@ TEST(bluestore_onode_t, seek_lextent)
   ASSERT_EQ(a, on.seek_lextent(199));
   ASSERT_EQ(on.extent_map.end(), on.seek_lextent(200));
 
-  on.extent_map[200] = bluestore_lextent_t(2, 0, 100, 0);
+  on.extent_map[200] = bluestore_lextent_t(2, 0, 100);
   map<uint64_t,bluestore_lextent_t>::iterator b = on.extent_map.find(200);
   ASSERT_EQ(a, on.seek_lextent(0));
   ASSERT_EQ(a, on.seek_lextent(99));
@@ -686,7 +676,7 @@ TEST(bluestore_onode_t, seek_lextent)
   ASSERT_EQ(b, on.seek_lextent(299));
   ASSERT_EQ(on.extent_map.end(), on.seek_lextent(300));
 
-  on.extent_map[400] = bluestore_lextent_t(4, 0, 100, 0);
+  on.extent_map[400] = bluestore_lextent_t(4, 0, 100);
   map<uint64_t,bluestore_lextent_t>::iterator d = on.extent_map.find(400);
   ASSERT_EQ(a, on.seek_lextent(0));
   ASSERT_EQ(a, on.seek_lextent(99));
@@ -709,7 +699,7 @@ TEST(bluestore_onode_t, has_any_lextents)
   ASSERT_FALSE(on.has_any_lextents(0, 1000));
   ASSERT_FALSE(on.has_any_lextents(1000, 1000));
 
-  on.extent_map[100] = bluestore_lextent_t(1, 0, 100, 0);
+  on.extent_map[100] = bluestore_lextent_t(1, 0, 100);
   ASSERT_FALSE(on.has_any_lextents(0, 50));
   ASSERT_FALSE(on.has_any_lextents(0, 100));
   ASSERT_FALSE(on.has_any_lextents(50, 50));
@@ -721,7 +711,7 @@ TEST(bluestore_onode_t, has_any_lextents)
   ASSERT_TRUE(on.has_any_lextents(199, 2));
   ASSERT_FALSE(on.has_any_lextents(200, 2));
 
-  on.extent_map[200] = bluestore_lextent_t(2, 0, 100, 0);
+  on.extent_map[200] = bluestore_lextent_t(2, 0, 100);
   ASSERT_TRUE(on.has_any_lextents(199, 1));
   ASSERT_TRUE(on.has_any_lextents(199, 2));
   ASSERT_TRUE(on.has_any_lextents(200, 2));
@@ -729,7 +719,7 @@ TEST(bluestore_onode_t, has_any_lextents)
   ASSERT_TRUE(on.has_any_lextents(299, 1));
   ASSERT_FALSE(on.has_any_lextents(300, 1));
 
-  on.extent_map[400] = bluestore_lextent_t(4, 0, 100, 0);
+  on.extent_map[400] = bluestore_lextent_t(4, 0, 100);
   ASSERT_TRUE(on.has_any_lextents(0, 10000));
   ASSERT_TRUE(on.has_any_lextents(199, 1));
   ASSERT_FALSE(on.has_any_lextents(300, 1));
@@ -746,30 +736,30 @@ TEST(bluestore_onode_t, compress_extent_map)
 {
   bluestore_onode_t on;
   vector<bluestore_lextent_t> r;
-  on.extent_map[0] = bluestore_lextent_t(1, 0, 100, 0);
-  on.extent_map[100] = bluestore_lextent_t(2, 0, 100, 0);
+  on.extent_map[0] = bluestore_lextent_t(1, 0, 100);
+  on.extent_map[100] = bluestore_lextent_t(2, 0, 100);
   ASSERT_EQ(0, on.compress_extent_map());
   ASSERT_EQ(2u, on.extent_map.size());
 
-  on.extent_map[200] = bluestore_lextent_t(2, 100, 100, 0);
-  on.extent_map[300] = bluestore_lextent_t(2, 200, 100, 0);
+  on.extent_map[200] = bluestore_lextent_t(2, 100, 100);
+  on.extent_map[300] = bluestore_lextent_t(2, 200, 100);
   ASSERT_EQ(2, on.compress_extent_map());
   ASSERT_EQ(2u, on.extent_map.size());
 
-  on.extent_map[200] = bluestore_lextent_t(3, 100, 100, 0);
-  on.extent_map[300] = bluestore_lextent_t(2, 200, 100, 0);
+  on.extent_map[200] = bluestore_lextent_t(3, 100, 100);
+  on.extent_map[300] = bluestore_lextent_t(2, 200, 100);
   ASSERT_EQ(0, on.compress_extent_map());
   ASSERT_EQ(4u, on.extent_map.size());
 
-  on.extent_map[400] = bluestore_lextent_t(2, 300, 100, 0);
-  on.extent_map[500] = bluestore_lextent_t(2, 500, 100, 0);
-  on.extent_map[600] = bluestore_lextent_t(2, 600, 100, 0);
+  on.extent_map[400] = bluestore_lextent_t(2, 300, 100);
+  on.extent_map[500] = bluestore_lextent_t(2, 500, 100);
+  on.extent_map[600] = bluestore_lextent_t(2, 600, 100);
   ASSERT_EQ(2, on.compress_extent_map());
   ASSERT_EQ(5u, on.extent_map.size());
 
-  on.extent_map[400] = bluestore_lextent_t(2, 300, 100, 0);
-  on.extent_map[500] = bluestore_lextent_t(2, 400, 100, 0);
-  on.extent_map[700] = bluestore_lextent_t(2, 500, 100, 0);
+  on.extent_map[400] = bluestore_lextent_t(2, 300, 100);
+  on.extent_map[500] = bluestore_lextent_t(2, 400, 100);
+  on.extent_map[700] = bluestore_lextent_t(2, 500, 100);
   ASSERT_EQ(1, on.compress_extent_map());
   ASSERT_EQ(6u, on.extent_map.size());
 }
@@ -778,8 +768,8 @@ TEST(bluestore_onode_t, punch_hole)
 {
   bluestore_onode_t on;
   vector<bluestore_lextent_t> r;
-  on.extent_map[0] = bluestore_lextent_t(1, 0, 100, 0);
-  on.extent_map[100] = bluestore_lextent_t(2, 0, 100, 0);
+  on.extent_map[0] = bluestore_lextent_t(1, 0, 100);
+  on.extent_map[100] = bluestore_lextent_t(2, 0, 100);
 
   on.punch_hole(0, 100, &r);
   ASSERT_EQ(1u, on.extent_map.size());

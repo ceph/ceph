@@ -178,8 +178,9 @@ struct C_InvokeAsyncRequest : public Context {
       return;
     }
 
+    int r;
     if (image_ctx.exclusive_lock->is_lock_owner() &&
-        image_ctx.exclusive_lock->accept_requests()) {
+        image_ctx.exclusive_lock->accept_requests(&r)) {
       send_local_request();
       owner_lock.put_read();
       return;
@@ -235,6 +236,8 @@ struct C_InvokeAsyncRequest : public Context {
     ldout(cct, 20) << __func__ << ": r=" << r << dendl;
 
     if (r != -ETIMEDOUT && r != -ERESTART) {
+      image_ctx.state->handle_update_notification();
+
       complete(r);
       return;
     }
@@ -535,7 +538,18 @@ void Operations<I>::execute_rename(const char *dstname, Context *on_finish) {
                 << dendl;
 
   if (m_image_ctx.old_format) {
+    // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
+    on_finish = new FunctionContext([this, on_finish](int r) {
+	m_image_ctx.image_watcher->register_watch(on_finish);
+      });
+    on_finish = new FunctionContext([this, dstname, on_finish](int r) {
+	operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
+	  m_image_ctx, on_finish, dstname);
+	req->send();
+      });
+    m_image_ctx.image_watcher->unregister_watch(on_finish);
+    return;
   }
   operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
     m_image_ctx, on_finish, dstname);
@@ -1155,7 +1169,7 @@ int Operations<I>::prepare_image_update() {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
-         !m_image_ctx.exclusive_lock->accept_requests())) {
+         !m_image_ctx.exclusive_lock->accept_requests(&r))) {
       m_image_ctx.exclusive_lock->try_lock(&ctx);
       trying_lock = true;
     }

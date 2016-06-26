@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
+#include "include/small_encoding.h"
 #include "common/hobject.h"
 
 namespace ceph {
@@ -54,52 +55,6 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
-/// extent: a byte extent back by the block device
-struct bluestore_extent_t {
-  enum {
-    FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
-  };
-  static string get_flags_string(unsigned flags);
-
-  uint64_t offset;
-  uint32_t length;
-  uint32_t flags;  /// or reserved
-
-  bluestore_extent_t(uint64_t o=0, uint32_t l=0, uint32_t f=0)
-    : offset(o), length(l), flags(f) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
-
-  bool has_flag(unsigned f) const {
-    return flags & f;
-  }
-  void set_flag(unsigned f) {
-    flags |= f;
-  }
-  void clear_flag(unsigned f) {
-    flags &= ~f;
-  }
-
-  void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
-    ::encode(flags, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
-    ::decode(flags, p);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_extent_t*>& o);
-};
-WRITE_CLASS_ENCODER(bluestore_extent_t)
-
-ostream& operator<<(ostream& out, const bluestore_extent_t& bp);
-
-
 /// pextent: physical extent
 struct bluestore_pextent_t {
   const static uint64_t INVALID_OFFSET = ~0ull;
@@ -118,12 +73,12 @@ struct bluestore_pextent_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(offset, bl);
-    ::encode(length, bl);
+    small_encode_lba(offset, bl);
+    small_encode_varint_lowz(length, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(offset, p);
-    ::decode(length, p);
+    small_decode_lba(offset, p);
+    small_decode_varint_lowz(length, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
@@ -132,6 +87,8 @@ WRITE_CLASS_ENCODER(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl);
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p);
 
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {
@@ -140,20 +97,20 @@ struct bluestore_extent_ref_map_t {
     uint32_t refs;
     record_t(uint32_t l=0, uint32_t r=0) : length(l), refs(r) {}
     void encode(bufferlist& bl) const {
-      ::encode(length, bl);
-      ::encode(refs, bl);
+      small_encode_varint_lowz(length, bl);
+      small_encode_varint(refs, bl);
     }
     void decode(bufferlist::iterator& p) {
-      ::decode(length, p);
-      ::decode(refs, p);
+      small_decode_varint_lowz(length, p);
+      small_decode_varint(refs, p);
     }
   };
   WRITE_CLASS_ENCODER(record_t)
 
-  map<uint64_t,record_t> ref_map;
+  map<uint32_t,record_t> ref_map;
 
   void _check() const;
-  void _maybe_merge_left(map<uint64_t,record_t>::iterator& p);
+  void _maybe_merge_left(map<uint32_t,record_t>::iterator& p);
 
   void clear() {
     ref_map.clear();
@@ -162,11 +119,11 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
-  void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
+  void get(uint32_t offset, uint32_t len);
+  void put(uint32_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
-  bool contains(uint64_t offset, uint32_t len) const;
-  bool intersects(uint64_t offset, uint32_t len) const;
+  bool contains(uint32_t offset, uint32_t len) const;
+  bool intersects(uint32_t offset, uint32_t len) const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -190,32 +147,12 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
   return !(l == r);
 }
 
-/// overlay: a byte extent backed by kv pair, logically overlaying other content
-struct bluestore_overlay_t {
-  uint64_t key;          ///< key (nid+key identify the kv pair in the kvdb)
-  uint32_t value_offset; ///< offset in associated value for this extent
-  uint32_t length;
-
-  bluestore_overlay_t() : key(0), value_offset(0), length(0) {}
-  bluestore_overlay_t(uint64_t k, uint32_t vo, uint32_t l)
-    : key(k), value_offset(vo), length(l) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_overlay_t*>& o);
-
-};
-WRITE_CLASS_ENCODER(bluestore_overlay_t)
-
-ostream& operator<<(ostream& out, const bluestore_overlay_t& o);
-
-
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
   enum {
     FLAG_MUTABLE = 1,     ///< blob can be overwritten or split
     FLAG_COMPRESSED = 2,  ///< blob is compressed
+    FLAG_CSUM = 4,        ///< blob as checksums
   };
   static string get_flags_string(unsigned flags);
 
@@ -256,33 +193,17 @@ struct bluestore_blob_t {
   }
 
   vector<bluestore_pextent_t> extents; ///< raw data position on device
-  uint32_t length;                 ///< logical (decompressed) length
-  uint32_t compressed_length;      ///< compressed length if any
-  uint32_t flags;                  ///< FLAG_*
+  uint32_t compressed_length = 0;      ///< compressed length if any
+  uint32_t flags = 0;                  ///< FLAG_*
 
-  uint8_t csum_type;               ///< CSUM_*
-  uint8_t csum_chunk_order;        ///< csum block size is 1<<block_order bytes
+  uint8_t csum_type = CSUM_NONE;     ///< CSUM_*
+  uint8_t csum_chunk_order = 0;      ///< csum block size is 1<<block_order bytes
 
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
   interval_set<uint32_t> unused;   ///< portion that has never been written to
   bufferptr csum_data;          ///< opaque vector of csum data
 
-  bluestore_blob_t(uint32_t l = 0, uint32_t f = 0)
-    : length(l),
-      compressed_length(0),
-      flags(f),
-      csum_type(CSUM_NONE),
-      csum_chunk_order(12) {
-  }
-
-  bluestore_blob_t(uint32_t l, const bluestore_pextent_t& ext, uint32_t f = 0)
-    : length(l),
-      compressed_length(0),
-      flags(f),
-      csum_type(CSUM_NONE),
-      csum_chunk_order(12) {
-    extents.push_back(ext);
-  }
+  bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -312,16 +233,8 @@ struct bluestore_blob_t {
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
   }
-  uint32_t get_payload_length() const {
-    return is_compressed() ? compressed_length : length;
-  }
-  uint32_t get_aligned_payload_length(uint64_t block_size) const {
-    uint32_t pl = get_payload_length();
-    pl = ROUND_UP_TO(pl, block_size);
-    if(csum_type != CSUM_NONE) {
-      pl = ROUND_UP_TO(pl, get_csum_chunk_size());
-    }
-    return pl;
+  uint32_t get_compressed_payload_length() const {
+    return is_compressed() ? compressed_length : 0;
   }
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
@@ -428,13 +341,6 @@ struct bluestore_blob_t {
     }
   }
 
-  uint64_t get_max_length() const {
-    if (has_flag(FLAG_COMPRESSED)) {
-      return length;
-    } else {
-      return get_ondisk_length();
-    }
-  }
   uint32_t get_ondisk_length() const {
     uint32_t len = 0;
     for (auto &p : extents) {
@@ -443,8 +349,8 @@ struct bluestore_blob_t {
     return len;
   }
 
-  bool has_csum_data() const {
-    return csum_data.length() > 0;
+  bool has_csum() const {
+    return has_flag(FLAG_CSUM);
   }
 
   uint32_t get_csum_chunk_size() const {
@@ -474,12 +380,14 @@ struct bluestore_blob_t {
     switch (cs) {
     case 0:
       assert(0 == "no csum data, bad index");
+    case 1:
+      return reinterpret_cast<const uint8_t*>(p)[i];
     case 2:
-      return *reinterpret_cast<const __le16*>(p);
+      return reinterpret_cast<const __le16*>(p)[i];
     case 4:
-      return *reinterpret_cast<const __le32*>(p);
+      return reinterpret_cast<const __le32*>(p)[i];
     case 8:
-      return *reinterpret_cast<const __le64*>(p);
+      return reinterpret_cast<const __le64*>(p)[i];
     default:
       assert(0 == "unrecognized csum word size");
     }
@@ -494,6 +402,7 @@ struct bluestore_blob_t {
   }
 
   void init_csum(unsigned type, unsigned order, unsigned len) {
+    flags |= FLAG_CSUM;
     csum_type = type;
     csum_chunk_order = order;
     csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
@@ -520,21 +429,16 @@ typedef int64_t bluestore_blob_id_t;
 
 /// lextent: logical data block back by the extent
 struct bluestore_lextent_t {
-  static string get_flags_string(unsigned flags);
-
   bluestore_blob_id_t blob;  ///< blob
   uint32_t offset;           ///< relative offset within the blob
   uint32_t length;           ///< length within the blob
-  uint32_t flags;            ///< FLAGS_*
 
   bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
 		      uint32_t o = 0,
-		      uint32_t l = 0,
-		      uint32_t f = 0)
+		      uint32_t l = 0)
     : blob(_blob),
       offset(o),
-      length(l),
-      flags(f) {}
+      length(l) {}
 
   uint64_t end() const {
     return offset + length;
@@ -544,27 +448,15 @@ struct bluestore_lextent_t {
     return blob < 0;
   }
 
-  bool has_flag(unsigned f) const {
-    return flags & f;
-  }
-  void set_flag(unsigned f) {
-    flags |= f;
-  }
-  void clear_flag(unsigned f) {
-    flags &= ~f;
-  }
-
   void encode(bufferlist& bl) const {
     ::encode(blob, bl);
     ::encode(offset, bl);
     ::encode(length, bl);
-    ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(blob, p);
     ::decode(offset, p);
     ::decode(length, p);
-    ::decode(flags, p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_lextent_t*>& o);
@@ -582,9 +474,6 @@ struct bluestore_onode_t {
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
   map<uint64_t,bluestore_lextent_t> extent_map;  ///< extent refs
-  map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
-  map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
-  uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
   uint32_t expected_object_size;
@@ -594,7 +483,6 @@ struct bluestore_onode_t {
   bluestore_onode_t()
     : nid(0),
       size(0),
-      last_overlay_key(0),
       omap_head(0),
       expected_object_size(0),
       expected_write_size(0),
@@ -653,24 +541,6 @@ struct bluestore_onode_t {
   void punch_hole(uint64_t offset, uint64_t length,
 		  vector<bluestore_lextent_t> *deref);
 
-  bool put_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      return true;
-    assert(q->second >= 2);
-    if (--q->second == 1) {
-      overlay_refs.erase(q);
-    }
-    return false;
-  }
-  void get_overlay_ref(uint64_t key) {
-    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
-    if (q == overlay_refs.end())
-      overlay_refs[key] = 2;
-    else
-      ++q->second;
-  }
-
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
@@ -688,10 +558,6 @@ struct bluestore_wal_op_t {
 
   vector<bluestore_pextent_t> extents;
   bufferlist data;
-
-  uint64_t nid;
-  vector<bluestore_overlay_t> overlays;
-  vector<uint64_t> removed_overlays;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

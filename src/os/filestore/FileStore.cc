@@ -711,8 +711,7 @@ int FileStore::statfs(struct store_statfs_t *buf0)
     assert(r != -ENOENT);
     return r;
   }
-  buf0->blocks = buf.f_blocks;
-  buf0->bsize = buf.f_bsize;
+  buf0->total = buf.f_blocks * buf.f_bsize;
   buf0->available = buf.f_bavail * buf.f_bsize;
   return 0;
 }

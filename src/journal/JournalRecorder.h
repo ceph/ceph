@@ -36,7 +36,7 @@ public:
 private:
   typedef std::map<uint8_t, ObjectRecorderPtr> ObjectRecorderPtrs;
 
-  struct Listener : public JournalMetadata::Listener {
+  struct Listener : public JournalMetadataListener {
     JournalRecorder *journal_recorder;
 
     Listener(JournalRecorder *_journal_recorder)

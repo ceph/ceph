@@ -2988,7 +2988,7 @@ TEST_F(TestLibRBD, SnapshotLimit)
   ASSERT_EQ(UINT64_MAX, limit);
   ASSERT_EQ(0, rbd_snap_set_limit(image, 2));
   ASSERT_EQ(0, rbd_snap_get_limit(image, &limit));
-  ASSERT_EQ(2, limit);
+  ASSERT_EQ(2U, limit);
 
   ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
   ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
@@ -3021,7 +3021,7 @@ TEST_F(TestLibRBD, SnapshotLimitPP)
     ASSERT_EQ(UINT64_MAX, limit);
     ASSERT_EQ(0, image.snap_set_limit(2));
     ASSERT_EQ(0, image.snap_get_limit(&limit));
-    ASSERT_EQ(2, limit);
+    ASSERT_EQ(2U, limit);
 
     ASSERT_EQ(0, image.snap_create("snap1"));
     ASSERT_EQ(0, image.snap_create("snap2"));
@@ -3574,10 +3574,14 @@ TEST_F(TestLibRBD, UpdateFeatures)
   // must provide a single feature
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                     RBD_FEATURE_OBJECT_MAP |
-                                     RBD_FEATURE_FAST_DIFF |
-                                     RBD_FEATURE_JOURNALING, false));
+  uint64_t disable_features;
+  disable_features = features & (RBD_FEATURE_EXCLUSIVE_LOCK |
+                                 RBD_FEATURE_OBJECT_MAP |
+                                 RBD_FEATURE_FAST_DIFF |
+                                 RBD_FEATURE_JOURNALING);
+  if (disable_features != 0) {
+    ASSERT_EQ(0, image.update_features(disable_features, false));
+  }
 
   // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));

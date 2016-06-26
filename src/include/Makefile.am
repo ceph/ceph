@@ -96,6 +96,7 @@ noinst_HEADERS += \
 	include/rangeset.h \
 	include/rados.h \
 	include/rbd_types.h \
+	include/small_encoding.h \
 	include/statlite.h \
 	include/str_list.h \
 	include/str_map.h \

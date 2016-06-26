@@ -2208,11 +2208,18 @@ void RGWCreateBucket::execute()
 
   s->bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   s->bucket.name = s->bucket_name;
+
+  /* Handle updates of the metadata for Swift's object versioning. */
+  if (swift_ver_location) {
+    s->bucket_info.swift_ver_location = *swift_ver_location;
+    s->bucket_info.swift_versioning = (! swift_ver_location->empty());
+  }
+
   op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
-				placement_rule, swift_ver_location,
-				pquota_info, attrs,
-				info, pobjv, &ep_objv, creation_time,
-				pmaster_bucket, true);
+                                placement_rule, s->bucket_info.swift_ver_location,
+                                pquota_info, attrs,
+                                info, pobjv, &ep_objv, creation_time,
+                                pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
@@ -2282,6 +2289,12 @@ void RGWCreateBucket::execute()
       op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
       if (op_ret < 0) {
         return;
+      }
+
+      /* Handle updates of the metadata for Swift's object versioning. */
+      if (swift_ver_location) {
+        s->bucket_info.swift_ver_location = *swift_ver_location;
+        s->bucket_info.swift_versioning = (! swift_ver_location->empty());
       }
 
       /* This will also set the quota on the bucket. */
@@ -2629,6 +2642,18 @@ void RGWPutObj::execute()
   }
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+
+  /* Handle object versioning of Swift API. */
+  if (! multipart) {
+    rgw_obj obj(s->bucket, s->object);
+    op_ret = store->swift_versioning_copy(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+                                          s->bucket_owner.get_id(),
+                                          s->bucket_info,
+                                          obj);
+    if (op_ret < 0) {
+      return;
+    }
+  }
 
   op_ret = processor->prepare(store, NULL);
   if (op_ret < 0) {
@@ -3118,8 +3143,10 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  s->bucket_info.swift_ver_location = swift_ver_location;
-  s->bucket_info.swift_versioning = (!swift_ver_location.empty());
+  if (swift_ver_location) {
+    s->bucket_info.swift_ver_location = *swift_ver_location;
+    s->bucket_info.swift_versioning = (! swift_ver_location->empty());
+  }
 
   /* Setting attributes also stores the provided bucket info. Due to this
    * fact, the new quota settings can be serialized with the same call. */
@@ -3294,35 +3321,46 @@ void RGWDeleteObj::execute()
     }
 
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-
     obj_ctx->set_atomic(obj);
 
-    RGWRados::Object del_target(store, s->bucket_info, *obj_ctx, obj);
-    RGWRados::Object::Delete del_op(&del_target);
-
-    op_ret = get_system_versioning_params(s, &del_op.params.olh_epoch,
-					  &del_op.params.marker_version_id);
+    bool ver_restored = false;
+    op_ret = store->swift_versioning_restore(*obj_ctx, s->bucket_owner.get_id(),
+                                             s->bucket_info, obj, ver_restored);
     if (op_ret < 0) {
       return;
     }
 
-    del_op.params.bucket_owner = s->bucket_owner.get_id();
-    del_op.params.versioning_status = s->bucket_info.versioning_status();
-    del_op.params.obj_owner = s->owner;
-    del_op.params.unmod_since = unmod_since;
-    del_op.params.high_precision_time = s->system_request; /* system request uses high precision time */
+    if (!ver_restored) {
+      /* Swift's versioning mechanism hasn't found any previous version of
+       * the object that could be restored. This means we should proceed
+       * with the regular delete path. */
+      RGWRados::Object del_target(store, s->bucket_info, *obj_ctx, obj);
+      RGWRados::Object::Delete del_op(&del_target);
 
-    op_ret = del_op.delete_obj();
-    if (op_ret >= 0) {
-      delete_marker = del_op.result.delete_marker;
-      version_id = del_op.result.version_id;
-    }
+      op_ret = get_system_versioning_params(s, &del_op.params.olh_epoch,
+                                            &del_op.params.marker_version_id);
+      if (op_ret < 0) {
+        return;
+      }
 
-    /* Check whether the object has expired. Swift API documentation
-     * stands that we should return 404 Not Found in such case. */
-    if (need_object_expiration() && object_is_expired(attrs)) {
-      op_ret = -ENOENT;
-      return;
+      del_op.params.bucket_owner = s->bucket_owner.get_id();
+      del_op.params.versioning_status = s->bucket_info.versioning_status();
+      del_op.params.obj_owner = s->owner;
+      del_op.params.unmod_since = unmod_since;
+      del_op.params.high_precision_time = s->system_request; /* system request uses high precision time */
+
+      op_ret = del_op.delete_obj();
+      if (op_ret >= 0) {
+        delete_marker = del_op.result.delete_marker;
+        version_id = del_op.result.version_id;
+      }
+
+      /* Check whether the object has expired. Swift API documentation
+       * stands that we should return 404 Not Found in such case. */
+      if (need_object_expiration() && object_is_expired(attrs)) {
+        op_ret = -ENOENT;
+        return;
+      }
     }
 
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
@@ -3544,6 +3582,16 @@ void RGWCopyObj::execute()
   encode_delete_at_attr(delete_at, attrs);
 
   bool high_precision_time = (s->system_request);
+
+  /* Handle object versioning of Swift API. In case of copying to remote this
+   * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
+  op_ret = store->swift_versioning_copy(obj_ctx,
+                                        dest_bucket_info.owner,
+                                        dest_bucket_info,
+                                        dst_obj);
+  if (op_ret < 0) {
+    return;
+  }
 
   op_ret = store->copy_obj(obj_ctx,
 			   s->user->user_id,

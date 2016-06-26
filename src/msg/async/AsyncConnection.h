@@ -224,8 +224,7 @@ class AsyncConnection : public Connection {
     STATE_WAIT_SEND,
     STATE_CONNECTING,
     STATE_CONNECTING_RE,
-    STATE_CONNECTING_WAIT_BANNER,
-    STATE_CONNECTING_WAIT_IDENTIFY_PEER,
+    STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY,
     STATE_CONNECTING_SEND_CONNECT_MSG,
     STATE_CONNECTING_WAIT_CONNECT_REPLY,
     STATE_CONNECTING_WAIT_CONNECT_REPLY_AUTH,
@@ -262,8 +261,7 @@ class AsyncConnection : public Connection {
                                         "STATE_WAIT_SEND",
                                         "STATE_CONNECTING",
                                         "STATE_CONNECTING_RE",
-                                        "STATE_CONNECTING_WAIT_BANNER",
-                                        "STATE_CONNECTING_WAIT_IDENTIFY_PEER",
+                                        "STATE_CONNECTING_WAIT_BANNER_AND_IDENTIFY",
                                         "STATE_CONNECTING_SEND_CONNECT_MSG",
                                         "STATE_CONNECTING_WAIT_CONNECT_REPLY",
                                         "STATE_CONNECTING_WAIT_CONNECT_REPLY_AUTH",
@@ -286,8 +284,8 @@ class AsyncConnection : public Connection {
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  atomic_t out_seq;
-  atomic_t ack_left, in_seq;
+  atomic64_t out_seq;
+  atomic64_t ack_left, in_seq;
   int state;
   int state_after_send;
   int sd;

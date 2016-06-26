@@ -1,5 +1,5 @@
 # unittest_mds_types
-add_executable(unittest_mds_types EXCLUDE_FROM_ALL
+add_executable(unittest_mds_types
   mds_types.cc
   )
 add_ceph_unittest(unittest_mds_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mds_types)

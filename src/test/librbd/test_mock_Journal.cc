@@ -1000,4 +1000,97 @@ TEST_F(TestMockJournal, FlushCommitPosition) {
   expect_shut_down_journaler(mock_journaler);
 }
 
+TEST_F(TestMockJournal, ExternalReplay) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+  expect_stop_append(mock_journaler, 0);
+  expect_start_append(mock_journaler);
+  expect_shut_down_journaler(mock_journaler);
+
+  C_SaferCond start_ctx;
+  C_SaferCond close_request_ctx;
+
+  journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
+  mock_journal.start_external_replay(&journal_replay, &start_ctx,
+                                     &close_request_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+
+  mock_journal.stop_external_replay();
+  ASSERT_EQ(-ECANCELED, close_request_ctx.wait());
+}
+
+TEST_F(TestMockJournal, ExternalReplayFailure) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  InSequence seq;
+  expect_stop_append(mock_journaler, -EINVAL);
+  expect_start_append(mock_journaler);
+  expect_shut_down_journaler(mock_journaler);
+
+  C_SaferCond start_ctx;
+  C_SaferCond close_request_ctx;
+
+  journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
+  mock_journal.start_external_replay(&journal_replay, &start_ctx,
+                                     &close_request_ctx);
+  ASSERT_EQ(-EINVAL, start_ctx.wait());
+  ASSERT_EQ(-EINVAL, close_request_ctx.wait());
+}
+
+TEST_F(TestMockJournal, ExternalReplayCloseRequest) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockJournalImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+
+  InSequence seq;
+  expect_stop_append(mock_journaler, 0);
+  expect_shut_down_journaler(mock_journaler);
+
+  C_SaferCond start_ctx;
+  C_SaferCond close_request_ctx;
+
+  journal::Replay<MockJournalImageCtx> *journal_replay = nullptr;
+  mock_journal.start_external_replay(&journal_replay, &start_ctx,
+                                     &close_request_ctx);
+  ASSERT_EQ(0, start_ctx.wait());
+
+  C_SaferCond close_ctx;
+  mock_journal.close(&close_ctx);
+
+  ASSERT_EQ(0, close_request_ctx.wait());
+  mock_journal.stop_external_replay();
+
+  ASSERT_EQ(0, close_ctx.wait());
+}
+
+
 } // namespace librbd

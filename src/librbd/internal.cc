@@ -248,7 +248,6 @@ int mirror_image_enable(CephContext *cct, librados::IoCtx &io_ctx,
   if (r < 0) {
     lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                << dendl;
-    return r;
   }
 
   ldout(cct, 20) << "image mirroring is enabled: global_id=" <<
@@ -341,7 +340,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   if (r < 0) {
     lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                << dendl;
-    return r;
   }
 
   header_oid = ::journal::Journaler::header_oid(ictx->id);
@@ -1689,7 +1687,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     // avoid accepting new requests from peers while we manipulate
     // the image features
     if (ictx->exclusive_lock != nullptr) {
-      ictx->exclusive_lock->block_requests();
+      ictx->exclusive_lock->block_requests(0);
     }
     BOOST_SCOPE_EXIT_ALL( (ictx) ) {
       if (ictx->exclusive_lock != nullptr) {
@@ -1726,15 +1724,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       RWLock::WLocker snap_locker(ictx->snap_lock);
       uint64_t new_features;
       if (enabled) {
+      	if ((features & ictx->features) != 0) {
+	  lderr(cct) << "one or more requested features are already enabled" << dendl;
+	  return -EINVAL;
+      	}
         features &= ~ictx->features;
         new_features = ictx->features | features;
       } else {
+        if ((features & ~ictx->features) != 0) {
+	  lderr(cct) << "one or more requested features are already disabled" << dendl;
+	  return -EINVAL;
+        }
         features &= ictx->features;
         new_features = ictx->features & ~features;
-      }
-
-      if (features == 0) {
-        return 0;
       }
 
       bool enable_mirroring = false;
@@ -3210,7 +3212,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       if (r < 0) {
         lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                    << dendl;
-        return r;
       }
     }
 
@@ -3366,7 +3367,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
                  << dendl;
-      return r;
     }
     return 0;
   }

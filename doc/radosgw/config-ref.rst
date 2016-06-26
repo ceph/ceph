@@ -346,6 +346,40 @@ Ceph configuration file, the default value will be set automatically.
 :Type: Boolean
 :Default: ``false``
 
+
+``rgw bucket default quota max objects``
+
+:Description: Default max number of objects per bucket. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw bucket default quota max size``
+
+:Description: Default max capacity per bucket, in bytes. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw user default quota max objects``
+
+:Description: Default max number of objects for a user. This includes all
+              objects in all buckets owned by the user. Set on new users,
+              if no other quota is specified. Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
+``rgw user default quota max size``
+
+:Description: The value for user max size quota in bytes set on new users,
+              if no other quota is specified.  Has no effect on existing users.
+:Type: Integer
+:Default: ``-1``
+
+
 Regions
 =======
 
@@ -780,6 +814,20 @@ Swift Settings
 :Description: The entry point for a Swift auth URL.
 :Type: String
 :Default: ``auth``
+
+
+``rgw swift versioning enabled``
+
+:Description: Enables the Object Versioning of OpenStack Object Storage API.
+              This allows clients to put the ``X-Versions-Location`` attribute
+              on containers that should be versioned. The attribute specifies
+              the name of container storing archived versions. It must be owned
+              by the same user that the versioned container due to access
+              control verification - ACLs are NOT taken into consideration.
+              Those containers cannot be versioned by the S3 object versioning
+              mechanism.
+:Type: Boolean
+:Default: ``false``
 
 
 

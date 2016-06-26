@@ -21,12 +21,14 @@ set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
-include(CheckCCompilerFlag)
-CHECK_C_COMPILER_FLAG("-Wp,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
-if(HAS_FORTIFY_SOURCE)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-D_FORTIFY_SOURCE=2")
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
 endif()
+
+include(CheckCCompilerFlag)
+CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2 -Werror" HAS_FORTIFY_SOURCE)
+if(HAS_FORTIFY_SOURCE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2")
 endif()
 CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
 if (HAS_STACK_PROTECT)
@@ -539,26 +541,34 @@ set(osdc_rbd_files
 add_library(osdc_rbd_objs OBJECT ${osdc_rbd_files})
 add_library(osdc STATIC ${osdc_files} $<TARGET_OBJECTS:osdc_rbd_objs>)
 
+add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
 set(librados_srcs
   librados/librados.cc
   librados/RadosClient.cc
   librados/IoCtxImpl.cc
-  librados/snap_set_diff.cc
   librados/RadosXattrIter.cc
   )
-add_library(librados ${CEPH_SHARED} ${librados_srcs}
+add_library(librados_objs OBJECT ${librados_srcs})
+add_library(librados ${CEPH_SHARED}
+  $<TARGET_OBJECTS:librados_objs>
   $<TARGET_OBJECTS:cls_references_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
-  add_dependencies(librados rados-tp)
+  add_dependencies(librados_objs rados-tp)
 endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 if(ENABLE_SHARED)
-  set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
-    SOVERSION 2)
+  set_target_properties(librados PROPERTIES
+    OUTPUT_NAME rados
+    VERSION 2.0.0
+    SOVERSION 2
+    # use COMPILE_FLAGS for the backward compatibility with cmake 2.8.11, should have been:
+    #  CXX_VISIBILITY_PRESET hidden
+    #  VISIBILITY_INLINES_HIDDEN ON
+    COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
 endif(ENABLE_SHARED)
 
 add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
@@ -573,7 +583,7 @@ install(FILES include/rados/librados.h
   include/page.h
   include/crc32c.h
   DESTINATION include/rados)
-install(TARGETS librados DESTINATION lib)
+install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_subdirectory(libradosstriper)
 install(FILES
@@ -608,7 +618,7 @@ add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
+target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -1140,11 +1150,13 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
     ${BLKID_LIBRARIES}
     ${CRYPTO_LIBS} ${EXTRALIBS})
-if(ENABLE_SHARED)
-  set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
-    SOVERSION 1)
-endif(ENABLE_SHARED)
-  install(TARGETS cephfs DESTINATION lib)
+  if(ENABLE_SHARED)
+    set_target_properties(cephfs PROPERTIES
+      OUTPUT_NAME cephfs
+      VERSION 1.0.0
+      SOVERSION 1)
+  endif(ENABLE_SHARED)
+  install(TARGETS cephfs DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(DIRECTORY
     "${CMAKE_SOURCE_DIR}/src/include/cephfs"
     DESTINATION include)
@@ -1228,7 +1240,8 @@ if(${WITH_RBD})
     tools/rbd_mirror/image_sync/SnapshotCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointCreateRequest.cc
     tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc)
-  add_library(rbd_mirror_internal STATIC ${rbd_mirror_internal})
+  add_library(rbd_mirror_internal STATIC
+    ${rbd_mirror_internal})
 
   if(WITH_FUSE)
     add_executable(rbd-fuse
@@ -1261,7 +1274,7 @@ if(${WITH_RBD})
     tools/rbd/OptionPrinter.cc
     tools/rbd/Shell.cc
     tools/rbd/Utils.cc
-    tools/rbd/action/BenchWrite.cc
+    tools/rbd/action/Bench.cc
     tools/rbd/action/Children.cc
     tools/rbd/action/Clone.cc
     tools/rbd/action/Copy.cc
@@ -1272,6 +1285,7 @@ if(${WITH_RBD})
     tools/rbd/action/ExportDiff.cc
     tools/rbd/action/Feature.cc
     tools/rbd/action/Flatten.cc
+    tools/rbd/action/Group.cc
     tools/rbd/action/ImageMeta.cc
     tools/rbd/action/Import.cc
     tools/rbd/action/ImportDiff.cc
@@ -1458,6 +1472,10 @@ if(${WITH_RADOSGW})
     cls_version_client cls_replica_log_client cls_user_client
     curl expat global fcgi resolv ${OPENSSL_LIBRARIES} ${BLKID_LIBRARIES} ${OPENLDAP_LIBS}
     ${ALLOC_LIBS})
+  # radosgw depends on cls libraries at runtime, but not as link dependencies
+  add_dependencies(radosgw cls_rgw cls_lock cls_refcount
+    cls_log cls_statelog cls_timeindex
+    cls_version cls_replica_log cls_user)
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs})
@@ -1504,12 +1522,17 @@ add_subdirectory(brag)
 add_custom_target(vstart DEPENDS
     ceph-osd
     ceph-mon
-    ceph-mds
     ceph-authtool
     ceph-conf
     monmaptool
     crushtool
     cython_rados)
+if(WITH_MDS)
+  add_dependencies(vstart ceph-mds)
+endif(WITH_MDS)
+if(WITH_RADOSGW)
+  add_dependencies(vstart radosgw radosgw-admin)
+endif(WITH_RADOSGW)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

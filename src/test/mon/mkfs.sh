@@ -45,7 +45,6 @@ function mon_mkfs() {
         --id $MON_ID \
         --fsid $fsid \
         --erasure-code-dir=$CEPH_LIB \
-        --compression-dir=$CEPH_LIB \
         --mkfs \
         --mon-data=$MON_DIR \
         --mon-initial-members=$MON_ID \
@@ -60,7 +59,6 @@ function mon_run() {
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --erasure-code-dir=$CEPH_LIB \
-        --compression-dir=$CEPH_LIB \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
         --mon-cluster-log-file=$MON_DIR/log \
@@ -88,7 +86,6 @@ function auth_none() {
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --erasure-code-dir=$CEPH_LIB \
-        --compression-dir=$CEPH_LIB \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
 
@@ -156,7 +153,6 @@ function makedir() {
         --id $MON_ID \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
-        --compression-dir=$CEPH_LIB \
         --erasure-code-dir=$CEPH_LIB \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log

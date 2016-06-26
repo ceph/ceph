@@ -187,7 +187,7 @@
   $ rbd lock remove foo id
   rbd: locker was not specified
   [22]
-  $ rbd bench-write
+  $ rbd bench --io-type write
   rbd: image name was not specified
   [22]
   $ rbd mirror pool enable rbd

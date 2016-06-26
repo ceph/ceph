@@ -11,6 +11,7 @@
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
+#include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/journal/Types.h"
@@ -155,8 +156,15 @@ public:
   }
 
   void start_external_replay(journal::Replay<ImageCtxT> **journal_replay,
-                             Context *on_finish);
+                             Context *on_start, Context *on_close_request);
   void stop_external_replay();
+
+  void add_listener(journal::ListenerType type,
+                    journal::JournalListenerPtr listener);
+  void remove_listener(journal::ListenerType type,
+                       journal::JournalListenerPtr listener);
+
+  int check_resync_requested(bool *do_resync);
 
 private:
   ImageCtxT &m_image_ctx;
@@ -286,6 +294,24 @@ private:
   bool m_blocking_writes;
 
   journal::Replay<ImageCtxT> *m_journal_replay;
+  Context *m_on_replay_close_request = nullptr;
+
+  struct MetadataListener : public ::journal::JournalMetadataListener {
+    Journal<ImageCtxT> *journal;
+
+    MetadataListener(Journal<ImageCtxT> *journal) : journal(journal) { }
+
+    void handle_update(::journal::JournalMetadata *) {
+      FunctionContext *ctx = new FunctionContext([this](int r) {
+        journal->handle_metadata_updated();
+      });
+      journal->m_work_queue->queue(ctx, 0);
+    }
+  } m_metadata_listener;
+
+  typedef std::map<journal::ListenerType,
+                   std::list<journal::JournalListenerPtr> > ListenerMap;
+  ListenerMap m_listener_map;
 
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
@@ -330,6 +356,10 @@ private:
 
   bool is_steady_state() const;
   void wait_for_steady_state(Context *on_state);
+
+  int check_resync_requested_internal(bool *do_resync);
+
+  void handle_metadata_updated();
 };
 
 } // namespace librbd

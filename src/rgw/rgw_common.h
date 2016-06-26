@@ -1006,11 +1006,14 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  bool versioned() { return (flags & BUCKET_VERSIONED) != 0; }
+  bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  bool has_swift_versioning() { return swift_versioning; }
+  bool has_swift_versioning() const {
+    /* A bucket may be versioned through one mechanism only. */
+    return swift_versioning && !versioned();
+  }
 
   RGWBucketInfo() : flags(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
                     has_website(false), swift_versioning(false) {}
@@ -1744,13 +1747,16 @@ public:
   bool operator<(const rgw_obj& o) const {
     int r = bucket.name.compare(o.bucket.name);
     if (r == 0) {
-     r = object.compare(o.object);
-     if (r == 0) {
-       r = ns.compare(o.ns);
-       if (r == 0) {
-         r = instance.compare(o.instance);
-       }
-     }
+      r = bucket.bucket_id.compare(o.bucket.bucket_id);
+      if (r == 0) {
+        r = object.compare(o.object);
+        if (r == 0) {
+          r = ns.compare(o.ns);
+          if (r == 0) {
+            r = instance.compare(o.instance);
+          }
+        }
+      }
     }
 
     return (r < 0);
