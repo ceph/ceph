@@ -433,10 +433,11 @@ class Run(object):
                          (backtrack, self.base_config.sha1))
             break
         else:
-            util.schedule_fail(
-                'Exceeded %d backtracks; raise --newest value' % limit,
-                name=name,
-            )
+            if self.args.newest:
+                util.schedule_fail(
+                    'Exceeded %d backtracks; raise --newest value' % limit,
+                    name=name,
+                )
 
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 
