@@ -29,15 +29,15 @@ Checking out the source
 
 You can clone from github with
 
-        git clone git@github.com:ceph/ceph
+	git clone git@github.com:ceph/ceph
 
 or, if you are not a github user,
 
-        git clone git://github.com/ceph/ceph
+	git clone git://github.com/ceph/ceph
 
 Ceph contains many git submodules that need to be checked out with
 
-        git submodule update --init --recursive
+	git submodule update --init --recursive
 
 
 Build Prerequisites
@@ -57,12 +57,11 @@ suitable for installation we recommend you build deb or rpm packages,
 or refer to the ceph.spec.in or debian/rules to see which
 configuration options are specified for production builds.
 
-Prerequisite:
-        CMake 2.8.11
+Prerequisite: CMake 2.8.11
 
 Build instructions:
 
-        ./do_cmake.sh
+	./do_cmake.sh
 	cd build
 	make
 
@@ -122,22 +121,22 @@ To run build and run all tests, use ctest:
 To run an individual test manually, run the ctest command with -R
 (regex matching):
 
-        ctest -R [test name]
+	ctest -R [test name]
 
 To run an individual test manually and see all the tests output, run
 the ctest command with the -V (verbose) flag:
 
-        ctest -V -R [test name]
+	ctest -V -R [test name]
 
 To run an tests manually and run the jobs in parallel, run the ctest
 command with the -j flag:
 
-        ctest -j [number of jobs]
+	ctest -j [number of jobs]
 
 There are many other flags you can give the ctest command for better control
 over manual test execution. To view these options run:
 
-        man ctest
+	man ctest
 
 
 Building the Documentation
