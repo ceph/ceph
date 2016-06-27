@@ -457,9 +457,8 @@ void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest<> *req) {
                  << "req=" << req << dendl;
   if (r < 0) {
     req->fail(r);
-    delete req;
-
     finish_queued_op(req);
+    delete req;
     finish_in_flight_op();
   } else {
     // since IO was stalled for refresh -- original IO order is preserved
