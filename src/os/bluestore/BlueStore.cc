@@ -633,7 +633,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.push_back(*b);
     }
   } else {
-    // ew got a hint from discard
+    // we got a hint from discard
     switch (b->cache_private) {
     case BUFFER_WARM_IN:
       // stay in warm_in.  move to front, even though 2Q doesn't actually
