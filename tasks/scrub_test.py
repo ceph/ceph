@@ -229,7 +229,32 @@ class InconsistentObjChecker:
         func = getattr(self, check)
         func(inc)
 
-    def _get_attrs(self, inc, attr_name):
+    def _check_errors(self, inc, err_name):
+        bad_found = False
+        good_found = False
+        for shard in inc['shards']:
+            log.info('shard = %r' % shard)
+            log.info('err = %s' % err_name)
+            assert 'osd' in shard
+            osd = shard['osd']
+            err = err_name in shard['errors']
+            if osd == self.osd:
+                assert bad_found is False, \
+                    "multiple entries found for the given OSD"
+                assert err is True, \
+                    "Didn't find '{err}' in errors".format(err=err_name)
+                bad_found = True
+            else:
+                assert osd in self.acting, "shard not in acting set"
+                assert err is False, \
+                    "Expected '{err}' in errors".format(err=err_name)
+                good_found = True
+        assert bad_found is True, \
+            "Shard for osd.{osd} not found".format(osd=self.osd)
+        assert good_found is True, \
+            "No other acting shards found"
+
+    def _check_attrs(self, inc, attr_name):
         bad_attr = None
         good_attr = None
         for shard in inc['shards']:
@@ -255,24 +280,22 @@ class InconsistentObjChecker:
         assert good_attr != bad_attr, \
             "bad attr is identical to the good ones: " \
             "{0} == {1}".format(good_attr, bad_attr)
-        return bad_attr, good_attr
 
     def data_digest_mismatch(self, inc):
-        assert inc['data_digest_mismatch'] is True
-        self._get_attrs(inc, 'data_digest')
+        assert 'data_digest_mismatch' in inc['errors']
+        self._check_attrs(inc, 'data_digest')
 
     def missing(self, inc):
-        assert inc['missing'] is True
-        has_missing, _ = self._get_attrs(inc, 'missing')
-        assert has_missing is True, "the removed shard is not missing"
+        assert 'missing' in inc['errors']
+        self._check_errors(inc, 'missing')
 
     def size_mismatch(self, inc):
-        assert inc['size_mismatch'] is True
-        self._get_attrs(inc, 'size')
+        assert 'size_mismatch' in inc['errors']
+        self._check_attrs(inc, 'size')
 
     def omap_digest_mismatch(self, inc):
-        assert inc['omap_digest_mismatch'] is True
-        self._get_attrs(inc, 'omap_digest')
+        assert 'omap_digest_mismatch' in inc['errors']
+        self._check_attrs(inc, 'omap_digest')
 
 
 def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
