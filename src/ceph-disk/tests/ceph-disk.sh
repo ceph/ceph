@@ -32,8 +32,6 @@ set -x
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
 export PATH=$CEPH_BIN:.:$PATH # make sure program from sources are preferred
-export PATH=../ceph-detect-init/virtualenv/bin:$PATH
-export PATH=virtualenv/bin:$PATH
 export LD_LIBRARY_PATH=$CEPH_LIB
 : ${CEPH_DISK:=ceph-disk}
 CEPH_DISK_ARGS=
