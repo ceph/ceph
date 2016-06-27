@@ -577,37 +577,12 @@ void MDSDaemon::tick()
   }
 }
 
-/* This function DOES put the passed message before returning*/
-void MDSDaemon::handle_command(MCommand *m)
+void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
+				   int r, bufferlist outbl,
+				   const std::string& outs)
 {
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   assert(session != NULL);
-
-  int r = 0;
-  cmdmap_t cmdmap;
-  std::stringstream ss;
-  std::string outs;
-  bufferlist outbl;
-  Context *run_after = NULL;
-
-
-  if (!session->auth_caps.allow_all()) {
-    dout(1) << __func__
-      << ": received command from client without `tell` capability: "
-      << m->get_connection()->peer_addr << dendl;
-
-    ss << "permission denied";
-    r = -EPERM;
-  } else if (m->cmd.empty()) {
-    ss << "no command given";
-    outs = ss.str();
-  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    r = -EINVAL;
-    outs = ss.str();
-  } else {
-    r = _handle_command(cmdmap, m->get_data(), &outbl, &outs, &run_after);
-  }
-
   // If someone is using a closed session for sending commands (e.g.
   // the ceph CLI) then we should feel free to clean up this connection
   // as soon as we've sent them a response.
@@ -627,6 +602,42 @@ void MDSDaemon::handle_command(MCommand *m)
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
   m->get_connection()->send_message(reply);
+}
+
+/* This function DOES put the passed message before returning*/
+void MDSDaemon::handle_command(MCommand *m)
+{
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  assert(session != NULL);
+
+  int r = 0;
+  cmdmap_t cmdmap;
+  std::stringstream ss;
+  std::string outs;
+  bufferlist outbl;
+  Context *run_after = NULL;
+  bool need_reply = true;
+
+  if (!session->auth_caps.allow_all()) {
+    dout(1) << __func__
+      << ": received command from client without `tell` capability: "
+      << m->get_connection()->peer_addr << dendl;
+
+    ss << "permission denied";
+    r = -EPERM;
+  } else if (m->cmd.empty()) {
+    ss << "no command given";
+    outs = ss.str();
+  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    r = -EINVAL;
+    outs = ss.str();
+  } else {
+    r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
+  }
+
+  if (need_reply) {
+    send_command_reply(m, mds_rank, r, outbl, outs);
+  }
 
   if (run_after) {
     run_after->complete(0);
@@ -693,10 +704,11 @@ void MDSDaemon::handle_command(MMonCommand *m)
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
-    bufferlist const &inbl,
+    MCommand *m,
     bufferlist *outbl,
     std::string *outs,
-    Context **run_later)
+    Context **run_later,
+    bool *need_reply)
 {
   assert(outbl != NULL);
   assert(outs != NULL);
@@ -814,7 +826,8 @@ int MDSDaemon::_handle_command(
   } else {
     // Give MDSRank a shot at the command
     if (mds_rank) {
-      bool handled = mds_rank->handle_command(cmdmap, inbl, &r, &ds, &ss);
+      bool handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
+					      need_reply);
       if (handled) {
         goto out;
       }
