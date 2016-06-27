@@ -25,7 +25,7 @@ class Run(object):
     WAIT_PAUSE = 5 * 60
     __slots__ = (
         'args', 'name', 'base_config', 'suite_repo_path', 'base_yaml_paths',
-        'base_args', 'package_versions',
+        'base_args', 'package_versions', 'kernel_dict', 'config_input',
     )
 
     def __init__(self, args):
@@ -76,7 +76,7 @@ class Run(object):
 
         :returns: A JobConfig object
         """
-        kernel_dict = self.choose_kernel()
+        self.kernel_dict = self.choose_kernel()
         ceph_hash = self.choose_ceph_hash()
         # We don't store ceph_version because we don't use it yet outside of
         # logging.
@@ -85,7 +85,7 @@ class Run(object):
         suite_branch = self.choose_suite_branch()
         suite_hash = self.choose_suite_hash(suite_branch)
 
-        config_input = dict(
+        self.config_input = dict(
             suite=self.args.suite,
             suite_branch=suite_branch,
             suite_hash=suite_hash,
@@ -97,10 +97,7 @@ class Run(object):
             archive_upload=config.archive_upload,
             archive_upload_key=config.archive_upload_key,
         )
-        conf_dict = substitute_placeholders(dict_templ, config_input)
-        conf_dict.update(kernel_dict)
-        job_config = JobConfig.from_dict(conf_dict)
-        return job_config
+        return self.build_base_config()
 
     def choose_kernel(self):
         # Put together a stanza specifying the kernel hash
@@ -211,6 +208,12 @@ class Run(object):
             util.schedule_fail(message=str(exc), name=self.name)
         log.info("ceph-qa-suite branch: %s %s", suite_branch, suite_hash)
 
+    def build_base_config(self):
+        conf_dict = substitute_placeholders(dict_templ, self.config_input)
+        conf_dict.update(self.kernel_dict)
+        job_config = JobConfig.from_dict(conf_dict)
+        return job_config
+
     def build_base_args(self):
         base_args = [
             '--name', self.name,
@@ -259,7 +262,6 @@ class Run(object):
             results_url = get_results_url(self.base_config.name)
             if results_url:
                 log.info("Test results viewable at %s", results_url)
-
 
     def collect_jobs(self, arch, configs, newest=False):
         jobs_to_schedule = []
@@ -420,12 +422,15 @@ class Run(object):
             jobs_missing_packages, jobs_to_schedule = \
                 self.collect_jobs(arch, configs, self.args.newest)
             if jobs_missing_packages and self.args.newest:
-                self.base_config.sha1 = \
+                new_sha1 = \
                     util.find_git_parent('ceph', self.base_config.sha1)
-                if self.base_config.sha1 is None:
+                if new_sha1 is None:
                     util.schedule_fail(
                         name, message='Backtrack for --newest failed'
                     )
+                # rebuild the base config to resubstitute sha1
+                self.config_input['ceph_hash'] = new_sha1
+                self.base_config = self.build_base_config()
                 backtrack += 1
                 continue
             if backtrack:
@@ -433,10 +438,11 @@ class Run(object):
                          (backtrack, self.base_config.sha1))
             break
         else:
-            util.schedule_fail(
-                'Exceeded %d backtracks; raise --newest value' % limit,
-                name=name,
-            )
+            if self.args.newest:
+                util.schedule_fail(
+                    'Exceeded %d backtracks; raise --newest value' % limit,
+                    name=name,
+                )
 
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 
