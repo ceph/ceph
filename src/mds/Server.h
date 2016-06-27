@@ -175,6 +175,10 @@ public:
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
   int parse_quota_vxattr(string name, string value, quota_info_t *quota);
+  int check_layout_vxattr(MDRequestRef& mdr,
+                          string name,
+                          string value,
+                          file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			 file_layout_t *dir_layout,
 			 set<SimpleLock*> rdlocks,
