@@ -24,6 +24,7 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/image/CreateRequest.h"
 #include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -1301,6 +1302,21 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return r;
   }
 
+  void create_v2(IoCtx& io_ctx, std::string &imgname, uint64_t size,
+                 int order, uint64_t features, uint64_t stripe_unit,
+                 uint64_t stripe_count, uint8_t journal_order,
+                 uint8_t journal_splay_width, const std::string &journal_pool,
+                 const std::string &non_primary_global_image_id,
+                 const std::string &primary_mirror_uuid,
+                 ContextWQ *op_work_queue, Context *ctx) {
+    std::string id = util::generate_image_id(io_ctx);
+    image::CreateRequest<> *req = image::CreateRequest<>::create(
+      io_ctx, imgname, id, size, order, features, stripe_unit,
+      stripe_count, journal_order, journal_splay_width, journal_pool,
+      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, ctx);
+    req->send();
+  }
+
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {
@@ -1450,10 +1466,17 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       opts.get(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, &journal_splay_width);
       opts.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &journal_pool);
 
-      r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
-		    stripe_count, journal_order, journal_splay_width,
-                    journal_pool, non_primary_global_image_id,
-                    primary_mirror_uuid);
+      C_SaferCond cond;
+      ContextWQ op_work_queue("librbd::op_work_queue",
+                              cct->_conf->rbd_op_thread_timeout,
+                              ImageCtx::get_thread_pool_instance(cct));
+      std::string imagename(imgname);
+      create_v2(io_ctx, imagename, size, order, features, stripe_unit,
+                stripe_count, journal_order, journal_splay_width, journal_pool,
+                non_primary_global_image_id, primary_mirror_uuid,
+                &op_work_queue, &cond);
+      r = cond.wait();
+      op_work_queue.drain();
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
