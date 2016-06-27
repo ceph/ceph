@@ -82,7 +82,7 @@ unsigned ceph_str_hash_rjenkins(const char *str, unsigned length)
  */
 unsigned ceph_str_hash_linux(const char *str, unsigned length)
 {
-	unsigned long hash = 0;
+	unsigned hash = 0;
 
 	while (length--) {
 		unsigned char c = *str++;
