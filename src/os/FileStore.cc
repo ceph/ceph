@@ -944,8 +944,8 @@ int FileStore::read_fsid(int fd, uuid_d *uuid)
     return ret;
   if (ret == 8) {
     // old 64-bit fsid... mirror it.
-    *(uint64_t*)&uuid->uuid[0] = *(uint64_t*)fsid_str;
-    *(uint64_t*)&uuid->uuid[8] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&uuid->bytes()[0] = *(uint64_t*)fsid_str;
+    *(uint64_t*)&uuid->bytes()[8] = *(uint64_t*)fsid_str;
     return 0;
   }
 
