@@ -53,9 +53,14 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out, int max_len,
     return -EINVAL;
   }
 
-  decode_json_obj(out, &parser);
-
   free(data);
+
+  try {
+      decode_json_obj(out, &parser);
+  } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+  }
+
   return 0;
 }
 
