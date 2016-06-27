@@ -51,6 +51,7 @@ public:
   void wait_for_scheduled_deletion(const std::string& image_name,
                                    Context *ctx,
                                    bool notify_on_failed_retry=true);
+  void cancel_waiter(const std::string& image_name);
 
   void print_status(Formatter *f, std::stringstream *ss);
 

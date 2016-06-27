@@ -236,6 +236,19 @@ void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
   (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
 }
 
+void ImageDeleter::cancel_waiter(const std::string& image_name) {
+  Mutex::Locker locker(m_delete_lock);
+  auto del_info = find_delete_info(image_name);
+  if (!del_info) {
+    return;
+  }
+
+  if ((*del_info)->on_delete != nullptr) {
+    (*del_info)->on_delete->complete(-ECANCELED);
+    (*del_info)->on_delete = nullptr;
+  }
+}
+
 bool ImageDeleter::process_image_delete() {
 
   stringstream ss;
