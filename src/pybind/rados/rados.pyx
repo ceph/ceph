@@ -81,6 +81,8 @@ cdef extern from "rados/librados.h" nogil:
         _LIBRADOS_OPERATION_IGNORE_CACHE "LIBRADOS_OPERATION_IGNORE_CACHE"
         _LIBRADOS_OPERATION_SKIPRWLOCKS "LIBRADOS_OPERATION_SKIPRWLOCKS"
         _LIBRADOS_OPERATION_IGNORE_OVERLAY "LIBRADOS_OPERATION_IGNORE_OVERLAY"
+        _LIBRADOS_CREATE_EXCLUSIVE "LIBRADOS_CREATE_EXCLUSIVE"
+        _LIBRADOS_CREATE_IDEMPOTENT "LIBRADOS_CREATE_IDEMPOTENT"
 
     cdef uint64_t _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
 
@@ -243,6 +245,15 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
     void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
+
+    void rados_write_op_create(rados_write_op_t write_op, int exclusive, const char *category)
+    void rados_write_op_append(rados_write_op_t write_op, const char *buffer, size_t len)
+    void rados_write_op_write_full(rados_write_op_t write_op, const char *buffer, size_t len)
+    void rados_write_op_write(rados_write_op_t write_op, const char *buffer, size_t len, uint64_t offset)
+    void rados_write_op_remove(rados_write_op_t write_op)
+    void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
+    void rados_write_op_zero(rados_write_op_t write_op, uint64_t offset, uint64_t len)
+
     void rados_read_op_omap_get_vals(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
     void rados_read_op_omap_get_keys(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
@@ -272,6 +283,9 @@ LIBRADOS_OPERATION_SKIPRWLOCKS = _LIBRADOS_OPERATION_SKIPRWLOCKS
 LIBRADOS_OPERATION_IGNORE_OVERLAY = _LIBRADOS_OPERATION_IGNORE_OVERLAY
 
 LIBRADOS_ALL_NSPACES = _LIBRADOS_ALL_NSPACES.decode('utf-8')
+
+LIBRADOS_CREATE_EXCLUSIVE = _LIBRADOS_CREATE_EXCLUSIVE
+LIBRADOS_CREATE_IDEMPOTENT = _LIBRADOS_CREATE_IDEMPOTENT
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -1694,6 +1708,26 @@ cdef class WriteOp(object):
         with nogil:
             rados_release_write_op(self.write_op)
 
+    @requires(('exclusive', opt(int)))
+    def new(self, exclusive=None):
+        """
+        Create the object.
+        """
+
+        cdef:
+            int _exclusive = exclusive
+
+        with nogil:
+            rados_write_op_create(self.write_op, _exclusive, NULL)
+
+
+    def remove(self):
+        """
+        Remove object.
+        """
+        with nogil:
+            rados_write_op_remove(self.write_op)
+
     @requires(('flags', int))
     def set_flags(self, flags=LIBRADOS_OPERATION_NOFLAG):
         """
@@ -1708,6 +1742,84 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_set_flags(self.write_op, _flags)
 
+    @requires(('to_write', bytes))
+    def append(self, to_write):
+        """
+        Append data to an object synchronously
+        :param to_write: data to write
+        :type to_write: bytes
+        """
+
+        cdef:
+            char *_to_write = to_write
+            size_t length = len(to_write)
+
+        with nogil:
+            rados_write_op_append(self.write_op, _to_write, length)
+
+    @requires(('to_write', bytes))
+    def write_full(self, to_write):
+        """
+        Write whole object, atomically replacing it.
+        :param to_write: data to write
+        :type to_write: bytes
+        """
+
+        cdef:
+            char *_to_write = to_write
+            size_t length = len(to_write)
+
+        with nogil:
+            rados_write_op_write_full(self.write_op, _to_write, length)
+
+    @requires(('to_write', bytes), ('offset', int))
+    def write(self, to_write, offset=0):
+        """
+        Write to offset.
+        :param to_write: data to write
+        :type to_write: bytes
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        """
+
+        cdef:
+            char *_to_write = to_write
+            size_t length = len(to_write)
+            uint64_t _offset = offset
+
+        with nogil:
+            rados_write_op_write(self.write_op, _to_write, length, _offset)
+
+    @requires(('offset', int), ('length', int))
+    def zero(self, offset, length):
+        """
+        Zero part of an object.
+        :param offset: byte offset in the object to begin writing at
+        :type offset: int
+        :param offset: number of zero to write
+        :type offset: int
+        """
+
+        cdef:
+            size_t _length = length
+            uint64_t _offset = offset
+
+        with nogil:
+            rados_write_op_zero(self.write_op, _length, _offset)
+
+    @requires(('offset', int))
+    def truncate(self, offset):
+        """
+        Truncate an object.
+        :param offset: byte offset in the object to begin truncating at
+        :type offset: int
+        """
+
+        cdef:
+            uint64_t _offset = offset
+
+        with nogil:
+            rados_write_op_truncate(self.write_op,  _offset)
 
 
 class WriteOpCtx(WriteOp, OpCtx):

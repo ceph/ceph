@@ -499,6 +499,31 @@ class TestIoctx(object):
             next(iter)
             eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
 
+    def test_write_ops(self):
+        with WriteOpCtx(self.ioctx) as write_op:
+            write_op.new(0)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'')
+            write_op.write_full(b'1')
+            write_op.append(b'2')
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12')
+            write_op.write_full(b'12345')
+            write_op.write(b'x', 2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12x45')
+            write_op.write_full(b'12345')
+            write_op.zero(2, 2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12\x00\x005')
+            write_op.write_full(b'12345')
+            write_op.truncate(2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'12')
+            write_op.remove()
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            with assert_raises(ObjectNotFound):
+                self.ioctx.read('write_ops')
 
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
