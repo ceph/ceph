@@ -51,6 +51,7 @@ function add_something() {
     local poolname=$2
     local obj=${3:-SOMETHING}
     local scrub=${4:-noscrub}
+    local num=${5:-0}
 
     if [ "$scrub" = "noscrub" ];
     then
@@ -61,8 +62,12 @@ function add_something() {
         ceph osd unset nodeep-scrub || return 1
     fi
 
-    local payload=ABCDEF
-    echo $payload > $dir/ORIGINAL
+    if [ $num -eq 0 ]; then
+        local payload=ABCDEF
+        echo $payload > $dir/ORIGINAL
+    else
+        dd if=/dev/urandom of=$dir/ORIGINAL bs=1 count=$num
+    fi
     rados --pool $poolname put $obj $dir/ORIGINAL || return 1
 }
 
@@ -84,6 +89,202 @@ function TEST_corrupt_and_repair_replicated() {
     # Reproduces http://tracker.ceph.com/issues/8914
     corrupt_and_repair_one $dir $poolname $(get_primary $poolname SOMETHING) || return 1
 
+    teardown $dir || return 1
+}
+
+# the utility function to mess up with shard file without starting/stopping
+# the involved OSD, thus faster =)
+# dir, osd, obj, pool, op, args...
+function faster_objectstore_tool()
+{
+    local dir=$1
+    shift
+    local osd=$1
+    shift
+    local obj=$1
+    shift
+    local pool=$1
+    shift
+    local op=$1
+    shift
+
+    local pg=$(get_pg $pool $obj)
+    local shard
+    if ceph osd pool get $pool erasure_code_profile 2>/dev/null; then
+        # ec pool
+        local shard_id=`basename $osd`
+        osd=`dirname $osd`
+        shard=($dir/$osd/current/${pg}s${shard_id}_head/${obj}__head*)
+    else
+        # replicated pool
+        shard=($dir/$osd/current/${pg}_head/${obj}__head*)
+    fi
+    echo $replica
+    case $op in
+        set-bytes)
+            # write up to the size of $shard
+            dd if=$1 of=$shard bs=1 count=$(stat --format '%s' $shard) conv=notrunc
+            ;;
+        truncate)
+            dd if=$1 of=$shard
+            ;;
+        remove)
+            rm $shard
+            ;;
+        get)
+            cp $shard $1
+            ;;
+        path)
+            echo $shard
+    esac
+}
+
+#
+# Corrupt one copy of a replicated pool and repair it manually
+#
+# TODO: move this test to ceph-qa-suite
+function TEST_corrupt_scrub_replicated_faster()
+{
+    local dir=$1
+    local poolname=csr_pool
+    local total_objs=4
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    wait_for_clean || return 1
+
+    ceph osd pool create $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    # obj 1: corrupt 1
+    # obj 2: remove 0
+    # obj 3: remove 1
+    # obj 4: remove 0
+    local corrupted_obj=OBJ1
+    for i in $(seq $total_objs) ; do
+        local objname=OBJ${i}
+        add_something $dir $poolname $objname
+        if [ $objname = ${corrupted_obj} ];
+        then
+            dd if=/dev/urandom of=$dir/CORRUPT bs=512 count=1
+            faster_objectstore_tool $dir $(expr $i % 2) $objname $poolname truncate $dir/CORRUPT || return 1
+        else
+            faster_objectstore_tool $dir $(expr $i % 2) $objname $poolname remove || return 1
+        fi
+    done
+
+    local pg=$(get_pg $poolname ${corrupted_obj})
+    pg_scrub $pg
+
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pg || return 1
+
+    rados list-inconsistent-obj $pg > $dir/json || return 1
+    # Get epoch for repair-get requests
+    local epoch=$(jq .epoch $dir/json)
+    # Check object count
+    test $(jq '.inconsistents | length' $dir/json) = "$total_objs" || return 1
+
+    rados -p $poolname --force repair-get ${corrupted_obj} 1 $epoch $dir/check
+    # repair-get only read up to the size stored in object-info. and the corrupted replica sizes 512 bytes, which is
+    # greater than len("ABCDEF") in $dir/ORIGINAL
+    local size=$(stat --format '%s' $dir/ORIGINAL)
+    cmp $dir/CORRUPT $dir/check --bytes=$size || return 1
+    rados -p $poolname repair-get ${corrupted_obj} 0 $epoch $dir/check
+    # This assume add_something() left ORIGINAL behind with what was written
+    diff $dir/ORIGINAL $dir/check || return 1
+
+    # repair them
+    for i in $(seq $total_objs) ; do
+        local objname=OBJ${i}
+        local ver=$(jq ".inconsistents[] | select(.object.name == \"$objname\") | .object.version" $dir/json)
+        local bad_replica=$(expr $i % 2)
+        rados -p $poolname repair-copy $objname $bad_replica $epoch $ver || return 1
+    done
+    pg_scrub $pg
+    test $(rados -p $poolname list-inconsistent-obj $pg --format=json | \
+                  jq '.inconsistents | length') = 0 || return 1
+    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    teardown $dir || return 1
+}
+
+#
+# Corrupt one copy of a ec pool and repair it manually
+#
+# TODO: move this test to ceph-qa-suite
+function TEST_corrupt_scrub_erasure_faster()
+{
+    local dir=$1
+    local poolname=ec_pool
+    local profile=myprofile
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    for id in `seq 0 3`; do
+        run_osd $dir $id || return 1
+    done
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set $profile \
+        k=2 m=2 ruleset-failure-domain=osd || return 1
+    ceph osd pool create $poolname 1 1 erasure $profile \
+        || return 1
+
+    local objname=something
+    # so the object is large enough to span across multiple shards
+    add_something $dir $poolname $objname scrub $((1024 * 10))
+    local shard_0=$(get_primary $poolname $objname)
+    local -a osds=($(get_osds $poolname $objname | sed -e "s/$shard_0//"))
+    local shard_1=${osds[0]}
+    local shard_2=${osds[1]}
+
+    # corrupt shard[0]
+    dd if=/dev/urandom of=$dir/CORRUPT bs=512 count=1
+    faster_objectstore_tool $dir $shard_0/0 $objname $poolname set-bytes $dir/CORRUPT || return 1
+
+    local pg=$(get_pg $poolname ${objname})
+    pg_deep_scrub $pg
+
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) -eq 1 || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pg || return 1
+
+    rados list-inconsistent-obj $pg > $dir/json || return 1
+    # Get epoch for repair-get requests
+    local epoch=$(jq .epoch $dir/json)
+    # Check object count
+    test $(jq '.inconsistents | length' $dir/json) -eq 1 || return 1
+
+    # the corrupted shard
+    test $(jq -r '.inconsistents[] | .object.name' $dir/json) = ${objname} || return 1
+    test $(jq '.inconsistents[] | .union_shard_errors | contains(["ec_hash_error"])' $dir/json) = true || return 1
+    rados -p $poolname --force repair-get ${objname} ${shard_0} $epoch $dir/shard_0 || return 1
+    local shard_0_size=$(stat --format '%s' $dir/shard_0)
+    local corrupted_size=$(stat --format '%s' $dir/CORRUPT)
+    cmp $dir/CORRUPT $dir/shard_0 --bytes=$corrupted_size || return 1
+    cmp $dir/ORIGINAL $dir/shard_0 --ignore-initial=$corrupted_size --bytes=$(($shard_0_size - $corrupted_size)) || return 1
+
+    # the untouched shard
+    # rados -p $poolname repair-get ${objname} ${shard_1} $epoch $dir/shard_1 || sleep 1h
+    # # This assume add_something() left ORIGINAL behind with what was written
+    # local obj_size=$(stat --format '%s' $dir/ORIGINAL)
+    # cmp $dir/ORIGINAL $dir/shard_1 --bytes=$(($obj_size - $shard_0_size)) $shard_0_size 0 || return 1
+
+    # repair it
+    local ver=$(jq ".inconsistents[] | select(.object.name == \"$objname\") | .object.version" $dir/json)
+    rados -p $poolname repair-copy $objname ${shard_0}/0 $epoch $ver || return 1
+
+    pg_scrub $pg
+    test $(rados -p $poolname list-inconsistent-obj $pg --format=json | \
+                  jq '.inconsistents | length') = 0 || return 1
+    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
 }
 
