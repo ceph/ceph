@@ -100,30 +100,31 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
   return 0;
 }
 
-static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool need_bucket_add=false)
+static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool sync_bucket_count=false)
 {
   stats->total_entries += entry.count;
   stats->total_bytes += entry.size;
   stats->total_bytes_rounded += entry.size_rounded;
-  if (need_bucket_add)
+  if (sync_bucket_count)
     stats->total_buckets += entry.bucket_count;
 }
 
-static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool need_delete=false)
+static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool sync_bucket_count=false)
 {
   stats->total_bytes -= entry.size;
   stats->total_bytes_rounded -= entry.size_rounded;
   stats->total_entries -= entry.count;
-  if (need_delete)
+  if (sync_bucket_count)
     stats->total_buckets -= entry.bucket_count;
 }
 
-static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
+static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry, bool sync_bucket_count=false)
 {
   target_entry->size = src_entry.size;
   target_entry->size_rounded = src_entry.size_rounded;
   target_entry->count = src_entry.count;
-  target_entry->bucket_count = src_entry.bucket_count;
+  if (sync_bucket_count)
+    target_entry->bucket_count = src_entry.bucket_count;
 }
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -177,7 +178,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count,
 	    (long long)update_entry.bucket_count);
 
-    apply_entry_stats(update_entry, &entry);
+    apply_entry_stats(update_entry, &entry, op.add);
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);
