@@ -191,9 +191,9 @@ public:
    * @defgroup Startup/Shutdown
    * @{
    */
-  virtual int start();
-  virtual void wait();
-  virtual int shutdown();
+  int start() override;
+  void wait() override;
+  int shutdown() override;
 
   /** @} // Startup/Shutdown */
 
@@ -201,8 +201,8 @@ public:
    * @defgroup Messaging
    * @{
    */
-  virtual int send_message(Message *m, const entity_inst_t& dest) {
-          Mutex::Locker l(lock);
+  int send_message(Message *m, const entity_inst_t& dest) override {
+    Mutex::Locker l(lock);
 
     return _send_message(m, dest);
   }
@@ -213,11 +213,11 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  virtual ConnectionRef get_connection(const entity_inst_t& dest);
-  virtual ConnectionRef get_loopback_connection();
+  ConnectionRef get_connection(const entity_inst_t& dest) override;
+  ConnectionRef get_loopback_connection() override;
   int send_keepalive(Connection *con);
-  virtual void mark_down(const entity_addr_t& addr);
-  virtual void mark_down_all();
+  void mark_down(const entity_addr_t& addr) override;
+  void mark_down_all() override;
   /** @} // Connection Management */
 
   /**
@@ -239,7 +239,7 @@ protected:
   /**
    * Start up the DispatchQueue thread once we have somebody to dispatch to.
    */
-  virtual void ready();
+  void ready() override;
   /** @} // Messenger Interfaces */
 
 private:
