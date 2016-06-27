@@ -1,6 +1,8 @@
 #ifndef CEPH_ASSERT_H
 #define CEPH_ASSERT_H
 
+#include <stdlib.h>
+
 #if defined(__linux__)
 #include <features.h>
 
@@ -117,7 +119,7 @@ using namespace ceph;
  * Currently, it's the same as assert(0), but we may one day make assert a
  * debug-only thing, like it is in many projects.
  */
-#define ceph_abort() assert(0)
+#define ceph_abort() abort()
 
 #endif
 
