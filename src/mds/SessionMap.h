@@ -466,29 +466,28 @@ public:
 
   // sessions
   void decode_legacy(bufferlist::iterator& blp);
-  bool empty() { return session_map.empty(); }
+  bool empty() const { return session_map.empty(); }
   const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
   {
     return session_map;
   }
 
-  bool is_any_state(int state) {
-    map<int,xlist<Session*>* >::iterator p = by_state.find(state);
+  bool is_any_state(int state) const {
+    map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);
     if (p == by_state.end() || p->second->empty())
       return false;
     return true;
   }
 
-  bool have_unclosed_sessions() {
+  bool have_unclosed_sessions() const {
     return
-      is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPENING) ||
       is_any_state(Session::STATE_OPEN) ||
       is_any_state(Session::STATE_CLOSING) ||
       is_any_state(Session::STATE_STALE) ||
       is_any_state(Session::STATE_KILLING);
   }
-  bool have_session(entity_name_t w) {
+  bool have_session(entity_name_t w) const {
     return session_map.count(w);
   }
   Session* get_session(entity_name_t w) {
