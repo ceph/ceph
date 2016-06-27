@@ -91,6 +91,7 @@ Running a test cluster
 To run a functional test cluster,
 
 	cd build
+	make vstart        # builds just enough to run vstart
 	../src/vstart.sh -d -n -x -l
 	./bin/ceph -s
 
@@ -116,6 +117,7 @@ Running unit tests
 To run build and run all tests, use ctest:
 
 	cd build
+	make
 	ctest -j$(nproc)
 
 To run an individual test manually, run the ctest command with -R
