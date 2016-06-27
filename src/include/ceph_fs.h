@@ -56,8 +56,6 @@ struct ceph_file_layout {
 
 #define CEPH_MIN_STRIPE_UNIT 65536
 
-int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
-
 struct ceph_dir_layout {
 	__u8   dl_dir_hash;   /* see ceph_hash.h for ids */
 	__u8   dl_unused1;

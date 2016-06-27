@@ -1303,7 +1303,7 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
         ctx->complete(0);
       });
     ctx = new FunctionContext([this, ctx](int r) {
-        m_local_image_ctx->journal->remove_listener(
+        m_local_journal->remove_listener(
             librbd::journal::ListenerType::RESYNC, m_resync_listener);
         m_local_replay->shut_down(true, ctx);
       });
