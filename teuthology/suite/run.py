@@ -422,12 +422,15 @@ class Run(object):
             jobs_missing_packages, jobs_to_schedule = \
                 self.collect_jobs(arch, configs, self.args.newest)
             if jobs_missing_packages and self.args.newest:
-                self.base_config.sha1 = \
+                new_sha1 = \
                     util.find_git_parent('ceph', self.base_config.sha1)
-                if self.base_config.sha1 is None:
+                if new_sha1 is None:
                     util.schedule_fail(
                         name, message='Backtrack for --newest failed'
                     )
+                # rebuild the base config to resubstitute sha1
+                self.config_input['ceph_hash'] = new_sha1
+                self.base_config = self.build_base_config()
                 backtrack += 1
                 continue
             if backtrack:
