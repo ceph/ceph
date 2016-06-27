@@ -229,6 +229,9 @@ void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
     return;
   }
 
+  if ((*del_info)->on_delete != nullptr) {
+    (*del_info)->on_delete->complete(-ESTALE);
+  }
   (*del_info)->on_delete = ctx;
   (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
 }
