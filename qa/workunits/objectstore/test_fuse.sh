@@ -81,8 +81,12 @@ test ! -s $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
 echo asdfasdfasdf > $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
 test -s $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
 grep -q asdfasdfasdf $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
+truncate --size 4 $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
+stat --format=%s $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data | grep -q ^4$
+expect_false grep -q asdfasdfasdf $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
 rm $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
 test ! -s $MNT/meta/all/#-1:7b3f43c4:::osd_superblock:0#/data
+
 
 # create pg collection
 mkdir --mode 0003 $MNT/0.0_head
