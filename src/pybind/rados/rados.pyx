@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 
+from collections import Callable
 from datetime import datetime
 from functools import partial, wraps
 from itertools import chain
@@ -237,13 +238,17 @@ cdef extern from "rados/librados.h" nogil:
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
+    int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
+    void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
     void rados_read_op_omap_get_vals(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
     void rados_read_op_omap_get_keys(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, int * prval)
     void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op, const char * const* keys, size_t keys_len, rados_omap_iter_t * iter, int * prval)
     int rados_read_op_operate(rados_read_op_t read_op, rados_ioctx_t io, const char * oid, int flags)
+    int rados_aio_read_op_operate(rados_read_op_t read_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, int flags)
+    void rados_read_op_set_flags(rados_read_op_t read_op, int flags)
     int rados_omap_get_next(rados_omap_iter_t iter, const char * const* key, const char * const* val, size_t * len)
     void rados_omap_get_end(rados_omap_iter_t iter)
 
@@ -1689,6 +1694,21 @@ cdef class WriteOp(object):
         with nogil:
             rados_release_write_op(self.write_op)
 
+    @requires(('flags', int))
+    def set_flags(self, flags=LIBRADOS_OPERATION_NOFLAG):
+        """
+        Set flags for the last operation added to this write_op.
+        :para flags: flags to apply to the last operation
+        :type flags: int
+        """
+
+        cdef:
+            int _flags = flags
+
+        with nogil:
+            rados_write_op_set_flags(self.write_op, _flags)
+
+
 
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""
@@ -1705,6 +1725,20 @@ cdef class ReadOp(object):
     def release(self):
         with nogil:
             rados_release_read_op(self.read_op)
+
+    @requires(('flags', int))
+    def set_flags(self, flags=LIBRADOS_OPERATION_NOFLAG):
+        """
+        Set flags for the last operation added to this read_op.
+        :para flags: flags to apply to the last operation
+        :type flags: int
+        """
+
+        cdef:
+            int _flags = flags
+
+        with nogil:
+            rados_read_op_set_flags(self.read_op, _flags)
 
 
 class ReadOpCtx(ReadOp, OpCtx):
@@ -2803,6 +2837,48 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret != 0:
             raise make_ex(ret, "Failed to operate write op for oid %s" % oid)
 
+    @requires(('write_op', WriteOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('mtime', opt(int)), ('flags', opt(int)))
+    def operate_aio_write_op(self, write_op, oid, oncomplete=None, onsafe=None, mtime=0, flags=LIBRADOS_OPERATION_NOFLAG):
+        """
+        excute the real write operation asynchronously
+        :para write_op: write operation object
+        :type write_op: WriteOp
+        :para oid: object name
+        :type oid: str
+        :param oncomplete: what to do when the remove is safe and complete in memory
+            on all replicas
+        :type oncomplete: completion
+        :param onsafe:  what to do when the remove is safe and complete on storage
+            on all replicas
+        :type onsafe: completion
+        :para mtime: the time to set the mtime to, 0 for the current time
+        :type mtime: int
+        :para flags: flags to apply to the entire operation
+        :type flags: int
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        oid = cstr(oid, 'oid')
+        cdef:
+            WriteOp _write_op = write_op
+            char *_oid = oid
+            Completion completion
+            time_t _mtime = mtime
+            int _flags = flags
+
+        completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
+
+        with nogil:
+            ret = rados_aio_write_op_operate(_write_op.write_op, self.io, completion.rados_comp, _oid,
+                                             &_mtime, _flags)
+        if ret != 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to operate aio write op for oid %s" % oid)
+        return completion
+
     @requires(('read_op', ReadOp), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=LIBRADOS_OPERATION_NOFLAG):
         """
@@ -2824,6 +2900,40 @@ returned %d, but should return zero on success." % (self.name, ret))
             ret = rados_read_op_operate(_read_op.read_op, self.io, _oid, _flag)
         if ret != 0:
             raise make_ex(ret, "Failed to operate read op for oid %s" % oid)
+
+    @requires(('read_op', ReadOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('flag', opt(int)))
+    def operate_aio_read_op(self, read_op, oid, oncomplete=None, onsafe=None, flag=LIBRADOS_OPERATION_NOFLAG):
+        """
+        excute the real read operation
+        :para read_op: read operation object
+        :type read_op: ReadOp
+        :para oid: object name
+        :type oid: str
+        :param oncomplete: what to do when the remove is safe and complete in memory
+            on all replicas
+        :type oncomplete: completion
+        :param onsafe:  what to do when the remove is safe and complete on storage
+            on all replicas
+        :type onsafe: completion
+        :para flag: flags to apply to the entire operation
+        :type flag: int
+        """
+        oid = cstr(oid, 'oid')
+        cdef:
+            ReadOp _read_op = read_op
+            char *_oid = oid
+            Completion completion
+            int _flag = flag
+
+        completion = self.__get_completion(oncomplete, onsafe)
+        self.__track_completion(completion)
+
+        with nogil:
+            ret = rados_aio_read_op_operate(_read_op.read_op, self.io, completion.rados_comp, _oid, _flag)
+        if ret != 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to operate aio read op for oid %s" % oid)
+        return completion
 
     @requires(('read_op', ReadOp), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
     def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):
