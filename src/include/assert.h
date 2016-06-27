@@ -86,26 +86,6 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
-/*
-#define assert(expr)							\
-  do {									\
-	static int __assert_flag = 0;					\
-	struct TlsData *tls = tls_get_val();				\
-	if (!__assert_flag && tls && tls->disable_assert) {		\
-		__assert_flag = 1;					\
-		__ceph_assert_warn(__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION); \
-	}								\
-	((expr)								\
-	? __CEPH_ASSERT_VOID_CAST (0)					\
-	: __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION)); \
-  } while (0)
-#endif
-*/
-/*
-#define assert_protocol(expr)	assert(expr)
-#define assert_disk(expr)	assert(expr)
-*/
-
 #ifdef __cplusplus
 }
 
