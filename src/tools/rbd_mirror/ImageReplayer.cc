@@ -1325,7 +1325,6 @@ template <typename I>
 void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
   reschedule_update_status_task(-1);
 
-  Context *on_stop = nullptr;
   {
     Mutex::Locker locker(m_lock);
 
@@ -1357,7 +1356,18 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
                                                    ctx, false);
       return;
     }
+  }
 
+  dout(20) << "stop complete" << dendl;
+  m_local_ioctx.close();
+  m_remote_ioctx.close();
+
+  delete m_replay_status_formatter;
+  m_replay_status_formatter = nullptr;
+
+  Context *on_stop = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
     std::swap(on_stop, m_on_stop_finish);
     m_stop_requested = false;
     assert(m_state == STATE_STOPPING);
@@ -1365,13 +1375,6 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
     m_state_desc.clear();
     m_last_r = 0;
   }
-  dout(20) << "stop complete" << dendl;
-
-  m_local_ioctx.close();
-  m_remote_ioctx.close();
-
-  delete m_replay_status_formatter;
-  m_replay_status_formatter = nullptr;
 
   if (on_start != nullptr) {
     dout(20) << "on start finish complete, r=" << r << dendl;
