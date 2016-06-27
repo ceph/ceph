@@ -63,7 +63,7 @@ public:
     librbd::mirror_mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
     m_deleter = new rbd::mirror::ImageDeleter(_rados,
-        m_threads->timer, &m_threads->timer_lock);
+        m_threads->work_queue, m_threads->timer, &m_threads->timer_lock);
 
     EXPECT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, 1 << 20));
     ImageCtx *ictx = new ImageCtx(m_image_name, "", "", m_local_io_ctx,
