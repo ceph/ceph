@@ -526,6 +526,9 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
+  if (log.rollback_info_trimmed_to > newhead)
+    log.rollback_info_trimmed_to = newhead;
+
   log.index();
 
   map<eversion_t, hobject_t> new_priors;
