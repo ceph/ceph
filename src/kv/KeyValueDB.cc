@@ -24,8 +24,7 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
-  if (type == "rocksdb" &&
-      cct->check_experimental_feature_enabled("rocksdb")) {
+  if (type == "rocksdb") {
     return new RocksDBStore(cct, dir, p);
   }
 #endif
