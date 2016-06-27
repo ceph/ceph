@@ -576,6 +576,11 @@ TEST_F(TestImageReplayer, Resync)
   m_replayer->resync_image(&ctx);
   ASSERT_EQ(0, ctx.wait());
 
+  C_SaferCond delete_ctx;
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_replayer->get_local_image_name(), &delete_ctx);
+  EXPECT_EQ(0, delete_ctx.wait());
+
   C_SaferCond cond;
   m_replayer->start(&cond);
   ASSERT_EQ(0, cond.wait());
@@ -636,6 +641,11 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
 
   ASSERT_TRUE(m_replayer->is_stopped());
 
+  C_SaferCond delete_ctx;
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_replayer->get_local_image_name(), &delete_ctx);
+  EXPECT_EQ(0, delete_ctx.wait());
+
   C_SaferCond cond3;
   m_replayer->start(&cond3);
   ASSERT_EQ(0, cond3.wait());
@@ -671,6 +681,11 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
   ASSERT_EQ(0, cond.wait());
 
   ASSERT_TRUE(m_replayer->is_stopped());
+
+  C_SaferCond delete_ctx;
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_replayer->get_local_image_name(), &delete_ctx);
+  EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond2;
   m_replayer->start(&cond2);
