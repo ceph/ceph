@@ -797,7 +797,7 @@ rm -rf %{buildroot}
 /sbin/ldconfig
 %if 0%{?suse_version}
 %fillup_only
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph.target >/dev/null 2>&1 || :
 fi
 %endif
@@ -924,7 +924,7 @@ fi
 
 %post mds
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mds@\*.service ceph-mds.target >/dev/null 2>&1 || :
 fi
 %endif
@@ -977,7 +977,7 @@ fi
 
 %post mon
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
 fi
 %endif
@@ -1040,7 +1040,7 @@ fi
 
 %post -n rbd-mirror
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-rbd-mirror@\*.service ceph-rbd-mirror.target >/dev/null 2>&1 || :
 fi
 %endif
@@ -1102,7 +1102,7 @@ fi
 
 %post radosgw
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-radosgw@\*.service ceph-radosgw.target >/dev/null 2>&1 || :
 fi
 %endif
@@ -1165,7 +1165,7 @@ fi
 
 %post osd
 %if 0%{?suse_version}
-if [ $1 -ge 1 ] ; then
+if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target >/dev/null 2>&1 || :
 fi
 %endif
