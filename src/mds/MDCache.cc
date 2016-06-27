@@ -355,7 +355,8 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   in->inode.mode = 0500 | mode;
   in->inode.size = 0;
   in->inode.ctime = 
-    in->inode.mtime = ceph_clock_now(g_ceph_context);
+    in->inode.mtime =
+    in->inode.btime = ceph_clock_now(g_ceph_context);
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
 
