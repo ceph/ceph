@@ -410,6 +410,11 @@ void MonClient::shutdown()
     waiting_for_session.pop_front();
   }
 
+  if (cur_con)
+    cur_con->mark_down();
+  cur_con.reset(NULL);
+  cur_mon.clear();
+
   monc_lock.Unlock();
 
   if (initialized) {
@@ -417,11 +422,6 @@ void MonClient::shutdown()
   }
   monc_lock.Lock();
   timer.shutdown();
-
-  if (cur_con)
-    cur_con->mark_down();
-  cur_con.reset(NULL);
-  cur_mon.clear();
 
   monc_lock.Unlock();
 }
