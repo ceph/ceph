@@ -754,7 +754,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       if (err == -ENOENT) {
 	r = -ENOENT;
       } else {
-	assert(r == 0);
+	assert(err == 0);
 	assert(b.length());
 	MDSMap mm;
 	mm.decode(b);
