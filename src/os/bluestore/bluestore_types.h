@@ -16,6 +16,7 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
 #include <ostream>
+#include <bitset>
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -150,9 +151,10 @@ static inline bool operator!=(const bluestore_extent_ref_map_t& l,
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
   enum {
-    FLAG_MUTABLE = 1,     ///< blob can be overwritten or split
-    FLAG_COMPRESSED = 2,  ///< blob is compressed
-    FLAG_CSUM = 4,        ///< blob as checksums
+    FLAG_MUTABLE = 1,         ///< blob can be overwritten or split
+    FLAG_COMPRESSED = 2,      ///< blob is compressed
+    FLAG_CSUM = 4,            ///< blob has checksums
+    FLAG_HAS_UNUSED = 8,      ///< blob has unused map
   };
   static string get_flags_string(unsigned flags);
 
@@ -192,16 +194,19 @@ struct bluestore_blob_t {
     return -EINVAL;
   }
 
-  vector<bluestore_pextent_t> extents; ///< raw data position on device
-  uint32_t compressed_length = 0;      ///< compressed length if any
-  uint32_t flags = 0;                  ///< FLAG_*
+  vector<bluestore_pextent_t> extents;///< raw data position on device
+  uint32_t compressed_length = 0;     ///< compressed length if any
+  uint32_t flags = 0;                 ///< FLAG_*
 
-  uint8_t csum_type = CSUM_NONE;     ///< CSUM_*
-  uint8_t csum_chunk_order = 0;      ///< csum block size is 1<<block_order bytes
+  uint8_t csum_type = CSUM_NONE;      ///< CSUM_*
+  uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
 
   bluestore_extent_ref_map_t ref_map; ///< references (empty when in onode)
-  interval_set<uint32_t> unused;   ///< portion that has never been written to
-  bufferptr csum_data;          ///< opaque vector of csum data
+  bufferptr csum_data;                ///< opaque vector of csum data
+
+  typedef uint16_t unused_uint_t;
+  typedef std::bitset<sizeof(unused_uint_t) * 8> unused_t;
+  unused_t unused;                    ///< portion that has never been written to
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
@@ -232,6 +237,20 @@ struct bluestore_blob_t {
   }
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
+  }
+  bool has_csum() const {
+    return has_flag(FLAG_CSUM);
+  }
+  bool has_unused() const {
+    return has_flag(FLAG_HAS_UNUSED);
+  }
+
+  /// return chunk (i.e. min readable block) size for the blob
+  uint64_t get_chunk_size(uint64_t dev_block_size) {
+    return has_csum() ? MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+  }
+  uint32_t get_csum_chunk_size() const {
+    return 1 << csum_chunk_order;
   }
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
@@ -277,24 +296,59 @@ struct bluestore_blob_t {
   }
 
   /// return true if the logical range has never been used
-  bool is_unused(uint64_t offset, uint64_t length) const {
-    return unused.contains(offset, length);
+  bool is_unused(uint64_t offset, uint64_t length, uint64_t min_alloc_size) const {
+    if (!has_unused()) {
+      return false;
+    }
+    assert((min_alloc_size % unused.size()) == 0 );
+    assert(offset + length <= min_alloc_size);
+    uint64_t chunk_size = min_alloc_size / unused.size();
+    uint64_t start = offset / chunk_size;
+    uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+    assert( end <= unused.size());
+    auto i = start;
+    while(i < end && unused[i]) {
+      i++;
+    }
+    return i >= end;
   }
 
   /// mark a range that has never been used
-  void add_unused(uint64_t offset, uint64_t length) {
-    unused.insert(offset, length);
+  void add_unused(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
+    assert((min_alloc_size % unused.size()) == 0 );
+    assert(offset + length <= min_alloc_size);
+    uint64_t chunk_size = min_alloc_size / unused.size();
+    uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
+    uint64_t end = (offset + length) / chunk_size;
+    assert( end <= unused.size());
+
+    for(auto i = start; i < end; ++i) {
+      unused[i] = 1;
+    }
+    if (start != end) {
+      set_flag(FLAG_HAS_UNUSED);
+    }
   }
 
   /// indicate that a range has (now) been used.
-  void mark_used(uint64_t offset, uint64_t length) {
-    if (unused.empty())
-      return;
-    interval_set<uint32_t> t;
-    t.insert(offset, length);
-    t.intersection_of(unused);
-    if (!t.empty())
-      unused.subtract(t);
+  void mark_used(uint64_t offset, uint64_t length, uint64_t min_alloc_size) {
+    if (has_unused()) {
+
+      assert((min_alloc_size % unused.size()) == 0 );
+      assert(offset + length <= min_alloc_size);
+      uint64_t chunk_size = min_alloc_size / unused.size();
+
+      uint64_t start = offset / chunk_size;
+      uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+      assert( end <= unused.size());
+
+      for(auto i = start; i < end; ++i) {
+        unused[i] = 0;
+      }
+      if (unused.none()) {
+        clear_flag(FLAG_HAS_UNUSED);
+      }
+    }
   }
 
   /// put logical references, and get back any released extents
@@ -349,13 +403,6 @@ struct bluestore_blob_t {
     return len;
   }
 
-  bool has_csum() const {
-    return has_flag(FLAG_CSUM);
-  }
-
-  uint32_t get_csum_chunk_size() const {
-    return 1 << csum_chunk_order;
-  }
 
   size_t get_csum_value_size() const {
     switch (csum_type) {
