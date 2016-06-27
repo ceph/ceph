@@ -529,6 +529,7 @@ void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
     return; // don't even try
 
   auto p = onode_lru.end();
+  assert(p != onode_lru.begin());
   --p;
   while (num > 0) {
     Onode *o = &*p;
@@ -632,7 +633,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.push_back(*b);
     }
   } else {
-    // ew got a hint from discard
+    // we got a hint from discard
     switch (b->cache_private) {
     case BUFFER_WARM_IN:
       // stay in warm_in.  move to front, even though 2Q doesn't actually
@@ -682,6 +683,7 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
 {
   dout(20) << __func__ << " delta " << delta << " on " << *b << dendl;
   if (!b->is_empty()) {
+    assert((int64_t)buffer_bytes + delta >= 0);
     buffer_bytes += delta;
   }
 }
@@ -747,8 +749,8 @@ void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
     return; // don't even try
 
   auto p = onode_lru.end();
-  if (num)
-    --p;
+  assert(p != onode_lru.begin());
+  --p;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
