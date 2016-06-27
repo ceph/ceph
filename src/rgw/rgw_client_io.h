@@ -34,7 +34,7 @@ public:
   virtual void flush() = 0;
   int read(char *buf, int max, int *actual);
 
-  virtual int send_status(const char *status, const char *status_name) = 0;
+  virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual int complete_header() = 0;
   virtual int complete_request() = 0;
