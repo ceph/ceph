@@ -683,6 +683,7 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
 {
   dout(20) << __func__ << " delta " << delta << " on " << *b << dendl;
   if (!b->is_empty()) {
+    assert((int64_t)buffer_bytes + delta >= 0);
     buffer_bytes += delta;
   }
 }
