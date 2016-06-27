@@ -804,7 +804,9 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
+fi
 
 %preun base
 %if 0%{?suse_version}
@@ -929,7 +931,9 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-mds@\*.service ceph-mds.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-mds.target >/dev/null 2>&1 || :
+fi
 
 %preun mds
 %if 0%{?suse_version}
@@ -980,7 +984,9 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-create-keys@\*.service ceph-mon@\*.service ceph-mon.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-mon.target >/dev/null 2>&1 || :
+fi
 
 %preun mon
 %if 0%{?suse_version}
@@ -1041,7 +1047,9 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-rbd-mirror.target >/dev/null 2>&1 || :
+fi
 
 %preun -n rbd-mirror
 %if 0%{?suse_version}
@@ -1101,7 +1109,9 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-radosgw@\*.service ceph-radosgw.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-radosgw.target >/dev/null 2>&1 || :
+fi
 
 %preun radosgw
 %if 0%{?suse_version}
@@ -1162,7 +1172,9 @@ fi
 %if 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-disk@\*.service ceph-osd@\*.service ceph-osd.target
 %endif
+if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
+fi
 
 %preun osd
 %if 0%{?suse_version}
