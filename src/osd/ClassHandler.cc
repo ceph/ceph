@@ -125,6 +125,7 @@ ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
     dout(10) << "_get_class adding new class name " << cname << " " << cls << dendl;
     cls->name = cname;
     cls->handler = this;
+    cls->whitelisted = in_class_list(cname, cct->_conf->osd_class_default_list);
   }
   return cls;
 }
