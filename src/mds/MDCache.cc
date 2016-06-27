@@ -7655,12 +7655,10 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
   bool forward = (onfail == MDS_TRAVERSE_FORWARD);
 
-  assert(mdr || req || fin);
-  assert(!forward || mdr || req);  // forward requires a request
+  assert(mdr || req || fin || !forward);
 
   snapid_t snapid = CEPH_NOSNAP;
-  if (mdr)
-    mdr->snapid = snapid;
+  mdr->snapid = snapid;
 
   client_t client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
