@@ -8577,9 +8577,9 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   info.last_update.epoch = get_osdmap()->get_epoch();
   const pg_missing_t &missing = pg_log.get_missing();
   map<hobject_t, pg_missing_t::item>::const_iterator m =
-    missing_loc.get_all_missing().begin();
+    missing_loc.get_needs_recovery().begin();
   map<hobject_t, pg_missing_t::item>::const_iterator mend =
-    missing_loc.get_all_missing().end();
+    missing_loc.get_needs_recovery().end();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
