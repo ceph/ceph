@@ -129,6 +129,13 @@ using namespace ceph;
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
+// this variant will *never* get compiled out to NDEBUG in the future.
+// (ceph_assert currently doesn't either, but in the future it might.)
+#define ceph_assert_always(expr)							\
+  ((expr)								\
+   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
+
 // Named by analogy with printf.  Along with an expression, takes a format
 // string and parameters which are printed if the assertion fails.
 #define assertf(expr, ...)                  \
@@ -136,6 +143,13 @@ using namespace ceph;
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 #define ceph_assertf(expr, ...)                  \
+  ((expr)								\
+   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
+
+// this variant will *never* get compiled out to NDEBUG in the future.
+// (ceph_assertf currently doesn't either, but in the future it might.)
+#define ceph_assertf_always(expr, ...)                  \
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
