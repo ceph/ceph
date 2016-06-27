@@ -1,21 +1,23 @@
 Overview
 ========
 
-This is a work-in-progress CMake build system.  Currently it builds
-a limited set of targets, and only on Linux/Posix. The goals include
+This is a work-in-progress CMake build system.  Currently it builds a
+limited set of targets and only on Linux/POSIX. The goals include
 faster builds (see for yourself), cleaner builds (no libtool), and
 improved portability (e.g., Windows).
+
 
 Building Ceph
 =============
 
-To build out of source make an empty directory (often named **build**)
-and run:
+To build out of source (i.e., in a directory not within your local
+Ceph directory) make an empty directory (often named **build**) and
+from within it run:
 
-    $ cmake [path to top level ceph-local directory]
+    $ cmake [path to top level of your local Ceph directory]
 
-To build in-source make an empty directory called (often named
-**build**) and run **cmake**:
+To build in-source, make an empty directory called (often named
+**build**) and run **cmake** as follows:
 
     $ mkdir build
     $ cd build
@@ -33,14 +35,17 @@ To build only certain targets use:
 To install:
 
     $ make install
- 
+
+
 Options
 =======
+
+[Note: This is not a complete list.]
 
 There is an option to build the RADOS gateway that is defaulted to ON
 To build without the Rados Gateway:
 
-    $ cmake -DWITH_RADOSGW=OFF [path to top level ceph-local directory]
+    $ cmake -DWITH_RADOSGW=OFF [path to top level of local Ceph directory]
 
 To build with debugging and alternate locations for a couple of
 external dependencies:
@@ -49,9 +54,9 @@ external dependencies:
       -DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
       ..
 
-If you often pipe `make`to `less` and would like to maintain the
+If you often pipe `make` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
-supports it), you can invoke `cmake` with:
+supports the option), you can invoke `cmake` with:
 
     $ cmake -DDIAGNOSTICS_COLOR=always [...]
 
@@ -92,6 +97,7 @@ and headers more thoroughly, and include tests to make this build
 become more robust. CMake allows ceph to build onto many platforms
 such as Windows though the shell scripts need bash/unix to run.
 
+
 Developer Quick-Start
 =====================
 
@@ -103,8 +109,9 @@ Development
 
 The **run-cmake-check.sh** script will install Ceph dependencies,
 compile everything in debug mode, and run a number of tests to verify
-that the result behaves as expected. It will also build in-source
-(i.e., create a *build* directory).
+that the results behave as expected. It will also build in-source
+(i.e., create a *build* directory at the top level of your local Ceph
+directory).
 
     $ ./run-cmake-check.sh
 
@@ -116,16 +123,24 @@ directory from which you'll run the various commands.
 
     $ cd build
 
-Now you can run a development deployment:
+After you make changes to the source files, you should:
 
-    $ ../src/vstart -d -n -x
+    $ make vstart
 
-You can also configure **vstart.sh** to use only one monitor and one
-metadata server by using the following:
+Now you can run a new (due to "-n") development deployment:
 
-    $ MON=1 MDS=1 ../src/vstart.sh -d -n -x
+    $ ../src/vstart.sh -d -n
 
-You can stop the development deployment with:
+Or an existing development deployment:
+
+    $ ../src/vstart.sh -d
+
+Through shell variables you can tell **vstart.sh** to use only one
+monitor and one metadata server with the following:
+
+    $ MON=1 MDS=1 ../src/vstart.sh -d -n
+
+You can stop a running development deployment with:
 
     $ ../src/stop.sh
 
