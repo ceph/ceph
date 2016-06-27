@@ -3501,7 +3501,7 @@ int BlueStore::_do_read(
     } else {
       for (auto reg : b2r_it->second) {
 	// determine how much of the blob to read
-	unsigned chunk_size = MAX(block_size, bptr->blob.get_csum_chunk_size());
+	uint64_t chunk_size = bptr->blob.get_chunk_size(block_size);
 	uint64_t r_off = reg.blob_xoffset;
 	uint64_t r_len = reg.length;
 	unsigned front = r_off % chunk_size;
@@ -5524,10 +5524,11 @@ void BlueStore::_dump_blob_map(BlobMap &bm, int log_level)
 }
 
 void BlueStore::_pad_zeros(
-  bufferlist *bl, uint64_t *offset, uint64_t *length,
+  bufferlist *bl, uint64_t *offset,
   uint64_t chunk_size)
 {
-  dout(30) << __func__ << " 0x" << std::hex << *offset << "~" << *length
+  auto length = bl->length();
+  dout(30) << __func__ << " 0x" << std::hex << *offset << "~" << length
 	   << " chunk_size 0x" << chunk_size << std::dec << dendl;
   dout(40) << "before:\n";
   bl->hexdump(*_dout);
@@ -5537,51 +5538,52 @@ void BlueStore::_pad_zeros(
   size_t back_pad = 0;
   size_t pad_count = 0;
   if (front_pad) {
-    size_t front_copy = MIN(chunk_size - front_pad, *length);
+    size_t front_copy = MIN(chunk_size - front_pad, length);
     bufferptr z = buffer::create_page_aligned(chunk_size);
     memset(z.c_str(), 0, front_pad);
     pad_count += front_pad;
     memcpy(z.c_str() + front_pad, bl->get_contiguous(0, front_copy), front_copy);
     if (front_copy + front_pad < chunk_size) {
-      back_pad = chunk_size - (*length + front_pad);
-      memset(z.c_str() + front_pad + *length, 0, back_pad);
+      back_pad = chunk_size - (length + front_pad);
+      memset(z.c_str() + front_pad + length, 0, back_pad);
       pad_count += back_pad;
     }
     bufferlist old, t;
     old.swap(*bl);
-    t.substr_of(old, front_copy, *length - front_copy);
+    t.substr_of(old, front_copy, length - front_copy);
     bl->append(z);
     bl->claim_append(t);
     *offset -= front_pad;
-    *length += front_pad + back_pad;
+    length += front_pad + back_pad;
   }
 
   // back
-  uint64_t end = *offset + *length;
+  uint64_t end = *offset + length;
   unsigned back_copy = end % chunk_size;
   if (back_copy) {
     assert(back_pad == 0);
     back_pad = chunk_size - back_copy;
-    assert(back_copy <= *length);
+    assert(back_copy <= length);
     bufferptr tail(chunk_size);
-    memcpy(tail.c_str(), bl->get_contiguous(*length - back_copy, back_copy),
+    memcpy(tail.c_str(), bl->get_contiguous(length - back_copy, back_copy),
 	   back_copy);
     memset(tail.c_str() + back_copy, 0, back_pad);
     bufferlist old;
     old.swap(*bl);
-    bl->substr_of(old, 0, *length - back_copy);
+    bl->substr_of(old, 0, length - back_copy);
     bl->append(tail);
-    *length += back_pad;
+    length += back_pad;
     pad_count += back_pad;
   }
   dout(20) << __func__ << " pad 0x" << std::hex << front_pad << " + 0x"
 	   << back_pad << " on front/back, now 0x" << *offset << "~"
-	   << *length << std::dec << dendl;
+	   << length << std::dec << dendl;
   dout(40) << "after:\n";
   bl->hexdump(*_dout);
   *_dout << dendl;
   if (pad_count)
     logger->inc(l_bluestore_write_pad_bytes, pad_count);
+  assert(bl->length() == length);
 }
 
 void BlueStore::_do_write_small(
@@ -5632,7 +5634,7 @@ void BlueStore::_do_write_small(
 	     << " bstart 0x" << std::hex << bstart << std::dec << dendl;
 
     // can we pad our head/tail out with zeros?
-    uint64_t chunk_size = MAX(block_size, b->blob.get_csum_chunk_size());
+    uint64_t chunk_size = b->blob.get_chunk_size(block_size);
     uint64_t head_pad = offset % chunk_size;
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
@@ -5662,10 +5664,10 @@ void BlueStore::_do_write_small(
     // direct write into unused blocks of an existing mutable blob?
     uint64_t b_off = offset - head_pad - bstart;
     uint64_t b_len = length + head_pad + tail_pad;
-    if (b->blob.get_ondisk_length() >= b_off + b_len &&
-	b->blob.is_unused(b_off, b_len) &&
-	b->blob.is_allocated(b_off, b_len) &&
-	(b_off % chunk_size == 0 && b_len % chunk_size == 0)) {
+    if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
+	b->blob.get_ondisk_length() >= b_off + b_len &&
+	b->blob.is_unused(b_off, b_len, min_alloc_size) &&
+	b->blob.is_allocated(b_off, b_len)) {
       dout(20) << __func__ << "  write to unused 0x" << std::hex
 	       << b_off << "~" << b_len
 	       << " pad 0x" << head_pad << " + 0x" << tail_pad
@@ -5686,7 +5688,7 @@ void BlueStore::_do_write_small(
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
 	bluestore_lextent_t(blob, b_off + head_pad, length);
       b->blob.ref_map.get(lex.offset, lex.length);
-      b->blob.mark_used(lex.offset, lex.length);
+      b->blob.mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	       << ": " << lex << dendl;
@@ -5760,7 +5762,7 @@ void BlueStore::_do_write_small(
       bluestore_lextent_t& lex = o->onode.extent_map[offset] =
 	bluestore_lextent_t(blob, offset - bstart, length);
       b->blob.ref_map.get(lex.offset, lex.length);
-      b->blob.mark_used(lex.offset, lex.length);
+      b->blob.mark_used(lex.offset, lex.length, min_alloc_size);
       txc->statfs_delta.stored() += lex.length;
       dout(20) << __func__ << "  lex 0x" << std::hex << offset
 	       << std::dec << ": " << lex << dendl;
@@ -5775,13 +5777,8 @@ void BlueStore::_do_write_small(
   b = o->blob_map.new_blob(c->cache);
   unsigned alloc_len = min_alloc_size;
   uint64_t b_off = offset % alloc_len;
-  uint64_t b_len = length;
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-  _pad_zeros(&bl, &b_off, &b_len, block_size);
-  if (b_off)
-    b->blob.add_unused(0, b_off);
-  if (b_off + b_len < alloc_len)
-    b->blob.add_unused(b_off + b_len, alloc_len - (b_off + b_len));
+  _pad_zeros(&bl, &b_off, block_size);
   o->onode.punch_hole(offset, length, &wctx->lex_old);
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
     bluestore_lextent_t(b->id, offset % min_alloc_size, length);
@@ -5790,7 +5787,7 @@ void BlueStore::_do_write_small(
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
 	   << ": " << lex << dendl;
   dout(20) << __func__ << "  new " << b->id << ": " << *b << dendl;
-  wctx->write(b, alloc_len, b_off, bl);
+  wctx->write(b, alloc_len, b_off, bl, true);
   return;
 }
 
@@ -5816,7 +5813,7 @@ void BlueStore::_do_write_big(
     bufferlist t;
     blp.copy(l, t);
     b->bc.write(txc->seq, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    wctx->write(b, l, 0, t);
+    wctx->write(b, l, 0, t, false);
     o->onode.punch_hole(offset, l, &wctx->lex_old);
     o->onode.extent_map[offset] = bluestore_lextent_t(b->id, 0, l);
     b->blob.ref_map.get(0, l);
@@ -5935,6 +5932,14 @@ int BlueStore::_do_alloc_write(
     if (csum_type) {
       b->blob.init_csum(csum_type, csum_order, csum_length);
       b->blob.calc_csum(b_off, *l);
+    }
+    if (wi.mark_unused) {
+      auto b_off = wi.b_off;
+      auto b_len = wi.bl.length();
+      if (b_off)
+        b->blob.add_unused(0, b_off, min_alloc_size);
+      if (b_off + b_len < wi.blob_length)
+        b->blob.add_unused(b_off + b_len, wi.blob_length - (b_off + b_len), min_alloc_size);
     }
 
     // queue io
