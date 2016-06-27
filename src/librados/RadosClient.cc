@@ -516,7 +516,7 @@ int librados::RadosClient::wait_for_osdmap()
   bool need_map = false;
   objecter->with_osdmap([&](const OSDMap& o) {
       if (o.get_epoch() == 0) {
-	need_map = true;
+        need_map = true;
       }
     });
 
@@ -527,25 +527,21 @@ int librados::RadosClient::wait_for_osdmap()
     if (cct->_conf->rados_mon_op_timeout > 0)
       timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
 
-    bool wait_forever = false;
-    if (timeout.is_zero()) {
-      // we'll going to wait forever, but wake up every 1 seconds,
-      // e.g., to avoid cpu burning.
-      wait_forever = true;
-      timeout = utime_t(1, 0);
-    }
-
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
       utime_t start = ceph_clock_now(cct);
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
-	cond.WaitInterval(cct, lock, timeout);
-	utime_t elapsed = ceph_clock_now(cct) - start;
-	if (!wait_forever && elapsed > timeout) {
-	  lderr(cct) << "timed out waiting for first osdmap from monitors"
-		     << dendl;
-	  return -ETIMEDOUT;
-	}
+        if (timeout.is_zero()) {
+          cond.Wait(lock);
+        } else {
+          cond.WaitInterval(cct, lock, timeout);
+          utime_t elapsed = ceph_clock_now(cct) - start;
+          if (elapsed > timeout) {
+            lderr(cct) << "timed out waiting for first osdmap from monitors"
+                       << dendl;
+            return -ETIMEDOUT;
+          }
+        }
       }
       ldout(cct, 10) << __func__ << " done waiting" << dendl;
     }
