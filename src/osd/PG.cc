@@ -661,7 +661,7 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_
     *end = info.history.same_interval_since;
   } else {
     // PG must be imported, so let's calculate the whole range.
-    *end = osd->get_superblock().newest_map;
+    *end = osdmap_ref->get_epoch();
   }
 
   // Do we already have the intervals we want?
