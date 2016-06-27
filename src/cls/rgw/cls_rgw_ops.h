@@ -204,26 +204,31 @@ struct rgw_cls_unlink_instance_op {
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  string olh_tag;
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(key, bl);
     ::encode(op_tag, bl);
     ::encode(olh_epoch, bl);
     ::encode(log_op, bl);
     ::encode(bilog_flags, bl);
+    ::encode(olh_tag, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(key, bl);
     ::decode(op_tag, bl);
     ::decode(olh_epoch, bl);
     ::decode(log_op, bl);
     ::decode(bilog_flags, bl);
+    if (struct_v >= 2) {
+      ::decode(olh_tag, bl);
+    }
     DECODE_FINISH(bl);
   }
 
