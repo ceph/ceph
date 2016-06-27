@@ -128,6 +128,8 @@ static inline int rgw_http_error_to_errno(int http_err)
   if (http_err >= 200 && http_err <= 299)
     return 0;
   switch (http_err) {
+    case 304:
+      return -ERR_NOT_MODIFIED;
     case 400:
       return -EINVAL;
     case 401:

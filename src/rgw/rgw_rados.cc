@@ -898,7 +898,7 @@ int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime,
   if (r < 0)
     return r;
 
-  is_complete = true;
+  is_complete = !canceled;
   return 0;
 }
 
@@ -1247,6 +1247,8 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   if (r < 0) {
     return r;
   }
+
+  canceled = obj_op.meta.canceled;
 
   return 0;
 }
@@ -3461,6 +3463,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     }
   }
 
+  meta.canceled = false;
+
   /* update quota cache */
   store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
 
@@ -3471,6 +3475,8 @@ done_cancel:
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: index_op.cancel()() returned ret=" << ret << dendl;
   }
+
+  meta.canceled = true;
 
   /* we lost in a race. There are a few options:
    * - existing object was rewritten (ECANCELED)
@@ -3704,6 +3710,10 @@ public:
   int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) {
     return processor->complete(etag, mtime, set_mtime, attrs);
   }
+
+  bool is_canceled() {
+    return processor->is_canceled();
+  }
 };
 
 /*
@@ -3785,6 +3795,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               bool copy_if_newer,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -3800,6 +3811,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   RGWRESTStreamReadRequest *in_stream_req;
   string tag;
   map<string, bufferlist> src_attrs;
+  int i;
   append_rand_alpha(cct, tag, tag, 32);
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
@@ -3845,8 +3857,26 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   string etag;
   map<string, string> req_headers;
   time_t set_mtime;
+
+  RGWObjState *dest_state = NULL;
+
+  time_t dest_mtime;
+  const time_t *pmod = mod_ptr;
+
+  if (copy_if_newer) {
+    /* need to get mtime for destination */
+    ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, NULL);
+    if (ret < 0)
+      return ret;
+
+    if (dest_state->exists) {
+      dest_mtime = dest_state->mtime;
+      pmod = &dest_mtime;
+    }
+  }
+
  
-  ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
+  ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr, true, &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -3889,8 +3919,34 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     attrs = src_attrs;
   }
 
-  ret = cb.complete(etag, mtime, set_mtime, attrs);
-  if (ret < 0) {
+#define MAX_COMPLETE_RETRY 100
+  for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
+    ret = cb.complete(etag, mtime, set_mtime, attrs);
+    if (ret < 0) {
+      goto set_err_state;
+    }
+    if (copy_if_newer && cb.is_canceled()) {
+      ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;
+      obj_ctx.invalidate(dest_obj); /* object was overwritten */
+      ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, NULL);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
+        goto set_err_state;
+      }
+      if (!dest_state->exists ||
+        dest_state->mtime < set_mtime) {
+        ldout(cct, 20) << "retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
+        continue;
+      } else {
+        ldout(cct, 20) << "not retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
+      }
+    }
+    break;
+  }
+
+  if (i == MAX_COMPLETE_RETRY) {
+    ldout(cct, 0) << "ERROR: retried object completion too many times, something is wrong!" << dendl;
+    ret = -EIO;
     goto set_err_state;
   }
 
@@ -3901,7 +3957,12 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   return 0;
 set_err_state:
-  int r = opstate.set_state(RGWOpState::OPSTATE_ERROR);
+  RGWOpState::OpState state = RGWOpState::OPSTATE_ERROR;
+  if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
+    state = RGWOpState::OPSTATE_COMPLETE;
+    ret = 0;
+  }
+  int r = opstate.set_state(state);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to set opstate r=" << ret << dendl;
   }
@@ -3967,6 +4028,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_match,
                const char *if_nomatch,
                AttrsMod attrs_mod,
+               bool copy_if_newer,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -4001,7 +4063,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
-               unmod_ptr, if_match, if_nomatch, attrs_mod, attrs, category,
+               unmod_ptr, if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, version_id, ptag, petag, err, progress_cb, progress_data);
   }
 
@@ -5453,7 +5515,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
     if (conds.mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *conds.mod_ptr << " Last-Modified: " << ctime << dendl;
-      if (ctime < *conds.mod_ptr) {
+      if (ctime <= *conds.mod_ptr) {
         return -ERR_NOT_MODIFIED;
       }
     }
