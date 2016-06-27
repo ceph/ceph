@@ -681,6 +681,10 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer
   if (image_name) {
     FunctionContext *ctx = new FunctionContext(
         [&] (int r) {
+          if (r == -ESTALE) {
+            return;
+          }
+
           if (r >= 0) {
             image_replayer->start();
           } else {
