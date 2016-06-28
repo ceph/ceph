@@ -1008,6 +1008,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         center->delete_file_event(sd, EVENT_WRITABLE);
+        net.set_priority(sd, async_msgr->get_socket_priority());
         ldout(async_msgr->cct, 10) << __func__ << " connect successfully, ready to send banner" << dendl;
 
         bufferlist bl;
@@ -1306,6 +1307,7 @@ ssize_t AsyncConnection::_process_connection()
           goto fail;
 
         net.set_socket_options(sd);
+        net.set_priority(sd, async_msgr->get_socket_priority());
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
