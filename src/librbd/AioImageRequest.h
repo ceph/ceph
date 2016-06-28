@@ -33,6 +33,8 @@ public:
                        size_t len, char *buf, bufferlist *pbl, int op_flags);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                         size_t len, const char *buf, int op_flags);
+  static void aio_writesame(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
+                        size_t len, const char *buf, size_t data_len, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                           uint64_t len);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
@@ -165,6 +167,44 @@ protected:
 private:
   const char *m_buf;
   int m_op_flags;
+};
+
+class AioImageWriteSame : public AbstractAioImageWrite {
+public:
+  AioImageWriteSame(ImageCtx &image_ctx, AioCompletion *aio_comp, uint64_t off,
+                size_t len, const char *buf, size_t data_len, int op_flags)
+    : AbstractAioImageWrite(image_ctx, aio_comp, off, len), m_buf(buf),
+      m_data_len(data_len), m_op_flags(op_flags) {
+  }
+
+protected:
+  virtual aio_type_t get_aio_type() const {
+    return AIO_TYPE_WRITE;
+  }
+  virtual const char *get_request_type() const {
+    return "aio_write";
+  }
+
+  void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
+
+  virtual void send_cache_requests(const ObjectExtents &object_extents,
+                                   uint64_t journal_tid);
+
+  virtual void send_object_requests(const ObjectExtents &object_extents,
+                                    const ::SnapContext &snapc,
+                                    AioObjectRequests *aio_object_requests);
+  virtual AioObjectRequest *create_object_request(
+      const ObjectExtent &object_extent, const ::SnapContext &snapc,
+      Context *on_finish);
+
+  virtual uint64_t append_journal_event(const AioObjectRequests &requests,
+                                        bool synchronous);
+  virtual void update_stats(size_t length);
+private:
+  const char *m_buf;
+  size_t m_data_len;
+  int m_op_flags;
+  bufferlist data_bl;
 };
 
 class AioImageDiscard : public AbstractAioImageWrite {

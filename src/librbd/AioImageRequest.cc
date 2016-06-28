@@ -109,6 +109,14 @@ void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
 }
 
 template <typename I>
+void AioImageRequest<I>::aio_writesame(I *ictx, AioCompletion *c,
+                                   uint64_t off, size_t len, const char *buf,
+                                   size_t data_len, int op_flags) {
+  AioImageWriteSame req(*ictx, c, off, len, buf, data_len, op_flags);
+  req.send();
+}
+
+template <typename I>
 void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                      uint64_t off, uint64_t len) {
   c->init_time(ictx, librbd::AIO_TYPE_DISCARD);
@@ -378,6 +386,107 @@ AioObjectRequest *AioImageWrite::create_object_request(
 }
 
 void AioImageWrite::update_stats(size_t length) {
+  m_image_ctx.perfcounter->inc(l_librbd_wr);
+  m_image_ctx.perfcounter->inc(l_librbd_wr_bytes, length);
+}
+
+void AioImageWriteSame::assemble_extent(const ObjectExtent &object_extent,
+                                    bufferlist *bl) {
+  if (object_extent.offset % m_data_len == 0
+      && m_image_ctx.object_cacher == NULL) {
+    if (object_extent.offset == m_off) {
+      bl->append(m_buf, m_data_len);
+    } else {
+      *bl = data_bl;
+    }
+  } else {
+    uint64_t left = object_extent.length;
+    while (left > m_data_len) {
+      if (object_extent.offset == m_off) {
+        bl->append(m_buf, m_data_len);
+      } else {
+        *bl = data_bl;
+      }
+      left -= m_data_len;
+    }
+
+    if (object_extent.offset == m_off) {
+      bl->append(m_buf, left);
+    } else {
+      bl->append(m_buf + m_data_len - left, left);
+    }
+  }
+}
+
+uint64_t AioImageWriteSame::append_journal_event(
+    const AioObjectRequests &requests, bool synchronous) {
+  bufferlist bl;
+  bl.append(m_buf, m_data_len);
+
+  journal::EventEntry event_entry(journal::AioWriteSameEvent(m_off, m_len, bl));
+  uint64_t tid = m_image_ctx.journal->append_io_event(std::move(event_entry),
+                                                      requests, m_off, m_len,
+                                                      synchronous);
+  if (m_image_ctx.object_cacher == NULL) {
+    m_aio_comp->associate_journal_event(tid);
+  }
+  return tid;
+}
+
+void AioImageWriteSame::send_cache_requests(const ObjectExtents &object_extents,
+                                        uint64_t journal_tid) {
+  for (ObjectExtents::const_iterator p = object_extents.begin();
+       p != object_extents.end(); ++p) {
+    const ObjectExtent &object_extent = *p;
+
+    bufferlist bl;
+    assemble_extent(object_extent, &bl);
+
+    C_AioRequest *req_comp = new C_AioRequest(m_aio_comp);
+    m_image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
+                               object_extent.offset, req_comp, m_op_flags,
+                               journal_tid);
+  }
+}
+
+void AioImageWriteSame::send_object_requests(
+    const ObjectExtents &object_extents, const ::SnapContext &snapc,
+    AioObjectRequests *aio_object_requests) {
+  // cache handles creating object requests during writeback
+  if (m_image_ctx.object_cacher == NULL) {
+    // prepare data_bl, if object is not the first one and objectextent->len % data_len == 0,
+    // we can use date_bl directly.(see assemble_extent method)
+    uint64_t buf_off = m_off % m_data_len;
+    if (buf_off) {
+      data_bl.append(m_buf + m_data_len - buf_off, buf_off);
+      data_bl.append(m_buf, m_data_len - buf_off);
+    } else {
+      data_bl.append(m_buf, m_data_len);
+    }
+
+    AbstractAioImageWrite::send_object_requests(object_extents, snapc,
+                                                aio_object_requests);
+  }
+}
+
+AioObjectRequest *AioImageWriteSame::create_object_request(
+    const ObjectExtent &object_extent, const ::SnapContext &snapc,
+    Context *on_finish) {
+  assert(m_image_ctx.object_cacher == NULL);
+
+  bufferlist bl;
+  assemble_extent(object_extent, &bl);
+  AioObjectWriteSame *req = new AioObjectWriteSame(&m_image_ctx,
+                                           object_extent.oid.name,
+                                           object_extent.objectno,
+                                           object_extent.offset,
+                                           object_extent.length, bl,
+                                           snapc, on_finish);
+  req->set_op_flags(m_op_flags);
+  return req;
+}
+
+void AioImageWriteSame::update_stats(size_t length) {
   m_image_ctx.perfcounter->inc(l_librbd_wr);
   m_image_ctx.perfcounter->inc(l_librbd_wr_bytes, length);
 }
