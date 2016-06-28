@@ -1000,6 +1000,7 @@ void CInode::_stored(int r, version_t v, Context *fin)
     mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
 				<< " errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
+    fin->complete(r);
     return;
   }
 
@@ -1216,6 +1217,8 @@ void CInode::_stored_backtrace(int r, version_t v, Context *fin)
                                 << ", pool " << get_backtrace_pool()
                                 << ", errno " << r << "\n";
     mdcache->mds->handle_write_error(r);
+    if (fin)
+      fin->complete(r);
     return;
   }
 
