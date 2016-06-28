@@ -6,6 +6,7 @@ import time
 import yaml
 
 from datetime import datetime
+from tempfile import NamedTemporaryFile
 
 from ..config import config, JobConfig
 from ..exceptions import (
@@ -212,6 +213,12 @@ class Run(object):
         conf_dict = substitute_placeholders(dict_templ, self.config_input)
         conf_dict.update(self.kernel_dict)
         job_config = JobConfig.from_dict(conf_dict)
+        job_config.name = self.name
+        job_config.priority = self.args.priority
+        if self.args.results_email:
+            job_config.email = self.args.results_email
+        if self.args.owner:
+            job_config.owner = self.args.owner
         return job_config
 
     def build_base_args(self):
@@ -414,6 +421,17 @@ class Run(object):
         log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
             suite_name, suite_path, len(configs)))
 
+        if self.args.dry_run:
+            log.debug("Base job config:\n%s" % self.base_config)
+
+        # create, but do not write, the temp file here, so it can be
+        # added to the args in collect_jobs, but not filled until
+        # any backtracking is done
+        base_yaml_path = NamedTemporaryFile(
+            prefix='schedule_suite_', delete=False
+        ).name
+        self.base_yaml_paths.insert(0, base_yaml_path)
+
         # if newest, do this until there are no missing packages
         # if not, do it once
         backtrack = 0
@@ -444,7 +462,14 @@ class Run(object):
                     name=name,
                 )
 
+        if self.args.dry_run:
+            log.debug("Base job config:\n%s" % self.base_config)
+
+        with open(base_yaml_path, 'w+b') as base_yaml:
+            base_yaml.write(str(self.base_config))
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
+
+        os.remove(base_yaml_path)
 
         count = len(jobs_to_schedule)
         missing_count = len(jobs_missing_packages)
