@@ -11,6 +11,12 @@ outfile="ceph-$version"
 
 echo "version $version"
 
+rpm_release=`if expr index $(git describe --always) '-' > /dev/null ; then git describe --always | cut -d- -f2- | tr '-' '.' ; else echo "0"; fi`
+echo "RPM_RELEASE $rpm_release"
+rpm_version=`git describe --abbrev=0 | sed 's/^v//'`
+echo "RPM_VERSION $rpm_version"
+sed -e "s/@VERSION@/$rpm_version/g" -e "s/@RPM_RELEASE@/$rpm_release/g" < ceph.spec.in > ceph.spec
+
 # update submodules
 echo "updating submodules..."
 force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
@@ -34,8 +40,10 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 echo "including src/.git_version and src/ceph_ver.h..."
 src/make_version -g src/.git_version -c src/ceph_ver.h
 ln -s . $outfile
+tar cvf $outfile.spec.tar ceph.spec
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/src/ceph_ver.h
 tar --concatenate -f $outfile.both.tar $outfile.version.tar
+tar --concatenate -f $outfile.both.tar $outfile.spec.tar
 tar --concatenate -f $outfile.both.tar $outfile.tar
 mv $outfile.both.tar $outfile.tar
 rm $outfile
