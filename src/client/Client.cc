@@ -1614,7 +1614,7 @@ int Client::make_request(MetaRequest *request,
 
   // make note
   mds_requests[tid] = request->get();
-  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
+  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)
     oldest_tid = tid;
 
   if (uid < 0)
@@ -1706,10 +1706,11 @@ int Client::make_request(MetaRequest *request,
   if (!request->reply) {
     assert(request->aborted());
     assert(!request->got_unsafe);
+    r = request->get_abort_code();
     request->item.remove_myself();
     unregister_request(request);
     put_request(request); // ours
-    return request->get_abort_code();
+    return r;
   }
 
   // got it!
