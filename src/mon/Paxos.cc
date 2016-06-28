@@ -1016,9 +1016,7 @@ void Paxos::commit_proposal()
   assert(mon->is_leader());
   assert(is_refresh());
 
-  list<Context*> ls;
-  ls.swap(committing_finishers);
-  finish_contexts(g_ceph_context, ls);
+  finish_contexts(g_ceph_context, committing_finishers);
 }
 
 void Paxos::finish_round()
