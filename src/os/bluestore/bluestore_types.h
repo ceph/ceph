@@ -632,6 +632,20 @@ struct bluestore_onode_t {
   void punch_hole(uint64_t offset, uint64_t length,
 		  vector<bluestore_lextent_t> *deref);
 
+  /// put new lextent into lextent_map overwriting existing ones if any and update references accordingly
+  void set_lextent(uint64_t offset,
+		   const bluestore_lextent_t& lext,
+		   bluestore_blob_t* b,
+		   vector<bluestore_lextent_t> *deref);
+
+  /// post process removed lextent to take care of blob references
+  /// returns true is underlying blob has to be released
+  bool deref_lextent(uint64_t offset,
+               bluestore_lextent_t& lext,
+               bluestore_blob_t* b,
+               uint64_t min_alloc_size,
+               vector<bluestore_pextent_t>* r);
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;

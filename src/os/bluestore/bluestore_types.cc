@@ -990,6 +990,50 @@ void bluestore_onode_t::punch_hole(
   }
 }
 
+void bluestore_onode_t::set_lextent(uint64_t offset,
+                   const bluestore_lextent_t& lext,
+                   bluestore_blob_t* b,
+                   vector<bluestore_lextent_t> *deref)
+{
+  punch_hole(offset, lext.length, deref);
+  extent_map[offset] = lext;
+  //increment reference for shared blobs only
+  if (b->has_refmap()) {
+    b->get_ref(lext.offset, lext.length);
+  }
+}
+
+bool bluestore_onode_t::deref_lextent( uint64_t offset,
+                         bluestore_lextent_t& lext,
+                         bluestore_blob_t* b,
+                         uint64_t min_alloc_size,
+                         vector<bluestore_pextent_t>* r)
+{
+  bool empty = false;
+  if (b->has_refmap()) {
+    empty = b->put_ref(lext.offset, lext.length, min_alloc_size, r);
+  } else {
+    bluestore_extent_ref_map_t temp_ref_map;
+    assert(offset >= lext.offset);
+    //determine the range in lextents map where specific blob can be referenced to.
+    uint64_t search_offset = offset - lext.offset;
+    uint64_t search_end = search_offset +
+                          (b->is_compressed() ?
+                             b->get_compressed_payload_original_length() :
+                             b->get_ondisk_length());
+    auto lp = seek_lextent(search_offset);
+    while (lp != extent_map.end() &&
+           lp->first < search_end) {
+      if (lp->second.blob == lext.blob) {
+        temp_ref_map.fill(lp->second.offset, lp->second.length);
+      }
+      ++lp;
+    }
+    temp_ref_map.get(lext.offset, lext.length); //insert a fake reference for the removed lextent
+    empty = b->put_ref_external( temp_ref_map, lext.offset, lext.length, min_alloc_size, r);
+  }
+  return empty;
+}
 // bluestore_wal_op_t
 
 void bluestore_wal_op_t::encode(bufferlist& bl) const
