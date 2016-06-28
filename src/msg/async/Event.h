@@ -80,12 +80,6 @@ class EventDriver {
   virtual int resize_events(int newsize) = 0;
 };
 
-extern thread_local EventCenter* local_center;
-
-inline EventCenter* center() {
-  return local_center;
-}
-
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
@@ -119,6 +113,7 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
+  pthread_t owner;
   std::mutex external_lock, file_lock;;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
@@ -169,7 +164,7 @@ class EventCenter {
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
   inline bool in_thread() const {
-    return local_center == this;
+    return pthread_equal(pthread_self(), owner);
   }
 
  private:
