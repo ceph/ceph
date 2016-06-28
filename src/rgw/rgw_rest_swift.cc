@@ -1388,17 +1388,11 @@ RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_get()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(true);
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_head()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(false);
 }
 
@@ -1438,17 +1432,11 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_get()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(true);
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_head()
 {
-  if (is_acl_op()) {
-    return new RGWGetACLs_ObjStore_SWIFT;
-  }
   return get_obj_op(false);
 }
 
