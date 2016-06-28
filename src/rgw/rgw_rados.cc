@@ -3981,7 +3981,6 @@ int RGWRados::init_watch()
 
   librados::Rados *rad = &rados[0];
   int r = rad->ioctx_create(control_pool, control_pool_ctx);
-
   if (r == -ENOENT) {
     r = rad->pool_create(control_pool);
     if (r == -EEXIST)
@@ -3992,6 +3991,8 @@ int RGWRados::init_watch()
     r = rad->ioctx_create(control_pool, control_pool_ctx);
     if (r < 0)
       return r;
+  } else if (r < 0) {
+    return r;
   }
 
   num_watchers = cct->_conf->rgw_num_control_oids;
