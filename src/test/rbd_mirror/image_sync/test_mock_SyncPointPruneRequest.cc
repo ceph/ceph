@@ -11,10 +11,21 @@
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.h"
 
 namespace librbd {
+
+namespace {
+
+struct MockTestImageCtx : public librbd::MockImageCtx {
+  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+    : librbd::MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace journal {
 
 template <>
-struct TypeTraits<librbd::MockImageCtx> {
+struct TypeTraits<librbd::MockTestImageCtx> {
   typedef ::journal::MockJournaler Journaler;
 };
 
@@ -23,7 +34,7 @@ struct TypeTraits<librbd::MockImageCtx> {
 
 // template definitions
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.cc"
-template class rbd::mirror::image_sync::SyncPointPruneRequest<librbd::MockImageCtx>;
+template class rbd::mirror::image_sync::SyncPointPruneRequest<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
@@ -37,7 +48,7 @@ using ::testing::WithArg;
 
 class TestMockImageSyncSyncPointPruneRequest : public TestMockFixture {
 public:
-  typedef SyncPointPruneRequest<librbd::MockImageCtx> MockSyncPointPruneRequest;
+  typedef SyncPointPruneRequest<librbd::MockTestImageCtx> MockSyncPointPruneRequest;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();
@@ -52,24 +63,24 @@ public:
       .WillOnce(WithArg<1>(CompleteContext(r)));
   }
 
-  void expect_get_snap_id(librbd::MockImageCtx &mock_remote_image_ctx,
+  void expect_get_snap_id(librbd::MockTestImageCtx &mock_remote_image_ctx,
                           const std::string &snap_name, uint64_t snap_id) {
     EXPECT_CALL(mock_remote_image_ctx, get_snap_id(StrEq(snap_name)))
       .WillOnce(Return(snap_id));
   }
 
-  void expect_image_refresh(librbd::MockImageCtx &mock_remote_image_ctx, int r) {
+  void expect_image_refresh(librbd::MockTestImageCtx &mock_remote_image_ctx, int r) {
     EXPECT_CALL(*mock_remote_image_ctx.state, refresh(_))
       .WillOnce(CompleteContext(r));
   }
 
-  void expect_snap_remove(librbd::MockImageCtx &mock_remote_image_ctx,
+  void expect_snap_remove(librbd::MockTestImageCtx &mock_remote_image_ctx,
                           const std::string &snap_name, int r) {
     EXPECT_CALL(*mock_remote_image_ctx.operations, snap_remove(StrEq(snap_name), _))
       .WillOnce(WithArg<1>(CompleteContext(r)));
   }
 
-  MockSyncPointPruneRequest *create_request(librbd::MockImageCtx &mock_remote_image_ctx,
+  MockSyncPointPruneRequest *create_request(librbd::MockTestImageCtx &mock_remote_image_ctx,
                                             journal::MockJournaler &mock_journaler,
                                             bool sync_complete, Context *ctx) {
     return new MockSyncPointPruneRequest(&mock_remote_image_ctx, sync_complete,
@@ -85,7 +96,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressSuccess) {
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -107,7 +118,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncInProgressSuccess) {
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -132,7 +143,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressMissingSnapSuccess)
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -157,7 +168,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressUnexpectedFromSnapS
   client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -183,7 +194,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncCompleteSuccess) {
   m_client_meta = client_meta;
   ASSERT_EQ(librbd::journal::MIRROR_PEER_STATE_SYNCING, m_client_meta.state);
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -206,7 +217,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncCompleteSuccess) {
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -228,7 +239,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedCatchUpSyncCompleteSucce
   client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -250,7 +261,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SnapshotDNE) {
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
@@ -272,7 +283,7 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, ClientUpdateError) {
   client_meta.sync_points.emplace_front("snap1", boost::none);
   m_client_meta = client_meta;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   journal::MockJournaler mock_journaler;
 
   InSequence seq;
