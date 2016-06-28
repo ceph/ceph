@@ -8,7 +8,7 @@
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
 #else
-# include "fcgiapp.h"
+# include <fcgiapp.h>
 #endif
 
 #include "rgw_client_io.h"
