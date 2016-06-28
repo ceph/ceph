@@ -7045,7 +7045,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
     fg = frag_t(dirp->offset_high());
   
   ldout(cct, 10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg
-		 << " offset " << hex << dirp->offset << dendl;
+		 << " offset " << hex << dirp->offset << dec << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
@@ -7228,7 +7228,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   }
 
   // can we read from our cache?
-  ldout(cct, 10) << "offset " << hex << dirp->offset
+  ldout(cct, 10) << "offset " << hex << dirp->offset << dec
 	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
@@ -8883,6 +8883,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   client_lock.Unlock();
   int rval = cond.wait();
   client_lock.Lock();
+
+  if (rval < 0) {
+    ldout(cct, 1) << "underlying call to statfs returned error: "
+                  << cpp_strerror(rval)
+                  << dendl;
+    return rval;
+  }
 
   memset(stbuf, 0, sizeof(*stbuf));
 
@@ -11664,8 +11671,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		      ceph::real_clock::now(cct),
 		      0, true, onfinish,
 		      new C_OnFinisher(onsafe, &objecter_finisher));
-      if (r < 0)
-	goto done;
+      assert(r == 0);
 
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
