@@ -2436,7 +2436,6 @@ protected:
   ~OSD();
 
   // static bits
-  static int find_osd_dev(char *result, int whoami);
   static int mkfs(CephContext *cct, ObjectStore *store,
 		  const string& dev,
 		  uuid_d fsid, int whoami);
