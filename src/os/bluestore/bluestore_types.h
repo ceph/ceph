@@ -389,8 +389,12 @@ struct bluestore_blob_t {
   /// get logical references
   void get_ref(uint64_t offset, uint64_t length);
   /// put logical references, and get back any released extents
-  void put_ref(uint64_t offset, uint64_t length, uint64_t min_alloc_size,
-	       vector<bluestore_pextent_t> *r);
+  bool put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+              vector<bluestore_pextent_t> *r);
+  /// put logical references using external ref_map, and get back any released extents
+  bool put_ref_external( bluestore_extent_ref_map_t& ref_map,
+               uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+               vector<bluestore_pextent_t> *r);
 
   void map(uint64_t x_off, uint64_t x_len,
 	   std::function<void(uint64_t,uint64_t)> f) const {
