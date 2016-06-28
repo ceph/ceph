@@ -753,7 +753,6 @@ rm -rf %{buildroot}
 %{_bindir}/ceph-run
 %{_bindir}/ceph-detect-init
 %{_bindir}/ceph-client-debug
-%{_bindir}/cephfs
 %{_unitdir}/ceph-create-keys@.service
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
@@ -791,7 +790,6 @@ rm -rf %{buildroot}
 %{_mandir}/man8/crushtool.8*
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
-%{_mandir}/man8/cephfs.8*
 #set up placeholder directories
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
