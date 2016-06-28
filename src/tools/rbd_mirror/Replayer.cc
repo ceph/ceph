@@ -229,10 +229,12 @@ private:
 };
 
 Replayer::Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+                   ImageSyncThrottlerRef<> image_sync_throttler,
                    RadosRef local_cluster, int64_t local_pool_id,
                    const peer_t &peer, const std::vector<const char*> &args) :
   m_threads(threads),
   m_image_deleter(image_deleter),
+  m_image_sync_throttler(image_sync_throttler),
   m_lock(stringify("rbd::mirror::Replayer ") + stringify(peer)),
   m_peer(peer),
   m_args(args),
@@ -611,9 +613,9 @@ void Replayer::set_sources(const ImageIds &image_ids)
     auto it = m_image_replayers.find(image_id.id);
     if (it == m_image_replayers.end()) {
       unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
-        m_threads, m_image_deleter, m_local, m_remote, local_mirror_uuid,
-        remote_mirror_uuid, m_local_pool_id, m_remote_pool_id, image_id.id,
-        image_id.global_id));
+        m_threads, m_image_deleter, m_image_sync_throttler, m_local, m_remote,
+        local_mirror_uuid, remote_mirror_uuid, m_local_pool_id,
+        m_remote_pool_id, image_id.id, image_id.global_id));
       it = m_image_replayers.insert(
         std::make_pair(image_id.id, std::move(image_replayer))).first;
     }
