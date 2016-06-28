@@ -21,10 +21,21 @@
 #include "tools/rbd_mirror/ImageSync.h"
 
 namespace librbd {
+
+namespace {
+
+struct MockTestImageCtx : public librbd::MockImageCtx {
+  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+    : librbd::MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace journal {
 
 template <>
-struct TypeTraits<librbd::MockImageCtx> {
+struct TypeTraits<librbd::MockTestImageCtx> {
   typedef ::journal::MockJournaler Journaler;
 };
 
@@ -36,18 +47,18 @@ namespace mirror {
 
 using ::testing::Invoke;
 
-typedef ImageSync<librbd::MockImageCtx> MockImageSync;
+typedef ImageSync<librbd::MockTestImageCtx> MockImageSync;
 
 template<>
-class ImageSync<librbd::MockImageCtx> {
+class ImageSync<librbd::MockTestImageCtx> {
 public:
   static std::vector<MockImageSync *> instances;
 
   Context *on_finish;
   bool syncing = false;
 
-  static ImageSync* create(librbd::MockImageCtx *local_image_ctx,
-                           librbd::MockImageCtx *remote_image_ctx,
+  static ImageSync* create(librbd::MockTestImageCtx *local_image_ctx,
+                           librbd::MockTestImageCtx *remote_image_ctx,
                            SafeTimer *timer, Mutex *timer_lock,
                            const std::string &mirror_uuid,
                            journal::MockJournaler *journaler,
@@ -90,14 +101,14 @@ std::vector<MockImageSync *> MockImageSync::instances;
 
 // template definitions
 #include "tools/rbd_mirror/ImageSyncThrottler.cc"
-template class rbd::mirror::ImageSyncThrottler<librbd::MockImageCtx>;
+template class rbd::mirror::ImageSyncThrottler<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
 
 class TestMockImageSyncThrottler : public TestMockFixture {
 public:
-  typedef ImageSyncThrottler<librbd::MockImageCtx> MockImageSyncThrottler;
+  typedef ImageSyncThrottler<librbd::MockTestImageCtx> MockImageSyncThrottler;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();
@@ -111,8 +122,8 @@ public:
 
     mock_sync_throttler = new MockImageSyncThrottler();
 
-    m_mock_local_image_ctx = new librbd::MockImageCtx(*m_local_image_ctx);
-    m_mock_remote_image_ctx = new librbd::MockImageCtx(*m_remote_image_ctx);
+    m_mock_local_image_ctx = new librbd::MockTestImageCtx(*m_local_image_ctx);
+    m_mock_remote_image_ctx = new librbd::MockTestImageCtx(*m_remote_image_ctx);
     m_mock_journaler = new journal::MockJournaler();
   }
 
@@ -153,8 +164,8 @@ public:
 
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx;
-  librbd::MockImageCtx *m_mock_local_image_ctx;
-  librbd::MockImageCtx *m_mock_remote_image_ctx;
+  librbd::MockTestImageCtx *m_mock_local_image_ctx;
+  librbd::MockTestImageCtx *m_mock_remote_image_ctx;
   journal::MockJournaler *m_mock_journaler;
   librbd::journal::MirrorPeerClientMeta m_client_meta;
   MockImageSyncThrottler *mock_sync_throttler;
