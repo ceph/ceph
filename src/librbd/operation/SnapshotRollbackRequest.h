@@ -7,13 +7,13 @@
 #include "librbd/operation/Request.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/journal/Types.h"
 #include <string>
 
 class Context;
 
 namespace librbd {
 
-class ImageCtx;
 class ProgressContext;
 
 namespace operation {

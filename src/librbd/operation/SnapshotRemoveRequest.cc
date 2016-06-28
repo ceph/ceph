@@ -6,7 +6,6 @@
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd

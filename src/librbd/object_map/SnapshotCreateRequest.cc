@@ -3,7 +3,6 @@
 
 #include "librbd/object_map/SnapshotCreateRequest.h"
 #include "common/dout.h"
-#include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "cls/lock/cls_lock_client.h"

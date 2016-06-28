@@ -3,13 +3,11 @@
 
 #include "librbd/DiffIterate.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
-#include "common/Mutex.h"
 #include "common/Throttle.h"
 #include "librados/snap_set_diff.h"
 #include <boost/tuple/tuple.hpp>

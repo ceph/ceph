@@ -4,8 +4,6 @@
 #ifndef CEPH_LIBRBD_IMAGE_SNAP_SET_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_SNAP_SET_REQUEST_H
 
-#include "include/int_types.h"
-#include "librbd/parent_types.h"
 #include <string>
 
 class Context;
