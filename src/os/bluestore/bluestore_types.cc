@@ -438,6 +438,7 @@ void bluestore_blob_t::encode(bufferlist& bl) const
   small_encode(extents, bl);
   small_encode_varint(flags, bl);
   if (is_compressed()) {
+    small_encode_varint_lowz(compressed_length_orig, bl);
     small_encode_varint_lowz(compressed_length, bl);
   }
   if (has_csum()) {
@@ -460,9 +461,10 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
   small_decode(extents, p);
   small_decode_varint(flags, p);
   if (is_compressed()) {
+    small_decode_varint_lowz(compressed_length_orig, p);
     small_decode_varint_lowz(compressed_length, p);
   } else {
-    compressed_length = 0;
+    compressed_length_orig = compressed_length = 0;
   }
   if (has_csum()) {
     small_decode_varint(csum_type, p);
@@ -490,6 +492,7 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
+  f->dump_unsigned("compressed_length_original", compressed_length_orig);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
@@ -524,7 +527,11 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " clen 0x" << std::hex << o.compressed_length << std::dec;
+      << " clen 0x" << std::hex
+      << o.compressed_length_orig
+      << " -> " << std::hex
+      << o.compressed_length
+      << std::dec;
   if (o.flags) {
     out << " " << o.get_flags_string();
   }
