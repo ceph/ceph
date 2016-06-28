@@ -562,6 +562,32 @@ namespace librbd {
     }
   }
 
+  void AioObjectWriteSame::add_write_ops(librados::ObjectWriteOperation *wr) {
+    RWLock::RLocker snap_locker(m_ictx->snap_lock);
+    if (m_ictx->enable_alloc_hint &&
+        (m_ictx->object_map == nullptr ||
+         !m_ictx->object_map->object_may_exist(m_object_no))) {
+      wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+    }
+
+    wr->writesame(m_object_off, m_object_len, m_write_data);
+    wr->set_op_flags2(m_op_flags);
+  }
+
+  void AioObjectWriteSame::send_write() {
+    bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid
+			   << " writesame " << m_object_off << "~" << m_object_len
+			   << " date_len " << m_write_data.length()
+                           << " object exist " << m_object_exist
+			   << " write_full " << write_full << dendl;
+    if (write_full && !has_parent()) {
+      send_write_op(false);
+    } else {
+      AbstractAioObjectWrite::send_write();
+    }
+  }
+
   void AioObjectRemove::guard_write() {
     // do nothing to disable write guard only if deep-copyup not required
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
