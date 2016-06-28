@@ -630,13 +630,13 @@ struct bluestore_onode_t {
 
   /// punch a logical hole.  add lextents to deref to target list.
   void punch_hole(uint64_t offset, uint64_t length,
-		  vector<bluestore_lextent_t> *deref);
+		  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
 
   /// put new lextent into lextent_map overwriting existing ones if any and update references accordingly
   void set_lextent(uint64_t offset,
 		   const bluestore_lextent_t& lext,
 		   bluestore_blob_t* b,
-		   vector<bluestore_lextent_t> *deref);
+		   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref);
 
   /// post process removed lextent to take care of blob references
   /// returns true is underlying blob has to be released
