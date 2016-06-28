@@ -245,9 +245,7 @@ struct bluestore_blob_t {
   typedef std::bitset<sizeof(unused_uint_t) * 8> unused_t;
   unused_t unused;                    ///< portion that has never been written to
 
-  bluestore_blob_t(uint32_t f = 0) : flags(f) {
-    set_flag(FLAG_HAS_REFMAP);
-  }
+  bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
