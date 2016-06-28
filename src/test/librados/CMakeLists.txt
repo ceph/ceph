@@ -151,6 +151,22 @@ set_target_properties(ceph_test_rados_api_tmap_migrate PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rados_api_tmap_migrate
   librados mds osdc global cls_cephfs_client ${UNITTEST_LIBS} radostest)
+install(TARGETS
+  ceph_test_rados_api_aio
+  ceph_test_rados_api_c_read_operations
+  ceph_test_rados_api_c_write_operations
+  ceph_test_rados_api_cmd
+  ceph_test_rados_api_io
+  ceph_test_rados_api_list
+  ceph_test_rados_api_lock
+  ceph_test_rados_api_misc
+  ceph_test_rados_api_pool
+  ceph_test_rados_api_snapshots
+  ceph_test_rados_api_stat
+  ceph_test_rados_api_tier
+  ceph_test_rados_api_tmap_migrate
+  ceph_test_rados_api_watch_notify
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_librados
 add_executable(unittest_librados
