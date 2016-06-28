@@ -556,13 +556,29 @@ void bluestore_blob_t::get_ref(
   ref_map.get(offset, length);
 }
 
-void bluestore_blob_t::put_ref(
+bool bluestore_blob_t::put_ref(
   uint64_t offset,
   uint64_t length,
   uint64_t min_release_size,
   vector<bluestore_pextent_t> *r)
 {
   assert(has_refmap());
+  return put_ref_external(
+    ref_map,
+    offset,
+    length,
+    min_release_size,
+    r);
+}
+
+
+bool bluestore_blob_t::put_ref_external(
+  bluestore_extent_ref_map_t& ref_map,
+  uint64_t offset,
+  uint64_t length,
+  uint64_t min_release_size,
+  vector<bluestore_pextent_t> *r)
+{
   vector<bluestore_pextent_t> logical;
   ref_map.put(offset, length, &logical);
 
@@ -580,12 +596,12 @@ void bluestore_blob_t::put_ref(
     extents.resize(1);
     extents[0].offset = bluestore_pextent_t::INVALID_OFFSET;
     extents[0].length = pos;
-    return;
+    return true;
   }
 
   // we cannot do partial deallocation on compressed blobs
   if (has_flag(FLAG_COMPRESSED)) {
-    return;
+    return false;
   }
 
   // we cannot release something smaller than our csum chunk size
@@ -675,6 +691,7 @@ void bluestore_blob_t::put_ref(
     vb.flush();
     extents.swap(vb.v);
   }
+  return false;
 }
 
 void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
