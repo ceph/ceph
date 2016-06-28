@@ -68,6 +68,8 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
   assert(ret == 0);
   c->set_rule_name(ruleno, "data");
 
+  c->finalize();
+
   if (false) {
     Formatter *f = Formatter::create("json-pretty");
     f->open_object_section("crush_map");
@@ -291,6 +293,8 @@ TEST(CRUSH, straw_zero) {
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(1, ruleset1);
 
+  c->finalize();
+
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
@@ -382,6 +386,8 @@ TEST(CRUSH, straw_same) {
     jf.flush(cout);
   }
 
+  c->finalize();
+
   vector<int> sum0(n, 0), sum1(n, 0);
   vector<unsigned> reweight(n, 0x10000);
   int different = 0;
@@ -450,6 +456,8 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   }
   totalweight /= (double)0x10000;
   double avgweight = totalweight / n;
+
+  c->finalize();
 
   int total = 1000000;
   for (int i=0; i<total; ++i) {
@@ -590,6 +598,8 @@ TEST(CRUSH, straw2_reweight) {
   }
   totalweight /= (double)0x10000;
   double avgweight = totalweight / n;
+
+  c->finalize();
 
   int total = 1000000;
   for (int i=0; i<total; ++i) {

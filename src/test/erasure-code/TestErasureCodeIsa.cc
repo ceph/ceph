@@ -905,6 +905,8 @@ TEST_F(IsaErasureCodeTest, create_ruleset)
     }
   }
 
+  c->finalize();
+
   {
     stringstream ss;
     ErasureCodeIsaDefault isa(tcache);

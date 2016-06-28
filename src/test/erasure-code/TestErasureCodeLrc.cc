@@ -130,6 +130,8 @@ TEST(ErasureCodeTest, create_ruleset)
     }
   }
 
+  c->finalize();
+
   ErasureCodeLrc lrc(g_conf->erasure_code_dir);
   EXPECT_EQ(0, lrc.create_ruleset("rule1", *c, &cerr));
 
