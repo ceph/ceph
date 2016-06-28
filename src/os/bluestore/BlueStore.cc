@@ -6097,7 +6097,8 @@ void BlueStore::_wctx_finish(
   WriteContext *wctx)
 {
   dout(10) << __func__ << " lex_old " << wctx->lex_old << dendl;
-  for (auto &l : wctx->lex_old) {
+  for (auto &lo : wctx->lex_old) {
+    bluestore_lextent_t& l = lo.second;
     Blob *b = c->get_blob(o, l.blob);
     vector<bluestore_pextent_t> r;
     bool compressed = b->blob.is_compressed();

@@ -931,7 +931,7 @@ int bluestore_onode_t::compress_extent_map()
 void bluestore_onode_t::punch_hole(
   uint64_t offset,
   uint64_t length,
-  vector<bluestore_lextent_t> *deref)
+  vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
 {
   auto p = seek_lextent(offset);
   uint64_t end = offset + length;
@@ -944,10 +944,12 @@ void bluestore_onode_t::punch_hole(
 	// split and deref middle
 	uint64_t front = offset - p->first;
 	deref->emplace_back(
-	  bluestore_lextent_t(
-	    p->second.blob,
-	    p->second.offset + front,
-	    length));
+          std::make_pair(
+            offset,
+            bluestore_lextent_t(
+              p->second.blob,
+              p->second.offset + front,
+              length)));
 	extent_map[end] = bluestore_lextent_t(
 	  p->second.blob,
 	  p->second.offset + front + length,
@@ -956,13 +958,15 @@ void bluestore_onode_t::punch_hole(
 	break;
       } else {
 	// deref tail
-	assert(p->first + p->second.length > offset); // else bug in find_lextent
+	assert(p->first + p->second.length > offset); // else bug in seek_lextent
 	uint64_t keep = offset - p->first;
 	deref->emplace_back(
-	  bluestore_lextent_t(
-	    p->second.blob,
-	    p->second.offset + keep,
-	    p->second.length - keep));
+          std::make_pair(
+            offset,
+            bluestore_lextent_t(
+              p->second.blob,
+              p->second.offset + keep,
+              p->second.length - keep)));
 	p->second.length = keep;
 	++p;
 	continue;
@@ -970,17 +974,19 @@ void bluestore_onode_t::punch_hole(
     }
     if (p->first + p->second.length <= end) {
       // deref whole lextent
-      deref->push_back(p->second);
+      deref->push_back(std::make_pair(p->first, p->second));
       extent_map.erase(p++);
       continue;
     }
     // deref head
     uint64_t keep = (p->first + p->second.length) - end;
     deref->emplace_back(
-      bluestore_lextent_t(
-	p->second.blob,
-	p->second.offset,
-	p->second.length - keep));
+      std::make_pair(
+        p->first,
+        bluestore_lextent_t(
+          p->second.blob,
+          p->second.offset,
+          p->second.length - keep)));
     extent_map[end] = bluestore_lextent_t(
       p->second.blob,
       p->second.offset + p->second.length - keep,
@@ -993,7 +999,7 @@ void bluestore_onode_t::punch_hole(
 void bluestore_onode_t::set_lextent(uint64_t offset,
                    const bluestore_lextent_t& lext,
                    bluestore_blob_t* b,
-                   vector<bluestore_lextent_t> *deref)
+                   vector<std::pair<uint64_t, bluestore_lextent_t> >*deref)
 {
   punch_hole(offset, lext.length, deref);
   extent_map[offset] = lext;
