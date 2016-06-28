@@ -238,7 +238,11 @@ void MDSRankDispatcher::shutdown()
   progress_thread.shutdown();
 
   // shut down messenger
+  // release mds_lock first because messenger thread might call 
+  // MDSDaemon::ms_handle_reset which will try to hold mds_lock
+  mds_lock.Unlock();
   messenger->shutdown();
+  mds_lock.Lock();
 
   // Workaround unclean shutdown: HeartbeatMap will assert if
   // worker is not removed (as we do in ~MDS), but ~MDS is not
