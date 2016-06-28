@@ -120,6 +120,14 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
+  //raw reference insertion that assumes no conflicts/interference with the existing references
+  void fill(uint32_t offset, uint32_t len, int refs = 1) {
+    auto p = ref_map.insert(
+        map<uint32_t,record_t>::value_type(offset,
+                                           record_t(len, refs))).first;
+    _maybe_merge_left(p);
+  }
+
   void get(uint32_t offset, uint32_t len);
   void put(uint32_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
