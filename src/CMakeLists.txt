@@ -25,6 +25,16 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE) 
 endif()
 
+if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
+  # we use assert(3) for testing, so scrub the -DNDEBUG defined by default
+  string(TOUPPER "${CMAKE_BUILD_TYPE}" build_type_upper)
+  foreach(flags
+      CMAKE_CXX_FLAGS_${build_type_upper}
+      CMAKE_C_FLAGS_${build_type_upper})
+    string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " " "${flags}" "${${flags}}")
+  endforeach()
+endif()
+
 include(CheckCCompilerFlag)
 CHECK_C_COMPILER_FLAG("-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
