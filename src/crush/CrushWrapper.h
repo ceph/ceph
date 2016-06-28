@@ -1091,23 +1091,25 @@ public:
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
     int scratch[maxout * 3];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
+    char work[crush->working_size];
+    crush_init_workspace(crush, work);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
+			       weight.size(), work, scratch);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
-  
+
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
-   
-    assert(crush);    
+    assert(crush);
 
     __u32 i;
     for (i = 0; i < crush->max_rules; i++) {
       if (crush->rules[i] &&
-          crush->rules[i]->mask.ruleset == ruleset &&
-          crush->rules[i]->mask.type == type) {
+	  crush->rules[i]->mask.ruleset == ruleset &&
+	  crush->rules[i]->mask.type == type) {
 
         if (crush->rules[i]->mask.min_size <= size &&
             crush->rules[i]->mask.max_size >= size) {
