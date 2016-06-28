@@ -156,6 +156,8 @@ private:
                     Context *on_safe);
   void handle_event(const SnapLimitEvent &event, Context *on_ready,
 		    Context *on_safe);
+  void handle_event(const AioWriteSameEvent &event, Context *on_ready,
+                    Context *on_safe);
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 

@@ -326,6 +326,27 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
 }
 
 template <typename I>
+void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
+                             Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": AIO writesame event" << dendl;
+
+  bufferlist data = event.data;
+  bool flush_required;
+  AioCompletion *aio_comp = create_aio_modify_completion(on_ready, on_safe,
+                                                         &flush_required);
+  AioImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp, event.offset,
+                                event.length, data.c_str(), data.length(), 0);
+  if (flush_required) {
+    m_lock.Lock();
+    AioCompletion *flush_comp = create_aio_flush_completion(nullptr);
+    m_lock.Unlock();
+
+    AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
+  }
+}
+
+template <typename I>
 void Replay<I>::handle_event(const journal::AioFlushEvent &event,
 			     Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;

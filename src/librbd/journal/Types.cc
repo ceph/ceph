@@ -100,6 +100,23 @@ void AioWriteEvent::dump(Formatter *f) const {
   f->dump_unsigned("length", length);
 }
 
+void AioWriteSameEvent::encode(bufferlist& bl) const {
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  ::encode(data, bl);
+}
+
+void AioWriteSameEvent::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(offset, it);
+  ::decode(length, it);
+  ::decode(data, it);
+}
+
+void AioWriteSameEvent::dump(Formatter *f) const {
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
 void AioFlushEvent::encode(bufferlist& bl) const {
 }
 
@@ -294,6 +311,8 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_DEMOTE:
     event = DemoteEvent();
     break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    event = AioWriteSameEvent();
   default:
     event = UnknownEvent();
     break;
