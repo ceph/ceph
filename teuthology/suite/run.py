@@ -418,7 +418,7 @@ class Run(object):
         # if not, do it once
         backtrack = 0
         limit = self.args.newest
-        while backtrack < limit:
+        while backtrack <= limit:
             jobs_missing_packages, jobs_to_schedule = \
                 self.collect_jobs(arch, configs, self.args.newest)
             if jobs_missing_packages and self.args.newest:
