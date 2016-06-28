@@ -274,11 +274,7 @@ int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& te
   }
 
   ep.linked = false;
-  ret = store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), &attrs);
-  if (ret < 0)
-    return ret;
-
-  return ret;
+  return store->put_bucket_entrypoint_info(tenant_name, bucket_name, ep, false, ot, real_time(), &attrs);
 }
 
 int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
@@ -447,9 +443,7 @@ int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& b
 
   rgw_obj obj(bucket, key);
 
-  int ret = store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
-
-  return ret;
+  return store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
 }
 
 int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
@@ -479,23 +473,23 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 
   if (delete_children) {
     int max = 1000;
-    ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
-    if (ret < 0)
-      return ret;
 
-    while (!objs.empty()) {
+    do {
+      objs.clear();
+
+      ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
+      if (ret < 0)
+        return ret;
+
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (; it != objs.end(); ++it) {
         ret = rgw_remove_object(store, info, bucket, (*it).key);
         if (ret < 0)
           return ret;
       }
-      objs.clear();
 
-      ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
-      if (ret < 0)
-        return ret;
-    }
+    } while (!objs.empty());
+
   }
 
   ret = rgw_bucket_sync_user_stats(store, bucket.tenant, bucket.name);
