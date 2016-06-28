@@ -1241,6 +1241,16 @@ private:
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
+
+  //helpers to handle blob references depending on the blob nature: shared or private
+  void get_ref(bluestore_lextent_t& lext, Blob* b);
+  bool put_ref(OnodeRef o,
+               uint64_t offset,
+               bluestore_lextent_t& lext,
+               Blob* b,
+               uint64_t min_alloc_size,
+               vector<bluestore_pextent_t>* r);
+
 public:
   void _txc_aio_finish(void *p) {
     _txc_state_proc(static_cast<TransContext*>(p));
@@ -1500,7 +1510,7 @@ private:
     uint64_t comp_blob_size = 0; ///< target compressed blob size
     unsigned csum_order = 0;     ///< target checksum chunk order
 
-    vector<bluestore_lextent_t> lex_old;       ///< must deref blobs
+    vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old;       ///< must deref blobs
 
     struct write_item {
       Blob *b;
