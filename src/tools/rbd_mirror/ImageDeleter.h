@@ -24,6 +24,8 @@
 #include "common/Timer.h"
 #include "types.h"
 
+class ContextWQ;
+
 namespace rbd {
 namespace mirror {
 
@@ -36,7 +38,8 @@ class ImageDeleter {
 public:
   static const int EISPRM = 1000;
 
-  ImageDeleter(RadosRef local_cluster, SafeTimer *timer, Mutex *timer_lock);
+  ImageDeleter(RadosRef local_cluster, ContextWQ *work_queue,
+               SafeTimer *timer, Mutex *timer_lock);
   ~ImageDeleter();
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
@@ -48,6 +51,7 @@ public:
   void wait_for_scheduled_deletion(const std::string& image_name,
                                    Context *ctx,
                                    bool notify_on_failed_retry=true);
+  void cancel_waiter(const std::string& image_name);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
@@ -99,6 +103,8 @@ private:
 
   RadosRef m_local;
   atomic_t m_running;
+
+  ContextWQ *m_work_queue;
 
   std::deque<std::unique_ptr<DeleteInfo> > m_delete_queue;
   Mutex m_delete_lock;
