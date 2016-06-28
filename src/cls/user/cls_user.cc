@@ -275,7 +275,12 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   }
 
 
-  entry.bucket_count = 1;
+  if (entry.user_stats_sync){
+    //we set user_stats_sync to true when we create a bucket
+    // as far as nobody overrides the stats are handled correctly
+    // if anyone else overrides this then the bucket header stats are no longer valid
+    dec_header_stats(&header.stats, entry, true);
+  }
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
@@ -283,11 +288,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   if (ret < 0)
     return ret;
 
-  // TODO: find better ways to handle this user_stats_sync isn't set in all
-  // buckets but we need to always decrement the header count anyway since we
-  // use that instead of all the entries
-  dec_header_stats(&header.stats, entry, true);
-
+  // write the header stats to disk
   CLS_LOG(20, "header: total bytes=%lld entries=%lld buckets=%lld",
 	  (long long)header.stats.total_bytes, (long long)header.stats.total_entries,
 	  (long long)header.stats.total_buckets);
