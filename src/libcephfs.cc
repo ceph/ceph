@@ -467,7 +467,8 @@ extern "C" int ceph_opendir(struct ceph_mount_info *cmount,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->opendir(name, (dir_result_t **)dirpp);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->opendir(name, (dir_result_t **)dirpp, perms);
 }
 
 extern "C" int ceph_closedir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
@@ -1558,8 +1559,9 @@ extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
 			       struct ceph_dir_result **dirpp,
 			       int uid, int gid)
 {
+  UserPerm perms(uid, gid);
   return (cmount->get_client()->ll_opendir(in, O_RDONLY, (dir_result_t**) dirpp,
-					   uid, gid));
+					   perms));
 }
 
 extern "C" int ceph_ll_releasedir(class ceph_mount_info *cmount,

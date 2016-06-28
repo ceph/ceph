@@ -737,7 +737,7 @@ private:
   // some readdir helpers
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct stat *st, int stmask, off_t off);
 
-  int _opendir(Inode *in, dir_result_t **dirpp, int uid=-1, int gid=-1);
+  int _opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms);
   void _readdir_drop_dirp_buffer(dir_result_t *dirp);
   bool _readdir_have_frag(dir_result_t *dirp);
   void _readdir_next_frag(dir_result_t *dirp);
@@ -976,7 +976,7 @@ public:
   void getcwd(std::string& cwd);
 
   // namespace ops
-  int opendir(const char *name, dir_result_t **dirpp);
+  int opendir(const char *name, dir_result_t **dirpp, const UserPerm& perms);
   int closedir(dir_result_t *dirp);
 
   /**
@@ -1136,7 +1136,8 @@ public:
 		  int flags, int uid=-1, int gid=-1);
   int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
   int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(Inode *in, int flags, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  int ll_opendir(Inode *in, int flags, dir_result_t **dirpp,
+		 const UserPerm& perms);
   int ll_releasedir(dir_result_t* dirp);
   int ll_fsyncdir(dir_result_t* dirp);
   int ll_readlink(Inode *in, char *buf, size_t bufsize, int uid = -1, int gid = -1);

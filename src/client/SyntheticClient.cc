@@ -1140,7 +1140,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
       dir_result_t *dirp;
-      client->opendir(a, &dirp);
+      client->opendir(a, &dirp, perms);
       if (dirp) open_dirs[b] = dirp;
     } else if (strcmp(op, "closedir") == 0) {
       int64_t a = t.get_int();
@@ -1354,7 +1354,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       dir_result_t *dirp;
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	if (client->ll_opendir(i1, O_RDONLY, &dirp) == 0)
+	if (client->ll_opendir(i1, O_RDONLY, &dirp, perms) == 0)
 	  ll_dirs[r] = dirp;
 	client->ll_put(i1);
       }
