@@ -327,13 +327,6 @@
 	rocksdb thread crap
 	Memcheck:Leak
 	...
-	fun:rocksdb::ThreadLocalPtr::StaticMeta::SetHandler*
-	...
-}
-{
-	rocksdb thread crap
-	Memcheck:Leak
-	...
-	fun:rocksdb::ThreadLocalPtr::Instance*
+	fun:*ThreadLocalPtr*
 	...
 }
