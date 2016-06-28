@@ -854,3 +854,197 @@ TEST(bluestore_onode_t, punch_hole)
   ASSERT_EQ(30u, r[2].length);
   r.clear();
 }
+
+TEST(bluestore_onode_t, insert_remove_lextent)
+{
+  bluestore_onode_t on;
+  vector<bluestore_lextent_t> r;
+  vector<bluestore_pextent_t> rp;
+
+  bluestore_pextent_t pext1(1, 0x10000);
+  bluestore_pextent_t pext2(2, 0x10000);
+  bluestore_pextent_t pext3(3, 0x10000);
+
+  bluestore_blob_t blob(bluestore_blob_t::FLAG_HAS_REFMAP);
+  blob.extents.push_back(pext1);
+
+  bluestore_blob_t blob2, blob3;
+  blob2.clear_flag(bluestore_blob_t::FLAG_HAS_REFMAP);
+  blob2.extents.push_back(pext2);
+  blob3.clear_flag(bluestore_blob_t::FLAG_HAS_REFMAP);
+  blob3.extents.push_back(pext3);
+
+  bool empty;
+
+  bluestore_lextent_t lextent(1, 0, 100);
+  on.set_lextent(0, lextent, &blob, &r);
+
+  ASSERT_EQ(1u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  r.clear();
+
+  lextent.blob = 2;
+  lextent.offset = 1;
+  lextent.length = 99;
+  on.set_lextent(101, lextent, &blob2, &r);
+
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  r.clear();
+
+  //overwrite lextent/blob that doesn't have REF_MAP
+  lextent.blob = 3;
+  lextent.offset = 1;
+  lextent.length = 99;
+  on.set_lextent(101, lextent, &blob3, &r);
+
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(1u, r[0].offset);
+  ASSERT_EQ(99u, r[0].length);
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //deref overwritten lextent
+  empty = on.deref_lextent(100, r[0], &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext2.offset == rp[0].offset);
+  ASSERT_TRUE(pext2.length == rp[0].length);
+
+  r.clear();
+  rp.clear();
+
+  //overwrite lextent/blob that has a REF_MAP with one that doesn't
+  lextent.blob = 2;
+  lextent.offset = 0;
+  lextent.length = 100;
+  blob2.extents.clear(); //for sure
+  blob2.extents.push_back(pext2);
+  on.set_lextent(0, lextent, &blob2, &r);
+
+  ASSERT_EQ(2u, on.extent_map.size());
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(1, r[0].blob);
+  ASSERT_EQ(0u, r[0].offset);
+  ASSERT_EQ(100u, r[0].length);
+  ASSERT_TRUE(blob.ref_map.contains(0,100));
+  ASSERT_TRUE(blob2.ref_map.empty());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //deref overwritten lextent
+  empty = on.deref_lextent(0, r[0], &blob, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext1.offset == rp[0].offset);
+  ASSERT_TRUE(pext1.length == rp[0].length);
+  ASSERT_TRUE(blob.ref_map.empty());
+
+  r.clear();
+  rp.clear();
+
+  //append an lextent pointing to already present blob 3
+  lextent.blob = 3;
+  lextent.offset = 200;
+  lextent.length = 50;
+  on.set_lextent(300, lextent, &blob3, &r);
+
+  ASSERT_EQ(3u, on.extent_map.size());
+  ASSERT_EQ(0u, r.size());
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  //deref lextent with underlying blob having multiple references (no ref_map case)
+  on.punch_hole(100, 100, &r);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(3, r[0].blob);
+  ASSERT_EQ(1u, r[0].offset);
+  ASSERT_EQ(99u, r[0].length);
+
+  empty = on.deref_lextent(100, r[0], &blob3, 0x10000, &rp);
+  ASSERT_FALSE(empty);
+  ASSERT_EQ(0u, rp.size());
+
+  r.clear();
+  rp.clear();
+
+  //deref lextent with underlying blob having single reference (no ref_map case)
+  on.punch_hole(300, 100, &r);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(3, r[0].blob);
+  ASSERT_EQ(200u, r[0].offset);
+  ASSERT_EQ(50u, r[0].length);
+
+  empty = on.deref_lextent(300, r[0], &blob3, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext3.offset == rp[0].offset);
+  ASSERT_TRUE(pext3.length == rp[0].length);
+  ASSERT_TRUE(blob3.ref_map.empty());
+
+  r.clear();
+  rp.clear();
+
+  //deref lextent partially (no ref_map case)
+  on.punch_hole(20, 10, &r);
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(20u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+
+  empty = on.deref_lextent(20, r[0], &blob2, 0x10000, &rp);
+  ASSERT_FALSE(empty);
+  ASSERT_EQ(0u, rp.size());
+
+  r.clear();
+  rp.clear();
+
+  //deref lextent partially once again(no ref_map case)
+  on.punch_hole(70, 10, &r);
+  ASSERT_EQ(1u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(70u, r[0].offset);
+  ASSERT_EQ(10u, r[0].length);
+
+  empty = on.deref_lextent(70, r[0], &blob2, 0x10000, &rp);
+  ASSERT_FALSE(empty);
+  ASSERT_EQ(0u, rp.size());
+
+  r.clear();
+  rp.clear();
+
+  //deref fragmented lextent totally (no ref_map case)
+  on.punch_hole(0, 100, &r);
+  ASSERT_EQ(3u, r.size());
+  ASSERT_EQ(2, r[0].blob);
+  ASSERT_EQ(0u, r[0].offset);
+  ASSERT_EQ(20u, r[0].length);
+  ASSERT_EQ(2, r[1].blob);
+  ASSERT_EQ(30u, r[1].offset);
+  ASSERT_EQ(40u, r[1].length);
+  ASSERT_EQ(2, r[2].blob);
+  ASSERT_EQ(80u, r[2].offset);
+  ASSERT_EQ(20u, r[2].length);
+
+  empty = on.deref_lextent(0, r[0], &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(1u, rp.size());
+  ASSERT_TRUE(pext2.offset == rp[0].offset);
+  ASSERT_TRUE(pext2.length == rp[0].length);
+  rp.clear();
+
+  empty = on.deref_lextent(30, r[1], &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(0u, rp.size()); //no more pextents for the blob, already deallocated above
+  rp.clear();
+
+  empty = on.deref_lextent(80, r[2], &blob2, 0x10000, &rp);
+  ASSERT_TRUE(empty);
+  ASSERT_EQ(0u, rp.size()); //no more pextents for the blob, already deallocated above
+
+  r.clear();
+  rp.clear();
+}
