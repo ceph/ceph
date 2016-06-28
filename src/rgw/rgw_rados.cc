@@ -6825,8 +6825,10 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
   }
 
   ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb());
-  if (ret < 0)
+  if (ret < 0) {
+    delete out_stream_req;
     return ret;
+  }
 
   ret = rest_master_conn->complete_request(out_stream_req, etag, mtime);
   if (ret < 0)
