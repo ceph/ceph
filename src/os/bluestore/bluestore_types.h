@@ -155,6 +155,7 @@ struct bluestore_blob_t {
     FLAG_COMPRESSED = 2,      ///< blob is compressed
     FLAG_CSUM = 4,            ///< blob has checksums
     FLAG_HAS_UNUSED = 8,      ///< blob has unused map
+    FLAG_HAS_REFMAP  = 16,    ///< blob has non-empty reference map
   };
   static string get_flags_string(unsigned flags);
 
@@ -235,7 +236,9 @@ struct bluestore_blob_t {
   typedef std::bitset<sizeof(unused_uint_t) * 8> unused_t;
   unused_t unused;                    ///< portion that has never been written to
 
-  bluestore_blob_t(uint32_t f = 0) : flags(f) {}
+  bluestore_blob_t(uint32_t f = 0) : flags(f) {
+    set_flag(FLAG_HAS_REFMAP);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -270,6 +273,9 @@ struct bluestore_blob_t {
   }
   bool has_unused() const {
     return has_flag(FLAG_HAS_UNUSED);
+  }
+  bool has_refmap() const {
+    return has_flag(FLAG_HAS_REFMAP);
   }
 
   /// return chunk (i.e. min readable block) size for the blob
@@ -375,8 +381,10 @@ struct bluestore_blob_t {
     }
   }
 
+  /// get logical references
+  void get_ref(uint64_t offset, uint64_t length);
   /// put logical references, and get back any released extents
-  void put_ref(uint64_t offset, uint64_t length,  uint64_t min_alloc_size,
+  void put_ref(uint64_t offset, uint64_t length, uint64_t min_alloc_size,
 	       vector<bluestore_pextent_t> *r);
 
   void map(uint64_t x_off, uint64_t x_len,

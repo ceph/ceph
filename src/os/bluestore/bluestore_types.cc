@@ -423,6 +423,11 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "has_unused";
   }
+  if (flags & FLAG_HAS_REFMAP) {
+    if (s.length())
+      s += '+';
+    s += "has_refmap";
+  }
 
   return s;
 }
@@ -440,7 +445,9 @@ void bluestore_blob_t::encode(bufferlist& bl) const
     small_encode_varint(csum_chunk_order, bl);
     small_encode_buf_lowz(csum_data, bl);
   }
-  ::encode(ref_map, bl);
+  if (has_refmap()) {
+    ::encode(ref_map, bl);
+  }
   if (has_unused()) {
     ::encode( unused_uint_t(unused.to_ullong()), bl);
   }
@@ -465,7 +472,9 @@ void bluestore_blob_t::decode(bufferlist::iterator& p)
     csum_type = CSUM_NONE;
     csum_chunk_order = 0;
   }
-  ::decode(ref_map, p);
+  if (has_refmap()) {
+    ::decode(ref_map, p);
+  }
   if (has_unused()) {
     unused_uint_t val;
     ::decode(val, p);
@@ -532,12 +541,21 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   return out;
 }
 
+void bluestore_blob_t::get_ref(
+  uint64_t offset,
+  uint64_t length)
+{
+  assert(has_refmap());
+  ref_map.get(offset, length);
+}
+
 void bluestore_blob_t::put_ref(
   uint64_t offset,
   uint64_t length,
   uint64_t min_release_size,
   vector<bluestore_pextent_t> *r)
 {
+  assert(has_refmap());
   vector<bluestore_pextent_t> logical;
   ref_map.put(offset, length, &logical);
 
