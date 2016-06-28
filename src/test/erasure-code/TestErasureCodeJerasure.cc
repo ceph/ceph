@@ -307,6 +307,8 @@ TEST(ErasureCodeTest, create_ruleset)
     }
   }
 
+  c->finalize();
+
   {
     stringstream ss;
     ErasureCodeJerasureReedSolomonVandermonde jerasure;
