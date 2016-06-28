@@ -58,6 +58,7 @@ private:
   void set_sources(const ImageIds &image_ids);
 
   void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                            const std::string &image_id,
                             const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 

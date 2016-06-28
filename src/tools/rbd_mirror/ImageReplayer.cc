@@ -1348,15 +1348,6 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
                                              m_local_image_name,
                                              m_global_image_id);
       m_stopping_for_resync = false;
-
-      FunctionContext *ctx = new FunctionContext(
-          [this, r, on_start] (int r) {
-            handle_shut_down(r, on_start);
-          }
-      );
-      m_image_deleter->wait_for_scheduled_deletion(m_local_image_name,
-                                                   ctx, false);
-      return;
     }
   }
 
