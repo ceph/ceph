@@ -45,9 +45,6 @@ class filepath;
 
 class MonClient;
 
-class Objecter;
-class Filer;
-
 class Server;
 class Locker;
 class MDCache;
