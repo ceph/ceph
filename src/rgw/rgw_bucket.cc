@@ -1343,8 +1343,6 @@ int RGWDataChangesLog::renew_entries()
   real_time ut = real_clock::now();
   for (iter = entries.begin(); iter != entries.end(); ++iter) {
     const rgw_bucket_shard& bs = iter->first;
-    const rgw_bucket& bucket = bs.bucket;
-    int shard_id = bs.shard_id;
 
     int index = choose_oid(bs);
 
@@ -1353,19 +1351,14 @@ int RGWDataChangesLog::renew_entries()
     rgw_data_change change;
     bufferlist bl;
     change.entity_type = ENTITY_TYPE_BUCKET;
-    change.key = bucket.name + ":" + bucket.bucket_id;
-    if (shard_id >= 0) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), ":%d", shard_id);
-      change.key += buf;
-    }
+    change.key = bs.get_key();
     change.timestamp = ut;
     ::encode(change, bl);
 
-    store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
+    store->time_log_prepare_entry(entry, ut, section, change.key, bl);
 
     m[index].first.push_back(bs);
-    m[index].second.push_back(entry);
+    m[index].second.emplace_back(std::move(entry));
   }
 
   map<int, pair<list<rgw_bucket_shard>, list<cls_log_entry> > >::iterator miter;
@@ -1493,12 +1486,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
     bufferlist bl;
     rgw_data_change change;
     change.entity_type = ENTITY_TYPE_BUCKET;
-    change.key = bucket.name + ":" + bucket.bucket_id;
-    if (shard_id >= 0) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), ":%d", shard_id);
-      change.key += buf;
-    }
+    change.key = bs.get_key();
     change.timestamp = now;
     ::encode(change, bl);
     string section;
@@ -1675,12 +1663,9 @@ void RGWDataChangesLog::ChangesRenewThread::stop()
   cond.Signal();
 }
 
-void RGWDataChangesLog::mark_modified(int shard_id, rgw_bucket_shard& bs)
+void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
 {
-  string key = bs.bucket.name + ":" + bs.bucket.bucket_id;
-  char buf[16];
-  snprintf(buf, sizeof(buf), ":%d", bs.shard_id);
-  key.append(buf);
+  auto key = bs.get_key();
   modified_lock.get_read();
   map<int, set<string> >::iterator iter = modified_shards.find(shard_id);
   if (iter != modified_shards.end()) {

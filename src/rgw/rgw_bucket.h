@@ -487,7 +487,7 @@ public:
   int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
                list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
 
-  void mark_modified(int shard_id, rgw_bucket_shard& bs);
+  void mark_modified(int shard_id, const rgw_bucket_shard& bs);
   void read_clear_modified(map<int, set<string> > &modified);
 
   bool going_down();
