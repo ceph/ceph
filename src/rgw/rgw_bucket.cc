@@ -110,9 +110,7 @@ int rgw_read_user_buckets(RGWRados * store,
   buckets.clear();
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  bufferlist bl;
   rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
-  bufferlist header;
   list<cls_user_bucket_entry> entries;
 
   bool truncated = false;
