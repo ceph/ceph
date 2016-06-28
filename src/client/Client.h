@@ -993,7 +993,8 @@ public:
   int readdir_r(dir_result_t *dirp, struct dirent *de);
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct stat *st, int *stmask);
 
-  int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
+  int getdir(const char *relpath, list<string>& names,
+	     const UserPerm& perms);  // get the whole dir at once.
 
   /**
    * Returns the length of the buffer that got filled in, or -errno.

@@ -7499,7 +7499,8 @@ static int _getdir_cb(void *p, struct dirent *de, struct stat *st, int stmask, o
   return 0;
 }
 
-int Client::getdir(const char *relpath, list<string>& contents)
+int Client::getdir(const char *relpath, list<string>& contents,
+		   const UserPerm& perms)
 {
   ldout(cct, 3) << "getdir(" << relpath << ")" << dendl;
   {
