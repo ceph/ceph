@@ -528,15 +528,24 @@ class CephFSMount(object):
         proc = self._run_python(pyscript)
         proc.wait()
 
-    def path_to_ino(self, fs_path):
+    def path_to_ino(self, fs_path, follow_symlinks=True):
         abs_path = os.path.join(self.mountpoint, fs_path)
 
-        pyscript = dedent("""
-            import os
-            import stat
+        if follow_symlinks:
+            pyscript = dedent("""
+                import os
+                import stat
 
-            print os.stat("{path}").st_ino
-            """).format(path=abs_path)
+                print os.stat("{path}").st_ino
+                """).format(path=abs_path)
+        else:
+            pyscript = dedent("""
+                import os
+                import stat
+
+                print os.lstat("{path}").st_ino
+                """).format(path=abs_path)
+
         proc = self._run_python(pyscript)
         proc.wait()
         return int(proc.stdout.getvalue().strip())

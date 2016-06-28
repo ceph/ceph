@@ -1,0 +1,7 @@
+tasks:
+- install:
+- ceph:
+- ceph-fuse:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephfs.test_dump_tree
