@@ -8,7 +8,6 @@
 #include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
-#include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
@@ -17,16 +16,17 @@
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include <algorithm>
-#include <iosfwd>
 #include <list>
 #include <string>
 #include <unordered_map>
 
-class Context;
 class ContextWQ;
 class SafeTimer;
 namespace journal {
 class Journaler;
+}
+namespace librados {
+  class IoCtx;
 }
 
 namespace librbd {

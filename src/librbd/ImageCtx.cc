@@ -27,6 +27,7 @@
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
+#include "librbd/LibrbdWriteback.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>

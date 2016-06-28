@@ -14,6 +14,8 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "include/rados/librados.hpp"
+
 #include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd

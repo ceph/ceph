@@ -15,14 +15,10 @@
 
 #include <errno.h>
 
-#include "common/Cond.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/snap_types.h"
-#include "common/perf_counters.h"
 #include "common/TracepointProvider.h"
 #include "include/Context.h"
-#include "osdc/ObjectCacher.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequestWQ.h"
