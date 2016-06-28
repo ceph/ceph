@@ -268,8 +268,10 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
   Inode *in = cfuse->iget(ino);
   void *dirp;
 
+  UserPerm perms(ctx->uid, ctx->gid);
+
   int r = cfuse->client->ll_opendir(in, fi->flags, (dir_result_t **)&dirp,
-				    ctx->uid, ctx->gid);
+				    perms);
   if (r >= 0) {
     fi->fh = (uint64_t)dirp;
     fuse_reply_open(req, fi);

@@ -6889,34 +6889,34 @@ int Client::flock(int fd, int operation, uint64_t owner)
   return _flock(f, operation, owner);
 }
 
-int Client::opendir(const char *relpath, dir_result_t **dirpp) 
+int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "opendir" << std::endl;
   tout(cct) << relpath << std::endl;
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, perms, true);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    int r = may_open(in.get(), O_RDONLY);
+    int r = may_open(in.get(), O_RDONLY, perms);
     if (r < 0)
       return r;
   }
-  r = _opendir(in.get(), dirpp);
+  r = _opendir(in.get(), dirpp, perms);
   tout(cct) << (unsigned long)*dirpp << std::endl;
   return r;
 }
 
-int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid) 
+int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
 {
   if (!in->is_dir())
     return -ENOTDIR;
   *dirpp = new dir_result_t(in);
   opened_dirs.insert(*dirpp);
-  (*dirpp)->owner_uid = uid;
-  (*dirpp)->owner_gid = gid;
+  (*dirpp)->owner_uid = perms.uid();
+  (*dirpp)->owner_gid = perms.gid();
   ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
 }
@@ -7100,6 +7100,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->dirp = dirp;
   
   bufferlist dirbl;
+  // FIXME: is owner_uid safe, or can dirp get invoked with different perms?
   int res = make_request(req, dirp->owner_uid, dirp->owner_gid, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
@@ -7510,7 +7511,7 @@ int Client::getdir(const char *relpath, list<string>& contents,
   }
 
   dir_result_t *d;
-  int r = opendir(relpath, &d);
+  int r = opendir(relpath, &d, perms);
   if (r < 0)
     return r;
 
@@ -11249,7 +11250,7 @@ uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
 }
 
 int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
-		       int uid, int gid)
+		       const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11260,12 +11261,12 @@ int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
   tout(cct) << vino.ino.val << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_open(in, flags, uid, gid);
+    int r = may_open(in, flags, perms);
     if (r < 0)
       return r;
   }
 
-  int r = _opendir(in, dirpp, uid, gid);
+  int r = _opendir(in, dirpp, perms);
   tout(cct) << (unsigned long)*dirpp << std::endl;
 
   ldout(cct, 3) << "ll_opendir " << vino << " = " << r << " (" << *dirpp << ")"
