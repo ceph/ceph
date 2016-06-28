@@ -53,7 +53,8 @@ using namespace std;
 #include "common/sharedptr_registry.hpp"
 #include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
-#include "osd/mClockOpClassAdapter.h"
+#include "osd/mClockOpClassQueue.h"
+#include "osd/mClockClientQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
 
@@ -1649,7 +1650,8 @@ private:
   enum class io_queue {
     prioritized,
     weightedpriority,
-    mclock_opclass // may want other mclock variations later that include client
+    mclock_opclass,
+    mclock_client,
   };
   friend std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
 
@@ -1686,6 +1688,9 @@ private:
 	    } else if (io_queue::mclock_opclass == opqueue) {
 	      pqueue = std::unique_ptr
 		<ceph::mClockOpClassQueue>(new ceph::mClockOpClassQueue(cct));
+	    } else if (io_queue::mclock_client == opqueue) {
+	      pqueue = std::unique_ptr
+		<ceph::mClockClientQueue>(new ceph::mClockClientQueue(cct));
 	    }
 	  }
     };
@@ -2327,15 +2332,19 @@ protected:
 
   io_queue get_io_queue() const {
     if (cct->_conf->osd_op_queue == "debug_random") {
+      static io_queue index_lookup[] = { io_queue::prioritized,
+					 io_queue::weightedpriority,
+					 io_queue::mclock_opclass,
+					 io_queue::mclock_client };
       srand(time(NULL));
-      unsigned which = rand() % 3;
-      return 0 == which ?
-	io_queue::prioritized :
-	(1 == which ? io_queue::weightedpriority: io_queue::mclock_opclass);
+      unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
+      return index_lookup[which];
     } else if (cct->_conf->osd_op_queue == "wpq") {
       return io_queue::weightedpriority;
     } else if (cct->_conf->osd_op_queue == "mclock_opclass") {
       return io_queue::mclock_opclass;
+    } else if (cct->_conf->osd_op_queue == "mclock_client") {
+      return io_queue::mclock_client;
     } else {
       return io_queue::prioritized;
     }

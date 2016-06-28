@@ -22,7 +22,8 @@ set(osd_srcs
   osd_types.cc
   ECUtil.cc
   ExtentCache.cc
-  mClockOpClassAdapter.cc
+  mClockOpClassQueue.cc
+  mClockClientQueue.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osdc_osd_srcs})
 if(HAS_VTA)

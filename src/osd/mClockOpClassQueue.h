@@ -157,6 +157,7 @@ namespace ceph {
 
     static pg_queueable_visitor_t pg_queueable_visitor;
 
-    osd_op_type_t get_osd_op_type(const Request& request);  }; // class mClockOpClassQueue
+    osd_op_type_t get_osd_op_type(const Request& request);
+  }; // class mClockOpClassAdapter
 
 } // namespace ceph

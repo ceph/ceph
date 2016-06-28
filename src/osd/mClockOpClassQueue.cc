@@ -15,7 +15,7 @@
 
 #include <memory>
 
-#include "osd/mClockOpClassAdapter.h"
+#include "osd/mClockOpClassQueue.h"
 #include "common/dout.h"
 
 
