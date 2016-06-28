@@ -70,19 +70,10 @@ class Processor {
   uint64_t nonce;
   EventCallbackRef listen_handler;
 
-  class C_processor_accept : public EventCallback {
-    Processor *pro;
-
-   public:
-    explicit C_processor_accept(Processor *p): pro(p) {}
-    void do_request(int id) {
-      pro->accept();
-    }
-  };
+  class C_processor_accept;
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
-          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n);
   ~Processor() { delete listen_handler; };
 
   void stop();
