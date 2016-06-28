@@ -6021,7 +6021,7 @@ int BlueStore::_do_alloc_write(
 	final_length = newlen;
 	csum_length = newlen;
 	csum_order = ctz(newlen);
-	b->blob.set_compressed(rawlen);
+	b->blob.set_compressed(wi.blob_length, rawlen);
 	compressed = true;
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
