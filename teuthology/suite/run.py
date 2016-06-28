@@ -343,8 +343,7 @@ class Run(object):
 
             sha1 = self.base_config.sha1
             if config.suite_verify_ceph_hash:
-                full_job_config = dict()
-                deep_merge(full_job_config, self.base_config.to_dict())
+                full_job_config = copy.deepcopy(self.base_config.to_dict())
                 deep_merge(full_job_config, parsed_yaml)
                 flavor = util.get_install_task_flavor(full_job_config)
                 # Get package versions for this sha1, os_type and flavor. If
