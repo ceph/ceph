@@ -60,7 +60,7 @@ if test -f /etc/redhat-release ; then
     $SUDO yum install -y redhat-lsb-core
 fi
 
-if type apt-get > /dev/null 2>&1 ; then
+if type apt-get > /dev/null 2>&1 && [ ! type zypper > /dev/null 2>&1 ]; then
     $SUDO apt-get install -y lsb-release devscripts equivs
 fi
 
