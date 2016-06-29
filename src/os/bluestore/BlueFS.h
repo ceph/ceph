@@ -236,7 +236,7 @@ private:
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
-  void _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
+  int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
 
   int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
 			  uint64_t want_seq = 0);
@@ -359,9 +359,9 @@ public:
     std::lock_guard<std::mutex> l(lock);
     _flush_range(h, offset, length);
   }
-  void fsync(FileWriter *h) {
+  int fsync(FileWriter *h) {
     std::unique_lock<std::mutex> l(lock);
-    _fsync(h, l);
+    return _fsync(h, l);
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
 	   bufferlist *outbl, char *out) {

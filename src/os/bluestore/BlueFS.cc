@@ -1322,10 +1322,12 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   return 0;
 }
 
-void BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
+int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
-  _flush(h, true);
+  int r = _flush(h, true);
+  if (r < 0)
+     return r;
   uint64_t old_dirty_seq = h->file->dirty_seq;
   lock.unlock();
   wait_for_aio(h);
@@ -1338,6 +1340,7 @@ void BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
     assert(h->file->dirty_seq == 0 ||  // cleaned
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
+  return 0;
 }
 
 void BlueFS::flush_bdev()
