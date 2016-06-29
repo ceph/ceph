@@ -106,10 +106,6 @@ int EventCenter::init(int n, unsigned i)
 
   file_events.resize(n);
   nevent = n;
-  notify_handler = new C_handle_notify(this, cct),
-  r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-  if (r < 0)
-    return r;
   return 0;
 }
 
@@ -132,7 +128,8 @@ EventCenter::~EventCenter()
     ::close(notify_send_fd);
 
   delete driver;
-  delete notify_handler;
+  if (notify_handler)
+    delete notify_handler;
 }
 
 
@@ -144,6 +141,10 @@ void EventCenter::set_owner()
   global_centers->centers[idx] = this;
   owner = pthread_self();
   ldout(cct, 1) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
+
+  notify_handler = new C_handle_notify(this, cct);
+  int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+  assert(r == 0);
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
