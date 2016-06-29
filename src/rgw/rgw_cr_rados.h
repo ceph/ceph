@@ -685,10 +685,10 @@ class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
   
 public:
   RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		        const string& _bucket_name, const string& _bucket_id,
-                        RGWBucketInfo *_bucket_info) : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-                                                       bucket_name(_bucket_name), bucket_id(_bucket_id),
-                                                       bucket_info(_bucket_info), req(NULL) {}
+                             const rgw_bucket& bucket, RGWBucketInfo *_bucket_info)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+      bucket_name(bucket.name), bucket_id(bucket.bucket_id),
+      bucket_info(_bucket_info), req(NULL) {}
   ~RGWGetBucketInstanceInfoCR() {
     request_cleanup();
   }
