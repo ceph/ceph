@@ -516,7 +516,7 @@ AS_IF([test "x$with_radosgw" != xno],
               [AC_CHECK_LIB([curl], [curl_easy_init],
                [RADOSGW=1
 	        AC_CHECK_HEADER([fastcgi/fcgiapp.h],
-		 [AC_DEFINE([FASTCGI_INCLUDE_DIR], [1], [FastCGI headers are in /usr/include/fastcgi])])
+		 [RGW_CXXFLAGS="-I/usr/include/fastcgi"])
 	       ],
 	       [if test "x$with_radosgw" != "xcheck"; then
 		    AC_MSG_FAILURE([--with-radosgw was given but libcurl (libcurl-dev on debian) not found])
@@ -529,6 +529,7 @@ AS_IF([test "x$with_radosgw" != xno],
 	     [if test "x$with_radosgw" != "xcheck"; then
 		AC_MSG_FAILURE([--with-radosgw was given but libfcgi (libfcgi-dev on debian) not found])
 	     fi])])
+AC_SUBST(RGW_CXXFLAGS)
 AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 AS_IF([test "$RADOSGW" = "1"], [AC_DEFINE([WITH_RADOSGW], [1], [define if radosgw enabled])])
