@@ -5326,7 +5326,7 @@ bool MDCache::process_imported_caps()
 	assert(session);
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
 	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
-	  add_reconnected_cap(in, q->first, r->second);
+	  add_reconnected_cap(q->first, in->ino(), r->second);
 	  if (r->first >= 0) {
 	    if (cap->get_last_seq() == 0) // don't increase mseq if cap already exists
 	      cap->inc_mseq();
@@ -5428,10 +5428,13 @@ void MDCache::choose_lock_states_and_reconnect_caps()
     if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
       in->mark_dirty_rstat();
 
+    auto p = reconnected_caps.find(in->ino());
+
     int dirty_caps = 0;
-    map<inodeno_t, int>::iterator it = cap_imports_dirty.find(in->ino());
-    if (it != cap_imports_dirty.end())
-      dirty_caps = it->second;
+    if (p != reconnected_caps.end()) {
+      for (const auto &it : p->second)
+	dirty_caps |= it.second.dirty_caps;
+    }
     in->choose_lock_states(dirty_caps);
     dout(15) << " chose lock states on " << *in << dendl;
 
@@ -5439,7 +5442,6 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 
     check_realm_past_parents(realm);
 
-    auto p = reconnected_caps.find(in);
     if (p != reconnected_caps.end()) {
       bool missing_snap_parent = false;
       // also, make sure client's cap is in the correct snaprealm.
@@ -5593,7 +5595,6 @@ void MDCache::export_remaining_imported_caps()
     mds->queue_waiters(p->second);
 
   cap_imports.clear();
-  cap_imports_dirty.clear();
   cap_reconnect_waiters.clear();
 
   if (warn_str.peek() != EOF) {
@@ -5618,9 +5619,12 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
       mds->locker->try_eval(in, CEPH_CAP_LOCKS);
     } else {
       int dirty_caps = 0;
-      map<inodeno_t, int>::iterator it = cap_imports_dirty.find(in->ino());
-      if (it != cap_imports_dirty.end())
-	dirty_caps = it->second;
+      auto p = reconnected_caps.find(in->ino());
+      if (p != reconnected_caps.end()) {
+	auto q = p->second.find(client);
+	if (q != p->second.end())
+	  dirty_caps = q->second.dirty_caps;
+      }
       in->choose_lock_states(dirty_caps);
       dout(15) << " chose lock states on " << *in << dendl;
     }
@@ -5701,7 +5705,7 @@ void MDCache::open_snap_parents()
       dout(10) << " past parents now open on " << *in << dendl;
 
       for (CInode *child : p->second) {
-	auto q = reconnected_caps.find(child);
+	auto q = reconnected_caps.find(child->ino());
 	assert(q != reconnected_caps.end());
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
 	  if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
