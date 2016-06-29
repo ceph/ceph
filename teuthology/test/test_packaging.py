@@ -357,6 +357,21 @@ class TestGitbuilderProject(object):
         assert result == expected
 
     @patch("teuthology.packaging.config")
+    def test_init_from_config_branch_ref(self, m_config):
+        m_config.baseurl_template = \
+            'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
+        m_config.gitbuilder_host = "gitbuilder.ceph.com"
+        config = dict(
+            os_type="ubuntu",
+            os_version="14.04",
+            branch='jewel',
+        )
+        gp = packaging.GitbuilderProject("ceph", config)
+        result = gp.uri_reference
+        expected = 'ref/jewel'
+        assert result == expected
+
+    @patch("teuthology.packaging.config")
     @patch("teuthology.packaging._get_config_value_for_remote")
     @patch("teuthology.packaging._get_response")
     def test_get_package_version_found(self, m_get_response, m_get_config_value,
