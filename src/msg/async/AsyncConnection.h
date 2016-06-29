@@ -156,6 +156,7 @@ class AsyncConnection : public Connection {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
     }
+    void set_center(EventCenter *c) { center = c; }
     void do_request(int id) override;
     void queue(double delay_period, utime_t release, Message *m) {
       Mutex::Locker l(delay_lock);
@@ -388,17 +389,8 @@ class AsyncConnection : public Connection {
     if (need_queue_reset)
       dispatch_queue->queue_reset(this);
   }
-  void cleanup_handler() {
-    for (auto &&t : register_time_events)
-      center->delete_time_event(t);
-    register_time_events.clear();
-    center->delete_time_event(last_tick_id);
-    if (sd >= 0) {
-      center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-      shutdown_socket();
-      ::close(sd);
-      sd = -1;
-    }
+  void cleanup() {
+    shutdown_socket();
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;
