@@ -367,9 +367,9 @@ class AsyncConnection : public Connection {
   void process();
   void wakeup_from(uint64_t id);
   void local_deliver();
-  void stop() {
+  void stop(bool queue_reset) {
     lock.Lock();
-    bool need_queue_reset = (state != STATE_CLOSED);
+    bool need_queue_reset = (state != STATE_CLOSED) && queue_reset;
     lock.Unlock();
     mark_down();
     if (need_queue_reset)

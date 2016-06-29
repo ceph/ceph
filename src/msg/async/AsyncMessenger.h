@@ -176,8 +176,10 @@ public:
   ConnectionRef get_connection(const entity_inst_t& dest) override;
   ConnectionRef get_loopback_connection() override;
   int send_keepalive(Connection *con);
-  void mark_down(const entity_addr_t& addr) override;
-  void mark_down_all() override;
+  virtual void mark_down(const entity_addr_t& addr) override;
+  virtual void mark_down_all() override {
+    shutdown_connections(true);
+  }
   /** @} // Connection Management */
 
   /**
@@ -347,6 +349,8 @@ private:
     local_connection->set_features(local_features);
     ms_deliver_handle_fast_connect(local_connection.get());
   }
+
+  void shutdown_connections(bool queue_reset);
 
 public:
 

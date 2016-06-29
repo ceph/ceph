@@ -277,13 +277,11 @@ int Processor::start(Worker *w)
 void Processor::accept()
 {
   ldout(msgr->cct, 10) << __func__ << " listen_sd=" << listen_sd << dendl;
-  int errors = 0;
-  while (errors < 4) {
+  while (true) {
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
     int sd = ::accept(listen_sd, (sockaddr*)&ss, &slen);
     if (sd >= 0) {
-      errors = 0;
       ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
 
       msgr->add_accept(sd);
@@ -293,10 +291,18 @@ void Processor::accept()
         continue;
       } else if (errno == EAGAIN) {
         break;
+      } else if (errno == EMFILE || errno == ENFILE) {
+        lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << sd
+                         << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        break;
+      } else if (errno == ECONNABORTED) {
+        ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << sd
+                            << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        continue;
       } else {
-        errors++;
-        ldout(msgr->cct, 20) << __func__ << " no incoming connection?  sd = " << sd
-                             << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        lderr(msgr->cct) << __func__ << " no incoming connection?  sd = " << sd
+                         << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+        break;
       }
     }
   }
@@ -571,16 +577,17 @@ int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
 
-  // break ref cycles on the loopback connection
-  processor.stop();
   mark_down_all();
-  dispatch_queue.shutdown();
+  // break ref cycles on the loopback connection
   local_connection->set_priv(NULL);
-  pool->barrier();
+   // done!  clean up.
+  processor.stop();
+  did_bind = false;
   lock.Lock();
   stop_cond.Signal();
-  lock.Unlock();
   stopped = true;
+  lock.Unlock();
+  pool->barrier();
   return 0;
 }
 
@@ -653,21 +660,16 @@ void AsyncMessenger::wait()
 
   lock.Unlock();
 
-  // done!  clean up.
-  ldout(cct,20) << __func__ << ": stopping processor thread" << dendl;
-  processor.stop();
-  did_bind = false;
-  ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
-
-  // close all connections
-  mark_down_all();
-
+  dispatch_queue.shutdown();
   if (dispatch_queue.is_started()) {
     ldout(cct, 10) << __func__ << ": waiting for dispatch queue" << dendl;
     dispatch_queue.wait();
     dispatch_queue.discard_local();
     ldout(cct, 10) << __func__ << ": dispatch queue is stopped" << dendl;
   }
+
+  // close all connections
+  shutdown_connections(false);
 
   ldout(cct, 10) << __func__ << ": done." << dendl;
   ldout(cct, 1) << __func__ << " complete." << dendl;
@@ -809,7 +811,7 @@ int AsyncMessenger::send_keepalive(Connection *con)
   return 0;
 }
 
-void AsyncMessenger::mark_down_all()
+void AsyncMessenger::shutdown_connections(bool queue_reset)
 {
   ldout(cct,1) << __func__ << " " << dendl;
   lock.Lock();
@@ -817,7 +819,7 @@ void AsyncMessenger::mark_down_all()
        q != accepting_conns.end(); ++q) {
     AsyncConnectionRef p = *q;
     ldout(cct, 5) << __func__ << " accepting_conn " << p.get() << dendl;
-    p->stop();
+    p->stop(queue_reset);
   }
   accepting_conns.clear();
 
@@ -827,7 +829,7 @@ void AsyncMessenger::mark_down_all()
     ldout(cct, 5) << __func__ << " mark down " << it->first << " " << p << dendl;
     conns.erase(it);
     p->get_perf_counter()->dec(l_msgr_active_connections);
-    p->stop();
+    p->stop(queue_reset);
   }
 
   {
