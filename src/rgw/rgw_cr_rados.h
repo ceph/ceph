@@ -429,6 +429,37 @@ public:
   }
 };
 
+class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
+  RGWRados *store;
+
+  string marker;
+  map<string, bufferlist> *entries;
+  int max_entries;
+
+  int rval;
+  librados::IoCtx ioctx;
+
+  set<string> keys;
+
+  rgw_bucket pool;
+  string oid;
+
+  RGWAioCompletionNotifier *cn;
+
+public:
+  RGWRadosRemoveOmapKeysCR(RGWRados *_store,
+		      const rgw_bucket& _pool, const string& _oid,
+		      const set<string>& _keys);
+
+  ~RGWRadosRemoveOmapKeysCR();
+
+  int send_request();
+
+  int request_complete() {
+    return rval;
+  }
+};
+
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -479,6 +510,8 @@ public:
   int request_complete();
 };
 
+#define OMAP_APPEND_MAX_ENTRIES_DEFAULT 100
+
 class RGWOmapAppend : public RGWConsumerCR<string> {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -493,9 +526,11 @@ class RGWOmapAppend : public RGWConsumerCR<string> {
 
   map<string, bufferlist> entries;
 
+  uint64_t window_size;
   uint64_t total_entries;
 public:
-  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid);
+  RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+                uint64_t _window_size = OMAP_APPEND_MAX_ENTRIES_DEFAULT);
   int operate();
   void flush_pending();
   bool append(const string& s);
@@ -503,6 +538,14 @@ public:
 
   uint64_t get_total_entries() {
     return total_entries;
+  }
+
+  const rgw_bucket& get_pool() {
+    return pool;
+  }
+
+  const string& get_oid() {
+    return oid;
   }
 };
 
