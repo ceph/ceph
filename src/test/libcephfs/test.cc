@@ -1127,7 +1127,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_closedir(cmount, dirp));
 
   ceph_readdir(cmount, dirp);
-  EXPECT_EQ(-ENOTCONN, errno);
+  EXPECT_EQ(ENOTCONN, errno);
 
   struct dirent rdent;
   EXPECT_EQ(-ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));

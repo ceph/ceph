@@ -481,7 +481,7 @@ extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct c
 {
   if (!cmount->is_mounted()) {
     /* Client::readdir also sets errno to signal errors. */
-    errno = -ENOTCONN;
+    errno = ENOTCONN;
     return NULL;
   }
   return cmount->get_client()->readdir(reinterpret_cast<dir_result_t*>(dirp));
@@ -1319,7 +1319,7 @@ extern "C" int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
   *parent = cmount->get_client()->get_root();
   if (*parent)
     return 0;
-  return EFAULT;
+  return -EFAULT;
 }
 
 extern "C" struct Inode *ceph_ll_get_inode(class ceph_mount_info *cmount,
