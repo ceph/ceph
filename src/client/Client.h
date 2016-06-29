@@ -302,6 +302,10 @@ class Client : public Dispatcher, public md_config_obs_t {
 public:
   void tick();
 
+  UserPerm pick_my_perms() {
+    return UserPerm(get_uid(), get_gid());
+  }
+
 protected:
   MonClient *monclient;
   Messenger *messenger;  
