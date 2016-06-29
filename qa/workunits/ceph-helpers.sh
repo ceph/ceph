@@ -17,6 +17,18 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+if [ -z "$CEPH_ROOT" ] || [ -z "$CEPH_BIN" ] || [ -z "$CEPH_LIB" ]; then
+    CEPH_ROOT=`readlink -f $(dirname $0)/../..`
+    if [ -d $CEPH_ROOT/build ] ; then
+       # asume we are in Cmake build environment
+        CEPH_BIN=$CEPH_ROOT/build/bin
+        CEPH_LIB=$CEPH_ROOT/build/lib
+    else
+        CEPH_BIN=$CEPH_ROOT/src
+        CEPH_LIB=$CEPH_ROOT/.libs/src
+    fi
+fi
+
 TIMEOUT=300
 PG_NUM=4
 : ${CEPH_BUILD_VIRTUALENV:=/tmp}
