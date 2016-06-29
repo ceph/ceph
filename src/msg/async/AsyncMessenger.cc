@@ -830,18 +830,10 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect)
     return cluster_protocol;
   } else {
     // public
-    if (connect) {
-      switch (peer_type) {
-        case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
-        case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
-        case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
-      }
-    } else {
-      switch (my_type) {
-        case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
-        case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
-        case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
-      }
+    switch (connect ? peer_type : my_type) {
+      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
     }
   }
   return 0;
