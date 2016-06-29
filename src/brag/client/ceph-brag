@@ -212,6 +212,8 @@ def run_command(cmd):
   child = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
   (o, e) = child.communicate()
+  o = o.decode('utf-8', 'ignore')
+  e = e.decode('utf-8', 'ignore')
   return (child.returncode, o, e)
 
 
