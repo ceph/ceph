@@ -54,6 +54,24 @@ static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
  * Processor
  */
 
+class Processor::C_processor_accept : public EventCallback {
+  Processor *pro;
+
+ public:
+  explicit C_processor_accept(Processor *p): pro(p) {}
+  void do_request(int id) {
+    pro->accept();
+  }
+};
+
+Processor::Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
+  : msgr(r),
+  net(c),
+  worker(NULL),
+  listen_sd(-1),
+  nonce(n),
+  listen_handler(new C_processor_accept(this)) {}
+
 int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
   const md_config_t *conf = msgr->cct->_conf;
