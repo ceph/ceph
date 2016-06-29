@@ -143,6 +143,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
   if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
+  if (in.state_test(CInode::STATE_MISSINGOBJS)) out << " missingobjs";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
@@ -4095,6 +4096,8 @@ void CInode::dump(Formatter *f) const
     f->dump_string("state", "dirtypool");
   if (state_test(STATE_ORPHAN))
     f->dump_string("state", "orphan");
+  if (state_test(STATE_MISSINGOBJS))
+    f->dump_string("state", "missingobjs");
   f->close_section();
 
   f->open_array_section("client_caps");

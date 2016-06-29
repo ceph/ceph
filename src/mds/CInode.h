@@ -217,6 +217,7 @@ public:
   static const int STATE_FROZENAUTHPIN = (1<<17);
   static const int STATE_DIRTYPOOL =   (1<<18);
   static const int STATE_REPAIRSTATS = (1<<19);
+  static const int STATE_MISSINGOBJS = (1<<20);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
