@@ -1973,6 +1973,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   session->inst = mdsmap->get_inst(mds);
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
+  session->mds_state = MDSMap::STATE_NULL;
   mds_sessions[mds] = session;
 
   // Maybe skip sending a request to open if this MDS daemon
@@ -2567,9 +2568,9 @@ void Client::handle_mds_map(MMDSMap* m)
     } else if (oldstate == newstate)
       continue;  // no change
     
-    if (newstate == MDSMap::STATE_RECONNECT &&
-	mds_sessions.count(p->first)) {
-      MetaSession *session = mds_sessions[p->first];
+    MetaSession *session = p->second;
+    session->mds_state = newstate;
+    if (newstate == MDSMap::STATE_RECONNECT) {
       session->inst = mdsmap->get_inst(p->first);
       session->con = messenger->get_connection(session->inst);
       send_reconnect(session);
@@ -2578,11 +2579,11 @@ void Client::handle_mds_map(MMDSMap* m)
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
 	// kick new requests
-	kick_requests(p->second);
-	kick_flushing_caps(p->second);
-	signal_context_list(p->second->waiting_for_open);
-	kick_maxsize_requests(p->second);
-	wake_inode_waiters(p->second);
+	kick_requests(session);
+	kick_flushing_caps(session);
+	signal_context_list(session->waiting_for_open);
+	kick_maxsize_requests(session);
+	wake_inode_waiters(session);
       }
       connect_mds_targets(p->first);
     }
@@ -3365,6 +3366,19 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
 
   ack:
+    // re-send old cap/snapcap flushes first.
+    if (session->mds_state >= MDSMap::STATE_RECONNECT &&
+	session->mds_state < MDSMap::STATE_ACTIVE &&
+	session->early_flushing_caps.count(in) == 0) {
+      ldout(cct, 20) << " reflushing caps (check_caps) on " << *in
+		     << " to mds." << session->mds_num << dendl;
+      session->early_flushing_caps.insert(in);
+      if (in->cap_snaps.size())
+	flush_snaps(in, true);
+      if (in->flushing_caps)
+	flush_caps(in, session);
+    }
+
     int flushing;
     ceph_tid_t flush_tid;
     if (in->auth_cap == cap && in->dirty_caps) {
@@ -4151,7 +4165,7 @@ void Client::early_kick_flushing_caps(MetaSession *session)
     if ((in->flushing_caps & in->auth_cap->issued) == in->flushing_caps)
       continue;
 
-    ldout(cct, 20) << " reflushing caps (revoked) on " << *in
+    ldout(cct, 20) << " reflushing caps (early_kick) on " << *in
 		   << " to mds." << session->mds_num << dendl;
 
     session->early_flushing_caps.insert(in);
