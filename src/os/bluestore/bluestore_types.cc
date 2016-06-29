@@ -318,7 +318,7 @@ void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
     int32_t pos = p->first;
     while (--n) {
       ++p;
-      small_encode_signed_varint_lowz((int64_t)p->first - pos, bl);
+      small_encode_varint_lowz((int64_t)p->first - pos, bl);
       p->second.encode(bl);
       pos = p->first;
     }
@@ -335,7 +335,7 @@ void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
     ref_map[pos].decode(p);
     while (--n) {
       int64_t delta;
-      small_decode_signed_varint_lowz(delta, p);
+      small_decode_varint_lowz(delta, p);
       pos += delta;
       ref_map[pos].decode(p);
     }
