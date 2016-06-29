@@ -1182,6 +1182,7 @@ public:
   void stop_spawned_services() {
     lease_cr->go_down();
     if (error_repo) {
+      error_repo->finish();
       error_repo->put();
       error_repo = NULL;
     }
