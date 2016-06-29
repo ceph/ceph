@@ -139,6 +139,8 @@ public:
                     uint64_t off, const SnapContext &snapc) = 0;
   virtual int write_full(const std::string& oid, bufferlist& bl,
                          const SnapContext &snapc) = 0;
+  virtual int writesame(const std::string& oid, bufferlist& bl, size_t len,
+                        uint64_t off, const SnapContext &snapc) = 0;
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset) = 0;
   virtual int xattr_set(const std::string& oid, const std::string &name,

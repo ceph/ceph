@@ -635,6 +635,14 @@ int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
                      ctx->get_snap_context()));
 }
 
+int IoCtx::writesame(const std::string& oid, bufferlist& bl, size_t len,
+                 uint64_t off) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::write, _1, _2, bl, len, off,
+                     ctx->get_snap_context()));
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
@@ -805,6 +813,12 @@ void ObjectWriteOperation::write(uint64_t off, const bufferlist& bl) {
 void ObjectWriteOperation::write_full(const bufferlist& bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::write_full, _1, _2, bl, _4));
+}
+
+void ObjectWriteOperation::writesame(uint64_t off, uint64_t len, const bufferlist& bl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::writesame, _1, _2, bl, len,
+			       off, _4));
 }
 
 void ObjectWriteOperation::zero(uint64_t off, uint64_t len) {
