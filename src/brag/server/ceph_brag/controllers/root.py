@@ -11,13 +11,13 @@ class RootController(RestController):
 
     @expose('json')
     def get(self, *args, **kwargs):
-        if len(args) is 0:
+        if len(args) == 0:
             #return the list of uuids
             try:
                 result = db.get_uuids()
             except Exception as e:
                 return self.fail(500, msg="Internal Server Error")
-        elif len(args) is 1 or len(args) is 2 and args[1] == '':
+        elif len(args) == 1 or len(args) == 2 and args[1] == '':
             #/uuid
             try:
                 result = db.get_versions(args[0])
@@ -26,7 +26,7 @@ class RootController(RestController):
 
             if result is None:
                 return self.fail(400, msg="Invalid UUID")
-        elif len(args) is 2 or len(args) is 3 and args[2] == '':
+        elif len(args) == 2 or len(args) == 3 and args[2] == '':
             #/uuid/version_number
             try:
                 result = db.get_brag(args[0], args[1])
