@@ -634,7 +634,12 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
     if (in->is_dir()) {
       if (in->snaprealm && in->snaprealm->has_past_parents()) {
 	dout(20) << "  directory has past parents "
-          << in->snaprealm->srnode.past_parents << dendl;
+		 << in->snaprealm->srnode.past_parents << dendl;
+	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
+	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
+			     << in->ino() << " has failed, missing object\n";
+	  mds->handle_write_error(-ENOENT);
+	}
 	return false;  // not until some snaps are deleted.
       }
 
