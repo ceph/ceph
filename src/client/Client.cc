@@ -11700,8 +11700,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     }
   }
 
-done:
-
   if (onuninline) {
     client_lock.Unlock();
     uninline_flock.Lock();
