@@ -190,3 +190,22 @@ void InoTable::generate_test_instances(list<InoTable*>& ls)
 {
   ls.push_back(new InoTable());
 }
+
+
+bool InoTable::repair_inotable(inodeno_t id)
+{
+	dout(0) << "repair inotable " << id << dendl;
+	if (free.contains(id)) {
+		dout(0) << "repair_inotable: Skipping ino=" << id << "pver =" << projected_version << "ver= " << version << dendl;
+		return false;
+	}
+
+	dout(0) << "repair_inotable: adding ino" << id << "to inotable" << dendl;
+	dout(0) << "repair_inotable: before status. ino=" << id << "pver =" << projected_version << "ver= " << version << dendl;
+	free.insert(id);
+	projected_free.insert(id);
+	++projected_version;
+	++version;
+	dout(0) << "repair_inotable: after status. ino=" << id << "pver =" << projected_version << "ver= " << version << dendl;
+	return true;
+}
