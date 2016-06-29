@@ -33,7 +33,6 @@ ceph:
   rpm:
   - ceph-radosgw
   - ceph-test
-  - ceph-devel
   - ceph
   - ceph-fuse
   - cephfs-java
