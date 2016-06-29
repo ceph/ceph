@@ -630,9 +630,9 @@ public:
   // File size recovery
 private:
   RecoveryQueue recovery_queue;
-  void identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
-  void start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q);
+  void identify_files_to_recover();
 public:
+  void start_files_to_recover();
   void do_file_recover();
   void queue_file_recover(CInode *in);
   void _queued_file_recover_cow(CInode *in, MutationRef& mut);

@@ -5166,7 +5166,7 @@ void MDCache::rejoin_gather_finish()
 
   choose_lock_states_and_reconnect_caps();
 
-  identify_files_to_recover(rejoin_recover_q, rejoin_check_q);
+  identify_files_to_recover();
   rejoin_send_acks();
   
   // signal completion of fetches, rejoin_gather_finish, etc.
@@ -5764,7 +5764,6 @@ void MDCache::open_snap_parents()
     dout(10) << "open_snap_parents - all open" << dendl;
     do_delayed_cap_imports();
 
-    start_files_to_recover(rejoin_recover_q, rejoin_check_q);
     assert(rejoin_done != NULL);
     rejoin_done->complete(0);
     rejoin_done = NULL;
@@ -6090,7 +6089,7 @@ void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
  * called after recovery to recover file sizes for previously opened (for write)
  * files.  that is, those where max_size > size.
  */
-void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q)
+void MDCache::identify_files_to_recover()
 {
   dout(10) << "identify_files_to_recover" << dendl;
   for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
@@ -6123,26 +6122,29 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
     if (recover) {
       in->auth_pin(&in->filelock);
       in->filelock.set_state(LOCK_PRE_SCAN);
-      recover_q.push_back(in);
-      
+      rejoin_recover_q.push_back(in);
+
       // make sure past parents are open/get opened
       SnapRealm *realm = in->find_snaprealm();
       check_realm_past_parents(realm);
     } else {
-      check_q.push_back(in);
+      rejoin_check_q.push_back(in);
     }
   }
 }
 
-void MDCache::start_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q)
+void MDCache::start_files_to_recover()
 {
-  for (vector<CInode*>::iterator p = check_q.begin(); p != check_q.end(); ++p) {
-    CInode *in = *p;
+  for (CInode *in : rejoin_check_q) {
     mds->locker->check_inode_max_size(in);
   }
-  for (vector<CInode*>::iterator p = recover_q.begin(); p != recover_q.end(); ++p) {
-    CInode *in = *p;
+  rejoin_check_q.clear();
+  for (CInode *in : rejoin_recover_q) {
     mds->locker->file_recover(&in->filelock);
+  }
+  if (!rejoin_recover_q.empty()) {
+    rejoin_recover_q.clear();
+    do_file_recover();
   }
 }
 
