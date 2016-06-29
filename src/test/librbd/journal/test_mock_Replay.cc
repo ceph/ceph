@@ -41,6 +41,14 @@ struct AioImageRequest<MockReplayImageCtx> {
     s_instance->aio_discard(c, off, len);
   }
 
+  MOCK_METHOD6(aio_writesame, void(AioCompletion *c, uint64_t off, size_t len,
+                                const char *buf, size_t data_len, int op_flags));
+  static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c, uint64_t off,
+                        size_t len, const char *buf, size_t data_len, int op_flags) {
+    assert(s_instance != nullptr);
+    s_instance->aio_writesame(c, off, len, buf, data_len, op_flags);
+  }
+
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
   static void aio_flush(MockReplayImageCtx *ictx, AioCompletion *c) {
     assert(s_instance != nullptr);
