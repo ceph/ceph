@@ -95,6 +95,7 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() {}
 
+  int verify_permission() override;
   int get_params();
   void send_response();
 };
@@ -132,6 +133,7 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() {}
 
+  int verify_permission() override;
   int get_params();
   bool need_object_expiration() { return true; }
   void send_response();

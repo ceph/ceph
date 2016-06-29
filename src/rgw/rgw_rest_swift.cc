@@ -678,6 +678,20 @@ static int get_delete_at_param(req_state *s, real_time *delete_at)
   return 0;
 }
 
+int RGWPutObj_ObjStore_SWIFT::verify_permission()
+{
+  op_ret = RGWPutObj_ObjStore::verify_permission();
+
+  /* We have to differentiate error codes depending on whether user is
+   * anonymous (401 Unauthorized) or he doesn't have necessary permissions
+   * (403 Forbidden). */
+  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+    return -EPERM;
+  } else {
+    return op_ret;
+  }
+}
+
 int RGWPutObj_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta) {
@@ -966,6 +980,20 @@ static void bulkdelete_respond(const unsigned num_deleted,
   formatter.close_section();
 
   formatter.close_section();
+}
+
+int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
+{
+  op_ret = RGWDeleteObj_ObjStore::verify_permission();
+
+  /* We have to differentiate error codes depending on whether user is
+   * anonymous (401 Unauthorized) or he doesn't have necessary permissions
+   * (403 Forbidden). */
+  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+    return -EPERM;
+  } else {
+    return op_ret;
+  }
 }
 
 int RGWDeleteObj_ObjStore_SWIFT::get_params()

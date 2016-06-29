@@ -153,7 +153,11 @@ void RGWThirdPartyAccountAuthApplier<T>::load_acct_info(RGWUserInfo& user_info) 
     if (ret < 0) {
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
-      throw ret;
+      if (ret == -ENOENT) {
+        throw -EACCES;
+      } else {
+        throw ret;
+      }
     }
 
   }
