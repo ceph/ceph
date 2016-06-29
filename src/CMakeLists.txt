@@ -554,20 +554,18 @@ add_library(osdc_rbd_objs OBJECT ${osdc_rbd_files})
 add_library(osdc STATIC ${osdc_files} $<TARGET_OBJECTS:osdc_rbd_objs>)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
-set(librados_srcs
-  librados/librados.cc
-  librados/RadosClient.cc
+add_library(librados_objs OBJECT
   librados/IoCtxImpl.cc
   librados/RadosXattrIter.cc
-  )
-add_library(librados_objs OBJECT ${librados_srcs})
+  librados/RadosClient.cc)
 add_library(librados ${CEPH_SHARED}
-  $<TARGET_OBJECTS:librados_objs>
+  librados/librados.cc
   $<TARGET_OBJECTS:cls_references_objs>
-  $<TARGET_OBJECTS:common_util_obj>)
+  $<TARGET_OBJECTS:common_util_obj>
+  $<TARGET_OBJECTS:librados_objs>)
 add_dependencies(librados osdc)
 if(WITH_LTTNG)
-  add_dependencies(librados_objs rados-tp)
+  add_dependencies(librados rados-tp)
 endif()
 # LINK_PRIVATE instead of PRIVATE is used to backward compatibility with cmake 2.8.11
 target_link_libraries(librados LINK_PRIVATE osdc osd os global common cls_lock_client
