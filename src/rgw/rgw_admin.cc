@@ -1518,10 +1518,10 @@ static int update_period(const string& realm_id, const string& realm_name,
   return 0;
 }
 
-static int init_bucket_for_sync(const string& tenant, const string& bucket_name, string& bucket_id)
+static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
+                                const string& bucket_id, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
-  rgw_bucket bucket;
 
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
   if (ret == -ENOENT) {
@@ -1529,8 +1529,6 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
       cerr << "ERROR: bucket id specified" << std::endl;
       return EINVAL;
     }
-  } else {
-    bucket_id = bucket.bucket_id;
   }
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -5115,11 +5113,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5142,11 +5141,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
@@ -5174,11 +5174,12 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id);
+    rgw_bucket bucket;
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
-    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket);
 
     ret = sync.init();
     if (ret < 0) {
