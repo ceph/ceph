@@ -1,6 +1,6 @@
 ## erasure code plugins
 
-set(erasure_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/erasure-code)
+set(erasure_plugin_dir ${CMAKE_INSTALL_FULL_PKGLIBDIR}/erasure-code)
 
 #jerasure subdir must be before shec so jerasure & neon obj libs are declared
 include_directories(jerasure/jerasure/include)
