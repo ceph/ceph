@@ -83,6 +83,8 @@ target_link_libraries(ceph_test_filestore_idempotent_sequence
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS ceph_test_filestore_idempotent_sequence
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # unittest_chain_xattr
 add_executable(unittest_chain_xattr
