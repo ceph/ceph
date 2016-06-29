@@ -623,49 +623,43 @@ for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
 done
 %endif
 
-./autogen.sh
-
 %if %{with lowmem_builder}
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
-%{configure}	CPPFLAGS="$java_inc" \
-		--prefix=/usr \
-                --libexecdir=%{_libexecdir} \
-		--localstatedir=%{_localstatedir} \
-		--sysconfdir=%{_sysconfdir} \
+export CPPFLAGS="$java_inc"
+export CFLAGS="$RPM_OPT_FLAGS"
+export CXXFLAGS="$RPM_OPT_FLAGS"
+
+%cmake \
+       -DCMAKE_INSTALL_PREFIX=/usr \
+       -DCMAKE_INSTALL_LIBEXECDIR=%{_libexecdir} \
+       -DCMAKE_INSTALL_LOCALSTATEDIR=%{_localstatedir} \
+       -DCMAKE_INSTALL_SYSCONFDIR=%{_sysconfdir} \
+       -DCMAKE_INSTALL_MANDIR=%{_mandir} \
+       -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
+       -DWITH_MANPAGE=ON \
 %if 0%{?rhel} && ! 0%{?centos}
-                --enable-subman \
-%endif
-		--with-systemdsystemunitdir=%_unitdir \
-		--docdir=%{_docdir}/ceph \
-		--with-man-pages \
-		--mandir="%_mandir" \
-		--with-nss \
-		--without-cryptopp \
-		--with-debug \
-%if 0%{with cephfs_java}
-		--enable-cephfs-java \
+       -DWITH_SUBMAN=ON \
 %endif
 %if 0%{with xio}
-		--enable-xio \
+	   -DWITH_XIO=ON \
+%endif
+%if 0%{with cephfs_java}
+	   -DWITH_CEPHFS_JAVA=ON \
 %endif
 %if 0%{with selinux}
-		--with-selinux \
+	   -DWITH_SELINUX=ON \
 %endif
-		--with-librocksdb-static=check \
-		--with-radosgw \
 %if %{without lttng}
-		--without-lttng \
-		--without-babeltrace \
+	   -DWITH_LTTNG=OFF
+       -DHAVE_BABELTRACE=OFF \
 %endif
-		$CEPH_EXTRA_CONFIGURE_ARGS \
-		%{?_with_ocf} \
-%if %{without tcmalloc}
-		--without-tcmalloc \
-%endif
-		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
+       $CEPH_EXTRA_CMAKE_ARGS \
+%if %{with ocf}
+       -DWITH_OCF=ON
+$endif
 
 %if %{with lowmem_builder}
 %if 0%{?jobs} > 8
@@ -679,7 +673,7 @@ make %{?_smp_mflags}
 %if 0%{with tests}
 %check
 # run in-tree unittests
-make %{?_smp_mflags} check
+ctest -V %{?_smp_mflags}
 
 %endif
 
