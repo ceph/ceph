@@ -3051,7 +3051,7 @@ int RGWPutMetadataAccount::verify_permission()
    * override in rgw_process.cc. This is the way to specify a given RGWOp
    * expect extra privileges.  */
   if (new_quota_extracted) {
-    return -EPERM;
+    return -EACCES;
   }
 
   return 0;

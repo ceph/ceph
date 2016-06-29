@@ -71,7 +71,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
 };
 
 const static struct rgw_http_errors RGW_HTTP_SWIFT_ERRORS[] = {
-    { EACCES, 401, "AccessDenied" },
+    { EACCES, 403, "AccessDenied" },
     { EPERM, 401, "AccessDenied" },
     { ERR_USER_SUSPENDED, 401, "UserSuspended" },
     { ERR_INVALID_UTF8, 412, "Invalid UTF8" },
