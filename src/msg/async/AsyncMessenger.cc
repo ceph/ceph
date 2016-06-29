@@ -50,48 +50,6 @@ static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
 }
 
 
-class Worker : public Thread {
-  static const uint64_t InitEventNumber = 5000;
-  static const uint64_t EventMaxWaitUs = 30000000;
-  CephContext *cct;
-  WorkerPool *pool;
-  bool done;
-  int id;
-  PerfCounters *perf_logger;
-
- public:
-  EventCenter center;
-  std::atomic_uint references;
-  Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
-    center.init(InitEventNumber);
-    char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
-    // initialize perf_logger
-    PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
-
-    plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
-    plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-    plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent inline messages");
-    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
-    plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
-    plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
-
-    perf_logger = plb.create_perf_counters();
-    cct->get_perfcounters_collection()->add(perf_logger);
-  }
-  ~Worker() {
-    if (perf_logger) {
-      cct->get_perfcounters_collection()->remove(perf_logger);
-      delete perf_logger;
-    }
-  }
-  void *entry();
-  void stop();
-  PerfCounters *get_perf_counter() { return perf_logger; }
-};
-
 /*******************
  * Processor
  */
@@ -357,7 +315,6 @@ class WorkerPool {
   virtual ~WorkerPool();
   void start();
   Worker *get_worker();
-  void release_worker(EventCenter* c);
   int get_cpuid(int id) {
     if (coreids.empty())
       return -1;
@@ -495,27 +452,10 @@ Worker* WorkerPool::get_worker()
   return current_best;
 }
 
-void WorkerPool::release_worker(EventCenter* c)
-{
-  ldout(cct, 10) << __func__ << dendl;
-  simple_spin_lock(&pool_spin);
-  for (auto p = workers.begin(); p != workers.end(); ++p) {
-    if (&((*p)->center) == c) {
-      ldout(cct, 10) << __func__ << " found worker, releasing" << dendl;
-      int oldref = (*p)->references.fetch_sub(1);
-      assert(oldref > 0);
-      break;
-    }
-  }
-  simple_spin_unlock(&pool_spin);
-}
-
 void WorkerPool::barrier()
 {
   ldout(cct, 10) << __func__ << " started." << dendl;
-  pthread_t cur = pthread_self();
   for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
-    assert(cur != (*it)->center.get_owner());
     barrier_count.inc();
     (*it)->center.dispatch_event_external(EventCallbackRef(new C_barrier(this)));
   }
@@ -545,8 +485,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   ceph_spin_init(&global_seq_lock);
   cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
   local_worker = pool->get_worker();
-  local_connection = new AsyncConnection(
-      cct, this, &dispatch_queue, &local_worker->center, local_worker->get_perf_counter());
+  local_connection = new AsyncConnection(cct, this, &dispatch_queue, local_worker);
   local_features = features;
   init_local_connection();
   reap_handler = new C_handle_reap(this);
@@ -680,7 +619,7 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
 {
   lock.Lock();
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w);
   conn->accept(sd);
   accepting_conns.insert(conn);
   lock.Unlock();
@@ -697,7 +636,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 
   // create connection
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w);
   conn->connect(addr, type);
   assert(!conns.count(addr));
   conns[addr] = conn;
@@ -860,10 +799,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
 Connection *AsyncMessenger::create_anon_connection() {
   Mutex::Locker l(lock);
   Worker *w = pool->get_worker();
-  return new AsyncConnection(cct,
-			     this,
-			     &dispatch_queue,
-			     &w->center, w->get_perf_counter());
+  return new AsyncConnection(cct, this, &dispatch_queue, w);
 }
 
 int AsyncMessenger::get_proto_version(int peer_type, bool connect)
@@ -891,16 +827,6 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect)
     }
   }
   return 0;
-}
-
-void AsyncMessenger::unregister_conn(AsyncConnectionRef conn) {
-  Mutex::Locker l(deleted_lock);
-  conn->release_worker();
-  deleted_conns.insert(conn);
-
-  if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
-    local_worker->center.dispatch_event_external(reap_handler);
-  }
 }
 
 void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
@@ -946,8 +872,4 @@ int AsyncMessenger::reap_dead()
   }
 
   return num;
-}
-
-void AsyncMessenger::release_worker(EventCenter* c) {
-  pool->release_worker(c);
 }

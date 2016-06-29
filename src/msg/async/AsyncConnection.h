@@ -26,6 +26,7 @@
 using namespace std;
 
 #include "auth/AuthSessionHandler.h"
+#include "common/ceph_time.h"
 #include "common/Mutex.h"
 #include "common/perf_counters.h"
 #include "include/buffer.h"
@@ -36,6 +37,7 @@ using namespace std;
 #include "net_handler.h"
 
 class AsyncMessenger;
+class Worker;
 
 static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 
@@ -142,12 +144,14 @@ class AsyncConnection : public Connection {
     EventCenter *center;
     DispatchQueue *dispatch_queue;
     uint64_t conn_id;
+    std::atomic_bool stop_dispatch;
 
    public:
     explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
                              DispatchQueue *q, uint64_t cid)
       : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid) { }
+        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
+        stop_dispatch(false) { }
     ~DelayedDelivery() {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
@@ -159,22 +163,27 @@ class AsyncConnection : public Connection {
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
-      Mutex::Locker l(delay_lock);
-      while (!delay_queue.empty()) {
-        Message *m = delay_queue.front().second;
-        dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
-        m->put();
-        delay_queue.pop_front();
-      }
-      for (auto i : register_time_events)
-        center->delete_time_event(i);
-      register_time_events.clear();
+      stop_dispatch = true;
+      center->submit_to(center->get_id(), [this] () mutable {
+        Mutex::Locker l(delay_lock);
+        while (!delay_queue.empty()) {
+          Message *m = delay_queue.front().second;
+          dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
+          m->put();
+          delay_queue.pop_front();
+        }
+        for (auto i : register_time_events)
+          center->delete_time_event(i);
+        register_time_events.clear();
+        stop_dispatch = false;
+      }, true);
     }
+    bool ready() const { return !stop_dispatch && delay_queue.empty() && register_time_events.empty(); }
     void flush();
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, EventCenter *c, PerfCounters *p);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
   ~AsyncConnection();
   void maybe_start_delay_thread();
 
@@ -202,8 +211,6 @@ class AsyncConnection : public Connection {
     policy.lossy = true;
   }
   
-  void release_worker();
-
  private:
   enum {
     STATE_NONE,
@@ -312,12 +319,16 @@ class AsyncConnection : public Connection {
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
   EventCallbackRef wakeup_handler;
+  EventCallbackRef tick_handler;
   struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
   uint32_t recv_end;
   set<uint64_t> register_time_events; // need to delete it if stop
+  ceph::coarse_mono_clock::time_point last_active;
+  uint64_t last_tick_id = 0;
+  const uint64_t inactive_timeout_us;
 
   // Tis section are temp variables used by state transition
 
@@ -352,6 +363,7 @@ class AsyncConnection : public Connection {
   // used only by "read_until"
   uint64_t state_offset;
   NetHandler net;
+  Worker *worker;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
 
@@ -366,6 +378,7 @@ class AsyncConnection : public Connection {
   void handle_write();
   void process();
   void wakeup_from(uint64_t id);
+  void tick(uint64_t id);
   void local_deliver();
   void stop(bool queue_reset) {
     lock.Lock();
@@ -376,9 +389,14 @@ class AsyncConnection : public Connection {
       dispatch_queue->queue_reset(this);
   }
   void cleanup_handler() {
+    for (auto &&t : register_time_events)
+      center->delete_time_event(t);
+    register_time_events.clear();
+    center->delete_time_event(last_tick_id);
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;
+    delete tick_handler;
     if (delay_state) {
       delete delay_state;
       delay_state = NULL;
