@@ -2226,11 +2226,7 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t 
 
   // For the first call pass -1 as the offset to
   // do a write_full.
-  int r = store->aio_put_obj_data(NULL, obj,
-                                     bl,
-                                     ((ofs != 0) ? ofs : -1),
-                                     exclusive, phandle);
-  return r;
+  return store->aio_put_obj_data(NULL, obj, bl, ((ofs != 0) ? ofs : -1), exclusive, phandle);
 }
 
 struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
