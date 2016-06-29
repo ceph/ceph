@@ -29,6 +29,10 @@ add_executable(unittest_rbd_mirror
 add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
 set_target_properties(unittest_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+add_dependencies(unittest_rbd_mirror
+  cls_journal
+  cls_lock
+  cls_rbd)
 target_link_libraries(unittest_rbd_mirror
   rbd_mirror
   rados_test_stub
