@@ -5,6 +5,11 @@ add_library(cls_hello SHARED hello/cls_hello.cc)
 set_target_properties(cls_hello PROPERTIES VERSION "1.0.0" SOVERSION "1")
 install(TARGETS cls_hello DESTINATION lib/rados-classes)
 
+# cls_numops
+add_library(cls_numops SHARED numops/cls_numops.cc)
+set_target_properties(cls_numops PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_numops DESTINATION lib/rados-classes)
+
 # cls_rbd
 if (WITH_RBD)
   add_library(cls_rbd SHARED rbd/cls_rbd.cc rbd/cls_rbd_types.cc)
