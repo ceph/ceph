@@ -7759,9 +7759,9 @@ int RGWRados::Object::Delete::delete_obj()
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0) {
     tombstone_cache_t *obj_tombstone_cache = store->get_tombstone_cache();
-    pair<ceph::real_time, uint32_t> tombstone_entry = make_pair<>(state->mtime, state->zone_short_id);
     if (obj_tombstone_cache) {
-      obj_tombstone_cache->add(obj, tombstone_entry);
+      tombstone_entry entry{*state};
+      obj_tombstone_cache->add(obj, entry);
     }
     r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), state->mtime, params.remove_objs);
   } else {
@@ -7983,11 +7983,13 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
-    pair<ceph::real_time, uint32_t> tombstone_entry;
-    if (obj_tombstone_cache && obj_tombstone_cache->find(obj, tombstone_entry)) {
-      s->mtime = tombstone_entry.first;
-      s->zone_short_id = tombstone_entry.second;
-      ldout(cct, 20) << __func__ << "(): found obj in tombstone cache: obj=" << obj << " mtime=" << s->mtime << dendl;
+    tombstone_entry entry;
+    if (obj_tombstone_cache && obj_tombstone_cache->find(obj, entry)) {
+      s->mtime = entry.mtime;
+      s->zone_short_id = entry.zone_short_id;
+      s->pg_ver = entry.pg_ver;
+      ldout(cct, 20) << __func__ << "(): found obj in tombstone cache: obj=" << obj
+          << " mtime=" << s->mtime << " pgv=" << s->pg_ver << dendl;
     } else {
       s->mtime = real_time();
     }
