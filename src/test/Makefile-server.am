@@ -45,12 +45,12 @@ ceph_perf_msgr_client_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_perf_msgr_client_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_perf_msgr_client
 
-if LINUX
 ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
 ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_objectstore
 
+if LINUX
 ceph_test_keyvaluedb_SOURCES = test/objectstore/test_kv.cc
 ceph_test_keyvaluedb_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_keyvaluedb_CXXFLAGS = $(UNITTEST_CXXFLAGS)

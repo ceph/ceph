@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "dns_resolve.h"
 
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -22,7 +21,7 @@
 #include "acconfig.h"
 #include "common/debug.h"
 #include "msg/msg_types.h"
-
+#include "dns_resolve.h"
 
 #define dout_subsys ceph_subsys_
 

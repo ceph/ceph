@@ -89,7 +89,11 @@ start_rgw=0
 ip=""
 nodaemon=0
 smallmds=0
-short=0
+if [ `uname` = FreeBSD ] ; then
+  short=1
+else
+  short=0
+fi
 ec=0
 hitset=""
 overwrite_conf=1
@@ -632,7 +636,9 @@ EOF
 	    fi
 
 	    rm -rf $CEPH_DEV_DIR/osd$osd || true
-	    for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
+	    if [ -f /usr/bin/btrfs ]; then 
+	        for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
+	    fi
 	    mkdir -p $CEPH_DEV_DIR/osd$osd
 
 	    uuid=`uuidgen`

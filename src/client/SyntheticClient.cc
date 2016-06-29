@@ -12,6 +12,7 @@
  * 
  */
 
+#include "include/compat.h"
 #include <iostream>
 #include <sstream>
 using namespace std;

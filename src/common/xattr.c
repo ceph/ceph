@@ -10,6 +10,7 @@
  */
 
 #include "acconfig.h"
+#include "include/compat.h"
 #if defined(__FreeBSD__)
 #include <errno.h>
 #include <stdint.h>
@@ -17,6 +18,7 @@
 #include <strings.h>
 #include <sys/types.h>
 #include <sys/extattr.h>
+#include <assert.h>
 #elif defined(__linux__)
 #include <sys/types.h>
 #include <sys/xattr.h>
