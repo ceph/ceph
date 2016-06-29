@@ -32,16 +32,22 @@ def task(ctx, config):
         if r.stdout.getvalue().find('failed'):
             log.info("Ceph services in failed state")
 
-        # test overall service stop and start
+        # test overall service stop and start using ceph.target
+        # ceph.target tests are meant for ceph systemd tests
+        # and not actual process testing using 'ps'
         log.info("Stopping all Ceph services")
         remote.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'])
         r = remote.run(args=['sudo', 'systemctl', 'status', 'ceph.target'],
                        stdout=StringIO(), check_status=False)
         log.info(r.stdout.getvalue())
+        log.info("Checking process status")
+        r = remote.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
+                             'grep', 'ceph'], stdout=StringIO())
         if r.stdout.getvalue().find('Active: inactive'):
             log.info("Sucessfully stopped all ceph services")
         else:
             log.info("Failed to stop ceph services")
+
         log.info("Starting all Ceph services")
         remote.run(args=['sudo', 'systemctl', 'start', 'ceph.target'])
         r = remote.run(args=['sudo', 'systemctl', 'status', 'ceph.target'],
@@ -52,9 +58,10 @@ def task(ctx, config):
         else:
             log.info("info", "Failed to start Ceph services")
         r = remote.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
-                         'grep', 'ceph'], stdout=StringIO())
+                             'grep', 'ceph'], stdout=StringIO())
         log.info(r.stdout.getvalue())
         time.sleep(4)
+
         # test individual services start stop
         name = remote.shortname
         mon_name = 'ceph-mon@' + name + '.service'
@@ -68,7 +75,7 @@ def task(ctx, config):
                              osd_service])
             remote.run(args=['sudo', 'systemctl', 'stop',
                              osd_service])
-            time.sleep(4) #immediate check will result in deactivating state
+            time.sleep(4)  # immediate check will result in deactivating state
             r = remote.run(args=['sudo', 'systemctl', 'status', osd_service],
                            stdout=StringIO(), check_status=False)
             log.info(r.stdout.getvalue())
@@ -82,8 +89,8 @@ def task(ctx, config):
         if mon_role_name in roles:
             remote.run(args=['sudo', 'systemctl', 'status', mon_name])
             remote.run(args=['sudo', 'systemctl', 'stop', mon_name])
-            time.sleep(4) #immediate check will result in deactivating state
-            r = remote.run(args=['sudo', 'systemctl', 'status', 'ceph.target'],
+            time.sleep(4)  # immediate check will result in deactivating state
+            r = remote.run(args=['sudo', 'systemctl', 'status', mon_name],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
                 log.info("Sucessfully stopped single mon ceph service")
@@ -94,8 +101,8 @@ def task(ctx, config):
         if mds_role_name in roles:
             remote.run(args=['sudo', 'systemctl', 'status', mds_name])
             remote.run(args=['sudo', 'systemctl', 'stop', mds_name])
-            time.sleep(4) #immediate check will result in deactivating state
-            r = remote.run(args=['sudo', 'systemctl', 'status', 'ceph.target'],
+            time.sleep(4)  # immediate check will result in deactivating state
+            r = remote.run(args=['sudo', 'systemctl', 'status', mds_name],
                            stdout=StringIO(), check_status=False)
             if r.stdout.getvalue().find('Active: inactive'):
                 log.info("Sucessfully stopped single ceph mds service")
