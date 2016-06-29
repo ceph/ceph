@@ -651,14 +651,25 @@ class GitbuilderProject(object):
             branch = self.branch
             sha1 = self.sha1
 
+        def warn(attrname):
+            if len([b for b in ref, tag, branch, sha1]) > 1:
+                log.warning(
+                    'More than one of ref, tag, branch, or sha1 supplied; using %s',
+                     attrname
+                )
+
         if ref:
             uri = 'ref'/ + ref
+            warn('ref')
         elif tag:
             uri = 'ref/' + tag
+            warn('tag')
         elif branch:
             uri = 'ref/' + branch
+            warn('branch')
         elif sha1:
             uri = 'sha1/' + sha1
+            warn('sha1')
         else:
             log.warning("defaulting to master branch")
             uri = getattr(self, 'ref', 'ref/master')
