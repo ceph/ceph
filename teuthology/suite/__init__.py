@@ -57,16 +57,16 @@ def main(args):
 
     if fn.email:
         config.results_email = fn.email
-    if args['--archive-upload']:
-        config.archive_upload = args['--archive-upload']
-        log.info('Will upload archives to ' + args['--archive-upload'])
+    if fn.archive_upload:
+        config.archive_upload = fn.archive_upload
+        log.info('Will upload archives to ' + fn.archive_upload)
 
     run = Run(fn)
     name = run.name
     run.prepare_and_schedule()
     if not fn.dry_run and args['--wait']:
         return wait(name, config.max_job_time,
-                    args['--archive-upload-url'])
+                    fn.archive_upload_url)
 
 
 class WaitException(Exception):
