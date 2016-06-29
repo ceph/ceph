@@ -16,10 +16,21 @@
 #include <boost/scope_exit.hpp>
 
 namespace librbd {
+
+namespace {
+
+struct MockTestImageCtx : public librbd::MockImageCtx {
+  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+    : librbd::MockImageCtx(image_ctx) {
+  }
+};
+
+} // anonymous namespace
+
 namespace journal {
 
 template <>
-struct TypeTraits<librbd::MockImageCtx> {
+struct TypeTraits<librbd::MockTestImageCtx> {
   typedef ::journal::MockJournaler Journaler;
 };
 
@@ -31,11 +42,11 @@ namespace mirror {
 namespace image_sync {
 
 template <>
-struct ObjectCopyRequest<librbd::MockImageCtx> {
+struct ObjectCopyRequest<librbd::MockTestImageCtx> {
   static ObjectCopyRequest* s_instance;
-  static ObjectCopyRequest* create(librbd::MockImageCtx *local_image_ctx,
-                                   librbd::MockImageCtx *remote_image_ctx,
-                                   const ImageCopyRequest<librbd::MockImageCtx>::SnapMap *snap_map,
+  static ObjectCopyRequest* create(librbd::MockTestImageCtx *local_image_ctx,
+                                   librbd::MockTestImageCtx *remote_image_ctx,
+                                   const ImageCopyRequest<librbd::MockTestImageCtx>::SnapMap *snap_map,
                                    uint64_t object_number, Context *on_finish) {
     assert(s_instance != nullptr);
     Mutex::Locker locker(s_instance->lock);
@@ -50,7 +61,7 @@ struct ObjectCopyRequest<librbd::MockImageCtx> {
   Mutex lock;
   Cond cond;
 
-  const ImageCopyRequest<librbd::MockImageCtx>::SnapMap *snap_map = nullptr;
+  const ImageCopyRequest<librbd::MockTestImageCtx>::SnapMap *snap_map = nullptr;
   std::map<uint64_t, Context *> object_contexts;
 
   ObjectCopyRequest() : lock("lock") {
@@ -58,7 +69,7 @@ struct ObjectCopyRequest<librbd::MockImageCtx> {
   }
 };
 
-ObjectCopyRequest<librbd::MockImageCtx>* ObjectCopyRequest<librbd::MockImageCtx>::s_instance = nullptr;
+ObjectCopyRequest<librbd::MockTestImageCtx>* ObjectCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image_sync
 } // namespace mirror
@@ -66,7 +77,7 @@ ObjectCopyRequest<librbd::MockImageCtx>* ObjectCopyRequest<librbd::MockImageCtx>
 
 // template definitions
 #include "tools/rbd_mirror/image_sync/ImageCopyRequest.cc"
-template class rbd::mirror::image_sync::ImageCopyRequest<librbd::MockImageCtx>;
+template class rbd::mirror::image_sync::ImageCopyRequest<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
@@ -81,8 +92,8 @@ using ::testing::InvokeWithoutArgs;
 
 class TestMockImageSyncImageCopyRequest : public TestMockFixture {
 public:
-  typedef ImageCopyRequest<librbd::MockImageCtx> MockImageCopyRequest;
-  typedef ObjectCopyRequest<librbd::MockImageCtx> MockObjectCopyRequest;
+  typedef ImageCopyRequest<librbd::MockTestImageCtx> MockImageCopyRequest;
+  typedef ObjectCopyRequest<librbd::MockTestImageCtx> MockObjectCopyRequest;
 
   virtual void SetUp() {
     TestMockFixture::SetUp();
@@ -95,7 +106,7 @@ public:
     ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &m_local_image_ctx));
   }
 
-  void expect_get_snap_id(librbd::MockImageCtx &mock_image_ctx) {
+  void expect_get_snap_id(librbd::MockTestImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, get_snap_id(_))
       .WillRepeatedly(Invoke([&mock_image_ctx](std::string snap_name) {
         RWLock::RLocker snap_locker(mock_image_ctx.image_ctx->snap_lock);
@@ -103,7 +114,7 @@ public:
       }));
   }
 
-  void expect_get_object_count(librbd::MockImageCtx &mock_image_ctx,
+  void expect_get_object_count(librbd::MockTestImageCtx &mock_image_ctx,
                                uint64_t count) {
     EXPECT_CALL(mock_image_ctx, get_object_count(_))
       .WillOnce(Return(count)).RetiresOnSaturation();
@@ -151,8 +162,8 @@ public:
     return *mock_object_copy_request.snap_map;
   }
 
-  MockImageCopyRequest *create_request(librbd::MockImageCtx &mock_remote_image_ctx,
-                                       librbd::MockImageCtx &mock_local_image_ctx,
+  MockImageCopyRequest *create_request(librbd::MockTestImageCtx &mock_remote_image_ctx,
+                                       librbd::MockTestImageCtx &mock_local_image_ctx,
                                        journal::MockJournaler &mock_journaler,
                                        librbd::journal::MirrorPeerSyncPoint &sync_point,
                                        Context *ctx) {
@@ -199,8 +210,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, SimpleImage) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -244,8 +255,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, Throttled) {
 
   uint64_t object_count = 55;
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -306,8 +317,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, SnapshotSubset) {
   ASSERT_EQ(0, create_snap("snap3"));
   m_client_meta.sync_points = {{"snap3", "snap2", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -344,8 +355,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartCatchup) {
   m_client_meta.sync_points = {{"snap1", boost::none},
                                {"snap2", "snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -376,8 +387,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartPartialSync) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"snap1", librbd::journal::MirrorPeerSyncPoint::ObjectNumber{0U}}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -413,8 +424,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -459,8 +470,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel_Inflight_Sync) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -507,8 +518,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel1) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
   MockObjectCopyRequest mock_object_copy_request;
 
@@ -538,8 +549,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, MissingSnap) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"missing-snap", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
   expect_get_snap_id(mock_remote_image_ctx);
@@ -558,8 +569,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, MissingFromSnap) {
   ASSERT_EQ(0, create_snap("snap1"));
   m_client_meta.sync_points = {{"snap1", "missing-snap", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
   expect_get_snap_id(mock_remote_image_ctx);
@@ -580,8 +591,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapMap) {
   m_client_meta.snap_seqs = {{0, 0}};
   m_client_meta.sync_points = {{"snap2", "snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
   expect_get_snap_id(mock_remote_image_ctx);
@@ -602,8 +613,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapSeqs) {
   m_client_meta.snap_seqs = {};
   m_client_meta.sync_points = {{"snap2", "snap1", boost::none}};
 
-  librbd::MockImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
-  librbd::MockImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
   journal::MockJournaler mock_journaler;
 
   expect_get_snap_id(mock_remote_image_ctx);
