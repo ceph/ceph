@@ -371,6 +371,7 @@ void Client::tear_down_cache()
 
 inodeno_t Client::get_root_ino()
 {
+  Mutex::Locker l(client_lock);
   if (use_faked_inos())
     return root->faked_ino;
   else
@@ -379,6 +380,7 @@ inodeno_t Client::get_root_ino()
 
 Inode *Client::get_root()
 {
+  Mutex::Locker l(client_lock);
   root->ll_get();
   return root;
 }
