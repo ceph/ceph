@@ -54,22 +54,12 @@ if [ x`uname`x = xFreeBSDx ]; then
         sysutils/flock \
 
     exit
-fi
-
-if test -f /etc/redhat-release ; then
-    $SUDO yum install -y redhat-lsb-core
-fi
-
-if type apt-get > /dev/null 2>&1 ; then
-    $SUDO apt-get install -y lsb-release devscripts equivs
-fi
-
-if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
-fi
-
-case $(lsb_release -si) in
-Ubuntu|Debian|Devuan)
+else
+    DISTRO=$(grep  "^ID=" /etc/os-release | sed "s/ID=//")
+    case $DISTRO in
+    debian|ubuntu|devuan)
+        echo "Using apt-get to install dependencies"
+        $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
@@ -94,7 +84,9 @@ Ubuntu|Debian|Devuan)
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-CentOS|Fedora|RedHatEnterpriseServer)
+    centos|fedora|rhel)
+        echo "Using yum to install dependencies"
+        $SUDO yum install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
                 $SUDO yum install -y yum-utils
@@ -119,14 +111,17 @@ CentOS|Fedora|RedHatEnterpriseServer)
         $SUDO yum-builddep -y $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-*SUSE*)
+    opensuse|suse)
+        echo "Using zypper to install dependencies"
+        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
-*)
-        echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
+    *)
+        echo "$DISTRO is unknown, dependencies will have to be installed manually."
         ;;
-esac
+    esac
+fi
 
 function populate_wheelhouse() {
     local install=$1
