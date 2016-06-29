@@ -774,7 +774,8 @@ private:
   int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target, int uid, int gid);
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target, int uid, int gid);
 
-  int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
+	    InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, int uid=-1, int gid=-1);
   int _mkdir(Inode *dir, const char *name, mode_t mode, int uid=-1, int gid=-1, InodeRef *inp = 0);
@@ -1013,7 +1014,7 @@ public:
   loff_t telldir(dir_result_t *dirp);
   void seekdir(dir_result_t *dirp, loff_t offset);
 
-  int link(const char *existing, const char *newname);
+  int link(const char *existing, const char *newname, const UserPerm& perm);
   int unlink(const char *path);
   int rename(const char *from, const char *to);
 
@@ -1152,7 +1153,7 @@ public:
   int ll_rename(Inode *parent, const char *name, Inode *newparent,
 		const char *newname, int uid = -1, int gid = -1);
   int ll_link(Inode *in, Inode *newparent, const char *newname,
-	      struct stat *attr, int uid = -1, int gid = -1);
+	      struct stat *attr, const UserPerm& perm);
   int ll_open(Inode *in, int flags, Fh **fh, int uid = -1, int gid = -1);
   int ll_create(Inode *parent, const char *name, mode_t mode, int flags,
 		struct stat *attr, Inode **out, Fh **fhp, int uid = -1,

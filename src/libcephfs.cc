@@ -545,7 +545,8 @@ extern "C" int ceph_link (struct ceph_mount_info *cmount, const char *existing,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->link(existing, newname);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->link(existing, newname, perms);
 }
 
 extern "C" int ceph_unlink(struct ceph_mount_info *cmount, const char *path)
@@ -1539,8 +1540,8 @@ extern "C" int ceph_ll_link(class ceph_mount_info *cmount,
 			    const char *name, struct stat *attr, int uid,
 			    int gid)
 {
-  return (cmount->get_client()->ll_link(in, newparent, name, attr, uid,
-					gid));
+  UserPerm perms(uid, gid);
+  return (cmount->get_client()->ll_link(in, newparent, name, attr, perms));
 }
 
 extern "C" int ceph_ll_truncate(class ceph_mount_info *cmount,
