@@ -6117,7 +6117,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
 
 // namespace ops
 
-int Client::link(const char *relexisting, const char *relpath) 
+int Client::link(const char *relexisting, const char *relpath, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "link" << std::endl;
@@ -6130,10 +6130,10 @@ int Client::link(const char *relexisting, const char *relpath)
   path.pop_dentry();
 
   InodeRef in, dir;
-  int r = path_walk(existing, &in);
+  int r = path_walk(existing, &in, perm, true);
   if (r < 0)
     goto out;
-  r = path_walk(path, &dir);
+  r = path_walk(path, &dir, perm, true);
   if (r < 0)
     goto out;
   if (cct->_conf->client_permissions) {
@@ -6141,14 +6141,14 @@ int Client::link(const char *relexisting, const char *relpath)
       r = -EPERM;
       goto out;
     }
-    r = may_hardlink(in.get());
+    r = may_hardlink(in.get(), perm);
     if (r < 0)
       goto out;
-    r = may_create(dir.get());
+    r = may_create(dir.get(), perm);
     if (r < 0)
       goto out;
   }
-  r = _link(in.get(), dir.get(), name.c_str());
+  r = _link(in.get(), dir.get(), name.c_str(), perm);
  out:
   return r;
 }
@@ -11071,10 +11071,10 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   return _rename(parent, name, newparent, newname, uid, gid);
 }
 
-int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, InodeRef *inp)
+int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& perm, InodeRef *inp)
 {
   ldout(cct, 3) << "_link(" << in->ino << " to " << dir->ino << " " << newname
-	  << " uid " << uid << " gid " << gid << ")" << dendl;
+		<< " uid " << perm.uid() << " gid " << perm.gid() << ")" << dendl;
 
   if (strlen(newname) > NAME_MAX)
     return -ENAMETOOLONG;
@@ -11103,7 +11103,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
     goto fail;
   req->set_dentry(de);
   
-  res = make_request(req, uid, gid, inp);
+  res = make_request(req, perm.uid(), perm.gid(), inp);
   ldout(cct, 10) << "link result is " << res << dendl;
 
   trim_cache();
@@ -11116,7 +11116,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
 }
 
 int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
-		    struct stat *attr, int uid, int gid)
+		    struct stat *attr, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11138,15 +11138,15 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
       r = -EPERM;
       goto out;
     }
-    r = may_hardlink(in, uid, gid);
+    r = may_hardlink(in, perm);
     if (r < 0)
       goto out;
-    r = may_create(newparent, uid, gid);
+    r = may_create(newparent, perm);
     if (r < 0)
       goto out;
   }
 
-  r = _link(in, newparent, newname, uid, gid, &target);
+  r = _link(in, newparent, newname, perm, &target);
   if (r == 0) {
     assert(target);
     fill_stat(target, attr);

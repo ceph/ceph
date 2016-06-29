@@ -446,9 +446,9 @@ static void fuse_ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   struct fuse_entry_param fe;
 
   memset(&fe, 0, sizeof(fe));
+  UserPerm perm(ctx->uid, ctx->gid);
   
-  int r = cfuse->client->ll_link(in, nin, newname, &fe.attr, ctx->uid,
-				 ctx->gid);
+  int r = cfuse->client->ll_link(in, nin, newname, &fe.attr, perm);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
