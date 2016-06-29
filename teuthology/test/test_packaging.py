@@ -387,7 +387,7 @@ class TestGitbuilderProject(object):
         assert result == expected
 
     @patch("teuthology.packaging.config")
-    def test_init_from_config_tag_overrides_branch_ref(self, m_config):
+    def test_init_from_config_tag_overrides_branch_ref(self, m_config, caplog):
         m_config.baseurl_template = \
             'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'
         m_config.gitbuilder_host = "gitbuilder.ceph.com"
@@ -401,6 +401,8 @@ class TestGitbuilderProject(object):
         result = gp.uri_reference
         expected = 'ref/v10.0.1'
         assert result == expected
+        expected_log = 'More than one of ref, tag, branch, or sha1 supplied; using tag'
+        assert expected_log in caplog.text()
 
     @patch("teuthology.packaging.config")
     @patch("teuthology.packaging._get_config_value_for_remote")
