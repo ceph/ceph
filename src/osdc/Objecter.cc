@@ -85,6 +85,7 @@ enum {
   l_osdc_osdop_read,
   l_osdc_osdop_write,
   l_osdc_osdop_writefull,
+  l_osdc_osdop_writesame,
   l_osdc_osdop_append,
   l_osdc_osdop_zero,
   l_osdc_osdop_truncate,
@@ -258,6 +259,8 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_osdop_write, "osdop_write", "Write operations");
     pcb.add_u64_counter(l_osdc_osdop_writefull, "osdop_writefull",
 			"Write full object operations");
+    pcb.add_u64_counter(l_osdc_osdop_writesame, "osdop_writesame",
+                        "Write same operations");
     pcb.add_u64_counter(l_osdc_osdop_append, "osdop_append",
 			"Append operation");
     pcb.add_u64_counter(l_osdc_osdop_zero, "osdop_zero",
@@ -2232,6 +2235,7 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_READ: code = l_osdc_osdop_read; break;
     case CEPH_OSD_OP_WRITE: code = l_osdc_osdop_write; break;
     case CEPH_OSD_OP_WRITEFULL: code = l_osdc_osdop_writefull; break;
+    case CEPH_OSD_OP_WRITESAME: code = l_osdc_osdop_writesame; break;
     case CEPH_OSD_OP_APPEND: code = l_osdc_osdop_append; break;
     case CEPH_OSD_OP_ZERO: code = l_osdc_osdop_zero; break;
     case CEPH_OSD_OP_TRUNCATE: code = l_osdc_osdop_truncate; break;
@@ -2324,7 +2328,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
+  } else if ((op->target.flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
 	     !(op->target.flags & (CEPH_OSD_FLAG_FULL_TRY |
 				   CEPH_OSD_FLAG_FULL_FORCE)) &&
 	     (_osdmap_full_flag() ||

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -79,22 +79,6 @@ static int get_features(bool *old_format, uint64_t *features)
     cout << "using old format" << std::endl;
   }
 
-  return 0;
-}
-
-static int get_image_id(librbd::Image &image, std::string *image_id)
-{
-  librbd::image_info_t info;
-  int r = image.stat(info, sizeof(info));
-  if (r < 0) {
-    return r;
-  }
-
-  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-  *image_id = std::string(prefix + strlen(RBD_DATA_PREFIX));
   return 0;
 }
 
@@ -2986,6 +2970,69 @@ TEST_F(TestLibRBD, Flatten)
   ASSERT_PASSED(validate_object_map, clone_image);
 }
 
+TEST_F(TestLibRBD, SnapshotLimit)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  uint64_t limit;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  ASSERT_EQ(0, rbd_snap_get_limit(image, &limit));
+  ASSERT_EQ(UINT64_MAX, limit);
+  ASSERT_EQ(0, rbd_snap_set_limit(image, 2));
+  ASSERT_EQ(0, rbd_snap_get_limit(image, &limit));
+  ASSERT_EQ(2U, limit);
+
+  ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
+  ASSERT_EQ(0, rbd_snap_create(image, "snap2"));
+  ASSERT_EQ(-EDQUOT, rbd_snap_create(image, "snap3"));
+  ASSERT_EQ(0, rbd_snap_set_limit(image, UINT64_MAX));
+  ASSERT_EQ(0, rbd_snap_create(image, "snap3"));
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+}
+  
+
+TEST_F(TestLibRBD, SnapshotLimitPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    std::string name = get_temp_image_name();
+    uint64_t size = 2 << 20;
+    int order = 0;
+    uint64_t limit;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    ASSERT_EQ(0, image.snap_get_limit(&limit));
+    ASSERT_EQ(UINT64_MAX, limit);
+    ASSERT_EQ(0, image.snap_set_limit(2));
+    ASSERT_EQ(0, image.snap_get_limit(&limit));
+    ASSERT_EQ(2U, limit);
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    ASSERT_EQ(0, image.snap_create("snap2"));
+    ASSERT_EQ(-EDQUOT, image.snap_create("snap3"));
+    ASSERT_EQ(0, image.snap_set_limit(UINT64_MAX));
+    ASSERT_EQ(0, image.snap_create("snap3"));
+  }
+
+  ioctx.close();
+}
+
 TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
 {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
@@ -3527,10 +3574,14 @@ TEST_F(TestLibRBD, UpdateFeatures)
   // must provide a single feature
   ASSERT_EQ(-EINVAL, image.update_features(0, true));
 
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK |
-                                     RBD_FEATURE_OBJECT_MAP |
-                                     RBD_FEATURE_FAST_DIFF |
-                                     RBD_FEATURE_JOURNALING, false));
+  uint64_t disable_features;
+  disable_features = features & (RBD_FEATURE_EXCLUSIVE_LOCK |
+                                 RBD_FEATURE_OBJECT_MAP |
+                                 RBD_FEATURE_FAST_DIFF |
+                                 RBD_FEATURE_JOURNALING);
+  if (disable_features != 0) {
+    ASSERT_EQ(0, image.update_features(disable_features, false));
+  }
 
   // cannot enable object map nor journaling w/o exclusive lock
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));

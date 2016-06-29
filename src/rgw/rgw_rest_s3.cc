@@ -8,6 +8,8 @@
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
+#include "common/safe_io.h"
+#include <boost/algorithm/string.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -21,9 +23,7 @@
 
 #include "rgw_client_io.h"
 
-/* This header consists several Keystone-related primitives
- * we want to reuse here. */
-#include "rgw_swift.h"
+#include "rgw_keystone.h"
 
 #include <typeinfo> // for 'typeid'
 
@@ -266,7 +266,7 @@ done:
 			riter->second.c_str());
   }
 
-  if (op_ret == ERR_NOT_MODIFIED) {
+  if (op_ret == -ERR_NOT_MODIFIED) {
       end_header(s, this);
   } else {
       if (!content_type)
@@ -1050,17 +1050,163 @@ int RGWPutObj_ObjStore_S3::get_params()
   return RGWPutObj_ObjStore::get_params();
 }
 
+int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
+                                                      char *chunk_data_str,
+                                                      unsigned int chunk_data_size,
+                                                      string chunk_signature)
+{
+
+  /* string to sign */
+
+  string hash_empty_str;
+  rgw_hash_s3_string_sha256("", 0, hash_empty_str);
+
+  string hash_chunk_data;
+  rgw_hash_s3_string_sha256(chunk_data_str, chunk_data_size, hash_chunk_data);
+
+  string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
+  string_to_sign.append(s->aws4_auth->date + "\n");
+  string_to_sign.append(s->aws4_auth->credential_scope + "\n");
+  string_to_sign.append(s->aws4_auth->seed_signature + "\n");
+  string_to_sign.append(hash_empty_str + "\n");
+  string_to_sign.append(hash_chunk_data);
+
+  /* new chunk signature */
+
+  char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  calc_hmac_sha256(s->aws4_auth->signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
+      string_to_sign.c_str(), string_to_sign.size(), signature_k);
+
+  char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
+  buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+
+  string new_chunk_signature = string(aux);
+
+  ldout(s->cct, 20) << "--------------- aws4 chunk validation" << dendl;
+  ldout(s->cct, 20) << "chunk_signature     = " << chunk_signature << dendl;
+  ldout(s->cct, 20) << "new_chunk_signature = " << new_chunk_signature << dendl;
+  ldout(s->cct, 20) << "aws4 chunk signing_key    = " << s->aws4_auth->signing_key << dendl;
+  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << string_to_sign << dendl;
+
+  /* chunk auth ok? */
+
+  if (new_chunk_signature != chunk_signature) {
+    ldout(s->cct, 20) << "ERROR: AWS4 chunk signature does NOT match (new_chunk_signature != chunk_signature)" << dendl;
+    return -ERR_SIGNATURE_NO_MATCH;
+  }
+
+  /* update seed signature */
+
+  s->aws4_auth->seed_signature = new_chunk_signature;
+
+  return 0;
+}
+
+int RGWPutObj_ObjStore_S3::validate_and_unwrap_available_aws4_chunked_data(bufferlist& bl_in,
+                                                                           bufferlist& bl_out)
+{
+
+  /* string(IntHexBase(chunk-size)) + ";chunk-signature=" + signature + \r\n + chunk-data + \r\n */
+
+  const unsigned int chunk_str_min_len = 1 + 17 + 64 + 2; /* len('0') = 1 */
+
+  char *chunk_str = bl_in.c_str();
+  unsigned int budget = bl_in.length();
+
+  bl_out.clear();
+
+  while (true) {
+
+    /* check available metadata */
+
+    if (budget < chunk_str_min_len) {
+      return -ERR_SIGNATURE_NO_MATCH;
+    }
+
+    unsigned int chunk_offset = 0;
+
+    /* grab chunk size */
+
+    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
+      chunk_offset++;
+    string str = string(chunk_str, chunk_offset);
+    unsigned int chunk_data_size;
+    stringstream ss;
+    ss << std::hex << str;
+    ss >> chunk_data_size;
+    if (ss.fail()) {
+      return -ERR_SIGNATURE_NO_MATCH;
+    }
+
+    /* grab chunk signature */
+
+    chunk_offset += 17;
+    string chunk_signature = string(chunk_str, chunk_offset, 64);
+
+    /* get chunk data */
+
+    chunk_offset += 64 + 2;
+    char *chunk_data_str = chunk_str + chunk_offset;
+
+    /* handle budget */
+
+    budget -= chunk_offset;
+    if (budget < chunk_data_size) {
+      return -ERR_SIGNATURE_NO_MATCH;
+    } else {
+      budget -= chunk_data_size;
+    }
+
+    /* auth single chunk */
+
+    if (validate_aws4_single_chunk(chunk_str, chunk_data_str, chunk_data_size, chunk_signature) < 0) {
+      ldout(s->cct, 20) << "ERROR AWS4 single chunk validation" << dendl;
+      return -ERR_SIGNATURE_NO_MATCH;
+    }
+
+    /* aggregate single chunk */
+
+    bl_out.append(chunk_data_str, chunk_data_size);
+
+    /* last chunk or no more budget? */
+
+    if ((chunk_data_size == 0) || (budget == 0))
+      break;
+
+    /* next chunk */
+
+    chunk_offset += chunk_data_size;
+    chunk_str += chunk_offset;
+  }
+
+  /* authorization ok */
+
+  return 0;
+
+}
+
 int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
 {
   int ret = RGWPutObj_ObjStore::get_data(bl);
   if (ret < 0)
     s->aws4_auth_needs_complete = false;
-  if ((ret == 0) && s->aws4_auth_needs_complete) {
-    int ret_auth = do_aws4_auth_completion();
+
+  int ret_auth;
+
+  if (s->aws4_auth_streaming_mode && ret > 0) {
+    ret_auth = validate_and_unwrap_available_aws4_chunked_data(bl, s->aws4_auth->bl);
     if (ret_auth < 0) {
       return ret_auth;
     }
   }
+
+  if ((ret == 0) && s->aws4_auth_needs_complete) {
+    ret_auth = do_aws4_auth_completion();
+    if (ret_auth < 0) {
+      return ret_auth;
+    }
+  }
+
   return ret;
 }
 
@@ -1600,10 +1746,32 @@ int RGWPostObj_ObjStore_S3::get_policy()
 	  s->perm_mask = RGW_PERM_FULL_CONTROL;
 	}
       } else if (store->ctx()->_conf->rgw_s3_auth_use_ldap &&
-		store->ctx()->_conf->rgw_ldap_uri.empty()) {
+		 (! store->ctx()->_conf->rgw_ldap_uri.empty())) {
+
+	ldout(store->ctx(), 15)
+	  << __func__ << " LDAP auth uri="
+	  << store->ctx()->_conf->rgw_ldap_uri
+	  << dendl;
+
 	RGWToken token{from_base64(s3_access_key)};
+	if (! token.valid())
+	  return -EACCES;
+
 	rgw::LDAPHelper *ldh = RGW_Auth_S3::get_ldap_ctx(store);
-	if ((! token.valid()) || ldh->auth(token.id, token.key) != 0)
+	if (unlikely(!ldh)) {
+	  ldout(store->ctx(), 0)
+	    << __func__ << " RGW_Auth_S3::get_ldap_ctx() failed"
+	    << dendl;
+	  return -EACCES;
+	}
+
+	ldout(store->ctx(), 10)
+	  << __func__ << " try LDAP auth uri="
+	  << store->ctx()->_conf->rgw_ldap_uri
+	  << " token.id=" << token.id
+	  << dendl;
+
+	if (ldh->auth(token.id, token.key) != 0)
 	  return -EACCES;
 
 	/* ok, succeeded */
@@ -1706,6 +1874,10 @@ int RGWPostObj_ObjStore_S3::get_policy()
     *(s->user) = user_info;
     s->owner.set_id(user_info.user_id);
     s->owner.set_name(user_info.display_name);
+
+    /* FIXME: remove this after switching S3 to the new authentication
+     * infrastructure. */
+    s->auth_identity = rgw_auth_transform_old_authinfo(s);
   } else {
     ldout(s->cct, 0) << "No attached policy found!" << dendl;
   }
@@ -2922,9 +3094,10 @@ void RGW_Auth_S3::init_impl(RGWRados* store)
   const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
   const string& ldap_dnattr =
     store->ctx()->_conf->rgw_ldap_dnattr;
+  std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
-  ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_searchdn,
-			    ldap_dnattr);
+  ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
+			    ldap_searchdn, ldap_dnattr);
 
   ldh->init();
   ldh->bind();
@@ -2949,7 +3122,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* get authentication token for Keystone. */
   string admin_token_id;
-  int r = RGWSwift::get_keystone_admin_token(cct, admin_token_id);
+  int r = KeystoneService::get_keystone_admin_token(cct, admin_token_id);
   if (r < 0) {
     ldout(cct, 2) << "s3 keystone: cannot get token for keystone access" << dendl;
     return r;
@@ -3004,10 +3177,11 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(
 
   /* check if we have a valid role */
   bool found = false;
-  list<string>::iterator iter;
-  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    if ((found=response.has_role(*iter))==true)
+  for (const auto& role : accepted_roles) {
+    if (response.has_role(role) == true) {
+      found = true;
       break;
+    }
   }
 
   if (!found) {
@@ -3118,7 +3292,7 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   if (s->aws4_auth_needs_complete) {
     const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
     if (expected_request_payload_hash &&
-	s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
+        s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
       ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
       return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
     }
@@ -3168,6 +3342,8 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   if (err) {
     return err;
   }
+
+  s->aws4_auth->seed_signature = s->aws4_auth->new_signature;
 
   return 0;
 
@@ -3516,6 +3692,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   string request_payload;
 
   bool unsigned_payload = false;
+  s->aws4_auth_streaming_mode = false;
 
   if (using_qs) {
     /* query parameters auth */
@@ -3523,8 +3700,11 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   } else {
     /* header auth */
     const char *request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-    if (request_payload_hash && string("UNSIGNED-PAYLOAD").compare(request_payload_hash) == 0) {
-      unsigned_payload = true;
+    if (request_payload_hash) {
+      unsigned_payload = string("UNSIGNED-PAYLOAD").compare(request_payload_hash) == 0;
+      if (!unsigned_payload) {
+        s->aws4_auth_streaming_mode = string("STREAMING-AWS4-HMAC-SHA256-PAYLOAD").compare(request_payload_hash) == 0;
+      }
     }
   }
 
@@ -3564,26 +3744,65 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* aws4 auth not completed... delay aws4 auth */
 
-    dout(10) << "delaying v4 auth" << dendl;
+    if (!s->aws4_auth_streaming_mode) {
 
-    switch (s->op_type)
-    {
-      case RGW_OP_CREATE_BUCKET:
-      case RGW_OP_PUT_OBJ:
-      case RGW_OP_PUT_ACLS:
-      case RGW_OP_PUT_CORS:
-      case RGW_OP_COMPLETE_MULTIPART:
-      case RGW_OP_SET_BUCKET_VERSIONING:
-      case RGW_OP_DELETE_MULTI_OBJ:
-      case RGW_OP_ADMIN_SET_METADATA:
-      case RGW_OP_SET_BUCKET_WEBSITE:
-        break;
-      default:
-        dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
-        return -ERR_NOT_IMPLEMENTED;
+      dout(10) << "delaying v4 auth" << dendl;
+
+      /* payload in a single chunk */
+
+      switch (s->op_type)
+      {
+        case RGW_OP_CREATE_BUCKET:
+        case RGW_OP_PUT_OBJ:
+        case RGW_OP_PUT_ACLS:
+        case RGW_OP_PUT_CORS:
+        case RGW_OP_COMPLETE_MULTIPART:
+        case RGW_OP_SET_BUCKET_VERSIONING:
+        case RGW_OP_DELETE_MULTI_OBJ:
+        case RGW_OP_ADMIN_SET_METADATA:
+        case RGW_OP_SET_BUCKET_WEBSITE:
+          break;
+        default:
+          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
+          return -ERR_NOT_IMPLEMENTED;
+      }
+
+      s->aws4_auth_needs_complete = true;
+
+    } else {
+
+      dout(10) << "body content detected in multiple chunks" << dendl;
+
+      /* payload in multiple chunks */
+
+      switch(s->op_type)
+      {
+        case RGW_OP_PUT_OBJ:
+          break;
+        default:
+          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
+          return -ERR_NOT_IMPLEMENTED;
+      }
+
+      /* calculate seed */
+
+      int err = authorize_v4_complete(store, s, "", unsigned_payload);
+      if (err) {
+        return err;
+      }
+
+      /* verify seed signature */
+
+      if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
+        dout(10) << "ERROR: AWS4 seed signature does NOT match!" << dendl;
+        return -ERR_SIGNATURE_NO_MATCH;
+      }
+
+      dout(10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
+
+      s->aws4_auth_needs_complete = false;
+
     }
-
-    s->aws4_auth_needs_complete = true;
 
   }
 
@@ -3720,29 +3939,45 @@ int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
 
     RGW_Auth_S3::init(store);
 
+    ldout(store->ctx(), 15)
+      << __func__ << " LDAP auth uri="
+      << store->ctx()->_conf->rgw_ldap_uri
+      << dendl;
+
     RGWToken token{from_base64(auth_id)};
-    if ((! token.valid()) || ldh->auth(token.id, token.key) != 0)
+
+    if (! token.valid())
       external_auth_result = -EACCES;
     else {
-      /* ok, succeeded */
-      external_auth_result = 0;
+      ldout(store->ctx(), 10)
+	<< __func__ << " try LDAP auth uri="
+	<< store->ctx()->_conf->rgw_ldap_uri
+	<< " token.id=" << token.id
+	<< dendl;
 
-      /* create local account, if none exists */
-      s->user->user_id = token.id;
-      s->user->display_name = token.id; // cn?
-      int ret = rgw_get_user_info_by_uid(store, s->user->user_id, *(s->user));
-      if (ret < 0) {
-	ret = rgw_store_user_info(store, *(s->user), nullptr, nullptr,
-				  real_time(), true);
+      if (ldh->auth(token.id, token.key) != 0)
+	external_auth_result = -EACCES;
+      else {
+	/* ok, succeeded */
+	external_auth_result = 0;
+
+	/* create local account, if none exists */
+	s->user->user_id = token.id;
+	s->user->display_name = token.id; // cn?
+	int ret = rgw_get_user_info_by_uid(store, s->user->user_id, *(s->user));
 	if (ret < 0) {
-	  dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
-		   << dendl;
+	  ret = rgw_store_user_info(store, *(s->user), nullptr, nullptr,
+				    real_time(), true);
+	  if (ret < 0) {
+	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret
+		     << dendl;
+	  }
 	}
-      }
 
       /* set request perms */
       s->perm_mask = RGW_PERM_FULL_CONTROL;
-    } /* success */
+      } /* success */
+    } /* token */
   } /* ldap */
 
   /* keystone failed (or not enabled); check if we want to use rados backend */

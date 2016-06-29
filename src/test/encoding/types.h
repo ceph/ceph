@@ -25,16 +25,17 @@ TYPE(SnapRealmInfo)
 TYPE(DecayCounter)
 
 #include "common/LogEntry.h"
-TYPE(LogEntryKey)
-TYPE(LogEntry)
-TYPE(LogSummary)
+TYPE_FEATUREFUL(LogEntryKey)
+TYPE_FEATUREFUL(LogEntry)
+TYPE_FEATUREFUL(LogSummary)
 
 #include "common/SloppyCRCMap.h"
 TYPE(SloppyCRCMap)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
-TYPE(entity_addr_t)
+TYPE_FEATUREFUL(entity_addr_t)
+TYPE_FEATUREFUL(entity_inst_t)
 
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
@@ -76,10 +77,10 @@ TYPE(pg_nls_response_t)
 TYPE(object_copy_cursor_t)
 TYPE_FEATUREFUL(object_copy_data_t)
 TYPE(pg_create_t)
-TYPE(watch_info_t)
-TYPE(object_info_t)
+TYPE_FEATUREFUL(watch_info_t)
+TYPE_FEATUREFUL(object_info_t)
 TYPE(SnapSet)
-TYPE(ObjectRecoveryInfo)
+TYPE_FEATUREFUL(ObjectRecoveryInfo)
 TYPE(ObjectRecoveryProgress)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
@@ -88,8 +89,8 @@ TYPE(pg_hit_set_history_t)
 TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
-TYPE(PullOp)
-TYPE(PushOp)
+TYPE_FEATUREFUL(PullOp)
+TYPE_FEATUREFUL(PushOp)
 TYPE(PushReplyOp)
 
 #include "osd/ECUtil.h"
@@ -114,18 +115,18 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
+#if !defined(__FreeBSD__)
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)
-TYPE(bluestore_extent_t)
 TYPE(bluestore_extent_ref_map_t)
-TYPE(bluestore_overlay_t)
 TYPE(bluestore_pextent_t)
 TYPE(bluestore_blob_t)
 TYPE(bluestore_lextent_t)
 TYPE(bluestore_onode_t)
 TYPE(bluestore_wal_op_t)
 TYPE(bluestore_wal_transaction_t)
+#endif
 
 #include "common/hobject.h"
 TYPE(hobject_t)
@@ -174,7 +175,7 @@ TYPE_FEATUREFUL(inode_t)
 TYPE_FEATUREFUL(old_inode_t)
 TYPE(fnode_t)
 TYPE(old_rstat_t)
-TYPE(session_info_t)
+TYPE_FEATUREFUL(session_info_t)
 TYPE(string_snap_t)
 TYPE(MDSCacheObjectInfo)
 TYPE(mds_table_pending_t)
@@ -373,14 +374,14 @@ TYPE(cls::rbd::MirrorImage)
 
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
-TYPE(rados::cls::lock::locker_info_t)
+TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
 TYPE(cls_lock_unlock_op)
 TYPE(cls_lock_break_op)
 TYPE(cls_lock_get_info_op)
-TYPE(cls_lock_get_info_reply)
+TYPE_FEATUREFUL(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
 TYPE(cls_lock_assert_op)
 

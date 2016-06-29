@@ -50,7 +50,7 @@ function run() {
     $DRY_RUN ./autogen.sh || return 1
     $DRY_RUN mkdir build
     $DRY_RUN cd build
-    $DRY_RUN cmake ../    
+    $DRY_RUN cmake "$@" ../
     $DRY_RUN make $BUILD_MAKEOPTS || return 1
 }
 

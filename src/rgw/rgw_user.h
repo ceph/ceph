@@ -56,10 +56,6 @@ extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 extern void rgw_get_anon_user(RGWUserInfo& info);
 
 /**
- * verify that user is an actual user, and not the anonymous user
- */
-extern bool rgw_user_is_authenticated(RGWUserInfo& info);
-/**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
@@ -92,8 +88,11 @@ extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInf
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
+extern int rgw_get_user_info_by_swift(RGWRados *store,
+                                      const string& swift_name,
+                                      RGWUserInfo& info,        /* out */
+                                      RGWObjVersionTracker *objv_tracker = nullptr,
+                                      real_time *pmtime = nullptr);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
@@ -157,8 +156,9 @@ struct RGWUserAdminOpState {
   rgw_user user_id;
   std::string user_email;
   std::string display_name;
-  uint32_t max_buckets;
+  int32_t max_buckets;
   __u8 suspended;
+  __u8 admin;
   __u8 system;
   __u8 exclusive;
   __u8 fetch_stats;
@@ -198,6 +198,7 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
+  bool admin_specified;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
@@ -317,6 +318,11 @@ struct RGWUserAdminOpState {
     suspension_op = true;
   }
 
+  void set_admin(__u8 is_admin) {
+    admin = is_admin;
+    admin_specified = true;
+  }
+
   void set_system(__u8 is_system) {
     system = is_system;
     system_specified = true;
@@ -335,7 +341,7 @@ struct RGWUserAdminOpState {
     info = user_info;
   }
 
-  void set_max_buckets(uint32_t mb) {
+  void set_max_buckets(int32_t mb) {
     max_buckets = mb;
     max_buckets_specified = true;
   }
@@ -410,7 +416,7 @@ struct RGWUserAdminOpState {
   __u8 get_suspension_status() { return suspended; }
   int32_t get_key_type() {return key_type; }
   uint32_t get_subuser_perm() { return perm_mask; }
-  uint32_t get_max_buckets() { return max_buckets; }
+  int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
@@ -474,6 +480,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = RGW_PERM_NONE;
     suspended = 0;
+    admin = 0;
     system = 0;
     exclusive = 0;
     fetch_stats = 0;

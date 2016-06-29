@@ -27,6 +27,7 @@
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Utils.h"
+#include "librbd/LibrbdWriteback.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -1019,10 +1020,7 @@ struct C_InvalidateCache : public Context {
 
   void ImageCtx::notify_update() {
     state->handle_update_notification();
-
-    C_SaferCond ctx;
-    image_watcher->notify_header_update(&ctx);
-    ctx.wait();
+    ImageWatcher::notify_header_update(md_ctx, header_oid);
   }
 
   void ImageCtx::notify_update(Context *on_finish) {

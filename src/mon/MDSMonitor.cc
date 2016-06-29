@@ -26,6 +26,7 @@
 #include "common/cmdparse.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
+#include "messages/MFSMapUser.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMonCommand.h"
 #include "messages/MGenericMessage.h"
@@ -138,7 +139,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 
   dout(10) << __func__ << " version " << version
 	   << ", my e " << fsmap.epoch << dendl;
-  assert(version >= fsmap.epoch);
+  assert(version > fsmap.epoch);
 
   // read and decode
   fsmap_bl.clear();
@@ -613,7 +614,8 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       dout(4) << __func__ << ": marking rank "
               << info.rank << " damaged" << dendl;
 
-      const utime_t until = ceph_clock_now(g_ceph_context);
+      utime_t until = ceph_clock_now(g_ceph_context);
+      until += g_conf->mds_blacklist_interval;
       const auto blacklist_epoch = mon->osdmon()->blacklist(info.addr, until);
       request_proposal(mon->osdmon());
       pending_fsmap.damaged(gid, blacklist_epoch);
@@ -1500,7 +1502,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_features() && CEPH_FEATURE_SERVER_JEWEL;
+      bool jewel = mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL;
       if (flag_bool && !jewel) {
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
@@ -1806,8 +1808,15 @@ public:
     if (var == "max_mds") {
       // NOTE: see also "mds set_max_mds", which can modify the same field.
       if (interr.length()) {
+        ss << interr;
 	return -EINVAL;
       }
+
+      if (n <= 0) {
+        ss << "You must specify at least one MDS";
+        return -EINVAL;
+      }
+
       if (!fs->mds_map.allows_multimds() && n > fs->mds_map.get_max_mds() &&
 	  n > 1) {
 	ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
@@ -2084,7 +2093,6 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       string err;
       poolid = strict_strtol(poolname.c_str(), 10, &err);
       if (err.length()) {
-	poolid = -1;
 	ss << "pool '" << poolname << "' does not exist";
         return -ENOENT;
       } else if (poolid < 0) {
@@ -2096,7 +2104,6 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
     assert(poolid >= 0);  // Checked by parsing code above
 
     if (fs->mds_map.get_first_data_pool() == poolid) {
-      poolid = -1;
       ss << "cannot remove default data pool";
       return -EINVAL;
     }
@@ -2385,7 +2392,7 @@ int MDSMonitor::legacy_filesystem_command(
   if (prefix == "mds set_max_mds") {
     // NOTE: deprecated by "fs set max_mds"
     int64_t maxmds;
-    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds <= 0) {
       return -EINVAL;
     }
 
@@ -2447,6 +2454,7 @@ void MDSMonitor::check_subs()
   // filesystems.  Build a list of all the types we service
   // subscriptions for.
   types.push_back("fsmap");
+  types.push_back("fsmap.user");
   types.push_back("mdsmap");
   for (const auto &i : fsmap.filesystems) {
     auto fscid = i.first;
@@ -2481,7 +2489,26 @@ void MDSMonitor::check_sub(Subscription *sub)
         sub->next = fsmap.get_epoch() + 1;
       }
     }
-  } else {
+  } else if (sub->type == "fsmap.user") {
+    if (sub->next <= fsmap.get_epoch()) {
+      FSMapUser fsmap_u;
+      fsmap_u.epoch = fsmap.get_epoch();
+      fsmap_u.legacy_client_fscid = fsmap.legacy_client_fscid;
+      for (auto p = fsmap.filesystems.begin();
+	   p != fsmap.filesystems.end();
+	   ++p) {
+	FSMapUser::fs_info_t& fs_info = fsmap_u.filesystems[p->first];
+	fs_info.cid = p->first;
+	fs_info.name= p->second->mds_map.fs_name;
+      }
+      sub->session->con->send_message(new MFSMapUser(mon->monmap->fsid, fsmap_u));
+      if (sub->onetime) {
+	mon->session_map.remove_sub(sub);
+      } else {
+	sub->next = fsmap.get_epoch() + 1;
+      }
+    }
+  } else if (sub->type.compare(0, 6, "mdsmap") == 0) {
     if (sub->next > fsmap.get_epoch()) {
       return;
     }

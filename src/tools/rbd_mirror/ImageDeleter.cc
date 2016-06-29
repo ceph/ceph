@@ -21,11 +21,13 @@
 #include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
+#include "librbd/journal/Policy.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
@@ -68,6 +70,16 @@ public:
 
 private:
   ImageDeleter *image_del;
+};
+
+struct DeleteJournalPolicy : public librbd::journal::Policy {
+  virtual void allocate_tag_on_lock(Context *on_finish) {
+    on_finish->complete(0);
+  }
+
+  virtual void cancel_external_replay(Context *on_finish) {
+    on_finish->complete(0);
+  }
 };
 
 } // anonymous namespace
@@ -115,10 +127,11 @@ private:
   Commands commands;
 };
 
-ImageDeleter::ImageDeleter(RadosRef local_cluster, SafeTimer *timer,
-                           Mutex *timer_lock)
+ImageDeleter::ImageDeleter(RadosRef local_cluster, ContextWQ *work_queue,
+                           SafeTimer *timer, Mutex *timer_lock)
   : m_local(local_cluster),
     m_running(1),
+    m_work_queue(work_queue),
     m_delete_lock("rbd::mirror::ImageDeleter::Delete"),
     m_image_deleter_thread(this),
     m_failed_timer(timer),
@@ -203,19 +216,37 @@ void ImageDeleter::schedule_image_delete(uint64_t local_pool_id,
 void ImageDeleter::wait_for_scheduled_deletion(const std::string& image_name,
                                                Context *ctx,
                                                bool notify_on_failed_retry) {
-  {
-    Mutex::Locker l(m_delete_lock);
 
-    auto del_info = find_delete_info(image_name);
-    if (del_info) {
-      (*del_info)->on_delete = ctx;
-      (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
-      return;
-    }
+  ctx = new FunctionContext([this, ctx](int r) {
+      m_work_queue->queue(ctx, r);
+    });
+
+  Mutex::Locker l(m_delete_lock);
+  auto del_info = find_delete_info(image_name);
+  if (!del_info) {
+    // image not scheduled for deletion
+    ctx->complete(0);
+    return;
   }
 
-  // image not scheduled for deletion
-  ctx->complete(0);
+  if ((*del_info)->on_delete != nullptr) {
+    (*del_info)->on_delete->complete(-ESTALE);
+  }
+  (*del_info)->on_delete = ctx;
+  (*del_info)->notify_on_failed_retry = notify_on_failed_retry;
+}
+
+void ImageDeleter::cancel_waiter(const std::string& image_name) {
+  Mutex::Locker locker(m_delete_lock);
+  auto del_info = find_delete_info(image_name);
+  if (!del_info) {
+    return;
+  }
+
+  if ((*del_info)->on_delete != nullptr) {
+    (*del_info)->on_delete->complete(-ECANCELED);
+    (*del_info)->on_delete = nullptr;
+  }
 }
 
 bool ImageDeleter::process_image_delete() {
@@ -270,7 +301,14 @@ bool ImageDeleter::process_image_delete() {
   mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
   r = cls_client::mirror_image_set(&ioctx, curr_deletion->local_image_id,
                                            mirror_image);
-  if (r == -EEXIST || r == -EINVAL) {
+  if (r == -ENOENT) {
+    dout(10) << "local image is not mirrored, aborting deletion..." << dendl;
+    m_delete_lock.Lock();
+    DeleteInfo *del_info = curr_deletion.release();
+    m_delete_lock.Unlock();
+    del_info->notify(r);
+    return true;
+  } else if (r == -EEXIST || r == -EINVAL) {
     derr << "cannot disable mirroring for image id" << curr_deletion->local_image_id
          << ": global_image_id has changed/reused, aborting deletion: "
          << cpp_strerror(r) << dendl;
@@ -302,10 +340,10 @@ bool ImageDeleter::process_image_delete() {
       return true;
     }
 
-    // We are disabling Journaling so that we can delete image snapshots
-    // of a non-primary image. Otherwise, we would fail to acquire the
-    // exclusive lock.
-    imgctx->features ^= RBD_FEATURE_JOURNALING;
+    {
+      RWLock::WLocker snap_locker(imgctx->snap_lock);
+      imgctx->set_journal_policy(new DeleteJournalPolicy());
+    }
 
     std::vector<librbd::snap_info_t> snaps;
     r = librbd::snap_list(imgctx, snaps);
@@ -354,16 +392,6 @@ bool ImageDeleter::process_image_delete() {
           enqueue_failed_delete(r);
           return true;
         }
-
-        r = imgctx->state->refresh();
-        if (r < 0) {
-          derr << "error refreshing image " << imgctx->name << ": "
-               << cpp_strerror(r) << dendl;
-          imgctx->state->close();
-          enqueue_failed_delete(r);
-          return true;
-        }
-        imgctx->features ^= RBD_FEATURE_JOURNALING;
       }
 
       r = imgctx->operations->snap_remove(snap.name.c_str());
@@ -502,8 +530,10 @@ void ImageDeleter::print_status(Formatter *f, stringstream *ss) {
 void ImageDeleter::DeleteInfo::notify(int r) {
   if (on_delete) {
     dout(20) << "executing image deletion handler r=" << r << dendl;
-    on_delete->complete(r);
+
+    Context *ctx = on_delete;
     on_delete = nullptr;
+    ctx->complete(r);
   }
 }
 

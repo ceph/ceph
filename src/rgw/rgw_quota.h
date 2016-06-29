@@ -20,31 +20,68 @@
 #include "include/atomic.h"
 #include "common/lru_map.h"
 
+static inline int64_t rgw_rounded_kb(int64_t bytes)
+{
+  return (bytes + 1023) / 1024;
+}
+
 class RGWRados;
 class JSONObj;
 
 struct RGWQuotaInfo {
-  int64_t max_size_kb;
-  int64_t max_objects;
-  bool enabled;
+  template<class T> friend class RGWQuotaCache;
+protected:
+  /* The quota thresholds after which comparing against cached storage stats
+   * is disallowed. Those fields may be accessed only by the RGWQuotaCache.
+   * They are not intended as tunables but rather as a mean to store results
+   * of repeating calculations in the quota cache subsystem. */
   int64_t max_size_soft_threshold;
   int64_t max_objs_soft_threshold;
 
-  RGWQuotaInfo() : max_size_kb(-1), max_objects(-1), enabled(false),
-                   max_size_soft_threshold(-1), max_objs_soft_threshold(-1) {}
+public:
+  int64_t max_size;
+  int64_t max_objects;
+  bool enabled;
+  /* Do we want to compare with raw, not rounded RGWStorageStats::size (true)
+   * or maybe rounded-to-4KiB RGWStorageStats::size_rounded (false)? */
+  bool check_on_raw;
+
+  RGWQuotaInfo()
+    : max_size_soft_threshold(-1),
+      max_objs_soft_threshold(-1),
+      max_size(-1),
+      max_objects(-1),
+      enabled(false),
+      check_on_raw(false) {
+  }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(max_size_kb, bl);
+    ENCODE_START(3, 1, bl);
+    if (max_size < 0) {
+      ::encode(-rgw_rounded_kb(abs(max_size)), bl);
+    } else {
+      ::encode(rgw_rounded_kb(max_size), bl);
+    }
     ::encode(max_objects, bl);
     ::encode(enabled, bl);
+    ::encode(max_size, bl);
+    ::encode(check_on_raw, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
+    int64_t max_size_kb;
     ::decode(max_size_kb, bl);
     ::decode(max_objects, bl);
     ::decode(enabled, bl);
+    if (struct_v < 2) {
+      max_size = max_size_kb * 1024;
+    } else {
+      ::decode(max_size, bl);
+    }
+    if (struct_v >= 3) {
+      ::decode(check_on_raw, bl);
+    }
     DECODE_FINISH(bl);
   }
 

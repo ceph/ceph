@@ -18,6 +18,8 @@
 #include <set>
 #include <map>
 
+#include <boost/optional.hpp>
+
 #include "common/armor.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -532,7 +534,7 @@ protected:
   obj_version ep_objv;
   bool has_cors;
   RGWCORSConfiguration cors_config;
-  string swift_ver_location;
+  boost::optional<std::string> swift_ver_location;
   map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
@@ -745,16 +747,28 @@ public:
 
 class RGWPutMetadataAccount : public RGWOp {
 protected:
-  set<string> rmattr_names;
+  std::set<std::string> rmattr_names;
+  std::map<std::string, bufferlist> attrs, orig_attrs;
+  std::map<int, std::string> temp_url_keys;
+  RGWQuotaInfo new_quota;
+  bool new_quota_extracted;
+
+  RGWObjVersionTracker acct_op_tracker;
+
   RGWAccessControlPolicy policy;
+  bool has_policy;
 
 public:
-  RGWPutMetadataAccount() {}
+  RGWPutMetadataAccount()
+    : new_quota_extracted(false),
+      has_policy(false) {
+  }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
+  int init_processing();
   int verify_permission();
   void pre_exec() { }
   void execute();
@@ -764,7 +778,6 @@ public:
   virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                    const set<string>& rmattr_names,
                                    map<int, string>& temp_url_keys);
-  virtual int handle_temp_url_update(const map<int, string>& temp_url_keys);
   virtual const string name() { return "put_account_metadata"; }
   virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_ACCOUNT; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
@@ -778,7 +791,7 @@ protected:
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
   string placement_rule;
-  string swift_ver_location;
+  boost::optional<std::string> swift_ver_location;
 
 public:
   RGWPutMetadataBucket()

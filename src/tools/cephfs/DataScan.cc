@@ -182,7 +182,12 @@ int DataScan::main(const std::vector<const char*> &args)
     // specialized command that will only exist in the Jewel series,
     // and doesn't require the initialization of the `driver` member
     // that is done below.
-    rados.connect();
+    r = rados.connect();
+    if (r < 0) {
+      std::cerr << "couldn't connect to cluster: " << cpp_strerror(r)
+                << std::endl;
+      return r;
+    }
 
     // Initialize metadata_io from pool on command line
     if (metadata_pool_name.empty()) {
@@ -231,7 +236,13 @@ int DataScan::main(const std::vector<const char*> &args)
   }
 
   dout(4) << "connecting to RADOS..." << dendl;
-  rados.connect();
+  r = rados.connect();
+  if (r < 0) {
+    std::cerr << "couldn't connect to cluster: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
   r = driver->init(rados, fsmap, fscid);
   if (r < 0) {
     return r;
@@ -278,7 +289,7 @@ int DataScan::main(const std::vector<const char*> &args)
       std::cerr << "Filesystem id " << fscid << " does not exist" << std::endl;
       return -ENOENT;
     }
-    int const metadata_pool_id = fs->mds_map.get_metadata_pool();
+    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     std::string metadata_pool_name;
@@ -1576,7 +1587,7 @@ int MetadataDriver::init(
 {
   auto fs =  fsmap->get_filesystem(fscid);
   assert(fs != nullptr);
-  int const metadata_pool_id = fs->mds_map.get_metadata_pool();
+  int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
   dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
   std::string metadata_pool_name;

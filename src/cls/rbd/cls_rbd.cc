@@ -108,6 +108,8 @@ cls_method_handle_t h_metadata_set;
 cls_method_handle_t h_metadata_remove;
 cls_method_handle_t h_metadata_list;
 cls_method_handle_t h_metadata_get;
+cls_method_handle_t h_snapshot_get_limit;
+cls_method_handle_t h_snapshot_set_limit;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -132,12 +134,18 @@ cls_method_handle_t h_mirror_image_status_get;
 cls_method_handle_t h_mirror_image_status_list;
 cls_method_handle_t h_mirror_image_status_get_summary;
 cls_method_handle_t h_mirror_image_status_remove_down;
+cls_method_handle_t h_group_create;
+cls_method_handle_t h_group_dir_list;
+cls_method_handle_t h_group_dir_add;
+cls_method_handle_t h_group_dir_remove;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 #define RBD_METADATA_KEY_PREFIX "metadata_"
+
+#define GROUP_SNAP_SEQ "snap_seq"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -1499,6 +1507,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist snap_namebl, snap_idbl;
   cls_rbd_snap snap_meta;
+  uint64_t snap_limit;
 
   try {
     bufferlist::iterator iter = in->begin();
@@ -1542,7 +1551,16 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  r = read_key(hctx, "snap_limit", &snap_limit);
+  if (r == -ENOENT) {
+    snap_limit = UINT64_MAX;
+  } else if (r < 0) {
+    CLS_ERR("Could not read snapshot limit off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
   int max_read = RBD_MAX_KEYS_READ;
+  uint64_t total_read = 0;
   string last_read = RBD_SNAP_KEY_PREFIX;
   do {
     map<string, bufferlist> vals;
@@ -1550,6 +1568,12 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 			     max_read, &vals);
     if (r < 0)
       return r;
+
+    total_read += vals.size();
+    if (total_read >= snap_limit) {
+      CLS_ERR("Attempt to create snapshot over limit of %lu", snap_limit);
+      return -EDQUOT;
+    }
 
     for (map<string, bufferlist>::iterator it = vals.begin();
 	 it != vals.end(); ++it) {
@@ -2675,6 +2699,50 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+int snapshot_get_limit(cls_method_context_t hctx, bufferlist *in,
+		       bufferlist *out)
+{
+  int rc;
+  uint64_t snap_limit;
+
+  rc = read_key(hctx, "snap_limit", &snap_limit);
+  if (rc == -ENOENT) {
+    rc = 0;
+    ::encode(UINT64_MAX, *out);
+  } else {
+    ::encode(snap_limit, *out);
+  }
+
+  CLS_LOG(20, "read snapshot limit %lu", snap_limit);
+  return rc;
+}
+
+int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
+		       bufferlist *out)
+{
+  int rc;
+  uint64_t new_limit;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(new_limit, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (new_limit == UINT64_MAX) {
+    CLS_LOG(20, "remove snapshot limit\n");
+    rc = cls_cxx_map_remove_key(hctx, "snap_limit");
+  } else {
+    CLS_LOG(20, "set snapshot limit to %lu\n", new_limit);
+    ::encode(new_limit, bl);
+    rc = cls_cxx_map_set_val(hctx, "snap_limit", &bl);
+  }
+
+  return rc;
+}
+
 
 /****************************** Old format *******************************/
 
@@ -2745,6 +2813,17 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   if (header->snap_seq > snap_id)
     return -ESTALE;
+
+  uint64_t snap_limit;
+  rc = read_key(hctx, "snap_limit", &snap_limit);
+  if (rc == -ENOENT) {
+    snap_limit = UINT64_MAX;
+  } else if (rc < 0) {
+    return rc;
+  }
+
+  if (header->snap_count >= snap_limit)
+    return -EDQUOT;
 
   const char *cur_snap_name;
   for (cur_snap_name = snap_names; cur_snap_name < end; cur_snap_name += strlen(cur_snap_name) + 1) {
@@ -2967,6 +3046,7 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return 0;
 }
 
+
 namespace mirror {
 
 static const std::string UUID("mirror_uuid");
@@ -3115,6 +3195,12 @@ int image_set(cls_method_context_t hctx, const string &image_id,
               cpp_strerror(r).c_str());
       return r;
     }
+
+    // make sure this was not a race for disabling
+    if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+      CLS_ERR("image '%s' is already disabled", image_id.c_str());
+      return r;
+    }
   } else if (r < 0) {
     CLS_ERR("error reading mirrored image '%s': '%s'", image_id.c_str(),
 	    cpp_strerror(r).c_str());
@@ -3185,14 +3271,14 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
     cls::rbd::MirrorImageStatus(status) {
   }
 
-  void encode_meta(bufferlist &bl) const {
+  void encode_meta(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(origin, bl);
+    ::encode(origin, bl, features);
     ENCODE_FINISH(bl);
   }
 
-  void encode(bufferlist &bl) const {
-    encode_meta(bl);
+  void encode(bufferlist &bl, uint64_t features) const {
+    encode_meta(bl, features);
     cls::rbd::MirrorImageStatus::encode(bl);
   }
 
@@ -3207,7 +3293,7 @@ struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
     cls::rbd::MirrorImageStatus::decode(it);
   }
 };
-WRITE_CLASS_ENCODER(MirrorImageStatusOnDisk)
+WRITE_CLASS_ENCODER_FEATURES(MirrorImageStatusOnDisk)
 
 int image_status_set(cls_method_context_t hctx, const string &global_image_id,
 		     const cls::rbd::MirrorImageStatus &status) {
@@ -3219,7 +3305,7 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   assert(r == 0);
 
   bufferlist bl;
-  encode(ondisk_status, bl);
+  encode(ondisk_status, bl, cls_get_features(hctx));
 
   r = cls_cxx_map_set_val(hctx, status_global_key(global_image_id), &bl);
   if (r < 0) {
@@ -3383,10 +3469,7 @@ int image_status_get_summary(cls_method_context_t hctx,
       }
 
       cls::rbd::MirrorImageStatus status;
-      r = image_status_get(hctx, mirror_image.global_image_id, &status);
-      if (r < 0) {
-	// Ignore.
-      }
+      image_status_get(hctx, mirror_image.global_image_id, &status);
 
       cls::rbd::MirrorImageStatusState state = status.up ? status.state :
 	cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
@@ -4132,6 +4215,212 @@ int mirror_image_status_remove_down(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+/**
+ * Initialize the header with basic metadata.
+ * Everything is stored as key/value pairs as omaps in the header object.
+ *
+ * Input:
+ * none
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist snap_seqbl;
+  uint64_t snap_seq = 0;
+  ::encode(snap_seq, snap_seqbl);
+  int r = cls_cxx_map_set_val(hctx, GROUP_SNAP_SEQ, &snap_seqbl);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+/**
+ * List consistency groups from the directory.
+ *
+ * Input:
+ * @param start_after (std::string)
+ * @param max_return (int64_t)
+ *
+ * Output:
+ * @param map of consistency groups (name, id)
+ * @return 0 on success, negative error code on failure
+ */
+int group_dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  map<string, string> groups;
+  string last_read = dir_key_for_name(start_after);
+
+  while (r == max_read && groups.size() < max_return) {
+    map<string, bufferlist> vals;
+    CLS_LOG(20, "last_read = '%s'", last_read.c_str());
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (pair<string, bufferlist> val: vals) {
+      string id;
+      bufferlist::iterator iter = val.second.begin();
+      try {
+	::decode(id, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode id of consistency group '%s'", val.first.c_str());
+	return -EIO;
+      }
+      CLS_LOG(20, "adding '%s' -> '%s'", dir_name_from_key(val.first).c_str(), id.c_str());
+      groups[dir_name_from_key(val.first)] = id;
+      if (groups.size() >= max_return)
+	break;
+    }
+    if (!vals.empty()) {
+      last_read = dir_key_for_name(groups.rbegin()->first);
+    }
+  }
+
+  ::encode(groups, *out);
+
+  return 0;
+}
+
+/**
+ * Add a consistency group to the directory.
+ *
+ * Input:
+ * @param name (std::string)
+ * @param id (std::string)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_dir_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  int r = cls_cxx_create(hctx, false);
+
+  if (r < 0) {
+    CLS_ERR("could not create consistency group directory: %s",
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (!name.size() || !is_valid_id(id)) {
+    CLS_ERR("invalid consistency group name '%s' or id '%s'",
+	    name.c_str(), id.c_str());
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "group_dir_add name=%s id=%s", name.c_str(), id.c_str());
+
+  string tmp;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  r = read_key(hctx, name_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "name already exists");
+    return -EEXIST;
+  }
+  r = read_key(hctx, id_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "id already exists");
+    return -EBADF;
+  }
+  bufferlist id_bl, name_bl;
+  ::encode(id, id_bl);
+  ::encode(name, name_bl);
+  map<string, bufferlist> omap_vals;
+  omap_vals[name_key] = id_bl;
+  omap_vals[id_key] = name_bl;
+  return cls_cxx_map_set_vals(hctx, &omap_vals);
+}
+
+/**
+ * Remove a consistency group from the directory.
+ *
+ * Input:
+ * @param name (std::string)
+ * @param id (std::string)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_dir_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string name, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(name, iter);
+    ::decode(id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "group_dir_remove name=%s id=%s", name.c_str(), id.c_str());
+
+  string stored_name, stored_id;
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+
+  int r = read_key(hctx, name_key, &stored_id);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  r = read_key(hctx, id_key, &stored_name);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  // check if this op raced with a rename
+  if (stored_name != name || stored_id != id) {
+    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
+	    stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
+    return -ESTALE;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, name_key);
+  if (r < 0) {
+    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, id_key);
+  if (r < 0) {
+    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -4215,6 +4504,12 @@ void __cls_init()
   cls_register_cxx_method(h_class, "metadata_get",
                           CLS_METHOD_RD,
 			  metadata_get, &h_metadata_get);
+  cls_register_cxx_method(h_class, "snapshot_get_limit",
+			  CLS_METHOD_RD,
+			  snapshot_get_limit, &h_snapshot_get_limit);
+  cls_register_cxx_method(h_class, "snapshot_set_limit",
+			  CLS_METHOD_WR,
+			  snapshot_set_limit, &h_snapshot_set_limit);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
@@ -4346,5 +4641,18 @@ void __cls_init()
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_image_status_remove_down,
 			  &h_mirror_image_status_remove_down);
+  /* methods for the consistency groups feature */
+  cls_register_cxx_method(h_class, "group_create",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_create, &h_group_create);
+  cls_register_cxx_method(h_class, "group_dir_list",
+			  CLS_METHOD_RD,
+			  group_dir_list, &h_group_dir_list);
+  cls_register_cxx_method(h_class, "group_dir_add",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_dir_add, &h_group_dir_add);
+  cls_register_cxx_method(h_class, "group_dir_remove",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  group_dir_remove, &h_group_dir_remove);
   return;
 }

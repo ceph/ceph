@@ -162,7 +162,10 @@ void PGPool::update(OSDMapRef map)
   info = *pi;
   auid = pi->auid;
   name = map->get_pool_name(id);
-  if (pi->get_snap_epoch() == map->get_epoch()) {
+  bool updated = false;
+  if ((map->get_epoch() == cached_epoch + 1) &&
+      (pi->get_snap_epoch() == map->get_epoch())) {
+    updated = true;
     pi->build_removed_snaps(newly_removed_snaps);
     interval_set<snapid_t> intersection;
     intersection.intersection_of(newly_removed_snaps, cached_removed_snaps);
@@ -180,14 +183,14 @@ void PGPool::update(OSDMapRef map)
   } else {
     newly_removed_snaps.clear();
   }
+  cached_epoch = map->get_epoch();
   lgeneric_subdout(g_ceph_context, osd, 20)
     << "PGPool::update cached_removed_snaps "
     << cached_removed_snaps
     << " newly_removed_snaps "
     << newly_removed_snaps
     << " snapc " << snapc
-    << (pi->get_snap_epoch() == map->get_epoch() ?
-	" (updated)":" (no change)")
+    << (updated ? " (updated)":" (no change)")
     << dendl;
 }
 
@@ -538,7 +541,7 @@ bool PG::MissingLoc::add_source_info(
 	       << dendl;
       continue;
     }
-    if (oinfo.last_backfill != hobject_t::get_max() &&
+    if (!oinfo.last_backfill.is_max() &&
 	oinfo.last_backfill_bitwise != sort_bitwise) {
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
@@ -1329,26 +1332,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
     return false;
   }
 
-  if ((up.size() &&
-      !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
-       auth_log_shard->second.log_tail) &&
-      auth_log_shard->second.is_incomplete()) {
-    map<pg_shard_t, pg_info_t> complete_infos;
-    for (map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
-	 i != all_info.end();
-	 ++i) {
-      if (!i->second.is_incomplete())
-	complete_infos.insert(*i);
-    }
-    map<pg_shard_t, pg_info_t>::const_iterator i = find_best_info(
-      complete_infos,
-      history_les_bound);
-    if (i != complete_infos.end()) {
-      auth_log_shard = all_info.find(i->first);
-    }
-  }
-
+  assert(!auth_log_shard->second.is_incomplete());
   auth_log_shard_id = auth_log_shard->first;
 
   // Determine if compatibility needed
@@ -1798,7 +1782,7 @@ void PG::activate(ObjectStore::Transaction& t,
       } else {
 	assert(peer_missing.count(*i));
 	missing_loc.add_active_missing(peer_missing[*i]);
-        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill == hobject_t::get_max())
+        if (!peer_missing[*i].have_missing() && peer_info[*i].last_backfill.is_max())
           complete_shards.insert(*i);
       }
     }
@@ -3864,8 +3848,10 @@ void PG::replica_scrub(
   // compensate for hobject_t's with wrong pool from sloppy hammer OSDs
   hobject_t start = msg->start;
   hobject_t end = msg->end;
-  start.pool = info.pgid.pool();
-  end.pool = info.pgid.pool();
+  if (!start.is_max())
+    start.pool = info.pgid.pool();
+  if (!end.is_max())
+    end.pool = info.pgid.pool();
 
   build_scrub_map_chunk(
     map, start, end, msg->deep, msg->seed,
@@ -4244,7 +4230,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  break;
 	}
 
-	if (cmp(scrubber.end, hobject_t::get_max(), get_sort_bitwise()) < 0) {
+	if (!(scrubber.end.is_max())) {
           scrubber.state = PG::Scrubber::NEW_CHUNK;
 	  requeue_scrub();
           done = true;

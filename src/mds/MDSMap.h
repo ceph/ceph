@@ -243,7 +243,7 @@ public:
   void set_max_filesize(uint64_t m) { max_file_size = m; }
   
   int get_flags() const { return flags; }
-  int test_flag(int f) const { return flags & f; }
+  bool test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
@@ -632,7 +632,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
-inline ostream& operator<<(ostream& out, MDSMap& m) {
+inline ostream& operator<<(ostream &out, const MDSMap &m) {
   m.print_summary(NULL, &out);
   return out;
 }

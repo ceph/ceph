@@ -98,7 +98,8 @@ void Locker::dispatch(Message *m)
     break;
     
   default:
-    assert(0);
+    derr << "locker unknown message " << m->get_type() << dendl;
+    assert(0 == "locker unknown message");
   }
 }
 

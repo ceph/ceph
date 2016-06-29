@@ -88,7 +88,7 @@
   $ rbd lock remove foo@snap id client.1234
   rbd: snapname specified for a command that doesn't use it
   [22]
-  $ rbd bench-write foo@snap
+  $ rbd bench foo@snap --io-type write
   rbd: snapname specified for a command that doesn't use it
   [22]
 

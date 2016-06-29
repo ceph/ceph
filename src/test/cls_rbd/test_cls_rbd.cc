@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_context.h"
@@ -512,6 +512,36 @@ TEST_F(TestClsRbd, protection_status)
   ASSERT_EQ(0, get_protection_status(&ioctx, oid,
 				     10, &status));
   ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTED, status);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 20));
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, snapshot_limits)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  librados::ObjectWriteOperation op;
+  string oid = get_temp_image_name();
+  uint64_t limit;
+  
+  ASSERT_EQ(-ENOENT, snapshot_get_limit(&ioctx, oid, &limit));
+  
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, RBD_FEATURE_LAYERING, oid));
+
+  snapshot_set_limit(&op, 2);
+
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  ASSERT_EQ(0, snapshot_get_limit(&ioctx, oid, &limit));
+  ASSERT_EQ(2U, limit);
+
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 10, "snap1"));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 20, "snap2"));
+  ASSERT_EQ(-EDQUOT, snapshot_add(&ioctx, oid, 30, "snap3"));
 
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 10));
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 20));
@@ -1383,6 +1413,10 @@ TEST_F(TestClsRbd, mirror_image) {
   cls::rbd::MirrorImage image3("uuid3", cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
+  ASSERT_EQ(-ENOENT, mirror_image_set(&ioctx, "image_id2", image2));
+  image2.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+  ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
+  image2.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id2", image2));
   ASSERT_EQ(-EINVAL, mirror_image_set(&ioctx, "image_id1", image2));
   ASSERT_EQ(-EEXIST, mirror_image_set(&ioctx, "image_id3", image2));
@@ -1694,4 +1728,110 @@ TEST_F(TestClsRbd, mirror_image_status) {
 	  &statuses));
   ASSERT_EQ(0U, images.size());
   ASSERT_EQ(0U, statuses.size());
+}
+
+TEST_F(TestClsRbd, group_create) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id = "group_id";
+  ASSERT_EQ(0, group_create(&ioctx, group_id));
+
+  uint64_t psize;
+  time_t pmtime;
+  ASSERT_EQ(0, ioctx.stat(group_id, &psize, &pmtime));
+}
+
+TEST_F(TestClsRbd, group_dir_list) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string group_id1 = "cgid1";
+  string group_name1 = "cgname1";
+  string group_id2 = "cgid2";
+  string group_name2 = "cgname2";
+  ASSERT_EQ(0, group_dir_add(&ioctx, RBD_GROUP_DIRECTORY, group_name1, group_id1));
+  ASSERT_EQ(0, group_dir_add(&ioctx, RBD_GROUP_DIRECTORY, group_name2, group_id2));
+
+  map<string, string> cgs;
+  ASSERT_EQ(0, group_dir_list(&ioctx, RBD_GROUP_DIRECTORY, "", 10, &cgs));
+
+  ASSERT_EQ(2U, cgs.size());
+
+  auto it = cgs.begin();
+  ASSERT_EQ(group_id1, it->second);
+  ASSERT_EQ(group_name1, it->first);
+
+  ++it;
+  ASSERT_EQ(group_id2, it->second);
+  ASSERT_EQ(group_name2, it->first);
+}
+
+void add_group_to_dir(librados::IoCtx ioctx, string group_id, string group_name) {
+  ASSERT_EQ(0, group_dir_add(&ioctx, RBD_GROUP_DIRECTORY, group_name, group_id));
+
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
+  ASSERT_EQ(2U, keys.size());
+  ASSERT_EQ("id_" + group_id, *keys.begin());
+  ASSERT_EQ("name_" + group_name, *keys.rbegin());
+}
+
+TEST_F(TestClsRbd, group_dir_add) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_GROUP_DIRECTORY);
+
+  string group_id = "cgid";
+  string group_name = "cgname";
+  add_group_to_dir(ioctx, group_id, group_name);
+}
+
+TEST_F(TestClsRbd, dir_add_already_existing) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_GROUP_DIRECTORY);
+
+  string group_id = "cgidexisting";
+  string group_name = "cgnameexisting";
+  add_group_to_dir(ioctx, group_id, group_name);
+
+  ASSERT_EQ(-EEXIST, group_dir_add(&ioctx, RBD_GROUP_DIRECTORY, group_name, group_id));
+}
+
+TEST_F(TestClsRbd, group_dir_remove) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_GROUP_DIRECTORY);
+
+  string group_id = "cgidtodel";
+  string group_name = "cgnametodel";
+  add_group_to_dir(ioctx, group_id, group_name);
+
+  ASSERT_EQ(0, group_dir_remove(&ioctx, RBD_GROUP_DIRECTORY, group_name, group_id));
+
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
+  ASSERT_EQ(0U, keys.size());
+}
+
+TEST_F(TestClsRbd, group_dir_remove_missing) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_GROUP_DIRECTORY);
+
+  string group_id = "cgidtodelmissing";
+  string group_name = "cgnametodelmissing";
+  // These two lines ensure that RBD_GROUP_DIRECTORY exists. It's important for the
+  // last two lines.
+  add_group_to_dir(ioctx, group_id, group_name);
+
+  ASSERT_EQ(0, group_dir_remove(&ioctx, RBD_GROUP_DIRECTORY, group_name, group_id));
+
+  // Removing missing
+  ASSERT_EQ(-ENOENT, group_dir_remove(&ioctx, RBD_GROUP_DIRECTORY, group_name, group_id));
+
+  set<string> keys;
+  ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
+  ASSERT_EQ(0U, keys.size());
 }

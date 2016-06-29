@@ -1744,9 +1744,10 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 
   utime_t grace = orig_grace;
   double my_grace = 0, peer_grace = 0;
+  double decay_k = 0;
   if (g_conf->mon_osd_adjust_heartbeat_grace) {
     double halflife = (double)g_conf->mon_osd_laggy_halflife;
-    double decay_k = ::log(.5) / halflife;
+    decay_k = ::log(.5) / halflife;
 
     // scale grace period based on historical probability of 'lagginess'
     // (false positive failures due to slowness).
@@ -1756,31 +1757,35 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 	     << " failed_for " << failed_for << " decay " << decay << dendl;
     my_grace = decay * (double)xi.laggy_interval * xi.laggy_probability;
     grace += my_grace;
+  }
 
-    // consider the peers reporting a failure a proxy for a potential
-    // 'subcluster' over the overall cluster that is similarly
-    // laggy.  this is clearly not true in all cases, but will sometimes
-    // help us localize the grace correction to a subset of the system
-    // (say, a rack with a bad switch) that is unhappy.
-    assert(fi.reporters.size());
-    for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
-	 p != fi.reporters.end();
-	 ++p) {
-      // get the parent bucket whose type matches with "reporter_subtree_level".
-      // fall back to OSD if the level doesn't exist.
-      map<string, string> reporter_loc = osdmap.crush->get_full_location(p->first);
-      map<string, string>::iterator iter = reporter_loc.find(reporter_subtree_level);
-      if (iter == reporter_loc.end()) {
-	reporters_by_subtree.insert("osd." + to_string(p->first));
-      } else {
-	reporters_by_subtree.insert(iter->second);
-      }
-
+  // consider the peers reporting a failure a proxy for a potential
+  // 'subcluster' over the overall cluster that is similarly
+  // laggy.  this is clearly not true in all cases, but will sometimes
+  // help us localize the grace correction to a subset of the system
+  // (say, a rack with a bad switch) that is unhappy.
+  assert(fi.reporters.size());
+  for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
+	p != fi.reporters.end();
+	++p) {
+    // get the parent bucket whose type matches with "reporter_subtree_level".
+    // fall back to OSD if the level doesn't exist.
+    map<string, string> reporter_loc = osdmap.crush->get_full_location(p->first);
+    map<string, string>::iterator iter = reporter_loc.find(reporter_subtree_level);
+    if (iter == reporter_loc.end()) {
+      reporters_by_subtree.insert("osd." + to_string(p->first));
+    } else {
+      reporters_by_subtree.insert(iter->second);
+    }
+    if (g_conf->mon_osd_adjust_heartbeat_grace) {
       const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
       utime_t elapsed = now - xi.down_stamp;
       double decay = exp((double)elapsed * decay_k);
       peer_grace += decay * (double)xi.laggy_interval * xi.laggy_probability;
     }
+  }
+  
+  if (g_conf->mon_osd_adjust_heartbeat_grace) {
     peer_grace /= (double)fi.reporters.size();
     grace += peer_grace;
   }
@@ -2265,7 +2270,8 @@ bool OSDMonitor::prepare_alive(MonOpRequestRef op)
 
   dout(7) << "prepare_alive want up_thru " << m->want << " have " << m->version
 	  << " from " << m->get_orig_source_inst() << dendl;
-  pending_inc.new_up_thru[from] = m->version;  // set to the latest map the OSD has
+
+  update_up_thru(from, m->version); // set to the latest map the OSD has
   wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
   return true;
 }
@@ -2328,6 +2334,21 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
       continue;
     }
 
+    int acting_primary = -1;
+    osdmap.pg_to_up_acting_osds(
+      p->first, nullptr, nullptr, nullptr, &acting_primary);
+    if (acting_primary != from) {
+      /* If the source isn't the primary based on the current osdmap, we know
+       * that the interval changed and that we can discard this message.
+       * Indeed, we must do so to avoid 16127 since we can't otherwise determine
+       * which of two pg temp mappings on the same pg is more recent.
+       */
+      dout(10) << __func__ << " ignore " << p->first << " -> " << p->second
+	       << ": primary has changed" << dendl;
+      ignore_cnt++;
+      continue;
+    }
+
     // removal?
     if (p->second.empty() && (osdmap.pg_temp->count(p->first) ||
 			      osdmap.primary_temp->count(p->first)))
@@ -2351,6 +2372,19 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 
  ignore:
   return true;
+}
+
+void OSDMonitor::update_up_thru(int from, epoch_t up_thru)
+{
+  epoch_t old_up_thru = osdmap.get_up_thru(from);
+  auto ut = pending_inc.new_up_thru.find(from);
+  if (ut != pending_inc.new_up_thru.end()) {
+    old_up_thru = ut->second;
+  }
+  if (up_thru > old_up_thru) {
+    // set up_thru too, so the osd doesn't have to ask again
+    pending_inc.new_up_thru[from] = up_thru;
+  }
 }
 
 bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
@@ -2380,7 +2414,10 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 	pending_inc.new_primary_temp.count(p->first))
       pending_inc.new_primary_temp[p->first] = -1;
   }
-  pending_inc.new_up_thru[from] = m->map_epoch;   // set up_thru too, so the osd doesn't have to ask again
+
+  // set up_thru too, so the osd doesn't have to ask again
+  update_up_thru(from, m->map_epoch);
+
   wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->map_epoch));
   return true;
 }
@@ -4542,7 +4579,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
 	*size = erasure_code->get_chunk_count();
-	*min_size = erasure_code->get_data_chunk_count();
+	*min_size = MIN(erasure_code->get_data_chunk_count() + 1, *size);
       }
     }
     break;

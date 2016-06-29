@@ -75,7 +75,7 @@ static void system_clock_sanity() {
 
 template<typename Clock>
 static void system_clock_conversions() {
-  static constexpr typename Clock::time_point brt(seconds(bs) +
+  static typename Clock::time_point brt(seconds(bs) +
 						  nanoseconds(bns));
 
   ASSERT_EQ(Clock::to_time_t(brt), btt);

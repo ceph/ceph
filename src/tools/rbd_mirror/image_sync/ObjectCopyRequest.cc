@@ -36,10 +36,9 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *local_image_ctx, I *remote_image_ctx,
   m_remote_io_ctx.dup(m_remote_image_ctx->data_ctx);
   m_remote_oid = m_remote_image_ctx->get_object_name(object_number);
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": "
-                 << "remote_oid=" << m_remote_oid << ", "
-                 << "local_oid=" << m_local_oid << dendl;
+  dout(20) << ": "
+           << "remote_oid=" << m_remote_oid << ", "
+           << "local_oid=" << m_local_oid << dendl;
 }
 
 template <typename I>
@@ -49,8 +48,7 @@ void ObjectCopyRequest<I>::send() {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_list_snaps() {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   librados::AioCompletion *rados_completion = create_rados_ack_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_list_snaps>(this);
@@ -71,15 +69,14 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
     r = m_snap_ret;
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r == -ENOENT) {
     finish(0);
     return;
   }
   if (r < 0) {
-    lderr(cct) << ": failed to list snaps: " << cpp_strerror(r) << dendl;
+    derr << ": failed to list snaps: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -90,7 +87,6 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_read_object() {
-  CephContext *cct = m_local_image_ctx->cct;
   if (m_snap_sync_ops.empty()) {
     // no more snapshot diffs to read from remote
     finish(0);
@@ -111,12 +107,12 @@ void ObjectCopyRequest<I>::send_read_object() {
     switch (std::get<0>(sync_op)) {
     case SYNC_OP_TYPE_WRITE:
       if (!read_required) {
-        ldout(cct, 20) << ": remote_snap_seq=" << remote_snap_seq << dendl;
+        dout(20) << ": remote_snap_seq=" << remote_snap_seq << dendl;
         read_required = true;
       }
 
-      ldout(cct, 20) << ": read op: " << std::get<1>(sync_op) << "~"
-                     << std::get<2>(sync_op) << dendl;
+      dout(20) << ": read op: " << std::get<1>(sync_op) << "~"
+               << std::get<2>(sync_op) << dendl;
       op.read(std::get<1>(sync_op), std::get<2>(sync_op),
               &std::get<3>(sync_op), nullptr);
       break;
@@ -140,12 +136,11 @@ void ObjectCopyRequest<I>::send_read_object() {
 
 template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to read from remote object: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to read from remote object: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -172,10 +167,9 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": "
-                 << "local_snap_seq=" << local_snap_seq << ", "
-                 << "local_snaps=" << local_snap_ids << dendl;
+  dout(20) << ": "
+           << "local_snap_seq=" << local_snap_seq << ", "
+           << "local_snaps=" << local_snap_ids << dendl;
 
   auto &sync_ops = m_snap_sync_ops.begin()->second;
   assert(!sync_ops.empty());
@@ -184,16 +178,16 @@ void ObjectCopyRequest<I>::send_write_object() {
   for (auto &sync_op : sync_ops) {
     switch (std::get<0>(sync_op)) {
     case SYNC_OP_TYPE_WRITE:
-      ldout(cct, 20) << ": write op: " << std::get<1>(sync_op) << "~"
-                     << std::get<3>(sync_op).length() << dendl;
+      dout(20) << ": write op: " << std::get<1>(sync_op) << "~"
+               << std::get<3>(sync_op).length() << dendl;
       op.write(std::get<1>(sync_op), std::get<3>(sync_op));
       break;
     case SYNC_OP_TYPE_TRUNC:
-      ldout(cct, 20) << ": trunc op: " << std::get<1>(sync_op) << dendl;
+      dout(20) << ": trunc op: " << std::get<1>(sync_op) << dendl;
       op.truncate(std::get<1>(sync_op));
       break;
     case SYNC_OP_TYPE_REMOVE:
-      ldout(cct, 20) << ": remove op" << dendl;
+      dout(20) << ": remove op" << dendl;
       op.remove();
       break;
     default:
@@ -211,15 +205,14 @@ void ObjectCopyRequest<I>::send_write_object() {
 
 template <typename I>
 void ObjectCopyRequest<I>::handle_write_object(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r == -ENOENT) {
     r = 0;
   }
   if (r < 0) {
-    lderr(cct) << ": failed to write to local object: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to write to local object: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -249,12 +242,10 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   auto snap_object_state = *m_snap_object_states.begin();
   m_snap_object_states.erase(m_snap_object_states.begin());
 
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": "
-                 << "local_snap_id=" << snap_object_state.first << ", "
-                 << "object_state=" << static_cast<uint32_t>(
-                      snap_object_state.second)
-                 << dendl;
+  dout(20) << ": "
+           << "local_snap_id=" << snap_object_state.first << ", "
+           << "object_state=" << static_cast<uint32_t>(snap_object_state.second)
+           << dendl;
 
   RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
   Context *ctx = create_context_callback<
@@ -270,8 +261,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
 
 template <typename I>
 void ObjectCopyRequest<I>::handle_update_object_map(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   assert(r == 0);
   if (!m_snap_object_states.empty()) {
@@ -299,13 +289,13 @@ void ObjectCopyRequest<I>::compute_diffs() {
     calc_snap_set_diff(cct, m_snap_set, start_remote_snap_id,
                        end_remote_snap_id, &diff, &end_size, &exists);
 
-    ldout(cct, 20) << ": "
-                   << "start_remote_snap=" << start_remote_snap_id << ", "
-                   << "end_remote_snap_id=" << end_remote_snap_id << ", "
-                   << "end_local_snap_id=" << end_local_snap_id << ", "
-                   << "diff=" << diff << ", "
-                   << "end_size=" << end_size << ", "
-                   << "exists=" << exists << dendl;
+    dout(20) << ": "
+             << "start_remote_snap=" << start_remote_snap_id << ", "
+             << "end_remote_snap_id=" << end_remote_snap_id << ", "
+             << "end_local_snap_id=" << end_local_snap_id << ", "
+             << "diff=" << diff << ", "
+             << "end_size=" << end_size << ", "
+             << "exists=" << exists << dendl;
 
     if (exists) {
       // clip diff to size of object (in case it was truncated)
@@ -314,7 +304,7 @@ void ObjectCopyRequest<I>::compute_diffs() {
         trunc.insert(end_size, prev_end_size);
         trunc.intersection_of(diff);
         diff.subtract(trunc);
-        ldout(cct, 20) << ": clearing truncate diff: " << trunc << dendl;
+        dout(20) << ": clearing truncate diff: " << trunc << dendl;
       }
 
       // prepare the object map state
@@ -331,15 +321,15 @@ void ObjectCopyRequest<I>::compute_diffs() {
 
       // object write/zero, or truncate
       for (auto it = diff.begin(); it != diff.end(); ++it) {
-        ldout(cct, 20) << ": read/write op: " << it.get_start() << "~"
-                       << it.get_len() << dendl;
+        dout(20) << ": read/write op: " << it.get_start() << "~"
+                 << it.get_len() << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_WRITE,
                                                          it.get_start(),
                                                          it.get_len(),
                                                          bufferlist());
       }
       if (end_size < prev_end_size) {
-        ldout(cct, 20) << ": trunc op: " << end_size << dendl;
+        dout(20) << ": trunc op: " << end_size << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_TRUNC,
                                                          end_size, 0U,
                                                          bufferlist());
@@ -347,7 +337,7 @@ void ObjectCopyRequest<I>::compute_diffs() {
     } else {
       if (prev_exists) {
         // object remove
-        ldout(cct, 20) << ": remove op" << dendl;
+        dout(20) << ": remove op" << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_REMOVE,
                                                          0U, 0U, bufferlist());
       }
@@ -361,8 +351,7 @@ void ObjectCopyRequest<I>::compute_diffs() {
 
 template <typename I>
 void ObjectCopyRequest<I>::finish(int r) {
-  CephContext *cct = m_local_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

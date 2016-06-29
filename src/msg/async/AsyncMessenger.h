@@ -33,6 +33,7 @@ using namespace std;
 #include "common/Throttle.h"
 
 #include "msg/SimplePolicyMessenger.h"
+#include "msg/DispatchQueue.h"
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
@@ -69,7 +70,7 @@ class Worker : public Thread {
   std::atomic_uint references;
   Worker(CephContext *c, WorkerPool *p, int i)
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
-    center.init(InitEventNumber);
+    center.init(InitEventNumber, i);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
     // initialize perf_logger
@@ -95,6 +96,10 @@ class Worker : public Thread {
   void *entry();
   void stop();
   PerfCounters *get_perf_counter() { return perf_logger; }
+  void release_worker() {
+    int oldref = references.fetch_sub(1);
+    assert(oldref > 0);
+  }
 };
 
 /**
@@ -109,19 +114,10 @@ class Processor {
   uint64_t nonce;
   EventCallbackRef listen_handler;
 
-  class C_processor_accept : public EventCallback {
-    Processor *pro;
-
-   public:
-    explicit C_processor_accept(Processor *p): pro(p) {}
-    void do_request(int id) {
-      pro->accept();
-    }
-  };
+  class C_processor_accept;
 
  public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
-          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n);
   ~Processor() { delete listen_handler; };
 
   void stop();
@@ -129,47 +125,6 @@ class Processor {
   int rebind(const set<int>& avoid_port);
   int start(Worker *w);
   void accept();
-};
-
-class WorkerPool {
-  WorkerPool(const WorkerPool &);
-  WorkerPool& operator=(const WorkerPool &);
-  CephContext *cct;
-  vector<Worker*> workers;
-  vector<int> coreids;
-  // Used to indicate whether thread started
-  bool started;
-  Mutex barrier_lock;
-  Cond barrier_cond;
-  atomic_t barrier_count;
-  simple_spinlock_t pool_spin = SIMPLE_SPINLOCK_INITIALIZER;
-
-  class C_barrier : public EventCallback {
-    WorkerPool *pool;
-   public:
-    explicit C_barrier(WorkerPool *p): pool(p) {}
-    void do_request(int id) {
-      Mutex::Locker l(pool->barrier_lock);
-      pool->barrier_count.dec();
-      pool->barrier_cond.Signal();
-      delete this;
-    }
-  };
-  friend class C_barrier;
- public:
-  explicit WorkerPool(CephContext *c);
-  virtual ~WorkerPool();
-  void start();
-  Worker *get_worker();
-  void release_worker(EventCenter* c);
-  int get_cpuid(int id) {
-    if (coreids.empty())
-      return -1;
-    return coreids[id % coreids.size()];
-  }
-  void barrier();
-  // uniq name for CephContext to distinguish differnt object
-  static const string name;
 };
 
 /*
@@ -205,11 +160,11 @@ public:
   void set_addr_unknowns(entity_addr_t& addr);
 
   int get_dispatch_queue_len() {
-    return 0;
+    return dispatch_queue.get_queue_len();
   }
 
   double get_dispatch_queue_max_age(utime_t now) {
-    return 0;
+    return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
 
@@ -231,9 +186,9 @@ public:
    * @defgroup Startup/Shutdown
    * @{
    */
-  virtual int start();
-  virtual void wait();
-  virtual int shutdown();
+  int start() override;
+  void wait() override;
+  int shutdown() override;
 
   /** @} // Startup/Shutdown */
 
@@ -241,8 +196,8 @@ public:
    * @defgroup Messaging
    * @{
    */
-  virtual int send_message(Message *m, const entity_inst_t& dest) {
-          Mutex::Locker l(lock);
+  int send_message(Message *m, const entity_inst_t& dest) override {
+    Mutex::Locker l(lock);
 
     return _send_message(m, dest);
   }
@@ -253,11 +208,13 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  virtual ConnectionRef get_connection(const entity_inst_t& dest);
-  virtual ConnectionRef get_loopback_connection();
+  ConnectionRef get_connection(const entity_inst_t& dest) override;
+  ConnectionRef get_loopback_connection() override;
   int send_keepalive(Connection *con);
-  virtual void mark_down(const entity_addr_t& addr);
-  virtual void mark_down_all();
+  virtual void mark_down(const entity_addr_t& addr) override;
+  virtual void mark_down_all() override {
+    shutdown_connections(true);
+  }
   /** @} // Connection Management */
 
   /**
@@ -265,11 +222,7 @@ public:
    * @{
    */
 
-  Connection *create_anon_connection() {
-    Mutex::Locker l(lock);
-    Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
-  }
+  Connection *create_anon_connection();
 
   /**
    * @} // Inner classes
@@ -283,7 +236,7 @@ protected:
   /**
    * Start up the DispatchQueue thread once we have somebody to dispatch to.
    */
-  virtual void ready();
+  void ready() override;
   /** @} // Messenger Interfaces */
 
 private:
@@ -330,6 +283,7 @@ private:
 
   Processor processor;
   friend class Processor;
+  DispatchQueue dispatch_queue;
 
   class C_handle_reap : public EventCallback {
     AsyncMessenger *msgr;
@@ -414,8 +368,7 @@ private:
 
     // lazy delete, see "deleted_conns"
     Mutex::Locker l(deleted_lock);
-    if (deleted_conns.count(p->second)) {
-      deleted_conns.erase(p->second);
+    if (deleted_conns.erase(p->second)) {
       p->second->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(p);
       return NULL;
@@ -431,6 +384,8 @@ private:
     local_connection->set_features(local_features);
     ms_deliver_handle_fast_connect(local_connection.get());
   }
+
+  void shutdown_connections(bool queue_reset);
 
 public:
 
@@ -452,14 +407,14 @@ public:
 
   int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    if (conns.count(conn->peer_addr)) {
-      AsyncConnectionRef existing = conns[conn->peer_addr];
+    auto it = conns.find(conn->peer_addr);
+    if (it != conns.end()) {
+      AsyncConnectionRef existing = it->second;
 
       // lazy delete, see "deleted_conns"
       // If conn already in, we will return 0
       Mutex::Locker l(deleted_lock);
-      if (deleted_conns.count(existing)) {
-        deleted_conns.erase(existing);
+      if (deleted_conns.erase(existing)) {
       } else if (conn != existing) {
         return -1;
       }
@@ -526,7 +481,6 @@ public:
    */
   void unregister_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(deleted_lock);
-    conn->release_worker();
     deleted_conns.insert(conn);
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
@@ -542,10 +496,6 @@ public:
    * See "deleted_conns"
    */
   int reap_dead();
-  
-  void release_worker(EventCenter* c) {
-    pool->release_worker(c);
-  }
 
   /**
    * @} // AsyncMessenger Internals

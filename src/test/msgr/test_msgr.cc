@@ -62,6 +62,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }
   virtual void TearDown() {
+    ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
+    ASSERT_EQ(client_msgr->get_dispatch_queue_len(), 0);
     delete server_msgr;
     delete client_msgr;
   }
@@ -365,6 +367,44 @@ TEST_P(MessengerTest, FeatureTest) {
   client_msgr->shutdown();
   server_msgr->wait();
   client_msgr->wait();
+}
+
+TEST_P(MessengerTest, TimeoutTest) {
+  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "1");
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("127.0.0.1");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  // 1. build the connection
+  MPing *m = new MPing();
+  ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 1);
+  ASSERT_TRUE(conn->peer_is_osd());
+
+  // 2. wait for idle
+  usleep(2500*1000);
+  ASSERT_FALSE(conn->is_connected());
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+
+  client_msgr->shutdown();
+  client_msgr->wait();
+  g_ceph_context->_conf->set_val("ms_tcp_read_timeout", "900");
 }
 
 TEST_P(MessengerTest, StatefulTest) {
@@ -826,6 +866,14 @@ class SyntheticDispatcher : public Dispatcher {
       sent.erase(*it);
     conn_sent.erase(con);
   }
+
+  void print() {
+    for (auto && p : conn_sent) {
+      if (!p.second.empty()) {
+        cerr << __func__ << " " << p.first << " wait " << p.second.size() << std::endl;
+      }
+    }
+  }
 };
 
 
@@ -1003,22 +1051,29 @@ class SyntheticWorkload {
          << " inflight messages: " << dispatcher.get_pending() << std::endl;
     if (detail && !available_connections.empty()) {
       for (auto &&c : available_connections)
-        cerr << "available connection: " << c.first;
+        cerr << "available connection: " << c.first << " ";
       cerr << std::endl;
+      dispatcher.print();
     }
   }
 
   void wait_for_done() {
-    uint64_t i = 0;
+    int64_t tick_us = 1000 * 100; // 100ms
+    int64_t timeout_us = 5 * 60 * 1000 * 1000; // 5 mins
+    int i = 0;
     while (dispatcher.get_pending()) {
-      usleep(1000*100);
+      usleep(tick_us);
+      timeout_us -= tick_us;
       if (i++ % 50 == 0)
         print_internal_state(true);
+      if (timeout_us < 0)
+        assert(0 == " loop time exceed 5 mins, it looks we stuck into some problems!");
     }
     for (set<Messenger*>::iterator it = available_servers.begin();
          it != available_servers.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
+      ASSERT_EQ((*it)->get_dispatch_queue_len(), 0);
       delete (*it);
     }
     available_servers.clear();
@@ -1027,6 +1082,7 @@ class SyntheticWorkload {
          it != available_clients.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
+      ASSERT_EQ((*it)->get_dispatch_queue_len(), 0);
       delete (*it);
     }
     available_clients.clear();
@@ -1104,8 +1160,10 @@ TEST_P(MessengerTest, SyntheticStressTest1) {
 
 
 TEST_P(MessengerTest, SyntheticInjectTest) {
+  uint64_t dispatch_throttle_bytes = g_ceph_context->_conf->ms_dispatch_throttle_bytes;
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
+  g_ceph_context->_conf->set_val("ms_dispatch_throttle_bytes", "16777216");
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
                              Messenger::Policy::stateful_server(0, 0),
                              Messenger::Policy::lossless_client(0, 0));
@@ -1134,6 +1192,8 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
   test_msg.wait_for_done();
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
+  g_ceph_context->_conf->set_val(
+      "ms_dispatch_throttle_bytes", std::to_string(dispatch_throttle_bytes));
 }
 
 TEST_P(MessengerTest, SyntheticInjectTest2) {

@@ -174,6 +174,7 @@ extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
 
 extern int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
+extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
@@ -194,6 +195,7 @@ struct RGWBucketAdminOpState {
   bool fix_index;
   bool delete_child_objects;
   bool bucket_stored;
+  int max_aio;
 
   rgw_bucket bucket;
 
@@ -201,6 +203,8 @@ struct RGWBucketAdminOpState {
   void set_check_objects(bool value) { check_objects = value; }
   void set_fix_index(bool value) { fix_index = value; }
   void set_delete_children(bool value) { delete_child_objects = value; }
+
+  void set_max_aio(int value) { max_aio = value; }
 
   void set_user_id(rgw_user& user_id) {
     if (!user_id.empty())
@@ -236,6 +240,7 @@ struct RGWBucketAdminOpState {
   bool is_user_op() { return !uid.empty(); }
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
+  int get_max_aio() { return max_aio; }
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
@@ -275,7 +280,7 @@ public:
           map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
-  int remove(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
@@ -302,7 +307,7 @@ public:
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);
 
-  static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state);
+  static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true);
   static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };

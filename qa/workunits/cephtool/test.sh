@@ -14,9 +14,10 @@ function check_no_osd_down()
 
 function wait_no_osd_down()
 {
-  for i in $(seq 1 300) ; do
+  max_run=300
+  for i in $(seq 1 $max_run) ; do
     if ! check_no_osd_down ; then
-      echo "waiting for osd(s) to come back up"
+      echo "waiting for osd(s) to come back up ($i/$max_run)"
       sleep 1
     else
       break
@@ -666,9 +667,10 @@ function check_mds_active()
 function wait_mds_active()
 {
   fs_name=$1
-  for i in $(seq 1 300) ; do
+  max_run=300
+  for i in $(seq 1 $max_run) ; do
       if ! check_mds_active $fs_name ; then
-          echo "waiting for an active MDS daemon"
+          echo "waiting for an active MDS daemon ($i/$max_run)"
           sleep 5
       else
           break
@@ -718,6 +720,19 @@ function mds_exists()
     ceph auth list | grep "^mds"
 }
 
+# some of the commands are just not idempotent.
+function without_test_dup_command()
+{
+  if [ -z ${CEPH_CLI_TEST_DUP_COMMAND+x} ]; then
+    $@
+  else
+    local saved=${CEPH_CLI_TEST_DUP_COMMAND}
+    unset CEPH_CLI_TEST_DUP_COMMAND
+    $@
+    CEPH_CLI_TEST_DUP_COMMAND=saved
+  fi
+}
+
 function test_mds_tell()
 {
   FS_NAME=cephfs
@@ -742,7 +757,7 @@ function test_mds_tell()
   expect_false ceph tell mds.a injectargs mds_max_file_recover -1
 
   # Test respawn by rank
-  ceph tell mds.0 respawn
+  without_test_dup_command ceph tell mds.0 respawn
   new_mds_gids=$old_mds_gids
   while [ $new_mds_gids -eq $old_mds_gids ] ; do
       sleep 5
@@ -751,7 +766,7 @@ function test_mds_tell()
   echo New GIDs: $new_mds_gids
 
   # Test respawn by ID
-  ceph tell mds.a respawn
+  without_test_dup_command ceph tell mds.a respawn
   new_mds_gids=$old_mds_gids
   while [ $new_mds_gids -eq $old_mds_gids ] ; do
       sleep 5
@@ -1092,14 +1107,17 @@ function test_mon_osd()
   ceph osd set sortbitwise  # new backends cant handle nibblewise
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+  ceph osd set require_jewel_osds
+  expect_false ceph osd unset require_jewel_osds
 
   ceph osd set noup
   ceph osd down 0
   ceph osd dump | grep 'osd.0 down'
   ceph osd unset noup
-  for ((i=0; i < 1000; i++)); do
+  max_run=1000
+  for ((i=0; i < $max_run; i++)); do
     if ! ceph osd dump | grep 'osd.0 up'; then
-      echo "waiting for osd.0 to come back up"
+      echo "waiting for osd.0 to come back up ($i/$max_run)"
       sleep 1
     else
       break

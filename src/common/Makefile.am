@@ -77,7 +77,8 @@ libcommon_internal_la_SOURCES = \
 	common/TracepointProvider.cc \
 	common/PluginRegistry.cc \
 	common/scrub_types.cc \
-	common/blkdev.cc
+	common/blkdev.cc \
+	common/dns_resolve.cc
 
 common/PluginRegistry.cc: ./ceph_ver.h
 
@@ -121,6 +122,7 @@ libcommon_internal_la_SOURCES += \
 	osd/HitSet.cc \
 	mds/MDSMap.cc \
 	mds/FSMap.cc \
+	mds/FSMapUser.cc \
 	mds/inode_backtrace.cc \
 	mds/mdstypes.cc \
 	mds/flock.cc
@@ -167,6 +169,7 @@ LIBCOMMON_DEPS += \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
 	$(BOOST_RANDOM_LIBS) \
+	$(RESOLV_LIBS) \
 	-luuid
 
 if LINUX
@@ -283,7 +286,8 @@ noinst_HEADERS += \
 	common/ceph_timer.h \
 	common/align.h \
 	common/mutex_debug.h \
-	common/shunique_lock.h
+	common/shunique_lock.h \
+	common/dns_resolve.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

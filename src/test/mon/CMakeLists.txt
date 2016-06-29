@@ -9,6 +9,8 @@ target_link_libraries(ceph_test_mon_workloadgen
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS}
   )
+install(TARGETS ceph_test_mon_workloadgen
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_mon_msg
 add_executable(ceph_test_mon_msg 
@@ -31,14 +33,14 @@ add_ceph_test(osd-pool-create.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-pool-create.sh)
 add_ceph_test(test_pool_quota.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pool_quota.sh)
 
 # unittest_mon_moncap
-add_executable(unittest_mon_moncap EXCLUDE_FROM_ALL
+add_executable(unittest_mon_moncap
   moncap.cc
   )
 add_ceph_unittest(unittest_mon_moncap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_moncap)
 target_link_libraries(unittest_mon_moncap mon global)
 
 # unittest_mon_pgmap
-add_executable(unittest_mon_pgmap EXCLUDE_FROM_ALL
+add_executable(unittest_mon_pgmap
   PGMap.cc
   )
 add_ceph_unittest(unittest_mon_pgmap ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mon_pgmap)

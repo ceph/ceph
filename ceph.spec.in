@@ -688,7 +688,6 @@ make %{?_smp_mflags} check
 %install
 make DESTDIR=%{buildroot} install
 find %{buildroot} -type f -name "*.la" -exec rm -f {} ';'
-find %{buildroot} -type f -name "*.a" -exec rm -f {} ';'
 install -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
@@ -713,8 +712,6 @@ install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildro
 # udev rules
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}%{_udevrulesdir}/95-ceph-osd.rules
-mv %{buildroot}/sbin/mount.ceph %{buildroot}/usr/sbin/mount.ceph
-mv %{buildroot}/sbin/mount.fuse.ceph %{buildroot}/usr/sbin/mount.fuse.ceph
 
 #set up placeholder directories
 mkdir -p %{buildroot}%{_sysconfdir}/ceph
@@ -1205,10 +1202,6 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/ceph
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/mds
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/mon
-%exclude %{_prefix}/lib/ocf/resource.d/ceph/osd
 %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
@@ -1375,7 +1368,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
 %{_bindir}/ceph_test_*
-%{_bindir}/librgw_file*
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage

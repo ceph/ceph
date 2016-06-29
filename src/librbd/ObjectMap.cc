@@ -3,9 +3,6 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
-#include "librbd/internal.h"
-#include "librbd/object_map/InvalidateRequest.h"
 #include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
@@ -17,6 +14,9 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
+
+#include "include/rados/librados.hpp"
+
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/stringify.h"

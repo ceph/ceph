@@ -78,7 +78,6 @@ install: build
 	dh_installdirs
 
 	$(MAKE) DESTDIR=$(DESTDIR) install
-	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 	install -D -m 644 src/etc-rbdmap $(DESTDIR)/etc/ceph/rbdmap
@@ -90,6 +89,7 @@ binary-indep: build install
 	dh_testdir
 	dh_testroot
 	jh_installlibs -v -i
+	jh_depends -i
 	dh_installchangelogs -i
 	dh_installdocs -i --all ChangeLog
 	dh_installexamples -i
@@ -203,7 +203,7 @@ binary-arch: build install
 	dh_makeshlibs -a
 	dh_python2 -a
 	dh_installdeb -a
-	dh_shlibdeps -a
+	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor
 	dh_gencontrol -a
 	dh_md5sums -a
 	dh_builddeb -a

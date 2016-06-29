@@ -46,9 +46,6 @@ struct librados::IoCtxImpl {
   xlist<AioCompletionImpl*> aio_write_list;
   map<ceph_tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
-  Mutex cached_pool_names_lock;
-  std::list<std::string> cached_pool_names;
-
   Objecter *objecter;
 
   IoCtxImpl();
@@ -90,7 +87,7 @@ struct librados::IoCtxImpl {
     return poolid;
   }
 
-  const string& get_cached_pool_name();
+  string get_cached_pool_name();
 
   int get_object_hash_position(const std::string& oid, uint32_t *hash_postion);
   int get_object_pg_hash_position(const std::string& oid, uint32_t *pg_hash_position);

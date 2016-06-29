@@ -75,33 +75,36 @@ bool ExclusiveLock<I>::is_lock_owner() const {
 }
 
 template <typename I>
-bool ExclusiveLock<I>::accept_requests() const {
+bool ExclusiveLock<I>::accept_requests(int *ret_val) const {
   Mutex::Locker locker(m_lock);
 
   bool accept_requests = (!is_shutdown() && m_state == STATE_LOCKED &&
-                          m_request_blockers == 0);
+                          !m_request_blocked);
+  *ret_val = m_request_blocked_ret_val;
+
   ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
                              << accept_requests << dendl;
   return accept_requests;
 }
 
 template <typename I>
-void ExclusiveLock<I>::block_requests() {
+void ExclusiveLock<I>::block_requests(int r) {
   Mutex::Locker locker(m_lock);
-  ++m_request_blockers;
+  assert(!m_request_blocked);
+  m_request_blocked = true;
+  m_request_blocked_ret_val = r;
 
-  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
-                             << m_request_blockers << dendl;
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << dendl;
 }
 
 template <typename I>
 void ExclusiveLock<I>::unblock_requests() {
   Mutex::Locker locker(m_lock);
-  assert(m_request_blockers > 0);
-  --m_request_blockers;
+  assert(m_request_blocked);
+  m_request_blocked = false;
+  m_request_blocked_ret_val = 0;
 
-  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "="
-                             << m_request_blockers << dendl;
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << dendl;
 }
 
 template <typename I>

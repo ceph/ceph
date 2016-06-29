@@ -45,7 +45,7 @@ public:
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(name, payload);
-    ::encode(addr, payload);
+    ::encode(addr, payload, features);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

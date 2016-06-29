@@ -151,6 +151,7 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
+  raw* create_dummy();
 
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
@@ -173,10 +174,10 @@ namespace buffer CEPH_BUFFER_API {
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
-    ptr(ptr&& p);
+    ptr(ptr&& p) noexcept;
     ptr(const ptr& p, unsigned o, unsigned l);
     ptr& operator= (const ptr& p);
-    ptr& operator= (ptr&& p);
+    ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
       release();
     }
@@ -308,8 +309,8 @@ namespace buffer CEPH_BUFFER_API {
 	//return off == bl->length();
       }
 
-      void advance(int o);
-      void seek(unsigned o);
+      void advance(ssize_t o);
+      void seek(size_t o);
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
@@ -328,6 +329,9 @@ namespace buffer CEPH_BUFFER_API {
       // number of bytes we can read from that position (up to want),
       // and advance the iterator by that amount.
       size_t get_ptr_and_advance(size_t want, const char **p);
+
+      /// calculate crc from iterator position
+      uint32_t crc32c(size_t length, uint32_t crc);
 
       friend bool operator==(const iterator_impl& lhs,
 			     const iterator_impl& rhs) {
@@ -348,8 +352,8 @@ namespace buffer CEPH_BUFFER_API {
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
-      void advance(int o);
-      void seek(unsigned o);
+      void advance(ssize_t o);
+      void seek(size_t o);
       char operator*();
       iterator& operator++();
       ptr get_current_ptr();

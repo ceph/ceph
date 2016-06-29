@@ -669,10 +669,10 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 /*
  * session_info_t
  */
-void session_info_t::encode(bufferlist& bl) const
+void session_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(6, 3, bl);
-  ::encode(inst, bl);
+  ::encode(inst, bl, features);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
@@ -1037,6 +1037,8 @@ void cap_reconnect_t::generate_test_instances(list<cap_reconnect_t*>& ls)
   ls.back()->path = "/test/path";
   ls.back()->capinfo.cap_id = 1;
 }
+
+uint64_t MDSCacheObject::last_wait_seq = 0;
 
 void MDSCacheObject::dump(Formatter *f) const
 {

@@ -494,6 +494,7 @@ public:
       }
       yield {
         int ret = http_op->wait(shard_info);
+        http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
         }
@@ -558,6 +559,7 @@ public:
 
   int request_complete() {
     int ret = http_op->wait(result);
+    http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldout(sync_env->store->ctx(), 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
       return ret;
@@ -620,7 +622,7 @@ public:
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -793,7 +795,7 @@ public:
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           set_status("failed acquiring lock");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -948,6 +950,7 @@ public:
       }
       yield {
         int ret = http_op->wait_bl(pbl);
+        http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
         }
@@ -1385,7 +1388,7 @@ public:
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           drain_all();
           return lease_cr->get_ret_status();
         }
@@ -1507,7 +1510,7 @@ public:
         }
         while (!lease_cr->is_locked()) {
           if (lease_cr->is_done()) {
-            ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+            ldout(cct, 5) << "lease cr failed, done early " << dendl;
             drain_all();
             return lease_cr->get_ret_status();
           }
@@ -2096,7 +2099,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
   int ret = http_op->wait(&data);
   if (ret < 0) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-    ldout(cct, 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
+    ldout(cct, 5) << "failed to wait for op, ret=" << ret << dendl;
     http_op->put();
     http_op = NULL;
     return set_cr_error(ret);

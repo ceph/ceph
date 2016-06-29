@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/utility/string_ref.hpp>
+
 #include <curl/curl.h>
 #include <curl/easy.h>
 #include <curl/multi.h>
@@ -75,36 +77,49 @@ struct rgw_http_req_data : public RefCountedObject {
 /*
  * the simple set of callbacks will be called on RGWHTTPClient::process()
  */
-static size_t simple_receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+/* Static methods - callbacks for libcurl. */
+size_t RGWHTTPClient::simple_receive_http_header(void * const ptr,
+                                                 const size_t size,
+                                                 const size_t nmemb,
+                                                 void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_header(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_header() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_header() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t simple_receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::simple_receive_http_data(void * const ptr,
+                                               const size_t size,
+                                               const size_t nmemb,
+                                               void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
-  size_t len = size * nmemb;
+  const size_t len = size * nmemb;
   int ret = client->receive_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return len;
 }
 
-static size_t simple_send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::simple_send_http_data(void * const ptr,
+                                            const size_t size,
+                                            const size_t nmemb,
+                                            void * const _info)
 {
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
+    dout(0) << "WARNING: client->receive_data() returned ret="
+            << ret << dendl;
   }
 
   return ret;
@@ -114,7 +129,10 @@ static size_t simple_send_http_data(void *ptr, size_t size, size_t nmemb, void *
  * the following set of callbacks will be called either on RGWHTTPManager::process(),
  * or via the RGWHTTPManager async processing.
  */
-static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::receive_http_header(void * const ptr,
+                                          const size_t size,
+                                          const size_t nmemb,
+                                          void * const _info)
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
   size_t len = size * nmemb;
@@ -133,7 +151,10 @@ static size_t receive_http_header(void *ptr, size_t size, size_t nmemb, void *_i
   return len;
 }
 
-static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::receive_http_data(void * const ptr,
+                                        const size_t size,
+                                        const size_t nmemb,
+                                        void * const _info)
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
   size_t len = size * nmemb;
@@ -152,7 +173,10 @@ static size_t receive_http_data(void *ptr, size_t size, size_t nmemb, void *_inf
   return len;
 }
 
-static size_t send_http_data(void *ptr, size_t size, size_t nmemb, void *_info)
+size_t RGWHTTPClient::send_http_data(void * const ptr,
+                                     const size_t size,
+                                     const size_t nmemb,
+                                     void * const _info)
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
 
@@ -344,6 +368,54 @@ RGWHTTPClient::~RGWHTTPClient()
 }
 
 
+int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
+{
+  const boost::string_ref header_line(static_cast<const char * const>(ptr), len);
+
+  /* We're tokening the line that way due to backward compatibility. */
+  const size_t sep_loc = header_line.find_first_of(" \t:");
+
+  if (boost::string_ref::npos == sep_loc) {
+    /* Wrongly formatted header? Just skip it. */
+    return 0;
+  }
+
+  header_name_t name(header_line.substr(0, sep_loc));
+  if (0 == relevant_headers.count(name)) {
+    /* Not interested in this particular header. */
+    return 0;
+  }
+
+  const auto value_part = header_line.substr(sep_loc + 1);
+
+  /* Skip spaces and tabs after the separator. */
+  const size_t val_loc_s = value_part.find_first_not_of(' ');
+  const size_t val_loc_e = value_part.find_first_of("\r\n");
+
+  if (boost::string_ref::npos == val_loc_s ||
+      boost::string_ref::npos == val_loc_e) {
+    /* Empty value case. */
+    found_headers.emplace(name, header_value_t());
+  } else {
+    found_headers.emplace(name, header_value_t(
+        value_part.substr(val_loc_s, val_loc_e - val_loc_s)));
+  }
+
+  return 0;
+}
+
+int RGWHTTPTransceiver::send_data(void* ptr, size_t len)
+{
+  int length_to_copy = 0;
+  if (post_data_index < post_data.length()) {
+    length_to_copy = min(post_data.length() - post_data_index, len);
+    memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
+    post_data_index += length_to_copy;
+  }
+  return length_to_copy;
+}
+
+
 #if HAVE_CURL_MULTI_WAIT
 
 static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
@@ -393,8 +465,11 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
     return -EIO;
   }
 
-  if (signal_fd >= maxfd) {
-    maxfd = signal_fd + 1;
+  if (signal_fd > 0) {
+    FD_SET(signal_fd, &fdread);
+    if (signal_fd >= maxfd) {
+      maxfd = signal_fd + 1;
+    }
   }
 
   /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */

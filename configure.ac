@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [10.2.0], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [11.0.0], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -47,7 +47,7 @@ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 # Automake
 AM_PROG_CC_C_O
-AM_PROG_LIBTOOL
+LT_INIT([disable-static])
 AM_PROG_AS
 
 
@@ -1305,6 +1305,20 @@ if test "x$with_openldap" != "xno"; then
 fi
 AM_CONDITIONAL(WITH_OPENLDAP, [ test "$have_openldap" = "yes" ])
 
+AC_ARG_WITH([reentrant-strsignal],
+            [AS_HELP_STRING([--with-reentrant-strsignal], [Use strsignal(3) instead of sys_siglist[]])],
+            [],
+            [with_reentrant_strsignal=no])
+AS_IF([test "x$with_reentrant_strsignal" != xno],
+  [AC_DEFINE(HAVE_REENTRANT_STRSIGNAL, 1, [Define if strsignal(3) is reentrant])])
+
+AC_ARG_WITH([thread-safe-res-query],
+            [AS_HELP_STRING([--with-thread-safe-res-query], [Use res_query(3) without locking])],
+            [],
+            [with_thread_safe_res_query=no])
+AS_IF([test "x$with_thread_safe_res_query" != xno],
+  [AC_DEFINE(HAVE_THREAD_SAFE_RES_QUERY, 1, [Define if res_query(3) is thread safe])])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
@@ -1361,7 +1375,6 @@ AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
 	src/ocf/Makefile
-	src/ocf/ceph
 	src/ocf/rbd
 	src/java/Makefile
 	systemd/Makefile

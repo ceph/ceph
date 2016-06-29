@@ -165,13 +165,13 @@ class ObjectCacher {
       journal_tid = _journal_tid;
     }
 
-    bool is_missing() { return state == STATE_MISSING; }
-    bool is_dirty() { return state == STATE_DIRTY; }
-    bool is_clean() { return state == STATE_CLEAN; }
-    bool is_zero() { return state == STATE_ZERO; }
-    bool is_tx() { return state == STATE_TX; }
-    bool is_rx() { return state == STATE_RX; }
-    bool is_error() { return state == STATE_ERROR; }
+    bool is_missing() const { return state == STATE_MISSING; }
+    bool is_dirty() const { return state == STATE_DIRTY; }
+    bool is_clean() const { return state == STATE_CLEAN; }
+    bool is_zero() const { return state == STATE_ZERO; }
+    bool is_tx() const { return state == STATE_TX; }
+    bool is_rx() const { return state == STATE_RX; }
+    bool is_error() const { return state == STATE_ERROR; }
 
     // reference counting
     int get() {
@@ -201,8 +201,7 @@ class ObjectCacher {
     }
 
     inline bool can_merge_journal(BufferHead *bh) const {
-      return (get_journal_tid() == 0 || bh->get_journal_tid() == 0 ||
-	      get_journal_tid() == bh->get_journal_tid());
+      return (get_journal_tid() == bh->get_journal_tid());
     }
 
     struct ptr_lt {
@@ -241,7 +240,6 @@ class ObjectCacher {
     bool complete;
     bool exists;
 
-  public:
     map<loff_t, BufferHead*>     data;
 
     ceph_tid_t last_write_tid;  // version of bh (if non-zero)
@@ -252,9 +250,8 @@ class ObjectCacher {
     map< ceph_tid_t, list<Context*> > waitfor_commit;
     xlist<C_ReadFinish*> reads;
 
-  public:
-    Object(const Object& other);
-    const Object& operator=(const Object& other);
+    Object(const Object&) = delete;
+    Object& operator=(const Object&) = delete;
 
     Object(ObjectCacher *_oc, sobject_t o, uint64_t ono, ObjectSet *os,
 	   object_locator_t& l, uint64_t ts, uint64_t tq) :
@@ -276,14 +273,14 @@ class ObjectCacher {
       set_item.remove_myself();
     }
 
-    sobject_t get_soid() { return oid; }
+    sobject_t get_soid() const { return oid; }
     object_t get_oid() { return oid.oid; }
     snapid_t get_snap() { return oid.snap; }
-    ObjectSet *get_object_set() { return oset; }
+    ObjectSet *get_object_set() const { return oset; }
     string get_namespace() { return oloc.nspace; }
     uint64_t get_object_number() const { return object_no; }
 
-    object_locator_t& get_oloc() { return oloc; }
+    const object_locator_t& get_oloc() const { return oloc; }
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
     bool can_close() {
@@ -593,38 +590,8 @@ class ObjectCacher {
     }
   };
 
-  class C_WriteCommit : public Context {
-    ObjectCacher *oc;
-    int64_t poolid;
-    sobject_t oid;
-    vector<pair<loff_t, uint64_t> > ranges;
-  public:
-    ceph_tid_t tid;
-    C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s,
-		  uint64_t l) :
-      oc(c), poolid(_poolid), oid(o), tid(0) {
-	ranges.push_back(make_pair(s, l));
-      }
-    C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o,
-		  vector<pair<loff_t, uint64_t> >& _ranges) :
-      oc(c), poolid(_poolid), oid(o), tid(0) {
-	ranges.swap(_ranges);
-      }
-    void finish(int r) {
-      oc->bh_write_commit(poolid, oid, ranges, tid, r);
-    }
- };
-
-  class C_WaitForWrite : public Context {
-  public:
-    C_WaitForWrite(ObjectCacher *oc, uint64_t len, Context *onfinish) :
-      m_oc(oc), m_len(len), m_onfinish(onfinish) {}
-    void finish(int r);
-  private:
-    ObjectCacher *m_oc;
-    uint64_t m_len;
-    Context *m_onfinish;
-  };
+  class C_WriteCommit;
+  class C_WaitForWrite;
 
   void perf_start();
   void perf_stop();
@@ -778,7 +745,7 @@ public:
 };
 
 
-inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
+inline ostream& operator<<(ostream &out, const ObjectCacher::BufferHead &bh)
 {
   out << "bh[ " << &bh << " "
       << bh.start() << "~" << bh.length()
@@ -812,7 +779,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ObjectCacher::ObjectSet &os)
+inline ostream& operator<<(ostream &out, const ObjectCacher::ObjectSet &os)
 {
   return out << "objectset[" << os.ino
 	     << " ts " << os.truncate_seq << "/" << os.truncate_size
@@ -821,7 +788,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::ObjectSet &os)
 	     << "]";
 }
 
-inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
+inline ostream& operator<<(ostream &out, const ObjectCacher::Object &ob)
 {
   out << "object["
       << ob.get_soid() << " oset " << ob.oset << dec

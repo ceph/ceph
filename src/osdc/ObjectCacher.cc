@@ -361,12 +361,12 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     if (p == data.end()) {
       if (final == NULL) {
         final = new BufferHead(this);
+        replace_journal_tid(final, tid);
         final->set_start( cur );
         final->set_length( max );
         oc->bh_add(this, final);
         ldout(oc->cct, 10) << "map_write adding trailing bh " << *final << dendl;
       } else {
-        replace_journal_tid(final, tid);
         oc->bh_stat_sub(final);
         final->set_length(final->length() + max);
         oc->bh_stat_add(final);
@@ -375,19 +375,20 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
       cur += max;
       continue;
     }
-    
+
     ldout(oc->cct, 10) << "cur is " << cur << ", p is " << *p->second << dendl;
     //oc->verify_stats();
 
     if (p->first <= cur) {
       BufferHead *bh = p->second;
       ldout(oc->cct, 10) << "map_write bh " << *bh << " intersected" << dendl;
-      
+
       if (p->first < cur) {
         assert(final == 0);
         if (cur + max >= bh->end()) {
           // we want right bit (one splice)
           final = split(bh, cur);   // just split it, take right half.
+          replace_journal_tid(final, tid);
           ++p;
           assert(p->second == final);
         } else {
@@ -396,6 +397,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
           ++p;
           assert(p->second == final);
           split(final, cur+max);
+          replace_journal_tid(final, tid);
         }
       } else {
         assert(p->first == cur);
@@ -410,36 +412,37 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
           oc->mark_dirty(final);
           --p;  // move iterator back to final
           assert(p->second == final);
-          replace_journal_tid(bh, 0);
+          replace_journal_tid(bh, tid);
           merge_left(final, bh);
         } else {
           final = bh;
+          replace_journal_tid(final, tid);
         }
       }
-      
+
       // keep going.
       loff_t lenfromcur = final->end() - cur;
       cur += lenfromcur;
       left -= lenfromcur;
       ++p;
-      continue; 
+      continue;
     } else {
       // gap!
       loff_t next = p->first;
       loff_t glen = MIN(next - cur, max);
       ldout(oc->cct, 10) << "map_write gap " << cur << "~" << glen << dendl;
       if (final) {
-	replace_journal_tid(final, tid);
         oc->bh_stat_sub(final);
         final->set_length(final->length() + glen);
         oc->bh_stat_add(final);
       } else {
         final = new BufferHead(this);
+	replace_journal_tid(final, tid);
         final->set_start( cur );
         final->set_length( glen );
         oc->bh_add(this, final);
       }
-      
+
       cur += glen;
       left -= glen;
       continue;    // more?
@@ -448,7 +451,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
 
   // set version
   assert(final);
-  replace_journal_tid(final, tid);
+  assert(final->get_journal_tid() == tid);
   ldout(oc->cct, 10) << "map_write final is " << *final << dendl;
 
   return final;
@@ -918,6 +921,27 @@ void ObjectCacher::bh_write_adjacencies(BufferHead *bh, ceph::real_time cutoff,
   bh_write_scattered(blist);
 }
 
+class ObjectCacher::C_WriteCommit : public Context {
+  ObjectCacher *oc;
+  int64_t poolid;
+  sobject_t oid;
+  vector<pair<loff_t, uint64_t> > ranges;
+public:
+  ceph_tid_t tid;
+  C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o, loff_t s,
+		uint64_t l) :
+    oc(c), poolid(_poolid), oid(o), tid(0) {
+      ranges.push_back(make_pair(s, l));
+    }
+  C_WriteCommit(ObjectCacher *c, int64_t _poolid, sobject_t o,
+		vector<pair<loff_t, uint64_t> >& _ranges) :
+    oc(c), poolid(_poolid), oid(o), tid(0) {
+      ranges.swap(_ranges);
+    }
+  void finish(int r) {
+    oc->bh_write_commit(poolid, oid, ranges, tid, r);
+  }
+};
 void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
 {
   assert(lock.is_locked());
@@ -1627,6 +1651,17 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
   trim();
   return r;
 }
+
+class ObjectCacher::C_WaitForWrite : public Context {
+public:
+  C_WaitForWrite(ObjectCacher *oc, uint64_t len, Context *onfinish) :
+    m_oc(oc), m_len(len), m_onfinish(onfinish) {}
+  void finish(int r);
+private:
+  ObjectCacher *m_oc;
+  uint64_t m_len;
+  Context *m_onfinish;
+};
 
 void ObjectCacher::C_WaitForWrite::finish(int r)
 {

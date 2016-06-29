@@ -37,13 +37,12 @@
 #endif
 #endif
 
-#include <pthread.h>
+#include <atomic>
+#include <mutex>
+#include <condition_variable>
 
-#include "include/atomic.h"
-#include "include/Context.h"
-#include "include/unordered_map.h"
 #include "common/ceph_time.h"
-#include "common/WorkQueue.h"
+#include "common/dout.h"
 #include "net_handler.h"
 
 #define EVENT_NONE 0
@@ -81,12 +80,22 @@ class EventDriver {
   virtual int resize_events(int newsize) = 0;
 };
 
-
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
  */
 class EventCenter {
+
   using clock_type = ceph::coarse_mono_clock;
+  // should be enough;
+  static const int MAX_EVENTCENTER = 24;
+
+  struct AssociatedCenters {
+    EventCenter *centers[MAX_EVENTCENTER];
+    AssociatedCenters(CephContext *c) {
+      memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter*));
+    }
+  };
+
   struct FileEvent {
     int mask;
     EventCallbackRef read_cb;
@@ -104,20 +113,21 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
-  Mutex external_lock, file_lock, time_lock;
-  atomic_t external_num_events;
+  pthread_t owner;
+  std::mutex external_lock, file_lock;;
+  std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;
   EventDriver *driver;
-  map<clock_type::time_point, list<TimeEvent> > time_events;
+  std::multimap<clock_type::time_point, TimeEvent> time_events;
+  std::map<uint64_t, std::multimap<clock_type::time_point, TimeEvent>::iterator> event_map;
   uint64_t time_event_next_id;
-  clock_type::time_point last_time; // last time process time event
-  clock_type::time_point next_time; // next wake up time
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
-  pthread_t owner;
   EventCallbackRef notify_handler;
+  unsigned idx = 10000;
+  AssociatedCenters *global_centers;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -130,22 +140,18 @@ class EventCenter {
 
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
-    external_lock("AsyncMessenger::external_lock"),
-    file_lock("AsyncMessenger::file_lock"),
-    time_lock("AsyncMessenger::time_lock"),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
-    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0),
+    notify_receive_fd(-1), notify_send_fd(-1), net(c),
     notify_handler(NULL),
     already_wakeup(0) {
-    last_time = clock_type::now();
   }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
-  int init(int nevent);
+  int init(int nevent, unsigned idx);
   void set_owner();
-  pthread_t get_owner() { return owner; }
+  unsigned get_id() { return idx; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
@@ -157,6 +163,57 @@ class EventCenter {
 
   // Used by external thread
   void dispatch_event_external(EventCallbackRef e);
+  inline bool in_thread() const {
+    return pthread_equal(pthread_self(), owner);
+  }
+
+ private:
+  template <typename func>
+  class C_submit_event : public EventCallback {
+    std::mutex lock;
+    std::condition_variable cond;
+    bool done = false;
+    func f;
+    bool nonwait;
+   public:
+    C_submit_event(func &&_f, bool nw)
+      : f(std::move(_f)), nonwait(nw) {}
+    void do_request(int id) {
+      f();
+      lock.lock();
+      cond.notify_all();
+      done = true;
+      lock.unlock();
+      if (nonwait)
+        delete this;
+    }
+    void wait() {
+      assert(!nonwait);
+      std::unique_lock<std::mutex> l(lock);
+      while (!done)
+        cond.wait(l);
+    }
+  };
+
+ public:
+  template <typename func>
+  void submit_to(int i, func &&f, bool nowait = false) {
+    assert(i < MAX_EVENTCENTER && global_centers);
+    EventCenter *c = global_centers->centers[i];
+    assert(c);
+    if (!nowait && c->in_thread()) {
+      f();
+      return ;
+    }
+    if (nowait) {
+      C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
+      c->dispatch_event_external(event);
+    } else {
+      C_submit_event<func> event(std::move(f), false);
+      c->dispatch_event_external(&event);
+      event.wait();
+    }
+  };
 };
 
 #endif

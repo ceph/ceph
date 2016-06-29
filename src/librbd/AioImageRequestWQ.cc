@@ -36,9 +36,6 @@ ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
   ldout(cct, 20) << "read: ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  std::vector<std::pair<uint64_t,uint64_t> > image_extents;
-  image_extents.push_back(make_pair(off, len));
-
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
   aio_read(c, off, len, buf, NULL, op_flags, false);
@@ -341,6 +338,8 @@ void *AioImageRequestWQ::_void_dequeue() {
     get_pool_lock().Lock();
     return nullptr;
   }
+
+  item->start_op();
   return item;
 }
 
@@ -398,8 +397,7 @@ int AioImageRequestWQ::start_in_flight_op(AioCompletion *c) {
     CephContext *cct = m_image_ctx.cct;
     lderr(cct) << "IO received on closed image" << dendl;
 
-    c->get();
-    c->fail(cct, -ESHUTDOWN);
+    c->fail(-ESHUTDOWN);
     return false;
   }
 
@@ -459,9 +457,8 @@ void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest<> *req) {
                  << "req=" << req << dendl;
   if (r < 0) {
     req->fail(r);
-    delete req;
-
     finish_queued_op(req);
+    delete req;
     finish_in_flight_op();
   } else {
     // since IO was stalled for refresh -- original IO order is preserved

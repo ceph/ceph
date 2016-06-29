@@ -24,9 +24,45 @@ public:
       size_t len,
       bufferlist::const_iterator& p
       ) {
-      bufferlist t;
-      p.copy(len, t);
-      return t.crc32c(-1);
+      return p.crc32c(len, -1);
+    }
+  };
+
+  struct crc32c_16 {
+    typedef __le16 value_t;
+
+    // we have no execution context/state.
+    typedef int state_t;
+    static void init(state_t *state) {
+    }
+    static void fini(state_t *state) {
+    }
+
+    static value_t calc(
+      state_t state,
+      size_t len,
+      bufferlist::const_iterator& p
+      ) {
+      return p.crc32c(len, -1) & 0xffff;
+    }
+  };
+
+  struct crc32c_8 {
+    typedef __u8 value_t;
+
+    // we have no execution context/state.
+    typedef int state_t;
+    static void init(state_t *state) {
+    }
+    static void fini(state_t *state) {
+    }
+
+    static value_t calc(
+      state_t state,
+      size_t len,
+      bufferlist::const_iterator& p
+      ) {
+      return p.crc32c(len, -1) & 0xff;
     }
   };
 

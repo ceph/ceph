@@ -612,9 +612,10 @@ public:
 
 private:
   /// pg -> (raw osd list)
-  int _pg_to_osds(const pg_pool_t& pool, pg_t pg,
-                  vector<int> *osds, int *primary,
-		  ps_t *ppps) const;
+  int _pg_to_raw_osds(
+    const pg_pool_t& pool, pg_t pg,
+    vector<int> *osds, int *primary,
+    ps_t *ppps) const;
   void _remove_nonexistent_osds(const pg_pool_t& pool, vector<int>& osds) const;
 
   void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
@@ -646,7 +647,7 @@ public:
    * by anybody for data mapping purposes.
    * raw and primary must be non-NULL
    */
-  int pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const;
+  int pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
   int pg_to_acting_osds(const pg_t& pg, vector<int> *acting,
                         int *acting_primary) const {

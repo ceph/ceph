@@ -12,6 +12,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/compat.h"
 #include "include/int_types.h"
 
 #include <unistd.h>
@@ -31,7 +32,6 @@
 #include <iostream>
 #include <map>
 
-#include "include/compat.h"
 #include "include/linux_fiemap.h"
 
 #include "common/xattr.h"
@@ -701,14 +701,18 @@ void FileStore::collect_metadata(map<string,string> *pm)
   }
 }
 
-int FileStore::statfs(struct statfs *buf)
+int FileStore::statfs(struct store_statfs_t *buf0)
 {
-  if (::statfs(basedir.c_str(), buf) < 0) {
+  struct statfs buf;
+  buf0->reset();
+  if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
     assert(!m_filestore_fail_eio || r != -EIO);
     assert(r != -ENOENT);
     return r;
   }
+  buf0->total = buf.f_blocks * buf.f_bsize;
+  buf0->available = buf.f_bavail * buf.f_bsize;
   return 0;
 }
 

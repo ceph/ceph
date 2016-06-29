@@ -249,7 +249,7 @@ public:
   typedef ceph::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
-  PGBackend *get_pgbackend() {
+  PGBackend *get_pgbackend() override {
     return pgbackend.get();
   }
 
@@ -259,13 +259,13 @@ public:
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
     ObjectStore::Transaction *t
-    );
+    ) override;
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info,
     const object_stat_sum_t &stat
-    );
+    ) override;
   void begin_peer_recover(
     pg_shard_t peer,
     const hobject_t oid);
@@ -555,19 +555,19 @@ public:
     list<std::function<void()>> on_success;
     template <typename F>
     void register_on_finish(F &&f) {
-      on_finish.emplace_back(std::move(f));
+      on_finish.emplace_back(std::forward<F>(f));
     }
     template <typename F>
     void register_on_success(F &&f) {
-      on_success.emplace_back(std::move(f));
+      on_success.emplace_back(std::forward<F>(f));
     }
     template <typename F>
     void register_on_applied(F &&f) {
-      on_applied.emplace_back(std::move(f));
+      on_applied.emplace_back(std::forward<F>(f));
     }
     template <typename F>
     void register_on_commit(F &&f) {
-      on_committed.emplace_back(std::move(f));
+      on_committed.emplace_back(std::forward<F>(f));
     }
 
     bool sent_ack;
@@ -673,6 +673,12 @@ public:
 	   pending_async_reads.erase(i++)) {
 	delete i->second.second;
       }
+    }
+    uint64_t get_features() {
+      if (op && op->get_req()) {
+        return op->get_req()->get_connection()->get_features();
+      }
+      return -1ll;
     }
   };
   using OpContextUPtr = std::unique_ptr<OpContext>;
@@ -1022,7 +1028,6 @@ protected:
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
-  SnapSetContext *create_snapset_context(const hobject_t& oid);
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
@@ -1654,7 +1659,7 @@ public:
     bool user_only = false);
 };
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
+inline ostream& operator<<(ostream& out, const ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop
       << " " << repop.v
@@ -1665,7 +1670,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ReplicatedPG::ProxyWriteOpRef pwop)
+inline ostream& operator<<(ostream& out,
+			   const ReplicatedPG::ProxyWriteOpRef& pwop)
 {
   out << "proxywrite(" << &pwop
       << " " << pwop->user_version

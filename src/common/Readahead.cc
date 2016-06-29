@@ -168,6 +168,16 @@ void Readahead::set_trigger_requests(int trigger_requests) {
   m_lock.Unlock();
 }
 
+uint64_t Readahead::get_min_readahead_size(void) {
+  Mutex::Locker lock(m_lock);
+  return m_readahead_min_bytes;
+}
+
+uint64_t Readahead::get_max_readahead_size(void) {
+  Mutex::Locker lock(m_lock);
+  return m_readahead_max_bytes;
+}
+
 void Readahead::set_min_readahead_size(uint64_t min_readahead_size) {
   m_lock.Lock();
   m_readahead_min_bytes = min_readahead_size;

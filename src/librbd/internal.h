@@ -95,6 +95,8 @@ namespace librbd {
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
+  int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
+             std::map<std::pair<int64_t, std::string >, std::set<std::string> >& image_info);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -138,6 +140,8 @@ namespace librbd {
 	     ProgressContext& prog_ctx, bool force=false);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
+  int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
+  int snap_set_limit(ImageCtx *ictx, uint64_t limit);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
@@ -215,6 +219,11 @@ namespace librbd {
                             size_t info_size);
   int mirror_image_get_status(ImageCtx *ictx, mirror_image_status_t *status,
 			      size_t status_size);
+
+  // Consistency groups functions
+  int group_create(librados::IoCtx& io_ctx, const char *imgname);
+  int group_remove(librados::IoCtx& io_ctx, const char *group_name);
+  int group_list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
 }
 
 #endif

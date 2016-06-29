@@ -5,7 +5,7 @@ if [ -n "$CEPH_BUILD_DIR" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BIN" ] && [ -n
 elif [ -e CMakeCache.txt ]; then
   echo "Environment Variables Not All Set, Detected Build System CMake"
   echo "Setting Environment Variables"
-  export CEPH_ROOT=`grep Ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  export CEPH_ROOT=`grep ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
   export CEPH_BUILD_DIR=`pwd`
   export CEPH_BIN=$CEPH_BUILD_DIR/bin
   export CEPH_LIB=$CEPH_BUILD_DIR/lib

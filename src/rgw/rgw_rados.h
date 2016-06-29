@@ -4,11 +4,14 @@
 #ifndef CEPH_RGWRADOS_H
 #define CEPH_RGWRADOS_H
 
+#include <functional>
+
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "common/ceph_time.h"
+#include "common/lru_map.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -1800,14 +1803,16 @@ class RGWRados
 protected:
   CephContext *cct;
 
-  librados::Rados **rados;
-  atomic_t next_rados_handle;
-  uint32_t num_rados_handles;
+  std::vector<librados::Rados> rados;
+  uint32_t next_rados_handle;
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
+
+  using tombstone_cache_t = lru_map<rgw_obj, pair<ceph::real_time, uint32_t> >;
+  tombstone_cache_t *obj_tombstone_cache;
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx objexp_pool_ctx;
@@ -1841,9 +1846,9 @@ public:
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
-               rados(NULL), next_rados_handle(0),
-               num_rados_handles(0), handle_lock("rados_handle_lock"),
-               binfo_cache(NULL),
+               next_rados_handle(0),
+               handle_lock("rados_handle_lock"),
+               binfo_cache(NULL), obj_tombstone_cache(nullptr),
                pools_initialized(false),
                quota_handler(NULL),
                finisher(NULL),
@@ -1956,16 +1961,10 @@ public:
 
   RGWDataChangesLog *data_log;
 
-  virtual ~RGWRados() {
-    for (uint32_t i=0; i < num_rados_handles; i++) {
-      if (rados[i]) {
-        rados[i]->shutdown();
-        delete rados[i];
-      }
-    }
-    if (rados) {
-      delete[] rados;
-    }
+  virtual ~RGWRados() = default;
+
+  tombstone_cache_t *get_tombstone_cache() {
+    return obj_tombstone_cache;
   }
 
   int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
@@ -2051,6 +2050,7 @@ public:
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
+                            const RGWQuotaInfo * pquota_info,
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
                             obj_version *pobjv,
@@ -2434,6 +2434,32 @@ public:
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
 
+  int on_last_entry_in_listing(RGWBucketInfo& bucket_info,
+                               const std::string& obj_prefix,
+                               const std::string& obj_delim,
+                               std::function<int(const RGWObjEnt&)> handler);
+
+  bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const {
+    return bucket_info.has_swift_versioning() &&
+        bucket_info.swift_ver_location.size();
+  }
+
+  int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
+                            const rgw_user& user,               /* in */
+                            RGWBucketInfo& bucket_info,         /* in */
+                            rgw_obj& obj);                      /* in */
+  int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
+                               const rgw_user& user,            /* in */
+                               RGWBucketInfo& bucket_info,      /* in */
+                               rgw_obj& obj,                    /* in */
+                               bool& restored);                 /* out */
+  int copy_obj_to_remote_dest(RGWObjState *astate,
+                              map<string, bufferlist>& src_attrs,
+                              RGWRados::Object::Read& read_op,
+                              const rgw_user& user_id,
+                              rgw_obj& dest_obj,
+                              ceph::real_time *mtime);
+
   enum AttrsMod {
     ATTRSMOD_NONE    = 0,
     ATTRSMOD_REPLACE = 1,
@@ -2471,14 +2497,6 @@ public:
                        struct rgw_err *err,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data);
-  int swift_versioning_copy(RGWBucketInfo& bucket_info, RGWRados::Object *source, RGWObjState *state,
-                            rgw_user& user);
-  int copy_obj_to_remote_dest(RGWObjState *astate,
-                              map<string, bufferlist>& src_attrs,
-                              RGWRados::Object::Read& read_op,
-                              const rgw_user& user_id,
-                              rgw_obj& dest_obj,
-                              ceph::real_time *mtime);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
@@ -2921,6 +2939,8 @@ public:
 
   librados::Rados* get_rados_handle();
 
+  int delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket, RGWBucketInfo& info, RGWObjState *astate,
+                     list<librados::AioCompletion *>& handles, bool keep_index_consistent);
  private:
   /**
    * This is a helper method, it generates a list of bucket index objects with the given

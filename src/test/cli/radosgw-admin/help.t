@@ -66,6 +66,7 @@
     zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
+    zone rename                rename a zone
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -121,6 +122,7 @@
                                of read, write, readwrite, full
      --display-name=<name>
      --max_buckets             max number of buckets for a user
+     --admin                   set the admin flag on the user
      --system                  set the system flag on the user
      --bucket=<bucket>
      --pool=<pool>
@@ -143,14 +145,14 @@
      --master-url              master url
      --master-zonegroup=<id>   master zonegroup id
      --master-zone=<id>        master zone id
-     --rgw-realm=<realm>       realm name
-     --realm-id=<realm id>     realm id
-     --realm-new-name=<realm new name> realm new name
-     --rgw-zonegroup=<zonegroup>   zonegroup name
-     --zonegroup-id=<zonegroup id> zonegroup id
-     --rgw-zone=<zone>         name of zone in which radosgw is running
-     --zone-id=<zone id>       zone id
-     --zone-new-name=<zone>    zone new name
+     --rgw-realm=<name>        realm name
+     --realm-id=<id>           realm id
+     --realm-new-name=<name>   realm new name
+     --rgw-zonegroup=<name>    zonegroup name
+     --zonegroup-id=<id>       zonegroup id
+     --rgw-zone=<name>         name of zone in which radosgw is running
+     --zone-id=<id>            zone id
+     --zone-new-name=<name>    zone new name
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
@@ -180,6 +182,10 @@
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
      --reset-regions           reset regionmap when regionmap update
+     --bypass-gc               when specified with bucket deletion, triggers
+                               object deletions by not involving GC
+     --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
+                               ignores bucket index consistency
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   

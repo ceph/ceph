@@ -2,10 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/image/RefreshRequest.h"
-#include "include/stringify.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AioImageRequestWQ.h"
@@ -28,8 +26,9 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 
 template <typename I>
-RefreshRequest<I>::RefreshRequest(I &image_ctx, Context *on_finish)
-  : m_image_ctx(image_ctx),
+RefreshRequest<I>::RefreshRequest(I &image_ctx, bool acquiring_lock,
+                                  Context *on_finish)
+  : m_image_ctx(image_ctx), m_acquiring_lock(acquiring_lock),
     m_on_finish(create_async_context_callback(m_image_ctx, on_finish)),
     m_error_result(0), m_flush_aio(false), m_exclusive_lock(nullptr),
     m_object_map(nullptr), m_journal(nullptr), m_refresh_parent(nullptr) {
@@ -269,6 +268,12 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     lderr(cct) << "image snap context is invalid!" << dendl;
     *result = -EIO;
     return m_on_finish;
+  }
+
+  if (m_acquiring_lock && (m_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+    ldout(cct, 5) << "ignoring dynamically disabled exclusive lock" << dendl;
+    m_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
+    m_incomplete_update = true;
   }
 
   send_v2_get_flags();
@@ -636,6 +641,7 @@ Context *RefreshRequest<I>::handle_v2_apply(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   apply();
+
   return send_v2_finalize_refresh_parent();
 }
 
@@ -779,6 +785,11 @@ Context *RefreshRequest<I>::handle_v2_close_object_map(int *result) {
 
 template <typename I>
 Context *RefreshRequest<I>::send_flush_aio() {
+  if (m_incomplete_update && m_error_result == 0) {
+    // if this was a partial refresh, notify ImageState
+    m_error_result = -ERESTART;
+  }
+
   if (m_flush_aio) {
     CephContext *cct = m_image_ctx.cct;
     ldout(cct, 10) << this << " " << __func__ << dendl;

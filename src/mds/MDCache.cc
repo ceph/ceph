@@ -427,8 +427,6 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
 void MDCache::create_mydir_hierarchy(MDSGather *gather)
 {
   // create mds dir
-  char myname[10];
-  snprintf(myname, sizeof(myname), "mds%d", int(mds->get_nodeid()));
   CInode *my = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR);
 
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
@@ -2119,10 +2117,12 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     if (do_parent_mtime || linkunlink) {
       assert(mut->wrlocks.count(&pin->filelock));
+      assert(mut->wrlocks.count(&pin->nestlock));
       assert(cfollows == CEPH_NOSNAP);
       
-      // update stale fragstat?
+      // update stale fragstat/rstat?
       parent->resync_accounted_fragstat();
+      parent->resync_accounted_rstat();
 
       if (do_parent_mtime) {
 	pf->fragstat.mtime = mut->get_op_stamp();
@@ -2145,35 +2145,34 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       }
     }
 
-    
     // rstat
     if (!primary_dn) {
       // don't update parent this pass
-    } else if (!linkunlink && !(parent->inode->nestlock.can_wrlock(-1) &&
-			        parent->inode->versionlock.can_wrlock())) {
-      dout(20) << " unwritable parent nestlock " << parent->inode->nestlock
-	       << ", marking dirty rstat on " << *cur << dendl;
+    } else if (!linkunlink && !(pin->nestlock.can_wrlock(-1) &&
+				pin->versionlock.can_wrlock())) {
+      dout(20) << " unwritable parent nestlock " << pin->nestlock
+	<< ", marking dirty rstat on " << *cur << dendl;
       cur->mark_dirty_rstat();
-   } else {
+    } else {
       // if we don't hold a wrlock reference on this nestlock, take one,
       // because we are about to write into the dirfrag fnode and that needs
       // to commit before the lock can cycle.
-     if (linkunlink) {
-       assert(parent->inode->nestlock.get_num_wrlocks() || mut->is_slave());
-     }
+      if (linkunlink) {
+	assert(pin->nestlock.get_num_wrlocks() || mut->is_slave());
+      }
 
-      if (mut->wrlocks.count(&parent->inode->nestlock) == 0) {
-	dout(10) << " taking wrlock on " << parent->inode->nestlock << " on " << *parent->inode << dendl;
-	mds->locker->wrlock_force(&parent->inode->nestlock, mut);
+      if (mut->wrlocks.count(&pin->nestlock) == 0) {
+	dout(10) << " taking wrlock on " << pin->nestlock << " on " << *pin << dendl;
+	mds->locker->wrlock_force(&pin->nestlock, mut);
       }
 
       // now we can project the inode rstat diff the dirfrag
-      SnapRealm *prealm = parent->inode->find_snaprealm();
-      
+      SnapRealm *prealm = pin->find_snaprealm();
+
       snapid_t follows = cfollows;
       if (follows == CEPH_NOSNAP)
 	follows = prealm->get_newest_seq();
-      
+
       snapid_t first = follows+1;
 
       // first, if the frag is stale, bring it back in sync.
@@ -2291,36 +2290,33 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     assert(parentdn);
 
     // rstat
-    if (primary_dn) {
+    dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
 
-      dout(10) << "predirty_journal_parents frag->inode on " << *parent << dendl;
+    // first, if the frag is stale, bring it back in sync.
+    parent->resync_accounted_rstat();
 
-      // first, if the frag is stale, bring it back in sync.
-      parent->resync_accounted_rstat();
+    if (g_conf->mds_snap_rstat) {
+      for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
+	   p != parent->dirty_old_rstat.end();
+	   ++p)
+	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first,
+				    p->first, pin, true);//false);
+    }
+    parent->dirty_old_rstat.clear();
+    project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
 
-      if (g_conf->mds_snap_rstat) {
-	for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
-	     p != parent->dirty_old_rstat.end();
-	     ++p)
-	  project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first,
-				      p->first, pin, true);//false);
-      }
-      parent->dirty_old_rstat.clear();
-      project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+    pf->accounted_rstat = pf->rstat;
 
-      pf->accounted_rstat = pf->rstat;
+    if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
+      if (pi->rstat.rbytes != pf->rstat.rbytes) {
+	mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
+	  << parent->dirfrag() << ", inode has " << pi->rstat
+	  << ", dirfrag has " << pf->rstat << "\n";
 
-      if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
-	if (pi->rstat.rbytes != pf->rstat.rbytes) { 
-	  mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
-	      << parent->dirfrag() << ", inode has " << pi->rstat
-	      << ", dirfrag has " << pf->rstat << "\n";
-	  
-	  // trust the dirfrag for now
-	  pi->rstat = pf->rstat;
+	// trust the dirfrag for now
+	pi->rstat = pf->rstat;
 
-	  assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
-	}
+	assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
       }
     }
 
@@ -4558,6 +4554,7 @@ CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
   if (!in->is_dir()) {
     assert(in->state_test(CInode::STATE_REJOINUNDEF));
     in->inode.mode = S_IFDIR;
+    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
   }
   CDir *dir = in->get_or_open_dirfrag(this, df.frag);
   dir->state_set(CDir::STATE_REJOINUNDEF);
@@ -5753,6 +5750,8 @@ void MDCache::opened_undef_inode(CInode *in) {
   dout(10) << "opened_undef_inode " << *in << dendl;
   rejoin_undef_inodes.erase(in);
   if (in->is_dir()) {
+    // FIXME: re-hash dentries if necessary
+    assert(in->inode.dir_layout.dl_dir_hash == g_conf->mds_default_dir_hash);
     if (in->has_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
       CDir *dir = in->get_dirfrag(frag_t());
       assert(dir);
@@ -7223,8 +7222,9 @@ void MDCache::check_memory_usage()
 
   // check client caps
   int num_inodes = inode_map.size();
-  float caps_per_inode = (float)num_caps / (float)num_inodes;
-  //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
+  float caps_per_inode = 0.0;
+  if (num_inodes)
+    caps_per_inode = (float)num_caps / (float)num_inodes;
 
   dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
@@ -7626,10 +7626,8 @@ void MDCache::dispatch(Message *m)
     break;
     
   default:
-    dout(7) << "cache unknown message " << m->get_type() << dendl;
-    assert(0);
-    m->put();
-    break;
+    derr << "cache unknown message " << m->get_type() << dendl;
+    assert(0 == "cache unknown message");
   }
 }
 
@@ -8079,7 +8077,7 @@ void MDCache::open_remote_dentry(CDentry *dn, bool projected, MDSInternalContext
   dout(10) << "open_remote_dentry " << *dn << dendl;
   CDentry::linkage_t *dnl = projected ? dn->get_projected_linkage() : dn->get_linkage();
   inodeno_t ino = dnl->get_remote_ino();
-  uint64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->mdsmap->get_metadata_pool() : -1;
+  int64_t pool = dnl->get_remote_d_type() == DT_DIR ? mds->mdsmap->get_metadata_pool() : -1;
   open_ino(ino, pool,
       new C_MDC_OpenRemoteDentry(this, dn, ino, fin, want_xlocked), true, want_xlocked); // backtrace
 }
@@ -8517,6 +8515,7 @@ void MDCache::handle_open_ino_reply(MMDSOpenInoReply *m)
       dout(10) << " found ino " << ino << " on mds." << from << dendl;
       if (!info.want_replica) {
 	open_ino_finish(ino, info, from);
+        m->put();
 	return;
       }
 
@@ -8549,7 +8548,7 @@ void MDCache::kick_open_ino_peers(mds_rank_t who)
     open_ino_info_t& info = p->second;
     if (info.checking == who) {
       dout(10) << "  kicking ino " << p->first << " who was checking mds." << who << dendl;
-      info.checking = -1;
+      info.checking = MDS_RANK_NONE;
       do_open_ino_peer(p->first, info);
     } else if (info.checking == MDS_RANK_NONE) {
       dout(10) << "  kicking ino " << p->first << " who was waiting" << dendl;
@@ -8691,7 +8690,7 @@ void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
 
     mds_rank_t from = mds_rank_t(m->get_source().num());
     if (fip.checking == from)
-      fip.checking = -1;
+      fip.checking = MDS_RANK_NONE;
     fip.checked.insert(from);
 
     if (!m->path.empty()) {
@@ -8724,9 +8723,9 @@ void MDCache::kick_find_ino_peers(mds_rank_t who)
     find_ino_peer_info_t& fip = p->second;
     if (fip.checking == who) {
       dout(10) << "kicking find_ino_peer " << fip.tid << " who was checking mds." << who << dendl;
-      fip.checking = -1;
+      fip.checking = MDS_RANK_NONE;
       _do_find_ino_peer(fip);
-    } else if (fip.checking == -1) {
+    } else if (fip.checking == MDS_RANK_NONE) {
       dout(10) << "kicking find_ino_peer " << fip.tid << " who was waiting" << dendl;
       _do_find_ino_peer(fip);
     }

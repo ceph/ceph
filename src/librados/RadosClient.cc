@@ -490,6 +490,7 @@ bool librados::RadosClient::_dispatch(Message *m)
     break;
 
   case CEPH_MSG_MDS_MAP:
+    m->put();
     break;
 
   case MSG_LOG:
@@ -526,13 +527,21 @@ int librados::RadosClient::wait_for_osdmap()
     if (cct->_conf->rados_mon_op_timeout > 0)
       timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
 
+    bool wait_forever = false;
+    if (timeout.is_zero()) {
+      // we'll going to wait forever, but wake up every 1 seconds,
+      // e.g., to avoid cpu burning.
+      wait_forever = true;
+      timeout = utime_t(1, 0);
+    }
+
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
       utime_t start = ceph_clock_now(cct);
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
 	cond.WaitInterval(cct, lock, timeout);
 	utime_t elapsed = ceph_clock_now(cct) - start;
-	if (!timeout.is_zero() && elapsed > timeout) {
+	if (!wait_forever && elapsed > timeout) {
 	  lderr(cct) << "timed out waiting for first osdmap from monitors"
 		     << dendl;
 	  return -ETIMEDOUT;
@@ -848,8 +857,7 @@ int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
   int r = objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,
 			 new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
-  if (r != 0)
-    return r;
+  assert(r == 0);
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
@@ -870,8 +878,7 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
   int r = objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
 		        new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
-  if (r != 0)
-    return r;
+  assert(r == 0);
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);

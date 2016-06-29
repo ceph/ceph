@@ -34,6 +34,7 @@ class MirrorStatusWatchCtx;
 class Replayer {
 public:
   Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+           ImageSyncThrottlerRef<> image_sync_throttler,
            RadosRef local_cluster, int64_t local_pool_id, const peer_t &peer,
            const std::vector<const char*> &args);
   ~Replayer();
@@ -57,6 +58,7 @@ private:
   void set_sources(const ImageIds &image_ids);
 
   void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                            const std::string &image_id,
                             const boost::optional<std::string>& image_name);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
@@ -65,6 +67,7 @@ private:
 
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
+  ImageSyncThrottlerRef<> m_image_sync_throttler;
   Mutex m_lock;
   Cond m_cond;
   atomic_t m_stopping;

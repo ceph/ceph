@@ -109,11 +109,26 @@ const char * ceph_osd_op_flag_name(unsigned flag)
 string ceph_osd_op_flag_string(unsigned flags)
 {
   string s;
-  for (unsigned i=0; i<31; ++i) {
+  for (unsigned i=0; i<32; ++i) {
     if (flags & (1u<<i)) {
       if (s.length())
 	s += "+";
       s += ceph_osd_op_flag_name(1u << i);
+    }
+  }
+  if (s.length())
+    return s;
+  return string("-");
+}
+
+string ceph_osd_alloc_hint_flag_string(unsigned flags)
+{
+  string s;
+  for (unsigned i=0; i<32; ++i) {
+    if (flags & (1u<<i)) {
+      if (s.length())
+	s += "+";
+      s += ceph_osd_alloc_hint_flag_name(1u << i);
     }
   }
   if (s.length())
@@ -464,7 +479,7 @@ ostream& operator<<(ostream& out, const spg_t &pg)
 
 pg_t pg_t::get_ancestor(unsigned old_pg_num) const
 {
-  int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+  int old_bits = cbits(old_pg_num);
   int old_mask = (1 << old_bits) - 1;
   pg_t ret = *this;
   ret.m_seed = ceph_stable_mod(m_seed, old_pg_num, old_mask);
@@ -479,7 +494,7 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
 
   bool split = false;
   if (true) {
-    int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+    int old_bits = cbits(old_pg_num);
     int old_mask = (1 << old_bits) - 1;
     for (int n = 1; ; n++) {
       int next_bit = (n << (old_bits-1));
@@ -498,7 +513,7 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
   }
   if (false) {
     // brute force
-    int old_bits = pg_pool_t::calc_bits_of(old_pg_num);
+    int old_bits = cbits(old_pg_num);
     int old_mask = (1 << old_bits) - 1;
     for (unsigned x = old_pg_num; x < new_pg_num; ++x) {
       unsigned o = ceph_stable_mod(x, old_pg_num, old_mask);
@@ -517,7 +532,7 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
   assert(pg_num > 1);
 
   // Find unique p such that pg_num \in [2^(p-1), 2^p)
-  unsigned p = pg_pool_t::calc_bits_of(pg_num);
+  unsigned p = cbits(pg_num);
   assert(p); // silence coverity #751330 
 
   if ((m_seed % (1<<(p-1))) < (pg_num % (1<<(p-1))))
@@ -528,7 +543,7 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
 
 pg_t pg_t::get_parent() const
 {
-  unsigned bits = pg_pool_t::calc_bits_of(m_seed);
+  unsigned bits = cbits(m_seed);
   assert(bits);
   pg_t retval = *this;
   retval.m_seed &= ~((~0)<<(bits - 1));
@@ -1193,20 +1208,10 @@ void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* t
   }
 }
 
-int pg_pool_t::calc_bits_of(int t)
-{
-  int b = 0;
-  while (t > 0) {
-    t = t >> 1;
-    ++b;
-  }
-  return b;
-}
-
 void pg_pool_t::calc_pg_masks()
 {
-  pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
-  pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
+  pg_num_mask = (1 << cbits(pg_num-1)) - 1;
+  pgp_num_mask = (1 << cbits(pgp_num-1)) - 1;
 }
 
 unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
@@ -2757,7 +2762,7 @@ void pg_info_t::encode(bufferlist &bl) const
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
   ::encode(log_tail, bl);
-  if (last_backfill_bitwise && last_backfill != last_backfill.get_max()) {
+  if (last_backfill_bitwise && !last_backfill.is_max()) {
     ::encode(hobject_t(), bl);
   } else {
     ::encode(last_backfill, bl);
@@ -4610,12 +4615,12 @@ SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
 
 // -- watch_info_t --
 
-void watch_info_t::encode(bufferlist& bl) const
+void watch_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
-  ::encode(addr, bl);
+  ::encode(addr, bl, features);
   ENCODE_FINISH(bl);
 }
 
@@ -4691,7 +4696,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
   return ps;
 }
 
-void object_info_t::encode(bufferlist& bl) const
+void object_info_t::encode(bufferlist& bl, uint64_t features) const
 {
   object_locator_t myoloc(soid);
   map<entity_name_t, watch_info_t> old_watchers;
@@ -4717,13 +4722,13 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
   ::encode(is_lost(), bl);
-  ::encode(old_watchers, bl);
+  ::encode(old_watchers, bl, features);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
   ::encode(test_flag(FLAG_USES_TMAP), bl);
-  ::encode(watchers, bl);
+  ::encode(watchers, bl, features);
   __u32 _flags = flags;
   ::encode(_flags, bl);
   ::encode(local_mtime, bl);
@@ -4936,13 +4941,13 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
   f->dump_string("omap_recovered_to", omap_recovered_to);
 }
 
-void ObjectRecoveryInfo::encode(bufferlist &bl) const
+void ObjectRecoveryInfo::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(2, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
-  ::encode(oi, bl);
+  ::encode(oi, bl, features);
   ::encode(ss, bl);
   ::encode(copy_subset, bl);
   ::encode(clone_subset, bl);
@@ -5082,11 +5087,11 @@ void PullOp::generate_test_instances(list<PullOp*> &o)
   o.back()->recovery_info.version = eversion_t(0, 0);
 }
 
-void PullOp::encode(bufferlist &bl) const
+void PullOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
-  ::encode(recovery_info, bl);
+  ::encode(recovery_info, bl, features);
   ::encode(recovery_progress, bl);
   ENCODE_FINISH(bl);
 }
@@ -5147,7 +5152,7 @@ void PushOp::generate_test_instances(list<PushOp*> &o)
   o.back()->version = eversion_t(0, 0);
 }
 
-void PushOp::encode(bufferlist &bl) const
+void PushOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(soid, bl);
@@ -5157,7 +5162,7 @@ void PushOp::encode(bufferlist &bl) const
   ::encode(omap_header, bl);
   ::encode(omap_entries, bl);
   ::encode(attrset, bl);
-  ::encode(recovery_info, bl);
+  ::encode(recovery_info, bl, features);
   ::encode(after_progress, bl);
   ::encode(before_progress, bl);
   ENCODE_FINISH(bl);
@@ -5577,4 +5582,41 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out)
       out.append(ops[i].outdata);
     }
   }
+}
+
+bool store_statfs_t::operator==(const store_statfs_t& other) const
+{
+  return total == other.total
+    && available == other.available
+    && allocated == other.allocated
+    && stored == other.stored
+    && compressed == other.compressed
+    && compressed_allocated == other.compressed_allocated
+    && compressed_original == other.compressed_original;
+}
+
+void store_statfs_t::dump(Formatter *f) const
+{
+  f->dump_int("total", total);
+  f->dump_int("available", available);
+  f->dump_int("allocated", allocated);
+  f->dump_int("stored", stored);
+  f->dump_int("compressed", compressed);
+  f->dump_int("compressed_allocated", compressed_allocated);
+  f->dump_int("compressed_original", compressed_original);
+}
+
+ostream& operator<<(ostream& out, const store_statfs_t &s)
+{
+  out << std::hex
+      << " store_statfs(0x" << s.available
+      << "/0x"  << s.total
+      << ", stored 0x" << s.stored
+      << "/0x"  << s.allocated
+      << ", compress 0x" << s.compressed
+      << "/0x"  << s.compressed_allocated
+      << "/0x"  << s.compressed_original
+      << std::dec
+      << ")";
+  return out;
 }

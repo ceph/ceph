@@ -571,8 +571,8 @@ public:
     Mutex::Locker l(pre_publish_lock);
     assert(next_osdmap);
     while (true) {
-      map<epoch_t, unsigned>::iterator i = map_reservations.begin();
-      if (i == map_reservations.end() || i->first >= next_osdmap->get_epoch()) {
+      map<epoch_t, unsigned>::const_iterator i = map_reservations.cbegin();
+      if (i == map_reservations.cend() || i->first >= next_osdmap->get_epoch()) {
 	break;
       } else {
 	pre_publish_cond.Wait(pre_publish_lock);
@@ -669,11 +669,11 @@ public:
     Mutex::Locker l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
       return false;
-    set<ScrubJob>::iterator iter = sched_scrub_pg.lower_bound(next);
-    if (iter == sched_scrub_pg.end())
+    set<ScrubJob>::const_iterator iter = sched_scrub_pg.lower_bound(next);
+    if (iter == sched_scrub_pg.cend())
       return false;
     ++iter;
-    if (iter == sched_scrub_pg.end())
+    if (iter == sched_scrub_pg.cend())
       return false;
     *out = *iter;
     return true;
@@ -1166,8 +1166,8 @@ public:
   void dump_live_pgids() {
     Mutex::Locker l(pgid_lock);
     derr << "live pgids:" << dendl;
-    for (map<spg_t, int>::iterator i = pgid_tracker.begin();
-	 i != pgid_tracker.end();
+    for (map<spg_t, int>::const_iterator i = pgid_tracker.cbegin();
+	 i != pgid_tracker.cend();
 	 ++i) {
       derr << "\t" << *i << dendl;
       live_pgs[i->first]->dump_live_ids();
@@ -1218,9 +1218,6 @@ protected:
 
   int whoami;
   std::string dev_path, journal_path;
-
-  Cond dispatch_cond;
-  bool dispatch_running;
 
   void create_logger();
   void create_recoverystate_perf();
@@ -1453,9 +1450,9 @@ private:
 
   void clear_waiting_sessions() {
     Mutex::Locker l(session_waiting_lock);
-    for (map<spg_t, set<Session*> >::iterator i =
-	   session_waiting_for_pg.begin();
-	 i != session_waiting_for_pg.end();
+    for (map<spg_t, set<Session*> >::const_iterator i =
+	   session_waiting_for_pg.cbegin();
+	 i != session_waiting_for_pg.cend();
 	 ++i) {
       for (set<Session*>::iterator j = i->second.begin();
 	   j != i->second.end();
@@ -1525,9 +1522,9 @@ private:
     Mutex::Locker l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
 
-    for (map<spg_t, list<OpRequestRef> >::iterator i =
-	   session->waiting_for_pg.begin();
-	 i != session->waiting_for_pg.end();
+    for (map<spg_t, list<OpRequestRef> >::const_iterator i =
+	   session->waiting_for_pg.cbegin();
+	 i != session->waiting_for_pg.cend();
 	 ++i) {
       clear_session_waiting_on_pg(session, i->first);
     }    
@@ -1544,8 +1541,8 @@ private:
   void register_session_waiting_on_pg(Session *session, spg_t pgid) {
     Mutex::Locker l(session_waiting_lock);
     set<Session*> &s = session_waiting_for_pg[pgid];
-    set<Session*>::iterator i = s.find(session);
-    if (i == s.end()) {
+    set<Session*>::const_iterator i = s.find(session);
+    if (i == s.cend()) {
       session->get();
       s.insert(session);
     }
@@ -1582,9 +1579,9 @@ private:
 
 private:
   /**
-   *  @defgroup monc helpers
-   *
-   *  Right now we only have the one
+   * @defgroup monc helpers
+   * @{
+   * Right now we only have the one
    */
 
   /**
@@ -1717,22 +1714,10 @@ public:
 private:
   // -- waiters --
   list<OpRequestRef> finished;
-  Mutex finished_lock;
   
   void take_waiters(list<OpRequestRef>& ls) {
-    finished_lock.Lock();
+    assert(osd_lock.is_locked());
     finished.splice(finished.end(), ls);
-    finished_lock.Unlock();
-  }
-  void take_waiters_front(list<OpRequestRef>& ls) {
-    finished_lock.Lock();
-    finished.splice(finished.begin(), ls);
-    finished_lock.Unlock();
-  }
-  void take_waiter(OpRequestRef op) {
-    finished_lock.Lock();
-    finished.push_back(op);
-    finished_lock.Unlock();
   }
   void do_waiters();
   
@@ -1883,11 +1868,11 @@ private:
       // items in pqueue are behind items in pg_for_processing
       sdata->pqueue->remove_by_filter(f);
 
-      map<PG *, list<PGQueueable> >::iterator iter =
+      map<PG *, list<PGQueueable> >::const_iterator iter =
 	sdata->pg_for_processing.find(pg);
-      if (iter != sdata->pg_for_processing.end()) {
-	for (auto i = iter->second.rbegin();
-	     i != iter->second.rend();
+      if (iter != sdata->pg_for_processing.cend()) {
+	for (auto i = iter->second.crbegin();
+	     i != iter->second.crend();
 	     ++i) {
 	  f.accumulate(*i);
 	}
@@ -1922,7 +1907,7 @@ private:
       : ThreadPool::BatchWorkQueue<PG>(
 	"OSD::PeeringWQ", ti, si, tp), osd(o) {}
 
-    void _dequeue(PG *pg) {
+    void _dequeue(PG *pg) override {
       for (list<PG*>::iterator i = peering_queue.begin();
 	   i != peering_queue.end();
 	   ) {
@@ -1934,15 +1919,15 @@ private:
 	}
       }
     }
-    bool _enqueue(PG *pg) {
+    bool _enqueue(PG *pg) override {
       pg->get("PeeringWQ");
       peering_queue.push_back(pg);
       return true;
     }
-    bool _empty() {
+    bool _empty() override {
       return peering_queue.empty();
     }
-    void _dequeue(list<PG*> *out);
+    void _dequeue(list<PG*> *out) override;
     void _process(
       const list<PG *> &pgs,
       ThreadPool::TPHandle &handle) override {
@@ -1953,14 +1938,14 @@ private:
 	(*i)->put("PeeringWQ");
       }
     }
-    void _process_finish(const list<PG *> &pgs) {
+    void _process_finish(const list<PG *> &pgs) override {
       for (list<PG*>::const_iterator i = pgs.begin();
 	   i != pgs.end();
 	   ++i) {
 	in_use.erase(*i);
       }
     }
-    void _clear() {
+    void _clear() override {
       assert(peering_queue.empty());
     }
   } peering_wq;
@@ -2284,17 +2269,17 @@ protected:
     CommandWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
       : ThreadPool::WorkQueue<Command>("OSD::CommandWQ", ti, si, tp), osd(o) {}
 
-    bool _empty() {
+    bool _empty() override {
       return osd->command_queue.empty();
     }
-    bool _enqueue(Command *c) {
+    bool _enqueue(Command *c) override {
       osd->command_queue.push_back(c);
       return true;
     }
-    void _dequeue(Command *pg) {
+    void _dequeue(Command *pg) override {
       assert(0);
     }
-    Command *_dequeue() {
+    Command *_dequeue() override {
       if (osd->command_queue.empty())
 	return NULL;
       Command *c = osd->command_queue.front();
@@ -2312,7 +2297,7 @@ protected:
       osd->osd_lock.Unlock();
       delete c;
     }
-    void _clear() {
+    void _clear() override {
       while (!osd->command_queue.empty()) {
 	Command *c = osd->command_queue.front();
 	osd->command_queue.pop_front();
@@ -2350,19 +2335,19 @@ protected:
 	"OSD::RemoveWQ", ti, si, tp),
 	store(o) {}
 
-    bool _empty() {
+    bool _empty() override {
       return remove_queue.empty();
     }
-    void _enqueue(pair<PGRef, DeletingStateRef> item) {
+    void _enqueue(pair<PGRef, DeletingStateRef> item) override {
       remove_queue.push_back(item);
     }
-    void _enqueue_front(pair<PGRef, DeletingStateRef> item) {
+    void _enqueue_front(pair<PGRef, DeletingStateRef> item) override {
       remove_queue.push_front(item);
     }
     bool _dequeue(pair<PGRef, DeletingStateRef> item) {
       assert(0);
     }
-    pair<PGRef, DeletingStateRef> _dequeue() {
+    pair<PGRef, DeletingStateRef> _dequeue() override {
       assert(!remove_queue.empty());
       pair<PGRef, DeletingStateRef> item = remove_queue.front();
       remove_queue.pop_front();
@@ -2370,7 +2355,7 @@ protected:
     }
     void _process(pair<PGRef, DeletingStateRef>,
 		  ThreadPool::TPHandle &) override;
-    void _clear() {
+    void _clear() override {
       remove_queue.clear();
     }
   } remove_wq;

@@ -443,6 +443,19 @@ void Beacon::notify_health(MDSRank const *mds)
     }
   }
 
+  // Detect MDS_HEALTH_SLOW_REQUEST condition
+  {
+    int slow = mds->get_mds_slow_req_count();
+    dout(20) << slow << " slow request found" << dendl;
+    if (slow) {
+      std::ostringstream oss;
+      oss << slow << " slow requests are blocked > " << g_conf->mds_op_complaint_time << " sec";
+
+      MDSHealthMetric m(MDS_HEALTH_SLOW_REQUEST, HEALTH_WARN, oss.str());
+      health.metrics.push_back(m);
+    }
+  }
+
   // Report a health warning if we are readonly
   if (mds->mdcache->is_readonly()) {
     MDSHealthMetric m(MDS_HEALTH_READ_ONLY, HEALTH_WARN,

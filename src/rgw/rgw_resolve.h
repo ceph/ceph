@@ -6,10 +6,12 @@
 
 #include "rgw_common.h"
 
-class RGWDNSResolver;
+namespace ceph {
+  class DNSResolver;
+}
 
 class RGWResolver {
-  RGWDNSResolver *resolver;
+  DNSResolver *resolver;
 
 public:
   ~RGWResolver();

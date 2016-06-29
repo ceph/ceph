@@ -60,8 +60,7 @@ void SyncPointCreateRequest<I>::send_update_client() {
   sync_point.snap_name = SNAP_NAME_PREFIX + "." + m_mirror_uuid + "." +
                          uuid_gen.to_string();
 
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": sync_point=" << sync_point << dendl;
+  dout(20) << ": sync_point=" << sync_point << dendl;
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(m_client_meta_copy);
@@ -75,12 +74,11 @@ void SyncPointCreateRequest<I>::send_update_client() {
 
 template <typename I>
 void SyncPointCreateRequest<I>::handle_update_client(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": failed to update client data: " << cpp_strerror(r)
-               << dendl;
+    derr << ": failed to update client data: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -93,8 +91,7 @@ void SyncPointCreateRequest<I>::handle_update_client(int r) {
 
 template <typename I>
 void SyncPointCreateRequest<I>::send_refresh_image() {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     SyncPointCreateRequest<I>, &SyncPointCreateRequest<I>::handle_refresh_image>(
@@ -104,11 +101,10 @@ void SyncPointCreateRequest<I>::send_refresh_image() {
 
 template <typename I>
 void SyncPointCreateRequest<I>::handle_refresh_image(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
+    derr << ": remote image refresh failed: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
@@ -118,8 +114,7 @@ void SyncPointCreateRequest<I>::handle_refresh_image(int r) {
 
 template <typename I>
 void SyncPointCreateRequest<I>::send_create_snap() {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  dout(20) << dendl;
 
   MirrorPeerSyncPoint &sync_point = m_client_meta_copy.sync_points.back();
 
@@ -132,14 +127,37 @@ void SyncPointCreateRequest<I>::send_create_snap() {
 
 template <typename I>
 void SyncPointCreateRequest<I>::handle_create_snap(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   if (r == -EEXIST) {
     send_update_client();
     return;
   } else if (r < 0) {
-    lderr(cct) << ": failed to create snapshot: " << cpp_strerror(r) << dendl;
+    derr << ": failed to create snapshot: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  send_final_refresh_image();
+}
+
+template <typename I>
+void SyncPointCreateRequest<I>::send_final_refresh_image() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    SyncPointCreateRequest<I>,
+    &SyncPointCreateRequest<I>::handle_final_refresh_image>(this);
+  m_remote_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+void SyncPointCreateRequest<I>::handle_final_refresh_image(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    derr << ": failed to refresh image for snapshot: " << cpp_strerror(r)
+         << dendl;
     finish(r);
     return;
   }
@@ -149,8 +167,7 @@ void SyncPointCreateRequest<I>::handle_create_snap(int r) {
 
 template <typename I>
 void SyncPointCreateRequest<I>::finish(int r) {
-  CephContext *cct = m_remote_image_ctx->cct;
-  ldout(cct, 20) << ": r=" << r << dendl;
+  dout(20) << ": r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;

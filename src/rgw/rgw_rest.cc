@@ -1005,6 +1005,49 @@ int RGWPutObj_ObjStore::get_params()
   return 0;
 }
 
+int RGWPutObj_ObjStore::get_padding_last_aws4_chunk_encoded(bufferlist &bl, uint64_t chunk_size) {
+
+  const int chunk_str_min_len = 1 + 17 + 64 + 2; /* len('0') = 1 */
+
+  char *chunk_str = bl.c_str();
+  int budget = bl.length();
+
+  unsigned int chunk_data_size;
+  unsigned int chunk_offset = 0;
+
+  while (1) {
+
+    /* check available metadata */
+    if (budget < chunk_str_min_len) {
+      return -ERR_SIGNATURE_NO_MATCH;
+    }
+
+    chunk_offset = 0;
+
+    /* grab chunk size */
+    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
+      chunk_offset++;
+    string str = string(chunk_str, chunk_offset);
+    stringstream ss;
+    ss << std::hex << str;
+    ss >> chunk_data_size;
+
+    /* next chunk */
+    chunk_offset += 17 + 64 + 2 + chunk_data_size;
+
+    /* last chunk? */
+    budget -= chunk_offset;
+    if (budget < 0) {
+      budget *= -1;
+      break;
+    }
+
+    chunk_str += chunk_offset;
+  }
+
+  return budget;
+}
+
 int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 {
   size_t cl;
@@ -1030,6 +1073,30 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
     len = read_len;
     bl.append(bp, 0, len);
+
+    /* read last aws4 chunk padding */
+    if (s->aws4_auth_streaming_mode && len == (int)chunk_size) {
+      int ret_auth = get_padding_last_aws4_chunk_encoded(bl, chunk_size);
+      if (ret_auth < 0) {
+        return ret_auth;
+      }
+      int len_padding = ret_auth;
+      if (len_padding) {
+        int read_len;
+        bufferptr bp_extra(len_padding);
+        int r = STREAM_IO(s)->read(bp_extra.c_str(), len_padding, &read_len,
+                                   s->aws4_auth_needs_complete);
+        if (r < 0) {
+          return r;
+        }
+        if (read_len != len_padding) {
+          return -ERR_SIGNATURE_NO_MATCH;
+        }
+        bl.append(bp_extra.c_str(), len_padding);
+        bl.rebuild();
+      }
+    }
+
   }
 
   if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
@@ -1604,6 +1671,27 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
   s->info.request_uri_aws4 = s->info.request_uri;
 
   s->cio = cio;
+
+  // We need to know if this RGW instance is running the s3website API with a
+  // higher priority than regular S3 API, or possibly in place of the regular
+  // S3 API.
+  // Map the listing of rgw_enable_apis in REVERSE order, so that items near
+  // the front of the list have a higher number assigned (and -1 for items not in the list).
+  list<string> apis;
+  get_str_list(g_conf->rgw_enable_apis, apis);
+  int api_priority_s3 = -1;
+  int api_priority_s3website = -1;
+  auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
+  auto api_s3_priority_rawpos = std::find(apis.begin(), apis.end(), "s3");
+  if (api_s3_priority_rawpos != apis.end()) {
+    api_priority_s3 = apis.size() - std::distance(apis.begin(), api_s3_priority_rawpos);
+  }
+  if (api_s3website_priority_rawpos != apis.end()) {
+    api_priority_s3website = apis.size() - std::distance(apis.begin(), api_s3website_priority_rawpos);
+  }
+  ldout(s->cct, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
+  bool s3website_enabled = api_priority_s3website >= 0;
+
   if (info.host.size()) {
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
@@ -1611,7 +1699,6 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
     bool in_hosted_domain_s3website = false;
     bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain, &subdomain, hostnames_set);
 
-    bool s3website_enabled = g_conf->rgw_enable_apis.find("s3website") != std::string::npos;
     string s3website_domain;
     string s3website_subdomain;
 
@@ -1621,7 +1708,6 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
 	in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
         domain = s3website_domain;
         subdomain = s3website_subdomain;
-        s->prot_flags |= RGW_REST_WEBSITE;
       }
     }
 
@@ -1661,7 +1747,6 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
 				     // strict superset of hostnames_s3website?
 	    domain = s3website_domain;
 	    subdomain = s3website_subdomain;
-	    s->prot_flags |= RGW_REST_WEBSITE;
 	  }
         }
 
@@ -1673,6 +1758,31 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
           << dendl;
       }
     }
+
+    // Handle A/CNAME records that point to the RGW storage, but do match the
+    // CNAME test above, per issue http://tracker.ceph.com/issues/15975
+    // If BOTH domain & subdomain variables are empty, then none of the above
+    // cases matched anything, and we should fall back to using the Host header
+    // directly as the bucket name.
+    // As additional checks:
+    // - if the Host header is an IP, we're using path-style access without DNS
+    // - Also check that the Host header is a valid bucket name before using it.
+    if (subdomain.empty()
+        && (domain.empty() || domain != info.host)
+        && !looks_like_ip_address(info.host.c_str())
+        && RGWHandler_REST::validate_bucket_name(info.host)) {
+      subdomain.append(info.host);
+      in_hosted_domain = 1;
+    }
+
+    if (s3website_enabled && api_priority_s3website > api_priority_s3) {
+      in_hosted_domain_s3website = 1;
+    }
+
+    if (in_hosted_domain_s3website) {
+      s->prot_flags |= RGW_REST_WEBSITE;
+    }
+
 
     if (in_hosted_domain && !subdomain.empty()) {
       string encoded_bucket = "/";
@@ -1686,6 +1796,16 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
     if (!domain.empty()) {
       s->info.domain = domain;
     }
+
+   ldout(s->cct, 20)
+      << "final domain/bucket"
+      << " subdomain=" << subdomain
+      << " domain=" << domain
+      << " in_hosted_domain=" << in_hosted_domain
+      << " in_hosted_domain_s3website=" << in_hosted_domain_s3website
+      << " s->info.domain=" << s->info.domain
+      << " s->info.request_uri=" << s->info.request_uri
+      << dendl;
   }
 
   if (s->info.domain.empty()) {

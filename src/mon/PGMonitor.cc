@@ -962,7 +962,7 @@ void PGMonitor::register_pg(OSDMap *osdmap,
     parent = pgid;
     while (1) {
       // remove most significant bit
-      int msb = pool.calc_bits_of(parent.ps());
+      int msb = cbits(parent.ps());
       if (!msb)
 	break;
       parent.set_ps(parent.ps() & ~(1<<(msb-1)));

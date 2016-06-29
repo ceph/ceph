@@ -46,7 +46,6 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_swift_auth.h"
-#include "rgw_swift.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
@@ -288,7 +287,11 @@ int main(int argc, const char **argv)
   // claim the reference and release it after subsequent destructors have fired
   boost::intrusive_ptr<CephContext> cct(g_ceph_context, false);
 
-  rgw_tools_init(g_ceph_context);
+  int r = rgw_tools_init(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: unable to initialize rgw tools" << dendl;
+    return -r;
+  }
 
   rgw_init_resolver();
   
@@ -296,7 +299,6 @@ int main(int argc, const char **argv)
   
   FCGX_Init();
 
-  int r = 0;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads,
       g_conf->rgw_run_sync_thread);
@@ -310,6 +312,10 @@ int main(int argc, const char **argv)
     return EIO;
   }
   r = rgw_perf_start(g_ceph_context);
+  if (r < 0) {
+    derr << "ERROR: failed starting rgw perf" << dendl;
+    return -r;
+  }
 
   rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
 
@@ -318,9 +324,6 @@ int main(int argc, const char **argv)
   init_timer.shutdown();
   mutex.Unlock();
 
-  if (r) 
-    return 1;
-
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
   rgw_log_usage_init(g_ceph_context, store);
@@ -328,7 +331,6 @@ int main(int argc, const char **argv)
   RGWREST rest;
 
   list<string> apis;
-  bool do_swift = false;
 
   get_str_list(g_conf->rgw_enable_apis, apis);
 
@@ -343,8 +345,6 @@ int main(int argc, const char **argv)
     rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
 
   if (apis_map.count("swift") > 0) {
-    do_swift = true;
-    swift_init(g_ceph_context);
     rest.register_resource(g_conf->rgw_swift_url_prefix,
 			   set_logging(new RGWRESTMgr_SWIFT));
   }
@@ -472,10 +472,6 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGINT, handle_sigterm);
   unregister_async_signal_handler(SIGUSR1, handle_sigterm);
   shutdown_async_signal_handler();
-
-  if (do_swift) {
-    swift_finalize();
-  }
 
   rgw_log_usage_finalize();
 

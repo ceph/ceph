@@ -84,6 +84,8 @@ const char *ceph_osd_op_flag_name(unsigned flag);
 string ceph_osd_flag_string(unsigned flags);
 /// conver CEPH_OSD_OP_FLAG_* op flags to a string
 string ceph_osd_op_flag_string(unsigned flags);
+/// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a string
+string ceph_osd_alloc_hint_flag_string(unsigned flags);
 
 struct pg_shard_t {
   int32_t osd;
@@ -511,6 +513,10 @@ struct spg_t {
       ghobject_t::NO_GEN,
       shard);
   }
+
+  unsigned hash_to_shard(unsigned num_shards) const {
+    return ps() % num_shards;
+  }
 };
 WRITE_CLASS_ENCODER(spg_t)
 WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
@@ -668,6 +674,12 @@ public:
       break;
     }
     return o;
+  }
+
+  unsigned hash_to_shard(unsigned num_shards) const {
+    if (type == TYPE_PG)
+      return pgid.hash_to_shard(num_shards);
+    return 0;  // whatever.
   }
 
   void dump(Formatter *f) const;
@@ -1428,7 +1440,6 @@ public:
     return quota_max_objects;
   }
 
-  static int calc_bits_of(int t);
   void calc_pg_masks();
 
   /*
@@ -3171,12 +3182,12 @@ struct watch_info_t {
   watch_info_t() : cookie(0), timeout_seconds(0) { }
   watch_info_t(uint64_t c, uint32_t t, const entity_addr_t& a) : cookie(c), timeout_seconds(t), addr(a) {}
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<watch_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(watch_info_t)
+WRITE_CLASS_ENCODER_FEATURES(watch_info_t)
 
 static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
   return l.cookie == r.cookie && l.timeout_seconds == r.timeout_seconds
@@ -3321,7 +3332,7 @@ struct object_info_t {
     set_omap_digest(-1);
   }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -3351,7 +3362,7 @@ struct object_info_t {
     return *this;
   }
 };
-WRITE_CLASS_ENCODER(object_info_t)
+WRITE_CLASS_ENCODER_FEATURES(object_info_t)
 
 struct ObjectState {
   object_info_t oi;
@@ -3879,12 +3890,12 @@ struct ObjectRecoveryInfo {
   ObjectRecoveryInfo() : size(0) { }
 
   static void generate_test_instances(list<ObjectRecoveryInfo*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl, int64_t pool = -1);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
+WRITE_CLASS_ENCODER_FEATURES(ObjectRecoveryInfo)
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 struct ObjectRecoveryProgress {
@@ -3936,14 +3947,14 @@ struct PullOp {
   ObjectRecoveryProgress recovery_progress;
 
   static void generate_test_instances(list<PullOp*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
 };
-WRITE_CLASS_ENCODER(PullOp)
+WRITE_CLASS_ENCODER_FEATURES(PullOp)
 ostream& operator<<(ostream& out, const PullOp &op);
 
 struct PushOp {
@@ -3960,14 +3971,14 @@ struct PushOp {
   ObjectRecoveryProgress after_progress;
 
   static void generate_test_instances(list<PushOp*>& o);
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   ostream &print(ostream &out) const;
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
 };
-WRITE_CLASS_ENCODER(PushOp)
+WRITE_CLASS_ENCODER_FEATURES(PushOp)
 ostream& operator<<(ostream& out, const PushOp &op);
 
 
@@ -4077,12 +4088,12 @@ struct watch_item_t {
     : name(name), cookie(cookie), timeout_seconds(timeout),
     addr(addr) { }
 
-  void encode(bufferlist &bl) const {
+  void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(cookie, bl);
     ::encode(timeout_seconds, bl);
-    ::encode(addr, bl);
+    ::encode(addr, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -4096,7 +4107,7 @@ struct watch_item_t {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(watch_item_t)
+WRITE_CLASS_ENCODER_FEATURES(watch_item_t)
 
 struct obj_watch_item_t {
   hobject_t obj;
@@ -4110,9 +4121,9 @@ struct obj_watch_item_t {
 struct obj_list_watch_response_t {
   list<watch_item_t> entries;
 
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl);
+    ::encode(entries, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -4152,8 +4163,7 @@ struct obj_list_watch_response_t {
     o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
   }
 };
-
-WRITE_CLASS_ENCODER(obj_list_watch_response_t)
+WRITE_CLASS_ENCODER_FEATURES(obj_list_watch_response_t)
 
 struct clone_info {
   snapid_t cloneid;
@@ -4300,5 +4310,27 @@ struct PromoteCounter {
     bytes.set(*b / 2);
   }
 };
+
+/** store_statfs_t
++* ObjectStore full statfs information
++*/
+struct store_statfs_t
+{
+  uint64_t total = 0;                  // Total bytes
+  uint64_t available = 0;              // Free bytes available
+
+  int64_t allocated = 0;               // Bytes allocated by the store
+  int64_t stored = 0;                  // Bytes actually stored by the user
+  int64_t compressed = 0;              // Bytes stored after compression
+  int64_t compressed_allocated = 0;    // Bytes allocated for compressed data
+  int64_t compressed_original = 0;     // Bytes that were successfully compressed
+
+  void reset() {
+    *this = store_statfs_t();
+  }
+  bool operator ==(const store_statfs_t& other) const;
+  void dump(Formatter *f) const;
+};
+ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
 
 #endif

@@ -25,6 +25,11 @@ else
 NPROC = nproc
 endif
 
+# explicitly disable jemalloc unless we are using it.
+if !WITH_JEMALLOC
+export DISABLE_JEMALLOC=1
+endif
+
 rocksdb/librocksdb.a:
 	cd rocksdb && CC="${CC}" CXX="${CXX}" EXTRA_CXXFLAGS="${ROCKSDBCXX_FLAGS}" PORTABLE=1 ${MAKE} -j$(shell ${NPROC}) static_lib
 libkv_a_CXXFLAGS += -I rocksdb/include -fPIC

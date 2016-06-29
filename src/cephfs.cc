@@ -57,6 +57,9 @@ int main (int argc, char **argv) {
   if (init_options(argc, argv, &fd, &path, &cmd, &stripe_unit, &stripe_count,
                    &object_size, &pool, &file_offset, &dir)){
     usage();
+    if (fd >= 0) {
+      close(fd);
+    }
     return 0;
   }
 
@@ -69,7 +72,7 @@ int main (int argc, char **argv) {
     err = ioctl(fd, CEPH_IOC_GET_LAYOUT, (unsigned long)&layout);
     if (err) {
       cerr << "Error getting layout: " << cpp_strerror(errno) << endl;
-      return 1;
+      goto close_fd_exit;
     }
     if (layout.stripe_unit == 0) {
       cerr << "layout not specified" << endl;
@@ -85,7 +88,7 @@ int main (int argc, char **argv) {
     err = ioctl(fd, CEPH_IOC_GET_DATALOC, (unsigned long)&location);
     if (err) {
       cerr << "Error getting location: " << cpp_strerror(err) << endl;
-      return 1;
+      goto close_fd_exit;
     }
     cout << "location.file_offset:  " << location.file_offset << endl;
     cout << "location.object_offset:" << location.object_offset << endl;
@@ -102,7 +105,7 @@ int main (int argc, char **argv) {
     int ioctl_num = (dir ? CEPH_IOC_SET_LAYOUT_POLICY : CEPH_IOC_SET_LAYOUT);
     if (pool == -1) {
       cerr << "Pool not specified (use --pool <name or id>)" << endl;
-      return 1;
+      goto close_fd_exit;
     }
     layout.data_pool = pool;
     layout.object_size = object_size;
@@ -112,14 +115,14 @@ int main (int argc, char **argv) {
     err = ioctl(fd, ioctl_num, (unsigned long)&layout);
     if (err) {
       cerr << "Error setting layout: " << cpp_strerror(errno) << endl;
-      return 1;
+      goto close_fd_exit;
     }
   } else if (CMD_MAP == cmd) {
     struct stat st;
     err = ::fstat(fd, &st);
     if (err < 0) {
       cerr << "error statting file: " << cpp_strerror(errno) << endl;
-      return 1;
+      goto close_fd_exit;
     }
 
     struct ceph_ioctl_layout layout;
@@ -127,7 +130,7 @@ int main (int argc, char **argv) {
     err = ioctl(fd, CEPH_IOC_GET_LAYOUT, (unsigned long)&layout);
     if (err) {
       cerr << "Error getting layout: " << cpp_strerror(errno) << endl;
-      return 1;
+      goto close_fd_exit;
     }
 
     printf("%15s  %24s  %12s  %12s  %s\n",
@@ -139,7 +142,7 @@ int main (int argc, char **argv) {
       err = ioctl(fd, CEPH_IOC_GET_DATALOC, (unsigned long)&location);
       if (err) {
 	cerr << "Error getting location: " << cpp_strerror(errno) << endl;
-	return 1;
+	goto close_fd_exit;
       }
       printf("%15lld  %24s  %12lld  %12lld  %d\n",
 	     off, location.object_name, (long long)location.object_offset,
@@ -149,10 +152,16 @@ int main (int argc, char **argv) {
   } else {
     cerr << "unknown cmd somehow set!" << endl;
     usage();
-    return 1;
+    goto close_fd_exit;
   }
 
   return 0;
+
+close_fd_exit:
+  if (fd >= 0) {
+    close(fd);
+  }
+  return 1;
 }
 
 

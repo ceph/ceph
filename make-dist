@@ -22,7 +22,7 @@ fi
 
 # clean out old cruft...
 echo "cleanup..."
-rm -f $outfile.tar $outfile.tar.gz
+rm -f $outfile*
 
 # build new tarball
 echo "building tarball..."
@@ -30,6 +30,25 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 		       --verbose \
 		       --ignore corpus \
 		       $outfile.tar
+
+# populate files with version strings
+echo "including src/.git_version, src/ceph_ver.h, ceph.spec"
+src/make_version -g src/.git_version -c src/ceph_ver.h
+
+rpm_version=`echo $version | cut -d - -f 1-1`
+rpm_release=`echo $version | cut -d - -f 2- | sed 's/-/./'`
+cat ceph.spec.in | \
+    sed "s/@VERSION@/$rpm_version/g" | \
+    sed "s/@RPM_RELEASE@/$rpm_release/g" > ceph.spec
+
+ln -s . $outfile
+tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/src/ceph_ver.h $outfile/ceph.spec
+tar --concatenate -f $outfile.both.tar $outfile.version.tar
+tar --concatenate -f $outfile.both.tar $outfile.tar
+mv $outfile.both.tar $outfile.tar
+rm $outfile
+rm -f $outfile.version.tar
+
 echo "compressing..."
 bzip2 -9 $outfile.tar
 

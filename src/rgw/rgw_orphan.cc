@@ -177,8 +177,8 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
 {
 #define MAX_OMAP_GET 100
   int ret = ioctx.omap_get_vals(oid, marker, MAX_OMAP_GET, entries);
-  if (ret < 0) {
-    cerr << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << std::endl;
+  if (ret < 0 && ret != -ENOENT) {
+    cerr << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << cpp_strerror(-ret) << std::endl;
   }
 
   *truncated = (entries->size() == MAX_OMAP_GET);

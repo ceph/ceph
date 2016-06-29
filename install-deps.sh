@@ -61,7 +61,7 @@ if test -f /etc/redhat-release ; then
 fi
 
 if type apt-get > /dev/null 2>&1 ; then
-    $SUDO apt-get install -y lsb-release
+    $SUDO apt-get install -y lsb-release devscripts equivs
 fi
 
 if type zypper > /dev/null 2>&1 ; then
@@ -76,20 +76,23 @@ Ubuntu|Debian|Devuan)
             exit 1
         fi
         touch $DIR/status
-        packages=$(dpkg-checkbuilddeps --admindir=$DIR debian/control 2>&1 | \
-            perl -p -e 's/.*Unmet build dependencies: *//;' \
-            -e 's/build-essential:native/build-essential/;' \
-            -e 's/\s*\|\s*/\|/g;' \
-            -e 's/\(.*?\)//g;' \
-            -e 's/ +/\n/g;' | sort)
+
+	backports=""
+	control="debian/control"
         case $(lsb_release -sc) in
             squeeze|wheezy)
-                packages=$(echo $packages | perl -pe 's/[-\w]*babeltrace[-\w]*//g')
+		control="/tmp/control.$$"
+		grep -v babeltrace debian/control > $control
                 backports="-t $(lsb_release -sc)-backports"
                 ;;
         esac
-        packages=$(echo $packages) # change newlines into spaces
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install $backports -y $packages || exit 1
+
+	# make a metapackage that expresses the build dependencies,
+	# install it, rm the .deb; then uninstall the package as its
+	# work is done
+	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
+	if [ -n "$backports" ] ; then rm $control; fi
         ;;
 CentOS|Fedora|RedHatEnterpriseServer)
         case $(lsb_release -si) in

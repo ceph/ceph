@@ -4,6 +4,7 @@ Ceph - a scalable distributed storage system
 
 Please see http://ceph.com/ for current info.
 
+
 Contributing Code
 =================
 
@@ -23,6 +24,22 @@ We do not require assignment of copyright to contribute code; code is
 contributed under the terms of the applicable license.
 
 
+Checking out the source
+=======================
+
+You can clone from github with
+
+	git clone git@github.com:ceph/ceph
+
+or, if you are not a github user,
+
+	git clone git://github.com/ceph/ceph
+
+Ceph contains many git submodules that need to be checked out with
+
+	git submodule update --init --recursive
+
+
 Build Prerequisites
 ===================
 
@@ -30,53 +47,27 @@ The list of Debian or RPM packages dependencies can be installed with:
 
 	./install-deps.sh
 
-Note: libsnappy-dev and libleveldb-dev are not available upstream for
-Debian Squeeze.  Backports for Ceph can be found at ceph.com/debian-leveldb.
 
 Building Ceph
 =============
 
-Autotools
----------
+Note that these instructions are meant for developers who are
+compiling the code for development and testing.  To build binaries
+suitable for installation we recommend you build deb or rpm packages,
+or refer to the ceph.spec.in or debian/rules to see which
+configuration options are specified for production builds.
 
-Developers, please refer to the [Developer
-Guide](doc/dev/quick_guide.rst) for more information, otherwise, you
-can build the server daemons, and FUSE client, by executing the
-following:
-
-	./autogen.sh
-	./configure
-	make
-
-(Note that the FUSE client will only be built if libfuse is present.)
-
-CMake
------
-
-Prerequisite:
-        CMake 2.8.11
+Prerequisite: CMake 2.8.11
 
 Build instructions:
 
-	mkdir build
+	./do_cmake.sh
 	cd build
-	cmake [options] /path/to/ceph/src/dir
 	make
 
-(Note that /path/to/ceph/src/dir can be in the tree and out of the tree)
-
-Dependencies
-------------
-
-The configure script will complain about any missing dependencies as
-it goes.  You can also refer to debian/control or ceph.spec.in for the
-package build dependencies on those platforms.  In many cases,
-dependencies can be avoided with --with-foo or --without-bar switches.
-For example,
-
-	./configure --with-nss         # use libnss instead of libcrypto++
-	./configure --without-radosgw  # do not build radosgw
-	./configure --without-tcmalloc # avoid google-perftools dependency
+This assumes you make your build dir a subdirectory of the ceph.git
+checkout.  If you put it elsewhere, just replace .. above with a
+correct path to the checkout.
 
 
 Building packages
@@ -92,6 +83,63 @@ systems with
 For RPM-based systems (Red Hat, SUSE, etc.),
 
 	rpmbuild
+
+
+Running a test cluster
+======================
+
+To run a functional test cluster,
+
+	cd build
+	make vstart        # builds just enough to run vstart
+	../src/vstart.sh -d -n -x -l
+	./bin/ceph -s
+
+Almost all of the usual commands are available in the bin/ directory.
+For example,
+
+	./bin/rados -p rbd bench 30 write
+	./bin/rbd create foo --size 1000
+
+To shut down the test cluster,
+
+	../src/stop.sh
+
+To start or stop individual daemons, the sysvinit script can be used:
+
+	./bin/init-ceph restart osd.0
+	./bin/init-ceph stop
+
+
+Running unit tests
+==================
+
+To run build and run all tests, use ctest:
+
+	cd build
+	make
+	ctest -j$(nproc)
+
+To run an individual test manually, run the ctest command with -R
+(regex matching):
+
+	ctest -R [test name]
+
+To run an individual test manually and see all the tests output, run
+the ctest command with the -V (verbose) flag:
+
+	ctest -V -R [test name]
+
+To run an tests manually and run the jobs in parallel, run the ctest
+command with the -j flag:
+
+	ctest -j [number of jobs]
+
+There are many other flags you can give the ctest command for better control
+over manual test execution. To view these options run:
+
+	man ctest
+
 
 Building the Documentation
 ==========================

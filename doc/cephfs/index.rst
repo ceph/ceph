@@ -84,6 +84,7 @@ authentication keyring.
 
     Administrative commands <administration>
 	POSIX compatibility <posix>
+	Experimental Features <experimental-features>
         CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>

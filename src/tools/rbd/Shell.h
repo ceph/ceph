@@ -28,15 +28,16 @@ public:
     const std::string help;
     GetArguments get_arguments;
     Execute execute;
+    bool visible;
 
     template <typename Args, typename Execute>
     Action(const std::initializer_list<std::string> &command_spec,
            const std::initializer_list<std::string> &alias_command_spec,
            const std::string &description, const std::string &help,
-           Args args, Execute execute)
+           Args args, Execute execute, bool visible = true)
         : command_spec(command_spec), alias_command_spec(alias_command_spec),
           description(description), help(help), get_arguments(args),
-          execute(execute) {
+          execute(execute), visible(visible) {
       Shell::get_actions().push_back(this);
     }
 
