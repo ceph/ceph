@@ -494,7 +494,6 @@ protected:
   map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<mds_rank_t,cap_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
   map<inodeno_t, list<MDSInternalContextBase*> > cap_reconnect_waiters;
   int cap_imports_num_opening;
@@ -552,9 +551,6 @@ public:
     assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
   }
-  void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
-    cap_imports_dirty[ino] |= dirty;
-  }
   void wait_replay_cap_reconnect(inodeno_t ino, MDSInternalContextBase *c) {
     cap_reconnect_waiters[ino].push_back(c);
   }
@@ -563,15 +559,21 @@ public:
   struct reconnected_cap_info_t {
     inodeno_t realm_ino;
     snapid_t snap_follows;
-    reconnected_cap_info_t() : realm_ino(0), snap_follows(0) {}
+    int dirty_caps;
+    reconnected_cap_info_t() :
+      realm_ino(0), snap_follows(0), dirty_caps(0) {}
   };
-  map<CInode*,map<client_t, reconnected_cap_info_t> >  reconnected_caps;   // inode -> client -> snap_follows,realmino
+  map<inodeno_t,map<client_t, reconnected_cap_info_t> >  reconnected_caps;   // inode -> client -> snap_follows,realmino
   map<inodeno_t,map<client_t, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
 
-  void add_reconnected_cap(CInode *in, client_t client, const cap_reconnect_t& icr) {
-    reconnected_cap_info_t &info = reconnected_caps[in][client];
+  void add_reconnected_cap(client_t client, inodeno_t ino, const cap_reconnect_t& icr) {
+    reconnected_cap_info_t &info = reconnected_caps[ino][client];
     info.realm_ino = inodeno_t(icr.capinfo.snaprealm);
     info.snap_follows = icr.snap_follows;
+  }
+  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty) {
+    reconnected_cap_info_t &info = reconnected_caps[ino][client];
+    info.dirty_caps |= dirty;
   }
   void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
