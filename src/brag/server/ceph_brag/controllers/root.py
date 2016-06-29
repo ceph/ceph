@@ -43,7 +43,7 @@ class RootController(RestController):
     @expose(content_type='application/json')
     def put(self, *args, **kwargs):
         try:
-            db.put_new_version(request.body)
+            db.put_new_version(request.body.decode('utf-8'))
         except ValueError as ve:
             return self.fail(status_code=422, msg="Improper payload : " + str(ve))
         except KeyError as ke:
