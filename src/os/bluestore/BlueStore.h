@@ -114,14 +114,12 @@ public:
       STATE_EMPTY,     ///< empty buffer -- used for cache history
       STATE_CLEAN,     ///< clean data that is up to date
       STATE_WRITING,   ///< data that is being written (io not yet complete)
-      STATE_READING,
     };
     static const char *get_state_name(int s) {
       switch (s) {
       case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
       case STATE_WRITING: return "writing";
-      case STATE_READING: return "reading";
       default: return "???";
       }
     }
@@ -163,9 +161,6 @@ public:
     }
     bool is_writing() const {
       return state == STATE_WRITING;
-    }
-    bool is_reading() const {
-      return state == STATE_READING;
     }
 
     uint64_t end() const {
