@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 import subprocess
 import uuid
 import re
@@ -200,9 +202,13 @@ class Counter(dict):
         return result
 
 
+def print_stderr(*args, **kwargs):
+  kwargs.setdefault('file', sys.stderr)
+  print(*args, **kwargs)
+
 def run_command(cmd):
   if verbose:
-    print "run_command: " + str(cmd)
+    print_stderr("run_command: " + str(cmd))
   child = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE)
   (o, e) = child.communicate()
@@ -366,7 +372,7 @@ def get_sysinfo(max_osds):
 
   sysinfo = {}
   if not osd_metadata_available:
-    print >> sys.stderr, "'ceph osd metadata' is not available at all"
+    print_stderr("'ceph osd metadata' is not available at all")
     return sysinfo
 
   def jsonify(type_count, name, type_name):
@@ -413,29 +419,30 @@ def output_json():
   return json.dumps(out, indent=2, separators=(',', ': ')), url
 
 def describe_usage():
-  print >> sys.stderr, "Usage:"
-  print >> sys.stderr, "======\n"
+  print_stderr("Usage:")
+  print_stderr("======")
+  print_stderr()
+  print_stderr(sys.argv[0] + " [-v|--verbose] [<commands> [command-options]]")
+  print_stderr()
+  print_stderr("without any option, shows the data to be published and do nothing")
+  print_stderr()
+  print_stderr("-v|--verbose: toggle verbose output on stdout")
+  print_stderr()
+  print_stderr("commands:")
+  print_stderr("publish - publish the brag report to the server")
+  print_stderr("update-metadata <update-metadata-options> - Update")
+  print_stderr("         ownership information for bragging")
+  print_stderr("clear-metadata - Clear information set by update-metadata")
+  print_stderr("unpublish --yes-i-am-shy - delete the brag report from the server")
+  print_stderr()
 
-  print >> sys.stderr, sys.argv[0] + " [-v|--verbose] [<commands> [command-options]]\n"
-  print >> sys.stderr, "without any option, shows the data to be published and do nothing"
-  print >> sys.stderr, ""
-  print >> sys.stderr, "-v|--verbose: toggle verbose output on stdout"
-  print >> sys.stderr, ""
-  print >> sys.stderr, "commands:"
-  print >> sys.stderr, "publish - publish the brag report to the server"
-  print >> sys.stderr, "update-metadata <update-metadata-options> - Update"
-  print >> sys.stderr, "         ownership information for bragging"
-  print >> sys.stderr, "clear-metadata - Clear information set by update-metadata"
-  print >> sys.stderr, "unpublish --yes-i-am-shy - delete the brag report from the server"
-  print >> sys.stderr, ""
-
-  print >> sys.stderr, "update-metadata options:"
-  print >> sys.stderr, "--name=  - Name of the cluster"
-  print >> sys.stderr, "--organization= - Name of the organization"
-  print >> sys.stderr, "--email= - Email contact address"
-  print >> sys.stderr, "--description= - Reporting use-case"
-  print >> sys.stderr, "--url= - The URL that is used to publish and unpublish"
-  print >> sys.stderr, ""
+  print_stderr("update-metadata options:")
+  print_stderr("--name=  - Name of the cluster")
+  print_stderr("--organization= - Name of the organization")
+  print_stderr("--email= - Email contact address")
+  print_stderr("--description= - Reporting use-case")
+  print_stderr("--url= - The URL that is used to publish and unpublish")
+  print_stderr()
 
 def update_metadata():
   info = {}
@@ -456,7 +463,7 @@ def update_metadata():
     if k in possibles:
       info[k] = v
     else:
-      print >> sys.stderr, "Unexpect option --" + k
+      print_stderr("Unexpect option --" + k)
       describe_usage()
       return 22
 
@@ -472,22 +479,22 @@ def clear_metadata():
 def publish():
   data, url = output_json()
   if url is None:
-    print >> sys.stderr, "Cannot publish until a URL is set using update-metadata"
+    print_stderr("Cannot publish until a URL is set using update-metadata")
     return 1
 
   if verbose:
-    print "PUT " + str(url) + " : " + str(data)
+    print_stderr("PUT " + str(url) + " : " + str(data))
   req = requests.put(url, data=data)
   if req.status_code != 201:
-    print >> sys.stderr, "Failed to publish, server responded with code " + str(req.status_code)
-    print >> sys.stderr, req.text
+    print_stderr("Failed to publish, server responded with code " + str(req.status_code))
+    print_stderr(req.text)
     return 1
 
   return 0
 
 def unpublish():
   if len(sys.argv) <= 2 or sys.argv[2] != '--yes-i-am-shy':
-    print >> sys.stderr, "unpublish should be followed by --yes-i-am-shy"
+    print_stderr("unpublish should be followed by --yes-i-am-shy")
     return 22
 
   fail = False
@@ -500,7 +507,7 @@ def unpublish():
     fail = True
 
   if fail:
-    print >> sys.stderr, "URL is not updated yet"
+    print_stderr("URL is not updated yet")
     return 1
 
   uuid = get_uuid()
@@ -508,7 +515,7 @@ def unpublish():
   params = {'uuid':uuid}
   req = requests.delete(url, params=params)
   if req.status_code != 200:
-    print >> sys.stderr, "Failed to unpublish, server responsed with code " + str(req.status_code)
+    print_stderr("Failed to unpublish, server responsed with code " + str(req.status_code))
     return 1
 
   return 0
@@ -519,7 +526,7 @@ def main():
     verbose = True
     sys.argv.pop(1)
   if len(sys.argv) == 1:
-    print output_json()[0]
+    print(output_json()[0])
     return 0
   if sys.argv[1] == 'update-metadata':
     return update_metadata()
