@@ -141,6 +141,7 @@
      --period=<id>             period id
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
+     --staging                 get staging period info
      --master                  set as master
      --master-url              master url
      --master-zonegroup=<id>   master zonegroup id
