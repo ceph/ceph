@@ -779,9 +779,6 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
       }
   }
 
-  bufferlist bl;
-  bl.append(data, len);
-
   RGWXMLDecoder::XMLParser parser;
   parser.init();
 
