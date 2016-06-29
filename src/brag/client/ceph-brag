@@ -211,12 +211,12 @@ def run_command(cmd):
 
 def get_uuid():
   (rc,uid,e) = run_command(['ceph', 'config-key', 'get', CLUSTER_UUID_NAME])
-  if rc is not 0:
+  if rc:
     #uuid is not yet set.
     uid = str(uuid.uuid4())
     (rc, o, e) = run_command(['ceph', 'config-key', 'put',
                              CLUSTER_UUID_NAME, uid])
-    if rc is not 0:
+    if rc:
       raise RuntimeError("\'ceph config-key put\' failed -" + e)
 
   return uid
@@ -239,7 +239,7 @@ def bytes_pretty_to_raw(byte_count, byte_scale):
 
 def get_nums():
   (rc, o, e) = run_command(['ceph', '-s', '-f', 'json'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph -s\' failed - " + e)
 
   oj = json.loads(o)
@@ -256,7 +256,7 @@ def get_nums():
   num_bytes_total = pgmap['bytes_total']
 
   (rc, o, e) = run_command(['ceph', 'pg', 'dump', 'pools', '-f', 'json-pretty'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph pg dump pools\' failed - " + e)
 
   pools = json.loads(o)
@@ -277,7 +277,7 @@ def get_nums():
 
 def get_crush_types():
   (rc, o, e) = run_command(['ceph', 'osd', 'crush', 'dump'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph osd crush dump\' failed - " + e)
 
   crush_dump = json.loads(o)
@@ -306,7 +306,7 @@ def get_crush_types():
 
 def get_osd_dump_info():
   (rc, o, e) = run_command(['ceph', 'osd', 'dump', '-f', 'json'])
-  if rc is not 0:
+  if rc:
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
   pool_meta = []
@@ -332,8 +332,8 @@ def get_sysinfo(max_osds):
   incr = lambda a,k: 1 if k not in a else a[k]+1
   while count < max_osds:
     (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
-    if rc is 0:
-      if osd_metadata_available is False:
+    if rc == 0:
+      if not osd_metadata_available:
         osd_metadata_available = True
 
       jmeta = json.loads(o)
@@ -365,7 +365,7 @@ def get_sysinfo(max_osds):
     count = count + 1
 
   sysinfo = {}
-  if osd_metadata_available is False:
+  if not osd_metadata_available:
     print >> sys.stderr, "'ceph osd metadata' is not available at all"
     return sysinfo
 
@@ -387,7 +387,7 @@ def get_sysinfo(max_osds):
 def get_ownership_info():
   (rc, o, e) = run_command(['ceph', 'config-key', 'get',
                             CLUSTER_OWNERSHIP_NAME])
-  if rc is not 0:
+  if rc:
     return {}
 
   return ast.literal_eval(o)
@@ -478,7 +478,7 @@ def publish():
   if verbose:
     print "PUT " + str(url) + " : " + str(data)
   req = requests.put(url, data=data)
-  if req.status_code is not 201:
+  if req.status_code != 201:
     print >> sys.stderr, "Failed to publish, server responded with code " + str(req.status_code)
     print >> sys.stderr, req.text
     return 1
@@ -507,7 +507,7 @@ def unpublish():
 
   params = {'uuid':uuid}
   req = requests.delete(url, params=params)
-  if req.status_code is not 200:
+  if req.status_code != 200:
     print >> sys.stderr, "Failed to unpublish, server responsed with code " + str(req.status_code)
     return 1
 
@@ -518,7 +518,7 @@ def main():
     global verbose
     verbose = True
     sys.argv.pop(1)
-  if len(sys.argv) is 1:
+  if len(sys.argv) == 1:
     print output_json()[0]
     return 0
   if sys.argv[1] == 'update-metadata':
