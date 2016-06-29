@@ -45,28 +45,28 @@ def process_args(args):
 
 
 def main(args):
-    fn = process_args(args)
-    if fn.verbose:
+    conf = process_args(args)
+    if conf.verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
-    if not fn.machine_type or fn.machine_type == 'None':
+    if not conf.machine_type or conf.machine_type == 'None':
         schedule_fail("Must specify a machine_type")
-    elif 'multi' in fn.machine_type:
+    elif 'multi' in conf.machine_type:
         schedule_fail("'multi' is not a valid machine_type. " +
                       "Maybe you want 'plana,mira,burnupi' or similar")
 
-    if fn.email:
-        config.results_email = fn.email
-    if fn.archive_upload:
-        config.archive_upload = fn.archive_upload
-        log.info('Will upload archives to ' + fn.archive_upload)
+    if conf.email:
+        config.results_email = conf.email
+    if conf.archive_upload:
+        config.archive_upload = conf.archive_upload
+        log.info('Will upload archives to ' + conf.archive_upload)
 
-    run = Run(fn)
+    run = Run(conf)
     name = run.name
     run.prepare_and_schedule()
-    if not fn.dry_run and args['--wait']:
+    if not conf.dry_run and conf.wait:
         return wait(name, config.max_job_time,
-                    fn.archive_upload_url)
+                    conf.archive_upload_url)
 
 
 class WaitException(Exception):
