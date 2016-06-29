@@ -654,6 +654,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
   }
   if (!b->is_empty()) {
     buffer_bytes += b->length;
+    buffer_list_bytes[b->cache_private] += b->length;
   }
 }
 
@@ -663,6 +664,8 @@ void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
  if (!b->is_empty()) {
     assert(buffer_bytes >= b->length);
     buffer_bytes -= b->length;
+    assert(buffer_list_bytes[b->cache_private] >= b->length);
+    buffer_list_bytes[b->cache_private] -= b->length;
   }
   switch (b->cache_private) {
   case BUFFER_WARM_IN:
@@ -685,6 +688,8 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
   if (!b->is_empty()) {
     assert((int64_t)buffer_bytes + delta >= 0);
     buffer_bytes += delta;
+    assert((int64_t)buffer_list_bytes[b->cache_private] + delta >= 0);
+    buffer_list_bytes[b->cache_private] += delta;
   }
 }
 
@@ -699,42 +704,86 @@ void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
   _audit("trim start");
 
   // buffers
-  uint64_t num_buffers = buffer_hot.size() + buffer_warm_in.size();
-  if (num_buffers) {
-    // for simplicity, we assume buffer sizes are uniform across hot
-    // and warm_in.  FIXME?
-    uint64_t avg_buffer_size = buffer_bytes / num_buffers;
-    uint64_t kin = buffer_max / avg_buffer_size / 2;
+  if (buffer_bytes > buffer_max) {
+    uint64_t kin = buffer_max / 2;
     uint64_t khot = kin;
-    uint64_t kout = buffer_max / avg_buffer_size;
-    // if hot is small, give slack to warm_in.
-    if (buffer_hot.size() < kin) {
-      kin += kin - buffer_hot.size();
+
+    // pre-calculate kout based on average buffer size too,
+    // which is typical(the warm_in and hot lists may change later)
+    uint64_t kout = 0;
+    uint64_t buffer_num = buffer_hot.size() + buffer_warm_in.size();
+    if (buffer_num) {
+      uint64_t buffer_avg_size = buffer_bytes / buffer_num;
+      assert(buffer_avg_size);
+      kout = buffer_max / buffer_avg_size;
     }
-    dout(20) << __func__ << " num_buffers " << num_buffers
-	     << " (hot " << buffer_hot.size()
-	     << " + warm_in " << buffer_warm_in.size() << ")"
-	     << " avg size " << avg_buffer_size
-	     << " warm_out " << buffer_warm_out.size()
-	     << " khot " << khot << " kin " << kin << " kout " << kout
-	     << dendl;
-    while (buffer_hot.size() > khot) {
-      Buffer *b = &*buffer_hot.rbegin();
-      assert(b->is_clean());
-      dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
-      b->space->_rm_buffer(b);
+
+    if (buffer_list_bytes[BUFFER_HOT] < khot) {
+      // hot is small, give slack to warm_in
+      kin += khot - buffer_list_bytes[BUFFER_HOT];
+    } else if (buffer_list_bytes[BUFFER_WARM_IN] < kin) {
+      // warm_in is small, give slack to hot
+      khot += kin - buffer_list_bytes[BUFFER_WARM_IN];
     }
-    while (buffer_warm_in.size() > kin) {
-      Buffer *b = &*buffer_warm_in.rbegin();
+
+    // adjust warm_in list
+    int64_t to_evict_bytes = buffer_list_bytes[BUFFER_WARM_IN] - kin;
+    uint64_t evicted = 0;
+
+    while (to_evict_bytes > 0) {
+      auto p = buffer_warm_in.rbegin();
+      if (p == buffer_warm_in.rend()) {
+        // stop if warm_in list is now empty
+        break;
+      }
+
+      Buffer *b = &*p;
       assert(b->is_clean());
       dout(20) << __func__ << " buffer_warm_in -> out " << *b << dendl;
       buffer_bytes -= b->length;
+      buffer_list_bytes[BUFFER_WARM_IN] -= b->length;
+      to_evict_bytes -= b->length;
+      evicted += b->length;
       b->state = Buffer::STATE_EMPTY;
       b->data.clear();
       buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
       buffer_warm_out.push_front(*b);
       b->cache_private = BUFFER_WARM_OUT;
     }
+
+    if (evicted > 0) {
+      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+               << " from warm_in list, done evicting warm_in buffers"
+               << dendl;
+    }
+
+    // adjust hot list
+    to_evict_bytes = buffer_list_bytes[BUFFER_HOT] - khot;
+    evicted = 0;
+
+    while (to_evict_bytes > 0) {
+      auto p = buffer_hot.rbegin();
+      if (p == buffer_hot.rend()) {
+        // stop if hot list is now empty
+        break;
+      }
+
+      Buffer *b = &*p;
+      assert(b->is_clean());
+      dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
+      // adjust evict size before buffer goes invalid
+      to_evict_bytes -= b->length;
+      evicted += b->length;
+      b->space->_rm_buffer(b);
+    }
+
+    if (evicted > 0) {
+      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+               << " from hot list, done evicting hot buffers"
+               << dendl;
+    }
+
+    // adjust warm out list too, if necessary
     while (buffer_warm_out.size() > kout) {
       Buffer *b = &*buffer_warm_out.rbegin();
       assert(b->is_empty());
@@ -783,20 +832,43 @@ void BlueStore::TwoQCache::_audit(const char *when)
     for (auto i = buffer_hot.begin(); i != buffer_hot.end(); ++i) {
       s += i->length;
     }
+
+    uint64_t hot_bytes = s;
+    if (hot_bytes != buffer_list_bytes[BUFFER_HOT]) {
+      derr << __func__ << " hot_list_bytes "
+           << buffer_list_bytes[BUFFER_HOT]
+           << " != actual " << hot_bytes
+           << dendl;
+      assert(hot_bytes == buffer_list_bytes[BUFFER_HOT]);
+    }
+
     for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
       s += i->length;
     }
+
+    uint64_t warm_in_bytes = s - hot_bytes;
+    if (warm_in_bytes != buffer_list_bytes[BUFFER_WARM_IN]) {
+      derr << __func__ << " warm_in_list_bytes "
+           << buffer_list_bytes[BUFFER_WARM_IN]
+           << " != actual " << warm_in_bytes
+           << dendl;
+      assert(warm_in_bytes == buffer_list_bytes[BUFFER_WARM_IN]);
+    }
+
     if (s != buffer_bytes) {
       derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
 	   << dendl;
       assert(s == buffer_bytes);
     }
+
     dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
 	     << " ok" << dendl;
   }
+
   if (false) {
     uint64_t lc = 0, oc = 0;
     set<OnodeSpace*> spaces;
+
     for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
       assert(i->space->onode_map.count(i->oid));
       if (spaces.count(i->space) == 0) {
@@ -805,6 +877,7 @@ void BlueStore::TwoQCache::_audit(const char *when)
       }
       ++lc;
     }
+
     if (lc != oc) {
       derr << " lc " << lc << " oc " << oc << dendl;
     }
