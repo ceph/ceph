@@ -403,6 +403,9 @@ int BlueFS::_write_super()
   ::encode(super, bl);
   uint32_t crc = bl.crc32c(-1);
   ::encode(crc, bl);
+  dout(10) << __func__ << " super block length(encoded): " << bl.length() << dendl;
+  dout(10) << __func__ << " superblock " << super.version << dendl;
+  dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
@@ -457,6 +460,7 @@ int BlueFS::_replay()
 
   FileRef log_file = _get_file(1);
   log_file->fnode = super.log_fnode;
+  dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
 
   FileReader *log_reader = new FileReader(
     log_file, g_conf->bluefs_alloc_size,
