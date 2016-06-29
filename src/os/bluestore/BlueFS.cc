@@ -448,6 +448,212 @@ int BlueFS::_open_super()
   return 0;
 }
 
+void
+BlueFS::dump_logfile(ostream& out)
+{
+  out << __func__ << std::endl;
+  ino_last = 1;  // by the log
+  log_seq = 0;
+
+  FileRef base_log_file = _get_file(1);
+  base_log_file->fnode = super.log_fnode;
+
+  FileReader *log_reader = new FileReader(
+    base_log_file, g_conf->bluefs_alloc_size,
+    false,  // !random
+    true);  // ignore eof
+  while (true) {
+    assert((log_reader->buf.pos & ~super.block_mask()) == 0);
+    uint64_t pos = log_reader->buf.pos;
+    bufferlist bl;
+    {
+      int r = _read(log_reader, &log_reader->buf, pos, super.block_size,
+		    &bl, NULL);
+      assert(r == (int)super.block_size);
+    }
+    uint64_t more = 0;
+    uint64_t seq;
+    uuid_d uuid;
+    {
+      bufferlist::iterator p = bl.begin();
+      __u8 a, b;
+      uint32_t len;
+      ::decode(a, p);
+      ::decode(b, p);
+      ::decode(len, p);
+      ::decode(uuid, p);
+      ::decode(seq, p);
+      if (len + 6 > bl.length()) {
+	more = ROUND_UP_TO(len + 6 - bl.length(), super.block_size);
+      }
+    }
+      out << __func__ << " Pos: " << pos << "seq: " << seq
+	       << " log seq: " << log_seq + 1 << std::endl;
+
+    if (uuid != super.uuid) {
+      out << __func__ << " " << pos << ": stop: uuid " << uuid
+	       << " != super.uuid " << super.uuid << std::endl;
+      break;
+    }
+    if (seq != log_seq + 1) {
+      out << __func__ << " " << pos << ": stop: seq " << seq
+	       << " != expected " << log_seq + 1 << std::endl;
+      break;
+    }
+
+    if (more) {
+      out << __func__ << "  need " << more << " more bytes" << std::endl;
+      bufferlist t;
+      int r = _read(log_reader, &log_reader->buf, pos + super.block_size, more,
+		    &t, NULL);
+      if (r < (int)more) {
+	out << __func__ << " Pos: " << pos << " len is "
+		 << bl.length() + more << ", which is past eof" << std::endl;
+	break;
+      }
+      assert(r == (int)more);
+      bl.claim_append(t);
+    }
+    bluefs_transaction_t t;
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(t, p);
+    }
+    catch (buffer::error& e) {
+      out << __func__ << " " << pos << ": stop: failed to decode: "
+	       << e.what() << std::endl;
+      delete log_reader;
+    }
+    assert(seq == t.seq);
+    out << __func__ << " " << pos << ": " << t << std::endl;
+
+    bufferlist::iterator p = t.op_bl.begin();
+    while (!p.end()) {
+      __u8 op;
+      ::decode(op, p);
+      switch (op) {
+
+      case bluefs_transaction_t::OP_INIT:
+	out << __func__ << " " << pos << ":  op_init" << std::endl;
+	break;
+
+      case bluefs_transaction_t::OP_JUMP_SEQ:
+        {
+	  uint64_t next_seq;
+	  ::decode(next_seq, p);
+	  out << __func__ << " " << pos << ":  op_jump_seq "
+		   << next_seq << std::endl;
+	  assert(next_seq >= log_seq);
+	  log_seq = next_seq - 1; // we will increment it below
+	}
+	break;
+
+      case bluefs_transaction_t::OP_ALLOC_ADD:
+        {
+	  __u8 id;
+	  uint64_t offset, length;
+	  ::decode(id, p);
+	  ::decode(offset, p);
+	  ::decode(length, p);
+	  out << __func__ << " " << pos << ":  op_alloc_add "
+		   << " " << (int)id << ":" << offset << "~" << length << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_ALLOC_RM:
+        {
+	  __u8 id;
+	  uint64_t offset, length;
+	  ::decode(id, p);
+	  ::decode(offset, p);
+	  ::decode(length, p);
+	  out << __func__ << " " << pos << ":  op_alloc_rm "
+		   << " " << (int)id << ":" << offset << "~" << length << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_LINK:
+        {
+	  string dirname, filename;
+	  uint64_t ino;
+	  ::decode(dirname, p);
+	  ::decode(filename, p);
+	  ::decode(ino, p);
+	  out << __func__ << " " << pos << ":  op_dir_link "
+		   << " " << dirname << "/" << filename << " to " << ino
+		   << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_UNLINK:
+        {
+	  string dirname, filename;
+	  ::decode(dirname, p);
+	  ::decode(filename, p);
+	  out << __func__ << " " << pos << ":  op_dir_unlink "
+		   << " " << dirname << "/" << filename << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_CREATE:
+        {
+	  string dirname;
+	  ::decode(dirname, p);
+	  out << __func__ << " " << pos << ":  op_dir_create " << dirname
+		   << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_DIR_REMOVE:
+        {
+	  string dirname;
+	  ::decode(dirname, p);
+	  out << __func__ << " " << pos << ":  op_dir_remove " << dirname
+		   << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_FILE_UPDATE:
+        {
+	  bluefs_fnode_t fnode;
+	  ::decode(fnode, p);
+	  out << __func__ << " " << pos << ":  op_file_update "
+		   << " " << fnode << std::endl;
+	}
+	break;
+
+      case bluefs_transaction_t::OP_FILE_REMOVE:
+        {
+	  uint64_t ino;
+	  ::decode(ino, p);
+	  out << __func__ << " " << pos << ":  op_file_remove " << ino
+		   << std::endl;
+	}
+	break;
+
+      default:
+	out << __func__ << " " << pos << ": stop: unrecognized op " << (int)op
+	     << std::endl;
+	delete log_reader;
+      }
+    }
+    assert(p.end());
+    ++log_seq;
+    base_log_file->fnode.size = log_reader->buf.pos;
+  }
+
+  out << __func__ << " log file size was " << base_log_file->fnode.size << " log reader position: " << log_reader->buf.pos << std::endl;
+  delete log_reader;
+
+  // dump all the file link counts
+  for (auto& p : file_map)
+      out << __func__ << " ino: " << p.second->fnode.ino << " refs: " << p.second->refs
+	     << " fnode: " << p.second->fnode  << std::endl;
+
+  out << __func__ << " done" << std::endl;
+}
+
+
 int BlueFS::_replay()
 {
   dout(10) << __func__ << dendl;
@@ -912,6 +1118,7 @@ uint64_t BlueFS::_estimate_log_size()
   return ROUND_UP_TO(size, super.block_size);
 }
 
+
 void BlueFS::_maybe_compact_log()
 {
   uint64_t current = log_writer->file->fnode.size;
@@ -928,22 +1135,50 @@ void BlueFS::_maybe_compact_log()
 	   << " vs expected " << expected << dendl;
 }
 
+/*
+ * 1. Check whether log needs compaction or not. It depends on
+ * bluefs_log_compact_min_size and bluefs_log_compact_min_ratio.
+ * This can be a simple heuristic that compares the estimated
+ * space we need (number of fnodes * some average size) vs the actual log size.
+ *
+ * 2. Allocate a new extent to continue the log, and then log an event
+ * that jumps the log write position to the new extent.  At this point, the
+ * old extent(s) won't be written to, and reflect everything should compact.
+ *
+ * 3. While still holding the lock, encode a bufferlist that dumps all of the
+ * in-memory fnodes and names.  This will become the new beginning of the
+ * log.  The last event will jump to the log continuation extent from #2.
+ *
+ * 4. Drop the lock so that writes can continue.
+ *
+ * 5. Queue a write to a new extent for the new beginnging of the log.  Wait
+ * for it to commit and flush.
+ *
+ * 6. Retake the lock.
+ *
+ * 7. Update the log_fnode to splice in the new beginning.  Queue an io to
+ * update the superblock.  Drop the lock.
+ *
+ * 8. Wait for things to flush.  Retake the lock, and release the old log
+ * beginnging extents to the allocator for reuse.
+ */
+
+void BlueFS::compact_log()
+{
+  _compact_log();
+}
+
+
 void BlueFS::_compact_log()
 {
-  // FIXME: we currently hold the lock while writing out the compacted log,
-  // which may mean a latency spike.  we could drop the lock while writing out
-  // the big compacted log, while continuing to log at the end of the old log
-  // file, and once it's done swap out the old log extents for the new ones.
-  dout(10) << __func__ << dendl;
   File *log_file = log_writer->file.get();
-
-  // clear out log (be careful who calls us!!!)
-  log_t.clear();
-
   bluefs_transaction_t t;
   t.seq = 1;
   t.uuid = super.uuid;
   dout(20) << __func__ << " op_init" << dendl;
+
+  lock.lock();
+
   t.op_init();
   for (unsigned bdev = 0; bdev < MAX_BDEV; ++bdev) {
     interval_set<uint64_t>& p = block_all[bdev];
@@ -975,6 +1210,7 @@ void BlueFS::_compact_log()
   bufferlist bl;
   ::encode(t, bl);
   _pad_bl(bl);
+  lock.unlock();
 
   uint64_t need = bl.length() + g_conf->bluefs_max_log_runway;
   dout(20) << __func__ << " need " << need << dendl;
@@ -996,17 +1232,21 @@ void BlueFS::_compact_log()
   int r = _flush(log_writer, true);
   assert(r == 0);
   _flush_wait(log_writer);
+  lock.lock();
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
   ++super.version;
+  lock.unlock();
   _write_super();
   _flush_bdev();
 
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
+  lock.lock();
   for (auto& r : old_extents) {
     alloc[r.bdev]->release(r.offset, r.length);
   }
+  lock.unlock();
 
   logger->inc(l_bluefs_log_compactions);
 }
@@ -1019,6 +1259,12 @@ void BlueFS::_pad_bl(bufferlist& bl)
 	     << " zeros" << dendl;
     bl.append_zero(super.block_size - partial);
   }
+}
+
+void BlueFS::flush_log()
+{
+  std::lock_guard<std::mutex> l(lock);
+  _flush_log();
 }
 
 int BlueFS::_flush_log()
@@ -1363,7 +1609,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 
 void BlueFS::sync_metadata()
 {
-  std::lock_guard<std::mutex> l(lock);
+  lock.lock();
   if (log_t.empty()) {
     dout(10) << __func__ << " - no pending log events" << dendl;
     return;
@@ -1381,7 +1627,39 @@ void BlueFS::sync_metadata()
       p->commit_finish();
     }
   }
-  _maybe_compact_log();
+  // check whether we need to compact the log or not
+  uint64_t current = log_writer->file->fnode.size;
+  uint64_t expected = _estimate_log_size();
+  float ratio = (float)current / (float)expected;
+  dout(10) << __func__ << " current " << current
+	   << " expected " << expected
+	   << " ratio " << ratio << dendl;
+
+  if (current < g_conf->bluefs_log_compact_min_size ||
+      ratio < g_conf->bluefs_log_compact_min_ratio) {
+    lock.unlock();
+    return;
+  }
+  /*
+   Allocate an extent at the end so that writes can proceed and
+   we can compact the log incore
+   Can we do this in background so that the write thread doesn't need
+   to pay this penality?
+  */
+  int r = _allocate(log_writer->file->fnode.prefer_bdev,
+                    g_conf->bluefs_max_log_runway,
+		    &log_writer->file->fnode.extents);
+  assert(r == 0);
+  log_t.op_file_update(log_writer->file->fnode);
+  ++log_seq;
+  dout(20) << __func__ << " op_jump_seq " << log_seq << dendl;
+  log_t.op_jump_seq(log_seq);
+
+  // clear out log (be careful who calls us!!!)
+  log_t.clear();
+  lock.unlock();
+  // Let us grab the lock again while compacting the log
+  _compact_log();
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
   dout(10) << __func__ << " done in " << dur << dendl;

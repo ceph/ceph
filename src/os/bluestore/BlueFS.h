@@ -286,6 +286,7 @@ public:
   int mkfs(uuid_d osd_uuid);
   int mount();
   void umount();
+  void dump_logfile(ostream &out);
 
   int fsck();
 
@@ -331,6 +332,8 @@ public:
 
   /// sync any uncommitted state to disk
   int sync();
+  void flush_log();
+  void compact_log();
 
   void sync_metadata();
 
