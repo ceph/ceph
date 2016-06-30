@@ -264,4 +264,64 @@ public:
   virtual RGWHandler_REST *get_handler(struct req_state *s);
 };
 
+
+class  RGWGetHealthCheck_ObjStore_SWIFT
+  : public RGWGetHealthCheck_ObjStore {
+public:
+  RGWGetHealthCheck_ObjStore_SWIFT() = default;
+  ~RGWGetHealthCheck_ObjStore_SWIFT() = default;
+
+  void send_response() override;
+};
+
+class RGWHandler_SWIFT_HealthCheck : public RGWHandler_REST {
+public:
+  RGWHandler_SWIFT_HealthCheck() = default;
+  ~RGWHandler_SWIFT_HealthCheck() = default;
+
+  RGWOp *op_get() override {
+    return new RGWGetHealthCheck_ObjStore_SWIFT();
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const state,
+           RGWClientIO* const cio) override {
+    state->dialect = "swift";
+    state->formatter = new JSONFormatter;
+    state->format = RGW_FORMAT_JSON;
+
+    return RGWHandler::init(store, state, cio);
+  }
+
+  int authorize() override {
+    return 0;
+  }
+
+  int postauth_init() override {
+    return 0;
+  }
+
+  int read_permissions(RGWOp *) override {
+    return 0;
+  }
+};
+
+class RGWRESTMgr_SWIFT_HealthCheck : public RGWRESTMgr {
+public:
+  RGWRESTMgr_SWIFT_HealthCheck() = default;
+  ~RGWRESTMgr_SWIFT_HealthCheck() = default;
+
+  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+                               const std::string& uri,
+                               std::string* const out_uri) override {
+    return this;
+  }
+
+  RGWHandler_REST* get_handler(struct req_state* const s) override {
+    s->prot_flags |= RGW_REST_SWIFT;
+    return new RGWHandler_SWIFT_HealthCheck;
+  }
+};
+
+
 #endif

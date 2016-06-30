@@ -1309,6 +1309,31 @@ public:
 };
 
 
+class RGWGetHealthCheck : public RGWOp {
+public:
+  RGWGetHealthCheck() = default;
+  ~RGWGetHealthCheck() = default;
+
+  int verify_permission() override {
+    return 0;
+  }
+
+  void execute() override;
+
+  const string name() override {
+    return "get_health_check";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_GET_HEALTH_CHECK;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+};
+
+
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   int max_to_delete;

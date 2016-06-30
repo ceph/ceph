@@ -341,13 +341,19 @@ int main(int argc, const char **argv)
     rest.register_default_mgr(set_logging(new RGWRESTMgr_S3(s3website_enabled)));
 
   if (apis_map.count("swift") > 0) {
+    RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
+
+    swift_resource->register_resource("healthcheck",
+                                      set_logging(new RGWRESTMgr_SWIFT_HealthCheck));
+
     rest.register_resource(g_conf->rgw_swift_url_prefix,
-			   set_logging(new RGWRESTMgr_SWIFT));
+                           set_logging(swift_resource));
   }
 
-  if (apis_map.count("swift_auth") > 0)
+  if (apis_map.count("swift_auth") > 0) {
     rest.register_resource(g_conf->rgw_swift_auth_entry,
 			   set_logging(new RGWRESTMgr_SWIFT_Auth));
+  }
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
