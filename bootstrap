@@ -136,3 +136,6 @@ fi
 ./virtualenv/bin/pip install setuptools --upgrade
 
 ./virtualenv/bin/pip install --upgrade -r requirements.txt
+
+# Remove leftover .pyc files
+find teuthology -name '*.pyc' -exec rm {} \;
