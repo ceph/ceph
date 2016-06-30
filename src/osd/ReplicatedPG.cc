@@ -1441,8 +1441,7 @@ void ReplicatedPG::do_request(
   if (!is_peered()) {
     // Delay unless PGBackend says it's ok
     if (pgbackend->can_handle_while_inactive(op)) {
-      bool handled = pgbackend->handle_message(op);
-      assert(handled);
+      assert(pgbackend->handle_message(op));
       return;
     } else {
       waiting_for_peered.push_back(op);
@@ -1452,8 +1451,9 @@ void ReplicatedPG::do_request(
   }
 
   assert(is_peered() && flushes_in_progress == 0);
-  if (pgbackend->handle_message(op))
+  if (pgbackend->handle_message(op)){
     return;
+  }
 
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
