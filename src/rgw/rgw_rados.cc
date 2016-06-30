@@ -3799,9 +3799,7 @@ int RGWRados::initialize()
   if (ret < 0)
     return ret;
 
-  ret = init_complete();
-
-  return ret;
+  return init_complete();
 }
 
 void RGWRados::finalize_watch()
