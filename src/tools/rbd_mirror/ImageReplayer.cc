@@ -93,7 +93,7 @@ public:
   explicit StartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
   bool call(Formatter *f, stringstream *ss) {
-    replayer->start(nullptr, nullptr, true);
+    replayer->start(nullptr, true);
     return true;
   }
 
@@ -319,9 +319,7 @@ void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
 }
 
 template <typename I>
-void ImageReplayer<I>::start(Context *on_finish,
-			     const BootstrapParams *bootstrap_params,
-			     bool manual)
+void ImageReplayer<I>::start(Context *on_finish, bool manual)
 {
   assert(m_on_start_finish == nullptr);
   assert(m_on_stop_finish == nullptr);
@@ -360,10 +358,6 @@ void ImageReplayer<I>::start(Context *on_finish,
 	 << ": " << cpp_strerror(r) << dendl;
     on_start_fail(r, "error opening remote pool");
     return;
-  }
-
-  if (bootstrap_params != nullptr && !bootstrap_params->empty()) {
-    m_local_image_name = bootstrap_params->local_image_name;
   }
 
   r = m_local->ioctx_create2(m_local_pool_id, m_local_ioctx);
@@ -723,7 +717,7 @@ void ImageReplayer<I>::restart(Context *on_finish)
       if (r < 0) {
 	// Try start anyway.
       }
-      start(on_finish, nullptr, true);
+      start(on_finish, true);
     });
   stop(ctx);
 }

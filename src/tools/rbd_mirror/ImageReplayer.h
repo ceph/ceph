@@ -64,18 +64,6 @@ public:
     STATE_STOPPED,
   };
 
-  struct BootstrapParams {
-    std::string local_image_name;
-
-    BootstrapParams() {}
-    BootstrapParams(const std::string local_image_name) :
-      local_image_name(local_image_name) {}
-
-    bool empty() const {
-      return local_image_name.empty();
-    }
-  };
-
   ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                 RadosRef local, RadosRef remote,
@@ -116,9 +104,7 @@ public:
     return m_local_image_name;
   }
 
-  void start(Context *on_finish = nullptr,
-	     const BootstrapParams *bootstrap_params = nullptr,
-	     bool manual = false);
+  void start(Context *on_finish = nullptr, bool manual = false);
   void stop(Context *on_finish = nullptr, bool manual = false);
   void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);

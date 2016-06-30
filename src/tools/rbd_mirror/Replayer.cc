@@ -476,7 +476,7 @@ void Replayer::start()
 
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
-    image_replayer->start(nullptr, nullptr, true);
+    image_replayer->start(nullptr, true);
   }
 }
 
