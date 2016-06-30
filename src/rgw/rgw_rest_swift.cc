@@ -1240,7 +1240,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
                                                  const off_t bl_ofs,
                                                  const off_t bl_len)
 {
-  string content_type; int rr;
+  string content_type;
 
   if (sent_header) {
     goto send_data;
