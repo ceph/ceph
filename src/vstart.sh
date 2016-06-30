@@ -99,6 +99,7 @@ cephx=1 #turn cephx on by default
 cache=""
 memstore=0
 bluestore=0
+lockdep=${LOCKDEP:-1}
 
 MON_ADDR=""
 
@@ -133,6 +134,7 @@ usage=$usage"\t--bluestore use bluestore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
+usage=$usage"\t--nolockdep disable lockdep\n"
 
 usage_exit() {
 	printf "$usage"
@@ -260,6 +262,9 @@ case $1 in
 	    fi
 	    shift
 	    ;;
+    --nolockdep )
+            lockdep=0
+            ;;
     * )
 	    usage_exit
 esac
@@ -354,9 +359,6 @@ if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = bluestore'
 fi
-
-# lockdep everywhere?
-# export CEPH_ARGS="--lockdep 1"
 
 if [ -z "$CEPH_PORT" ]; then
     CEPH_PORT=6789
@@ -457,8 +459,12 @@ if [ "$start_mon" -eq 1 ]; then
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+EOF
+if [ "$lockdep" -eq 1 ] ; then
+cat <<EOF >> $conf_fn
         lockdep = true
 EOF
+fi
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf_fn
         auth supported = cephx
