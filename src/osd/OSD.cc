@@ -9208,7 +9208,7 @@ int OSD::init_op_flags(OpRequestRef& op)
     case CEPH_OSD_OP_CALL:
       {
 	bufferlist::iterator bp = iter->indata.begin();
-	int is_write, is_read;
+	bool is_write, is_read, is_promote;
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);
 	bp.copy(iter->op.cls.method_len, mname);
@@ -9233,7 +9233,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	}
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
-        bool is_promote = flags & CLS_METHOD_PROMOTE;
+        is_promote = flags & CLS_METHOD_PROMOTE;
 
 	dout(10) << "class " << cname << " method " << mname << " "
 		 << "flags=" << (is_read ? "r" : "")
