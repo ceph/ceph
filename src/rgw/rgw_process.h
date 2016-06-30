@@ -21,7 +21,6 @@
 #define def_dout_subsys
 #endif
 
-#define SOCKET_BACKLOG 1024
 
 extern void signal_shutdown();
 
