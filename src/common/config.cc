@@ -689,7 +689,7 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
   char *p = b;
   while (*p) {
     nargs.push_back(p);
-    while (*p && *p != ' ') p++;
+    while (*p != ' ') p++;
     if (!*p)
       break;
     *p++ = 0;
