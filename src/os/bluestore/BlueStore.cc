@@ -955,11 +955,10 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
       _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
-      _rm_buffer(i);
     } else {
       _add_buffer(new Buffer(this, b->state, b->seq, end, keep), 0, b);
-      _rm_buffer(i);
     }
+    _rm_buffer(i);
     cache->_audit("discard end 2");
     break;
   }
@@ -1691,7 +1690,6 @@ int BlueStore::_open_bdev(bool create)
   assert(block_size == 1u << block_size_order);
 
   _set_alloc_sizes();
-  max_alloc_size = g_conf->bluestore_max_alloc_size;
   return 0;
 
  fail_close:
@@ -2811,6 +2809,7 @@ int BlueStore::_fsck_verify_blob_map(
       derr << " " << what << " blob " << b.id
 	   << " has no lextent refs" << dendl;
       ++errors;
+      continue;
     }
     if (pv->second != b.blob.ref_map) {
       derr << " " << what << " blob " << b.id
@@ -3494,7 +3493,6 @@ int BlueStore::_do_read(
 	       << std::dec << dendl;
       pos += hole;
       left -= hole;
-      continue;
     }
     Blob *bptr = c->get_blob(o, lp->second.blob);
     if (bptr == nullptr) {
@@ -5714,7 +5712,7 @@ void BlueStore::_do_write_small(
     }
     uint64_t tail_pad =
       ROUND_UP_TO(offset + length, chunk_size) - (offset + length);
-    if (o->onode.has_any_lextents(offset + length, tail_pad)) {
+    if (tail_pad && o->onode.has_any_lextents(offset + length, tail_pad)) {
       tail_pad = 0;
     }
     bufferlist padded = bl;
