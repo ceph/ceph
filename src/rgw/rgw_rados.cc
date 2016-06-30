@@ -4052,9 +4052,7 @@ int RGWRados::open_pool_ctx(const string& pool, librados::IoCtx&  io_ctx)
   if (r < 0 && r != -EEXIST)
     return r;
 
-  r = rad->ioctx_create(pool.c_str(), io_ctx);
-
-  return r;
+  return rad->ioctx_create(pool.c_str(), io_ctx);
 }
 
 int RGWRados::open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx)
@@ -11216,8 +11214,7 @@ int RGWRados::cls_rgw_init_index(librados::IoCtx& index_ctx, librados::ObjectWri
 {
   bufferlist in;
   cls_rgw_bucket_init(op);
-  int r = index_ctx.operate(oid, &op);
-  return r;
+  return index_ctx.operate(oid, &op);
 }
 
 int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
