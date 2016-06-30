@@ -121,7 +121,7 @@ LIBRGW_DEPS += \
         -ldl
 endif
 
-if FREEBSD
+if WITH_OPENLDAP
 LIBRGW_DEPS += \
       -lldap
 endif
