@@ -1,6 +1,5 @@
 import json
 import logging
-import misc
 import os
 import random
 import re
@@ -11,12 +10,14 @@ import yaml
 
 from subprocess import CalledProcessError
 
-from .openstack import OpenStack, OpenStackInstance
-from .config import config
-from .contextutil import safe_while
-from .exceptions import QuotaExceededError
-from .misc import decanonicalize_hostname, get_distro, get_distro_version
-from .lockstatus import get_status
+from .. import misc
+
+from ..openstack import OpenStack, OpenStackInstance
+from ..config import config
+from ..contextutil import safe_while
+from ..exceptions import QuotaExceededError
+from ..misc import decanonicalize_hostname, get_distro, get_distro_version
+from ..lockstatus import get_status
 
 
 log = logging.getLogger(__name__)
