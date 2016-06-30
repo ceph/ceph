@@ -1,9 +1,5 @@
 # Django settings for calamari project.
 
-
-from calamari_rest.config import CalamariConfig
-config = CalamariConfig()
-
 DEBUG = False
 TEMPLATE_DEBUG = DEBUG
 
