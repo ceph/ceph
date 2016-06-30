@@ -4,9 +4,10 @@ import time
 from textwrap import dedent
 from unittest import SkipTest
 from tasks.cephfs.fuse_mount import FuseMount
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 class TestCapFlush(CephFSTestCase):
+    @for_teuthology
     def test_replay_create(self):
         """
         MDS starts to handle client caps when it enters clientreplay stage.

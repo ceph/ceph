@@ -10,7 +10,7 @@ import traceback
 from collections import namedtuple
 
 from teuthology.orchestra.run import CommandFailedError
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
 
@@ -506,6 +506,6 @@ class TestDataScan(CephFSTestCase):
         keys = self._dirfrag_keys(frag_obj_id)
         self.assertListEqual(sorted(keys), sorted(["%s_head" % f for f in file_names]))
 
-    @long_running
+    @for_teuthology
     def test_parallel_execution(self):
         self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 25), workers=7)
