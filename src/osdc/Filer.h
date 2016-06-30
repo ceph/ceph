@@ -117,7 +117,7 @@ class Filer {
 
   /*** async file interface.  scatter/gather as needed. ***/
 
-  int read(inodeno_t ino,
+  void read(inodeno_t ino,
 	   file_layout_t *layout,
 	   snapid_t snap,
 	   uint64_t offset,
@@ -130,10 +130,9 @@ class Filer {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_read(extents, snap, bl, flags, onfinish, op_flags);
-    return 0;
   }
 
-  int read_trunc(inodeno_t ino,
+  void read_trunc(inodeno_t ino,
 		 file_layout_t *layout,
 		 snapid_t snap,
 		 uint64_t offset,
@@ -150,10 +149,9 @@ class Filer {
 			     extents);
     objecter->sg_read_trunc(extents, snap, bl, flags,
 			    truncate_size, truncate_seq, onfinish, op_flags);
-    return 0;
   }
 
-  int write(inodeno_t ino,
+  void write(inodeno_t ino,
 	    file_layout_t *layout,
 	    const SnapContext& snapc,
 	    uint64_t offset,
@@ -168,10 +166,9 @@ class Filer {
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit,
 		       op_flags);
-    return 0;
   }
 
-  int write_trunc(inodeno_t ino,
+  void write_trunc(inodeno_t ino,
 		  file_layout_t *layout,
 		  const SnapContext& snapc,
 		  uint64_t offset,
@@ -189,10 +186,9 @@ class Filer {
 			     extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
 		       truncate_size, truncate_seq, onack, oncommit, op_flags);
-    return 0;
   }
 
-  int truncate(inodeno_t ino,
+  void truncate(inodeno_t ino,
 	       file_layout_t *layout,
 	       const SnapContext& snapc,
 	       uint64_t offset,
@@ -228,10 +224,9 @@ class Filer {
       gack.activate();
       gcom.activate();
     }
-    return 0;
   }
 
-  int zero(inodeno_t ino,
+  void zero(inodeno_t ino,
 	   file_layout_t *layout,
 	   const SnapContext& snapc,
 	   uint64_t offset,
@@ -273,10 +268,9 @@ class Filer {
       gack.activate();
       gcom.activate();
     }
-    return 0;
   }
 
-  int zero(inodeno_t ino,
+  void zero(inodeno_t ino,
 	   file_layout_t *layout,
 	   const SnapContext& snapc,
 	   uint64_t offset,
@@ -285,12 +279,11 @@ class Filer {
 	   int flags,
 	   Context *onack,
 	   Context *oncommit) {
-
-    return zero(ino, layout,
-		snapc, offset,
-		len, mtime,
-		flags, false,
-		onack, oncommit);
+    zero(ino, layout,
+         snapc, offset,
+         len, mtime,
+         flags, false,
+         onack, oncommit);
   }
   // purge range of ino.### objects
   int purge_range(inodeno_t ino,

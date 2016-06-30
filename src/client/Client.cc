@@ -8585,13 +8585,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
-    r = filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+    filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 			   offset, size, bl, ceph::real_clock::now(cct), 0,
 			   in->truncate_size, in->truncate_seq,
 			   onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
-    if (r < 0)
-      goto done;
-
     client_lock.Unlock();
     flock.Lock();
 
@@ -11665,14 +11662,12 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
       _invalidate_inode_cache(in, offset, length);
-      r = filer->zero(in->ino, &in->layout,
+      filer->zero(in->ino, &in->layout,
 		      in->snaprealm->get_snap_context(),
 		      offset, length,
 		      ceph::real_clock::now(cct),
 		      0, true, onfinish,
 		      new C_OnFinisher(onsafe, &objecter_finisher));
-      assert(r == 0);
-
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
