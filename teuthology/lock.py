@@ -47,7 +47,7 @@ def get_distro_from_downburst():
                                  u'16.04(xenial)'],
                      u'sles': [u'11-sp2'],
                      u'debian': [u'6.0', u'7.0', u'8.0']}
-    executable_cmd = provision.downburst_executable()
+    executable_cmd = provision.downburst.downburst_executable()
     if not executable_cmd:
         log.warn("Downburst not found!")
         log.info('Using default values for supported os_type/os_version')

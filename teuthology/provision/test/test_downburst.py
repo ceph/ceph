@@ -77,7 +77,7 @@ class TestDownburst(object):
                                          _downburst=dbrst)
         assert result is False
 
-    @patch('teuthology.provision.downburst_executable')
+    @patch('teuthology.provision.downburst.downburst_executable')
     def test_create_fails_without_executable(self, m_exec):
         name = self.name
         ctx = self.ctx
@@ -87,7 +87,7 @@ class TestDownburst(object):
         result = dbrst.create()
         assert result is False
 
-    @patch('teuthology.provision.downburst_executable')
+    @patch('teuthology.provision.downburst.downburst_executable')
     def test_destroy_fails_without_executable(self, m_exec):
         name = self.name
         ctx = self.ctx
