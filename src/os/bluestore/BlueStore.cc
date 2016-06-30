@@ -2738,6 +2738,7 @@ int BlueStore::_fsck_verify_blob_map(
       derr << " " << what << " blob " << b.id
 	   << " has no lextent refs" << dendl;
       ++errors;
+      continue;
     }
     if (pv->second != b.blob.ref_map) {
       derr << " " << what << " blob " << b.id
