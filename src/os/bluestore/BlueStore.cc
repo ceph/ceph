@@ -5639,7 +5639,7 @@ void BlueStore::_do_write_small(
     }
     uint64_t tail_pad =
       ROUND_UP_TO(offset + length, chunk_size) - (offset + length);
-    if (o->onode.has_any_lextents(offset + length, tail_pad)) {
+    if (tail_pad && o->onode.has_any_lextents(offset + length, tail_pad)) {
       tail_pad = 0;
     }
     bufferlist padded = bl;
