@@ -122,31 +122,7 @@ INSTALLED_APPS = (
 # See http://docs.djangoproject.com/en/dev/topics/logging for
 # more details on how to customize your logging configuration.
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'simple': {
-            'format': "%(asctime)s - %(levelname)s - %(name)s %(message)s"
-        }
-    },
-    'handlers': {
-        'log_file': {
-            'class': 'logging.handlers.WatchedFileHandler',
-            'filename':
-            # FIXME: populate configuration like log path from up in
-            # the C++ layer where we have our ceph config_opts
-            "/tmp/pyfoo.log",
-            'formatter': 'simple'
-        },
-    },
-    'loggers': {
-        'django.request': {
-            'handlers': ['log_file'],
-            # FIXME: populate log level from C++-land configuration
-            'level': "DEBUG",
-            'propagate': True,
-        },
-    }
+
 }
 
 
