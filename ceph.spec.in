@@ -613,7 +613,7 @@ python-cephfs instead.
 # common
 #################################################################################
 %prep
-%autosetup -p1
+%setup -q -n %{name}-%{version}-%{release}
 
 %build
 %if 0%{with cephfs_java}
