@@ -258,6 +258,12 @@ public:
   ~RGWDeleteObj_ObjStore() {}
 };
 
+class  RGWGetCrossDomainPolicy_ObjStore : public RGWGetCrossDomainPolicy {
+public:
+  RGWGetCrossDomainPolicy_ObjStore() = default;
+  ~RGWGetCrossDomainPolicy_ObjStore() = default;
+};
+
 class RGWCopyObj_ObjStore : public RGWCopyObj {
 public:
   RGWCopyObj_ObjStore() {}
