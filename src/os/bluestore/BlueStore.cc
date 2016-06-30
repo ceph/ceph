@@ -1617,7 +1617,6 @@ int BlueStore::_open_bdev(bool create)
   assert(block_size == 1u << block_size_order);
 
   _set_alloc_sizes();
-  max_alloc_size = g_conf->bluestore_max_alloc_size;
   return 0;
 
  fail_close:
