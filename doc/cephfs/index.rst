@@ -8,7 +8,7 @@ Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
 
 .. note:: If you are evaluating CephFS for the first time, please review
-          the guidance for early adopters: :doc:`/cephfs/early-adopters`
+          the best practices for deployment: :doc:`/cephfs/best-practices`
 
 .. ditaa::
             +-----------------------+  +------------------------+
@@ -79,6 +79,7 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+    Deployment best practices <best-practices>
     Administrative commands <administration>
 	POSIX compatibility <posix>
 	Experimental Features <experimental-features>
