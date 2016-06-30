@@ -603,6 +603,7 @@ void MDSDaemon::handle_command(MCommand *m)
     ss << "permission denied";
     r = -EPERM;
   } else if (m->cmd.empty()) {
+    r = -EINVAL;
     ss << "no command given";
     outs = ss.str();
   } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
