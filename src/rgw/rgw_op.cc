@@ -52,12 +52,12 @@ public:
     if (len < 6)
       return false;
 
-    int pos = name.find(MP_META_SUFFIX, len - 5);
-    if (pos <= 0)
+    size_t pos = name.find(MP_META_SUFFIX, len - 5);
+    if (pos == string::npos)
       return false;
 
     pos = name.rfind('.', pos - 1);
-    if (pos < 0)
+    if (pos == string::npos)
       return false;
 
     key = name.substr(0, pos);
@@ -77,8 +77,8 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
 
   *partial_content = false;
 
-  int pos = s.find("bytes=");
-  if (pos < 0) {
+  size_t pos = s.find("bytes=");
+  if (pos == string::npos) {
     pos = 0;
     while (isspace(s[pos]))
       pos++;
@@ -96,7 +96,7 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
     s = s.substr(pos + 6); /* size of("bytes=")  */
   }
   pos = s.find('-');
-  if (pos < 0)
+  if (pos == string::npos)
     goto done;
 
   *partial_content = true;
@@ -1019,8 +1019,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   ldout(s->cct, 2) << "RGWGetObj::handle_user_manifest() prefix=" << prefix << dendl;
 
   string prefix_str = prefix;
-  int pos = prefix_str.find('/');
-  if (pos < 0)
+  size_t pos = prefix_str.find('/');
+  if (pos == string::npos)
     return -EINVAL;
 
   string bucket_name_raw, bucket_name;
@@ -3377,8 +3377,8 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
   string name_str;
   string params_str;
 
-  int pos = url_src.find('?');
-  if (pos < 0) {
+  size_t pos = url_src.find('?');
+  if (pos == string::npos) {
     name_str = url_src;
   } else {
     name_str = url_src.substr(0, pos);
@@ -3395,7 +3395,7 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
   string str(src);
 
   pos = str.find('/');
-  if (pos <= 0)
+  if (pos ==string::npos)
     return false;
 
   bucket_name = str.substr(0, pos);
