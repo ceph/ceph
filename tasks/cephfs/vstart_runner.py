@@ -396,7 +396,7 @@ class LocalFuseMount(FuseMount):
                                                 self.mountpoint
                                             ], wait=False)
 
-        log.info("Mounted client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
+        log.info("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
