@@ -47,6 +47,8 @@
 
 #include "mds/MDSContinuation.h"
 
+#include "InoTable.h"
+
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
@@ -3837,6 +3839,25 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         }
       }
 next:
+      if (1) {
+	      std::stringstream ds;
+	      inode_t& inode = in->inode;
+	      JSONFormatter *f = new JSONFormatter();
+              MDCache *mdcache = in->mdcache;
+
+	      mdcache->mds->inotable->dump(f);
+	      f->flush(ds);
+	      dout(0) << "scrub: inotable: adding ino = " << inode.ino <<dendl;
+	      dout(0) << "scrub: inotable status: before = "<< ds.str() << dendl;
+	      mdcache->mds->inotable->repair_inotable(inode.ino);
+	      mdcache->mds->inotable->save();
+
+	      mdcache->mds->inotable->dump(f);
+	      f->flush(ds);
+	      dout(0) << "scrub: inotable status: after= "<< ds.str() << dendl;
+	      delete f;
+      }
+
       // quit if we're a file, or kick off directory checks otherwise
       // TODO: validate on-disk inode for non-base directories
       if (!in->is_dir()) {
