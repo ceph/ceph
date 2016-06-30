@@ -180,6 +180,10 @@ class Module(MgrModule):
         # class definition
         log = self.log
 
+        # Configure django.request logger
+        logging.getLogger("django.request").handlers = self.log.handlers
+        logging.getLogger("django.request").setLevel(logging.DEBUG)
+
         class APIKeyAuthentication(authentication.BaseAuthentication):
             def authenticate(self, request):
                 if not global_instance().enable_auth:
