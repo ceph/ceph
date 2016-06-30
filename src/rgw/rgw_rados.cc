@@ -7485,6 +7485,7 @@ int RGWRados::open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index
         (RGWBucketInfo::BIShardsHashType)binfo.bucket_index_shard_hash_type, bucket_obj, shard_id);
   if (ret < 0) {
     ldout(cct, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
+    return ret;
   }
   return 0;
 }
@@ -8753,9 +8754,8 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
       append_rand_alpha(store->ctx(), optag, optag, 32);
     }
   }
-  ret = store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags);
 
-  return ret;
+  return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags);
 }
 
 int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint64_t size,
@@ -11232,8 +11232,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.get_loc(), get_zone().log_data, bilog_flags);
-  int r = bs.index_ctx.operate(bs.bucket_obj, &o);
-  return r;
+  return bs.index_ctx.operate(bs.bucket_obj, &o);
 }
 
 int RGWRados::cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag,
