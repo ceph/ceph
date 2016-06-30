@@ -1173,21 +1173,31 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
 
     RGWBulkDelete::acct_path_t path;
 
-    const size_t sep_pos = path_str.find('/');
-    if (string::npos == sep_pos) {
-      url_decode(path_str, path.bucket_name);
-    } else {
-      string bucket_name;
-      url_decode(path_str.substr(0, sep_pos), bucket_name);
+    /* We need to skip all slashes at the beginning in order to preserve
+     * compliance with Swift. */
+    const size_t start_pos = path_str.find_first_not_of('/');
 
-      string obj_name;
-      url_decode(path_str.substr(sep_pos + 1), obj_name);
+    if (string::npos != start_pos) {
+      /* Seperator is the first slash after the leading ones. */
+      const size_t sep_pos = path_str.find('/', start_pos);
 
-      path.bucket_name = bucket_name;
-      path.obj_key = obj_name;
+      if (string::npos != sep_pos) {
+        string bucket_name;
+        url_decode(path_str.substr(start_pos, sep_pos - start_pos), bucket_name);
+
+        string obj_name;
+        url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+        path.bucket_name = bucket_name;
+        path.obj_key = obj_name;
+      } else {
+        /* It's guaranteed here that bucket name is at least one character
+         * long and is different than slash. */
+        url_decode(path_str.substr(start_pos), path.bucket_name);
+      }
+
+      items.push_back(path);
     }
-
-    items.push_back(path);
 
     if (items.size() == MAX_CHUNK_ENTRIES) {
       *is_truncated = true;
