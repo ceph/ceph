@@ -531,22 +531,6 @@ ceph_test_rbd_mirror_random_write_LDADD = \
 	$(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_random_write
 
-ceph_test_rbd_mirror_image_replay_SOURCES = \
-	test/rbd_mirror/image_replay.cc
-ceph_test_rbd_mirror_image_replay_LDADD = \
-	librbd_mirror_internal.la \
-	librbd_internal.la \
-	librbd_api.la \
-	$(LIBRBD_TYPES) \
-	libjournal.la \
-	$(LIBRADOS) $(LIBOSDC) \
-	librados_internal.la \
-	libcls_rbd_client.la \
-	libcls_lock_client.la \
-	libcls_journal_client.la \
-	$(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_test_rbd_mirror_image_replay
-
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
 ceph_test_librbd_fsx_LDADD = \
