@@ -936,7 +936,16 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_remove_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    int r = ictx->operations->snap_remove(snap_name);
+    int r = librbd::snap_remove(ictx, snap_name, 0);
+    tracepoint(librbd, snap_remove_exit, r);
+    return r;
+  }
+
+  int Image::snap_remove2(const char *snap_name, uint32_t flags)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_remove2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name, flags);
+    int r = librbd::snap_remove(ictx, snap_name, flags);
     tracepoint(librbd, snap_remove_exit, r);
     return r;
   }
@@ -2213,6 +2222,15 @@ extern "C" int rbd_snap_remove(rbd_image_t image, const char *snap_name)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_remove_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
   int r = ictx->operations->snap_remove(snap_name);
+  tracepoint(librbd, snap_remove_exit, r);
+  return r;
+}
+
+extern "C" int rbd_snap_remove2(rbd_image_t image, const char *snap_name, uint32_t flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_remove2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name, flags);
+  int r = librbd::snap_remove(ictx, snap_name, flags);
   tracepoint(librbd, snap_remove_exit, r);
   return r;
 }

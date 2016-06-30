@@ -2264,6 +2264,32 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags)
+  {
+    ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
+
+    int r = 0;
+
+retry:
+    r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+
+    C_SaferCond ctx;
+    ictx->operations->snap_remove(snap_name, &ctx);
+
+    r = ctx.wait();
+    if (r < 0) {
+      if (r == -EBUSY && (flags & RBD_SNAP_REMOVE_UNPROTECT)) {
+	r = ictx->operations->snap_unprotect(snap_name);
+	goto retry;
+      }
+      return r;
+    }
+
+    return r;
+  }
+
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
   {
     return cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,

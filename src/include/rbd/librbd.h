@@ -72,6 +72,8 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
+#define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
+
 /**
  * These types used to in set_image_notification to indicate the type of event
  * socket passed in.
