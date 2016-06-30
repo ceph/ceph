@@ -265,7 +265,9 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.info("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[1])
-
+        log.info("No match for {0} {1}: {2}".format(
+            self.daemon_type, self.daemon_id, ps_txt
+            ))
         return None
 
     def wait(self, timeout):
@@ -330,9 +332,7 @@ class LocalFuseMount(FuseMount):
 
     @property
     def _prefix(self):
-        # FuseMount only uses the prefix for running ceph, which in cmake or autotools is in
-        # the present path
-        return "./"
+        return BIN_PREFIX
 
     def _asok_path(self):
         # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
@@ -396,7 +396,7 @@ class LocalFuseMount(FuseMount):
                                                 self.mountpoint
                                             ], wait=False)
 
-        log.info("Mounted client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
+        log.info("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
@@ -844,7 +844,7 @@ def exec_test():
 
         drop_test = False
 
-        if hasattr(fn, 'is_long_running') and getattr(fn, 'is_long_running') is True:
+        if hasattr(fn, 'is_for_teuthology') and getattr(fn, 'is_for_teuthology') is True:
             drop_test = True
             log.warn("Dropping test because long running: ".format(method.id()))
 
@@ -863,7 +863,7 @@ def exec_test():
             if not is_named:
                 victims.append((case, method))
 
-    log.info("Disabling {0} tests because of is_long_running or needs_trimming".format(len(victims)))
+    log.info("Disabling {0} tests because of is_for_teuthology or needs_trimming".format(len(victims)))
     for s, method in victims:
         s._tests.remove(method)
 

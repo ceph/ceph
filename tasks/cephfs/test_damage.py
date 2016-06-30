@@ -5,7 +5,7 @@ import re
 from teuthology.contextutil import MaxWhileTries
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra.run import wait
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 DAMAGED_ON_START = "damaged_on_start"
 DAMAGED_ON_LS = "damaged_on_ls"
@@ -34,7 +34,7 @@ class TestDamage(CephFSTestCase):
         mds_map = self.fs.get_mds_map()
         return rank in mds_map['damaged']
 
-    @long_running #459s
+    @for_teuthology #459s
     def test_object_deletion(self):
         """
         That the MDS has a clean 'damaged' response to loss of any single metadata object

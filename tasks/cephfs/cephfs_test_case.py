@@ -16,11 +16,11 @@ from teuthology.orchestra.run import CommandFailedError
 log = logging.getLogger(__name__)
 
 
-def long_running(f):
+def for_teuthology(f):
     """
-    Decorator that adds an "is_long_running" attribute to the wrapped function
+    Decorator that adds an "is_for_teuthology" attribute to the wrapped function
     """
-    f.is_long_running = True
+    f.is_for_teuthology = True
     return f
 
 
@@ -127,10 +127,15 @@ class CephFSTestCase(unittest.TestCase):
 
         # In case anything is in the OSD blacklist list, clear it out.  This is to avoid
         # the OSD map changing in the background (due to blacklist expiry) while tests run.
-        blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['blacklist']
-        log.info("Removing {0} blacklist entries".format(len(blacklist)))
-        for addr, blacklisted_at in blacklist.items():
-            self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
+        try:
+            self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "clear")
+        except CommandFailedError:
+            # Fallback for older Ceph cluster
+            blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd",
+                                  "dump", "--format=json-pretty"))['blacklist']
+            log.info("Removing {0} blacklist entries".format(len(blacklist)))
+            for addr, blacklisted_at in blacklist.items():
+                self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
 
         # In case some test messed with auth caps, reset them
         client_mount_ids = [m.client_id for m in self.mounts]
