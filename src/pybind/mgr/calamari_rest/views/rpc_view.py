@@ -14,11 +14,8 @@ from rest_framework.views import APIView
 
 from rest_framework.response import Response
 
-from calamari_rest.config import CalamariConfig
-
 from calamari_rest.types import OsdMap, SYNC_OBJECT_STR_TYPE, OSD, OSD_MAP, POOL, CLUSTER, CRUSH_RULE, ServiceId,\
     NotFound, SERVER
-config = CalamariConfig()
 
 from rest import global_instance as rest_plugin
 
