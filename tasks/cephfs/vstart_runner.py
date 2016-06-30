@@ -844,7 +844,7 @@ def exec_test():
 
         drop_test = False
 
-        if hasattr(fn, 'is_long_running') and getattr(fn, 'is_long_running') is True:
+        if hasattr(fn, 'is_for_teuthology') and getattr(fn, 'is_for_teuthology') is True:
             drop_test = True
             log.warn("Dropping test because long running: ".format(method.id()))
 
@@ -863,7 +863,7 @@ def exec_test():
             if not is_named:
                 victims.append((case, method))
 
-    log.info("Disabling {0} tests because of is_long_running or needs_trimming".format(len(victims)))
+    log.info("Disabling {0} tests because of is_for_teuthology or needs_trimming".format(len(victims)))
     for s, method in victims:
         s._tests.remove(method)
 
