@@ -491,16 +491,9 @@ struct bluestore_lextent_t {
     return blob < 0;
   }
 
-  void encode(bufferlist& bl) const {
-    ::encode(blob, bl);
-    ::encode(offset, bl);
-    ::encode(length, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(blob, p);
-    ::decode(offset, p);
-    ::decode(length, p);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_lextent_t*>& o);
 };
