@@ -318,7 +318,7 @@ void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
     int32_t pos = p->first;
     while (--n) {
       ++p;
-      small_encode_signed_varint_lowz((int64_t)p->first - pos, bl);
+      small_encode_varint_lowz((int64_t)p->first - pos, bl);
       p->second.encode(bl);
       pos = p->first;
     }
@@ -335,7 +335,7 @@ void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
     ref_map[pos].decode(p);
     while (--n) {
       int64_t delta;
-      small_decode_signed_varint_lowz(delta, p);
+      small_decode_varint_lowz(delta, p);
       pos += delta;
       ref_map[pos].decode(p);
     }
@@ -721,6 +721,18 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 }
 
 // bluestore_lextent_t
+void bluestore_lextent_t::encode(bufferlist& bl) const
+{
+  small_encode_signed_varint(blob, bl);
+  small_encode_varint_lowz(offset, bl);
+  small_encode_varint_lowz(length, bl);
+}
+void bluestore_lextent_t::decode(bufferlist::iterator& p)
+{
+  small_decode_signed_varint(blob, p);
+  small_decode_varint_lowz(offset, p);
+  small_decode_varint_lowz(length, p);
+}
 
 void bluestore_lextent_t::dump(Formatter *f) const
 {
@@ -742,8 +754,42 @@ ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
 	     << "->" << lb.blob;
 }
 
-
 // bluestore_onode_t
+void small_encode(const map<uint64_t,bluestore_lextent_t>& extents, bufferlist& bl)
+{
+  size_t n = extents.size();
+  small_encode_varint(n, bl);
+  if (n) {
+    auto p = extents.begin();
+    small_encode_varint_lowz(p->first, bl);
+    p->second.encode(bl);
+    uint64_t pos = p->first;
+    while (--n) {
+      ++p;
+      small_encode_varint_lowz((uint64_t)p->first - pos, bl);
+      p->second.encode(bl);
+      pos = p->first;
+    }
+  }
+}
+
+void small_decode(map<uint64_t,bluestore_lextent_t>& extents, bufferlist::iterator& p)
+{
+  size_t n;
+  extents.clear();
+  small_decode_varint(n, p);
+  if (n) {
+    uint64_t pos;
+    small_decode_varint_lowz(pos, p);
+    extents[pos].decode(p);
+    while (--n) {
+      uint64_t delta;
+      small_decode_varint_lowz(delta, p);
+      pos += delta;
+      extents[pos].decode(p);
+    }
+  }
+}
 
 void bluestore_onode_t::encode(bufferlist& bl) const
 {
@@ -751,7 +797,7 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(nid, bl);
   ::encode(size, bl);
   ::encode(attrs, bl);
-  ::encode(extent_map, bl);
+  small_encode(extent_map, bl);
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
@@ -765,7 +811,7 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(nid, p);
   ::decode(size, p);
   ::decode(attrs, p);
-  ::decode(extent_map, p);
+  small_decode(extent_map, p);
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
