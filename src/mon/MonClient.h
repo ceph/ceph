@@ -431,6 +431,22 @@ public:
    */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
 
+  /**
+   * Run a callback within our lock, with a reference
+   * to the MonMap
+   */
+  template<typename Callback, typename...Args>
+  auto with_monmap(Callback&& cb, Args&&...args) ->
+    typename std::enable_if<
+      std::is_void<
+    decltype(cb(const_cast<const MonMap&>(monmap),
+		std::forward<Args>(args)...))>::value,
+      void>::type {
+    Mutex::Locker l(monc_lock);
+    std::forward<Callback>(cb)(const_cast<const MonMap&>(monmap),
+			       std::forward<Args>(args)...);
+  }
+
 private:
   struct version_req_d {
     Context *context;
