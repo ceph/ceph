@@ -356,9 +356,16 @@ int main(int argc, const char **argv)
   }
 
   if (apis_map.count("swift") > 0) {
+    RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
+
+    if (! g_conf->rgw_cross_domain_policy.empty()) {
+      swift_resource->register_resource("crossdomain.xml",
+                          set_logging(new RGWRESTMgr_SWIFT_CrossDomain));
+    }
+
     if (! swift_at_root) {
       rest.register_resource(g_conf->rgw_swift_url_prefix,
-                             set_logging(new RGWRESTMgr_SWIFT));
+                          set_logging(swift_resource));
     } else {
       if (store->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
@@ -366,13 +373,14 @@ int main(int argc, const char **argv)
              << " with S3 API enabled!" << dendl;
       }
 
-      rest.register_default_mgr(set_logging(new RGWRESTMgr_SWIFT));
+      rest.register_default_mgr(set_logging(swift_resource));
     }
   }
 
-  if (apis_map.count("swift_auth") > 0)
+  if (apis_map.count("swift_auth") > 0) {
     rest.register_resource(g_conf->rgw_swift_auth_entry,
                set_logging(new RGWRESTMgr_SWIFT_Auth));
+  }
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;

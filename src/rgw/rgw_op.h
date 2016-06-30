@@ -1310,6 +1310,33 @@ public:
 };
 
 
+class RGWGetCrossDomainPolicy : public RGWOp {
+public:
+  RGWGetCrossDomainPolicy() = default;
+  ~RGWGetCrossDomainPolicy() = default;
+
+  int verify_permission() override {
+    return 0;
+  }
+
+  void execute() override {
+    op_ret = 0;
+  }
+
+  const string name() override {
+    return "get_crossdomain_policy";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_GET_CROSS_DOMAIN_POLICY;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_READ;
+  }
+};
+
+
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   int max_to_delete;
