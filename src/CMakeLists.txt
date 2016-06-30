@@ -1327,8 +1327,11 @@ if(${WITH_RBD})
     ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
   install(TARGETS rbd rbd-nbd rbd-mirror DESTINATION bin)
-  install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
-  install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/rbdmap DESTINATION bin)
+  install(PROGRAMS
+    ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer
+    ${CMAKE_SOURCE_DIR}/src/rbd-replay-many
+    ${CMAKE_SOURCE_DIR}/src/rbdmap
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(${WITH_RBD})
 

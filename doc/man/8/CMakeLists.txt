@@ -61,6 +61,7 @@ if(WITH_RBD)
 	ceph-rbdnamer.rst
 	rbd-mirror.rst
 	rbd-nbd.rst
+	rbd-replay-many.rst
 	rbd-replay-prep.rst
 	rbd-replay.rst
 	rbdmap.rst
