@@ -1,31 +1,37 @@
 
-CephFS for early adopters
-=========================
+CephFS best practices
+=====================
 
-This pages provides guidance for early adoption of CephFS by users
-with an appetite for adventure.  While work is ongoing to build the
-scrubbing and disaster recovery tools needed to run CephFS in demanding
-production environments, it is already useful for community members to
-try CephFS and provide bug reports and feedback.
+This guide provides recommendations for best results when deploying CephFS.
 
-Setup instructions
-==================
+For the actual configuration guide for CephFS, please see the instructions
+at :doc:`/cephfs/index`.
 
-Please see the instructions at :doc:`/cephfs/index`.
+Which Ceph version?
+===================
+
+Use at least the Jewel (v10.2.0) release of Ceph.  This is the first
+release to include stable CephFS code and fsck/repair tools.  Make sure
+you are using the latest point release to get bug fixes.
+
+Note that Ceph releases do not include a kernel, this is versioned
+and released separately.  See below for guidance of choosing an
+appropriate kernel version if you are using the kernel client
+for CephFS.
 
 Most stable configuration
 =========================
 
-For the best chance of a happy healthy filesystem, use a **single active MDS** 
-and **do not use snapshots**.  Both of these are the default:
+Some features in CephFS are still experimental.  See
+:doc:`/cephfs/experimental-features` for guidance on these.
 
-* Snapshots are disabled by default, unless they are enabled explicitly by
-  an administrator using the ``allow_new_snaps`` setting.
-* Ceph will use a single active MDS unless an administrator explicitly sets
-  ``max_mds`` to a value greater than 1.  Note that creating additional
-  MDS daemons (e.g. with ``ceph-deploy mds create``) is okay, as these will
-  by default simply become standbys.  It is also fairly safe to enable
-  standby-replay mode.
+For the best chance of a happy healthy filesystem, use a **single active MDS** 
+and **do not use snapshots**.  Both of these are the default.
+
+Note that creating multiple MDS daemons is fine, as these will simply be
+used as standbys.  However, for best stability you should avoid
+adjusting ``max_mds`` upwards, as this would cause multiple
+daemons to be active at once.
 
 Which client?
 =============
