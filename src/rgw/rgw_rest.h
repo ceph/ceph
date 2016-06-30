@@ -264,6 +264,12 @@ public:
   ~RGWGetCrossDomainPolicy_ObjStore() = default;
 };
 
+class  RGWGetHealthCheck_ObjStore : public RGWGetHealthCheck {
+public:
+  RGWGetHealthCheck_ObjStore() = default;
+  ~RGWGetHealthCheck_ObjStore() = default;
+};
+
 class RGWCopyObj_ObjStore : public RGWCopyObj {
 public:
   RGWCopyObj_ObjStore() {}

@@ -1348,7 +1348,6 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-
 void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
@@ -1365,6 +1364,17 @@ void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
      << R"(</cross-domain-policy>)";
 
   STREAM_IO(s)->write(ss.str().c_str(), ss.str().length());
+}
+
+void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+
+  if (op_ret) {
+    STREAM_IO(s)->print("DISABLED BY FILE");
+  }
 }
 
 RGWOp *RGWHandler_REST_Service_SWIFT::op_get()
