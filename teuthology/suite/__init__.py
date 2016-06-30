@@ -5,7 +5,6 @@
 import logging
 import os
 import time
-from tempfile import NamedTemporaryFile
 
 import teuthology
 from ..config import config, YamlConfig
@@ -46,46 +45,28 @@ def process_args(args):
 
 
 def main(args):
-    fn = process_args(args)
-    if fn.verbose:
+    conf = process_args(args)
+    if conf.verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
-    if not fn.machine_type or fn.machine_type == 'None':
+    if not conf.machine_type or conf.machine_type == 'None':
         schedule_fail("Must specify a machine_type")
-    elif 'multi' in fn.machine_type:
+    elif 'multi' in conf.machine_type:
         schedule_fail("'multi' is not a valid machine_type. " +
                       "Maybe you want 'plana,mira,burnupi' or similar")
 
-    if fn.email:
-        config.results_email = fn.email
-    if args['--archive-upload']:
-        config.archive_upload = args['--archive-upload']
-        log.info('Will upload archives to ' + args['--archive-upload'])
+    if conf.email:
+        config.results_email = conf.email
+    if conf.archive_upload:
+        config.archive_upload = conf.archive_upload
+        log.info('Will upload archives to ' + conf.archive_upload)
 
-    run = Run(fn)
-    job_config = run.base_config
+    run = Run(conf)
     name = run.name
-
-    job_config.name = name
-    job_config.priority = fn.priority
-    if config.results_email:
-        job_config.email = config.results_email
-    if fn.owner:
-        job_config.owner = fn.owner
-
-    if fn.dry_run:
-        log.debug("Base job config:\n%s" % job_config)
-
-    with NamedTemporaryFile(prefix='schedule_suite_',
-                            delete=False) as base_yaml:
-        base_yaml.write(str(job_config))
-        base_yaml_path = base_yaml.name
-    run.base_yaml_paths.insert(0, base_yaml_path)
     run.prepare_and_schedule()
-    os.remove(base_yaml_path)
-    if not fn.dry_run and args['--wait']:
+    if not conf.dry_run and conf.wait:
         return wait(name, config.max_job_time,
-                    args['--archive-upload-url'])
+                    conf.archive_upload_url)
 
 
 class WaitException(Exception):
