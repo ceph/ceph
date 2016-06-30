@@ -2273,6 +2273,7 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
 
 void buffer::list::prepare_iov(std::vector<iovec> *piov) const
 {
+  assert(_buffers.size() <= IOV_MAX);
   piov->resize(_buffers.size());
   unsigned n = 0;
   for (std::list<buffer::ptr>::const_iterator p = _buffers.begin();
