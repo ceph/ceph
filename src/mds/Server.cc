@@ -2155,6 +2155,23 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
   return true;
 }
 
+/**
+ * check whether fragment has reached maximum size
+ *
+ */
+bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
+{
+  const auto size = in->get_frag_size();
+  if (size >= g_conf->mds_bal_fragment_size_max) {
+    dout(10) << "fragment " << *in << " size exceeds " << g_conf->mds_bal_fragment_size_max << " (ENOSPC)" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return false;
+  }
+
+  return true;
+}
+
+
 /** validate_dentry_dir
  *
  * verify that the dir exists and would own the dname.
@@ -2239,14 +2256,19 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 {
   CDentry *straydn = mdr->straydn;
   if (straydn) {
-    string name;
-    in->name_stray_dentry(name);
-    if (straydn->get_name() == name)
+    string straydname;
+    in->name_stray_dentry(straydname);
+    if (straydn->get_name() == straydname)
       return straydn;
 
     assert(!mdr->done_locking);
     mdr->unpin(straydn);
   }
+
+  CDir *straydir = mdcache->get_stray_dir(in);
+
+  if (!check_fragment_space(mdr, straydir))
+    return NULL;
 
   straydn = mdcache->get_or_create_stray_dentry(in);
   mdr->straydn = straydn;
@@ -3185,12 +3207,16 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
-  CInode *diri = dn->get_dir()->get_inode();
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   if (!check_access(mdr, diri, access))
+    return;
+
+  if (!check_fragment_space(mdr, dir))
     return;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -4621,6 +4647,9 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
+  if (!check_fragment_space(mdr, dn->get_dir()))
+    return;
+
   unsigned mode = req->head.args.mknod.mode;
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
@@ -4704,13 +4733,17 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
-  CInode *diri = dn->get_dir()->get_inode();
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   // mkdir check access
   if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
+  if (!check_fragment_space(mdr, dir))
     return;
 
   // new inode
@@ -4784,13 +4817,17 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
-  CInode *diri = dn->get_dir()->get_inode();
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   if (!check_access(mdr, diri, MAY_WRITE))
    return;
+
+  if (!check_fragment_space(mdr, dir))
+    return;
 
   unsigned mode = S_IFLNK | 0777;
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode);
@@ -4863,6 +4900,9 @@ void Server::handle_client_link(MDRequestRef& mdr)
     return;
 
   if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_fragment_space(mdr, dir))
     return;
 
   // go!
@@ -5436,6 +5476,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   CDentry *straydn = NULL;
   if (dnl->is_primary()) {
     straydn = prepare_stray_dentry(mdr, dnl->get_inode());
+    if (!straydn)
+      return;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
@@ -6216,6 +6258,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   CDentry *straydn = NULL;
   if (destdnl->is_primary() && !linkmerge) {
     straydn = prepare_stray_dentry(mdr, destdnl->get_inode());
+    if (!straydn)
+      return;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
@@ -6324,6 +6368,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     return;
 
   if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_fragment_space(mdr, destdn->get_dir()))
     return;
 
   if (!check_access(mdr, srci, MAY_WRITE))
