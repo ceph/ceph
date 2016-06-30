@@ -195,8 +195,7 @@ void TrimRequest<I>::send_copyup_objects() {
 
     snapc = image_ctx.snapc;
     has_snapshots = !image_ctx.snaps.empty();
-    int r = image_ctx.get_parent_overlap(image_ctx.get_copyup_snap_id(),
-                                           &parent_overlap);
+    int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
     assert(r == 0);
   }
 

@@ -662,17 +662,6 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  uint64_t ImageCtx::get_copyup_snap_id() const
-  {
-    assert(snap_lock.is_locked());
-    // copyup requires the largest possible parent overlap,
-    // which is always the oldest snapshot (if any).
-    if (!snaps.empty()) {
-      return snaps.back();
-    }
-    return CEPH_NOSNAP;
-  }
-
   void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
 				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish,
