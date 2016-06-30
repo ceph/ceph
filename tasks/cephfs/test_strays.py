@@ -1,8 +1,9 @@
 import json
+import time
 import logging
 from textwrap import dedent
-import time
 import gevent
+from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
 
 log = logging.getLogger(__name__)
@@ -682,3 +683,114 @@ class TestStrays(CephFSTestCase):
 
         # can't use self.fs.data_objects_absent here, it does not support fancy layout
         self.await_data_pool_empty()
+
+    def test_dirfrag_limit(self):
+        """
+        That the directory fragment size cannot exceed mds_bal_fragment_size_max (using a limit of 50 in all configurations).
+
+        That fragmentation (forced) will allow more entries to be created.
+
+        That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
+        """
+
+        self.fs.mon_manager.raw_cluster_cmd("mds", "set", "allow_dirfrags", "true", "--yes-i-really-mean-it")
+
+        LOW_LIMIT = 50
+        for mds in self.fs.get_daemon_names():
+            self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
+
+        try:
+            self.mount_a.run_python(dedent("""
+                import os
+                path = os.path.join("{path}", "subdir")
+                os.mkdir(path)
+                for n in range(0, {file_count}):
+                    open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+                """.format(
+            path=self.mount_a.mountpoint,
+            file_count=LOW_LIMIT+1
+            )))
+        except CommandFailedError:
+            pass # ENOSPAC
+        else:
+            raise RuntimeError("fragment size exceeded")
+
+        # Now test that we can go beyond the limit if we fragment the directory
+
+        self.mount_a.run_python(dedent("""
+            import os
+            path = os.path.join("{path}", "subdir2")
+            os.mkdir(path)
+            for n in range(0, {file_count}):
+                open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+            """.format(
+        path=self.mount_a.mountpoint,
+        file_count=LOW_LIMIT
+        )))
+
+        # Ensure that subdir2 is fragmented
+        mds_id = self.fs.get_active_names()[0]
+        self.fs.mds_asok(["dirfrag", "split", "/subdir2", "0/0", "1"], mds_id)
+
+        # remount+flush (release client caps)
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(["flush", "journal"], mds_id)
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+
+        # Create 50% more files than the current fragment limit
+        self.mount_a.run_python(dedent("""
+            import os
+            path = os.path.join("{path}", "subdir2")
+            for n in range({file_count}, ({file_count}*3)//2):
+                open(os.path.join(path, "%s" % n), 'w').write("%s" % n)
+            """.format(
+        path=self.mount_a.mountpoint,
+        file_count=LOW_LIMIT
+        )))
+
+        # Now test the stray directory size is limited and recovers
+        strays_before = self.get_mdc_stat("strays_created")
+        try:
+            self.mount_a.run_python(dedent("""
+                import os
+                path = os.path.join("{path}", "subdir3")
+                os.mkdir(path)
+                for n in range({file_count}):
+                    fpath = os.path.join(path, "%s" % n)
+                    f = open(fpath, 'w')
+                    f.write("%s" % n)
+                    f.close()
+                    os.unlink(fpath)
+                """.format(
+            path=self.mount_a.mountpoint,
+            file_count=LOW_LIMIT*10 # 10 stray directories, should collide before this count
+            )))
+        except CommandFailedError:
+            pass # ENOSPAC
+        else:
+            raise RuntimeError("fragment size exceeded")
+
+        strays_after = self.get_mdc_stat("strays_created")
+        self.assertGreaterEqual(strays_after-strays_before, LOW_LIMIT)
+
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("strays_purged"),
+            strays_after,
+            timeout=600
+        )
+
+        self.mount_a.run_python(dedent("""
+            import os
+            path = os.path.join("{path}", "subdir4")
+            os.mkdir(path)
+            for n in range({file_count}):
+                fpath = os.path.join(path, "%s" % n)
+                f = open(fpath, 'w')
+                f.write("%s" % n)
+                f.close()
+                os.unlink(fpath)
+            """.format(
+        path=self.mount_a.mountpoint,
+        file_count=LOW_LIMIT
+        )))
