@@ -398,3 +398,9 @@ add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
 endif(WITH_MANPAGE)
+
+option(WITH_SYSTEMD "install systemd target and service files" OFF)
+if(WITH_SYSTEMD)
+  add_subdirectory(systemd)
+endif()
+
