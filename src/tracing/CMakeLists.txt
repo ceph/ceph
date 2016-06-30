@@ -48,5 +48,5 @@ add_tracing_library(rados_tp librados.tp 2.0.0)
 add_tracing_library(rbd_tp librbd.tp 1.0.0)
 add_tracing_library(os_tp objectstore.tp 1.0.0)
 
-install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION lib)
+install(TARGETS rados_tp osd_tp rbd_tp os_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
