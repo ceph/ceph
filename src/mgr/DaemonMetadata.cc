@@ -19,7 +19,9 @@
 
 void DaemonMetadataIndex::insert(DaemonMetadataPtr dm)
 {
-  if (exists(dm->key)) {
+  Mutex::Locker l(lock);
+
+  if (all.count(dm->key)) {
     _erase(dm->key);
   }
 
@@ -43,6 +45,8 @@ void DaemonMetadataIndex::_erase(DaemonKey dmk)
 
 DaemonMetadataCollection DaemonMetadataIndex::get_by_type(uint8_t type) const
 {
+  Mutex::Locker l(lock);
+
   DaemonMetadataCollection result;
 
   for (const auto &i : all) {
@@ -56,6 +60,8 @@ DaemonMetadataCollection DaemonMetadataIndex::get_by_type(uint8_t type) const
 
 DaemonMetadataCollection DaemonMetadataIndex::get_by_server(const std::string &hostname) const
 {
+  Mutex::Locker l(lock);
+
   if (by_server.count(hostname)) {
     return by_server.at(hostname);
   } else {
@@ -65,11 +71,15 @@ DaemonMetadataCollection DaemonMetadataIndex::get_by_server(const std::string &h
 
 bool DaemonMetadataIndex::exists(const DaemonKey &key) const
 {
+  Mutex::Locker l(lock);
+
   return all.count(key) > 0;
 }
 
 DaemonMetadataPtr DaemonMetadataIndex::get(const DaemonKey &key)
 {
+  Mutex::Locker l(lock);
+
   return all.at(key);
 }
 

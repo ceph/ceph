@@ -108,7 +108,7 @@ class DaemonMetadataIndex
 
   std::set<DaemonKey> updating;
 
-  Mutex lock;
+  mutable Mutex lock;
 
   public:
 
