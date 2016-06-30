@@ -16,11 +16,11 @@ from teuthology.orchestra.run import CommandFailedError
 log = logging.getLogger(__name__)
 
 
-def long_running(f):
+def for_teuthology(f):
     """
-    Decorator that adds an "is_long_running" attribute to the wrapped function
+    Decorator that adds an "is_for_teuthology" attribute to the wrapped function
     """
-    f.is_long_running = True
+    f.is_for_teuthology = True
     return f
 
 

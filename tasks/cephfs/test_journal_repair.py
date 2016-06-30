@@ -10,7 +10,7 @@ import time
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
-from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 from tasks.workunit import task as workunit
 
 log = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ class TestJournalRepair(CephFSTestCase):
         # Check that we can do metadata ops in the recovered directory
         self.mount_a.run_shell(["touch", "subdir/subsubdir/subsubdirfile"])
 
-    @long_running # 308s
+    @for_teuthology # 308s
     def test_reset(self):
         """
         That after forcibly modifying the backing store, we can get back into
@@ -396,7 +396,7 @@ class TestJournalRepair(CephFSTestCase):
                    "result": 0}}
         )
 
-    @long_running  # Hack: "long running" because .sh doesn't work outside teuth
+    @for_teuthology  # Hack: "for_teuthology" because .sh doesn't work outside teuth
     def test_journal_smoke(self):
         workunit(self.ctx, {
             'clients': {
