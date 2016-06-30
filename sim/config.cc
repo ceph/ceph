@@ -122,32 +122,32 @@ int crimson::qos_simulation::parse_config_file(const std::string &fname, sim_con
   }
 
   std::string val;
-  if (!cf.read("global", "server_count", val))
-    g_conf.server_count = std::stoul(val);
-  if (!cf.read("global", "client_count", val))
-    g_conf.client_count = std::stoul(val);
-  if (!cf.read("global", "server_types", val))
-    g_conf.server_types = std::stoul(val);
-  if (!cf.read("global", "client_types", val))
-    g_conf.client_types = std::stoul(val);
+  if (!cf.read("global", "server_groups", val))
+    g_conf.server_groups = std::stoul(val);
+  if (!cf.read("global", "client_groups", val))
+    g_conf.client_groups = std::stoul(val);
   if (!cf.read("global", "server_random_selection", val))
     g_conf.server_random_selection = stobool(val);
   if (!cf.read("global", "server_soft_limit", val))
     g_conf.server_soft_limit = stobool(val);
 
-  for (uint i = 0; i < g_conf.server_types; i++) {
-    srv_type_t st;
+  for (uint i = 0; i < g_conf.server_groups; i++) {
+    srv_group_t st;
     std::string section = "server." + std::to_string(i);
+    if (!cf.read(section, "server_count", val))
+      st.server_count = std::stoul(val);
     if (!cf.read(section, "server_iops", val))
       st.server_iops = std::stoul(val);
     if (!cf.read(section, "server_threads", val))
       st.server_threads = std::stoul(val);
-    g_conf.srv_type.push_back(st);
+    g_conf.srv_group.push_back(st);
   }
 
-  for (uint i = 0; i < g_conf.client_types; i++) {
-    cli_type_t ct;
+  for (uint i = 0; i < g_conf.client_groups; i++) {
+    cli_group_t ct;
     std::string section = "client." + std::to_string(i);
+    if (!cf.read(section, "client_count", val))
+      ct.client_count = std::stoul(val);
     if (!cf.read(section, "client_wait", val))
       ct.client_wait = std::chrono::seconds(std::stoul(val));
     if (!cf.read(section, "client_total_ops", val))
@@ -164,7 +164,7 @@ int crimson::qos_simulation::parse_config_file(const std::string &fname, sim_con
       ct.client_limit = std::stod(val);
     if (!cf.read(section, "client_weight", val))
       ct.client_weight = std::stod(val);
-    g_conf.cli_type.push_back(ct);
+    g_conf.cli_group.push_back(ct);
   }
 
   return 0;
