@@ -917,6 +917,7 @@ if(HAVE_LIBAIO)
   install(TARGETS ceph-bluefs-tool
     DESTINATION bin)
 endif()
+add_dependencies(os compressor_plugins)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
