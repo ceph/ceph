@@ -29,3 +29,6 @@
 [submodule "src/xxHash"]
 	path = src/xxHash
 	url = https://github.com/ceph/xxHash.git
+[submodule "src/isa-l"]
+	path = src/isa-l
+	url = https://github.com/ceph/isa-l
