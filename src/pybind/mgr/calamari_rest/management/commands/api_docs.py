@@ -1,3 +1,18 @@
+#
+# If Django is installed locally, run the following command from the top of
+# the ceph source tree:
+#
+#   PYTHONPATH=src/pybind/mgr \
+#   DJANGO_SETTINGS_MODULE=calamari_rest.settings \
+#   CALAMARI_CONFIG=src/pybind/mgr/calamari.conf \
+#       django-admin api_docs
+#
+# This will create resources.rst (the API docs), and rest.log (which will
+# probably just be empty).
+#
+# TODO: Add the above to a makefile, so the docs land somewhere sane.
+#
+
 from collections import defaultdict
 import json
 from optparse import make_option
@@ -12,8 +27,15 @@ from django.core.urlresolvers import RegexURLPattern, RegexURLResolver
 import sys
 import codecs
 
-from calamari_rest.serializers.v2 import ValidatingSerializer
+class ceph_state:
+    pass
 
+sys.modules["ceph_state"] = ceph_state
+
+# Needed to avoid weird import loops
+from rest import global_instance
+
+from calamari_rest.serializers.v2 import ValidatingSerializer
 
 GENERATED_PREFIX = "."
 
@@ -28,7 +50,7 @@ old_as_view = rest_framework.viewsets.ViewSetMixin.as_view
 
 @classmethod
 def as_view(cls, actions=None, **initkwargs):
-    view = old_as_view.__func__(cls)
+    view = old_as_view.__func__(cls, actions, **initkwargs)
     view._actions = actions
     return view
 
@@ -193,7 +215,7 @@ class ApiIntrospector(object):
                             continue
                         view_to_url_patterns[view_cls].append(url_pattern)
 
-        self.prefix = _find_prefix("calamari_web.urls", url_module)
+        self.prefix = _find_prefix("calamari_rest.urls", url_module)
         parse_urls(importlib.import_module(url_module).urlpatterns)
 
         self.view_to_url_patterns = sorted(view_to_url_patterns.items(), cmp=lambda x, y: cmp(x[0].__name__, y[0].__name__))
@@ -208,7 +230,7 @@ class ApiIntrospector(object):
         """
         Output RsT for one API view
         """
-        name = view().metadata(None)['name']
+        name = view().get_view_name()
 
         if view.__doc__:
             view_help_text = view.__doc__
@@ -261,7 +283,7 @@ class ApiIntrospector(object):
                     field_help_text = ""
                 field_table.append(
                     [field_name,
-                     field.type_label,
+                     field.__class__.__name__,
                      str(field.read_only),
                      create,
                      modify,
@@ -286,7 +308,7 @@ class ApiIntrospector(object):
 
                 row = [_pretty_url(self.prefix, url_pattern)]
 
-                view_name = view().metadata(None)['name']
+                view_name = view().get_view_name()
                 row.append(
                     u":ref:`{0} <{1}>`".format(view_name.replace(" ", unichr(0x00a0)), view.__name__)
                 )
@@ -368,14 +390,15 @@ class Command(NoArgsCommand):
     def handle_noargs(self, list_urls, **options):
         introspector = ApiIntrospector("calamari_rest.urls.v2")
         if list_urls:
+            # TODO: this just prints an empty array (not sure why)
             print json.dumps(introspector.get_url_list())
         else:
             try:
                 try:
                     examples = json.load(open(EXAMPLES_FILE, 'r'))
                 except IOError:
-                    print >>sys.stderr, "Examples data '%s' not found, have you run test_rest_api?" % EXAMPLES_FILE
-                    return
+                    examples = {}
+                    print >>sys.stderr, "Examples data '%s' not found, no examples will be generated" % EXAMPLES_FILE
 
                 introspector.write_docs(examples)
             except:
