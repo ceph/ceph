@@ -9,6 +9,7 @@
 
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
+#include <boost/utility/in_place_factory.hpp>
 
 #include "common/ceph_json.h"
 #include "common/utf8.h"
@@ -2328,86 +2329,40 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, rgw_obj *pobj, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
 {
   *again = false;
 
   *phandle = NULL;
 
-  bufferlist in_bl;
-
-  // compression stuff
-  if ((ofs > 0 && compressed) ||                                // if previous part was compressed
-      (ofs == 0 && compression_enabled)) {   // or it's the first part and flag is set
-    ldout(store->ctx(), 10) << "Compression for rgw is enabled, compress part " << bl.length() << dendl;
-    CompressorRef compressor = Compressor::create(store->ctx(), store->ctx()->_conf->rgw_compression_type);
-    if (!compressor.get()) {
-      if (ofs > 0 && compressed) {
-        lderr(store->ctx()) << "Cannot load compressor of type " << store->ctx()->_conf->rgw_compression_type
-                            << " for next part, compression process failed" << dendl;
-        return -EIO;
-      }
-      // if compressor isn't available - just do not use it with log warning?
-      ldout(store->ctx(), 5) << "Cannot load compressor of type " << store->ctx()->_conf->rgw_compression_type 
-                       << "for rgw, check rgw_compression_type config option" << dendl;
-      compressed = false;
-      in_bl.claim(bl);
-    } else {
-      int cr = compressor->compress(bl, in_bl);
-      if (cr < 0) {
-        if (ofs > 0 && compressed) {
-          lderr(store->ctx()) << "Compression failed with exit code " << cr
-                              << " for next part, compression process failed" << dendl;
-          return -EIO;
-        }
-        ldout(store->ctx(), 5) << "Compression failed with exit code " << cr << dendl;
-        compressed = false;
-        in_bl.claim(bl);
-      } else {
-        compressed = true;
-  
-        compression_block newbl;
-        int bs = blocks.size();
-        newbl.old_ofs = ofs;
-        newbl.new_ofs = bs > 0 ? blocks[bs-1].len + blocks[bs-1].new_ofs : 0;
-        newbl.len = in_bl.length();
-        blocks.push_back(newbl);
-      }
-    }
-  } else {
-    compressed = false;
-    in_bl.claim(bl);
-  }
-  // end of compression stuff
-
   if (extra_data_len) {
-    size_t extra_len = in_bl.length();
+    size_t extra_len = bl.length();
     if (extra_len > extra_data_len)
       extra_len = extra_data_len;
 
     bufferlist extra;
-    in_bl.splice(0, extra_len, &extra);
+    bl.splice(0, extra_len, &extra);
     extra_data_bl.append(extra);
 
     extra_data_len -= extra_len;
-    if (in_bl.length() == 0) {
+    if (bl.length() == 0) {
       return 0;
     }
   }
 
   uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
-  pending_data_bl.claim_append(in_bl);
+  pending_data_bl.claim_append(bl);
   if (pending_data_bl.length() < max_write_size)
     return 0;
 
-  pending_data_bl.splice(0, max_write_size, &in_bl);
+  pending_data_bl.splice(0, max_write_size, &bl);
 
   /* do we have enough data pending accumulated that needs to be written? */
   *again = (pending_data_bl.length() >= max_chunk_size);
 
   if (!data_ofs && !immutable_head()) {
-    first_chunk.claim(in_bl);
+    first_chunk.claim(bl);
     obj_len = (uint64_t)first_chunk.length();
     int r = prepare_next_part(obj_len);
     if (r < 0) {
@@ -2417,13 +2372,12 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
     return 0;
   }
   off_t write_ofs = data_ofs;
-  data_ofs = write_ofs + in_bl.length();
+  data_ofs = write_ofs + bl.length();
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
-  int ret = write_data(in_bl, write_ofs, phandle, pobj, exclusive);
+  int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
-    in_bl.clear();
     bl.clear();
   }
   return ret;
@@ -5074,9 +5028,10 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       bufferlist attr;
       map<string, bufferlist> attrset;
       int y = store->raw_obj_stat(cs_obj, NULL, NULL, NULL, &attrset, NULL, NULL);
-      if (!y && attrset.find(RGW_ATTR_COMPRESSION) != attrset.end()) {
+      map<string, bufferlist>::iterator cmp = attrset.find(RGW_ATTR_COMPRESSION);
+      if (!y && cmp != attrset.end()) {
         RGWCompressionInfo cs_info;
-        bufferlist::iterator bliter = attrset[RGW_ATTR_COMPRESSION].begin();
+        bufferlist::iterator bliter = cmp->second.begin();
         try {
           ::decode(cs_info, bliter);
         } catch (buffer::error& err) {
@@ -7072,8 +7027,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
   attrs.erase(RGW_ATTR_SOURCE_ZONE);
-  if (src_attrs.find(RGW_ATTR_COMPRESSION) != src_attrs.end())
-    attrs[RGW_ATTR_COMPRESSION] = src_attrs[RGW_ATTR_COMPRESSION];
+  map<string, bufferlist>::iterator cmp = src_attrs.find(RGW_ATTR_COMPRESSION);
+  if (cmp != src_attrs.end())
+    attrs[RGW_ATTR_COMPRESSION] = cmp->second;
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -12491,8 +12447,9 @@ int RGWRados::delete_obj_aio(rgw_obj& obj, rgw_bucket& bucket,
 }
 
 int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info) {
-  if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
-    bufferlist::iterator bliter = attrs[RGW_ATTR_COMPRESSION].begin();
+  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_COMPRESSION);
+  if (value != attrs.end()) {
+    bufferlist::iterator bliter = value->second.begin();
     try {
       ::decode(cs_info, bliter);
     } catch (buffer::error& err) {
@@ -12509,4 +12466,17 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
   }
 }
 
-
+int rgw_bucket_compression_info_from_attrset(map<string, bufferlist>& attrs, RGWBucketCompressionInfo& cs_info)
+{
+  map<string, bufferlist>::iterator cmp = attrs.find(RGW_ATTR_COMPRESSION);
+  if (cmp != attrs.end()) {
+    try {
+      ::decode(cs_info, cmp->second);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+  } else {
+    return 1;
+  }
+  return 0;
+}

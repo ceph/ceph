@@ -6,6 +6,9 @@
 
 #include <sstream>
 
+#include <boost/optional.hpp>
+#include <boost/utility/in_place_factory.hpp>
+
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/mime.h"
@@ -27,9 +30,8 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
-#include "rgw_lc.h"
-#include "rgw_lc_s3.h"
 #include "rgw_client_io.h"
+#include "rgw_compression.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -768,6 +770,16 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   return true;
 }
 
+int RGWOp::update_compressed_bucket_size(uint64_t obj_size, RGWBucketCompressionInfo& bucket_size)
+{
+  bucket_size.orig_size += obj_size;
+  bufferlist bs;
+  ::encode(bucket_size, bs);
+  s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
+  return store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                         &s->bucket_attrs);
+}
+
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
                                        const RGWObjEnt& ent,
                                        RGWAccessControlPolicy * const bucket_policy,
@@ -1244,62 +1256,6 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
     gc_invalidate_time = start_time;
     gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
   }
-  // compression stuff
-  if (need_decompress) {
-    ldout(s->cct, 10) << "Compression for rgw is enabled, decompress part " << bl_len << dendl;
-
-    CompressorRef compressor = Compressor::create(s->cct, cs_info.compression_type);
-    if (!compressor.get()) {
-      // if compressor isn't available - error, because cannot return decompressed data?
-      lderr(s->cct) << "Cannot load compressor of type " << cs_info.compression_type 
-                       << "for rgw, check rgw_compression_type config option" << dendl;
-      return -EIO;
-    } else {
-      bufferlist out_bl, in_bl;
-      bl_ofs = 0;
-      if (waiting.length() != 0) {
-        in_bl.append(waiting);
-        in_bl.append(bl);        
-        waiting.clear();
-      } else {
-        in_bl.claim(bl);
-      }
-      bl_len = in_bl.length();
-      
-      while (first_block <= last_block) {
-        bufferlist tmp, tmp_out;
-        int ofs_in_bl = cs_info.blocks[first_block].new_ofs - cur_ofs;
-        if (ofs_in_bl + cs_info.blocks[first_block].len > bl_len) {
-          // not complete block, put it to waiting
-          int tail = bl_len - ofs_in_bl;
-          in_bl.copy(ofs_in_bl, tail, waiting);
-          cur_ofs -= tail;
-          break;
-        }
-        in_bl.copy(ofs_in_bl, cs_info.blocks[first_block].len, tmp);
-        int cr = compressor->decompress(tmp, tmp_out);
-        if (cr < 0) {
-          lderr(s->cct) << "Compression failed with exit code " << cr << dendl;
-          return cr;
-        }
-        if (first_block == last_block && partial_content)
-          out_bl.append(tmp_out.c_str(), q_len);
-        else
-          out_bl.append(tmp_out);
-        first_block++;
-      }
-
-      if (first_data && partial_content && out_bl.length() != 0)
-        bl_ofs =  q_ofs;
-
-      if (first_data && out_bl.length() != 0)
-        first_data = false;
-
-      cur_ofs += bl_len;
-      return send_response_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
-    }
-  }
-  // end of compression stuff
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
@@ -1362,7 +1318,8 @@ void RGWGetObj::execute()
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
   RGWGetObj_CB cb(this);
-  RGWGetDataCB* decrypt = nullptr;
+  RGWGetDataCB* filter = (RGWGetDataCB*)&cb;
+  boost::optional<RGWGetObj_Decompress> decompress;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
@@ -1426,7 +1383,7 @@ void RGWGetObj::execute()
         end = cs_info.orig_size - 1;
       }
 
-      if (ofs >= cs_info.orig_size) {
+      if ((unsigned)ofs >= cs_info.orig_size) {
         lderr(s->cct) << "ERROR: begin of the bytes range more than object size (" << cs_info.orig_size
                          << ")" <<  dendl;
         op_ret = -ERANGE;
@@ -1434,7 +1391,7 @@ void RGWGetObj::execute()
       } else
         new_ofs = ofs;
 
-      if (end >= cs_info.orig_size) {
+      if ((unsigned)end >= cs_info.orig_size) {
         ldout(s->cct, 5) << "WARNING: end of the bytes range more than object size (" << cs_info.orig_size
                          << ")" <<  dendl;
         new_end = cs_info.orig_size - 1;
@@ -1518,30 +1475,8 @@ void RGWGetObj::execute()
       goto done_err;
     }
 
-    if (partial_content) {
-
-      // if user set range, we need to calculate it in decompressed data
-      first_block = 0; last_block = 0;
-      if (cs_info.blocks.size() > 1) {
-        off_t i = 1;
-        while (i < cs_info.blocks.size() && cs_info.blocks[i].old_ofs <= new_ofs) i++;
-        first_block = i - 1;
-        while (i < cs_info.blocks.size() && cs_info.blocks[i].old_ofs < new_end) i++;
-        last_block = i - 1;
-      }
-    } else {
-      first_block = 0; last_block = cs_info.blocks.size() - 1;
-    }
-
-    q_ofs = new_ofs - cs_info.blocks[first_block].old_ofs;
-    q_len = new_end - cs_info.blocks[last_block].old_ofs + 1;
-
-    new_ofs = cs_info.blocks[first_block].new_ofs;
-    new_end = cs_info.blocks[last_block].new_ofs + cs_info.blocks[last_block].len;
-
-    first_data = true;
-    cur_ofs = new_ofs;
-    waiting.clear();
+    decompress = boost::in_place(s->cct, &cs_info, partial_content, filter);
+    filter = &*decompress;
   }
 
   /* STAT ops don't need data, and do no i/o */
@@ -1553,21 +1488,10 @@ void RGWGetObj::execute()
 
   perfcounter->inc(l_rgw_get_b, new_end - new_ofs);
 
-  op_ret = this->get_decrypt_filter(&decrypt, cb);
-  if (op_ret < 0) {
-    goto done_err;
-  }
-  if (decrypt != nullptr) {
-    off_t tmp_ofs = ofs;
-    off_t tmp_end = end;
-    decrypt->fixup_range(tmp_ofs, tmp_end);
-    op_ret = read_op.iterate(tmp_ofs, tmp_end, decrypt);
-    if (op_ret >= 0)
-      op_ret = decrypt->flush();
-    delete decrypt;
-  }
-  else
-    op_ret = read_op.iterate(ofs, end, &cb);
+  filter->fixup_range(new_ofs, new_end);
+  op_ret = read_op.iterate(new_ofs, new_end, filter);
+  if (op_ret >= 0)
+    op_ret = filter->flush();
 
   perfcounter->tinc(l_rgw_get_lat,
                    (ceph_clock_now(s->cct) - start_time));
@@ -1982,9 +1906,12 @@ void RGWStatBucket::execute()
       op_ret = -EINVAL;
     }
   }
-  if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end()) {
-    ::decode(bucket.size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
-  }
+  RGWBucketCompressionInfo bcs;
+  int res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bcs);
+  if (!res)
+    bucket.size = bcs.orig_size;
+  if (res < 0)
+      lderr(s->cct) << "Failed to read decompressed bucket size" << dendl;
 }
 
 int RGWListBucket::verify_permission()
@@ -2715,12 +2642,14 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, real_time *mtime, re
   info.size = s->obj_size;
   info.modified = real_clock::now();
   info.manifest = manifest;
-  if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
-    bool tmp;
-    RGWCompressionInfo cs_info;
-    rgw_compression_info_from_attrset(attrs, tmp, cs_info);
-    info.cs_info = cs_info;
+
+  bool compressed;
+  r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
+  if (r < 0) {
+    dout(1) << "cannot get compression info" << dendl;
+    return r;
   }
+
   ::encode(info, bl);
 
   string multipart_meta_obj = mp.get_meta();
@@ -2757,7 +2686,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
   return processor;
 }
 
-void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
+void RGWPutObj::dispose_processor(RGWPutObjDataProcessor *processor)
 {
   delete processor;
 }
@@ -2770,6 +2699,7 @@ void RGWPutObj::pre_exec()
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
+  RGWPutObjDataProcessor *filter = NULL;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -2779,7 +2709,10 @@ void RGWPutObj::execute()
   int len;
   map<string, string>::iterator iter;
   bool multipart;
-  uint64_t bucket_size = 0;
+  RGWBucketCompressionInfo bucket_size;
+  int res;
+  bool compression_enabled;
+  boost::optional<RGWPutObj_Compress> compressor;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
@@ -2840,6 +2773,9 @@ void RGWPutObj::execute()
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
+  // no filters by default
+  filter = processor;
+
   /* Handle object versioning of Swift API. */
   if (! multipart) {
     rgw_obj obj(s->bucket, s->object);
@@ -2859,7 +2795,11 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  processor->compression_enabled = s->cct->_conf->rgw_compression_type != "none";
+  compression_enabled = s->cct->_conf->rgw_compression_type != "none";
+  if (compression_enabled) {
+    compressor = boost::in_place(s->cct, filter);
+    filter = &*compressor;
+  }
 
   do {
     bufferlist data_in;
@@ -2894,7 +2834,7 @@ void RGWPutObj::execute()
       orig_data = data;
     }
 
-    op_ret = put_data_and_throttle(processor, data, ofs, need_to_wait);
+    op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="
@@ -2912,6 +2852,8 @@ void RGWPutObj::execute()
       dispose_processor(processor);
       processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
+      filter = processor;
+
       string oid_rand;
       char buf[33];
       gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
@@ -2924,7 +2866,12 @@ void RGWPutObj::execute()
         goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, false);
+      if (compression_enabled) {
+        compressor = boost::in_place(s->cct, filter);
+        filter = &*compressor;
+      }
+
+      op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
         goto done;
       }
@@ -2976,24 +2923,21 @@ void RGWPutObj::execute()
 
   hash.Final(m);
 
-  if (processor->is_compressed()) {
+  if (compression_enabled && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
     cs_info.compression_type = s->cct->_conf->rgw_compression_type;
     cs_info.orig_size = s->obj_size;
-    cs_info.blocks = processor->get_compression_blocks();
+    cs_info.blocks = move(compressor->get_compression_blocks());
     ::encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
-  // add attr to bucket to know original size of data
-  if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end())
-    ::decode(bucket_size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
-  bucket_size += s->obj_size;
-  ::encode(bucket_size, bs);
-  s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-        &s->bucket_attrs);
+  // add attr to bucket to know original  size of data
+  res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bucket_size);
+  if (res < 0)
+    lderr(s->cct) << "ERROR: failed to read decompressed bucket size, cannot update stat" << dendl;
+  op_ret = update_compressed_bucket_size(s->obj_size, bucket_size);
   if (op_ret < 0)
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
          << " returned err=" << op_ret << dendl;
@@ -3088,7 +3032,7 @@ RGWPutObjProcessor *RGWPostObj::select_processor(RGWObjectCtx& obj_ctx)
   return processor;
 }
 
-void RGWPostObj::dispose_processor(RGWPutObjProcessor *processor)
+void RGWPostObj::dispose_processor(RGWPutObjDataProcessor *processor)
 {
   delete processor;
 }
@@ -3101,11 +3045,14 @@ void RGWPostObj::pre_exec()
 void RGWPostObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
+  RGWPutObjDataProcessor *filter = NULL;
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
   buffer::list bl, aclbl;
   int len = 0;
+  bool compression_enabled;
+  boost::optional<RGWPutObj_Compress> compressor;
 
   // read in the data from the POST form
   op_ret = get_params();
@@ -3129,11 +3076,18 @@ void RGWPostObj::execute()
 
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx));
 
+  // no filters by default
+  filter = processor;
+
   op_ret = processor->prepare(store, NULL);
   if (op_ret < 0)
     goto done;
 
-  processor->compression_enabled = s->cct->_conf->rgw_compression_type != "none";
+  compression_enabled = s->cct->_conf->rgw_compression_type != "none";
+  if (compression_enabled) {
+    compressor = boost::in_place(s->cct, filter);
+    filter = &*compressor;
+  }
 
   while (data_pending) {
      bufferlist data;
@@ -3148,7 +3102,7 @@ void RGWPostObj::execute()
        break;
 
      hash.Update((const byte *)data.c_str(), data.length());
-     op_ret = put_data_and_throttle(processor, data, ofs, false);
+     op_ret = put_data_and_throttle(filter, data, ofs, false);
 
      ofs += len;
 
@@ -3187,12 +3141,12 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
   }
 
-  if (processor->is_compressed()) {
+  if (compression_enabled && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
     cs_info.compression_type = s->cct->_conf->rgw_compression_type;
     cs_info.orig_size = s->obj_size;
-    cs_info.blocks = processor->get_compression_blocks();
+    cs_info.blocks = move(compressor->get_compression_blocks());
     ::encode(cs_info, tmp);
     emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
   }
@@ -3599,22 +3553,26 @@ void RGWDeleteObj::execute()
       if (op_ret >= 0) {
         delete_marker = del_op.result.delete_marker;
         version_id = del_op.result.version_id;
-        if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end()) {
-          uint64_t bucket_size, deleted_size;
-          ::decode(bucket_size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
-          if (attrs.find(RGW_ATTR_COMPRESSION) != attrs.end()) {
-            bool tmp;
-            RGWCompressionInfo cs_info;
-            rgw_compression_info_from_attrset(attrs, tmp, cs_info);
-            deleted_size = cs_info.orig_size;
-          } else
+        RGWBucketCompressionInfo bucket_size;
+        int res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bucket_size);
+        if (res < 0)
+          lderr(s->cct) << "ERROR: failed to read decompressed bucket size, cannot update stat" << dendl;
+        if (!res) {
+          uint64_t deleted_size;
+          bool tmp;
+          RGWCompressionInfo cs_info;
+          res = rgw_compression_info_from_attrset(attrs, tmp, cs_info);
+          if (res < 0) {
+            lderr(s->cct) << "ERROR: failed to decode compression info, cannot update stat" << dendl;
             deleted_size = s->obj_size;
-          bucket_size -= deleted_size;
-          bufferlist bs;
-          ::encode(bucket_size, bs);
-          s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
-          op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-            &s->bucket_attrs);
+          } else {
+            if (tmp) 
+              deleted_size = cs_info.orig_size;
+            else
+              deleted_size = s->obj_size;
+          }
+          if (update_compressed_bucket_size(-deleted_size, bucket_size) < 0)
+            lderr(s->cct) << "ERROR: failed to update bucket stat" << dendl;
         }
       }
 
@@ -4790,14 +4748,14 @@ void RGWCompleteMultipart::execute()
         }
         int new_ofs; // offset in compression data for new part
         if (cs_info.blocks.size() > 0)
-          new_ofs = cs_info.blocks[cs_info.blocks.size() - 1].new_ofs + cs_info.blocks[cs_info.blocks.size() - 1].len;
+          new_ofs = cs_info.blocks.back().new_ofs + cs_info.blocks.back().len;
         else
           new_ofs = 0;
-        for (off_t i=0; i < obj_part.cs_info.blocks.size(); ++i) {
+        for (const auto& block : obj_part.cs_info.blocks) {
           compression_block cb;
-          cb.old_ofs = obj_part.cs_info.blocks[i].old_ofs + cs_info.orig_size;
+          cb.old_ofs = block.old_ofs + cs_info.orig_size;
           cb.new_ofs = new_ofs;
-          cb.len = obj_part.cs_info.blocks[i].len;
+          cb.len = block.len;
           cs_info.blocks.push_back(cb);
           new_ofs = cb.new_ofs + cb.len;
         } 
@@ -4945,18 +4903,20 @@ void RGWAbortMultipart::execute()
       }
         map<string, bufferlist> attrset;
         int y = get_obj_attrs(store, s, obj, attrset);
-        if (!y && attrset.find(RGW_ATTR_COMPRESSION) != attrset.end()) {
+        map<string, bufferlist>::iterator cmp = attrset.find(RGW_ATTR_COMPRESSION);
+        if (!y && cmp != attrset.end()) {
           RGWCompressionInfo cs_info;
-          bufferlist::iterator bliter = attrset[RGW_ATTR_COMPRESSION].begin();
+          bufferlist::iterator bliter = cmp->second.begin();
           try {
             ::decode(cs_info, bliter);
+            if (cs_info.compression_type != "none")
+              deleted_size += cs_info.orig_size;
+            else
+              deleted_size += obj_part.size;
           } catch (buffer::error& err) {
             ldout(s->cct, 5) << "Failed to get decompressed obj size" << dendl;
-          }
-          if (cs_info.compression_type != "none")
-            deleted_size += cs_info.orig_size;
-          else
             deleted_size += obj_part.size;
+          }
         } else
           deleted_size += obj_part.size;
     }
@@ -4985,15 +4945,13 @@ void RGWAbortMultipart::execute()
   }
 
   if (!op_ret) {
-    if (s->bucket_attrs.find(RGW_ATTR_COMPRESSION) != s->bucket_attrs.end()) {
-      uint64_t bucket_size;
-      ::decode(bucket_size, s->bucket_attrs[RGW_ATTR_COMPRESSION]);
-      bucket_size -= deleted_size;
-      bufferlist bs;
-      ::encode(bucket_size, bs);
-      s->bucket_attrs[RGW_ATTR_COMPRESSION] = bs;
-      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-        &s->bucket_attrs);
+    RGWBucketCompressionInfo bucket_size;
+    int res = rgw_bucket_compression_info_from_attrset(s->bucket_attrs, bucket_size);
+    if (res < 0)
+      lderr(s->cct) << "ERROR: failed to read decompressed bucket size, cannot update stat" << dendl;
+    if (!res) {
+      if (update_compressed_bucket_size(-deleted_size, bucket_size) < 0)
+            lderr(s->cct) << "ERROR: failed to update bucket stat" << dendl;
     }
   }
 

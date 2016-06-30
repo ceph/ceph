@@ -101,6 +101,9 @@ struct RGWCompressionInfo {
   vector<compression_block> blocks;
 
   RGWCompressionInfo() : compression_type("none"), orig_size(0) {}
+  RGWCompressionInfo(const RGWCompressionInfo& cs_info) : compression_type(cs_info.compression_type),
+                                                          orig_size(cs_info.orig_size),
+                                                          blocks(cs_info.blocks) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -120,7 +123,28 @@ struct RGWCompressionInfo {
 };
 WRITE_CLASS_ENCODER(RGWCompressionInfo)
 
+struct RGWBucketCompressionInfo {
+  uint64_t orig_size;
+
+  RGWBucketCompressionInfo() : orig_size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(orig_size, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(orig_size, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWBucketCompressionInfo)
+
 int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
+// return 0, if find and read; -EIO, if find and not read; 1 if not find
+int rgw_bucket_compression_info_from_attrset(map<string, bufferlist>& attrs, RGWBucketCompressionInfo& cs_info);
 
 struct RGWOLHInfo {
   rgw_obj target;
@@ -3192,10 +3216,8 @@ protected:
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
   bool is_complete;
-  bool compressed;
   RGWBucketInfo bucket_info;
   bool canceled;
-  vector<compression_block> blocks;
 
   virtual int do_complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
                           map<string, bufferlist>& attrs, ceph::real_time delete_at,
@@ -3205,28 +3227,21 @@ public:
   RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), 
                                                                    obj_ctx(_obj_ctx), 
                                                                    is_complete(false), 
-                                                                   compressed(false), 
                                                                    bucket_info(_bi), 
-                                                                   canceled(false),
-                                                                   compression_enabled(false) {}
+                                                                   canceled(false) {}
   virtual ~RGWPutObjProcessor() {}
   virtual int prepare(RGWRados *_store, string *oid_rand) {
     store = _store;
     return 0;
   }
 
-  //virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again);
-  //virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
   virtual int complete(string& etag, ceph::real_time *mtime, ceph::real_time set_mtime,
                        map<string, bufferlist>& attrs, ceph::real_time delete_at,
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
-  bool compression_enabled;
   CephContext *ctx();
 
   bool is_canceled() { return canceled; }
-  bool is_compressed() { return compressed; }
-  const vector<compression_block>& get_compression_blocks() { return blocks; }
 }; /* RGWPutObjProcessor */
 
 struct put_obj_aio_info {

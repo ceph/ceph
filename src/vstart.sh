@@ -21,12 +21,6 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_OUT_DIR=$VSTART_DEST/out
 fi
 
-mkdir -p .libs/compressor
-for f in `ls -d compressor/*/`; 
-do 
-    cp .libs/libceph_`basename $f`.so* .libs/compressor/;
-done
-
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
   # Out of tree build, learn source location from CMakeCache.txt
