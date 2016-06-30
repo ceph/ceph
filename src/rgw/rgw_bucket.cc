@@ -6,6 +6,8 @@
 #include <string>
 #include <map>
 
+#include <boost/utility/string_ref.hpp>
+
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "rgw_rados.h"
@@ -348,6 +350,53 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *targ
     return -EINVAL;
   }
 
+  return 0;
+}
+
+// parse key in format: [tenant/]name:instance[:shard_id]
+int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
+                                rgw_bucket *bucket, int *shard_id)
+{
+  boost::string_ref name{key};
+  boost::string_ref instance;
+
+  // split tenant/name
+  auto pos = name.find('/');
+  if (pos != boost::string_ref::npos) {
+    auto tenant = name.substr(0, pos);
+    bucket->tenant.assign(tenant.begin(), tenant.end());
+    name = name.substr(pos + 1);
+  }
+
+  // split name:instance
+  pos = name.find(':');
+  if (pos != boost::string_ref::npos) {
+    instance = name.substr(pos + 1);
+    name = name.substr(0, pos);
+  }
+  bucket->name.assign(name.begin(), name.end());
+
+  // split instance:shard
+  pos = instance.find(':');
+  if (pos == boost::string_ref::npos) {
+    bucket->bucket_id.assign(instance.begin(), instance.end());
+    *shard_id = -1;
+    return 0;
+  }
+
+  // parse shard id
+  auto shard = instance.substr(pos + 1);
+  string err;
+  auto id = strict_strtol(shard.data(), 10, &err);
+  if (!err.empty()) {
+    ldout(cct, 0) << "ERROR: failed to parse bucket shard '"
+        << instance.data() << "': " << err << dendl;
+    return -EINVAL;
+  }
+
+  *shard_id = id;
+  instance = instance.substr(0, pos);
+  bucket->bucket_id.assign(instance.begin(), instance.end());
   return 0;
 }
 
