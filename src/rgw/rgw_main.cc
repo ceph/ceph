@@ -363,6 +363,9 @@ int main(int argc, const char **argv)
                           set_logging(new RGWRESTMgr_SWIFT_CrossDomain));
     }
 
+    swift_resource->register_resource("healthcheck",
+                          set_logging(new RGWRESTMgr_SWIFT_HealthCheck));
+
     if (! swift_at_root) {
       rest.register_resource(g_conf->rgw_swift_url_prefix,
                           set_logging(swift_resource));
