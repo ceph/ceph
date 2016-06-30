@@ -367,7 +367,7 @@ find_package(Threads REQUIRED)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)
-  find_file(SELINUX_MAKEFILE selinux/devel/include/Makefile
+  find_file(SELINUX_MAKEFILE selinux/devel/Makefile
     PATH /usr/share)
   if(NOT SELINUX_MAKEFILE)
     message(FATAL_ERROR "Can't find selinux's Makefile")
@@ -398,3 +398,9 @@ add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
 endif(WITH_MANPAGE)
+
+option(WITH_SYSTEMD "install systemd target and service files" OFF)
+if(WITH_SYSTEMD)
+  add_subdirectory(systemd)
+endif()
+
