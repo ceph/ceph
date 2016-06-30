@@ -3421,7 +3421,6 @@ int BlueStore::_do_read(
 	       << std::dec << dendl;
       pos += hole;
       left -= hole;
-      continue;
     }
     Blob *bptr = c->get_blob(o, lp->second.blob);
     if (bptr == nullptr) {
