@@ -633,14 +633,17 @@ public:
     buffer_list_t buffer_hot;      //< "Am" hot buffers
     buffer_list_t buffer_warm_in;  //< "A1in" newly warm buffers
     buffer_list_t buffer_warm_out; //< "A1out" empty buffers we've evicted
-    uint64_t buffer_bytes = 0;        //< bytes
+    uint64_t buffer_bytes = 0;     //< bytes
 
     enum {
       BUFFER_NEW = 0,
       BUFFER_WARM_IN,   ///< in buffer_warm_in
       BUFFER_WARM_OUT,  ///< in buffer_warm_out
       BUFFER_HOT,       ///< in buffer_hot
+      BUFFER_TYPE_MAX
     };
+
+    uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
 
   public:
     void _add_onode(OnodeRef& o, int level) override {
