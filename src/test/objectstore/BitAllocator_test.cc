@@ -84,7 +84,6 @@ TEST(BitAllocator, test_bmap_iter)
   bmap_test_assert(count == num_items + 1);
 
   delete arr;
-  //delete list;
 
   num_items = 4;
   off = num_items - 1;
@@ -93,7 +92,6 @@ TEST(BitAllocator, test_bmap_iter)
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
-//  list = new BitMapList<BmapEntityTmp>(arr, num_items, 0);
   iter = BitMapEntityIter<BmapEntityTmp>(arr, off, true);
   i = off;
   last_idx = off;
@@ -108,6 +106,8 @@ TEST(BitAllocator, test_bmap_iter)
   }
   bmap_test_assert(i == (off + 1)%num_items);
   bmap_test_assert(count == num_items + 1);
+
+  delete arr;
 
   /*
    * BitMapArea Iter tests.
@@ -136,7 +136,6 @@ TEST(BitAllocator, test_bmap_iter)
   bmap_test_assert(i == off);
   bmap_test_assert(count == num_items);
 
-  // offset 0
   off = 0;
   area_iter = BmapEntityListIter(area_list, off, true);
   i = off;
@@ -152,6 +151,12 @@ TEST(BitAllocator, test_bmap_iter)
   }
   bmap_test_assert(i == (off + 1)%num_items);
   bmap_test_assert(count == num_items + 1);
+
+  for (i = 0; i < num_items; i++)
+    delete children[i];
+
+  delete children;
+  delete area_list;
 }
 
 TEST(BitAllocator, test_bmap_entry)
@@ -232,6 +237,7 @@ TEST(BitAllocator, test_bmap_entry)
   bmap_test_assert(!bmap->is_allocated(0, 4));
   bmap->set_bits(0, 4);
   bmap_test_assert(bmap->is_allocated(0, BmapEntry::size()));
+  delete bmap;
 }
 
 TEST(BitAllocator, test_zone_alloc)
@@ -384,7 +390,6 @@ TEST(BitAllocator, test_bmap_alloc)
   delete alloc;
   alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
 
-  int64_t blocks[2048] = {0};
   for (int64_t i = 0; i < alloc->size(); i++) {
     allocated = alloc->alloc_blocks(1, &start_block);
     bmap_test_assert(allocated == 1);
@@ -393,6 +398,8 @@ TEST(BitAllocator, test_bmap_alloc)
     alloc->free_blocks(i, 1);
   }
 
+  int64_t blocks[alloc->size() / 2];
+  memset(blocks, 0, sizeof(blocks));
   allocated = alloc->alloc_blocks_dis(alloc->size()/2, blocks);
   bmap_test_assert(allocated == alloc->size() / 2);
 
