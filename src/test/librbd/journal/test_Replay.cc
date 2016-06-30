@@ -147,7 +147,11 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
                                  &read_payload[0], NULL, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
-  ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
+  if (ictx->cct->_conf->rbd_skip_partial_discard) {
+    ASSERT_EQ(payload, read_payload);
+  } else {
+    ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
+  }
 
   // check the commit position is properly updated
   int64_t current_tag;

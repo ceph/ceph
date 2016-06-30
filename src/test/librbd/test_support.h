@@ -11,18 +11,13 @@ int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                     const std::string &name, uint64_t size);
 int get_image_id(librbd::Image &image, std::string *image_id);
 
-#define REQUIRE_FEATURE(feature) { 	  \
-  if (!is_feature_enabled(feature)) { 	  \
+#define REQUIRE(x) {			  \
+  if (!(x)) {				  \
     std::cout << "SKIPPING" << std::endl; \
     return SUCCEED(); 			  \
   } 					  \
 }
 
-#define REQUIRE_FORMAT_V1() { 	          \
-  if (is_feature_enabled(0)) { 	          \
-    std::cout << "SKIPPING" << std::endl; \
-    return SUCCEED(); 			  \
-  } 					  \
-}
-
+#define REQUIRE_FEATURE(feature) REQUIRE(is_feature_enabled(feature))
+#define REQUIRE_FORMAT_V1() REQUIRE(!is_feature_enabled(0))
 #define REQUIRE_FORMAT_V2() REQUIRE_FEATURE(0)
