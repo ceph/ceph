@@ -10972,7 +10972,8 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
   vector<RGWObjEnt> objs;
   int r = pool_iterate(ctx.iter_ctx, max, objs, is_truncated, &filter);
   if (r < 0) {
-    ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
+    if(r != -ENOENT)
+      ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
     return r;
   }
 
