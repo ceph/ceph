@@ -1,0 +1,13 @@
+roles:
+- [mon.a, osd.0]
+- [osd.1, osd.2]
+- [mds.a, osd.3]
+- [mon.b, client.0]
+tasks:
+- ssh-keys:
+- ceph-deploy:
+- systemd:
+- workunit:
+    clients:
+      all:
+      - rados/load-gen-mix.sh
