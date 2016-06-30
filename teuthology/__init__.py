@@ -4,12 +4,16 @@ monkey.patch_all(
     # Don't patch subprocess to avoid http://tracker.ceph.com/issues/14990
     subprocess=False,
 )
+import sys
+
+# Don't write pyc files
+sys.dont_write_bytecode = True
+
 from .orchestra import monkey
 monkey.patch_all()
 
 import logging
 import os
-import sys
 
 
 __version__ = '0.1.0'
