@@ -5943,8 +5943,12 @@ int BlueStore::_do_alloc_write(
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
       uint64_t newlen = ROUND_UP_TO(rawlen, min_alloc_size);
-      if (newlen < final_length) {
-	// pad out to min_alloc_size
+      uint64_t dstlen = final_length *
+        g_conf->bluestore_compression_required_ratio;
+      dstlen = ROUND_UP_TO(dstlen, min_alloc_size);
+      if (newlen <= dstlen && newlen < final_length) {
+        // Cool. We compressed at least as much as we were hoping to.
+        // pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
 	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
 	dout(20) << __func__ << hex << "  compressed 0x" << wi.blob_length
@@ -5962,9 +5966,10 @@ int BlueStore::_do_alloc_write(
 	compressed = true;
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
-		 << " -> 0x" << rawlen << " with " << chdr.type
-		 << ", leaving uncompressed"
-		 << dec << dendl;
+                 << " -> 0x" << rawlen << " with " << chdr.type
+                 << ", which is more than required 0x" << dstlen
+                 << ", leaving uncompressed"
+                 << dec << dendl;
       }
     }
     if (!compressed) {

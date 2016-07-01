@@ -965,6 +965,12 @@ OPTION(bluestore_compression, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
 OPTION(bluestore_compression_min_blob_size, OPT_U32, 256*1024)
 OPTION(bluestore_compression_max_blob_size, OPT_U32, 4*1024*1024)
+/*
+ * Require the net gain of compression at least to be at this ratio,
+ * otherwise we don't compress.
+ * And ask for compressing at least 12.5%(1/8) off, by default.
+ */
+OPTION(bluestore_compression_required_ratio, OPT_DOUBLE, .875)
 OPTION(bluestore_cache_type, OPT_STR, "2q")   // lru, 2q
 OPTION(bluestore_onode_cache_size, OPT_U32, 16*1024)
 OPTION(bluestore_buffer_cache_size, OPT_U32, 512*1024*1024)
