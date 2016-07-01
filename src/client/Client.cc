@@ -8796,7 +8796,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 int Client::fstat(int fd, struct stat *stbuf, int mask)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fstat mask " << hex << mask << std::endl;
+  tout(cct) << "fstat mask " << hex << mask << dec << std::endl;
   tout(cct) << fd << std::endl;
 
   Fh *f = get_filehandle(fd);
