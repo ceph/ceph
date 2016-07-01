@@ -235,6 +235,13 @@ void ObjectCopyRequest<I>::send_update_object_map() {
     m_local_image_ctx->snap_lock.put_read();
     finish(0);
     return;
+  } else if (m_local_image_ctx->object_map == nullptr) {
+    // possible that exclusive lock was lost in background
+    derr << ": object map is not initialized" << dendl;
+
+    m_local_image_ctx->snap_lock.put_read();
+    finish(-EINVAL);
+    return;
   }
 
   assert(m_local_image_ctx->object_map != nullptr);
