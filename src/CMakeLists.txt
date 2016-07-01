@@ -202,6 +202,11 @@ if(WITH_OCF)
   add_subdirectory(ocf)
 endif()
 
+option(WITH_LIBZBC "build libzbc - library to support SMR commands" OFF)
+if(WITH_LIBZBC)
+	add_subdirectory(libzbc)
+endif()
+
 option(WITH_CEPHFS_JAVA "build libcephfs Java bindings" OFF)
 if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
