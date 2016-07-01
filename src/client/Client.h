@@ -524,6 +524,12 @@ protected:
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
   }
+
+  int fill_statx(Inode *in, struct statx *stx, frag_info_t *dirstat=0);
+  int fill_statx(InodeRef& in, struct statx *stx, frag_info_t *dirstat=0) {
+    return fill_statx(in.get(), stx, dirstat);
+  }
+
   void touch_dn(Dentry *dn);
 
   // trim cache.
@@ -980,6 +986,7 @@ public:
 
   // inode stuff
   int stat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int statx(const char *path, unsigned int flags, struct statx *stx, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
@@ -1079,6 +1086,7 @@ public:
   bool ll_forget(Inode *in, int count);
   bool ll_put(Inode *in);
   int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
+  int ll_getattrx(Inode *in, unsigned int flags, struct statx *st, int uid = -1, int gid = -1);
   int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1,
 		 int gid = -1);
   int ll_getxattr(Inode *in, const char *name, void *value, size_t size,

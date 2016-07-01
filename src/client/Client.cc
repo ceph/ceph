@@ -94,6 +94,8 @@
 #include "include/assert.h"
 #include "include/stat.h"
 
+#include "include/cephfs/statx.h"
+
 #if HAVE_GETGROUPLIST
 #include <grp.h>
 #include <pwd.h>
@@ -6609,6 +6611,28 @@ int Client::stat(const char *relpath, struct stat *stbuf,
   return r;
 }
 
+int Client::statx(const char *relpath, unsigned int flags, struct statx *stx,
+			  frag_info_t *dirstat, int mask)
+{
+  ldout(cct, 3) << "statx enter (relpath " << relpath << " mask " << mask << ")" << dendl;
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "statx" << std::endl;
+  tout(cct) << relpath << std::endl;
+  filepath path(relpath);
+  InodeRef in;
+  int r = path_walk(path, &in);
+  if (r < 0)
+    return r;
+  r = _getattr(in, mask);
+  if (r < 0) {
+    ldout(cct, 3) << "statx exit on error!" << dendl;
+    return r;
+  }
+  fill_statx(in, stx, dirstat);
+  ldout(cct, 3) << "statx exit (relpath " << relpath << " mask " << mask << ")" << dendl;
+  return r;
+}
+
 int Client::lstat(const char *relpath, struct stat *stbuf,
 			  frag_info_t *dirstat, int mask)
 {
@@ -6675,6 +6699,61 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     *dirstat = in->dirstat;
   if (rstat)
     *rstat = in->rstat;
+
+  return in->caps_issued();
+}
+
+int Client::fill_statx(Inode *in, struct statx *stx, frag_info_t *dirstat)
+{
+  ldout(cct, 10) << "fill_statx on " << in->ino << " snap/dev" << in->snapid
+	   << " mode 0" << oct << in->mode << dec
+	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
+  memset(stx, 0, sizeof(struct statx));
+
+  /* For now, don't check the incoming mask. Just set everything. */
+  stx->stx_mode = in->mode;
+  stx->stx_nlink = in->nlink;
+  stx->stx_uid = in->uid;
+  stx->stx_gid = in->gid;
+  if (in->ctime.sec() > in->mtime.sec()) {
+    stx->stx_ctime = in->ctime.sec();
+    stx->stx_ctime_ns = in->ctime.nsec();
+  } else {
+    stx->stx_ctime = in->mtime.sec();
+    stx->stx_ctime_ns = in->mtime.nsec();
+  }
+  stx->stx_atime = in->atime.sec();
+  stx->stx_atime_ns = in->atime.nsec();
+  stx->stx_mtime = in->mtime.sec();
+  stx->stx_mtime_ns = in->mtime.nsec();
+  stx->stx_btime = in->btime.sec();
+  stx->stx_btime_ns = in->btime.nsec();
+
+  if (use_faked_inos())
+    stx->stx_ino = in->faked_ino;
+  else
+    stx->stx_ino = in->ino;
+
+  stx->stx_dev_major = in->snapid >> 32;
+  stx->stx_dev_minor = (uint32_t)in->snapid;
+
+  if (in->is_dir()) {
+    if (cct->_conf->client_dirsize_rbytes)
+      stx->stx_size = in->rstat.rbytes;
+    else
+      stx->stx_size = in->dirstat.size();
+    stx->stx_blocks = 1;
+  } else {
+    stx->stx_size = in->size;
+    stx->stx_blocks = (in->size + 511) >> 9;
+  }
+  stx->stx_blksize = MAX(in->layout.stripe_unit, 4096);
+
+  /* Set the bits accordingly */
+  stx->stx_mask = STATX_BASIC_STATS | STATX_BTIME;
+
+  if (dirstat)
+    *dirstat = in->dirstat;
 
   return in->caps_issued();
 }
@@ -9675,6 +9754,27 @@ int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
   if (res == 0)
     fill_stat(in, attr);
   ldout(cct, 3) << "ll_getattr " << vino << " = " << res << dendl;
+  return res;
+}
+
+int Client::ll_getattrx(Inode *in, unsigned int flags, struct statx *stx, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+
+  int res = _ll_getattr(in, uid, gid);
+  vinodeno_t vino = _get_vino(in);
+
+  /* special case for dotdot (..) */
+  if (vino.ino.val == CEPH_INO_DOTDOT) {
+    stx->stx_mode = S_IFDIR | 0755;
+    stx->stx_nlink = 2;
+    stx->stx_mask = STATX_MODE | STATX_NLINK;
+    return 0;
+  }
+
+  if (res == 0)
+    fill_statx(in, stx);
+  ldout(cct, 3) << "ll_getattrx " << vino << " = " << res << dendl;
   return res;
 }
 
