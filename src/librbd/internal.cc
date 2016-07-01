@@ -865,6 +865,69 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int flatten_children(ImageCtx *ictx, const char* snap_name)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "children flatten " << ictx->name << dendl;
+
+    RWLock::RLocker l(ictx->snap_lock);
+    snap_t snap_id = ictx->get_snap_id(snap_name);
+    parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
+    map< pair<int64_t, string>, set<string> > image_info;
+
+    int r = list_children_info(ictx, parent_spec, image_info);
+    if (r < 0) {
+      return r;
+    }
+
+    Rados rados(ictx->md_ctx);
+    for ( auto &info : image_info){
+      string pool = info.first.second;
+      IoCtx ioctx;
+      r = rados.ioctx_create2(info.first.first, ioctx);
+      if (r < 0) {
+        lderr(cct) << "Error accessing child image pool " << pool
+                   << dendl;
+        return r;
+      }
+
+      for (auto &id_it : info.second) {
+	ImageCtx *imctx = new ImageCtx("", id_it, NULL, ioctx, false);
+	int r = imctx->state->open();
+	if (r < 0) {
+	  lderr(cct) << "error opening image: "
+		     << cpp_strerror(r) << dendl;
+	  return r;
+	}
+	librbd::NoOpProgressContext prog_ctx;
+	r = imctx->operations->flatten(prog_ctx);
+	if (r < 0) {
+	  lderr(cct) << "error to flatten image: " << pool << "/" << id_it
+		     << cpp_strerror(r) << dendl;
+	  return r;
+	}
+
+	if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+	    !imctx->snaps.empty()) {
+	  imctx->parent_lock.get_read();
+	  parent_info parent_info = imctx->parent_md;
+	  imctx->parent_lock.put_read();
+
+	  r = cls_client::remove_child(&imctx->md_ctx, RBD_CHILDREN,
+				       parent_info.spec, imctx->id);
+	  if (r < 0 && r != -ENOENT) {
+	    lderr(cct) << "error removing child from children list" << dendl;
+	    imctx->state->close();
+	    return r;
+	  }
+	}
+	imctx->state->close();
+      }
+    }
+    
+    return 0;
+  }
+
   int list_children(ImageCtx *ictx, set<pair<string, string> >& names)
   {
     CephContext *cct = ictx->cct;
@@ -2270,23 +2333,27 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     int r = 0;
 
-retry:
     r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
+
+    if (flags & RBD_SNAP_REMOVE_FLATTEN) {
+	r = flatten_children(ictx, snap_name);
+	if (r < 0) {
+	  return r;
+	}
+    }
+
+    if (flags & RBD_SNAP_REMOVE_UNPROTECT) {
+      r = ictx->operations->snap_unprotect(snap_name);
+      if (r < 0)
+	return r;
+    }
 
     C_SaferCond ctx;
     ictx->operations->snap_remove(snap_name, &ctx);
 
     r = ctx.wait();
-    if (r < 0) {
-      if (r == -EBUSY && (flags & RBD_SNAP_REMOVE_UNPROTECT)) {
-	r = ictx->operations->snap_unprotect(snap_name);
-	goto retry;
-      }
-      return r;
-    }
-
     return r;
   }
 
