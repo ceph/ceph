@@ -1157,10 +1157,8 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(client osdc mds)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
-    $<TARGET_OBJECTS:cls_references_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(cephfs LINK_PRIVATE client osdc osd os global common
-    ${BLKID_LIBRARIES}
+  target_link_libraries(cephfs LINK_PRIVATE client
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
     set_target_properties(cephfs PROPERTIES
