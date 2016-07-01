@@ -57,6 +57,7 @@ void _usage()
   cout << "  user enable                re-enable user after suspension\n";
   cout << "  user check                 check user info\n";
   cout << "  user stats                 show user stats as accounted by quota subsystem\n";
+  cout << "  user list                  list users\n";
   cout << "  caps add                   add user capabilities\n";
   cout << "  caps rm                    remove user capabilities\n";
   cout << "  subuser create             create a new subuser\n" ;
@@ -269,6 +270,7 @@ enum {
   OPT_USER_ENABLE,
   OPT_USER_CHECK,
   OPT_USER_STATS,
+  OPT_USER_LIST,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -453,6 +455,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USER_CHECK;
     if (strcmp(cmd, "stats") == 0)
       return OPT_USER_STATS;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_USER_LIST;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -4853,7 +4857,10 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_METADATA_LIST) {
+  if (opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_USER_LIST) {
+    if (opt_cmd == OPT_USER_LIST) {
+      metadata_key = "user";
+    }
     void *handle;
     int max = 1000;
     int ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
