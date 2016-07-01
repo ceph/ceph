@@ -2,13 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/object_map/Request.h"
-#include "include/rados/librados.hpp"
-#include "include/rbd/librbd.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/RWLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageWatcher.h"
 #include "librbd/object_map/InvalidateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd

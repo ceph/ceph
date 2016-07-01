@@ -23,6 +23,7 @@ noinst_HEADERS += \
 	journal/FutureImpl.h \
 	journal/Journaler.h \
 	journal/JournalMetadata.h \
+	journal/JournalMetadataListener.h \
 	journal/JournalPlayer.h \
 	journal/JournalRecorder.h \
 	journal/JournalTrimmer.h \

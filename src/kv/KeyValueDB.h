@@ -299,7 +299,7 @@ public:
   class MergeOperator {
     public:
     /// Merge into a key that doesn't exist
-    virtual void merge_nonexistant(
+    virtual void merge_nonexistent(
       const char *rdata, size_t rlen,
       std::string *new_value) = 0;
     /// Merge into a key that does exist

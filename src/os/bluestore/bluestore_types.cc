@@ -98,37 +98,27 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t(123));
 }
 
-// bluestore_extent_t
+// bluestore_pextent_t
 
-string bluestore_extent_t::get_flags_string(unsigned flags)
+void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl)
 {
-  string s;
-  if (flags & FLAG_SHARED) {
-    s = "shared";
+  size_t n = v.size();
+  small_encode_varint(n, bl);
+  for (auto e : v) {
+    e.encode(bl);
   }
-  return s;
 }
 
-void bluestore_extent_t::dump(Formatter *f) const
+void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p)
 {
-  f->dump_unsigned("offset", offset);
-  f->dump_unsigned("length", length);
-  f->dump_unsigned("flags", flags);
-}
-
-void bluestore_extent_t::generate_test_instances(list<bluestore_extent_t*>& o)
-{
-  o.push_back(new bluestore_extent_t());
-  o.push_back(new bluestore_extent_t(123, 456));
-  o.push_back(new bluestore_extent_t(789, 1024, 322));
-}
-
-ostream& operator<<(ostream& out, const bluestore_extent_t& e)
-{
-  out << e.offset << "~" << e.length;
-  if (e.flags)
-    out << ":" << bluestore_extent_t::get_flags_string(e.flags);
-  return out;
+  size_t n;
+  small_decode_varint(n, p);
+  v.clear();
+  v.reserve(n);
+  while (n--) {
+    v.push_back(bluestore_pextent_t());
+    ::decode(v.back(), p);
+  }
 }
 
 // bluestore_extent_ref_map_t
@@ -147,7 +137,7 @@ void bluestore_extent_ref_map_t::_check() const
   }
 }
 
-void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint64_t,record_t>::iterator& p)
+void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint32_t,record_t>::iterator& p)
 {
   if (p == ref_map.begin())
     return;
@@ -161,9 +151,9 @@ void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint64_t,record_t>::itera
   }
 }
 
-void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
+void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
 {
-  map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
@@ -179,9 +169,9 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     }
     if (p->first > offset) {
       // gap
-      uint64_t newlen = MIN(p->first - offset, length);
+      uint32_t newlen = MIN(p->first - offset, length);
       p = ref_map.insert(
-	map<uint64_t,record_t>::value_type(offset,
+	map<uint32_t,record_t>::value_type(offset,
 					   record_t(newlen, 1))).first;
       offset += newlen;
       length -= newlen;
@@ -192,9 +182,9 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     if (p->first < offset) {
       // split off the portion before offset
       assert(p->first + p->second.length > offset);
-      uint64_t left = p->first + p->second.length - offset;
+      uint32_t left = p->first + p->second.length - offset;
       p->second.length = offset - p->first;
-      p = ref_map.insert(map<uint64_t,record_t>::value_type(
+      p = ref_map.insert(map<uint32_t,record_t>::value_type(
 			   offset, record_t(left, p->second.refs))).first;
       // continue below
     }
@@ -219,10 +209,10 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 }
 
 void bluestore_extent_ref_map_t::put(
-  uint64_t offset, uint32_t length,
+  uint32_t offset, uint32_t length,
   vector<bluestore_pextent_t> *release)
 {
-  map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
       assert(0 == "put on missing extent (nothing before)");
@@ -233,9 +223,9 @@ void bluestore_extent_ref_map_t::put(
     }
   }
   if (p->first < offset) {
-    uint64_t left = p->first + p->second.length - offset;
+    uint32_t left = p->first + p->second.length - offset;
     p->second.length = offset - p->first;
-    p = ref_map.insert(map<uint64_t,record_t>::value_type(
+    p = ref_map.insert(map<uint32_t,record_t>::value_type(
 			 offset, record_t(left, p->second.refs))).first;
   }
   while (length > 0) {
@@ -272,9 +262,9 @@ void bluestore_extent_ref_map_t::put(
   _check();
 }
 
-bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const
+bool bluestore_extent_ref_map_t::contains(uint32_t offset, uint32_t length) const
 {
-  map<uint64_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
       return false; // nothing before
@@ -291,7 +281,7 @@ bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) cons
       return false;
     if (p->first + p->second.length >= offset + length)
       return true;
-    uint64_t overlap = p->first + p->second.length - offset;
+    uint32_t overlap = p->first + p->second.length - offset;
     offset += overlap;
     length -= overlap;
     ++p;
@@ -300,10 +290,10 @@ bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) cons
 }
 
 bool bluestore_extent_ref_map_t::intersects(
-  uint64_t offset,
+  uint32_t offset,
   uint32_t length) const
 {
-  map<uint64_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  map<uint32_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
     --p;
     if (p->first + p->second.length <= offset) {
@@ -319,16 +309,37 @@ bool bluestore_extent_ref_map_t::intersects(
 
 void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
-  ::encode(ref_map, bl);
-  ENCODE_FINISH(bl);
+  uint32_t n = ref_map.size();
+  small_encode_varint(n, bl);
+  if (n) {
+    auto p = ref_map.begin();
+    small_encode_varint_lowz(p->first, bl);
+    p->second.encode(bl);
+    int32_t pos = p->first;
+    while (--n) {
+      ++p;
+      small_encode_varint_lowz((int64_t)p->first - pos, bl);
+      p->second.encode(bl);
+      pos = p->first;
+    }
+  }
 }
 
 void bluestore_extent_ref_map_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START(1, p);
-  ::decode(ref_map, p);
-  DECODE_FINISH(p);
+  uint32_t n;
+  small_decode_varint(n, p);
+  if (n) {
+    int64_t pos;
+    small_decode_varint_lowz(pos, p);
+    ref_map[pos].decode(p);
+    while (--n) {
+      int64_t delta;
+      small_decode_varint_lowz(delta, p);
+      pos += delta;
+      ref_map[pos].decode(p);
+    }
+  }
 }
 
 void bluestore_extent_ref_map_t::dump(Formatter *f) const
@@ -368,47 +379,6 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
   return out;
 }
 
-// bluestore_overlay_t
-
-void bluestore_overlay_t::encode(bufferlist& bl) const
-{
-  ENCODE_START(1, 1, bl);
-  ::encode(key, bl);
-  ::encode(value_offset, bl);
-  ::encode(length, bl);
-  ENCODE_FINISH(bl);
-}
-
-void bluestore_overlay_t::decode(bufferlist::iterator& p)
-{
-  DECODE_START(1, p);
-  ::decode(key, p);
-  ::decode(value_offset, p);
-  ::decode(length, p);
-  DECODE_FINISH(p);
-}
-
-void bluestore_overlay_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("key", key);
-  f->dump_unsigned("value_offset", value_offset);
-  f->dump_unsigned("length", length);
-}
-
-void bluestore_overlay_t::generate_test_instances(list<bluestore_overlay_t*>& o)
-{
-  o.push_back(new bluestore_overlay_t());
-  o.push_back(new bluestore_overlay_t(789, 1024, 1232232));
-}
-
-ostream& operator<<(ostream& out, const bluestore_overlay_t& o)
-{
-  out << "overlay(0x" << std::hex << o.value_offset << "~" << o.length
-      << std::dec << " key " << o.key << ")";
-  return out;
-}
-
-
 // bluestore_pextent_t
 
 void bluestore_pextent_t::dump(Formatter *f) const
@@ -443,36 +413,64 @@ string bluestore_blob_t::get_flags_string(unsigned flags)
       s += '+';
     s += "compressed";
   }
+  if (flags & FLAG_CSUM) {
+    if (s.length())
+      s += '+';
+    s += "csum";
+  }
+  if (flags & FLAG_HAS_UNUSED) {
+    if (s.length())
+      s += '+';
+    s += "has_unused";
+  }
+
   return s;
 }
 
 void bluestore_blob_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(extents, bl);
-  ::encode(length, bl);
-  ::encode(compressed_length, bl);
-  ::encode(flags, bl);
-  ::encode(csum_type, bl);
-  ::encode(csum_chunk_order, bl);
+  small_encode(extents, bl);
+  small_encode_varint(flags, bl);
+  if (is_compressed()) {
+    small_encode_varint_lowz(compressed_length, bl);
+  }
+  if (has_csum()) {
+    small_encode_varint(csum_type, bl);
+    small_encode_varint(csum_chunk_order, bl);
+    small_encode_buf_lowz(csum_data, bl);
+  }
   ::encode(ref_map, bl);
-  ::encode(unused, bl);
-  ::encode(csum_data, bl);
+  if (has_unused()) {
+    ::encode( unused_uint_t(unused.to_ullong()), bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void bluestore_blob_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(extents, p);
-  ::decode(length, p);
-  ::decode(compressed_length, p);
-  ::decode(flags, p);
-  ::decode(csum_type, p);
-  ::decode(csum_chunk_order, p);
+  small_decode(extents, p);
+  small_decode_varint(flags, p);
+  if (is_compressed()) {
+    small_decode_varint_lowz(compressed_length, p);
+  } else {
+    compressed_length = 0;
+  }
+  if (has_csum()) {
+    small_decode_varint(csum_type, p);
+    small_decode_varint(csum_chunk_order, p);
+    small_decode_buf_lowz(csum_data, p);
+  } else {
+    csum_type = CSUM_NONE;
+    csum_chunk_order = 0;
+  }
   ::decode(ref_map, p);
-  ::decode(unused, p);
-  ::decode(csum_data, p);
+  if (has_unused()) {
+    unused_uint_t val;
+    ::decode(val, p);
+    unused = unused_t(val);
+  }
   DECODE_FINISH(p);
 }
 
@@ -483,7 +481,6 @@ void bluestore_blob_t::dump(Formatter *f) const
     f->dump_object("extent", p);
   }
   f->close_section();
-  f->dump_unsigned("length", length);
   f->dump_unsigned("compressed_length", compressed_length);
   f->dump_unsigned("flags", flags);
   f->dump_unsigned("csum_type", csum_type);
@@ -494,34 +491,30 @@ void bluestore_blob_t::dump(Formatter *f) const
   for (unsigned i = 0; i < n; ++i)
     f->dump_unsigned("csum", get_csum_item(i));
   f->close_section();
-  f->open_array_section("unused");
-  for (auto p = unused.begin(); p != unused.end(); ++p) {
-    f->open_object_section("range");
-    f->dump_unsigned("offset", p.get_start());
-    f->dump_unsigned("length", p.get_len());
-    f->close_section();
-  }
-  f->close_section();
+  f->dump_unsigned("unused", unused.to_ullong());
 }
 
 void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
 {
   ls.push_back(new bluestore_blob_t);
-  ls.push_back(new bluestore_blob_t(4096, 0));
-  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
-  ls.push_back(new bluestore_blob_t(4096, bluestore_pextent_t(111, 222), 12));
-  ls.back()->csum_type = CSUM_XXHASH32;
-  ls.back()->csum_chunk_order = 16;
+  ls.push_back(new bluestore_blob_t(0));
+  ls.push_back(new bluestore_blob_t);
+  ls.back()->extents.push_back(bluestore_pextent_t(111, 222));
+  ls.push_back(new bluestore_blob_t);
+  ls.back()->init_csum(CSUM_XXHASH32, 16, 65536);
   ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->ref_map.get(3, 5);
-  ls.back()->add_unused(0, 3);
-  ls.back()->add_unused(8, 8);
+  ls.back()->add_unused(0, 3, 4096);
+  ls.back()->add_unused(8, 8, 4096);
+  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40100000, 0x10000));
+  ls.back()->extents.emplace_back(
+    bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
+  ls.back()->extents.emplace_back(bluestore_pextent_t(0x40120000, 0x10000));
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
 {
   out << "blob(" << o.extents
-      << " len 0x" << std::hex << o.length << std::dec
       << " clen 0x" << std::hex << o.compressed_length << std::dec;
   if (o.flags) {
     out << " " << o.get_flags_string();
@@ -533,8 +526,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   if (!o.ref_map.empty()) {
     out << " " << o.ref_map;
   }
-  if (!o.unused.empty())
-    out << " unused=0x" << std::hex << o.unused << std::dec;
+  if (o.has_unused())
+    out << " unused=0x" << std::hex << o.unused.to_ullong() << std::dec;
   out << ")";
   return out;
 }
@@ -571,7 +564,7 @@ void bluestore_blob_t::put_ref(
   }
 
   // we cannot release something smaller than our csum chunk size
-  if (has_csum_data() && get_csum_chunk_size() > min_release_size) {
+  if (has_csum() && get_csum_chunk_size() > min_release_size) {
     min_release_size = get_csum_chunk_size();
   }
 
@@ -588,7 +581,7 @@ void bluestore_blob_t::put_ref(
     }
     uint64_t end;
     if (p == ref_map.ref_map.end()) {
-      end = this->length;
+      end = this->get_ondisk_length();
     } else {
       end = p->first;
     }
@@ -728,11 +721,17 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
 }
 
 // bluestore_lextent_t
-
-string bluestore_lextent_t::get_flags_string(unsigned flags)
+void bluestore_lextent_t::encode(bufferlist& bl) const
 {
-  string s;
-  return s;
+  small_encode_signed_varint(blob, bl);
+  small_encode_varint_lowz(offset, bl);
+  small_encode_varint_lowz(length, bl);
+}
+void bluestore_lextent_t::decode(bufferlist::iterator& p)
+{
+  small_decode_signed_varint(blob, p);
+  small_decode_varint_lowz(offset, p);
+  small_decode_varint_lowz(length, p);
 }
 
 void bluestore_lextent_t::dump(Formatter *f) const
@@ -740,27 +739,57 @@ void bluestore_lextent_t::dump(Formatter *f) const
   f->dump_unsigned("blob", blob);
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
-  f->dump_unsigned("flags", flags);
 }
 
 void bluestore_lextent_t::generate_test_instances(list<bluestore_lextent_t*>& ls)
 {
   ls.push_back(new bluestore_lextent_t);
-  ls.push_back(new bluestore_lextent_t(23232, 0, 4096, 0));
-  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192, 7));
+  ls.push_back(new bluestore_lextent_t(23232, 0, 4096));
+  ls.push_back(new bluestore_lextent_t(23232, 16384, 8192));
 }
 
 ostream& operator<<(ostream& out, const bluestore_lextent_t& lb)
 {
-  out  << "0x" << std::hex << lb.offset << "~" << lb.length << std::dec
-       << "->" << lb.blob;
-  if (lb.flags)
-    out << ":" << bluestore_lextent_t::get_flags_string(lb.flags);
-  return out;
+  return out << "0x" << std::hex << lb.offset << "~" << lb.length << std::dec
+	     << "->" << lb.blob;
 }
 
-
 // bluestore_onode_t
+void small_encode(const map<uint64_t,bluestore_lextent_t>& extents, bufferlist& bl)
+{
+  size_t n = extents.size();
+  small_encode_varint(n, bl);
+  if (n) {
+    auto p = extents.begin();
+    small_encode_varint_lowz(p->first, bl);
+    p->second.encode(bl);
+    uint64_t pos = p->first;
+    while (--n) {
+      ++p;
+      small_encode_varint_lowz((uint64_t)p->first - pos, bl);
+      p->second.encode(bl);
+      pos = p->first;
+    }
+  }
+}
+
+void small_decode(map<uint64_t,bluestore_lextent_t>& extents, bufferlist::iterator& p)
+{
+  size_t n;
+  extents.clear();
+  small_decode_varint(n, p);
+  if (n) {
+    uint64_t pos;
+    small_decode_varint_lowz(pos, p);
+    extents[pos].decode(p);
+    while (--n) {
+      uint64_t delta;
+      small_decode_varint_lowz(delta, p);
+      pos += delta;
+      extents[pos].decode(p);
+    }
+  }
+}
 
 void bluestore_onode_t::encode(bufferlist& bl) const
 {
@@ -768,10 +797,7 @@ void bluestore_onode_t::encode(bufferlist& bl) const
   ::encode(nid, bl);
   ::encode(size, bl);
   ::encode(attrs, bl);
-  ::encode(extent_map, bl);
-  ::encode(overlay_map, bl);
-  ::encode(overlay_refs, bl);
-  ::encode(last_overlay_key, bl);
+  small_encode(extent_map, bl);
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
@@ -785,10 +811,7 @@ void bluestore_onode_t::decode(bufferlist::iterator& p)
   ::decode(nid, p);
   ::decode(size, p);
   ::decode(attrs, p);
-  ::decode(extent_map, p);
-  ::decode(overlay_map, p);
-  ::decode(overlay_refs, p);
-  ::decode(last_overlay_key, p);
+  small_decode(extent_map, p);
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
@@ -817,25 +840,6 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_object_section("overlays");
-  for (map<uint64_t,bluestore_overlay_t>::const_iterator p = overlay_map.begin();
-       p != overlay_map.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-  f->open_array_section("overlay_refs");
-  for (map<uint64_t,uint16_t>::const_iterator p = overlay_refs.begin();
-       p != overlay_refs.end(); ++p) {
-    f->open_object_section("overlay");
-    f->dump_unsigned("offset", p->first);
-    f->dump_unsigned("refs", p->second);
-    f->close_section();
-  }
-  f->close_section();
-  f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
@@ -899,13 +903,11 @@ void bluestore_onode_t::punch_hole(
 	  bluestore_lextent_t(
 	    p->second.blob,
 	    p->second.offset + front,
-	    length,
-	    p->second.flags));
+	    length));
 	extent_map[end] = bluestore_lextent_t(
 	  p->second.blob,
 	  p->second.offset + front + length,
-	  p->second.length - front - length,
-	  p->second.flags);
+	  p->second.length - front - length);
 	p->second.length = front;
 	break;
       } else {
@@ -916,8 +918,7 @@ void bluestore_onode_t::punch_hole(
 	  bluestore_lextent_t(
 	    p->second.blob,
 	    p->second.offset + keep,
-	    p->second.length - keep,
-	    p->second.flags));
+	    p->second.length - keep));
 	p->second.length = keep;
 	++p;
 	continue;
@@ -935,13 +936,11 @@ void bluestore_onode_t::punch_hole(
       bluestore_lextent_t(
 	p->second.blob,
 	p->second.offset,
-	p->second.length - keep,
-	p->second.flags));
+	p->second.length - keep));
     extent_map[end] = bluestore_lextent_t(
       p->second.blob,
       p->second.offset + p->second.length - keep,
-      keep,
-      p->second.flags);
+      keep);
     extent_map.erase(p++);
     break;
   }
@@ -955,9 +954,6 @@ void bluestore_wal_op_t::encode(bufferlist& bl) const
   ::encode(op, bl);
   ::encode(extents, bl);
   ::encode(data, bl);
-  ::encode(nid, bl);
-  ::encode(overlays, bl);
-  ::encode(removed_overlays, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -967,9 +963,6 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
   ::decode(op, p);
   ::decode(extents, p);
   ::decode(data, p);
-  ::decode(nid, p);
-  ::decode(overlays, p);
-  ::decode(removed_overlays, p);
   DECODE_FINISH(p);
 }
 
@@ -980,17 +973,6 @@ void bluestore_wal_op_t::dump(Formatter *f) const
   f->open_array_section("extents");
   for (auto& e : extents) {
     f->dump_object("extent", e);
-  }
-  f->close_section();
-  f->dump_unsigned("nid", nid);
-  f->open_array_section("overlays");
-  for (auto& o : overlays) {
-    f->dump_object("overlay", o);
-  }
-  f->close_section();
-  f->open_array_section("removed_overlays");
-  for (auto key : removed_overlays) {
-    f->dump_unsigned("key", key);
   }
   f->close_section();
 }

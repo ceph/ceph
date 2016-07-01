@@ -15,8 +15,10 @@
 #include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "journal/ReplayEntry.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
 #include <boost/optional.hpp>
@@ -57,6 +59,7 @@ public:
     STATE_UNKNOWN,
     STATE_STARTING,
     STATE_REPLAYING,
+    STATE_REPLAY_FLUSHING,
     STATE_STOPPING,
     STATE_STOPPED,
   };
@@ -73,8 +76,10 @@ public:
     }
   };
 
-  ImageReplayer(Threads *threads, RadosRef local, RadosRef remote,
-		const std::string &local_mirror_uuid,
+  ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+                ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+                RadosRef local, RadosRef remote,
+                const std::string &local_mirror_uuid,
                 const std::string &remote_mirror_uuid, int64_t local_pool_id,
 		int64_t remote_pool_id, const std::string &remote_image_id,
                 const std::string &global_image_id);
@@ -85,6 +90,7 @@ public:
   State get_state() { Mutex::Locker l(m_lock); return get_state_(); }
   bool is_stopped() { Mutex::Locker l(m_lock); return is_stopped_(); }
   bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
+  bool is_replaying() { Mutex::Locker l(m_lock); return is_replaying_(); }
 
   std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
   void set_state_description(int r, const std::string &desc);
@@ -116,6 +122,8 @@ public:
   void stop(Context *on_finish = nullptr, bool manual = false);
   void restart(Context *on_finish = nullptr);
   void flush(Context *on_finish = nullptr);
+
+  void resync_image(Context *on_finish=nullptr);
 
   void print_status(Formatter *f, stringstream *ss);
 
@@ -215,6 +223,8 @@ private:
   };
 
   Threads *m_threads;
+  std::shared_ptr<ImageDeleter> m_image_deleter;
+  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
   RadosRef m_local, m_remote;
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
@@ -231,9 +241,13 @@ private:
     nullptr;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
+
+  decltype(ImageCtxT::journal) m_local_journal = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
   Journaler* m_remote_journaler = nullptr;
   ::journal::ReplayHandler *m_replay_handler = nullptr;
+  librbd::journal::ResyncListener *m_resync_listener;
+  bool m_stopping_for_resync = false;
 
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;
@@ -283,6 +297,9 @@ private:
   bool is_running_() const {
     return !is_stopped_() && m_state != STATE_STOPPING && !m_stop_requested;
   }
+  bool is_replaying_() const {
+    return m_state == STATE_REPLAYING;
+  }
 
   bool update_mirror_image_status(bool force, const OptionalState &state);
   bool start_mirror_image_status_update(bool force, bool restarting);
@@ -303,6 +320,7 @@ private:
 
   void start_replay();
   void handle_start_replay(int r);
+  void handle_stop_replay_request(int r);
 
   void replay_flush();
   void handle_replay_flush(int r);

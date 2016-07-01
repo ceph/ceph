@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [10.2.0], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [11.0.0], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -398,13 +398,27 @@ AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_FUNCS([syncfs], AC_DEFINE([HAVE_SYS_SYNCFS], [1], [we have syncfs]), [])
 
 # Find some crypto library for us to use, while letting user to decide which one to use.
-AC_ARG_WITH([cryptopp],
-	[AS_HELP_STRING([--with-cryptopp], [Use cryptographic functions from cryptopp])],
+AC_ARG_WITH([nss],
+	[AS_HELP_STRING([--with-nss], [Use cryptographic functions from nss])],
 	[],
-	[with_cryptopp=check])
-have_cryptopp=no
-# this looks clumsy but it's just if A then { success } else { if B then success }
-AS_IF([test "x$with_cryptopp" != "xno"],
+	[with_nss=check])
+have_nss=no
+AS_IF([test "x$with_nss" != "xno"],
+    [PKG_CHECK_MODULES([NSS], [nss], [have_nss=yes], [true])])
+# bail out if given explicit --with-nss
+if test "x$have_nss" = "xno" -a "x$with_nss" != "xcheck" -a "x$with_nss" != "xno"; then
+    AC_MSG_FAILURE([--with-nss was given, but library was not found])
+fi
+
+if test "x$have_nss" = "xno"; then
+  AC_ARG_WITH([cryptopp],
+    [AS_HELP_STRING([--with-cryptopp], [Use cryptographic functions from cryptopp])],
+    [],
+    [with_cryptopp=check])
+
+  have_cryptopp=no
+  # this looks clumsy but it's just if A then { success } else { if B then success }
+  AS_IF([test "x$with_cryptopp" != "xno"],
     [PKG_CHECK_MODULES([CRYPTOPP],
 	    [libcrypto++],
 	    [have_cryptopp=yes],
@@ -422,32 +436,14 @@ AS_IF([test "x$with_cryptopp" != "xno"],
 		   CXXFLAGS="${SAVED_CXXFLAGS}"
 		   AC_LANG_POP([C++])
 	   ])])
-# bail out if given explicit --with-cryptopp
-if test "x$have_cryptopp" = "xno" -a "x$with_cryptopp" != "xcheck" -a "x$with_cryptopp" != "xno"; then
+  # bail out if given explicit --with-cryptopp
+  if test "x$have_cryptopp" = "xno" -a "x$with_cryptopp" != "xcheck" -a "x$with_cryptopp" != "xno"; then
     AC_MSG_FAILURE([--with-cryptopp was given, but library was not found])
+  fi
 fi
 
-AC_ARG_WITH([nss],
-	[AS_HELP_STRING([--with-nss], [Use cryptographic functions from nss])],
-	[],
-	[with_nss=check])
-have_nss=no
-AS_IF([test "x$with_nss" != "xno"],
-    [PKG_CHECK_MODULES([NSS], [nss], [have_nss=yes], [true])])
-# bail out if given explicit --with-nss
-if test "x$have_nss" = "xno" -a "x$with_nss" != "xcheck" -a "x$with_nss" != "xno"; then
-    AC_MSG_FAILURE([--with-nss was given, but library was not found])
-fi
-
-# now decide which crypto library to really use
-if test "x$have_cryptopp" = "xyes"; then
-    AC_MSG_NOTICE([using cryptopp for cryptography])
-    AC_DEFINE([USE_CRYPTOPP], [1], [Define if using CryptoPP.])
-    AC_SUBST([CRYPTO_CFLAGS], [$CRYPTOPP_CFLAGS])
-    #AC_SUBST([CRYPTO_CXXFLAGS], [$CRYPTOPP_CXXFLAGS])
-    AM_CXXFLAGS="${AM_CXXFLAGS} ${CRYPTOPP_CXXFLAGS}"
-    AC_SUBST([CRYPTO_LIBS], [$CRYPTOPP_LIBS])
-elif test "x$have_nss" = "xyes"; then
+# now decide which crypto library to use
+if test "x$have_nss" = "xyes"; then
     AC_MSG_NOTICE([using nss for cryptography])
     AC_DEFINE([USE_NSS], [1], [Define if using NSS.])
     AC_SUBST([CRYPTO_CFLAGS], [$NSS_CFLAGS])
@@ -455,6 +451,19 @@ elif test "x$have_nss" = "xyes"; then
     #AC_SUBST([CRYPTO_CXXFLAGS], [$NSS_CFLAGS $NSS_CXXFLAGS])
     AM_CXXFLAGS="${AM_CXXFLAGS} ${NSS_CFLAGS} ${NSS_CXXFLAGS}"
     AC_SUBST([CRYPTO_LIBS], [$NSS_LIBS])
+    AC_SUBST([SSL_LIBS], [$NSS_LIBS])
+elif test "x$have_cryptopp" = "xyes"; then
+    AC_MSG_NOTICE([using cryptopp for cryptography])
+    AC_DEFINE([USE_CRYPTOPP], [1], [Define if using CryptoPP.])
+    AC_SUBST([CRYPTO_CFLAGS], [$CRYPTOPP_CFLAGS])
+    #AC_SUBST([CRYPTO_CXXFLAGS], [$CRYPTOPP_CXXFLAGS])
+    AM_CXXFLAGS="${AM_CXXFLAGS} ${CRYPTOPP_CXXFLAGS}"
+    AC_SUBST([CRYPTO_LIBS], [$CRYPTOPP_LIBS])
+    # OpenSSL -- defines OPENSSL_{INCLUDES,LIBS,LDFLAGS} on success
+    AX_CHECK_OPENSSL([],
+	[AC_MSG_FAILURE([CryptoPP build selected but OpenSSL not found])])
+    AC_SUBST([SSL_INCLUDES], [$OPENSSL_INCLUDES])
+    AC_SUBST([SSL_LIBS], [$OPENSSL_LIBS])
 else
     AC_MSG_FAILURE([no suitable crypto library found])
 fi
@@ -1305,6 +1314,20 @@ if test "x$with_openldap" != "xno"; then
 fi
 AM_CONDITIONAL(WITH_OPENLDAP, [ test "$have_openldap" = "yes" ])
 
+AC_ARG_WITH([reentrant-strsignal],
+            [AS_HELP_STRING([--with-reentrant-strsignal], [Use strsignal(3) instead of sys_siglist[]])],
+            [],
+            [with_reentrant_strsignal=no])
+AS_IF([test "x$with_reentrant_strsignal" != xno],
+  [AC_DEFINE(HAVE_REENTRANT_STRSIGNAL, 1, [Define if strsignal(3) is reentrant])])
+
+AC_ARG_WITH([thread-safe-res-query],
+            [AS_HELP_STRING([--with-thread-safe-res-query], [Use res_query(3) without locking])],
+            [],
+            [with_thread_safe_res_query=no])
+AS_IF([test "x$with_thread_safe_res_query" != xno],
+  [AC_DEFINE(HAVE_THREAD_SAFE_RES_QUERY, 1, [Define if res_query(3) is thread safe])])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
@@ -1361,7 +1384,6 @@ AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
 	src/ocf/Makefile
-	src/ocf/ceph
 	src/ocf/rbd
 	src/java/Makefile
 	systemd/Makefile

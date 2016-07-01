@@ -10,6 +10,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
+#include "tools/rbd_mirror/ImageDeleter.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/Threads.h"
 
 #include <string>
@@ -130,6 +132,8 @@ int main(int argc, const char **argv)
   rbd::mirror::RadosRef local(new librados::Rados());
   rbd::mirror::RadosRef remote(new librados::Rados());
   rbd::mirror::Threads *threads = nullptr;
+  std::shared_ptr<rbd::mirror::ImageDeleter> image_deleter;
+  std::shared_ptr<rbd::mirror::ImageSyncThrottler<>> image_sync_throttler;
 
   C_SaferCond start_cond, stop_cond;
 
@@ -184,7 +188,16 @@ int main(int argc, const char **argv)
 
   threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
     local->cct()));
-  replayer = new rbd::mirror::ImageReplayer<>(threads, local, remote, client_id,
+
+  image_deleter.reset(new rbd::mirror::ImageDeleter(local, threads->work_queue,
+                                                    threads->timer,
+                                                    &threads->timer_lock));
+
+  image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
+
+  replayer = new rbd::mirror::ImageReplayer<>(threads, image_deleter,
+                                              image_sync_throttler, local,
+                                              remote, client_id,
 					      "remote mirror uuid",
                                               local_pool_id, remote_pool_id,
                                               remote_image_id,

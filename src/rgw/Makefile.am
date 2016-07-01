@@ -121,7 +121,7 @@ LIBRGW_DEPS += \
         -ldl
 endif
 
-if FREEBSD
+if WITH_OPENLDAP
 LIBRGW_DEPS += \
       -lldap
 endif
@@ -143,8 +143,8 @@ libcivetweb_la_SOURCES =  \
 
 libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -fPIC -Woverloaded-virtual \
 	${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE} -fPIC -DNO_SSL_DL
-LIBCIVETWEB_DEPS += -lssl -lcrypto
+libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE} ${SSL_INCLUDES} -fPIC -DNO_SSL_DL
+LIBCIVETWEB_DEPS += ${SSL_LIBS}
 
 noinst_LTLIBRARIES += libcivetweb.la
 

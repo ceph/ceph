@@ -5,7 +5,6 @@
 #include "include/rbd/object_map_types.h"
 #include "include/stringify.h"
 #include "common/dout.h"
-#include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "cls/lock/cls_lock_client.h"

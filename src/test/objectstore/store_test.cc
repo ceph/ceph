@@ -1161,8 +1161,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ( 0u, statfs.allocated);
     ASSERT_EQ( 0u, statfs.stored);
-    ASSERT_EQ(0x1000u, statfs.bsize);
-    ASSERT_EQ(g_conf->bluestore_block_size / 0x1000, statfs.blocks);
+    ASSERT_EQ(g_conf->bluestore_block_size, statfs.total);
     ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
     //force fsck
     EXPECT_EQ(store->umount(), 0);
@@ -1379,10 +1378,9 @@ TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ( 0u, statfs.allocated);
-    ASSERT_EQ( 0u, statfs.stored);
-    ASSERT_EQ(0x1000u, statfs.bsize);
-    ASSERT_EQ(g_conf->bluestore_block_size / 0x1000, statfs.blocks);
+    ASSERT_EQ(g_conf->bluestore_block_size, statfs.total);
+    ASSERT_EQ(0u, statfs.allocated);
+    ASSERT_EQ(0u, statfs.stored);
     ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
   }
   std::string data;
@@ -1972,6 +1970,35 @@ TEST_P(StoreTest, MiscFragmentTests) {
     ASSERT_EQ(r, 0);
   }
 
+}
+
+TEST_P(StoreTest, ZeroLengthWrite) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist empty;
+    t.write(cid, hoid, 1048576, 0, empty);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  struct stat stat;
+  r = store->stat(cid, hoid, &stat);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, stat.st_size);
+
+  bufferlist newdata;
+  r = store->read(cid, hoid, 0, 1048576, newdata);
+  ASSERT_EQ(0, r);
 }
 
 TEST_P(StoreTest, SimpleAttrTest) {
@@ -3440,8 +3467,10 @@ public:
 
     bufferlist& data = contents[new_obj].data;
     if (data.length() <= offset) {
-      data.append_zero(offset-data.length());
-      data.append(bl);
+      if (len > 0) {
+        data.append_zero(offset-data.length());
+        data.append(bl);
+      }
     } else {
       bufferlist value;
       assert(data.length() > offset);
@@ -3686,14 +3715,16 @@ public:
   }
 };
 
-void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store)
+void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store,
+		     uint64_t max_obj, uint64_t max_wr, uint64_t align)
 {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen(555);
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 400*1024, 40*1024, 0);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid,
+				  max_obj, max_wr, align);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
@@ -3731,38 +3762,164 @@ void doSyntheticTest(boost::scoped_ptr<ObjectStore>& store)
 }
 
 TEST_P(StoreTest, Synthetic) {
-  doSyntheticTest(store);
+  doSyntheticTest(store, 400*1024, 40*1024, 0);
 }
 
-TEST_P(StoreTest, SyntheticCompressed) {
-  if (string(GetParam()) != "bluestore")
-    return;
-  g_conf->set_val("bluestore_compression", "force");
-  g_ceph_context->_conf->apply_changes(NULL);
 
-  doSyntheticTest(store);
+// bluestore matrix testing
+uint64_t max_write = 40 * 1024;
+uint64_t max_size = 400 * 1024;
+uint64_t alignment = 0;
 
-  g_conf->set_val("bluestore_compression_algorithm", "zlib");
-  g_ceph_context->_conf->apply_changes(NULL);
+string matrix_get(const char *k) {
+  if (string(k) == "max_write") {
+    return stringify(max_write);
+  } else if (string(k) == "max_size") {
+    return stringify(max_size);
+  } else if (string(k) == "alignment") {
+    return stringify(alignment);
+  } else {
+    char *buf;
+    g_conf->get_val(k, &buf, -1);
+    string v = buf;
+    free(buf);
+    return v;
+  }
+}
 
-  doSyntheticTest(store);
+void matrix_set(const char *k, const char *v) {
+  if (string(k) == "max_write") {
+    max_write = atoll(v);
+  } else if (string(k) == "max_size") {
+    max_size = atoll(v);
+  } else if (string(k) == "alignment") {
+    alignment = atoll(v);
+  } else {
+    g_conf->set_val(k, v);
+  }
+}
 
-  g_conf->set_val("bluestore_compression", "none");
-  g_conf->set_val("bluestore_compression_algorithm", "snappy");
+void do_matrix_choose(const char *matrix[][10],
+		      int i, int pos, int num,
+		      boost::scoped_ptr<ObjectStore>& store) {
+  if (matrix[i][0]) {
+    int count;
+    for (count = 0; matrix[i][count+1]; ++count) ;
+    for (int j = 1; matrix[i][j]; ++j) {
+      matrix_set(matrix[i][0], matrix[i][j]);
+      do_matrix_choose(matrix, i + 1, pos * count + j - 1, num * count, store);
+    }
+  } else {
+    cout << "---------------------- " << (pos + 1) << " / " << num
+	 << " ----------------------" << std::endl;
+    for (unsigned k=0; matrix[k][0]; ++k) {
+      cout << "  " << matrix[k][0] << " = " << matrix_get(matrix[k][0])
+	   << std::endl;
+    }
+    g_ceph_context->_conf->apply_changes(NULL);
+    doSyntheticTest(store, max_size, max_write, alignment);
+  }
+}
+
+void do_matrix(const char *matrix[][10],
+	       boost::scoped_ptr<ObjectStore>& store)
+{
+  map<string,string> old;
+  for (unsigned i=0; matrix[i][0]; ++i) {
+    old[matrix[i][0]] = matrix_get(matrix[i][0]);
+  }
+  cout << "saved config options " << old << std::endl;
+
+  do_matrix_choose(matrix, 0, 0, 1, store);
+
+  cout << "restoring config options " << old << std::endl;
+  for (auto p : old) {
+    cout << "  " << p.first << " = " << p.second << std::endl;
+    matrix_set(p.first.c_str(), p.second.c_str());
+  }
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
-TEST_P(StoreTest, SyntheticNoCSum) {
+TEST_P(StoreTest, SyntheticMatrixCsumAlgorithm) {
   if (string(GetParam()) != "bluestore")
     return;
-  g_conf->set_val("bluestore_csum", "false");
-  g_conf->set_val("bluestore_csum_type", "none");
-  g_ceph_context->_conf->apply_changes(NULL);
 
-  doSyntheticTest(store);
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "1048576", 0 },
+    { "alignment", "16", 0 },
+    { "bluestore_min_alloc_size", "65536", 0 },
+    { "bluestore_csum", "true", 0 },
+    { "bluestore_csum_type", "crc32c", "crc32c_16", "crc32c_8", "xxhash32",
+      "xxhash64", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
 
-  g_conf->set_val("bluestore_csum", "true");
-  g_conf->set_val("bluestore_csum_type", "crc32c");
+TEST_P(StoreTest, SyntheticMatrixCsumVsCompression) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "262144", 0 },
+    { "alignment", "512", 0 },
+    { "bluestore_min_alloc_size", "32768", "4096", 0 },
+    { "bluestore_compression", "force", "none", 0},
+    { "bluestore_csum", "true", 0 },
+    { "bluestore_csum_type", "crc32c", 0 },
+    { "bluestore_default_buffered_read", "true", "false", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
+TEST_P(StoreTest, SyntheticMatrixCompression) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "1048576", 0 },
+    { "max_size", "4194304", 0 },
+    { "alignment", "65536", 0 },
+    { "bluestore_min_alloc_size", "4096", "65536", 0 },
+    { "bluestore_compression", "force", "aggressive", "passive", "none", 0},
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
+TEST_P(StoreTest, SyntheticMatrixCompressionAlgorithm) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "1048576", 0 },
+    { "max_size", "4194304", 0 },
+    { "alignment", "65536", 0 },
+    { "bluestore_compression_algorithm", "zlib", "snappy", 0 },
+    { "bluestore_compression", "force", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
+}
+
+TEST_P(StoreTest, SyntheticMatrixNoCsum) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "max_write", "65536", 0 },
+    { "max_size", "1048576", 0 },
+    { "alignment", "512", 0 },
+    { "bluestore_min_alloc_size", "65536", "4096", 0 },
+    { "bluestore_compression", "force", "none", 0},
+    { "bluestore_csum", "false", 0 },
+    { "bluestore_default_buffered_read", "true", "false", 0 },
+    { 0 },
+  };
+  do_matrix(m, store);
 }
 
 TEST_P(StoreTest, AttrSynthetic) {
@@ -4777,15 +4934,6 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 
 #endif
 
-static bool plugin_exists(const string& compressor_dir)
-{
-  string pattern(compressor_dir + "/libceph*.so");
-  glob_t buf;
-  int ret = glob(pattern.c_str(), 0, nullptr, &buf);
-  globfree(&buf);
-  return ret == 0;
-}
-
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -4793,38 +4941,6 @@ int main(int argc, char **argv) {
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-
-  const char* env = getenv("CEPH_LIB");
-  std::string directory(env ? env : ".libs");
-  if (plugin_exists(directory)) {
-    string mkdir_compressor = "mkdir -p " + directory + "/compressor";
-    int r = system(mkdir_compressor.c_str());
-    (void)r;
-
-    string cp_libceph_snappy = "cp " + directory + "/libceph_snappy.so* " + directory + "/compressor/";
-    r = system(cp_libceph_snappy.c_str());
-    (void)r;
-
-    string cp_libceph_zlib = "cp " + directory + "/libceph_zlib.so* " + directory + "/compressor/";
-    r = system(cp_libceph_zlib.c_str());
-    (void)r;
-    g_ceph_context->_conf->set_val("plugin_dir", directory, false, false);
-  } else {
-    char plugin_dir[PATH_MAX];
-    char *val = plugin_dir;
-    int r = g_ceph_context->_conf->get_val("plugin_dir", &val,
-					   sizeof(plugin_dir));
-    if (r)
-      return r;
-    string compressor_dir(val);
-    compressor_dir += "/compressor";
-    if (!plugin_exists(compressor_dir)) {
-      std::cerr << "compressor plugins not found in '"
-		<< directory << "' or '" << compressor_dir << "'"
-		<< std::endl;
-      return EINVAL;
-    }
-  }
 
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
@@ -4839,6 +4955,11 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
   g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
   g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
+
+  // set small cache sizes so we see trimming during Synthetic tests
+  g_ceph_context->_conf->set_val("bluestore_buffer_cache_size", "2000000");
+  g_ceph_context->_conf->set_val("bluestore_onode_cache_size", "500");
+
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);

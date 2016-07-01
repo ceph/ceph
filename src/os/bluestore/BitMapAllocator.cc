@@ -30,10 +30,11 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
         zone_size_blks, CONCURRENT, true);
   assert(m_bit_alloc);
   if (!m_bit_alloc) {
-    dout(10) << __func__ << "Unable to intialize Bit Allocator" << dendl;
+    derr << __func__ << " Unable to intialize Bit Allocator" << dendl;
   }
-  dout(10) << __func__ <<" instance "<< (uint64_t) this <<
-      " size " << device_size << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " size 0x" << std::hex << device_size << std::dec
+           << dendl;
 }
 
 BitMapAllocator::~BitMapAllocator()
@@ -43,8 +44,10 @@ BitMapAllocator::~BitMapAllocator()
 
 void BitMapAllocator::insert_free(uint64_t off, uint64_t len)
 {
-  dout(20) << __func__ <<" instance "<< (uint64_t) this <<
-     " offset " << off << " len "<< len << dendl;
+  dout(20) << __func__ << " instance " << (uint64_t) this
+           << " off 0x" << std::hex << off
+           << " len 0x" << len << std::dec
+           << dendl;
 
   assert(!(off % m_block_size));
   assert(!(len % m_block_size));
@@ -57,9 +60,10 @@ int BitMapAllocator::reserve(uint64_t need)
 {
   int nblks = need / m_block_size; // apply floor
   assert(!(need % m_block_size));
-  dout(10) << __func__ <<" instance "<< (uint64_t) this <<
-    " num_used " << m_bit_alloc->get_used_blocks() <<
-    " total " << m_bit_alloc->size() << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " num_used " << m_bit_alloc->get_used_blocks()
+           << " total " << m_bit_alloc->size()
+           << dendl;
 
   if (!m_bit_alloc->reserve_blocks(nblks)) {
     return -ENOSPC;
@@ -72,10 +76,11 @@ void BitMapAllocator::unreserve(uint64_t unused)
   int nblks = unused / m_block_size;
   assert(!(unused % m_block_size));
 
-  dout(10) << __func__ <<" instance "<< (uint64_t) this <<
-      " unused " << nblks <<
-      " num used " << m_bit_alloc->get_used_blocks() <<
-      " total " << m_bit_alloc->size() << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " unused " << nblks
+           << " num used " << m_bit_alloc->get_used_blocks()
+           << " total " << m_bit_alloc->size()
+           << dendl;
 
   m_bit_alloc->unreserve_blocks(nblks);
 }
@@ -93,11 +98,11 @@ int BitMapAllocator::allocate(
   int64_t start_blk = 0;
   int64_t count = 0;
 
-  dout(10) << __func__ <<" instance "<< (uint64_t) this
-     << " want_size " << want_size
-     << " alloc_unit " << alloc_unit
-     << " hint " << hint
-     << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " want_size 0x" << std::hex << want_size
+           << " alloc_unit 0x" << alloc_unit
+           << " hint 0x" << hint << std::dec
+           << dendl;
 
   *offset = 0;
   *length = 0;
@@ -110,7 +115,9 @@ int BitMapAllocator::allocate(
   *length = count * m_block_size;
 
   dout(20) << __func__ <<" instance "<< (uint64_t) this
-     << " offset " << *offset << " length " << *length << dendl;
+           << " offset 0x" << std::hex << *offset
+           << " length 0x" << *length << std::dec
+           << dendl;
 
   return 0;
 }
@@ -119,7 +126,9 @@ int BitMapAllocator::release(
   uint64_t offset, uint64_t length)
 {
   std::lock_guard<std::mutex> l(m_lock);
-  dout(10) << __func__ << " " << offset << "~" << length << dendl;
+  dout(10) << __func__ << " 0x"
+           << std::hex << offset << "~" << length << std::dec
+           << dendl;
   m_uncommitted.insert(offset, length);
   m_num_uncommitted += length;
   return 0;
@@ -135,29 +144,35 @@ uint64_t BitMapAllocator::get_free()
 void BitMapAllocator::dump(ostream& out)
 {
   std::lock_guard<std::mutex> l(m_lock);
-  dout(30) << __func__ <<" instance "<< (uint64_t) this
-      << " committing: " << m_committing.num_intervals()
-      << " extents" << dendl;
+  dout(30) << __func__ << " instance " << (uint64_t) this
+           << " committing: " << m_committing.num_intervals() << " extents"
+           << dendl;
 
   for (auto p = m_committing.begin();
     p != m_committing.end(); ++p) {
-    dout(30) << __func__ <<" instance "<< (uint64_t) this
-        << "  " << p.get_start() << "~" << p.get_len() << dendl;
+    dout(30) << __func__ << " instance " << (uint64_t) this
+             << " 0x" << std::hex << p.get_start()
+             << "~" << p.get_len() << std::dec
+             << dendl;
   }
-  dout(30) << __func__ <<" instance "<< (uint64_t) this
-        << " uncommitted: " << m_uncommitted.num_intervals()
-        << " extents" << dendl;
+  dout(30) << __func__ << " instance " << (uint64_t) this
+           << " uncommitted: " << m_uncommitted.num_intervals() << " extents"
+           << dendl;
 
   for (auto p = m_uncommitted.begin();
     p != m_uncommitted.end(); ++p) {
-    dout(30) << __func__ << "  " << p.get_start() << "~" << p.get_len() << dendl;
+    dout(30) << __func__ << " 0x" << std::hex << p.get_start()
+             << "~" << p.get_len() << std::dec
+             << dendl;
   }
 }
 
 void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  dout(10) << __func__ <<" instance "<< (uint64_t) this <<
-    " offset " << offset << " length " << length << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " offset 0x" << std::hex << offset
+           << " length 0x" << length << std::dec
+           << dendl;
   uint64_t size = m_bit_alloc->size() * m_block_size;
 
   uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
@@ -174,8 +189,10 @@ void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
 
 void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
-  dout(10) << __func__ <<" instance "<< (uint64_t) this <<
-    " offset " << offset << " length " << length << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " offset 0x" << std::hex << offset
+           << " length 0x" << length << std::dec
+           << dendl;
 
   assert(!(offset % m_block_size));
   assert(!(length % m_block_size));
@@ -189,18 +206,18 @@ void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 
 void BitMapAllocator::shutdown()
 {
-  dout(10) << __func__ <<" instance "<< (uint64_t) this << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this << dendl;
   m_bit_alloc->shutdown();
-  //delete m_bit_alloc; //Fix this
 }
 
 void BitMapAllocator::commit_start()
 {
   std::lock_guard<std::mutex> l(m_lock);
 
-  dout(10) << __func__ <<" instance "<< (uint64_t) this
-      << " releasing " << m_num_uncommitted
-      << " in extents " << m_uncommitted.num_intervals() << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " releasing " << m_num_uncommitted
+           << " in extents " << m_uncommitted.num_intervals()
+           << dendl;
   assert(m_committing.empty());
   m_committing.swap(m_uncommitted);
   m_num_committing = m_num_uncommitted;
@@ -210,9 +227,10 @@ void BitMapAllocator::commit_start()
 void BitMapAllocator::commit_finish()
 {
   std::lock_guard<std::mutex> l(m_lock);
-  dout(10) << __func__ <<" instance "<< (uint64_t) this
-      << " released " << m_num_committing
-      << " in extents " << m_committing.num_intervals() << dendl;
+  dout(10) << __func__ << " instance " << (uint64_t) this
+           << " released " << m_num_committing
+           << " in extents " << m_committing.num_intervals()
+           << dendl;
   for (auto p = m_committing.begin();
     p != m_committing.end();
     ++p) {

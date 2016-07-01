@@ -17,6 +17,7 @@ namespace librbd {
 
 class AioObjectRequest;
 class ImageCtx;
+class AioCompletion;
 
 template <typename ImageCtxT = ImageCtx>
 class AioImageRequest {

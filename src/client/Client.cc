@@ -1614,7 +1614,7 @@ int Client::make_request(MetaRequest *request,
 
   // make note
   mds_requests[tid] = request->get();
-  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
+  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)
     oldest_tid = tid;
 
   if (uid < 0)
@@ -1706,10 +1706,11 @@ int Client::make_request(MetaRequest *request,
   if (!request->reply) {
     assert(request->aborted());
     assert(!request->got_unsafe);
+    r = request->get_abort_code();
     request->item.remove_myself();
     unregister_request(request);
     put_request(request); // ours
-    return request->get_abort_code();
+    return r;
   }
 
   // got it!
@@ -2506,9 +2507,10 @@ void Client::handle_fs_map_user(MFSMapUser *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
-  if (m->get_epoch() < mdsmap->get_epoch()) {
-    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
-	    << mdsmap->get_epoch() << dendl;
+  if (m->get_epoch() <= mdsmap->get_epoch()) {
+    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch()
+                  << " is identical to or older than our "
+                  << mdsmap->get_epoch() << dendl;
     m->put();
     return;
   }  
@@ -7043,7 +7045,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
     fg = frag_t(dirp->offset_high());
   
   ldout(cct, 10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg
-		 << " offset " << hex << dirp->offset << dendl;
+		 << " offset " << hex << dirp->offset << dec << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
@@ -7226,7 +7228,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   }
 
   // can we read from our cache?
-  ldout(cct, 10) << "offset " << hex << dirp->offset
+  ldout(cct, 10) << "offset " << hex << dirp->offset << dec
 	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
@@ -8881,6 +8883,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   client_lock.Unlock();
   int rval = cond.wait();
   client_lock.Lock();
+
+  if (rval < 0) {
+    ldout(cct, 1) << "underlying call to statfs returned error: "
+                  << cpp_strerror(rval)
+                  << dendl;
+    return rval;
+  }
 
   memset(stbuf, 0, sizeof(*stbuf));
 
@@ -11662,8 +11671,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		      ceph::real_clock::now(cct),
 		      0, true, onfinish,
 		      new C_OnFinisher(onsafe, &objecter_finisher));
-      if (r < 0)
-	goto done;
+      assert(r == 0);
 
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
@@ -11691,8 +11699,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       }
     }
   }
-
-done:
 
   if (onuninline) {
     client_lock.Unlock();

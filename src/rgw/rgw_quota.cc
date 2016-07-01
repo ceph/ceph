@@ -823,8 +823,6 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWRados *store;
   RGWBucketStatsCache bucket_stats_cache;
   RGWUserStatsCache user_stats_cache;
-  RGWQuotaInfo def_bucket_quota;
-  RGWQuotaInfo def_user_quota;
 
   int check_quota(const char * const entity,
                   const RGWQuotaInfo& quota,
@@ -856,24 +854,9 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     return 0;
   }
 public:
-  RGWQuotaHandlerImpl(RGWRados *_store, bool quota_threads) : store(_store), bucket_stats_cache(_store), user_stats_cache(_store, quota_threads) {
-    if (store->ctx()->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      def_bucket_quota.max_objects = store->ctx()->_conf->rgw_bucket_default_quota_max_objects;
-      def_bucket_quota.enabled = true;
-    }
-    if (store->ctx()->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      def_bucket_quota.max_size = store->ctx()->_conf->rgw_bucket_default_quota_max_size * 1024;
-      def_bucket_quota.enabled = true;
-    }
-    if (store->ctx()->_conf->rgw_user_default_quota_max_objects >= 0) {
-      def_user_quota.max_objects = store->ctx()->_conf->rgw_user_default_quota_max_objects;
-      def_user_quota.enabled = true;
-    }
-    if (store->ctx()->_conf->rgw_user_default_quota_max_size >= 0) {
-      def_user_quota.max_size = store->ctx()->_conf->rgw_user_default_quota_max_size * 1024;
-      def_user_quota.enabled = true;
-    }
-  }
+  RGWQuotaHandlerImpl(RGWRados *_store, bool quota_threads) : store(_store),
+                                    bucket_stats_cache(_store),
+                                    user_stats_cache(_store, quota_threads) {}
 
   virtual int check_quota(const rgw_user& user,
                           rgw_bucket& bucket,
@@ -882,10 +865,9 @@ public:
                           uint64_t num_objs,
                           uint64_t size) override {
 
-    if (!bucket_quota.enabled && !user_quota.enabled && !def_bucket_quota.enabled && !def_user_quota.enabled)
+    if (!bucket_quota.enabled && !user_quota.enabled) {
       return 0;
-
-    RGWStorageStats bucket_stats;
+    }
 
     /*
      * we need to fetch bucket stats if the user quota is enabled, because
@@ -894,49 +876,30 @@ public:
      * fetch that info and not rely on cached data
      */
 
-    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
-                                           bucket_quota);
-    if (ret < 0) {
-      return ret;
-    }
-
     if (bucket_quota.enabled) {
+      RGWStorageStats bucket_stats;
+      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,
+                                           bucket_quota);
+      if (ret < 0) {
+        return ret;
+      }
       ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size);
       if (ret < 0) {
         return ret;
       }
     }
 
-    if (def_bucket_quota.enabled) {
-      ret = check_quota("def_bucket", def_bucket_quota, bucket_stats,
-                        num_objs, size);
-      if (ret < 0) {
-        return ret;
-      }
-    }
-
-    if (user_quota.enabled || def_user_quota.enabled) {
+    if (user_quota.enabled) {
       RGWStorageStats user_stats;
-
-      ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
+      int ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
       if (ret < 0) {
         return ret;
       }
-
-      if (user_quota.enabled) {
-	ret = check_quota("user", user_quota, user_stats, num_objs, size);
-	if (ret < 0) {
-	  return ret;
-        }
-      } else if (def_user_quota.enabled) {
-        ret = check_quota("def_user", def_user_quota, user_stats,
-                          num_objs, size);
-        if (ret < 0) {
-          return ret;
-        }
+      ret = check_quota("user", user_quota, user_stats, num_objs, size);
+      if (ret < 0) {
+        return ret;
       }
     }
-
     return 0;
   }
 

@@ -14,8 +14,6 @@
  *
  */
 
-#include <time.h>
-
 #include "common/errno.h"
 #include "Event.h"
 
@@ -57,16 +55,17 @@ class C_handle_notify : public EventCallback {
 
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
-  return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
+  return *_dout << "Event(" << this << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
 }
 
-static thread_local pthread_t thread_id = 0;
-
-int EventCenter::init(int n)
+int EventCenter::init(int n, unsigned i)
 {
   // can't init multi times
   assert(nevent == 0);
+
+  idx = i;
+
 #ifdef HAVE_EPOLL
   driver = new EpollDriver(cct);
 #else
@@ -117,7 +116,7 @@ int EventCenter::init(int n)
 EventCenter::~EventCenter()
 {
   {
-    Mutex::Locker l(external_lock);
+    std::lock_guard<std::mutex> l(external_lock);
     while (!external_events.empty()) {
       EventCallbackRef e = external_events.front();
       if (e)
@@ -141,13 +140,18 @@ EventCenter::~EventCenter()
 
 void EventCenter::set_owner()
 {
-  thread_id = owner = pthread_self();
+  cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
+      global_centers, "AsyncMessenger::EventCenter::global_center");
+  assert(global_centers && !global_centers->centers[idx]);
+  global_centers->centers[idx] = this;
+  owner = pthread_self();
+  ldout(cct, 1) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   int r = 0;
-  Mutex::Locker l(file_lock);
+  std::lock_guard<std::mutex> l(file_lock);
   if (fd >= nevent) {
     int new_size = nevent << 2;
     while (fd > new_size)
@@ -192,7 +196,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 void EventCenter::delete_file_event(int fd, int mask)
 {
   assert(fd >= 0);
-  Mutex::Locker l(file_lock);
+  std::lock_guard<std::mutex> l(file_lock);
   if (fd >= nevent) {
     ldout(cct, 1) << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
                   << "mask=" << mask << dendl;
@@ -224,7 +228,7 @@ void EventCenter::delete_file_event(int fd, int mask)
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
 {
-  Mutex::Locker l(time_lock);
+  assert(in_thread());
   uint64_t id = time_event_next_id++;
 
   ldout(cct, 10) << __func__ << " id=" << id << " trigger after " << microseconds << "us"<< dendl;
@@ -232,45 +236,40 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   clock_type::time_point expire = clock_type::now() + std::chrono::microseconds(microseconds);
   event.id = id;
   event.time_cb = ctxt;
-  time_events[expire].push_back(event);
-  if (expire < next_time)
-    wakeup();
+  std::multimap<clock_type::time_point, TimeEvent>::value_type s_val(expire, event);
+  auto it = time_events.insert(std::move(s_val));
+  event_map[id] = it;
 
   return id;
 }
 
-// TODO: Ineffective implementation now!
 void EventCenter::delete_time_event(uint64_t id)
 {
-  Mutex::Locker l(time_lock);
+  assert(in_thread());
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
   if (id >= time_event_next_id)
     return ;
 
-  for (auto it = time_events.begin(); it != time_events.end(); ++it) {
-    for (list<TimeEvent>::iterator j = it->second.begin();
-         j != it->second.end(); ++j) {
-      if (j->id == id) {
-        it->second.erase(j);
-        if (it->second.empty())
-          time_events.erase(it);
-        return ;
-      }
-    }
+  auto it = event_map.find(id);
+  if (it == event_map.end()) {
+    ldout(cct, 10) << __func__ << " id=" << id << " not found" << dendl;
+    return ;
   }
+
+  time_events.erase(it->second);
 }
 
 void EventCenter::wakeup()
 {
-  if (already_wakeup.compare_and_swap(0, 1)) {
     ldout(cct, 1) << __func__ << dendl;
+    already_wakeup.compare_and_swap(0, 1);
+
     char buf[1];
     buf[0] = 'c';
     // wake up "event_wait"
     int n = write(notify_send_fd, buf, 1);
     // FIXME ?
     assert(n == 1);
-  }
 }
 
 int EventCenter::process_time_events()
@@ -279,34 +278,17 @@ int EventCenter::process_time_events()
   clock_type::time_point now = clock_type::now();
   ldout(cct, 10) << __func__ << " cur time is " << now << dendl;
 
-  Mutex::Locker l(time_lock);
-  /* If the system clock is moved to the future, and then set back to the
-   * right value, time events may be delayed in a random way. Often this
-   * means that scheduled operations will not be performed soon enough.
-   *
-   * Here we try to detect system clock skews, and force all the time
-   * events to be processed ASAP when this happens: the idea is that
-   * processing events earlier is less dangerous than delaying them
-   * indefinitely, and practice suggests it is. */
-  bool clock_skewed = now < last_time;
-  last_time = now;
-
   while (!time_events.empty()) {
     auto it = time_events.begin();
-    if (now >= it->first || clock_skewed) {
-      if (it->second.empty()) {
-        time_events.erase(it);
-      } else {
-        TimeEvent &e = it->second.front();
-        EventCallbackRef cb = e.time_cb;
-        uint64_t id = e.id;
-        it->second.pop_front();
-        ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
-        processed++;
-        time_lock.Unlock();
-        cb->do_request(id);
-        time_lock.Lock();
-      }
+    if (now >= it->first) {
+      TimeEvent &e = it->second;
+      EventCallbackRef cb = e.time_cb;
+      uint64_t id = e.id;
+      time_events.erase(it);
+      event_map.erase(id);
+      ldout(cct, 10) << __func__ << " process time event: id=" << id << dendl;
+      processed++;
+      cb->do_request(id);
     } else {
       break;
     }
@@ -317,25 +299,21 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
-  // Must set owner before looping
-  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;
   auto now = clock_type::now();
 
   // If exists external events, don't block
-  if (external_num_events.read()) {
+  if (external_num_events.load()) {
     tv.tv_sec = 0;
     tv.tv_usec = 0;
-    next_time = now;
   } else {
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
 
-    Mutex::Locker l(time_lock);
     auto it = time_events.begin();
-    if (it != time_events.end() && shortest > it->first) {
+    if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
       trigger_time = true;
@@ -349,13 +327,12 @@ int EventCenter::process_events(int timeout_microseconds)
     }
     tv.tv_sec = timeout_microseconds / 1000000;
     tv.tv_usec = timeout_microseconds % 1000000;
-    next_time = shortest;
   }
 
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
-  file_lock.Lock();
+  file_lock.lock();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
@@ -370,36 +347,36 @@ int EventCenter::process_events(int timeout_microseconds)
     if (event->mask & fired_events[j].mask & EVENT_READABLE) {
       rfired = 1;
       cb = event->read_cb;
-      file_lock.Unlock();
+      file_lock.unlock();
       cb->do_request(fired_events[j].fd);
-      file_lock.Lock();
+      file_lock.lock();
     }
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
       if (!rfired || event->read_cb != event->write_cb) {
         cb = event->write_cb;
-        file_lock.Unlock();
+        file_lock.unlock();
         cb->do_request(fired_events[j].fd);
-        file_lock.Lock();
+        file_lock.lock();
       }
     }
 
     ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
-  file_lock.Unlock();
+  file_lock.unlock();
 
   if (trigger_time)
     numevents += process_time_events();
 
-  if (external_num_events.read()) {
-    external_lock.Lock();
+  if (external_num_events.load()) {
+    external_lock.lock();
     if (external_events.empty()) {
-      external_lock.Unlock();
+      external_lock.unlock();
     } else {
       deque<EventCallbackRef> cur_process;
       cur_process.swap(external_events);
-      external_num_events.set(0);
-      external_lock.Unlock();
+      external_num_events.store(0);
+      external_lock.unlock();
       while (!cur_process.empty()) {
         EventCallbackRef e = cur_process.front();
         if (e)
@@ -414,11 +391,11 @@ int EventCenter::process_events(int timeout_microseconds)
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  external_lock.Lock();
+  external_lock.lock();
   external_events.push_back(e);
-  uint64_t num = external_num_events.inc();
-  external_lock.Unlock();
-  if (thread_id != owner)
+  uint64_t num = ++external_num_events;
+  external_lock.unlock();
+  if (!in_thread())
     wakeup();
 
   ldout(cct, 10) << __func__ << " " << e << " pending " << num << dendl;

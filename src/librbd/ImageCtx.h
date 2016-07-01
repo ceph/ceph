@@ -7,18 +7,15 @@
 
 #include <list>
 #include <map>
-#include <set>
 #include <string>
 #include <vector>
-#include <boost/optional.hpp>
 
-#include "common/Cond.h"
 #include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
-#include "include/atomic.h"
+
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
@@ -28,7 +25,6 @@
 
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
-#include "librbd/LibrbdWriteback.h"
 #include "librbd/SnapInfo.h"
 #include "librbd/parent_types.h"
 
@@ -51,6 +47,7 @@ namespace librbd {
   class LibrbdAdminSocketHook;
   class ObjectMap;
   template <typename> class Operations;
+  class LibrbdWriteback;
 
   namespace exclusive_lock { struct Policy; }
   namespace journal { struct Policy; }

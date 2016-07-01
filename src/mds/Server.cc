@@ -2155,6 +2155,23 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
   return true;
 }
 
+/**
+ * check whether fragment has reached maximum size
+ *
+ */
+bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
+{
+  const auto size = in->get_frag_size();
+  if (size >= g_conf->mds_bal_fragment_size_max) {
+    dout(10) << "fragment " << *in << " size exceeds " << g_conf->mds_bal_fragment_size_max << " (ENOSPC)" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return false;
+  }
+
+  return true;
+}
+
+
 /** validate_dentry_dir
  *
  * verify that the dir exists and would own the dname.
@@ -2239,14 +2256,19 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
 {
   CDentry *straydn = mdr->straydn;
   if (straydn) {
-    string name;
-    in->name_stray_dentry(name);
-    if (straydn->get_name() == name)
+    string straydname;
+    in->name_stray_dentry(straydname);
+    if (straydn->get_name() == straydname)
       return straydn;
 
     assert(!mdr->done_locking);
     mdr->unpin(straydn);
   }
+
+  CDir *straydir = mdcache->get_stray_dir(in);
+
+  if (!check_fragment_space(mdr, straydir))
+    return NULL;
 
   straydn = mdcache->get_or_create_stray_dentry(in);
   mdr->straydn = straydn;
@@ -3038,8 +3060,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
   
   // hit pop
-  if (cmode == CEPH_FILE_MODE_RDWR ||
-      cmode == CEPH_FILE_MODE_WR) 
+  if (cmode & CEPH_FILE_MODE_WR)
     mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IWR);
   else
     mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IRD,
@@ -3186,12 +3207,16 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     return;
   }
 
-  CInode *diri = dn->get_dir()->get_inode();
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   if (!check_access(mdr, diri, access))
+    return;
+
+  if (!check_fragment_space(mdr, dir))
     return;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -4158,6 +4183,76 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
   return 0;
 }
 
+/*
+ * Verify that the file layout attribute carried by client
+ * is well-formatted.
+ * Return 0 on success, otherwise this function takes
+ * responsibility for the passed mdr.
+ */
+int Server::check_layout_vxattr(MDRequestRef& mdr,
+                                string name,
+                                string value,
+                                file_layout_t *layout)
+{
+  MClientRequest *req = mdr->client_request;
+  epoch_t epoch;
+  int r;
+
+  mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
+      r = parse_layout_vxattr(name, value, osdmap, layout);
+      epoch = osdmap.get_epoch();
+    });
+
+  if (r == -ENOENT) {
+
+    // we don't have the specified pool, make sure our map
+    // is newer than or as new as the client.
+    epoch_t req_epoch = req->get_osdmap_epoch();
+
+    if (req_epoch > epoch) {
+
+      // well, our map is older. consult mds.
+      Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
+        new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
+
+      if (!mds->objecter->wait_for_map(req_epoch, fin))
+        return r; // wait, fin will retry this request later
+
+      delete fin;
+
+      // now we have at least as new a map as the client, try again.
+      mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
+          r = parse_layout_vxattr(name, value, osdmap, layout);
+          epoch = osdmap.get_epoch();
+        });
+
+      assert(epoch >= req_epoch); // otherwise wait_for_map() told a lie
+
+    } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
+
+      // For compatibility with client w/ old code, we still need get the
+      // latest map. One day if COMPACT_VERSION of MClientRequest >=3,
+      // we can remove those code.
+      mdr->waited_for_osdmap = true;
+      mds->objecter->wait_for_latest_osdmap(new C_OnFinisher(new C_IO_Wrapper(
+        mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
+      return r;
+    }
+  }
+
+  if (r < 0) {
+
+    if (r == -ENOENT)
+      r = -EINVAL;
+
+    respond_to_request(mdr, r);
+    return r;
+  }
+
+  // all is well
+  return 0;
+}
+
 void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			       file_layout_t *dir_layout,
 			       set<SimpleLock*> rdlocks,
@@ -4168,7 +4263,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
-  dout(10) << "handle_set_vxattr " << name << " val " << value.length() << " bytes on " << *cur << dendl;
+  dout(10) << "handle_set_vxattr " << name
+           << " val " << value.length()
+           << " bytes on " << *cur
+           << dendl;
 
   inode_t *pi = NULL;
   string rest;
@@ -4188,34 +4286,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       layout = mdcache->default_file_layout;
 
     rest = name.substr(name.find("layout"));
-    epoch_t epoch;
-    int r;
-    mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
-	r = parse_layout_vxattr(rest, value, osdmap, &layout);
-	epoch = osdmap.get_epoch();
-      });
-    if (r < 0) {
-      if (r == -ENOENT) {
-        epoch_t req_epoch = req->get_osdmap_epoch();
-        if (req_epoch > epoch) {
-          Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
-            new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
-          if (!mds->objecter->wait_for_map(req_epoch, fin))
-            return;
-          delete fin;
-        } else  if (req_epoch == 0 && !mdr->waited_for_osdmap) {
-          // For compatibility with client w/ old code, we still need get the latest map. 
-          // One day if COMPACT_VERSION of MClientRequest >=3, we can remove those code.
-          mdr->waited_for_osdmap = true;
-          mds->objecter->wait_for_latest_osdmap(
-	    new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
-          return;
-        }
-        r = -EINVAL;
-      }
-      respond_to_request(mdr, r);
+    if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
       return;
-    }
 
     xlocks.insert(&cur->policylock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -4241,34 +4313,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     }
     file_layout_t layout = cur->get_projected_inode()->layout;
     rest = name.substr(name.find("layout"));
-    int r;
-    epoch_t epoch;
-    mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
-	r = parse_layout_vxattr(rest, value, osdmap, &layout);
-	epoch = osdmap.get_epoch();
-      });
-    if (r < 0) {
-      if (r == -ENOENT) {
-        epoch_t req_epoch = req->get_osdmap_epoch();
-        if (req_epoch > epoch) {
-          Context *fin = new C_OnFinisher(new C_IO_Wrapper(mds,
-            new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher);
-          if (!mds->objecter->wait_for_map(req_epoch, fin))
-            return;
-          delete fin;
-        } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
-          // For compatibility with client w/ old code, we still need get the latest map. 
-          // One day if COMPACT_VERSION of MClientRequest >=3, we can remove those code.
-          mdr->waited_for_osdmap = true;
-          mds->objecter->wait_for_latest_osdmap(
-            new C_OnFinisher(new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr)), mds->finisher));
-          return;
-        }
-        r = -EINVAL;
-      }
-      respond_to_request(mdr, r);
+    if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
       return;
-    }
 
     xlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -4601,6 +4647,9 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
+  if (!check_fragment_space(mdr, dn->get_dir()))
+    return;
+
   unsigned mode = req->head.args.mknod.mode;
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
@@ -4684,13 +4733,17 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
-  CInode *diri = dn->get_dir()->get_inode();
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   // mkdir check access
   if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+
+  if (!check_fragment_space(mdr, dir))
     return;
 
   // new inode
@@ -4764,13 +4817,17 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
     respond_to_request(mdr, -EROFS);
     return;
   }
-  CInode *diri = dn->get_dir()->get_inode();
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
   rdlocks.insert(&diri->authlock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   if (!check_access(mdr, diri, MAY_WRITE))
    return;
+
+  if (!check_fragment_space(mdr, dir))
+    return;
 
   unsigned mode = S_IFLNK | 0777;
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode);
@@ -4843,6 +4900,9 @@ void Server::handle_client_link(MDRequestRef& mdr)
     return;
 
   if (!check_access(mdr, dir->get_inode(), MAY_WRITE))
+    return;
+
+  if (!check_fragment_space(mdr, dir))
     return;
 
   // go!
@@ -5416,6 +5476,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   CDentry *straydn = NULL;
   if (dnl->is_primary()) {
     straydn = prepare_stray_dentry(mdr, dnl->get_inode());
+    if (!straydn)
+      return;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
@@ -6099,7 +6161,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       return;
     }
 
-    // non-empty dir?
+    // non-empty dir? do trivial fast unlocked check, do another check later with read locks
     if (oldin->is_dir() && _dir_is_nonempty_unlocked(mdr, oldin)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
@@ -6196,6 +6258,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   CDentry *straydn = NULL;
   if (destdnl->is_primary() && !linkmerge) {
     straydn = prepare_stray_dentry(mdr, destdnl->get_inode());
+    if (!straydn)
+      return;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
@@ -6306,9 +6370,13 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (!check_access(mdr, destdn->get_dir()->get_inode(), MAY_WRITE))
     return;
 
+  if (!check_fragment_space(mdr, destdn->get_dir()))
+    return;
+
   if (!check_access(mdr, srci, MAY_WRITE))
     return;
 
+  // with read lock, really verify oldin is empty
   if (oldin &&
       oldin->is_dir() &&
       _dir_is_nonempty(mdr, oldin)) {

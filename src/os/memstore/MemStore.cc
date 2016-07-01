@@ -224,14 +224,10 @@ int MemStore::statfs(struct store_statfs_t *st)
 {
    dout(10) << __func__ << dendl;
   st->reset();
-  st->bsize = 4096;
-
-   // Device size is a configured constant
-  st->blocks = g_conf->memstore_device_bytes / st->bsize;
-
-  dout(10) << __func__ << ": used_bytes: " << used_bytes << "/" << g_conf->memstore_device_bytes << dendl;
-  st->available = MAX((int64_t(st->blocks * st->bsize) - int64_t(used_bytes)), 0);
-
+  st->total = g_conf->memstore_device_bytes;
+  st->available = MAX(int64_t(st->total) - int64_t(used_bytes), 0ll);
+  dout(10) << __func__ << ": used_bytes: " << used_bytes
+	   << "/" << g_conf->memstore_device_bytes << dendl;
   return 0;
 }
 
@@ -1035,9 +1031,11 @@ int MemStore::_write(const coll_t& cid, const ghobject_t& oid,
     return -ENOENT;
 
   ObjectRef o = c->get_or_create_object(oid);
-  const ssize_t old_size = o->get_size();
-  o->write(offset, bl);
-  used_bytes += (o->get_size() - old_size);
+  if (len > 0) {
+    const ssize_t old_size = o->get_size();
+    o->write(offset, bl);
+    used_bytes += (o->get_size() - old_size);
+  }
 
   return 0;
 }

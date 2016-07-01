@@ -537,7 +537,7 @@ TEST_F(TestClsRbd, snapshot_limits)
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 
   ASSERT_EQ(0, snapshot_get_limit(&ioctx, oid, &limit));
-  ASSERT_EQ(2, limit);
+  ASSERT_EQ(2U, limit);
 
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 10, "snap1"));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, 20, "snap2"));
@@ -1756,7 +1756,7 @@ TEST_F(TestClsRbd, group_dir_list) {
   map<string, string> cgs;
   ASSERT_EQ(0, group_dir_list(&ioctx, RBD_GROUP_DIRECTORY, "", 10, &cgs));
 
-  ASSERT_EQ(2, cgs.size());
+  ASSERT_EQ(2U, cgs.size());
 
   auto it = cgs.begin();
   ASSERT_EQ(group_id1, it->second);
@@ -1772,7 +1772,7 @@ void add_group_to_dir(librados::IoCtx ioctx, string group_id, string group_name)
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
-  ASSERT_EQ(2, keys.size());
+  ASSERT_EQ(2U, keys.size());
   ASSERT_EQ("id_" + group_id, *keys.begin());
   ASSERT_EQ("name_" + group_name, *keys.rbegin());
 }
@@ -1812,7 +1812,7 @@ TEST_F(TestClsRbd, group_dir_remove) {
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
-  ASSERT_EQ(0, keys.size());
+  ASSERT_EQ(0U, keys.size());
 }
 
 TEST_F(TestClsRbd, group_dir_remove_missing) {
@@ -1833,5 +1833,5 @@ TEST_F(TestClsRbd, group_dir_remove_missing) {
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(RBD_GROUP_DIRECTORY, "", 10, &keys));
-  ASSERT_EQ(0, keys.size());
+  ASSERT_EQ(0U, keys.size());
 }

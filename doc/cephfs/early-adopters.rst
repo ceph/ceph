@@ -41,6 +41,27 @@ When encountering bugs or performance issues, it is often instructive to
 try using the other client, in order to find out whether the bug was
 client-specific or not (and then to let the developers know).
 
+Which kernel version?
+---------------------
+
+Because the kernel client is distributed as part of the linux kernel (not
+as part of packaged ceph releases),
+you will need to consider which kernel version to use on your client nodes.
+Older kernels are known to include buggy ceph clients, and may not support
+features that more recent Ceph clusters support.
+
+Remember that the "latest" kernel in a stable linux distribution is likely
+to be years behind the latest upstream linux kernel where Ceph development
+takes place (including bug fixes).
+
+As a rough guide, as of Ceph 10.x (Jewel), you should be using a least a
+4.x kernel.  If you absolutely have to use an older kernel, you should use
+the fuse client instead of the kernel client.
+
+This advice does not apply if you are using a linux distribution that
+includes CephFS support, as in this case the distributor will be responsible
+for backporting fixes to their stable kernel: check with your vendor.
+
 Reporting issues
 ================
 

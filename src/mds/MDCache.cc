@@ -718,7 +718,7 @@ void MDCache::open_foreign_mdsdir(inodeno_t ino, MDSInternalContextBase *fin)
   discover_base_ino(ino, fin, mds_rank_t(ino & (MAX_MDS-1)));
 }
 
-CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
+CDir *MDCache::get_stray_dir(CInode *in)
 {
   string straydname;
   in->name_stray_dentry(straydname);
@@ -728,6 +728,14 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   frag_t fg = strayi->pick_dirfrag(straydname);
   CDir *straydir = strayi->get_dirfrag(fg);
   assert(straydir);
+  return straydir;
+}
+
+CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
+{
+  CDir *straydir = get_stray_dir(in);
+  string straydname;
+  in->name_stray_dentry(straydname);
   CDentry *straydn = straydir->lookup(straydname);
   if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
@@ -8515,6 +8523,7 @@ void MDCache::handle_open_ino_reply(MMDSOpenInoReply *m)
       dout(10) << " found ino " << ino << " on mds." << from << dendl;
       if (!info.want_replica) {
 	open_ino_finish(ino, info, from);
+        m->put();
 	return;
       }
 
@@ -8547,7 +8556,7 @@ void MDCache::kick_open_ino_peers(mds_rank_t who)
     open_ino_info_t& info = p->second;
     if (info.checking == who) {
       dout(10) << "  kicking ino " << p->first << " who was checking mds." << who << dendl;
-      info.checking = -1;
+      info.checking = MDS_RANK_NONE;
       do_open_ino_peer(p->first, info);
     } else if (info.checking == MDS_RANK_NONE) {
       dout(10) << "  kicking ino " << p->first << " who was waiting" << dendl;
@@ -8689,7 +8698,7 @@ void MDCache::handle_find_ino_reply(MMDSFindInoReply *m)
 
     mds_rank_t from = mds_rank_t(m->get_source().num());
     if (fip.checking == from)
-      fip.checking = -1;
+      fip.checking = MDS_RANK_NONE;
     fip.checked.insert(from);
 
     if (!m->path.empty()) {
@@ -8722,9 +8731,9 @@ void MDCache::kick_find_ino_peers(mds_rank_t who)
     find_ino_peer_info_t& fip = p->second;
     if (fip.checking == who) {
       dout(10) << "kicking find_ino_peer " << fip.tid << " who was checking mds." << who << dendl;
-      fip.checking = -1;
+      fip.checking = MDS_RANK_NONE;
       _do_find_ino_peer(fip);
-    } else if (fip.checking == -1) {
+    } else if (fip.checking == MDS_RANK_NONE) {
       dout(10) << "kicking find_ino_peer " << fip.tid << " who was waiting" << dendl;
       _do_find_ino_peer(fip);
     }

@@ -7,12 +7,10 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
-#include "include/rbd/librbd.hpp"
 #include "common/Mutex.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
-#include <set>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -52,6 +50,7 @@ private:
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
     Context *on_op_complete = nullptr;
+    ReturnValues op_finish_error_codes;
     ReturnValues ignore_error_codes;
   };
 
@@ -122,6 +121,7 @@ private:
   ContextSet m_aio_modify_safe_contexts;
 
   OpEvents m_op_events;
+  uint64_t m_in_flight_op_events = 0;
 
   Context *m_flush_ctx = nullptr;
   Context *m_on_aio_ready = nullptr;

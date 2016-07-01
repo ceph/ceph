@@ -6,6 +6,7 @@
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "test/journal/mock/MockJournaler.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournal.h"
@@ -21,8 +22,9 @@ struct MockTestImageCtx : public MockImageCtx {
 };
 
 struct MockTestJournal : public MockJournal {
-  MOCK_METHOD2(start_external_replay, void(journal::Replay<MockTestImageCtx> **,
-                                           Context *on_finish));
+  MOCK_METHOD3(start_external_replay, void(journal::Replay<MockTestImageCtx> **,
+                                           Context *on_finish,
+                                           Context *on_close_request));
   MOCK_METHOD0(stop_external_replay, void());
 };
 
@@ -58,19 +60,20 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static BootstrapRequest* create(librados::IoCtx &local_io_ctx,
-                                  librados::IoCtx &remote_io_ctx,
-                                  librbd::MockTestImageCtx **local_image_ctx,
-                                  const std::string &local_image_name,
-                                  const std::string &remote_image_id,
-                                  const std::string &global_image_id,
-                                  ContextWQ *work_queue, SafeTimer *timer,
-                                  Mutex *timer_lock,
-                                  const std::string &local_mirror_uuid,
-                                  const std::string &remote_mirror_uuid,
-                                  ::journal::MockJournalerProxy *journaler,
-                                  librbd::journal::MirrorPeerClientMeta *client_meta,
-                                  Context *on_finish,
-                                  rbd::mirror::ProgressContext *progress_ctx = nullptr) {
+        librados::IoCtx &remote_io_ctx,
+        rbd::mirror::ImageSyncThrottlerRef<librbd::MockTestImageCtx> image_sync_throttler,
+        librbd::MockTestImageCtx **local_image_ctx,
+        const std::string &local_image_name,
+        const std::string &remote_image_id,
+        const std::string &global_image_id,
+        ContextWQ *work_queue, SafeTimer *timer,
+        Mutex *timer_lock,
+        const std::string &local_mirror_uuid,
+        const std::string &remote_mirror_uuid,
+        ::journal::MockJournalerProxy *journaler,
+        librbd::journal::MirrorPeerClientMeta *client_meta,
+        Context *on_finish,
+        rbd::mirror::ProgressContext *progress_ctx = nullptr) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
