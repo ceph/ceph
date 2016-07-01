@@ -835,6 +835,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
     // immutable bits
     in->ino = st->vino.ino;
+    in->btime = st->btime;
     in->snapid = st->vino.snapid;
     in->mode = st->mode & S_IFMT;
     was_new = true;
@@ -9461,6 +9462,7 @@ Inode *Client::open_snapdir(Inode *diri)
     in->gid = diri->gid;
     in->mtime = diri->mtime;
     in->ctime = diri->ctime;
+    in->btime = diri->btime;
     in->size = diri->size;
 
     in->dirfragtree.clear();

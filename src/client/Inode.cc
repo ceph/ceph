@@ -324,6 +324,7 @@ void Inode::dump(Formatter *f) const
   if (rdev)
     f->dump_unsigned("rdev", rdev);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_stream("mode") << '0' << std::oct << mode << std::dec;
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
@@ -482,6 +483,7 @@ void CapSnap::dump(Formatter *f) const
   f->dump_stream("dirty") << ccap_string(dirty);
   f->dump_unsigned("size", size);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_stream("mtime") << mtime;
   f->dump_stream("atime") << atime;
   f->dump_int("time_warp_seq", time_warp_seq);
