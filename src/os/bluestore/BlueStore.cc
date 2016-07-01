@@ -3343,6 +3343,9 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
     return false;
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   if (!o || !o->exists)
     return false;
   return true;
@@ -3378,6 +3381,9 @@ int BlueStore::stat(
   st->st_blksize = 4096;
   st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_nlink = 1;
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   return 0;
 }
 
@@ -3430,6 +3436,9 @@ int BlueStore::read(
   r = _do_read(c, o, offset, length, bl, op_flags);
 
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -3732,7 +3741,7 @@ int BlueStore::fiemap(
 	   << " size 0x" << o->onode.size << std::dec << dendl;
 
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
- if (offset > o->onode.size)
+  if (offset > o->onode.size)
     goto out;
 
   if (offset + length > o->onode.size) {
@@ -3774,6 +3783,9 @@ int BlueStore::fiemap(
   }
 
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size = 0 (" << m << ")" << std::dec << dendl;
@@ -3819,6 +3831,9 @@ int BlueStore::getattr(
   value = o->onode.attrs[k];
   r = 0;
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
@@ -3856,6 +3871,9 @@ int BlueStore::getattrs(
   aset = o->onode.attrs;
   r = 0;
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
