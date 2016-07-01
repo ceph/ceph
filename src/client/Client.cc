@@ -6620,14 +6620,19 @@ int Client::statx(const char *relpath, unsigned int flags, struct statx *stx,
   tout(cct) << relpath << std::endl;
   filepath path(relpath);
   InodeRef in;
+
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  r = _getattr(in, mask);
-  if (r < 0) {
-    ldout(cct, 3) << "statx exit on error!" << dendl;
-    return r;
+
+  if (!(flags & AT_NO_ATTR_SYNC)) {
+    r = _getattr(in, mask);
+    if (r < 0) {
+      ldout(cct, 3) << "statx exit on error!" << dendl;
+      return r;
+    }
   }
+
   fill_statx(in, stx, dirstat);
   ldout(cct, 3) << "statx exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
@@ -9761,7 +9766,11 @@ int Client::ll_getattrx(Inode *in, unsigned int flags, struct statx *stx, int ui
 {
   Mutex::Locker lock(client_lock);
 
-  int res = _ll_getattr(in, uid, gid);
+  int res = 0;
+
+  if (!(flags & AT_NO_ATTR_SYNC))
+    res = _ll_getattr(in, uid, gid);
+
   vinodeno_t vino = _get_vino(in);
 
   /* special case for dotdot (..) */

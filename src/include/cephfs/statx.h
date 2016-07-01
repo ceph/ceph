@@ -73,6 +73,11 @@ struct statx {
 #define STATX_GEN		0x00002000U     /* Want/got st_gen */
 #define STATX_ALL_STATS		0x00003fffU     /* All supported stats */
 
+/* statx request flags. Callers can set these in the "flags" field */
+#ifndef AT_NO_ATTR_SYNC
+#define AT_NO_ATTR_SYNC		0x4000 /* Don't sync attributes with the server */
+#endif
+
 #ifdef __cplusplus
 }
 #endif
