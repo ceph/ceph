@@ -474,6 +474,7 @@ class GitbuilderProject(object):
         self.codename = self.job_config.get("codename")
         self.os_version = self._get_version()
         self.branch = self.job_config.get("branch")
+        self.tag = self.job_config.get("tag")
         self.ref = self.job_config.get("ref")
         self.distro = self._get_distro(
             distro=self.os_type,
@@ -643,19 +644,34 @@ class GitbuilderProject(object):
                                                   self.job_config, 'branch')
             sha1 = _get_config_value_for_remote(self.ctx, self.remote,
                                                 self.job_config, 'sha1')
+            ref = None
         else:
-            sha1 = self.sha1
+            ref = self.ref
+            tag = self.tag
             branch = self.branch
+            sha1 = self.sha1
 
-        if tag:
+        def warn(attrname):
+            if len([b for b in ref, tag, branch, sha1]) > 1:
+                log.warning(
+                    'More than one of ref, tag, branch, or sha1 supplied; using %s',
+                     attrname
+                )
+
+        if ref:
+            uri = 'ref'/ + ref
+            warn('ref')
+        elif tag:
             uri = 'ref/' + tag
+            warn('tag')
         elif branch:
             uri = 'ref/' + branch
+            warn('branch')
         elif sha1:
             uri = 'sha1/' + sha1
+            warn('sha1')
         else:
-            # FIXME: Should master be the default?
-            log.debug("defaulting to master branch")
+            log.warning("defaulting to master branch")
             uri = getattr(self, 'ref', 'ref/master')
         return uri
 
