@@ -106,9 +106,9 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  MonClientState state__; //deprecated
-  string DEFAULT__mon = "com.redhat.sdieffen.mon/default-mon/str_23062016@13:15:02";
-  map<string, MonClientState> state_map; //REFNEW
+  //MonClientState state__; //deprecated
+  //string DEFAULT__mon = "com.redhat.sdieffen.mon/default-mon/str_23062016@13:15:02";
+  map<entity_addr_t, MonClientState> state_map; //REFNEW
 
   Messenger *messenger;
 
@@ -187,23 +187,34 @@ private:
   void _reopen_session() {
     _reopen_session(-1, string());
   }
-  void safe_set_state(string name, MonClientState new_state, bool force=false) {
-    if (!name.empty() && state_map.count(name) == 0) {
-      state_map[name] = new_state;
-    } else if (!name.empty() && force) {
-      state_map[name] = new_state;
+  /*void set_default_state(MonClientState new_state) {
+    state__ = new_state;
+  }*/
+  /*bool check_default_state(MonClientState compare_state) {
+    return compare_state == state__;
+  }*/
+  void _set_state(ConnectionRef con, MonClientState new_state, bool force=false) {
+    if (!con) {
+      return;
+    }
+    entity_addr_t addr = con->get_peer_addr();
+    if (force || state_map.count(addr) == 0) {
+      state_map[addr] = new_state;
     }
   }
-  bool safe_check_state(string name, MonClientState compare_state) {
-    if (name.empty() || state_map.count(name) == 0) {
-      if (state_map.count(name) != 0)
-        state_map[name] = MC_STATE_NONE;
+  bool _check_state(ConnectionRef con, MonClientState compare_state) {
+    if (!con) {
+      return false;
+    }
+    entity_addr_t addr = con->get_peer_addr();
+    if (state_map.count(addr) == 0) {
       return compare_state == MC_STATE_NONE;
     } else {
-      return compare_state == state_map[name];
+      return compare_state == state_map[addr];
     }
   }
   void _send_mon_message(Message *m, bool force=false);
+  void _send_mon_message(Message *m, ConnectionRef con, bool force=false);
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
