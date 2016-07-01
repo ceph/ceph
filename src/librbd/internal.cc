@@ -953,14 +953,14 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       }
 
       for (auto &id_it : info.second) {
-	    string name;
-	    r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
-	    if (r < 0) {
-	      lderr(cct) << "Error looking up name for image id " << id_it
-                         << " in pool " << info.first.second << dendl;
-	      return r;
-	    }
-	    names.insert(make_pair(info.first.second, name));
+	string name;
+	r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
+	if (r < 0) {
+	  lderr(cct) << "Error looking up name for image id " << id_it
+		     << " in pool " << info.first.second << dendl;
+	  return r;
+	}
+	names.insert(make_pair(info.first.second, name));
       }
     }
     
