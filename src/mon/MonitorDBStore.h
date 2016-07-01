@@ -662,6 +662,7 @@ class MonitorDBStore
     // there should be no work queued!
     io_work.stop();
     is_open = false;
+    db.reset(NULL);
   }
 
   void compact() {
