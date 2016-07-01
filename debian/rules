@@ -9,6 +9,7 @@ extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_CEPHFS_JAVA=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
+extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
 
 ifeq ($(DEB_HOST_ARCH), armel)
