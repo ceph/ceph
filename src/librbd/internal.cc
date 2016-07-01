@@ -1465,7 +1465,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     int r = p_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
-		 << cpp_strerror(-r) << dendl;
+		 << cpp_strerror(r) << dendl;
       delete p_imctx;
       return r;
     }
