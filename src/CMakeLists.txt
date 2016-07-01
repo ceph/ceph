@@ -10,6 +10,7 @@ set(bindir ${CMAKE_INSTALL_FULL_BINDIR})
 set(sbindir ${CMAKE_INSTALL_FULL_SBINDIR})
 set(libdir ${CMAKE_INSTALL_FULL_LIBDIR})
 set(sysconfdir ${CMAKE_INSTALL_FULL_SYSCONFDIR})
+set(libexecdir ${CMAKE_INSTALL_FULL_LIBEXECDIR})
 set(pkgdatadir ${CMAKE_INSTALL_FULL_DATADIR})
 set(datadir ${CMAKE_INSTALL_FULL_DATADIR}/${PROJECT_NAME})
 set(prefix ${CMAKE_INSTALL_PREFIX})
@@ -623,7 +624,7 @@ target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRA
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 install(PROGRAMS
   tools/ceph-monstore-update-crush.sh
-  DESTINATION lib/ceph)
+  DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
@@ -1129,7 +1130,7 @@ install(FILES
 install(PROGRAMS
   ceph_common.sh
   ceph-osd-prestart.sh
-  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/ceph)
+  DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 install(PROGRAMS
   ${CMAKE_SOURCE_DIR}/src/ceph-create-keys
