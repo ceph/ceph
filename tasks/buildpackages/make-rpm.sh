@@ -87,7 +87,7 @@ function build_package() {
     # options (otherwise parts of the source tree will be left out).
     #
     if [ "$suse" = true ] ; then
-        sudo zypper -n install bzip2 
+        sudo zypper -n install bzip2
     else
         sudo yum install -y bzip2
     fi
@@ -118,6 +118,10 @@ function build_package() {
         cd ${buildarea}/SPECS
         ccache=$(echo /usr/lib*/ccache)
         # Build RPMs
+        if [ "$suse" = true ]; then
+          sed -i -e '0,/%package/s//%debug_package\n&/' \
+                  -e 's/%{epoch}://g' -e '/^Epoch:/d' ceph.spec
+        fi
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
         PATH=$ccache:$PATH rpmbuild -ba --define "_unpackaged_files_terminate_build 0" --define "_topdir ${buildarea}" ceph.spec
     )
