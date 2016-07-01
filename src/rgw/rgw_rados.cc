@@ -6657,7 +6657,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     /* need to get mtime for destination */
     ret = get_obj_state(&obj_ctx, dest_obj, &dest_state, NULL);
     if (ret < 0)
-      return ret;
+      goto set_err_state;
 
     if (!real_clock::is_zero(dest_state->mtime)) {
       dest_mtime_weight.init(dest_state);
