@@ -362,6 +362,7 @@ example::
 	``rados put`` command on the command line. For example::
 
 		echo {Test-data} > testfile.txt
+		rados mkpool data
 		rados put {object-name} {file-path} --pool=data
 		rados put test-object-1 testfile.txt --pool=data
 
