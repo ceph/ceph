@@ -9644,15 +9644,26 @@ Inode *Client::ll_get_inode(vinodeno_t vino)
   return in;
 }
 
-int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
+int Client::_ll_getattr(Inode *in, int uid, int gid)
 {
-  Mutex::Locker lock(client_lock);
-
   vinodeno_t vino = _get_vino(in);
 
   ldout(cct, 3) << "ll_getattr " << vino << dendl;
   tout(cct) << "ll_getattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
+
+  if (vino.snapid < CEPH_NOSNAP)
+    return 0;
+  else
+    return _getattr(in, CEPH_STAT_CAP_INODE_ALL, uid, gid);
+}
+
+int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
+{
+  Mutex::Locker lock(client_lock);
+
+  int res = _ll_getattr(in, uid, gid);
+  vinodeno_t vino = _get_vino(in);
 
   /* special case for dotdot (..) */
   if (vino.ino.val == CEPH_INO_DOTDOT) {
@@ -9661,11 +9672,6 @@ int Client::ll_getattr(Inode *in, struct stat *attr, int uid, int gid)
     return 0;
   }
 
-  int res;
-  if (vino.snapid < CEPH_NOSNAP)
-    res = 0;
-  else
-    res = _getattr(in, CEPH_STAT_CAP_INODE_ALL, uid, gid);
   if (res == 0)
     fill_stat(in, attr);
   ldout(cct, 3) << "ll_getattr " << vino << " = " << res << dendl;
