@@ -41,7 +41,7 @@ else
 	ASSUME_DEV=1
     else
 	BINDIR=@bindir@
-	SBINDIR=@prefix@/sbin
+	SBINDIR=@sbindir@
 	LIBEXECDIR=@libexecdir@/ceph
 	ETCDIR=@sysconfdir@/ceph
 	ASSUME_DEV=0
