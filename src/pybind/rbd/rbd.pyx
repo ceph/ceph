@@ -216,6 +216,7 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
     int rbd_snap_create(rbd_image_t image, const char *snapname)
     int rbd_snap_remove(rbd_image_t image, const char *snapname)
+    int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags)
     int rbd_snap_rollback(rbd_image_t image, const char *snapname)
     int rbd_snap_rename(rbd_image_t image, const char *snapname,
                         const char* dstsnapsname)
@@ -1529,6 +1530,24 @@ cdef class Image(object):
             ret = rbd_snap_remove(self.image, _name)
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s' % (name, self.name))
+
+    def remove_snap2(self, name, flags):
+        """
+        Delete a snapshot of the image.
+
+        :param name: the name of the snapshot
+        :param flags: the flags for removal
+        :type name: str
+        :raises: :class:`IOError`, :class:`ImageBusy`
+        """
+        name = cstr(name, 'name')
+        cdef:
+            char *_name = name
+            uint32_t _flags = flags
+        with nogil:
+            ret = rbd_snap_remove2(self.image, _name, _flags)
+        if ret != 0:
+            raise make_ex(ret, 'error removing snapshot %s from %s with flags %llx' % (name, self.name, flags))
 
     def rollback_to_snap(self, name):
         """
