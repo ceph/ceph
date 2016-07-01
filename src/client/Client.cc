@@ -702,7 +702,7 @@ void Client::update_inode_file_bits(Inode *in,
 				    uint64_t truncate_seq, uint64_t truncate_size,
 				    uint64_t size,
 				    uint64_t time_warp_seq, utime_t ctime,
-				    utime_t mtime,
+				    utime_t btime, utime_t mtime,
 				    utime_t atime,
 				    version_t inline_version,
 				    bufferlist& inline_data,
@@ -885,8 +885,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     }
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
-			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
-			   st->inline_version, st->inline_data,
+			   st->time_warp_seq, st->ctime, st->btime, st->mtime,
+			   st->atime, st->inline_version, st->inline_data,
 			   issued);
   } else if (st->inline_version > in->inline_version) {
     in->inline_data = st->inline_data;
@@ -4649,7 +4649,7 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
   issued |= implemented;
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(),
                          m->get_size(), m->get_time_warp_seq(), m->get_ctime(),
-                         m->get_mtime(), m->get_atime(),
+                         m->get_btime(), m->get_mtime(), m->get_atime(),
                          m->inline_version, m->inline_data,
                          issued);
   m->put();
@@ -4853,8 +4853,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
-			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(),
-			 m->inline_version, m->inline_data, issued);
+			 m->get_time_warp_seq(), m->get_ctime(), m->get_btime(), m->get_mtime(),
+			 m->get_atime(), m->inline_version, m->inline_data, issued);
 
   // max_size
   if (cap == in->auth_cap &&
