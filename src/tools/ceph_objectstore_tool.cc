@@ -1429,8 +1429,25 @@ int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug,
   return 0;
 }
 
+int remove_object(coll_t coll, ghobject_t &ghobj,
+  SnapMapper &mapper,
+  MapCacher::Transaction<std::string, bufferlist> *_t,
+  ObjectStore::Transaction *t)
+{
+  int r = mapper.remove_oid(ghobj.hobj, _t);
+  if (r < 0 && r != -ENOENT) {
+    cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  t->remove(coll, ghobj);
+  return 0;
+}
+
+int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss, bool silent);
+
 int do_remove_object(ObjectStore *store, coll_t coll,
-		     ghobject_t &ghobj,
+		     ghobject_t &ghobj, bool all, bool force,
 		     ObjectStore::Sequencer &osr)
 {
   spg_t pg;
@@ -1448,20 +1465,52 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     return r;
   }
 
-  cout << "remove " << ghobj << std::endl;
-  if (dry_run)
-    return 0;
-  ObjectStore::Transaction t;
-  OSDriver::OSTransaction _t(driver.get_transaction(&t));
-  r = mapper.remove_oid(ghobj.hobj, &_t);
-  if (r < 0 && r != -ENOENT) {
-    cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
-    return r;
+  SnapSet ss;
+  if (ghobj.hobj.has_snapset()) {
+    r = get_snapset(store, coll, ghobj, ss, false);
+    if (r < 0) {
+      cerr << "Can't get snapset error " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (!ss.snaps.empty() && !all) {
+      if (force) {
+        cout << "WARNING: only removing "
+             << (ghobj.hobj.is_head() ? "head" : "snapdir")
+             << " with snapshots present" << std::endl;
+        ss.snaps.clear();
+      } else {
+        cerr << "Snapshots are present, use removeall to delete everything" << std::endl;
+        return -EINVAL;
+      }
+    }
   }
 
-  t.remove(coll, ghobj);
+  ObjectStore::Transaction t;
+  OSDriver::OSTransaction _t(driver.get_transaction(&t));
 
-  store->apply_transaction(&osr, std::move(t));
+  cout << "remove " << ghobj << std::endl;
+
+  if (!dry_run) {
+    r = remove_object(coll, ghobj, mapper, &_t, &t);
+    if (r < 0)
+      return r;
+  }
+
+  ghobject_t snapobj = ghobj;
+  for (vector<snapid_t>::iterator i = ss.snaps.begin() ;
+       i != ss.snaps.end() ; ++i) {
+    snapobj.hobj.snap = *i;
+    cout << "remove " << snapobj << std::endl;
+    if (!dry_run) {
+      r = remove_object(coll, snapobj, mapper, &_t, &t);
+      if (r < 0)
+        return r;
+    }
+  }
+
+  if (!dry_run)
+    store->apply_transaction(&osr, std::move(t));
+
   return 0;
 }
 
@@ -2160,7 +2209,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> set-omaphdr [file]" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> list-attrs" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
-    cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> remove|removeall" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> dump" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>" << std::endl;
@@ -2838,8 +2887,9 @@ int main(int argc, char **argv)
 
     if (vm.count("objcmd")) {
       ret = 0;
-      if (objcmd == "remove") {
-        ret = do_remove_object(fs, coll, ghobj, *osr);
+      if (objcmd == "remove" || objcmd == "removeall") {
+        bool all = (objcmd == "removeall");
+        ret = do_remove_object(fs, coll, ghobj, all, force, *osr);
         goto out;
       } else if (objcmd == "list-attrs") {
         ret = do_list_attrs(fs, coll, ghobj);

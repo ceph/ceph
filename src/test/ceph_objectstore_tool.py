@@ -577,6 +577,75 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     return errors
 
 
+def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_NAME, NUM_CLONED_REP_OBJECTS):
+    # Test removeall
+    TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
+    nullfd = open(os.devnull, "w")
+    errors=0
+    print "Test removeall"
+    kill_daemons()
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+            JSON = db[nspace][basename]['json']
+            for pg in OBJREPPGS:
+                OSDS = get_osds(pg, OSDDIR)
+                for osd in OSDS:
+                    DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                    fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                              and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                    if not fnames:
+                        continue
+
+                    if int(basename.split(REP_NAME)[1]) <= int(NUM_CLONED_REP_OBJECTS):
+                        cmd = (CFSD_PREFIX + "'{json}' remove").format(osd=osd, json=JSON)
+                        errors += test_failure(cmd, "Snapshots are present, use removeall to delete everything")
+
+                    cmd = (CFSD_PREFIX + " --force --dry-run '{json}' remove").format(osd=osd, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                    if ret != 0:
+                        logging.error("remove with --force failed for {json}".format(json=JSON))
+                        errors += 1
+
+                    cmd = (CFSD_PREFIX + " --dry-run '{json}' removeall").format(osd=osd, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                    if ret != 0:
+                        logging.error("removeall failed for {json}".format(json=JSON))
+                        errors += 1
+
+                    cmd = (CFSD_PREFIX + " '{json}' removeall").format(osd=osd, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                    if ret != 0:
+                        logging.error("removeall failed for {json}".format(json=JSON))
+                        errors += 1
+
+                    tmpfd = open(TMPFILE, "w")
+                    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --namespace {ns} {name}").format(osd=osd, pg=pg, ns=nspace, name=basename)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=tmpfd)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+                        errors += 1
+                    tmpfd.close()
+                    lines = get_lines(TMPFILE)
+                    if len(lines) != 0:
+                        logging.error("Removeall didn't remove all objects {ns}/{name} : {lines}".format(ns=nspace, name=basename, lines=lines))
+                        errors += 1
+    vstart(new=False)
+    wait_for_health()
+    cmd = "{path}/rados -p {pool} rmsnap snap1".format(pool=REP_POOL, path=CEPH_BIN)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    if ret != 0:
+        logging.error("rados rmsnap failed")
+        errors += 1
+    time.sleep(2)
+    wait_for_health()
+    return errors
+
+
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     if len(argv) > 1 and argv[1] == "debug":
@@ -1867,6 +1936,8 @@ def main(argv):
 
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
+
+    ERRORS += test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_NAME, NUM_CLONED_REP_OBJECTS)
 
     # vstart() starts 4 OSDs
     ERRORS += test_get_set_osdmap(CFSD_PREFIX, range(4), ALLOSDS)
