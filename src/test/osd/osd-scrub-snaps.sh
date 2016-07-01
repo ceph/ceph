@@ -98,7 +98,7 @@ function TEST_scrub_snaps() {
     # Don't need to ceph_objectstore_tool function because osd stopped
 
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj1 | grep \"snapid\":-2)"
-    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
+    ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" --force remove
 
     JSON="$(ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal --op list obj5 | grep \"snapid\":2)"
     ceph-objectstore-tool --data-path $dir/0 --journal-path $dir/0/journal "$JSON" remove
