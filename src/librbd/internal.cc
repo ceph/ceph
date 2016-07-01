@@ -937,7 +937,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
-    int r = list_children_info(ictx, parent_spec,image_info);
+    int r = list_children_info(ictx, parent_spec, image_info);
     if (r < 0) {
       return r;
     }
