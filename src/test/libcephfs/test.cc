@@ -1408,3 +1408,43 @@ TEST(LibCephFS, TestStatx) {
 
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, TestStatxLazy) {
+  struct ceph_mount_info *cmount1, *cmount2;
+  ASSERT_EQ(ceph_create(&cmount1, NULL), 0);
+  ASSERT_EQ(ceph_create(&cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount1, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount2, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount1, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount2, NULL));
+  ASSERT_EQ(ceph_mount(cmount1, "/"), 0);
+  ASSERT_EQ(ceph_mount(cmount2, "/"), 0);
+
+  char filename[32];
+  sprintf(filename, "/statxlazy%x", getpid());
+
+  ceph_unlink(cmount1, filename);
+  int fd = ceph_open(cmount1, filename, O_RDWR|O_CREAT|O_EXCL, 0666);
+  ASSERT_LT(0, fd);
+
+  struct statx	stx;
+  ASSERT_EQ(ceph_statx(cmount2, filename, 0, &stx), 0);
+
+  int64_t old_ctime = stx.stx_btime;
+  int32_t old_ctime_ns = stx.stx_btime_ns;
+
+  /*
+   * Now sleep, do a chmod on the first client and the see whether we get a
+   * different ctime with a statx that uses AT_NO_ATTR_SYNC
+   */
+  sleep(1);
+  ASSERT_EQ(ceph_chmod(cmount1, filename, 0644), 0);
+  ASSERT_EQ(ceph_statx(cmount1, filename, 0, &stx), 0);
+  ASSERT_FALSE(old_ctime == stx.stx_ctime && old_ctime_ns == stx.stx_ctime_ns);
+  ASSERT_EQ(ceph_statx(cmount2, filename, AT_NO_ATTR_SYNC, &stx), 0);
+  ASSERT_EQ(stx.stx_ctime, old_ctime);
+  ASSERT_EQ(stx.stx_ctime_ns, old_ctime_ns);
+
+  ceph_shutdown(cmount1);
+  ceph_shutdown(cmount2);
+}
