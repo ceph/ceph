@@ -3352,7 +3352,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
     ::encode(layout.pool_ns, bl);
   }
-  if (session->connection->has_featuer(CEPH_FEATURE_FS_BTIME)) {
+  if (session->connection->has_feature(CEPH_FEATURE_FS_BTIME)) {
     ::encode(any_i->btime, bl);
   }
 
