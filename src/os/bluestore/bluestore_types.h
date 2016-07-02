@@ -120,7 +120,7 @@ struct bluestore_extent_ref_map_t {
     return ref_map.empty();
   }
 
-  void get(uint32_t offset, uint32_t len);
+  void get(uint32_t offset, uint32_t len, int refs=1);
   void put(uint32_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
 
   bool contains(uint32_t offset, uint32_t len) const;
@@ -226,6 +226,13 @@ struct bluestore_blob_t {
   }
   string get_flags_string() const {
     return get_flags_string(flags);
+  }
+
+  bool is_compatible_with(const bluestore_blob_t& o) {
+    return
+      flags == o.flags &&
+      csum_type == o.csum_type &&
+      csum_chunk_order == o.csum_chunk_order;
   }
 
   void set_compressed(uint64_t clen) {

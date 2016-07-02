@@ -1141,6 +1141,50 @@ void BlueStore::Blob::discard_unallocated()
   }
 }
 
+void BlueStore::Blob::append(Blob *o)
+{
+  size_t offset = blob.get_ondisk_length();
+  dout(20) << __func__ << " me " << *this << dendl;
+  dout(20) << __func__ << "  + " << *o
+	   << " offset 0x" << std::hex << offset << std::dec
+	   << dendl;
+  blob.extents.insert(blob.extents.end(),
+		      o->blob.extents.begin(), o->blob.extents.end());
+  if (blob.has_csum()) {
+    bufferptr new_csum_data = buffer::create(blob.csum_data.length() +
+					     o->blob.csum_data.length());
+    memcpy(new_csum_data.c_str(),
+	   blob.csum_data.c_str(),
+	   o->blob.csum_data.length());
+    memcpy(new_csum_data.c_str() + blob.csum_data.length(),
+	   o->blob.csum_data.c_str(),
+	   o->blob.csum_data.length());
+    blob.csum_data = new_csum_data;
+  }
+  if (blob.has_unused() || o->blob.has_unused()) {
+    // FIXME: we could try to merge here.
+    blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
+    blob.unused.reset();
+  }
+  for (auto& p : o->blob.ref_map.ref_map) {
+    blob.ref_map.get(p.first + offset, p.second.length, p.second.refs);
+  }
+  {
+    std::lock_guard<std::mutex> l(bc.cache->lock);
+    for (auto& p : o->bc.buffer_map) {
+      dout(20) << __func__ << " moved buffer " << *p.second
+	       << " from " << &o->bc << " to " << &bc << dendl;
+      p.second->space = &bc;
+      p.second->offset += offset;
+      bc.buffer_map[p.second->offset] = std::move(p.second);
+    }
+    o->bc.buffer_map.clear();
+    bc.writing.splice(bc.writing.end(), o->bc.writing);
+    assert(o->bc.empty());
+  }
+  dout(20) << __func__ << " is " << *this << dendl;
+}
+
 // BlobMap
 
 #undef dout_prefix
@@ -6183,8 +6227,63 @@ int BlueStore::_do_write(
   }
   r = 0;
 
+  // coalesce lextents and blobs.  if there is no deferred csum with a
+  // blob pointer.
+  if (!o->onode.extent_map.empty() &&
+      txc->deferred_csum.empty()) {
+    _try_merge_blobs(c, o, offset, length);
+  }
+
  out:
   return r;
+}
+
+void BlueStore::_try_merge_blobs(CollectionRef& c, OnodeRef& o,
+				 uint64_t offset, uint64_t length)
+{
+  uint64_t end = offset + length;
+  int merged = 0;
+  auto lp = o->onode.seek_lextent(offset);
+  if (lp != o->onode.extent_map.begin()) {
+    --lp;
+  }
+  for (; lp != o->onode.extent_map.end() && lp->first < end; ++lp) {
+    if (lp->second.blob < 0) {
+      continue;
+    }
+    Blob *bp = c->get_blob(o, lp->second.blob);
+    dout(30) << __func__ << " lp " << lp->first << ": " << lp->second
+	     << " " << *bp << dendl;
+    auto lq = lp;
+    ++lq;
+    while (lq != o->onode.extent_map.end()) {
+      if (lq->second.blob < 0) {
+	dout(30) << __func__ << " not in onode" << dendl;
+	break;
+      }
+      if (lq->first > lp->first + lp->second.length) {
+	dout(30) << __func__ << " not adjacent" << dendl;
+	break;
+      }
+      Blob *bq = c->get_blob(o, lq->second.blob);
+      dout(30) << __func__ << " lq " << lq->first << ": " << lq->second
+	       << " " << *bq << dendl;
+      if (!bp->blob.is_compatible_with(bq->blob)) {
+	dout(30) << __func__ << " blob not compatible" << dendl;
+	break;
+      }
+      // combine
+      bp->append(bq);
+      o->blob_map.erase(bq);
+      delete bq;
+      lp->second.length += lq->second.length;
+      o->onode.extent_map.erase(lq++);
+      ++merged;
+    }
+  }
+  if (merged) {
+    dout(20) << __func__ << " merged " << merged << " blobs" << dendl;
+  }
 }
 
 int BlueStore::_write(TransContext *txc,

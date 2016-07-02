@@ -322,6 +322,8 @@ public:
 
     /// discard buffers for unallocated regions
     void discard_unallocated();
+
+    void append(Blob *o);
   };
 
   /// a map of blobs, indexed by int64_t
@@ -1552,6 +1554,8 @@ private:
 	     uint32_t fadvise_flags);
   void _pad_zeros(bufferlist *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+  void _try_merge_blobs(CollectionRef &c, OnodeRef& o,
+			uint64_t offset, uint64_t length);
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,

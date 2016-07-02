@@ -151,7 +151,7 @@ void bluestore_extent_ref_map_t::_maybe_merge_left(map<uint32_t,record_t>::itera
   }
 }
 
-void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
+void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length, int refs)
 {
   map<uint32_t,record_t>::iterator p = ref_map.lower_bound(offset);
   if (p != ref_map.begin()) {
@@ -164,7 +164,8 @@ void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
     if (p == ref_map.end()) {
       // nothing after offset; add the whole thing.
       p = ref_map.insert(
-	map<uint64_t,record_t>::value_type(offset, record_t(length, 1))).first;
+	map<uint64_t,record_t>::value_type(offset,
+					   record_t(length, refs))).first;
       break;
     }
     if (p->first > offset) {
@@ -172,7 +173,7 @@ void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
       uint32_t newlen = MIN(p->first - offset, length);
       p = ref_map.insert(
 	map<uint32_t,record_t>::value_type(offset,
-					   record_t(newlen, 1))).first;
+					   record_t(newlen, refs))).first;
       offset += newlen;
       length -= newlen;
       _maybe_merge_left(p);
@@ -194,10 +195,10 @@ void bluestore_extent_ref_map_t::get(uint32_t offset, uint32_t length)
 			       record_t(p->second.length - length,
 					p->second.refs)));
       p->second.length = length;
-      ++p->second.refs;
+      p->second.refs += refs;
       break;
     }
-    ++p->second.refs;
+    p->second.refs += refs;
     offset += p->second.length;
     length -= p->second.length;
     _maybe_merge_left(p);
