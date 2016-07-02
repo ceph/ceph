@@ -759,12 +759,40 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
                                 const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
                                 bool brief) const
 {
-  if (brief)
-    ss << "pg_stat\tstate\tup\tup_primary\tacting\tacting_primary" << std::endl;
-  else
-    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog\tstate\t"
-          "state_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\t"
-          "last_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  TextTable tab;
+
+  if (brief){
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("ACTING", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+  }
+  else {
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("STATE_STAMP", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("VERSION", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("REPORTED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("ACTING", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LAST_SCRUB", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LAST_DEEP_SCRUB", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
+  }
+
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
        i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
@@ -827,8 +855,30 @@ void PGMap::dump_pg_stats(ostream& ss, bool brief) const
 
 void PGMap::dump_pool_stats(ostream& ss, bool header) const
 {
-  if (header)
-    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog" << std::endl;
+  TextTable tab;
+
+  if (header) {
+    tab.define_column("POOLID", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
+  } else {
+    tab.define_column("", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+  }
+
   for (ceph::unordered_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
        p != pg_pool_sum.end();
        ++p) {
@@ -851,7 +901,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
   TextTable tab;
 
   if (header) {
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -861,7 +911,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
-    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -890,7 +940,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
 {
   TextTable tab;
 
-  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
@@ -922,7 +972,7 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
 {
   TextTable tab;
 
-  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
@@ -1715,7 +1765,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs)
 {
   TextTable tab;
 
-  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
