@@ -781,7 +781,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
   TextTable tab;
 
   if (brief){
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
@@ -789,7 +789,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
     tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   }
   else {
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -884,7 +884,7 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
   TextTable tab;
 
   if (header) {
-    tab.define_column("POOLID", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("POOLID", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -894,7 +894,7 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
-    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -928,7 +928,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
   TextTable tab;
 
   if (header) {
-    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
@@ -938,7 +938,7 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
-    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::LEFT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -967,7 +967,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
 {
   TextTable tab;
 
-  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
@@ -999,7 +999,7 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
 {
   TextTable tab;
 
-  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OSD_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("TOTAL", TextTable::LEFT, TextTable::RIGHT);
@@ -1794,7 +1794,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs)
 {
   TextTable tab;
 
-  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
