@@ -482,7 +482,7 @@ class MonitorDBStore
   Synchronizer get_synchronizer(pair<string,string> &key,
 				set<string> &prefixes) {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_snapshot_iterator();
+    iter = db->get_iterator();
 
     if (!key.first.empty() && !key.second.empty())
       iter->upper_bound(key.first, key.second);
@@ -496,14 +496,14 @@ class MonitorDBStore
 
   KeyValueDB::Iterator get_iterator(const string &prefix) {
     assert(!prefix.empty());
-    KeyValueDB::Iterator iter = db->get_snapshot_iterator(prefix);
+    KeyValueDB::Iterator iter = db->get_iterator(prefix);
     iter->seek_to_first();
     return iter;
   }
 
   KeyValueDB::WholeSpaceIterator get_iterator() {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_snapshot_iterator();
+    iter = db->get_iterator();
     iter->seek_to_first();
     return iter;
   }
