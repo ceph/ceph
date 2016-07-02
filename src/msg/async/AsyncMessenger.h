@@ -285,16 +285,6 @@ private:
   friend class Processor;
   DispatchQueue dispatch_queue;
 
-  class C_handle_reap : public EventCallback {
-    AsyncMessenger *msgr;
-
-   public:
-    explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
-    void do_request(int id) {
-      // judge whether is a time event
-      msgr->reap_dead();
-    }
-  };
   // the worker run messenger's cron jobs
   Worker *local_worker;
 
