@@ -107,7 +107,10 @@ class AsyncConnection : public Connection {
     for (auto &&t : register_time_events)
       center->delete_time_event(t);
     register_time_events.clear();
-    center->delete_time_event(last_tick_id);
+    if (last_tick_id) {
+      center->delete_time_event(last_tick_id);
+      last_tick_id = 0;
+    }
     if (sd >= 0) {
       center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
       ::shutdown(sd, SHUT_RDWR);
