@@ -1955,7 +1955,7 @@ int RGWObjManifest::generator::create_next(uint64_t ofs)
 
   uint64_t max_head_size = manifest->get_max_head_size();
 
-  if (ofs <= max_head_size) {
+  if (ofs < max_head_size) {
     manifest->set_head_size(ofs);
   }
 
