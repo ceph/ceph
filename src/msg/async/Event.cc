@@ -245,7 +245,7 @@ void EventCenter::delete_time_event(uint64_t id)
 {
   assert(in_thread());
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
-  if (id >= time_event_next_id)
+  if (id >= time_event_next_id || id == 0)
     return ;
 
   auto it = event_map.find(id);

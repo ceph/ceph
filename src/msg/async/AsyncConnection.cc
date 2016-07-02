@@ -1321,7 +1321,8 @@ ssize_t AsyncConnection::_process_connection()
         async_msgr->ms_deliver_handle_fast_connect(this);
 
         // make sure no pending tick timer
-        center->delete_time_event(last_tick_id);
+        if (last_tick_id)
+          center->delete_time_event(last_tick_id);
         last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
 
         // message may in queue between last _try_send and connection ready
@@ -1496,7 +1497,8 @@ ssize_t AsyncConnection::_process_connection()
         if (delay_state)
           assert(delay_state->ready());
         // make sure no pending tick timer
-        center->delete_time_event(last_tick_id);
+        if (last_tick_id)
+          center->delete_time_event(last_tick_id);
         last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
 
         write_lock.Lock();
@@ -2654,6 +2656,7 @@ void AsyncConnection::tick(uint64_t id)
                              << " last_active" << last_active << dendl;
   assert(last_tick_id == id);
   Mutex::Locker l(lock);
+  last_tick_id = 0;
   auto idle_period = std::chrono::duration_cast<std::chrono::microseconds>(now - last_active).count();
   if (inactive_timeout_us < (uint64_t)idle_period) {
     ldout(async_msgr->cct, 1) << __func__ << " idle(" << idle_period << ") more than "
