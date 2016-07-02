@@ -1323,7 +1323,7 @@ if(${WITH_KVS})
     key_value_store/cls_kvs.cc)
   add_library(cls_kvs SHARED ${kvs_srcs})
   set_target_properties(cls_kvs PROPERTIES VERSION "1.0.0" SOVERSION "1")
-  install(TARGETS cls_kvs DESTINATION lib/rados-classes)
+  install(TARGETS cls_kvs DESTINATION ${CMAKE_INSTALL_LIBDIR}/rados-classes)
 endif(${WITH_KVS})
 
 if(${WITH_RADOSGW})
@@ -1456,7 +1456,7 @@ if(${WITH_RADOSGW})
   set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
     SOVERSION 1)
 
-  install(TARGETS rgw DESTINATION lib)
+  install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
   install(FILES
     include/rados/librgw.h
     include/rados/rgw_file.h
