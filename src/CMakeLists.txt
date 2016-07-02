@@ -609,7 +609,7 @@ target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRA
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 install(PROGRAMS
   tools/ceph-monstore-update-crush.sh
-  DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
 
 add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
