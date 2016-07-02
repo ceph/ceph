@@ -1388,6 +1388,7 @@ BlueStore::~BlueStore()
   assert(db == NULL);
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
+  assert(path_fd < 0);
   for (auto i : cache_shards) {
     delete i;
   }
