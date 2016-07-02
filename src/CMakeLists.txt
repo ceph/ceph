@@ -1091,7 +1091,6 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
-  ${CMAKE_SOURCE_DIR}/src/vstart.sh
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
 install(PROGRAMS
@@ -1104,10 +1103,6 @@ install(FILES
   ${CMAKE_SOURCE_DIR}/share/id_dsa_drop.ceph.com.pub
   ${CMAKE_SOURCE_DIR}/share/known_hosts_drop.ceph.com
   DESTINATION ${CMAKE_INSTALL_DATADIR}/ceph)
-
-install(FILES
-  ${CMAKE_SOURCE_DIR}/doc/start/ceph.conf
-  DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/ceph/ RENAME ceph.conf.example)
 
 install(PROGRAMS
   ceph_common.sh
