@@ -245,21 +245,6 @@ if(NOT PYTHONINTERP_FOUND)
 endif(NOT PYTHONINTERP_FOUND)
 find_package(PythonLibs REQUIRED)
 
-# if CMAKE_INSTALL_PREFIX is an empty string, must replace
-# it with "/" to make PYTHON_INSTALL_TEMPLATE an absolute path to be
-# consistent with all other installation paths.
-if(CMAKE_INSTALL_PREFIX)
-  set(PYTHON_INSTALL_TEMPLATE "${CMAKE_INSTALL_PREFIX}")
-else(CMAKE_INSTALL_PREFIX)
-  set(PYTHON_INSTALL_TEMPLATE "/")
-endif(CMAKE_INSTALL_PREFIX)
-
-execute_process(
-  COMMAND
-  ${PYTHON_EXECUTABLE} -c "from distutils import sysconfig; print sysconfig.get_python_lib(1,0,prefix='${PYTHON_INSTALL_TEMPLATE}')"
-  OUTPUT_VARIABLE PYTHON_INSTDIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE)
-
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
@@ -691,9 +676,6 @@ target_link_libraries(librados-config librados global ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
 install(TARGETS rados librados-config DESTINATION bin)
-
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/
-  DESTINATION ${PYTHON_INSTDIR})
 
 # virtualenv base directory for ceph-disk and ceph-detect-init
 set(CEPH_BUILD_VIRTUALENV $ENV{TMPDIR})
