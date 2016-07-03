@@ -23,7 +23,7 @@
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
 DaemonServer::DaemonServer(MonClient *monc_,
-  DaemonMetadataIndex &daemon_state_,
+  DaemonStateIndex &daemon_state_,
   PyModules &py_modules_)
     : Dispatcher(g_ceph_context), msgr(nullptr), monc(monc_),
       daemon_state(daemon_state_),
@@ -166,11 +166,11 @@ bool DaemonServer::handle_report(MMgrReport *m)
   dout(4) << "from " << m->get_connection() << " name "
           << m->daemon_name << dendl;
 
-  DaemonMetadataPtr daemon;
+  DaemonStatePtr daemon;
   if (daemon_state.exists(key)) {
     daemon = daemon_state.get(key);
   } else {
-    daemon = std::make_shared<DaemonMetadata>(daemon_state.types);
+    daemon = std::make_shared<DaemonState>(daemon_state.types);
     // FIXME: crap, we don't know the hostname at this stage.
     daemon->key = key;
     daemon_state.insert(daemon);

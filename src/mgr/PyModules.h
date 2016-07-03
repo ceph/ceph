@@ -20,7 +20,7 @@
 #include "common/Mutex.h"
 
 
-#include "DaemonMetadata.h"
+#include "DaemonState.h"
 #include "ClusterState.h"
 
 
@@ -32,7 +32,7 @@ class PyModules
   protected:
   std::map<std::string, MgrPyModule*> modules;
 
-  DaemonMetadataIndex &daemon_state;
+  DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
   Finisher &finisher;
@@ -42,7 +42,7 @@ class PyModules
 public:
   static constexpr auto config_prefix = "mgr.";
 
-  PyModules(DaemonMetadataIndex &ds, ClusterState &cs, MonClient &mc,
+  PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             Finisher &f)
     : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f),
       lock("PyModules")
@@ -76,7 +76,7 @@ public:
   int main(std::vector<const char *> args);
 
   void dump_server(const std::string &hostname,
-                   const DaemonMetadataCollection &dmc,
+                   const DaemonStateCollection &dmc,
                    Formatter *f);
 
   bool get_config(const std::string &handle,
