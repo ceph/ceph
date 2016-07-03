@@ -35,7 +35,7 @@
 #include "DaemonServer.h"
 #include "PyModules.h"
 
-#include "DaemonMetadata.h"
+#include "DaemonState.h"
 #include "ClusterState.h"
 
 class MCommand;
@@ -57,7 +57,7 @@ protected:
   Context *waiting_for_fs_map;
 
   PyModules py_modules;
-  DaemonMetadataIndex daemon_state;
+  DaemonStateIndex daemon_state;
   ClusterState cluster_state;
 
   DaemonServer server;

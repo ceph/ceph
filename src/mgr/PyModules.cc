@@ -27,7 +27,7 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 void PyModules::dump_server(const std::string &hostname,
-                      const DaemonMetadataCollection &dmc,
+                      const DaemonStateCollection &dmc,
                       Formatter *f)
 {
   f->dump_string("hostname", hostname);
