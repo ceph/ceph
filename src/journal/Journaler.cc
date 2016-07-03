@@ -16,6 +16,7 @@
 #include "journal/ReplayHandler.h"
 #include "cls/journal/cls_journal_client.h"
 #include "cls/journal/cls_journal_types.h"
+#include "Utils.h"
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
@@ -31,6 +32,7 @@ static const std::string JOURNAL_OBJECT_PREFIX = "journal_data.";
 } // anonymous namespace
 
 using namespace cls::journal;
+using utils::rados_ctx_callback;
 
 std::string Journaler::header_oid(const std::string &journal_id) {
   return JOURNAL_HEADER_PREFIX + journal_id;
@@ -228,6 +230,30 @@ int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
     return r;
   }
   return 0;
+}
+
+void Journaler::create(uint8_t order, uint8_t splay_width,
+                      int64_t pool_id, Context *on_finish) {
+  if (order > 64 || order < 12) {
+    lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
+    on_finish->complete(-EDOM);
+    return;
+  }
+  if (splay_width == 0) {
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  ldout(m_cct, 5) << "creating new journal: " << m_header_oid << dendl;
+
+  librados::ObjectWriteOperation op;
+  client::create(&op, order, splay_width, pool_id);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(on_finish, nullptr, rados_ctx_callback);
+  int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op);
+  assert(r == 0);
+  comp->release();
 }
 
 int Journaler::remove(bool force) {
