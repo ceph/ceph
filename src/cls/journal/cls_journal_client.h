@@ -18,6 +18,8 @@ namespace cls {
 namespace journal {
 namespace client {
 
+void create(librados::ObjectWriteOperation *op,
+            uint8_t order, uint8_t splay, int64_t pool_id);
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
            uint8_t splay, int64_t pool_id);
 
