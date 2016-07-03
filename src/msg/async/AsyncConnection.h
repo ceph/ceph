@@ -395,8 +395,8 @@ class AsyncConnection : public Connection {
   void stop(bool queue_reset) {
     lock.Lock();
     bool need_queue_reset = (state != STATE_CLOSED) && queue_reset;
+    _stop();
     lock.Unlock();
-    mark_down();
     if (need_queue_reset)
       dispatch_queue->queue_reset(this);
   }
