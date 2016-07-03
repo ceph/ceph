@@ -11,10 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
-#ifndef DAEMON_METADATA_H_
-#define DAEMON_METADATA_H_
-
-// TODO: rename me to DaemonState from DaemonMetadata
+#ifndef DAEMON_STATE_H_
+#define DAEMON_STATE_H_
 
 #include <map>
 #include <string>
@@ -68,7 +66,7 @@ class DaemonPerfCounters
 };
 
 // The state that we store about one daemon
-class DaemonMetadata
+class DaemonState
 {
   public:
   DaemonKey key;
@@ -83,14 +81,14 @@ class DaemonMetadata
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
-  DaemonMetadata(PerfCounterTypes &types_)
+  DaemonState(PerfCounterTypes &types_)
     : perf_counters(types_)
   {
   }
 };
 
-typedef std::shared_ptr<DaemonMetadata> DaemonMetadataPtr;
-typedef std::map<DaemonKey, DaemonMetadataPtr> DaemonMetadataCollection;
+typedef std::shared_ptr<DaemonState> DaemonStatePtr;
+typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 
 
 
@@ -100,11 +98,11 @@ typedef std::map<DaemonKey, DaemonMetadataPtr> DaemonMetadataCollection;
  * a view that can be queried by service type, ID or also
  * by server (aka fqdn).
  */
-class DaemonMetadataIndex
+class DaemonStateIndex
 {
   private:
-  std::map<std::string, DaemonMetadataCollection> by_server;
-  DaemonMetadataCollection all;
+  std::map<std::string, DaemonStateCollection> by_server;
+  DaemonStateCollection all;
 
   std::set<DaemonKey> updating;
 
@@ -112,22 +110,22 @@ class DaemonMetadataIndex
 
   public:
 
-  DaemonMetadataIndex() : lock("DaemonState") {}
+  DaemonStateIndex() : lock("DaemonState") {}
 
-  // FIXME: shouldn't really be public, maybe construct DaemonMetadata
+  // FIXME: shouldn't really be public, maybe construct DaemonState
   // objects internally to avoid this.
   PerfCounterTypes types;
 
-  void insert(DaemonMetadataPtr dm);
+  void insert(DaemonStatePtr dm);
   void _erase(DaemonKey dmk);
 
   bool exists(const DaemonKey &key) const;
-  DaemonMetadataPtr get(const DaemonKey &key);
-  DaemonMetadataCollection get_by_server(const std::string &hostname) const;
-  DaemonMetadataCollection get_by_type(uint8_t type) const;
+  DaemonStatePtr get(const DaemonKey &key);
+  DaemonStateCollection get_by_server(const std::string &hostname) const;
+  DaemonStateCollection get_by_type(uint8_t type) const;
 
-  const DaemonMetadataCollection &get_all() const {return all;}
-  const std::map<std::string, DaemonMetadataCollection> &get_all_servers() const
+  const DaemonStateCollection &get_all() const {return all;}
+  const std::map<std::string, DaemonStateCollection> &get_all_servers() const
   {
     return by_server;
   }

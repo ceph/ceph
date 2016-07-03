@@ -11,13 +11,13 @@
  * Foundation.  See file COPYING.
  */
 
-#include "DaemonMetadata.h"
+#include "DaemonState.h"
 
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-void DaemonMetadataIndex::insert(DaemonMetadataPtr dm)
+void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
   Mutex::Locker l(lock);
 
@@ -29,7 +29,7 @@ void DaemonMetadataIndex::insert(DaemonMetadataPtr dm)
   all[dm->key] = dm;
 }
 
-void DaemonMetadataIndex::_erase(DaemonKey dmk)
+void DaemonStateIndex::_erase(DaemonKey dmk)
 {
   assert(lock.is_locked_by_me());
 
@@ -43,11 +43,11 @@ void DaemonMetadataIndex::_erase(DaemonKey dmk)
   all.erase(dmk);
 }
 
-DaemonMetadataCollection DaemonMetadataIndex::get_by_type(uint8_t type) const
+DaemonStateCollection DaemonStateIndex::get_by_type(uint8_t type) const
 {
   Mutex::Locker l(lock);
 
-  DaemonMetadataCollection result;
+  DaemonStateCollection result;
 
   for (const auto &i : all) {
     if (i.first.first == type) {
@@ -58,7 +58,7 @@ DaemonMetadataCollection DaemonMetadataIndex::get_by_type(uint8_t type) const
   return result;
 }
 
-DaemonMetadataCollection DaemonMetadataIndex::get_by_server(const std::string &hostname) const
+DaemonStateCollection DaemonStateIndex::get_by_server(const std::string &hostname) const
 {
   Mutex::Locker l(lock);
 
@@ -69,21 +69,21 @@ DaemonMetadataCollection DaemonMetadataIndex::get_by_server(const std::string &h
   }
 }
 
-bool DaemonMetadataIndex::exists(const DaemonKey &key) const
+bool DaemonStateIndex::exists(const DaemonKey &key) const
 {
   Mutex::Locker l(lock);
 
   return all.count(key) > 0;
 }
 
-DaemonMetadataPtr DaemonMetadataIndex::get(const DaemonKey &key)
+DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 {
   Mutex::Locker l(lock);
 
   return all.at(key);
 }
 
-void DaemonMetadataIndex::cull(entity_type_t daemon_type,
+void DaemonStateIndex::cull(entity_type_t daemon_type,
                                std::set<std::string> names_exist)
 {
   Mutex::Locker l(lock);

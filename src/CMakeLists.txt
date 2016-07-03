@@ -517,7 +517,7 @@ add_subdirectory(libradosstriper)
 if (WITH_MGR)
   set(mgr_srcs
       ceph_mgr.cc
-      mgr/DaemonMetadata.cc
+      mgr/DaemonState.cc
       mgr/DaemonServer.cc
       mgr/ClusterState.cc
       mgr/PyModules.cc

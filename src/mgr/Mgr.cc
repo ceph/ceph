@@ -66,18 +66,18 @@ Mgr::~Mgr()
 
 /**
  * Context for completion of metadata mon commands: take
- * the result and stash it in DaemonMetadataIndex
+ * the result and stash it in DaemonStateIndex
  */
 class MetadataUpdate : public Context
 {
-  DaemonMetadataIndex &daemon_state;
+  DaemonStateIndex &daemon_state;
   DaemonKey key;
 
 public:
   bufferlist outbl;
   std::string outs;
 
-  MetadataUpdate(DaemonMetadataIndex &daemon_state_, const DaemonKey &key_)
+  MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
     : daemon_state(daemon_state_), key(key_) {}
 
   void finish(int r)
@@ -97,7 +97,7 @@ public:
 
 
         json_spirit::mObject daemon_meta = json_result.get_obj();
-        DaemonMetadataPtr dm = std::make_shared<DaemonMetadata>(daemon_state.types);
+        DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
         dm->key = key;
         dm->hostname = daemon_meta.at("hostname").get_str();
 
@@ -243,7 +243,7 @@ void Mgr::load_all_metadata()
       continue;
     }
 
-    DaemonMetadataPtr dm = std::make_shared<DaemonMetadata>(daemon_state.types);
+    DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
     dm->key = DaemonKey(CEPH_ENTITY_TYPE_MDS,
                         daemon_meta.at("name").get_str());
     dm->hostname = daemon_meta.at("hostname").get_str();
@@ -265,7 +265,7 @@ void Mgr::load_all_metadata()
       continue;
     }
 
-    DaemonMetadataPtr dm = std::make_shared<DaemonMetadata>(daemon_state.types);
+    DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
     dm->key = DaemonKey(CEPH_ENTITY_TYPE_MON,
                         daemon_meta.at("name").get_str());
     dm->hostname = daemon_meta.at("hostname").get_str();
@@ -288,7 +288,7 @@ void Mgr::load_all_metadata()
     }
     dout(4) << osd_metadata.at("hostname").get_str() << dendl;
 
-    DaemonMetadataPtr dm = std::make_shared<DaemonMetadata>(daemon_state.types);
+    DaemonStatePtr dm = std::make_shared<DaemonState>(daemon_state.types);
     dm->key = DaemonKey(CEPH_ENTITY_TYPE_OSD,
                         stringify(osd_metadata.at("id").get_int()));
     dm->hostname = osd_metadata.at("hostname").get_str();

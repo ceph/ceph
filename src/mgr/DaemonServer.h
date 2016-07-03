@@ -26,7 +26,7 @@
 
 #include "auth/AuthAuthorizeHandler.h"
 
-#include "DaemonMetadata.h"
+#include "DaemonState.h"
 
 class MMgrReport;
 class MMgrOpen;
@@ -42,7 +42,7 @@ class DaemonServer : public Dispatcher
 protected:
   Messenger *msgr;
   MonClient *monc;
-  DaemonMetadataIndex &daemon_state;
+  DaemonStateIndex &daemon_state;
   PyModules &py_modules;
 
   AuthAuthorizeHandlerRegistry auth_registry;
@@ -57,7 +57,7 @@ public:
   entity_addr_t get_myaddr() const;
 
   DaemonServer(MonClient *monc_,
-      DaemonMetadataIndex &daemon_state_,
+      DaemonStateIndex &daemon_state_,
       PyModules &py_modules_);
   ~DaemonServer();
 
