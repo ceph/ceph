@@ -64,7 +64,7 @@ class Processor::C_processor_accept : public EventCallback {
   }
 };
 
-Processor::Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
+Processor::Processor(AsyncMessenger &r, CephContext *c, uint64_t n)
   : msgr(r),
   net(c),
   worker(NULL),
@@ -74,9 +74,9 @@ Processor::Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
 
 int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
-  const md_config_t *conf = msgr->cct->_conf;
+  const md_config_t *conf = msgr.cct->_conf;
   // bind to a socket
-  ldout(msgr->cct, 10) << __func__ << dendl;
+  ldout(msgr.cct, 10) << __func__ << dendl;
 
   int family;
   switch (bind_addr.get_family()) {
@@ -93,7 +93,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   /* socket creation */
   listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
-    lderr(msgr->cct) << __func__ << " unable to create socket: "
+    lderr(msgr.cct) << __func__ << " unable to create socket: "
         << cpp_strerror(errno) << dendl;
     return -errno;
   }
@@ -117,7 +117,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   for (int i = 0; i < conf->ms_bind_retry_count; i++) {
     if (i > 0) {
-      lderr(msgr->cct) << __func__ << " was unable to bind. Trying again in "
+      lderr(msgr.cct) << __func__ << " was unable to bind. Trying again in "
                        << conf->ms_bind_retry_delay << " seconds " << dendl;
       sleep(conf->ms_bind_retry_delay);
     }
@@ -128,7 +128,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
       int on = 1;
       rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
       if (rc < 0) {
-        lderr(msgr->cct) << __func__ << " unable to setsockopt: " << cpp_strerror(errno) << dendl;
+        lderr(msgr.cct) << __func__ << " unable to setsockopt: " << cpp_strerror(errno) << dendl;
         r = -errno;
         continue;
       }
@@ -136,14 +136,14 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
       rc = ::bind(listen_sd, listen_addr.get_sockaddr(),
 		  listen_addr.get_sockaddr_len());
       if (rc < 0) {
-        lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr
+        lderr(msgr.cct) << __func__ << " unable to bind to " << listen_addr
                          << ": " << cpp_strerror(errno) << dendl;
         r = -errno;
         continue;
       }
     } else {
       // try a range of ports
-      for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
+      for (int port = msgr.cct->_conf->ms_bind_port_min; port <= msgr.cct->_conf->ms_bind_port_max; port++) {
         if (avoid_ports.count(port))
           continue;
 
@@ -154,22 +154,22 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
           break;
       }
       if (rc < 0) {
-        lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr
-                         << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
-                         << "-" << msgr->cct->_conf->ms_bind_port_max << ": "
+        lderr(msgr.cct) << __func__ << " unable to bind to " << listen_addr
+                         << " on any port in range " << msgr.cct->_conf->ms_bind_port_min
+                         << "-" << msgr.cct->_conf->ms_bind_port_max << ": "
                          << cpp_strerror(errno) << dendl;
         r = -errno;
         listen_addr.set_port(0); // Clear port before retry, otherwise we shall fail again.
         continue;
       }
-      ldout(msgr->cct, 10) << __func__ << " bound on random port " << listen_addr << dendl;
+      ldout(msgr.cct, 10) << __func__ << " bound on random port " << listen_addr << dendl;
     }
     if (rc == 0)
       break;
   }
   // It seems that binding completely failed, return with that exit status
   if (rc < 0) {
-    lderr(msgr->cct) << __func__ << " was unable to bind after " << conf->ms_bind_retry_count
+    lderr(msgr.cct) << __func__ << " was unable to bind after " << conf->ms_bind_retry_count
                      << " attempts: " << cpp_strerror(errno) << dendl;
     ::close(listen_sd);
     listen_sd = -1;
@@ -182,64 +182,64 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   rc = getsockname(listen_sd, (sockaddr*)&ss, &llen);
   if (rc < 0) {
     rc = -errno;
-    lderr(msgr->cct) << __func__ << " failed getsockname: " << cpp_strerror(rc) << dendl;
+    lderr(msgr.cct) << __func__ << " failed getsockname: " << cpp_strerror(rc) << dendl;
     ::close(listen_sd);
     listen_sd = -1;
     return rc;
   }
   listen_addr.set_sockaddr((sockaddr*)&ss);
 
-  ldout(msgr->cct, 10) << __func__ << " bound to " << listen_addr << dendl;
+  ldout(msgr.cct, 10) << __func__ << " bound to " << listen_addr << dendl;
 
   // listen!
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
     rc = -errno;
-    lderr(msgr->cct) << __func__ << " unable to listen on " << listen_addr
+    lderr(msgr.cct) << __func__ << " unable to listen on " << listen_addr
         << ": " << cpp_strerror(rc) << dendl;
     ::close(listen_sd);
     listen_sd = -1;
     return rc;
   }
 
-  msgr->set_myaddr(bind_addr);
+  msgr.set_myaddr(bind_addr);
   if (bind_addr != entity_addr_t())
-    msgr->learned_addr(bind_addr);
+    msgr.learned_addr(bind_addr);
 
-  if (msgr->get_myaddr().get_port() == 0) {
-    msgr->set_myaddr(listen_addr);
+  if (msgr.get_myaddr().get_port() == 0) {
+    msgr.set_myaddr(listen_addr);
   }
-  entity_addr_t addr = msgr->get_myaddr();
+  entity_addr_t addr = msgr.get_myaddr();
   addr.nonce = nonce;
-  msgr->set_myaddr(addr);
+  msgr.set_myaddr(addr);
 
-  msgr->init_local_connection();
+  msgr.init_local_connection();
 
-  ldout(msgr->cct,1) << __func__ << " bind my_inst.addr is " << msgr->get_myaddr() << dendl;
+  ldout(msgr.cct,1) << __func__ << " bind my_inst.addr is " << msgr.get_myaddr() << dendl;
   return 0;
 }
 
 int Processor::rebind(const set<int>& avoid_ports)
 {
-  ldout(msgr->cct, 1) << __func__ << " rebind avoid " << avoid_ports << dendl;
+  ldout(msgr.cct, 1) << __func__ << " rebind avoid " << avoid_ports << dendl;
 
-  entity_addr_t addr = msgr->get_myaddr();
+  entity_addr_t addr = msgr.get_myaddr();
   set<int> new_avoid = avoid_ports;
   new_avoid.insert(addr.get_port());
   addr.set_port(0);
 
   // adjust the nonce; we want our entity_addr_t to be truly unique.
   nonce += 1000000;
-  msgr->my_inst.addr.nonce = nonce;
-  ldout(msgr->cct, 10) << __func__ << " new nonce " << nonce << " and inst " << msgr->my_inst << dendl;
+  msgr.my_inst.addr.nonce = nonce;
+  ldout(msgr.cct, 10) << __func__ << " new nonce " << nonce << " and inst " << msgr.my_inst << dendl;
 
-  ldout(msgr->cct, 10) << __func__ << " will try " << addr << " and avoid ports " << new_avoid << dendl;
+  ldout(msgr.cct, 10) << __func__ << " will try " << addr << " and avoid ports " << new_avoid << dendl;
   return bind(addr, new_avoid);
 }
 
 int Processor::start(Worker *w)
 {
-  ldout(msgr->cct, 1) << __func__ << " " << dendl;
+  ldout(msgr.cct, 1) << __func__ << " " << dendl;
 
   // start thread
   if (listen_sd >= 0) {
@@ -252,15 +252,15 @@ int Processor::start(Worker *w)
 
 void Processor::accept()
 {
-  ldout(msgr->cct, 10) << __func__ << " listen_sd=" << listen_sd << dendl;
+  ldout(msgr.cct, 10) << __func__ << " listen_sd=" << listen_sd << dendl;
   while (true) {
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
     int sd = ::accept(listen_sd, (sockaddr*)&ss, &slen);
     if (sd >= 0) {
-      ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
+      ldout(msgr.cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
 
-      msgr->add_accept(sd);
+      msgr.add_accept(sd);
       continue;
     } else {
       if (errno == EINTR) {
@@ -268,15 +268,15 @@ void Processor::accept()
       } else if (errno == EAGAIN) {
         break;
       } else if (errno == EMFILE || errno == ENFILE) {
-        lderr(msgr->cct) << __func__ << " open file descriptions limit reached sd = " << sd
+        lderr(msgr.cct) << __func__ << " open file descriptions limit reached sd = " << sd
                          << " errno " << errno << " " << cpp_strerror(errno) << dendl;
         break;
       } else if (errno == ECONNABORTED) {
-        ldout(msgr->cct, 0) << __func__ << " it was closed because of rst arrived sd = " << sd
+        ldout(msgr.cct, 0) << __func__ << " it was closed because of rst arrived sd = " << sd
                             << " errno " << errno << " " << cpp_strerror(errno) << dendl;
         continue;
       } else {
-        lderr(msgr->cct) << __func__ << " no incoming connection?  sd = " << sd
+        lderr(msgr.cct) << __func__ << " no incoming connection?  sd = " << sd
                          << " errno " << errno << " " << cpp_strerror(errno) << dendl;
         break;
       }
@@ -286,7 +286,7 @@ void Processor::accept()
 
 void Processor::stop()
 {
-  ldout(msgr->cct,10) << __func__ << dendl;
+  ldout(msgr.cct,10) << __func__ << dendl;
 
   if (listen_sd >= 0) {
     worker->center.delete_file_event(listen_sd, EVENT_READABLE);
@@ -493,7 +493,7 @@ void WorkerPool::barrier()
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
-    processor(this, cct, _nonce),
+    processor(*this, cct, _nonce),
     dispatch_queue(cct, this, mname),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), need_addr(true), did_bind(false),
