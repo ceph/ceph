@@ -10597,6 +10597,7 @@ int RGWRados::convert_old_bucket_info(RGWObjectCtx& obj_ctx,
   ret = put_linked_bucket_info(info, false, ep_mtime, &ot.write_version, &attrs, true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
+    return ret;
   }
 
   return 0;
