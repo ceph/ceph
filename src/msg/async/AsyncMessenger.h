@@ -148,7 +148,6 @@ public:
    */
   ConnectionRef get_connection(const entity_inst_t& dest) override;
   ConnectionRef get_loopback_connection() override;
-  int send_keepalive(Connection *con);
   virtual void mark_down(const entity_addr_t& addr) override;
   virtual void mark_down_all() override {
     shutdown_connections(true);
