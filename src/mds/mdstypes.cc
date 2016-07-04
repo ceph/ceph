@@ -1066,7 +1066,7 @@ void MDSCacheObject::dump(Formatter *f) const
     f->dump_int("first", authority().first);
     f->dump_int("second", authority().second);
     f->close_section();
-    f->dump_int("replica_nonce", get_replica_nonce());
+    f->dump_unsigned("replica_nonce", get_replica_nonce());
   }
   f->close_section();  // replica_state
 
