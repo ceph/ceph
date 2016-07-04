@@ -746,6 +746,11 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return r;
   }
 
+  if (!store->is_meta_master()) {
+    /* only need to keep this data around if we're not meta master */
+    in_data.append(data, len);
+  }
+
   r = parser.get_versioning_status(&enable_versioning);
   
   return r;
