@@ -159,6 +159,9 @@ class Module(MgrModule):
         """
         return [self._auth_cls()]
 
+    def shutdown(self):
+        cherrypy.engine.stop()
+
     def serve(self):
         self.keys = self._load_keys()
         self.enable_auth = self.get_config_json("enable_auth")
