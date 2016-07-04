@@ -273,7 +273,7 @@ static int get_key_bnode(const string& key, shard_id_t *shard,
     return -1;
   p = _key_decode_shard(p, shard);
   p = _key_decode_u64(p, (uint64_t*)pool);
-  pool -= 0x8000000000000000ull;
+  *pool -= 0x8000000000000000ull;
   p = _key_decode_u32(p, hash);
   return 0;
 }
