@@ -5159,7 +5159,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time))
-      creation_time = ceph::real_clock::now(cct);
+      info.creation_time = ceph::real_clock::now(cct);
     else
       info.creation_time = creation_time;
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true);
