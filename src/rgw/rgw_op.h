@@ -446,6 +446,7 @@ public:
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   bool enable_versioning;
+  bufferlist in_data;
 public:
   RGWSetBucketVersioning() : enable_versioning(false) {}
 

@@ -157,6 +157,7 @@ void req_info::rebuild_from(req_info& src)
 {
   method = src.method;
   script_uri = src.script_uri;
+  args = src.args;
   if (src.effective_uri.empty()) {
     request_uri = src.request_uri;
   } else {
