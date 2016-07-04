@@ -316,6 +316,7 @@ class AsyncConnection : public Connection {
   Mutex write_lock;
   enum class WriteStatus {
     NOWRITE,
+    REPLACING,
     CANWRITE,
     CLOSED
   };
