@@ -18,26 +18,25 @@
 
 #include "common/Finisher.h"
 #include "common/Mutex.h"
-
+#include "common/Thread.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
 
-
-
-
+class ServeThread;
 
 class PyModules
 {
   protected:
   std::map<std::string, MgrPyModule*> modules;
+  std::map<std::string, ServeThread*> serve_threads;
 
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
   Finisher &finisher;
 
-  Mutex lock;
+  mutable Mutex lock;
 
 public:
   static constexpr auto config_prefix = "mgr.";
@@ -65,15 +64,14 @@ public:
   void insert_config(const std::map<std::string, std::string> &new_config);
 
   // Public so that MonCommandCompletion can use it
-  // FIXME: bit weird that we're sending command completions
-  // to all modules (we rely on them to ignore anything that
-  // they don't recognise), but when we get called from
-  // python-land we don't actually know who we are.  Need
-  // to give python-land a handle in initialisation.
+  // FIXME: for send_command completion notifications,
+  // send it to only the module that sent the command, not everyone
   void notify_all(const std::string &notify_type,
                   const std::string &notify_id);
 
-  int main(std::vector<const char *> args);
+  int init();
+  void start();
+  void shutdown();
 
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,

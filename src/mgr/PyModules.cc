@@ -12,6 +12,9 @@
  */
 
 
+#include <boost/tokenizer.hpp>
+#include "common/errno.h"
+
 #include "PyState.h"
 #include "PyFormatter.h"
 
@@ -212,8 +215,11 @@ std::string handle_pyerror()
     return extract<std::string>(formatted);
 }
 
-int PyModules::main(vector<const char *> args)
+
+int PyModules::init()
 {
+  Mutex::Locker locker(lock);
+
   global_handle = this;
 
   // Set up global python interpreter
@@ -252,53 +258,103 @@ int PyModules::main(vector<const char *> args)
   }
 
   // Load python code
-  // TODO load mgr_modules list, run them all in a thread each.
-  auto mod = new MgrPyModule("rest");
-  int r = mod->load();
-  if (r != 0) {
-    derr << "Error loading python module" << dendl;
-    derr << handle_pyerror() << dendl;
-#if 0
-    PyObject *ptype, *pvalue, *ptraceback;
-    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
-    if (ptype) {
-      if (pvalue) {
-        char *pStrErrorMessage = PyString_AsString(pvalue);
+  boost::tokenizer<> tok(g_conf->mgr_modules);
+  for(boost::tokenizer<>::iterator module_name=tok.begin();
+      module_name != tok.end();++module_name){
+    dout(1) << "Loading python module '" << *module_name << "'" << dendl;
+    auto mod = new MgrPyModule(*module_name);
+    int r = mod->load();
+    if (r != 0) {
+      derr << "Error loading module '" << *module_name << "': "
+        << cpp_strerror(r) << dendl;
+      derr << handle_pyerror() << dendl;
 
-XXX why is pvalue giving null when converted to string?
-
-        assert(pStrErrorMessage != nullptr);
-        derr << "Exception: " << pStrErrorMessage << dendl;
-        Py_DECREF(ptraceback);
-        Py_DECREF(pvalue);
-      }
-      Py_DECREF(ptype);
+      return r;
+    } else {
+      // Success!
+      modules[*module_name] = mod;
     }
+  } 
+
+  // Drop the GIL
+#if 1
+  PyThreadState *tstate = PyEval_SaveThread();
+#else
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+  PyGILState_Release(gstate);
 #endif
+  
+  return 0;
+}
 
-    // FIXME: be tolerant of bad modules, log an error and continue
-    // to load other, healthy modules.
-    return r;
-  }
+class ServeThread : public Thread
+{
+  MgrPyModule *mod;
+
+public:
+  ServeThread(MgrPyModule *mod_)
+    : mod(mod_) {}
+
+  void *entry()
   {
-    Mutex::Locker locker(lock);
-    modules["rest"] = mod;
+    PyGILState_STATE gstate;
+    gstate = PyGILState_Ensure();
+
+    dout(4) << "Entering thread for " << mod->get_name() << dendl;
+    mod->serve();
+
+    PyGILState_Release(gstate);
+
+    return nullptr;
   }
+};
 
-  // Execute python server
-  mod->serve();
-
+void PyModules::start()
+{
   {
-    Mutex::Locker locker(lock);
-    // Tear down modules
-    for (auto i : modules) {
-      delete i.second;
+    Mutex::Locker l(lock);
+    for (auto &i : modules) {
+      auto thread = new ServeThread(i.second);
+      serve_threads[i.first] = thread;
     }
-    modules.clear();
   }
+
+  for (auto &i : serve_threads) {
+    std::ostringstream thread_name;
+    thread_name << "mgr." << i.first;
+    dout(4) << "Starting thread for " << i.first << dendl;
+    i.second->create(thread_name.str().c_str());
+  }
+}
+
+void PyModules::shutdown()
+{
+  Mutex::Locker locker(lock);
+
+  // Signal modules to drop out of serve()
+  for (auto i : modules) {
+    auto module = i.second;
+    finisher.queue(new C_StdFunction([module](){
+      module->shutdown();
+    }));
+  }
+
+  for (auto &i : serve_threads) {
+    lock.Unlock();
+    i.second->join();
+    lock.Lock();
+    delete i.second;
+  }
+  serve_threads.clear();
+
+  // Tear down modules
+  for (auto i : modules) {
+    delete i.second;
+  }
+  modules.clear();
 
   Py_Finalize();
-  return 0;
 }
 
 void PyModules::notify_all(const std::string &notify_type,
@@ -320,6 +376,10 @@ void PyModules::notify_all(const std::string &notify_type,
 bool PyModules::get_config(const std::string &handle,
     const std::string &key, std::string *val) const
 {
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
   const std::string global_key = config_prefix + handle + "." + key;
 
   if (config_cache.count(global_key)) {
@@ -335,20 +395,25 @@ void PyModules::set_config(const std::string &handle,
 {
   const std::string global_key = config_prefix + handle + "." + key;
 
-  config_cache[global_key] = val;
-
-  std::ostringstream cmd_json;
   Command set_cmd;
+  {
+    PyThreadState *tstate = PyEval_SaveThread();
+    Mutex::Locker l(lock);
+    PyEval_RestoreThread(tstate);
+    config_cache[global_key] = val;
 
-  JSONFormatter jf;
-  jf.open_object_section("cmd");
-  jf.dump_string("prefix", "config-key put");
-  jf.dump_string("key", global_key);
-  jf.dump_string("val", val);
-  jf.close_section();
-  jf.flush(cmd_json);
+    std::ostringstream cmd_json;
 
-  set_cmd.run(&monc, cmd_json.str());
+    JSONFormatter jf;
+    jf.open_object_section("cmd");
+    jf.dump_string("prefix", "config-key put");
+    jf.dump_string("key", global_key);
+    jf.dump_string("val", val);
+    jf.close_section();
+    jf.flush(cmd_json);
+
+    set_cmd.run(&monc, cmd_json.str());
+  }
   set_cmd.wait();
 
   // FIXME: is config-key put ever allowed to fail?
@@ -374,6 +439,8 @@ std::vector<ModuleCommand> PyModules::get_commands()
 void PyModules::insert_config(const std::map<std::string,
                               std::string> &new_config)
 {
+  Mutex::Locker l(lock);
+
   dout(4) << "Loaded " << new_config.size() << " config settings" << dendl;
   config_cache = new_config;
 }

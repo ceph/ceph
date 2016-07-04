@@ -46,7 +46,6 @@ private:
   PyObject *pClass;
   PyObject *pClassInstance;
 
-
   std::vector<ModuleCommand> commands;
 
   int load_commands();
@@ -57,11 +56,17 @@ public:
 
   int load();
   int serve();
+  void shutdown();
   void notify(const std::string &notify_type, const std::string &notify_id);
 
   const std::vector<ModuleCommand> &get_commands() const
   {
     return commands;
+  }
+
+  const std::string &get_name() const
+  {
+    return module_name;
   }
 
   int handle_command(
