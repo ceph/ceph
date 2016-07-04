@@ -71,7 +71,19 @@ class MgrModule(object):
         """
         Called by the ceph-mgr service to start any server that
         is provided by this Python plugin.  The implementation
-        of this function should block until it receives a signal.
+        of this function should block until ``shutdown`` is called.
+
+        You *must* implement ``shutdown`` if you implement ``serve``
+        """
+        pass
+
+    def shutdown(self):
+        """
+        Called by the ceph-mgr service to request that this
+        module drop out of its serve() function.  You do not
+        need to implement this if you do not implement serve()
+
+        :return: None
         """
         pass
 
