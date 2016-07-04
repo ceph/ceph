@@ -42,6 +42,7 @@ librbd_internal_la_SOURCES = \
 	librbd/image_watcher/Notifier.cc \
 	librbd/image_watcher/NotifyLockOwner.cc \
 	librbd/journal/RemoveRequest.cc \
+	librbd/journal/CreateRequest.cc \
 	librbd/journal/Replay.cc \
 	librbd/journal/StandardPolicy.cc \
 	librbd/object_map/InvalidateRequest.cc \
@@ -131,6 +132,7 @@ noinst_HEADERS += \
 	librbd/image_watcher/Notifier.h \
 	librbd/image_watcher/NotifyLockOwner.h \
 	librbd/journal/RemoveRequest.h \
+	librbd/journal/CreateRequest.h \
 	librbd/journal/Policy.h \
 	librbd/journal/Replay.h \
 	librbd/journal/StandardPolicy.h \

@@ -37,6 +37,7 @@ set(librbd_internal_srcs
   image_watcher/Notifier.cc
   image_watcher/NotifyLockOwner.cc
   journal/RemoveRequest.cc
+  journal/CreateRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   object_map/InvalidateRequest.cc
