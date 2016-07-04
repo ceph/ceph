@@ -77,7 +77,7 @@ def check_sanity():
     Test if development headers and library for rados is available by compiling a dummy C program.
     """
 
-    tmp_dir = tempfile.mkdtemp(dir=os.path.dirname(__file__))
+    tmp_dir = tempfile.mkdtemp(dir=os.environ.get('TMPDIR', os.path.dirname(__file__)))
     tmp_file = os.path.join(tmp_dir, 'rados_dummy.c')
 
     with open(tmp_file, 'w') as fp:
