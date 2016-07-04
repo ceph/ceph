@@ -559,11 +559,13 @@ void CDentry::dump(Formatter *f) const
   make_path(path);
 
   f->dump_string("path", path.get_path());
+  f->dump_unsigned("path_ino", path.get_ino().val);
   f->dump_unsigned("snap_first", first);
   f->dump_unsigned("snap_last", last);
   
-  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
     f->dump_unsigned("inode", get_linkage()->get_inode()->ino());
