@@ -1503,6 +1503,21 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
+    if ((p_features & RBD_FEATURE_JOURNALING) != 0) {
+      bool force_non_primary = !non_primary_global_image_id.empty();
+      bool is_primary;
+      int r = Journal<>::is_tag_owner(p_imctx, &is_primary);
+      if (r < 0) {
+	lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
+		   << dendl;
+	return r;
+      }
+      if (!is_primary && !force_non_primary) {
+	lderr(cct) << "parent is non-primary mirrored image" << dendl;
+	return -EINVAL;
+      }
+    }
+
     if (use_p_features) {
       c_opts.set(RBD_IMAGE_OPTION_FEATURES, p_features);
     }
