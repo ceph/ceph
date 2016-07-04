@@ -523,9 +523,6 @@ add_library(global STATIC ${libglobal_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
 target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
   ${EXTRALIBS})
-if(${WITH_LTTNG})
-  target_link_libraries(global lttng-ust dl)
-endif(${WITH_LTTNG})
 
 # rados object classes
 add_subdirectory(cls)
