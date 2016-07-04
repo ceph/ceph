@@ -52,16 +52,14 @@ endfunction(distutils_add_cython_module)
 
 function(distutils_install_cython_module name)
   install(CODE "
+    set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
       if(EXISTS /etc/debian_version)
-        set(options --install-layout=deb)
-      else()
-        set(options --prefix=/usr)
+        list(APPEND options --install-layout=deb)
       endif()
-      set(root --root=\$ENV{DESTDIR})
+      list(APPEND options --root=\$ENV{DESTDIR})
     else()
-      set(options \"--prefix=${CMAKE_INSTALL_PREFIX}\")
-      set(root --root=/)
+      list(APPEND options --root=/)
     endif()
     execute_process(
        COMMAND env
@@ -69,7 +67,7 @@ function(distutils_install_cython_module name)
            CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
            ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --build-base ${CYTHON_MODULE_DIR} --verbose
-           install \${options} \${root} --verbose
+           install \${options} --verbose
            --single-version-externally-managed --record /dev/null
        WORKING_DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\"
        RESULT_VARIABLE install_res)
