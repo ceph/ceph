@@ -108,6 +108,28 @@ testlog()
     echo $(date '+%F %T') $@ | tee -a "${TEMPDIR}/rbd-mirror.test.log"
 }
 
+expect_failure()
+{
+    local expected="$1" ; shift
+    local out=${TEMPDIR}/expect_failure.out
+
+    if "$@" > ${out} 2>&1 ; then
+        cat ${out} >&2
+        return 1
+    fi
+
+    if [ -z "${expected}" ]; then
+	return 0
+    fi
+
+    if ! grep -q "${expected}" ${out} ; then
+        cat ${out} >&2
+        return 1
+    fi
+
+    return 0
+}
+
 setup()
 {
     local c
