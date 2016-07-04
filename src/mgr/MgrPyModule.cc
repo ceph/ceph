@@ -93,6 +93,27 @@ int MgrPyModule::serve()
   return 0;
 }
 
+// FIXME: DRY wrt serve
+void MgrPyModule::shutdown()
+{
+  assert(pClassInstance != nullptr);
+
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+
+  auto pValue = PyObject_CallMethod(pClassInstance,
+      (const char*)"shutdown", (const char*)"()");
+
+  if (pValue != NULL) {
+    Py_DECREF(pValue);
+  } else {
+    PyErr_Print();
+    derr << "Failed to invoke shutdown() on " << module_name << dendl;
+  }
+
+  PyGILState_Release(gstate);
+}
+
 void MgrPyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
   assert(pClassInstance != nullptr);

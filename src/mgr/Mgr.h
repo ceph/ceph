@@ -81,6 +81,7 @@ public:
   void shutdown();
   void usage() {}
   int main(vector<const char *> args);
+  void handle_signal(int signum);
 };
 
 #endif /* MDS_UTILITY_H_ */

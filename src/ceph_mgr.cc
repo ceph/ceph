@@ -23,6 +23,8 @@
 #include "global/global_init.h"
 
 
+
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -55,13 +57,6 @@ int main(int argc, const char **argv)
   }
 
   // Finally, execute the user's commands
-  rc = mgr.main(args);
-  if (rc != 0) {
-    std::cerr << "Error (" << cpp_strerror(rc) << ")" << std::endl;
-  }
-
-  mgr.shutdown();
-
-  return rc;
+  return mgr.main(args);
 }
 
