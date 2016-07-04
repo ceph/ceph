@@ -16,6 +16,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "gmock/gmock.h"
@@ -119,6 +120,39 @@ public:
 };
 
 MockRemove *MockRemove::s_instance = nullptr;
+
+struct MockCreate {
+  static MockCreate *s_instance;
+  static MockCreate &get_instance() {
+    assert(s_instance != nullptr);
+    return *s_instance;
+  }
+
+  MockCreate() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+template<>
+class CreateRequest<MockJournalImageCtx> {
+public:
+  static CreateRequest *create(IoCtx &ioctx, const std::string &imageid,
+                                      uint8_t order, uint8_t splay_width,
+                                      const std::string &object_pool,
+                                      uint64_t tag_class, TagData &tag_data,
+                                      const std::string &client_id,
+                                      ContextWQ *op_work_queue, Context *on_finish) {
+    return new CreateRequest();
+  }
+
+  void send() {
+    MockCreate::get_instance().send();
+  }
+};
+
+MockCreate *MockCreate::s_instance = nullptr;
 
 } // namespace journal
 } // namespace librbd
