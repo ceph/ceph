@@ -141,6 +141,9 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
 test_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${clone_image}
 
+expect_failure "is non-primary" clone_image ${CLUSTER1} ${PARENT_POOL} \
+    ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
+
 testlog "TEST: disable mirroring / delete non-primary image"
 image2=test2
 image3=test3
