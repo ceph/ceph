@@ -5,7 +5,8 @@
     "num_pgs": 192,
     "num_mdss": 1,
     "num_osds": 1,
-    "num_bytes": 0,
+    "num_data_bytes": 0,
+    "num_bytes_total": 0,
     "num_pools": 3,
     "num_mons": 1,
     "num_objects": 0
