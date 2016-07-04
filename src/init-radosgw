@@ -17,10 +17,6 @@ if [ -x /sbin/start-stop-daemon ]; then
 else
     . /etc/rc.d/init.d/functions
     DEBIAN=0
-
-    # detect systemd, also check whether the systemd-run binary exists
-    SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
-    grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
 fi
 
 daemon_is_running() {
@@ -99,10 +95,8 @@ case "$1" in
             fi
 
             echo "Starting $name..."
-	    if [ $DEBIAN -eq 1 ]; then
-		start-stop-daemon --start -u $user -x $RADOSGW -p /var/run/ceph/client-$name.pid -- -n $name
-	    elif [ -n "$SYSTEMD_RUN" ]; then
-                $SYSTEMD_RUN -r su "$user" -c "ulimit -n 32768; $RADOSGW -n $name"
+            if [ $DEBIAN -eq 1 ]; then
+                start-stop-daemon --start -u $user -x $RADOSGW -p /var/run/ceph/client-$name.pid -- -n $name
             else
 		ulimit -n 32768
                 daemon --user="$user" "$RADOSGW -n $name"
