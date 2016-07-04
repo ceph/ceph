@@ -1830,7 +1830,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     _stop();
     dispatch_queue->queue_reset(this);
     ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
-    existing->can_write = WriteStatus::NOWRITE;
+    existing->can_write = WriteStatus::REPLACING;
     existing->open_write = false;
     existing->replacing = true;
     existing->state_offset = 0;
@@ -2083,7 +2083,8 @@ int AsyncConnection::send_message(Message *m)
   } else {
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(async_msgr->cct, 15) << __func__ << " inline write is denied, reschedule m=" << m << dendl;
-    center->dispatch_event_external(write_handler);
+    if (can_write != WriteStatus::REPLACING)
+      center->dispatch_event_external(write_handler);
   }
   return 0;
 }
