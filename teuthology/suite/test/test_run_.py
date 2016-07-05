@@ -1,8 +1,11 @@
+import os
 import pytest
 import requests
+import yaml
 
 from datetime import datetime
-from mock import patch
+from mock import patch, call, ANY
+from StringIO import StringIO
 
 from teuthology.config import config, YamlConfig
 from teuthology.exceptions import ScheduleFailError
@@ -274,6 +277,9 @@ class TestScheduleSuite(object):
         m_schedule_jobs,
         m_find_git_parent,
     ):
+        # rig has_packages_for_distro to fail this many times, so
+        # everything will run NUM_FAILS+1 times
+        NUM_FAILS = 5
         m_git_validate_sha1.return_value = self.args.ceph_sha1
         m_package_version_for_hash.return_value = 'ceph_version'
         m_git_ls_remote.return_value = 'suite_hash'
@@ -283,11 +289,14 @@ class TestScheduleSuite(object):
             (build_matrix_desc, build_matrix_frags),
         ]
         m_build_matrix.return_value = build_matrix_output
-        m_file.side_effect = [StringIO('field: val\n') for i in xrange(11)]
+        m_file.side_effect = [
+            StringIO('field: val\n') for i in xrange(NUM_FAILS+1)
+        ]
         m_get_install_task_flavor.return_value = 'basic'
         m_get_package_versions.return_value = dict()
+        # NUM_FAILS, then success
         m_has_packages_for_distro.side_effect = \
-            [False for i in xrange(5)] + [True]
+            [False for i in xrange(NUM_FAILS)] + [True]
 
         m_find_git_parent.side_effect = lambda proj, sha1: sha1 + '^'
 
@@ -298,8 +307,8 @@ class TestScheduleSuite(object):
         assert count == 1
         m_has_packages_for_distro.assert_has_calls(
             [call('ceph_sha1' + '^' * i, 'ubuntu', 'basic', {})
-             for i in xrange(5)]
+             for i in xrange(NUM_FAILS+1)]
         )
         m_find_git_parent.assert_has_calls(
-            [call('ceph', 'ceph_sha1' + i * '^') for i in xrange(5)]
+            [call('ceph', 'ceph_sha1' + i * '^') for i in xrange(NUM_FAILS)]
         )

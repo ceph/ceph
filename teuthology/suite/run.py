@@ -115,7 +115,7 @@ class Run(object):
             if not kernel_hash:
                 util.schedule_fail(
                     "Kernel branch '{branch}' not found".format(
-                     branch=self.args.kernel_branch), name
+                     branch=self.args.kernel_branch)
                 )
         if kernel_hash:
             log.info("kernel sha1: {hash}".format(hash=kernel_hash))
