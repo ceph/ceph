@@ -730,7 +730,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   // local?
   if (my_inst.addr == dest_addr) {
     // local
-    static_cast<AsyncConnection*>(local_connection.get())->send_message(m);
+    local_connection->send_message(m);
     return ;
   }
 
