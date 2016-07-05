@@ -1746,18 +1746,38 @@ int BlueStore::_open_fm(bool create)
       dout(1) << __func__ << " pre-fragmenting freespace, using "
 	      << g_conf->bluestore_debug_prefill << " with max free extent "
 	      << g_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
+      uint64_t start = P2ROUNDUP(reserved, min_alloc_size);
       uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
       float r = g_conf->bluestore_debug_prefill;
-      while (start < end) {
+      r /= 1.0 - r;
+      bool stop = false;
+
+      while (!stop && start < end) {
 	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
-	if (start + l > end)
+	if (start + l > end) {
 	  l = end - start;
-	l = ROUND_UP_TO(l, min_alloc_size);
-	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
-	u = ROUND_UP_TO(u, min_alloc_size);
+          l = P2ALIGN(l, min_alloc_size);
+        }
+        assert(start + l <= end);
+
+	uint64_t u = 1 + (uint64_t)(r * (double)l);
+	u = P2ROUNDUP(u, min_alloc_size);
+        if (start + l + u > end) {
+          u = end - (start + l);
+          // trim to align so we don't overflow again
+          u = P2ALIGN(u, min_alloc_size);
+          stop = true;
+        }
+        assert(start + l + u <= end);
+
 	dout(20) << "  free 0x" << std::hex << start << "~" << l
 		 << " use 0x" << u << std::dec << dendl;
+
+        if (u == 0) {
+          // break if u has been trimmed to nothing
+          break;
+        }
+
 	fm->allocate(start + l, u, t);
 	start += l + u;
       }
