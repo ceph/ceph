@@ -2038,7 +2038,7 @@ int BlueStore::_open_db(bool create)
 			    g_conf->bluestore_bluefs_gift_ratio);
       initial = MAX(initial, g_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
-      initial = ROUND_UP_TO(initial, g_conf->bluefs_alloc_size);
+      initial = P2ROUNDUP(initial, g_conf->bluefs_alloc_size);
       initial += g_conf->bluefs_alloc_size - BLUEFS_START;
       bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
       bluefs_extents.insert(BLUEFS_START, initial);
@@ -2316,7 +2316,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
 
   if (gift) {
     // round up to alloc size
-    gift = ROUND_UP_TO(gift, min_alloc_size);
+    gift = P2ROUNDUP(gift, min_alloc_size);
 
     // hard cap to fit into 32 bits
     gift = MIN(gift, 1ull<<31);
@@ -2347,7 +2347,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    reclaim = ROUND_UP_TO(reclaim, min_alloc_size);
+    reclaim = P2ROUNDUP(reclaim, min_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = MIN(reclaim, 1ull<<31);
@@ -5980,10 +5980,10 @@ int BlueStore::_do_alloc_write(
       ::encode(chdr, compressed_bl);
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
-      uint64_t newlen = ROUND_UP_TO(rawlen, min_alloc_size);
+      uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
       uint64_t dstlen = final_length *
         g_conf->bluestore_compression_required_ratio;
-      dstlen = ROUND_UP_TO(dstlen, min_alloc_size);
+      dstlen = P2ROUNDUP(dstlen, min_alloc_size);
       if (newlen <= dstlen && newlen < final_length) {
         // Cool. We compressed at least as much as we were hoping to.
         // pad out to min_alloc_size
@@ -6183,28 +6183,27 @@ int BlueStore::_do_write(
     // we fall within the same block
     _do_write_small(txc, c, o, offset, length, p, &wctx);
   } else {
-    uint64_t head_offset = 0, head_length = 0;
-    uint64_t middle_offset = 0, middle_length = 0;
-    uint64_t tail_offset = 0, tail_length = 0;
-    if (offset % min_alloc_size) {
-      head_offset = offset;
-      head_length = min_alloc_size - (offset % min_alloc_size);
-      assert(head_length < length);
+    uint64_t head_offset, head_length;
+    uint64_t middle_offset, middle_length;
+    uint64_t tail_offset, tail_length;
+
+    head_offset = offset;
+    head_length = P2NPHASE(offset, min_alloc_size);
+
+    tail_offset = P2ALIGN(end, min_alloc_size);
+    tail_length = P2PHASE(end, min_alloc_size);
+
+    middle_offset = head_offset + head_length;
+    middle_length = length - head_length - tail_length;
+
+    if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, &wctx);
-      middle_offset = offset + head_length;
-      middle_length = length - head_length;
-    } else {
-      middle_offset = offset;
-      middle_length = length;
     }
-    if (end % min_alloc_size) {
-      tail_length = end % min_alloc_size;
-      tail_offset = end - tail_length;
-      middle_length -= tail_length;
-    }
+
     if (middle_length) {
       _do_write_big(txc, c, o, middle_offset, middle_length, p, &wctx);
     }
+
     if (tail_length) {
       _do_write_small(txc, c, o, tail_offset, tail_length, p, &wctx);
     }
