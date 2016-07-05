@@ -15,6 +15,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Replay.h"
+#include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "gmock/gmock.h"
@@ -88,6 +89,36 @@ public:
 };
 
 MockReplay *MockReplay::s_instance = nullptr;
+
+struct MockRemove {
+  static MockRemove *s_instance;
+  static MockRemove &get_instance() {
+    assert(s_instance != nullptr);
+    return *s_instance;
+  }
+
+  MockRemove() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+template <>
+class RemoveRequest<MockJournalImageCtx> {
+public:
+  static RemoveRequest *create(IoCtx &ioctx, const std::string &imageid,
+                                      const std::string &client_id,
+                                      ContextWQ *op_work_queue, Context *on_finish) {
+    return new RemoveRequest();
+  }
+
+  void send() {
+    MockRemove::get_instance().send();
+  }
+};
+
+MockRemove *MockRemove::s_instance = nullptr;
 
 } // namespace journal
 } // namespace librbd

@@ -17,6 +17,7 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
+#include "librbd/journal/RemoveRequest.h"
 
 #include <boost/scope_exit.hpp>
 
@@ -394,40 +395,18 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
-
-  bool journal_exists;
-  int r = journaler.exists(&journal_exists);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to stat journal header: " << cpp_strerror(r) << dendl;
-    return r;
-  } else if (!journal_exists) {
-    return 0;
-  }
-
   C_SaferCond cond;
-  journaler.init(&cond);
-  BOOST_SCOPE_EXIT_ALL(&journaler) {
-    journaler.shut_down();
-  };
+  ContextWQ op_work_queue("librbd::op_work_queue",
+                          cct->_conf->rbd_op_thread_timeout,
+                          ImageCtx::get_thread_pool_instance(cct));
+  journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
+    io_ctx, image_id, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+  req->send();
 
-  r = cond.wait();
-  if (r == -ENOENT) {
-    return 0;
-  } else if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to initialize journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  int r = cond.wait();
+  op_work_queue.drain();
 
-  r = journaler.remove(true);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to remove journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  return r;
 }
 
 template <typename I>
