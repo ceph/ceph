@@ -64,8 +64,23 @@ CLUSTER1=cluster1
 CLUSTER2=cluster2
 POOL=mirror
 PARENT_POOL=mirror_parent
-SRC_DIR=$(readlink -f $(dirname $0)/../../../src)
 TEMPDIR=
+
+CEPH_ROOT=$(readlink -f $(dirname $0)/../../../src)
+CEPH_BIN=.
+CEPH_SRC=.
+if [ -e CMakeCache.txt ]; then
+    CEPH_SRC=${CEPH_ROOT}
+    CEPH_ROOT=${PWD}
+    CEPH_BIN=./bin
+
+    # needed for ceph CLI under cmake
+    export LD_LIBRARY_PATH=${CEPH_ROOT}/lib:${LD_LIBRARY_PATH}
+    export PYTHONPATH=${PYTHONPATH}:${CEPH_SRC}/pybind
+    for x in ${CEPH_ROOT}/lib/cython_modules/lib* ; do
+        export PYTHONPATH="${PYTHONPATH}:${x}"
+    done
+fi
 
 # These vars facilitate running this script in an environment with
 # ceph installed from packages, like teuthology. These are not defined
@@ -121,9 +136,9 @@ setup()
     fi
 
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
-        cd ${SRC_DIR}
-        ./mstart.sh ${CLUSTER1} -n
-        ./mstart.sh ${CLUSTER2} -n
+        cd ${CEPH_ROOT}
+        ${CEPH_SRC}/mstart.sh ${CLUSTER1} -n
+        ${CEPH_SRC}/mstart.sh ${CLUSTER2} -n
 
         ln -s $(readlink -f run/${CLUSTER1}/ceph.conf) \
            ${TEMPDIR}/${CLUSTER1}.conf
@@ -159,9 +174,9 @@ cleanup()
     stop_mirror "${CLUSTER2}"
 
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
-        cd ${SRC_DIR}
-        ./mstop.sh ${CLUSTER1}
-        ./mstop.sh ${CLUSTER2}
+        cd ${CEPH_ROOT}
+        ${CEPH_SRC}/mstop.sh ${CLUSTER1}
+        ${CEPH_SRC}/mstop.sh ${CLUSTER2}
     else
         ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
         ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
