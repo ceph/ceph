@@ -18,6 +18,7 @@
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
 #include "rgw_boost_asio_yield.h"
+#include "rgw_sync_module.h"
 
 #include "cls/lock/cls_lock_client.h"
 
@@ -591,9 +592,9 @@ int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers
   return run(new RGWListRemoteDataLogCR(&sync_env, shard_markers, 1, result));
 }
 
-int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger)
+int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger, RGWDataSyncModuleRef& _sync_module)
 {
-  sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger, _source_zone);
+  sync_env.init(store->ctx(), store, _conn, async_rados, &http_manager, _error_logger, _source_zone, _sync_module);
 
   if (initialized) {
     return 0;
@@ -1485,6 +1486,39 @@ public:
   }
 };
 
+class RGWDefaultDataSyncModule : public RGWDataSyncModule {
+public:
+  RGWDefaultDataSyncModule() {}
+
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch) override;
+  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch) override;
+  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+                                     rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch) override;
+};
+
+RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch)
+{
+  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, bucket_info,
+                                 key, versioned_epoch,
+                                 true);
+}
+
+RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
+                                                      real_time& mtime, bool versioned, uint64_t versioned_epoch)
+{
+  return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
+                            bucket_info, key, versioned, versioned_epoch,
+                            NULL, NULL, false, &mtime);
+}
+
+RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+                                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch)
+{
+  return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
+                            bucket_info, key, versioned, versioned_epoch,
+                            &owner.id, &owner.display_name, true, &mtime);
+}
+
 class RGWDataSyncControlCR : public RGWBackoffControlCR
 {
   RGWDataSyncEnv *sync_env;
@@ -1566,7 +1600,9 @@ int RGWDataSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  r = source_log.init(source_zone, conn, error_logger);
+  sync_module.reset(new RGWDefaultDataSyncModule());
+
+  r = source_log.init(source_zone, conn, error_logger, sync_module);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
     finalize();
@@ -1615,14 +1651,15 @@ string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int s
 
 int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
                              const rgw_bucket& bucket, int shard_id,
-                             RGWSyncErrorLogger *_error_logger)
+                             RGWSyncErrorLogger *_error_logger,
+                             RGWDataSyncModuleRef& _sync_module)
 {
   conn = _conn;
   source_zone = _source_zone;
   bs.bucket = bucket;
   bs.shard_id = shard_id;
 
-  sync_env.init(store->ctx(), store, conn, async_rados, http_manager, _error_logger, source_zone);
+  sync_env.init(store->ctx(), store, conn, async_rados, http_manager, _error_logger, source_zone, _sync_module);
 
   return 0;
 }
@@ -1846,18 +1883,11 @@ RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
 }
 
 
-struct bucket_entry_owner {
-  string id;
-  string display_name;
-
-  bucket_entry_owner() {}
-  bucket_entry_owner(const string& _id, const string& _display_name) : id(_id), display_name(_display_name) {}
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("ID", id, obj);
-    JSONDecoder::decode_json("DisplayName", display_name, obj);
-  }
-};
+void rgw_bucket_entry_owner::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("ID", id, obj);
+  JSONDecoder::decode_json("DisplayName", display_name, obj);
+}
 
 struct bucket_list_entry {
   bool delete_marker;
@@ -1867,7 +1897,7 @@ struct bucket_list_entry {
   string etag;
   uint64_t size;
   string storage_class;
-  bucket_entry_owner owner;
+  rgw_bucket_entry_owner owner;
   uint64_t versioned_epoch;
   string rgw_tag;
 
@@ -2096,7 +2126,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   rgw_obj_key key;
   bool versioned;
   uint64_t versioned_epoch;
-  bucket_entry_owner owner;
+  rgw_bucket_entry_owner owner;
   real_time timestamp;
   RGWModifyOp op;
   RGWPendingState op_state;
@@ -2119,7 +2149,7 @@ public:
                              const rgw_bucket_shard& bs,
                              const rgw_obj_key& _key, bool _versioned, uint64_t _versioned_epoch,
                              real_time& _timestamp,
-                             const bucket_entry_owner& _owner,
+                             const rgw_bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker) : RGWCoroutine(_sync_env->cct),
 						      sync_env(_sync_env),
@@ -2578,7 +2608,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << cur_id << ". Duplicate entry?" << dendl;
           } else {
             uint64_t versioned_epoch = 0;
-            bucket_entry_owner owner(entry->owner, entry->owner_display_name);
+            rgw_bucket_entry_owner owner(entry->owner, entry->owner_display_name);
             if (entry->ver.pool < 0) {
               versioned_epoch = entry->ver.epoch;
             }
@@ -2770,11 +2800,13 @@ int RGWBucketSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
+  sync_module.reset(new RGWDefaultDataSyncModule());
+
   int effective_num_shards = (num_shards ? num_shards : 1);
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(store, this, async_rados, &http_manager);
-    ret = l->init(source_zone, conn, bucket, (num_shards ? i : -1), error_logger);
+    ret = l->init(source_zone, conn, bucket, (num_shards ? i : -1), error_logger, sync_module);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to initialize RGWRemoteBucketLog object" << dendl;
       return ret;
