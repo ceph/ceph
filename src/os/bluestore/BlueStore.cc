@@ -5706,6 +5706,7 @@ void BlueStore::_do_write_small(
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   assert(length < min_alloc_size);
+  uint64_t end = offset + length;
 
   bufferlist bl;
   blp.copy(length, bl);
@@ -5725,7 +5726,7 @@ void BlueStore::_do_write_small(
       break;
     }
     int64_t blob = ep->second.blob;
-    b = c->get_blob(o, ep->second.blob);
+    b = c->get_blob(o, blob);
     if (!b->blob.is_mutable() || b->blob.is_compressed()) {
       dout(20) << __func__ << " ignoring immutable " << blob << ": " << *b
 	       << dendl;
@@ -5744,15 +5745,16 @@ void BlueStore::_do_write_small(
 
     // can we pad our head/tail out with zeros?
     uint64_t chunk_size = b->blob.get_chunk_size(block_size);
-    uint64_t head_pad = offset % chunk_size;
+    uint64_t head_pad = P2PHASE(offset, chunk_size);
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
     }
-    uint64_t tail_pad =
-      ROUND_UP_TO(offset + length, chunk_size) - (offset + length);
-    if (tail_pad && o->onode.has_any_lextents(offset + length, tail_pad)) {
+
+    uint64_t tail_pad = P2NPHASE(end, chunk_size);
+    if (tail_pad && o->onode.has_any_lextents(end, tail_pad)) {
       tail_pad = 0;
     }
+
     bufferlist padded = bl;
     if (head_pad) {
       bufferlist z;
@@ -5806,9 +5808,8 @@ void BlueStore::_do_write_small(
     }
 
     // read some data to fill out the chunk?
-    uint64_t head_read = b_off % chunk_size;
-    uint64_t tail_read =
-      ROUND_UP_TO(b_off + b_len, chunk_size) - (b_off + b_len);
+    uint64_t head_read = P2PHASE(b_off, chunk_size);
+    uint64_t tail_read = P2NPHASE(b_off + b_len, chunk_size);
     if ((head_read || tail_read) &&
 	(b->blob.get_ondisk_length() >= b_off + b_len + tail_read) &&
 	head_read + tail_read < min_alloc_size) {
@@ -5885,12 +5886,12 @@ void BlueStore::_do_write_small(
   // new blob.
   b = o->blob_map.new_blob(c->cache);
   unsigned alloc_len = min_alloc_size;
-  uint64_t b_off = offset % alloc_len;
+  uint64_t b_off = P2PHASE(offset, alloc_len);
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
   o->onode.punch_hole(offset, length, &wctx->lex_old);
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-    bluestore_lextent_t(b->id, offset % min_alloc_size, length);
+    bluestore_lextent_t(b->id, P2PHASE(offset, alloc_len), length);
   b->blob.ref_map.get(lex.offset, lex.length);
   txc->statfs_delta.stored() += lex.length;
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
