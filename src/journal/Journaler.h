@@ -59,6 +59,7 @@ public:
   ~Journaler();
 
   int exists(bool *header_exists) const;
+  void exists(Context *on_finish) const;
   int create(uint8_t order, uint8_t splay_width, int64_t pool_id);
   int remove(bool force);
 

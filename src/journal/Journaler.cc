@@ -123,6 +123,17 @@ int Journaler::exists(bool *header_exists) const {
   return 0;
 }
 
+void Journaler::exists(Context *on_finish) const {
+  librados::ObjectReadOperation op;
+  op.stat(NULL, NULL, NULL);
+
+  librados::AioCompletion *comp =
+    librados::Rados::aio_create_completion(on_finish, nullptr, rados_ctx_callback);
+  int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op, NULL);
+  assert(r == 0);
+  comp->release();
+}
+
 void Journaler::init(Context *on_init) {
   m_metadata->init(new C_InitJournaler(this, on_init));
 }
