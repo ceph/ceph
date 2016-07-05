@@ -841,6 +841,7 @@ protected:
 class OSDUtilizationPlainDumper : public OSDUtilizationDumper<TextTable> {
 public:
   typedef OSDUtilizationDumper<TextTable> Parent;
+  set<int> uniq_osd;
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
 		     const PGMap *pgm, bool tree) :
@@ -858,6 +859,8 @@ public:
     tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     if (tree)
       tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
+
+    uniq_osd.clear();
 
     Parent::dump(tbl);
 
@@ -889,6 +892,13 @@ protected:
 			 double& var,
 			 const size_t num_pgs,
 			 TextTable *tbl) {
+    //Make sure the osd id is uniq.
+    if (!qi.is_bucket() && uniq_osd.count(qi.id)) {
+      return;
+    }
+    
+    uniq_osd.insert(qi.id);    
+
     *tbl << qi.id
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
