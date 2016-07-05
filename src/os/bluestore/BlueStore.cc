@@ -2794,11 +2794,24 @@ int BlueStore::umount()
   return 0;
 }
 
+void apply(uint64_t off,
+           uint64_t len,
+           uint64_t granularity,
+           boost::dynamic_bitset<> &bitset,
+          std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
+  auto end = ROUND_UP_TO(off + len, granularity);
+  while (off < end) {
+  uint64_t pos = off / granularity;
+  f( pos, bitset);
+    off += granularity;
+  }
+}
+
 int BlueStore::_fsck_verify_blob_map(
   string what,
   const BlobMap& blob_map,
   map<int64_t,bluestore_extent_ref_map_t>& v,
-  interval_set<uint64_t> &used_blocks,
+  boost::dynamic_bitset<> &used_blocks,
   store_statfs_t& expected_statfs)
 {
   int errors = 0;
@@ -2830,20 +2843,31 @@ int BlueStore::_fsck_verify_blob_map(
       if (!p.is_valid()) {
         continue;
       }
-      interval_set<uint64_t> e, i;
-      e.insert(p.offset, p.length);
-      i.intersection_of(e, used_blocks);
       expected_statfs.allocated += p.length;
       if (compressed) {
         expected_statfs.compressed_allocated += p.length;
       }
-      if (!i.empty()) {
-	derr << " " << what << " extent(s) " << i
-	     << " already allocated" << dendl;
+      bool already_allocated = false;
+      apply( 
+        p.offset, p.length, min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          if (bs.test(pos)) {
+            already_allocated = true;
+          } else {
+            bs.set(pos);
+          }
+        }
+      );
+
+      if (already_allocated) {
+	derr << " " << what << " extent 0x" << std::hex
+	     << p.offset << "~" << p.length
+	     << " or its' subset is already allocated" << dendl;
 	++errors;
       } else {
-	used_blocks.insert(p.offset, p.length);
 	if (p.end() > bdev->get_size()) {
+	  interval_set<uint64_t> e;
+	  e.insert(p.offset, p.length);
 	  derr << " " << what << " blob " << b.id << " extent " << e
 	       << " past end of block device" << dendl;
 	  ++errors;
@@ -2865,11 +2889,12 @@ int BlueStore::fsck()
   int errors = 0;
   set<uint64_t> used_nids;
   set<uint64_t> used_omap_head;
-  interval_set<uint64_t> used_blocks;
+  boost::dynamic_bitset<> used_blocks;
   KeyValueDB::Iterator it;
   BnodeRef bnode;
   map<int64_t,bluestore_extent_ref_map_t> hash_shared;
   store_statfs_t expected_statfs, actual_statfs;
+
 
   int r = _open_path();
   if (r < 0)
@@ -2910,9 +2935,24 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_alloc;
 
-  used_blocks.insert(0, BLUEFS_START);
+  used_blocks.resize(
+    ROUND_UP_TO(bdev->get_size(), min_alloc_size) / min_alloc_size);
+  apply(
+    0, BLUEFS_START, min_alloc_size, used_blocks,
+    [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+      bs.set(pos);
+    }
+  );
+
   if (bluefs) {
-    used_blocks.insert(bluefs_extents);
+    for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
+      apply(
+        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          bs.set(pos);
+        }
+      );
+    }
     r = bluefs->fsck();
     if (r < 0) {
       coll_map.clear();
@@ -3160,7 +3200,14 @@ int BlueStore::fsck()
       dout(20) << __func__ << "  wal " << wt.seq
 	       << " ops " << wt.ops.size()
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
-      used_blocks.insert(wt.released);
+      for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
+        apply(
+          e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+          [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+            bs.set(pos);
+          }
+        );
+      }
     }
   }
 
@@ -3169,25 +3216,31 @@ int BlueStore::fsck()
     fm->enumerate_reset();
     uint64_t offset, length;
     while (fm->enumerate_next(&offset, &length)) {
-      if (used_blocks.intersects(offset, length)) {
+      bool intersects = false;
+      apply(
+        offset, length, min_alloc_size, used_blocks,
+        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          if (bs.test(pos)) {
+            intersects = true;
+          } else {
+            bs.set(pos);
+          }
+        }
+      );
+      if (intersects) {
 	derr << __func__ << " free extent 0x" << std::hex << offset
 	     << "~" << length << std::dec
 	     << " intersects allocated blocks" << dendl;
-	interval_set<uint64_t> free, overlap;
-	free.insert(offset, length);
-	overlap.intersection_of(free, used_blocks);
-	derr << __func__ << " overlap: 0x" << std::hex << overlap
-	     << std::dec << dendl;
 	++errors;
 	continue;
       }
-      used_blocks.insert(offset, length);
     }
-    if (!used_blocks.contains(0, bdev->get_size())) {
-      derr << __func__ << " leaked some space; free+used = 0x" << std::hex
-	   << used_blocks
-	   << " != expected 0x0~" << bdev->get_size()
-	   << std::dec << dendl;
+    size_t count = used_blocks.count();
+    if (used_blocks.size() != count) {
+      assert(used_blocks.size() > count);
+      derr << __func__ << " leaked some space;"
+	   << (used_blocks.size() - count) * min_alloc_size
+	   << " bytes leaked" << dendl;
       ++errors;
     }
   }
