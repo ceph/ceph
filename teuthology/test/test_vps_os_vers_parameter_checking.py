@@ -1,8 +1,7 @@
-from mock import patch
+from mock import patch, Mock
 
 from .. import lock
 
-class Mock: pass
 
 class TestVpsOsVersionParamCheck(object):
 
@@ -21,7 +20,7 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = 'ubuntu'
         self.fake_ctx.os_version = 'precise'
         with patch.multiple(
-            lock.provision,
+            lock.provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
             check_value = lock.vps_version_or_type_valid(
@@ -35,7 +34,7 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = 'ubuntu'
         self.fake_ctx.os_version = '12.04'
         with patch.multiple(
-            lock.provision,
+            lock.provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
             check_value = lock.vps_version_or_type_valid(
@@ -48,7 +47,7 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = '6.5'
         self.fake_ctx.os_version = 'rhel'
         with patch.multiple(
-            lock.provision,
+            lock.provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
             check_value = lock.vps_version_or_type_valid(
@@ -61,7 +60,7 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = 'aardvark'
         self.fake_ctx.os_version = '6.5'
         with patch.multiple(
-            lock.provision,
+            lock.provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
             check_value = lock.vps_version_or_type_valid(
@@ -74,7 +73,7 @@ class TestVpsOsVersionParamCheck(object):
         self.fake_ctx.os_type = 'rhel'
         self.fake_ctx.os_version = 'vampire_bat'
         with patch.multiple(
-            lock.provision,
+            lock.provision.downburst,
             downburst_executable=self.fake_downburst_executable,
         ):
             check_value = lock.vps_version_or_type_valid(
