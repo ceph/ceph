@@ -1,0 +1,63 @@
+# Getting started with Ceph ZetaScale integration
+
+ZetaScale is a flash optimized key value store.  
+This integration makes ZetaScale as an alternative metadata backend 
+for Ceph BlueStore.
+
+
+How to build and get started:
+
+1. Download the code.
+
+   git clone -b zs https://github.com/efirs/ceph.git
+
+2. Build the code
+   do_autogen.sh -z
+   make -j32
+
+3. export zetascale library.
+
+   vstart.sh and make install should automatically do the work,
+   but if libzs.so isn't found by some reason the path needs
+   to be specified:
+   	export LD_LIBRARY_PATH=../src/zs/output/lib/libzs.so
+
+4. Configuration.
+
+   Configure the following in the ceph.conf:
+
+   enable experimental unrecoverable data corrupting features = bluestore zs
+   bluestore_kvbackend      = zs  
+   bluestore_block_wal_path = <WAL partition. example: /dev/sda1>
+   bluestore_block_db_path  = <ZetaScale data partition. example /dev/sda2>
+   bluestore_block_db_size  = <size of the zetascale db in bytes >
+   bluestore_block_path     = <Block device partition. example:/dev/sda3>
+   bluestore_zs_options     = "ZetaScale options seperated by comma"
+
+   if db_path/wal_path is not set then block.db and block.wal files
+   created automatically as files in osd_data directory.
+
+   ZetaScale options:
+   ZS_BTREE_L1CACHE_SIZE = <DRAM Cache size in bytes> Default 1GB
+   ZS_LOG_LEVEL          = <info or debug or error or warn or trace> default level: info
+
+   Typical ZetaScale ceph configuration with flash.
+   * Create 3 partitions. one for WAL, one for DB and one for Block device. 
+     - The size of log partition: 96MB
+     - The size of DB partition : ~9G per Terabytes of storage
+     - The size of block device : remaining size
+   * specify the paths of the partitions in 
+     bluestore_block_wal_path,bluestore_block_db_path,bluestore_block_db_size
+
+5. start the ceph cluster
+   example: 
+   vstart.sh --zs ....
+
+6. The zetascale logs are placed at in the same directory where regular Ceph log is.
+   
+
+TODO:
+1. Make ceph-disk support bluestore_block_db_path/bluestore_block_wal_path and create partitions if they set.
+2. Implement cmake based build  
+3. Redirect ZS error logs to Ceph logs.
+
