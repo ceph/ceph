@@ -1129,10 +1129,9 @@ void FileJournal::do_write(bufferlist& bl)
   write_lock.Unlock();
 
   // split?
-  off64_t split = 0;
   if (pos + bl.length() > header.max_size) {
     bufferlist first, second;
-    split = header.max_size - pos;
+    off64_t split = header.max_size - pos;
     first.substr_of(bl, 0, split);
     second.substr_of(bl, split, bl.length() - split);
     assert(first.length() + second.length() == bl.length());
