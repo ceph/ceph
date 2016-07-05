@@ -193,20 +193,14 @@ private:
   /*bool check_default_state(MonClientState compare_state) {
     return compare_state == state__;
   }*/
-  void _set_state(ConnectionRef con, MonClientState new_state, bool force=false) {
-    if (!con) {
-      return;
-    }
-    entity_addr_t addr = con->get_peer_addr();
-    if (force || state_map.count(addr) == 0) {
+  void _set_state(entity_addr_t addr, MonClientState new_state, bool force=false) {
+    if (force) {
+      state_map[addr] = new_state;
+    } else if (state_map.count(addr) == 0) {
       state_map[addr] = new_state;
     }
   }
-  bool _check_state(ConnectionRef con, MonClientState compare_state) {
-    if (!con) {
-      return false;
-    }
-    entity_addr_t addr = con->get_peer_addr();
+  bool _check_state(entity_addr_t addr, MonClientState compare_state) {
     if (state_map.count(addr) == 0) {
       return compare_state == MC_STATE_NONE;
     } else {
