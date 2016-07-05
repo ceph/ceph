@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 2.8)
 # TO REMOVE include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src)
 include_directories(../support/src)
-include_directories(../sim)
+include_directories(../sim/src)
 include_directories(${BOOST_INCLUDE_DIR})
 
-set(support_srcs ../sim/test_dmclock.cc)
+set(support_srcs ../sim/src/test_dmclock.cc)
 set(test_srcs
   test_test_client.cc
   test_dmclock_server.cc
