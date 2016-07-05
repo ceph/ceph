@@ -4,7 +4,6 @@
 #include "rgw_fcgi.h"
 
 #include "acconfig.h"
-#include <fcgiapp.h>
 
 int RGWFCGX::write_data(const char *buf, int len)
 {
