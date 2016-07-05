@@ -64,6 +64,7 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
+    export TMPDIR=$(mktemp -d --tmpdir ceph.XXX)
     if test -x ./do_cmake.sh ; then
         $DRY_RUN ./do_cmake.sh || return 1
         cd build
@@ -77,6 +78,7 @@ function run() {
         $DRY_RUN make $CHECK_MAKEOPTS check || return 1
         $DRY_RUN make dist || return 1
     fi
+    rm -rf $TMPDIR
 }
 
 function main() {
