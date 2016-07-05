@@ -1839,6 +1839,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             if (r < 0 && r != -ENOENT) {
               lderr(cct) << "error retrieving mirroring state: "
                 << cpp_strerror(r) << dendl;
+              return r;
             }
 
             if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
