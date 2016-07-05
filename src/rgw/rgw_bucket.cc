@@ -300,6 +300,18 @@ int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersi
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
 
+// 'tenant/' is used in bucket instance keys for sync to avoid parsing ambiguity
+// with the existing instance[:shard] format. once we parse the shard, the / is
+// replaced with a : to match the [tenant:]instance format
+void rgw_bucket_instance_key_to_oid(string& key)
+{
+  // replace tenant/ with tenant:
+  auto c = key.find('/');
+  if (c != string::npos) {
+    key[c] = ':';
+  }
+}
+
 int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id)
 {
   ssize_t pos = bucket_instance.rfind(':');
@@ -388,13 +400,9 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
       return ret;
     }
   }
-  string oid;
-  store->get_bucket_meta_oid(bucket, oid);
-  rgw_obj obj(store->get_zone_params().domain_root, oid);
 
-  string key;
-  store->get_bucket_instance_entry(bucket, key); /* we want the bucket instance name without
-						    the oid prefix cruft */
+  /* we want the bucket instance name without the oid prefix cruft */
+  string key = bucket.get_key();
   bufferlist bl;
 
   ::encode(bucket_info, bl);
@@ -563,6 +571,172 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << dendl;
     return ret;
+  }
+
+  ret = rgw_unlink_bucket(store, info.owner, bucket.tenant, bucket.name, false);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
+  }
+
+  return ret;
+}
+
+static int aio_wait(librados::AioCompletion *handle)
+{
+  librados::AioCompletion *c = (librados::AioCompletion *)handle;
+  c->wait_for_complete();
+  int ret = c->get_return_value();
+  c->release();
+  return ret;
+}
+
+static int drain_handles(list<librados::AioCompletion *>& pending)
+{
+  int ret = 0;
+  while (!pending.empty()) {
+    librados::AioCompletion *handle = pending.front();
+    pending.pop_front();
+    int r = aio_wait(handle);
+    if (r < 0) {
+      ret = r;
+    }
+  }
+  return ret;
+}
+
+int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
+                                int concurrent_max, bool keep_index_consistent)
+{
+  int ret;
+  map<RGWObjCategory, RGWStorageStats> stats;
+  std::vector<RGWObjEnt> objs;
+  map<string, bool> common_prefixes;
+  RGWBucketInfo info;
+  RGWObjectCtx obj_ctx(store);
+
+  string bucket_ver, master_ver;
+
+  ret = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, NULL);
+  if (ret < 0)
+    return ret;
+
+  ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL);
+  if (ret < 0)
+    return ret;
+
+
+  RGWRados::Bucket target(store, info);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.list_versions = true;
+
+  std::list<librados::AioCompletion*> handles;
+
+  int max = 1000;
+  int max_aio = concurrent_max;
+  ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
+  if (ret < 0)
+    return ret;
+
+  while (!objs.empty()) {
+    std::vector<RGWObjEnt>::iterator it = objs.begin();
+    for (; it != objs.end(); ++it) {
+      RGWObjState *astate = NULL;
+      rgw_obj obj(bucket, (*it).key.name);
+      obj.set_instance((*it).key.instance);
+
+      ret = store->get_obj_state(&obj_ctx, obj, &astate, NULL);
+      if (ret == -ENOENT) {
+        dout(1) << "WARNING: cannot find obj state for obj " << obj.get_object() << dendl;
+        continue;
+      }
+      if (ret < 0) {
+        lderr(store->ctx()) << "ERROR: get obj state returned with error " << ret << dendl;
+        return ret;
+      }
+
+      if (astate->has_manifest) {
+        rgw_obj head_obj;
+        RGWObjManifest& manifest = astate->manifest;
+        RGWObjManifest::obj_iterator miter = manifest.obj_begin();
+
+        if (miter.get_location().ns.empty()) {
+          head_obj = miter.get_location();
+        }
+
+        for (; miter != manifest.obj_end() && max_aio--; ++miter) {
+          if (!max_aio) {
+            ret = drain_handles(handles);
+            if (ret < 0) {
+              lderr(store->ctx()) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
+              return ret;
+            }
+            max_aio = concurrent_max;
+          }
+
+          rgw_obj last_obj = miter.get_location();
+          if (last_obj == head_obj) {
+            // have the head obj deleted at the end
+            continue;
+          }
+
+          ret = store->delete_obj_aio(last_obj, bucket, info, astate, handles, keep_index_consistent);
+          if (ret < 0) {
+            lderr(store->ctx()) << "ERROR: delete obj aio failed with " << ret << dendl;
+            return ret;
+          }
+        } // for all shadow objs
+
+        ret = store->delete_obj_aio(head_obj, bucket, info, astate, handles, keep_index_consistent);
+        if (ret < 0) {
+          lderr(store->ctx()) << "ERROR: delete obj aio failed with " << ret << dendl;
+          return ret;
+        }
+      }
+
+      if (!max_aio) {
+        ret = drain_handles(handles);
+        if (ret < 0) {
+          lderr(store->ctx()) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
+          return ret;
+        }
+        max_aio = concurrent_max;
+      }
+    } // for all RGW objects
+    objs.clear();
+
+    ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
+    if (ret < 0)
+      return ret;
+  }
+
+  ret = drain_handles(handles);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: could not drain handles as aio completion returned with " << ret << dendl;
+    return ret;
+  }
+
+  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, bucket.name);
+  if (ret < 0) {
+     dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  }
+
+  RGWObjVersionTracker objv_tracker;
+
+  ret = rgw_bucket_delete_bucket_obj(store, bucket.tenant, bucket.name, objv_tracker);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << "with ret as " << ret << dendl;
+    return ret;
+  }
+
+  if (!store->is_syncing_bucket_meta(bucket)) {
+    RGWObjVersionTracker objv_tracker;
+    string entry = bucket.get_key();
+    ret = rgw_bucket_instance_remove_entry(store, entry, &objv_tracker);
+    if (ret < 0) {
+      lderr(store->ctx()) << "ERROR: could not remove bucket instance entry" << bucket.name << "with ret as " << ret << dendl;
+      return ret;
+    }
   }
 
   ret = rgw_unlink_bucket(store, info.owner, bucket.tenant, bucket.name, false);
@@ -1937,6 +2111,7 @@ public:
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
       }
+      bci.info.bucket.tenant = bucket.tenant;
       bci.info.bucket.data_pool = bucket.data_pool;
       bci.info.bucket.index_pool = bucket.index_pool;
       bci.info.index_type = rule_info.index_type;
@@ -1990,6 +2165,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
+    rgw_bucket_instance_key_to_oid(oid);
     bucket = store->get_zone_params().domain_root;
   }
 
