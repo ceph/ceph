@@ -5103,8 +5103,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
           return r;
 
         /* remove bucket meta instance */
-        string entry;
-        get_bucket_instance_entry(bucket, entry);
+        string entry = bucket.get_key();
         r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
         if (r < 0)
           return r;
@@ -7265,8 +7264,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   /* if the bucket is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    string entry;
-    get_bucket_instance_entry(bucket, entry);
+    string entry = bucket.get_key();
     r= rgw_bucket_instance_remove_entry(this, entry, &objv_tracker);
     if (r < 0) {
       return r;
@@ -10461,23 +10459,12 @@ int RGWRados::get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx
   return 0;
 }
 
-void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
+void RGWRados::get_bucket_meta_oid(const rgw_bucket& bucket, string& oid)
 {
-  if (bucket.tenant.empty()) {
-    entry = bucket.name + ":" + bucket.bucket_id;
-  } else {
-    entry = bucket.tenant + ":" + bucket.name + ":" + bucket.bucket_id;
-  }
+  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + bucket.get_key(':');
 }
 
-void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
-{
-  string entry;
-  get_bucket_instance_entry(bucket, entry);
-  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
-}
-
-void RGWRados::get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj)
+void RGWRados::get_bucket_instance_obj(const rgw_bucket& bucket, rgw_obj& obj)
 {
   if (!bucket.oid.empty()) {
     obj.init(get_zone_params().domain_root, bucket.oid);
@@ -10496,6 +10483,7 @@ int RGWRados::get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta
     return -EINVAL;
   }
   string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key;
+  rgw_bucket_instance_key_to_oid(oid);
 
   return get_bucket_instance_from_oid(obj_ctx, oid, info, pmtime, pattrs);
 }
@@ -10706,8 +10694,7 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 
   ::encode(info, bl);
 
-  string key;
-  get_bucket_instance_entry(info.bucket, key); /* when we go through meta api, we don't use oid directly */
+  string key = info.bucket.get_key(); /* when we go through meta api, we don't use oid directly */
   int ret = rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
