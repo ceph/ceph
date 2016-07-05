@@ -7,6 +7,7 @@
 
 
 #include "test_dmclock.h"
+#include "config.h"
 
 #ifdef PROFILE
 #include "profile.h"
@@ -36,43 +37,96 @@ namespace crimson {
 
 
 int main(int argc, char* argv[]) {
-    // server params
+    std::vector<const char*> args;
+    for (int i = 1; i < argc; ++i) {
+      args.push_back(argv[i]);
+    }
 
-    const uint server_count = 100;
-    const uint server_iops = 40;
-    const uint server_threads = 1;
-    const bool server_soft_limit = true;
+    std::string conf_file_list;
+    sim::ceph_argparse_early_args(args, &conf_file_list);
 
-    // client params
+    sim::sim_config_t g_conf;
+    std::vector<sim::cli_group_t> &cli_group = g_conf.cli_group;
+    std::vector<sim::srv_group_t> &srv_group = g_conf.srv_group;
 
-    const uint client_total_ops = 1000;
-    const uint client_count = 100;
-    const uint client_server_select_range = 10;
-    const uint client_wait_count = 1;
-    const uint client_iops_goal = 50;
-    const uint client_outstanding_ops = 100;
-    const std::chrono::seconds client_wait(10);
+    if (!conf_file_list.empty()) {
+      int ret;
+      ret = sim::parse_config_file(conf_file_list, g_conf);
+      if (ret) {
+	// error
+	_exit(1);
+      }
+    } else {
+      // default simulation parameter
+      g_conf.client_groups = 2;
 
-    // client info
-  
-    const double client_reservation = 20.0;
-    const double client_limit = 60.0;
-    const double client_weight = 1.0;
+      sim::srv_group_t st;
+      srv_group.push_back(st);
 
-    test::dmc::ClientInfo client_info(client_reservation,
-                                      client_weight,
-                                      client_limit);
+      sim::cli_group_t ct1(99, 0);
+      cli_group.push_back(ct1);
+
+      sim::cli_group_t ct2(1, 10);
+      cli_group.push_back(ct2);
+    }
+
+    const uint server_groups = g_conf.server_groups;
+    const uint client_groups = g_conf.client_groups;
+    const bool server_random_selection = g_conf.server_random_selection;
+    const bool server_soft_limit = g_conf.server_soft_limit;
+    uint server_total_count = 0;
+    uint client_total_count = 0;
+
+    for (uint i = 0; i < client_groups; ++i) {
+      client_total_count += cli_group[i].client_count;
+    }
+
+    for (uint i = 0; i < server_groups; ++i) {
+      server_total_count += srv_group[i].server_count;
+    }
+
+    std::vector<test::dmc::ClientInfo> client_info;
+    for (uint i = 0; i < client_groups; ++i) {
+      client_info.push_back(test::dmc::ClientInfo 
+			  { cli_group[i].client_reservation,
+			    cli_group[i].client_weight,
+			    cli_group[i].client_limit } );
+    }
+
+    auto ret_client_group_f = [&](const ClientId& c) -> uint {
+      uint group_max = 0;
+      uint i = 0;
+      for (; i < client_groups; ++i) {
+	group_max += cli_group[i].client_count;
+	if (c < group_max) {
+	  break;
+	}
+      }
+      return i;
+    };
+
+    auto ret_server_group_f = [&](const ServerId& s) -> uint {
+      uint group_max = 0;
+      uint i = 0;
+      for (; i < server_groups; ++i) {
+	group_max += srv_group[i].server_count;
+	if (s < group_max) {
+	  break;
+	}
+      }
+      return i;
+    };
 
     auto client_info_f = [=](const ClientId& c) -> test::dmc::ClientInfo {
-        return client_info;
+      return client_info[ret_client_group_f(c)];
     };
 
     auto client_disp_filter = [=] (const ClientId& i) -> bool {
-        return i < 3 || i >= (client_count - 3);
+        return i < 3 || i >= (client_total_count - 3);
     };
 
     auto server_disp_filter = [=] (const ServerId& i) -> bool {
-        return i < 3 || i >= (server_count - 3);
+        return i < 3 || i >= (server_total_count - 3);
     };
 
 
@@ -89,16 +143,25 @@ int main(int argc, char* argv[]) {
         s.post(request, client_id, req_params);
     };
 
-    static std::vector<sim::CliInst> no_wait =
-        { { sim::req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
-    static std::vector<sim::CliInst> wait =
-        { { sim::wait_op, client_wait },
-          { sim::req_op, client_total_ops, client_iops_goal, client_outstanding_ops } };
+    std::vector<std::vector<sim::CliInst>> cli_inst;
+    for (uint i = 0; i < client_groups; ++i) {
+      if (cli_group[i].client_wait == std::chrono::seconds(0)) {
+	cli_inst.push_back(
+	    { { sim::req_op, 
+	        (uint16_t)cli_group[i].client_total_ops, 
+	        (double)cli_group[i].client_iops_goal, 
+	        (uint16_t)cli_group[i].client_outstanding_ops } } );
+      } else {
+	cli_inst.push_back(
+	    { { sim::wait_op, cli_group[i].client_wait },
+	      { sim::req_op, 
+	        (uint16_t)cli_group[i].client_total_ops, 
+		(double)cli_group[i].client_iops_goal, 
+		(uint16_t)cli_group[i].client_outstanding_ops } } );
+      }
+    }
 
     simulation = new test::MySim();
-
-    test::MySim::ClientBasedServerSelectFunc server_select_f =
-      simulation->make_server_select_alt_range(client_server_select_range);
 
     test::DmcServer::ClientRespFunc client_response_f =
         [&simulation](ClientId client_id,
@@ -116,26 +179,48 @@ int main(int argc, char* argv[]) {
         return new test::DmcQueue(client_info_f, can_f, handle_f, server_soft_limit);
     };
 
-  
+ 
     auto create_server_f = [&](ServerId id) -> test::DmcServer* {
-        return new test::DmcServer(id,
-                                   server_iops, server_threads,
-                                   client_response_f,
-                                   test::dmc_server_accumulate_f,
-                                   create_queue_f);
+      uint i = ret_server_group_f(id);
+      return new test::DmcServer(id,
+                                 srv_group[i].server_iops,
+				 srv_group[i].server_threads,
+				 client_response_f,
+				 test::dmc_server_accumulate_f,
+				 create_queue_f);
     };
 
     auto create_client_f = [&](ClientId id) -> test::DmcClient* {
-        return new test::DmcClient(id,
-                                   server_post_f,
-                                   std::bind(server_select_f, _1, id),
-                                   test::dmc_client_accumulate_f,
-                                   id < (client_count - client_wait_count)
-                                   ? no_wait : wait);
+      uint i = ret_client_group_f(id);
+      test::MySim::ClientBasedServerSelectFunc server_select_f;
+      uint client_server_select_range = cli_group[i].client_server_select_range;
+      if (!server_random_selection) {
+	server_select_f = simulation->make_server_select_alt_range(client_server_select_range);
+      } else {
+	server_select_f = simulation->make_server_select_ran_range(client_server_select_range);
+      }
+      return new test::DmcClient(id,
+				 server_post_f,
+				 std::bind(server_select_f, _1, id),
+				 test::dmc_client_accumulate_f,
+				 cli_inst[i]);
     };
 
-    simulation->add_servers(server_count, create_server_f);
-    simulation->add_clients(client_count, create_client_f);
+#if 1
+    std::cout << "[global]" << std::endl << g_conf << std::endl;
+    for (uint i = 0; i < client_groups; ++i) {
+      std::cout << std::endl << "[client." << i << "]" << std::endl;
+      std::cout << cli_group[i] << std::endl;
+    }
+    for (uint i = 0; i < server_groups; ++i) {
+      std::cout << std::endl << "[server." << i << "]" << std::endl;
+      std::cout << srv_group[i] << std::endl;
+    }
+    std::cout << std::endl;
+#endif
+
+    simulation->add_servers(server_total_count, create_server_f);
+    simulation->add_clients(client_total_count, create_client_f);
 
     simulation->run();
     simulation->display_stats(std::cout,
