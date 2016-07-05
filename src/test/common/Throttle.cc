@@ -276,7 +276,8 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   std::condition_variable c;
   uint64_t total = 0;
   std::list<uint64_t> in_queue;
-  bool stop = false;
+  bool stop_getters = false;
+  bool stop_putters = false;
 
   auto wait_time = std::chrono::duration<double>(0);
   uint64_t waits = 0;
@@ -301,7 +302,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
     std::uniform_int_distribution<> dis(0, 10);
 
     std::unique_lock<std::mutex> g(l);
-    while (!stop) {
+    while (!stop_getters) {
       g.unlock();
 
       uint64_t to_get = dis(gen);
@@ -318,9 +319,11 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
 
   auto putter = [&]() {
     std::unique_lock<std::mutex> g(l);
-    while (!stop) {
-      while (in_queue.empty())
+    while (!stop_putters || !in_queue.empty()) {
+      if (in_queue.empty()) {
 	c.wait(g);
+	continue;
+      }
 
       uint64_t c = in_queue.front();
 
@@ -348,10 +351,17 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   std::this_thread::sleep_for(std::chrono::duration<double>(5));
   {
     std::unique_lock<std::mutex> g(l);
-    stop = true;
+    stop_getters = true;
+    c.notify_all();
   }
   for (auto &&i: gts) i.join();
   gts.clear();
+
+  {
+    std::unique_lock<std::mutex> g(l);
+    stop_putters = true;
+    c.notify_all();
+  }
   for (auto &&i: pts) i.join();
   pts.clear();
 
