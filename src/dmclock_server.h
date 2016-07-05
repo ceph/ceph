@@ -12,6 +12,7 @@
  * when an idle client became active
  */
 // #define USE_PROP_HEAP
+// #define DO_NOT_DELAY_TAG_CALC
 
 #pragma once
 
@@ -246,6 +247,8 @@ namespace crimson {
 	ClientInfo            info;
 	bool                  idle;
 	Counter               last_tick;
+	uint32_t              cur_rho;
+	uint32_t              cur_delta;
 
 	ClientRec(C _client,
 		  const ClientInfo& _info,
@@ -254,7 +257,9 @@ namespace crimson {
 	  prev_tag(0.0, 0.0, 0.0),
 	  info(_info),
 	  idle(true),
-	  last_tick(current_tick)
+	  last_tick(current_tick),
+	  cur_rho(1),
+	  cur_delta(1)
 	{
 	  // empty
 	}
@@ -304,19 +309,11 @@ namespace crimson {
 	  return requests.size();
 	}
 
-	bool remove_by_req_filter(std::function<bool(const R&)> filter) {
-	  struct Sink {
-	    void push_back(const R& v) {}
-	  };
-	  static Sink my_sink;
-	  return remove_by_req_filter(filter, my_sink);
-	}
-
 	// NB: because a deque is the underlying structure, this
 	// operation might be expensive
 	template<typename Collect>
-	bool remove_by_req_filter(std::function<bool(const R&)> filter,
-				  Collect& out) {
+	bool remove_by_req_filter_forwards(std::function<bool(const R&)> filter,
+					   Collect& out) {
 	  bool any_removed = false;
 	  for (auto i = requests.begin();
 	       i != requests.end();
@@ -332,6 +329,36 @@ namespace crimson {
 	  return any_removed;
 	}
 
+	// NB: because a deque is the underlying structure, this
+	// operation might be expensive
+	template<typename Collect>
+	bool remove_by_req_filter_backwards(std::function<bool(const R&)> filter,
+					    Collect& out) {
+	  bool any_removed = false;
+	  for (auto i = --requests.end();
+	       /* no cond */;
+	       --i) {
+	    if (filter(*i->request)) {
+	      any_removed = true;
+	      out.push_back(*i->request);
+	      i = requests.erase(i);
+	    }
+	    if (requests.begin() == i) break;
+	  }
+	  return any_removed;
+	}
+
+	template<typename Collect>
+	inline bool remove_by_req_filter(std::function<bool(const R&)> filter,
+					 Collect& out,
+					 bool visit_backwards) {
+	  if (visit_backwards) {
+	    return remove_by_req_filter_backwards(filter, out);
+	  } else {
+	    return remove_by_req_filter_forwards(filter, out);
+	  }
+	}
+	
 	friend std::ostream&
 	operator<<(std::ostream& out,
 		   const typename PriorityQueueBase<C,R>::ClientRec& e) {
@@ -396,22 +423,25 @@ namespace crimson {
       }
 
 
-      bool remove_by_req_filter(std::function<bool(const R&)> filter) {
+      bool remove_by_req_filter(std::function<bool(const R&)> filter,
+				bool visit_backwards = false) {
 	struct Sink {
-	  void push_back(const R& v) {}
+	  void push_back(const R& v) {} // do nothing
 	};
 	static Sink my_sink;
-	return remove_by_req_filter(filter, my_sink);
+	return remove_by_req_filter(filter, my_sink, visit_backwards);
       }
 
       
       template<typename Collect>
       bool remove_by_req_filter(std::function<bool(const R&)> filter,
-				Collect& out) {
+				Collect& out,
+				bool visit_backwards = false) {
 	bool any_removed = false;
 	DataGuard g(data_mtx);
 	for (auto i : client_map) {
-	  bool modified = i.second->remove_by_req_filter(filter, out);
+	  bool modified =
+	    i.second->remove_by_req_filter(filter, out, visit_backwards);
 	  if (modified) {
 	    resv_heap.adjust(*i.second);
 	    limit_heap.adjust(*i.second);
@@ -678,11 +708,30 @@ namespace crimson {
 	  client.idle = false;
 	} // if this client was idle
 
+#ifndef DO_NOT_DELAY_TAG_CALC
+	RequestTag tag(0,0,0);
+
+	if (!client.has_request())
+	{
+	  tag = RequestTag(client.get_req_tag(), client.info,
+			   req_params, time, cost);
+
+	  // copy tag to previous tag for client
+	  client.update_req_tag(tag, tick);
+	}
+#else
 	RequestTag tag(client.get_req_tag(), client.info, req_params, time, cost);
+#endif
+
 	client.add_request(tag, client.client, std::move(request));
 
+	client.cur_rho = req_params.rho;
+	client.cur_delta = req_params.delta;
+
+#ifdef DO_NOT_DELAY_TAG_CALC
 	// copy tag to previous tag for client
 	client.update_req_tag(tag, tick);
+#endif
 
 	resv_heap.adjust(client);
 	limit_heap.adjust(client);
@@ -706,6 +755,20 @@ namespace crimson {
 
 	// pop request and adjust heaps
 	top.pop_request();
+
+#ifndef DO_NOT_DELAY_TAG_CALC
+	if (top.has_request())
+	{
+	  ClientReq& next_first = top.next_request();
+	  next_first.tag = RequestTag(first.tag, top.info,
+	                              ReqParams(top.cur_delta, top.cur_rho),
+				      get_time());
+
+  	  // copy tag to previous tag for client
+	  top.update_req_tag(next_first.tag, tick);
+	}
+#endif
+
 	resv_heap.demote(top);
 	limit_heap.demote(top);
 #if USE_PROP_HEAP
@@ -745,6 +808,11 @@ namespace crimson {
       void reduce_reservation_tags(ClientRec& client) {
 	for (auto& r : client.requests) {
 	  r.tag.reservation -= client.info.reservation_inv;
+
+#ifndef DO_NOT_DELAY_TAG_CALC
+	  // reduce only for front tag. because next tags' value are invalid
+	  break;
+#endif
 	}
 	// don't forget to update previous tag
 	client.prev_tag.reservation -= client.info.reservation_inv;

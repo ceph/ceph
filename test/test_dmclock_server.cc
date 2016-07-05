@@ -9,6 +9,7 @@
 #include <chrono>
 #include <iostream>
 #include <list>
+#include <vector>
 
 
 #include "dmclock_server.h"
@@ -272,6 +273,71 @@ namespace crimson {
 	total += i.id;
       }
       EXPECT_EQ(146, total) << " sum of captured items should be 146";
+    } // TEST
+
+
+    TEST(dmclock_server, remove_by_req_filter_ordering) {
+      struct MyReq {
+	int id;
+
+	MyReq(int _id) :
+	  id(_id)
+	{
+	  // empty
+	}
+      }; // MyReq
+
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+
+      ClientId client1 = 17;
+
+      dmc::ClientInfo info1(0.0, 1.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	return info1;
+      };
+
+      Queue pq(client_info_f, true);
+
+      EXPECT_EQ(0, pq.client_count());
+      EXPECT_EQ(0, pq.request_count());
+
+      ReqParams req_params(1,1);
+
+      pq.add_request(MyReq(1), client1, req_params);
+      pq.add_request(MyReq(2), client1, req_params);
+      pq.add_request(MyReq(3), client1, req_params);
+      pq.add_request(MyReq(4), client1, req_params);
+      pq.add_request(MyReq(5), client1, req_params);
+      pq.add_request(MyReq(6), client1, req_params);
+
+      EXPECT_EQ(1, pq.client_count());
+      EXPECT_EQ(6, pq.request_count());
+
+      // now remove odd ids in forward order
+
+      std::vector<MyReq> capture;
+      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 1 == r.id % 2;},
+			      capture);
+
+      EXPECT_EQ(3, pq.request_count());
+      EXPECT_EQ(3, capture.size());
+      EXPECT_EQ(1, capture[0].id) << "items should come out in forward order";
+      EXPECT_EQ(3, capture[1].id) << "items should come out in forward order";
+      EXPECT_EQ(5, capture[2].id) << "items should come out in forward order";
+
+      // now remove even ids in reverse order
+      
+      std::vector<MyReq> capture2;
+      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 0 == r.id % 2;},
+			      capture2,
+			      true);
+      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(3, capture2.size());
+      EXPECT_EQ(6, capture2[0].id) << "items should come out in reverse order";
+      EXPECT_EQ(4, capture2[1].id) << "items should come out in reverse order";
+      EXPECT_EQ(2, capture2[2].id) << "items should come out in reverse order";
     } // TEST
 
 
