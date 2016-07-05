@@ -47,6 +47,3 @@ if(${WITH_BABELTRACE})
     )
   install(TARGETS rbd-replay-prep DESTINATION bin)
 endif(${WITH_BABELTRACE})
-
-install(TARGETS rbd_replay rbd_replay_ios DESTINATION lib)
-
