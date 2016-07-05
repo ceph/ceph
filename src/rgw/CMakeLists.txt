@@ -1,5 +1,3 @@
-include_directories(${FCGI_INCLUDE_DIR})
-
 add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc
   rgw_common.cc
