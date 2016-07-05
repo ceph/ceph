@@ -24,7 +24,10 @@ add_library(erasure_code_objs OBJECT ErasureCode.cc)
 add_custom_target(erasure_code_plugins DEPENDS
     ${EC_ISA_LIB}
     ec_lrc
-    ec_jerasure_sse3
-    ec_jerasure_sse4
     ec_jerasure)
-
+if(TARGET ec_jerasure_sse3)
+  add_dependencies(erasure_code_plugins ec_jerasure_sse3)
+endif()
+if(TARGET ec_jerasure_sse4)
+  add_dependencies(erasure_code_plugins ec_jerasure_sse4)
+endif()
