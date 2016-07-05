@@ -278,6 +278,8 @@ TEST_P(MessengerTest, SimpleTest) {
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   client_msgr->shutdown();
   client_msgr->wait();
+  server_msgr->shutdown();
+  server_msgr->wait();
 }
 
 TEST_P(MessengerTest, NameAddrTest) {
