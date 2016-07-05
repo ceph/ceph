@@ -486,7 +486,7 @@ function test_auth()
   ceph auth print-key client.xx
   ceph auth print_key client.xx
   ceph auth caps client.xx osd "allow rw"
-  expect_false "ceph auth get client.xx | grep caps | grep mon"
+  expect_false sh <<< "ceph auth get client.xx | grep caps | grep mon"
   ceph auth get client.xx | grep osd | grep "allow rw"
   ceph auth export | grep client.xx
   ceph auth export -o authfile
@@ -1055,14 +1055,14 @@ function test_mon_osd()
   ceph osd dump --format=json-pretty | grep $bl
   ceph osd dump | grep "^blacklist $bl"
   ceph osd blacklist rm $bl
-  expect_false "ceph osd blacklist ls | grep $bl"
+  ceph osd blacklist ls | expect_false grep $bl
 
   bl=192.168.0.1
   # test without nonce, invalid nonce
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
   ceph osd blacklist rm $bl
-  expect_false "ceph osd blacklist ls | grep $bl"
+  ceph osd blacklist ls | expect_false grep $expect_false bl
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
@@ -1073,7 +1073,7 @@ function test_mon_osd()
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
   ceph osd blacklist clear
-  expect_false "ceph osd blacklist ls | grep $bl"
+  ceph osd blacklist ls | expect_false grep $bl
 
   #
   # osd crush
@@ -1468,41 +1468,41 @@ function test_mon_osd_pool_set()
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag 2
   done
 
-  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET scrub_min_interval 123456
   ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep 'scrub_min_interval: 123456'
   ceph osd pool set $TEST_POOL_GETSET scrub_min_interval 0
-  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET scrub_min_interval | expect_false grep '.'
 
-  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET scrub_max_interval 123456
   ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | grep 'scrub_max_interval: 123456'
   ceph osd pool set $TEST_POOL_GETSET scrub_max_interval 0
-  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET scrub_max_interval | expect_false grep '.'
 
-  expect_false "ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET deep_scrub_interval 123456
   ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep 'deep_scrub_interval: 123456'
   ceph osd pool set $TEST_POOL_GETSET deep_scrub_interval 0
-  expect_false "ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | expect_false grep '.'
 
-  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority 5 
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority 0
-  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
 
-  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5 
   ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep 'recovery_op_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 0
-  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | expect_false grep '.'
 
-  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_priority | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET scrub_priority 5 
   ceph osd pool get $TEST_POOL_GETSET scrub_priority | grep 'scrub_priority: 5'
   ceph osd pool set $TEST_POOL_GETSET scrub_priority 0
-  expect_false "ceph osd pool get $TEST_POOL_GETSET scrub_priority | grep '.'"
+  ceph osd pool get $TEST_POOL_GETSET scrub_priority | expect_false grep '.'
 
   ceph osd pool set $TEST_POOL_GETSET nopgchange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 10
