@@ -17,15 +17,19 @@ set_source_files_properties(${srcs} ${test_srcs}
   COMPILE_FLAGS "${local_flags}"
   )
 
-add_executable(data_struct_tests EXCLUDE_FROM_ALL ${test_srcs})
+add_executable(data-struct-tests EXCLUDE_FROM_ALL ${test_srcs})
 
-target_link_libraries(data_struct_tests
+set_target_properties(data-struct-tests
+  PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ../../test)
+
+target_link_libraries(data-struct-tests
   PUBLIC pthread ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY})
 
 # for every argument, adds a test with that name, using it as a gtest filter
 function(make_tests)
   foreach(targ ${ARGN})
-    add_test(NAME ${targ} COMMAND data_struct_tests --gtest_filter=${targ}.*)
+    add_test(NAME ${targ} COMMAND data-struct-tests --gtest_filter=${targ}.*)
   endforeach()
 endfunction()
 

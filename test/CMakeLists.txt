@@ -33,7 +33,7 @@ else()
 endif()
   
 
-add_dependencies(dmclock-tests dmclock)
+add_dependencies(dmclock-tests dmclock data-struct-tests)
 
 # for every argument, adds a test with that name, using it as a gtest filter
 function(dmclock_make_tests)

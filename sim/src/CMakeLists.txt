@@ -32,6 +32,10 @@ set_property(
 add_executable(ssched_sim EXCLUDE_FROM_ALL ${ssched_sim_srcs})
 add_executable(dmc_sim EXCLUDE_FROM_ALL ${dmc_sim_srcs} ${config_srcs})
 
+set_target_properties(ssched_sim dmc_sim
+  PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ..)
+
 add_dependencies(dmc_sim dmclock)
 
 target_link_libraries(ssched_sim PUBLIC pthread)
