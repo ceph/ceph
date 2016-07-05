@@ -2,13 +2,18 @@
 
 # this should be run from the src directory in the ceph.git
 
-CEPH_SRC=$(pwd)
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CEPH_SRC/.libs"
+source $(dirname $0)/detect-build-env-vars.sh
+if [ -e CMakeCache.txt ]; then
+    CYTHON_MODULES_DIR=$CEPH_LIB/cython_modules
+else
+    CYTHON_MODULES_DIR=$CEPH_SRC/build
+fi
+
+CEPH_SRC=$CEPH_ROOT/src
 export PYTHONPATH="$CEPH_SRC/pybind:$CEPH_SRC/test/pybind"
-for x in $CEPH_SRC/build/lib* ; do
-  export PYTHONPATH="${PYTHONPATH}:${x}"
+for x in $CYTHON_MODULES_DIR/lib* ; do
+    PYTHONPATH="${PYTHONPATH}:${x}"
 done
-PATH="$CEPH_SRC:$PATH"
 
 recreate_pool() {
     POOL_NAME=$1

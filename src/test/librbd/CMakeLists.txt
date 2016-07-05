@@ -88,7 +88,6 @@ add_executable(ceph_test_librbd
   $<TARGET_OBJECTS:parse_secret_objs>
   )
 target_link_libraries(ceph_test_librbd
-  rados_test_stub
   librados
   rbd_test
   rbd_api
