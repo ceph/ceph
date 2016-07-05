@@ -101,6 +101,7 @@ namespace crimson {
       double proportion;
       double limit;
       bool   ready; // true when within limit
+      Time   arrival;
 
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
@@ -127,11 +128,12 @@ namespace crimson {
 	assert(reservation < max_tag || proportion < max_tag);
       }
 
-      RequestTag(double _res, double _prop, double _lim) :
+      RequestTag(double _res, double _prop, double _lim, const Time& _arrival) :
 	reservation(_res),
 	proportion(_prop),
 	limit(_lim),
-	ready(false)
+	ready(false),
+	arrival(_arrival)
       {
 	assert(reservation < max_tag || proportion < max_tag);
       }
@@ -140,7 +142,8 @@ namespace crimson {
 	reservation(other.reservation),
 	proportion(other.proportion),
 	limit(other.limit),
-	ready(other.ready)
+	ready(other.ready),
+	arrival(other.arrival)
       {
 	// empty
       }
@@ -254,7 +257,7 @@ namespace crimson {
 		  const ClientInfo& _info,
 		  Counter current_tick) :
 	  client(_client),
-	  prev_tag(0.0, 0.0, 0.0),
+	  prev_tag(0.0, 0.0, 0.0, TimeZero),
 	  info(_info),
 	  idle(true),
 	  last_tick(current_tick),
@@ -432,7 +435,7 @@ namespace crimson {
 	return remove_by_req_filter(filter, my_sink, visit_backwards);
       }
 
-      
+
       template<typename Collect>
       bool remove_by_req_filter(std::function<bool(const R&)> filter,
 				Collect& out,
@@ -709,10 +712,9 @@ namespace crimson {
 	} // if this client was idle
 
 #ifndef DO_NOT_DELAY_TAG_CALC
-	RequestTag tag(0,0,0);
+	RequestTag tag(0, 0, 0, time);
 
-	if (!client.has_request())
-	{
+	if (!client.has_request()) {
 	  tag = RequestTag(client.get_req_tag(), client.info,
 			   req_params, time, cost);
 
@@ -757,12 +759,11 @@ namespace crimson {
 	top.pop_request();
 
 #ifndef DO_NOT_DELAY_TAG_CALC
-	if (top.has_request())
-	{
+	if (top.has_request()) {
 	  ClientReq& next_first = top.next_request();
 	  next_first.tag = RequestTag(first.tag, top.info,
 	                              ReqParams(top.cur_delta, top.cur_rho),
-				      get_time());
+				      next_first.tag.arrival);
 
   	  // copy tag to previous tag for client
 	  top.update_req_tag(next_first.tag, tick);
@@ -916,7 +917,7 @@ namespace crimson {
 	  result.type = NextReqType::none;
 	  return result;
 	}
-      } // schedule_request
+      } // do_next_request
 
 
       // if possible is not zero and less than current then return it;
