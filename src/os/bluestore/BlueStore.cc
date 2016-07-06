@@ -507,20 +507,17 @@ void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
   _audit("trim start");
 
   // buffers
-  auto i = buffer_lru.end();
-  if (buffer_size) {
-    assert(i != buffer_lru.begin());
-    --i;
-  }
   while (buffer_size > buffer_max) {
+    auto i = buffer_lru.rbegin();
+    if (i == buffer_lru.rend()) {
+      // stop if buffer_lru is now empty
+      break;
+    }
+
     Buffer *b = &*i;
     assert(b->is_clean());
-    auto p = b->space->buffer_map.find(b->offset);
-    if (i != buffer_lru.begin()) {
-      --i;
-    }
     dout(20) << __func__ << " rm " << *b << dendl;
-    b->space->_rm_buffer(p);
+    b->space->_rm_buffer(b);
   }
 
   // onodes
@@ -1391,6 +1388,7 @@ BlueStore::~BlueStore()
   assert(db == NULL);
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
+  assert(path_fd < 0);
   for (auto i : cache_shards) {
     delete i;
   }
