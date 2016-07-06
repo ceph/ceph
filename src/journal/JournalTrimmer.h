@@ -28,6 +28,7 @@ public:
   void shut_down(Context *on_finish);
 
   int remove_objects(bool force);
+  void remove_objects(bool force, Context *on_finish);
   void committed(uint64_t commit_tid);
 
 private:
