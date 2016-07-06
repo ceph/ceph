@@ -49,21 +49,22 @@ run() {
     do_run "$@"
 }
 
-DNAME="`dirname $0`"
-DNAME="`readlink -f $DNAME`"
-RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
-if ! test -f $RADOS_TOOL ; then
-    RADOS_TOOL=$(which rados)
+if [ -n "$CEPH_BIN" ] ; then
+   # CMake env
+   RADOS_TOOL="$CEPH_BIN/rados"
+   CEPH_TOOL="$CEPH_BIN/ceph"
+else
+   # executables should be installed by the QA env 
+   RADOS_TOOL=$(which rados)
+   CEPH_TOOL=$(which ceph)
 fi
-CEPH_TOOL="`readlink -f \"$DNAME/../ceph\"`"
-if ! test -f $CEPH_TOOL ; then
-    CEPH_TOOL=$(which ceph)
-fi
+
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
 
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
+[ -x "$CEPH_TOOL" ] || die "couldn't find $CEPH_TOOL binary to test"
 
 while getopts  "c:hkp:" flag; do
     case $flag in
@@ -304,7 +305,7 @@ test_xattr() {
     $RADOS_TOOL -p $POOL listxattr $OBJ > $V1
     grep -q foo $V1
     grep -q bar $V1
-    wc -l $V1 | grep -q "^2 "
+    [ `cat $V1 | wc -l` -eq 2 ]
     rm $V1 $V2
     cleanup
 }
