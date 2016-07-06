@@ -4137,11 +4137,6 @@ void OSD::heartbeat_check()
 {
   assert(heartbeat_lock.is_locked());
   utime_t now = ceph_clock_now(cct);
-  double age = hbclient_messenger->get_dispatch_queue_max_age(now);
-  if (age > ((double)cct->_conf->osd_heartbeat_grace / 2.0)) {
-    derr << "skipping heartbeat_check, hbqueue max age: " << age << dendl;
-    return; // hb dispatch is too backed up for our hb status to be meaningful
-  }
 
   // check for incoming heartbeats (move me elsewhere?)
   utime_t cutoff = now;
