@@ -114,8 +114,8 @@ class Run(object):
             )
             if not kernel_hash:
                 util.schedule_fail(
-                    message="Kernel branch '{branch}' not found".format(
-                        branch=self.args.kernel_branch), name=self.name
+                    "Kernel branch '{branch}' not found".format(
+                     branch=self.args.kernel_branch), name
                 )
         if kernel_hash:
             log.info("kernel sha1: {hash}".format(hash=kernel_hash))
@@ -442,10 +442,8 @@ class Run(object):
                 new_sha1 = \
                     util.find_git_parent('ceph', self.base_config.sha1)
                 if new_sha1 is None:
-                    util.schedule_fail(
-                        name, message='Backtrack for --newest failed'
-                    )
-                # rebuild the base config to resubstitute sha1
+                    util.schedule_fail('Backtrack for --newest failed', name)
+                 # rebuild the base config to resubstitute sha1
                 self.config_input['ceph_hash'] = new_sha1
                 self.base_config = self.build_base_config()
                 backtrack += 1
@@ -458,7 +456,7 @@ class Run(object):
             if self.args.newest:
                 util.schedule_fail(
                     'Exceeded %d backtracks; raise --newest value' % limit,
-                    name=name,
+                    name,
                 )
 
         if self.args.dry_run:
