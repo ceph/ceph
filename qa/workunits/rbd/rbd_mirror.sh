@@ -170,6 +170,8 @@ unprotect_snapshot ${CLUSTER2} ${POOL} ${image5} 'snap2'
 for i in ${image3} ${image5}; do
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
+  # workaround #16555: before removing make sure it is not still bootstrapped
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
   remove_image ${CLUSTER2} ${POOL} ${i}
 done
 
