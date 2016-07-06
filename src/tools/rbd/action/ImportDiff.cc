@@ -67,10 +67,10 @@ static int do_import_diff(librbd::Image &image, const char *path,
       goto done;
     }
 
-    if (tag == 'e') {
+    if (tag == RBD_DIFF_END) {
       dout(2) << " end diff" << dendl;
       break;
-    } else if (tag == 'f') {
+    } else if (tag == RBD_DIFF_FROM_SNAP) {
       r = utils::read_string(fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
       if (r < 0)
         goto done;
@@ -88,7 +88,7 @@ static int do_import_diff(librbd::Image &image, const char *path,
         goto done;
       }
     }
-    else if (tag == 't') {
+    else if (tag == RBD_DIFF_TO_SNAP) {
       r = utils::read_string(fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
       if (r < 0)
         goto done;
@@ -106,7 +106,7 @@ static int do_import_diff(librbd::Image &image, const char *path,
         r = -EEXIST;
         goto done;
       }
-    } else if (tag == 's') {
+    } else if (tag == RBD_DIFF_IMAGE_SIZE) {
       uint64_t end_size;
       char buf[8];
       r = safe_read_exact(fd, buf, 8);
@@ -126,7 +126,7 @@ static int do_import_diff(librbd::Image &image, const char *path,
       }
       if (from_stdin)
         size = end_size;
-    } else if (tag == 'w' || tag == 'z') {
+    } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
       uint64_t len;
       char buf[16];
       r = safe_read_exact(fd, buf, 16);
@@ -138,7 +138,7 @@ static int do_import_diff(librbd::Image &image, const char *path,
       ::decode(off, p);
       ::decode(len, p);
 
-      if (tag == 'w') {
+      if (tag == RBD_DIFF_WRITE) {
         bufferptr bp = buffer::create(len);
         r = safe_read_exact(fd, bp.c_str(), len);
         if (r < 0)

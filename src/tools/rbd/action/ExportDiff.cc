@@ -98,7 +98,7 @@ private:
                           uint64_t length, bool exists) {
     // extent
     bufferlist bl;
-    __u8 tag = exists ? 'w' : 'z';
+    __u8 tag = exists ? RBD_DIFF_WRITE : RBD_DIFF_ZERO;
     ::encode(tag, bl);
     ::encode(offset, bl);
     ::encode(length, bl);
@@ -142,20 +142,20 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 
     __u8 tag;
     if (fromsnapname) {
-      tag = 'f';
+      tag = RBD_DIFF_FROM_SNAP;
       ::encode(tag, bl);
       std::string from(fromsnapname);
       ::encode(from, bl);
     }
 
     if (endsnapname) {
-      tag = 't';
+      tag = RBD_DIFF_TO_SNAP;
       ::encode(tag, bl);
       std::string to(endsnapname);
       ::encode(to, bl);
     }
 
-    tag = 's';
+    tag = RBD_DIFF_IMAGE_SIZE;
     ::encode(tag, bl);
     uint64_t endsize = info.size;
     ::encode(endsize, bl);
@@ -179,7 +179,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   }
 
   {
-    __u8 tag = 'e';
+    __u8 tag = RBD_DIFF_END;
     bufferlist bl;
     ::encode(tag, bl);
     r = bl.write_fd(fd);

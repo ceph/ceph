@@ -16,6 +16,13 @@ namespace utils {
 
 static const std::string RBD_DIFF_BANNER ("rbd diff v1\n");
 
+#define RBD_DIFF_FROM_SNAP	'f'
+#define RBD_DIFF_TO_SNAP	't'
+#define RBD_DIFF_IMAGE_SIZE	's'
+#define RBD_DIFF_WRITE		'w'
+#define RBD_DIFF_ZERO		'z'
+#define RBD_DIFF_END		'e'
+
 enum SnapshotPresence {
   SNAPSHOT_PRESENCE_NONE,
   SNAPSHOT_PRESENCE_PERMITTED,
