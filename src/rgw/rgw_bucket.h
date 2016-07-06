@@ -37,6 +37,7 @@ extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, strin
 
 extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
 extern void rgw_bucket_instance_key_to_oid(string& key);
+extern void rgw_bucket_instance_oid_to_key(string& oid);
 
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
                                         const string& tenant_name,
