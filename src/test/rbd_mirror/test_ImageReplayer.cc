@@ -106,8 +106,7 @@ public:
     m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
 
-    m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_local_cluster,
-                                                        m_threads->work_queue,
+    m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_threads->work_queue,
                                                         m_threads->timer,
                                                         &m_threads->timer_lock));
     m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
