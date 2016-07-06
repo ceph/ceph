@@ -346,18 +346,18 @@ test_ls() {
 	done
     done
     CHECK=$("$RADOS_TOOL" -p $p ls 2> /dev/null | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if [ "$OBJS" -ne "$CHECK" ];
     then
         die "Created $OBJS objects in default namespace but saw $CHECK"
     fi
     TESTNS=NS${NS}
     CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if [ "$OBJS" -ne "$CHECK" ];
     then
         die "Created $OBJS objects in $TESTNS namespace but saw $CHECK"
     fi
     CHECK=$("$RADOS_TOOL" -p $p --all ls 2> /dev/null | wc -l)
-    if test "$TOTAL" != "$CHECK";
+    if [ "$TOTAL" -ne "$CHECK" ];
     then
         die "Created $TOTAL objects but saw $CHECK"
     fi
@@ -400,7 +400,7 @@ test_cleanup() {
     $RADOS_TOOL -p $p -N NS3 cleanup 2> /dev/null
     #echo "Check NS3 after specific cleanup"
     CHECK=$($RADOS_TOOL -p $p -N NS3 ls | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if [ "$OBJS" -ne "$CHECK" ] ;
     then
         die "Expected $OBJS objects in NS3 but saw $CHECK"
     fi
@@ -410,7 +410,7 @@ test_cleanup() {
     #echo "Check all namespaces"
     $RADOS_TOOL -p $p --all ls > $TDIR/after.ls.out 2> /dev/null
     CHECK=$(cat $TDIR/after.ls.out | wc -l)
-    if test "$TOTAL" != "$CHECK";
+    if [ "$TOTAL" -ne "$CHECK" ];
     then
         die "Expected $TOTAL objects but saw $CHECK"
     fi
