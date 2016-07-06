@@ -148,14 +148,14 @@ int main(int argc, char* argv[]) {
       if (cli_group[i].client_wait == std::chrono::seconds(0)) {
 	cli_inst.push_back(
 	    { { sim::req_op, 
-	        (uint16_t)cli_group[i].client_total_ops, 
+	        (uint32_t)cli_group[i].client_total_ops,
 	        (double)cli_group[i].client_iops_goal, 
 	        (uint16_t)cli_group[i].client_outstanding_ops } } );
       } else {
 	cli_inst.push_back(
 	    { { sim::wait_op, cli_group[i].client_wait },
 	      { sim::req_op, 
-	        (uint16_t)cli_group[i].client_total_ops, 
+	        (uint32_t)cli_group[i].client_total_ops,
 		(double)cli_group[i].client_iops_goal, 
 		(uint16_t)cli_group[i].client_outstanding_ops } } );
       }
