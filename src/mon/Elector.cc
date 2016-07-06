@@ -488,6 +488,5 @@ void Elector::start_participating()
 {
   if (!participating) {
     participating = true;
-    call_election();
   }
 }
