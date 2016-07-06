@@ -319,17 +319,17 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       if (name.compare(delimiter) == 0)
         goto next;
 
-        s->formatter->open_object_section_with_attrs("subdir", FormatterAttrs("name", name.c_str(), NULL));
+      s->formatter->open_object_section_with_attrs("subdir", FormatterAttrs("name", name.c_str(), NULL));
 
-        /* swift is a bit inconsistent here */
-        switch (s->format) {
-          case RGW_FORMAT_XML:
-            s->formatter->dump_string("name", name);
-            break;
-          default:
-            s->formatter->dump_string("subdir", name);
-        }
-        s->formatter->close_section();
+      /* swift is a bit inconsistent here */
+      switch (s->format) {
+        case RGW_FORMAT_XML:
+          s->formatter->dump_string("name", name);
+          break;
+        default:
+          s->formatter->dump_string("subdir", name);
+      }
+      s->formatter->close_section();
     }
 next:
     if (do_objs)
