@@ -99,6 +99,7 @@ memstore=0
 bluestore=0
 rgw_frontend="civetweb"
 lockdep=${LOCKDEP:-1}
+zs=0
 
 VSTART_SEC="client.vstart.sh"
 
@@ -138,6 +139,7 @@ usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
+usage=$usage"\t--zs enable ZetaScale as the KV backend\n"
 
 usage_exit() {
 	printf "$usage"
@@ -259,6 +261,9 @@ case $1 in
 	    ;;
     -b | --bluestore )
 	    bluestore=1
+	    ;;
+    --zs )
+	    zs=1
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -411,6 +416,11 @@ fi
 if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = bluestore'
+fi
+
+if [ "$zs" -eq 1 ]; then
+	export LD_LIBRARY_PATH=zs/output/lib:$LD_LIBRARY_PATH
+	ZSBACKEND='bluestore_kvbackend=zs'
 fi
 
 if [ -z "$CEPH_PORT" ]; then
@@ -592,6 +602,7 @@ $DAEMONOPTS
 $COSDDEBUG
 $COSDMEMSTORE
 $COSDSHORT
+$ZSBACKEND
 $extra_conf
 [mon]
         mon pg warn min per osd = 3
