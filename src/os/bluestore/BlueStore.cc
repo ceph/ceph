@@ -2954,7 +2954,7 @@ int BlueStore::_open_fm(bool create)
     fm->create(bdev->get_size(), t);
 
     uint64_t reserved = 0;
-    if (g_conf->bluestore_bluefs) {
+    if (g_conf->bluestore_bluefs && g_conf->bluestore_kvbackend == "rocksdb") {
       assert(bluefs_extents.num_intervals() == 1);
       interval_set<uint64_t>::iterator p = bluefs_extents.begin();
       reserved = p.get_start() + p.get_len();
@@ -3200,7 +3200,7 @@ int BlueStore::_open_db(bool create)
 
   bool do_bluefs;
   if (create) {
-    do_bluefs = g_conf->bluestore_bluefs;
+    do_bluefs = g_conf->bluestore_bluefs && kv_backend == "rocksdb";
   } else {
     string s;
     r = read_meta("bluefs", &s);
@@ -3367,7 +3367,7 @@ int BlueStore::_open_db(bool create)
       if (g_conf->rocksdb_db_paths.length())
 	env->CreateDir(fn + ".slow");
     }
-  } else if (create) {
+  } else if (create && kv_backend != "zs") {
     int r = ::mkdir(fn.c_str(), 0755);
     if (r < 0)
       r = -errno;
@@ -3415,6 +3415,8 @@ int BlueStore::_open_db(bool create)
 
   if (kv_backend == "rocksdb")
     options = g_conf->bluestore_rocksdb_options;
+  else if (kv_backend == "zs")
+    options = g_conf->bluestore_zs_options;
   db->init(options);
   if (create)
     r = db->create_and_open(err);
@@ -3765,6 +3767,7 @@ int BlueStore::mkfs()
   dout(1) << __func__ << " path " << path << dendl;
   int r;
   uuid_d old_fsid;
+  bool zs = g_conf->bluestore_kvbackend == "zs";
 
   {
     string done;
@@ -3840,15 +3843,19 @@ int BlueStore::mkfs()
 				   g_conf->bluestore_block_create);
   if (r < 0)
     goto out_close_fsid;
-  if (g_conf->bluestore_bluefs) {
+  /* For ZetaScale we always create db/wal and restrict minimum db size */
+  if (g_conf->bluestore_bluefs || zs) {
     r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
 	g_conf->bluestore_block_wal_size,
-	g_conf->bluestore_block_wal_create);
+	g_conf->bluestore_block_wal_create || zs);
     if (r < 0)
       goto out_close_fsid;
-    r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
-	g_conf->bluestore_block_db_size,
-	g_conf->bluestore_block_db_create);
+#define ZS_MINIMUM_DB_SIZE (64L * 1024 * 1024 * 1024)
+    r = _setup_block_symlink_or_file("block.db",
+	  g_conf->bluestore_block_db_path,
+	  ((!zs || g_conf->bluestore_block_db_size >= ZS_MINIMUM_DB_SIZE)
+	    ? g_conf->bluestore_block_db_size : ZS_MINIMUM_DB_SIZE),
+	  g_conf->bluestore_block_db_create || zs);
     if (r < 0)
       goto out_close_fsid;
   }
@@ -3874,7 +3881,8 @@ int BlueStore::mkfs()
   r = write_meta("kv_backend", g_conf->bluestore_kvbackend);
   if (r < 0)
     goto out_close_alloc;
-  r = write_meta("bluefs", stringify((int)g_conf->bluestore_bluefs));
+  r = write_meta("bluefs", stringify((int)(g_conf->bluestore_bluefs &&
+	  g_conf->bluestore_kvbackend == "rocksdb")));
   if (r < 0)
     goto out_close_alloc;
 
