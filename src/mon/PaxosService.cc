@@ -254,7 +254,7 @@ void PaxosService::_active()
   dout(10) << "_active" << dendl;
 
   // create pending state?
-  if (mon->is_leader() && is_active()) {
+  if (mon->is_leader()) {
     dout(7) << "_active creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
@@ -270,8 +270,6 @@ void PaxosService::_active()
   } else {
     if (!mon->is_leader()) {
       dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
-    } else if (!is_active()) {
-      dout(7) << __func__ << " we are not active, hence we propose nothing!" << dendl;
     }
   }
 
@@ -280,13 +278,12 @@ void PaxosService::_active()
   // on this list; it is on Paxos's.
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
 
-  if (is_active() && mon->is_leader())
+  if (mon->is_leader())
     upgrade_format();
 
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
-  if (is_active())
-    on_active();
+  on_active();
 }
 
 
