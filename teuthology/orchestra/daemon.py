@@ -238,7 +238,7 @@ class DaemonGroup(object):
                         prefix = type_
                         if cluster_aware:
                             prefix = daemon.role
-                        resolved.append(prefix + daemon.id_)
+                        resolved.append(prefix + '.' + daemon.id_)
         else:
             # Handle explicit list of roles or wildcards
             for raw_role in roles:
@@ -256,7 +256,7 @@ class DaemonGroup(object):
                         prefix = role_type
                         if cluster_aware:
                             prefix = daemon.role
-                        resolved.append(prefix + daemon.id_)
+                        resolved.append(prefix + '.' + daemon.id_)
                 else:
                     # Handle explicit role
                     resolved.append(raw_role)
