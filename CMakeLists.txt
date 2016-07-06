@@ -494,6 +494,8 @@ add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND}
   DEPENDS tests)
 
+option(WITH_ZS "Build with ZetaScale support" OFF)
+
 add_subdirectory(src)
 
 add_subdirectory(doc)

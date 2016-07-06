@@ -66,6 +66,10 @@ if(WITH_FUSE)
   target_link_libraries(os ${FUSE_LIBRARIES})
 endif()
 
+if(WITH_ZS)
+  target_link_libraries(os zsdll)
+endif()
+
 if(WITH_SPDK)
   target_link_libraries(os
     ${SPDK_LIBRARIES}
