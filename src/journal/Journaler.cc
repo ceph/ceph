@@ -252,6 +252,23 @@ int Journaler::remove(bool force) {
   return 0;
 }
 
+void Journaler::remove(bool force, Context *on_finish) {
+  // chain journal removal (reverse order)
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      librados::AioCompletion *comp = librados::Rados::aio_create_completion(
+        on_finish, nullptr, utils::rados_ctx_callback);
+      r = m_header_ioctx.aio_remove(m_header_oid, comp);
+      assert(r == 0);
+      comp->release();
+    });
+
+  on_finish = new FunctionContext([this, force, on_finish](int r) {
+      m_trimmer->remove_objects(force, on_finish);
+    });
+
+  m_metadata->shut_down(on_finish);
+}
+
 void Journaler::flush_commit_position(Context *on_safe) {
   m_metadata->flush_commit_position(on_safe);
 }
