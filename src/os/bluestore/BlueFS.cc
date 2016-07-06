@@ -1530,7 +1530,7 @@ int BlueFS::open_for_write(
 
   if (0 == filename.compare(filename.length() - 4, 4, ".log")) {
     (*h)->writer_type = BlueFS::WRITER_WAL;
-    if (logger) {
+    if (logger && !overwrite) {
       logger->inc(l_bluefs_files_written_wal);
     }
   } else if (0 == filename.compare(filename.length() - 4, 4, ".sst")) {
