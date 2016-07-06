@@ -906,7 +906,7 @@ namespace crimson {
 	}
 	if (limit_heap.top().has_request()) {
 	  const auto& next = limit_heap.top().next_request();
-	  assert(!next.tag.ready);
+	  assert(!next.tag.ready || max_tag == next.tag.proportion);
 	  next_call = min_not_0_time(next_call, next.tag.limit);
 	}
 	if (next_call < TimeMax) {

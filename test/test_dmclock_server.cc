@@ -265,7 +265,7 @@ namespace crimson {
       std::list<MyReq> capture;
       pq.remove_by_req_filter([](const MyReq& r) -> bool {return 0 == r.id % 2;},
 			      capture);
-      
+
       EXPECT_EQ(0, pq.request_count());
       EXPECT_EQ(5, capture.size());
       int total = 0;
@@ -328,7 +328,7 @@ namespace crimson {
       EXPECT_EQ(5, capture[2].id) << "items should come out in forward order";
 
       // now remove even ids in reverse order
-      
+
       std::vector<MyReq> capture2;
       pq.remove_by_req_filter([](const MyReq& r) -> bool {return 0 == r.id % 2;},
 			      capture2,
@@ -521,6 +521,74 @@ namespace crimson {
 	"two-thirds of request should have come from first client";
       EXPECT_EQ(2, c2_count) <<
 	"one-third of request should have come from second client";
+    } // dmclock_server_pull.pull_reservation
+
+
+    // This test shows what happens when a request can be ready (under
+    // limit) but not schedulable since proportion tag is 0. We expect
+    // to get some future and none responses.
+    TEST(dmclock_server_pull, ready_and_under_limit) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 52;
+      ClientId client2 = 8;
+
+      dmc::ClientInfo info1(1.0, 0.0, 0.0);
+      dmc::ClientInfo info2(1.0, 0.0, 0.0);
+
+      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
+	if (client1 == c) return info1;
+	else if (client2 == c) return info2;
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return info1;
+	}
+      };
+
+      QueueRef pq(new Queue(client_info_f, false));
+
+      Request req;
+      ReqParams req_params(1,1);
+
+      // make sure all times are well before now
+      auto start_time = dmc::get_time() - 100.0;
+
+      // add six requests; for same client reservations spaced one apart
+      for (int i = 0; i < 3; ++i) {
+	pq->add_request_time(req, client1, req_params, start_time);
+	pq->add_request_time(req, client2, req_params, start_time);
+      }
+
+      Queue::PullReq pr = pq->pull_request(start_time + 0.5);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      pr = pq->pull_request(start_time + 0.5);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      pr = pq->pull_request(start_time + 0.5);
+      EXPECT_EQ(Queue::NextReqType::future, pr.type) <<
+	"too soon for next reservation";
+
+      pr = pq->pull_request(start_time + 1.5);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      pr = pq->pull_request(start_time + 1.5);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      pr = pq->pull_request(start_time + 1.5);
+      EXPECT_EQ(Queue::NextReqType::future, pr.type) <<
+	"too soon for next reservation";
+
+      pr = pq->pull_request(start_time + 2.5);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      pr = pq->pull_request(start_time + 2.5);
+      EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+
+      pr = pq->pull_request(start_time + 2.5);
+      EXPECT_EQ(Queue::NextReqType::none, pr.type) << "no more requests left";
     }
 
 
