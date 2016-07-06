@@ -166,7 +166,7 @@ namespace crimson {
 			 [] (const ServerId&) { return true; },
 			 ClientFilter client_filter =
 			 [] (const ClientId&) { return true; },
-			 int head_w = 12, int data_w = 8, int data_prec = 2) {
+			 int head_w = 12, int data_w = 7, int data_prec = 2) {
 	assert(has_run);
 
 	// skip first 2 secondsd of data
@@ -221,7 +221,7 @@ namespace crimson {
 	out << std::setw(head_w) << "client:";
 	for (auto const &c : clients) {
 	  if (!client_filter(c.first)) continue;
-	  out << std::setw(data_w) << c.first;
+	  out << " " << std::setw(data_w) << c.first;
 	}
 	out << std::setw(data_w) << "total" << std::endl;
 
@@ -243,10 +243,10 @@ namespace crimson {
 
 	      if (!client_filter(c.first)) continue;
 
-	      out << std::setw(data_w) << std::setprecision(data_prec) <<
+	      out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
 		std::fixed << data;
 	    }
-	    out << std::setw(data_w) << std::setprecision(data_prec) <<
+	    out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
 	      std::fixed << total << std::endl;
 	    ++i;
 	  } while(has_data);
@@ -262,9 +262,9 @@ namespace crimson {
 	out << std::setw(head_w) << "server:";
 	for (auto const &s : servers) {
 	  if (!server_filter(s.first)) continue;
-	  out << std::setw(data_w) << s.first;
+	  out << " " << std::setw(data_w) << s.first;
 	}
-	out << std::setw(data_w) << "total" << std::endl;
+	out << " " << std::setw(data_w) << "total" << std::endl;
 
 	server_out_f(out, this, server_filter, head_w, data_w, data_prec);
 

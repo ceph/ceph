@@ -243,9 +243,9 @@ void test::client_data(std::ostream& out,
         auto r = client.get_accumulator().reservation_count;
         total_r += r;
         if (!client_disp_filter(i)) continue;
-        out << std::setw(data_w) << r;
+        out << " " << std::setw(data_w) << r;
     }
-    out << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_r << std::endl;
 
     int total_p = 0;
@@ -255,9 +255,9 @@ void test::client_data(std::ostream& out,
         auto p = client.get_accumulator().proportion_count;
         total_p += p;
         if (!client_disp_filter(i)) continue;
-        out << std::setw(data_w) << p;
+        out << " " << std::setw(data_w) << p;
     }
-    out << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_p << std::endl;
 }
 
@@ -273,9 +273,9 @@ void test::server_data(std::ostream& out,
         auto rc = server.get_accumulator().reservation_count;
         total_r += rc;
         if (!server_disp_filter(i)) continue;
-        out << std::setw(data_w) << rc;
+        out << " " << std::setw(data_w) << rc;
     }
-    out << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_r << std::endl;
 
     out << std::setw(head_w) << "prop_ops:";
@@ -285,9 +285,9 @@ void test::server_data(std::ostream& out,
         auto pc = server.get_accumulator().proportion_count;
         total_p += pc;
         if (!server_disp_filter(i)) continue;
-        out << std::setw(data_w) << pc;
+        out << " " << std::setw(data_w) << pc;
     }
-    out << std::setw(data_w) << std::setprecision(data_prec) <<
+    out << " " << std::setw(data_w) << std::setprecision(data_prec) <<
         std::fixed << total_p << std::endl;
 
 #ifdef PROFILE
