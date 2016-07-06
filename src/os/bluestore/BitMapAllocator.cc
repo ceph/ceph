@@ -152,6 +152,7 @@ int BitMapAllocator::release(
 
 uint64_t BitMapAllocator::get_free()
 {
+  assert(m_bit_alloc->size() >= m_bit_alloc->get_used_blocks());
   return ((
     m_bit_alloc->size() - m_bit_alloc->get_used_blocks()) *
     m_block_size);
