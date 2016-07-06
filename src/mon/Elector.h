@@ -425,6 +425,7 @@ class Elector {
    * @post  @p participating is true
    */
   void start_participating();
+
   /**
    * @}
    */
