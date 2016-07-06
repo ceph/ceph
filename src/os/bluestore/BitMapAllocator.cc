@@ -105,6 +105,8 @@ int BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
+  if (want_size == 0)
+    return 0;
 
   assert(!(alloc_unit % m_block_size));
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
