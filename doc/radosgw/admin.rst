@@ -433,6 +433,8 @@ Usage
 The Ceph Object Gateway logs usage for each user. You can track
 user usage within date ranges too.
 
+- Add ``rgw enable usage log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
+
 Options include: 
 
 - **Start Date:** The ``--start-date`` option allows you to filter usage
