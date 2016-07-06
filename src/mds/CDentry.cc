@@ -559,16 +559,18 @@ void CDentry::dump(Formatter *f) const
   make_path(path);
 
   f->dump_string("path", path.get_path());
-  f->dump_int("snap_first", first);
-  f->dump_int("snap_last", last);
-
-  f->dump_bool("is_null", get_linkage()->is_null());
+  f->dump_unsigned("path_ino", path.get_ino().val);
+  f->dump_unsigned("snap_first", first);
+  f->dump_unsigned("snap_last", last);
+  
+  f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
-    f->dump_int("inode", get_linkage()->get_inode()->ino());
+    f->dump_unsigned("inode", get_linkage()->get_inode()->ino());
   } else {
-    f->dump_int("inode", 0);
+    f->dump_unsigned("inode", 0);
   }
 
   if (linkage.is_remote()) {
@@ -577,8 +579,8 @@ void CDentry::dump(Formatter *f) const
     f->dump_string("remote_type", "");
   }
 
-  f->dump_int("version", get_version());
-  f->dump_int("projected_version", get_projected_version());
+  f->dump_unsigned("version", get_version());
+  f->dump_unsigned("projected_version", get_projected_version());
 
   f->dump_int("auth_pins", auth_pins);
   f->dump_int("nested_auth_pins", nested_auth_pins);
