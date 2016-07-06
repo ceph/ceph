@@ -952,6 +952,9 @@ if(${HAVE_LIBFUSE})
 endif(${HAVE_LIBFUSE})
 install(TARGETS ceph-osd DESTINATION bin)
 
+if(WITH_MDS OR WITH_LIBCEPHFS)
+  add_library(mds_flock_obj OBJECT mds/flock.cc)
+endif()
 # MDS
 if(${WITH_MDS})
   set(mds_srcs
@@ -959,7 +962,6 @@ if(${WITH_MDS})
     mds/MDSDaemon.cc
     mds/MDSRank.cc
     mds/Beacon.cc
-    mds/flock.cc
     mds/locks.c
     mds/journal.cc
     mds/Server.cc
@@ -993,7 +995,8 @@ if(${WITH_MDS})
     ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
   add_library(mds STATIC ${mds_srcs}
     $<TARGET_OBJECTS:heap_profiler_objs>
-    $<TARGET_OBJECTS:common_util_obj>)
+    $<TARGET_OBJECTS:common_util_obj>
+    $<TARGET_OBJECTS:mds_flock_obj>)
   target_link_libraries(mds ${ALLOC_LIBS} osdc common)
   set(ceph_mds_srcs
     ceph_mds.cc)
@@ -1127,9 +1130,10 @@ if(WITH_LIBCEPHFS)
     client/ClientSnapRealm.cc
     client/MetaSession.cc
     client/Trace.cc
-    client/posix_acl.cc)
+    client/posix_acl.cc
+    $<TARGET_OBJECTS:mds_flock_obj>)
   add_library(client STATIC ${libclient_srcs})
-  target_link_libraries(client osdc mds)
+  target_link_libraries(client osdc common)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs}
     $<TARGET_OBJECTS:common_util_obj>)
