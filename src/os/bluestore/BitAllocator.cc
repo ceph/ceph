@@ -419,11 +419,7 @@ BitMapZone::~BitMapZone()
 bool BitMapZone::is_exhausted()
 {
   debug_assert(check_locked());
-  if (get_used_blocks() == size()) {
-    return true;
-  } else {
-    return false;
-  }
+  return get_used_blocks() == size();
 }
 
 bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
@@ -523,10 +519,7 @@ void BitMapZone::lock_excl()
 
 bool BitMapZone::lock_excl_try()
 {
-  if (m_lock.try_lock()) {
-    return true;
-  }
-  return false;
+  return m_lock.try_lock();
 }
 
 void BitMapZone::unlock()
@@ -793,10 +786,7 @@ void BitMapAreaIN::child_unlock(BitMapArea *child)
 
 bool BitMapAreaIN::is_exhausted()
 {
-  if (get_used_blocks() == size()) {
-    return true;
-  }
-  return false;
+  return get_used_blocks() == size();
 }
 
 int64_t BitMapAreaIN::add_used_blocks(int64_t blks)
