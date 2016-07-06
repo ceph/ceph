@@ -264,11 +264,6 @@ class DataScan : public MDSUtility, public MetadataTool
      */
     bool valid_ino(inodeno_t ino) const;
 
-    /**
-     * Invoke tmap_to_omap on all metadata pool objects
-     */
-    int tmap_upgrade();
-
     // Accept pools which are not in the FSMap
     bool force_pool;
     // Respond to decode errors by overwriting
