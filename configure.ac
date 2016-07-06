@@ -221,13 +221,27 @@ if test x"$with_cython" = xyes; then
     if test x"$CYTHON_CHECK" != xyes; then
         AC_MSG_FAILURE([cython not found])
     fi
-    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, python-config, yes)
-    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
-        AC_MSG_FAILURE([python-config not found])
+
+    # Check if we are running inside a Python virtual environment
+    # Both `virtualenv' as well as PEP 405 `pyvenv' set the VIRTUAL_ENV
+    # environment variable upon activation
+    if test x"$VIRTUAL_ENV" != x; then
+        PYTHON="python"
     fi
-    PYTHON_CFLAGS=`python-config --cflags`
+
+    # Set PYTHON to default system Python version if not specified
+    if test x"$PYTHON" = x; then
+        PYTHON="python"
+    fi
+
+    AC_CHECK_PROG(PYTHON_CONFIG_CHECK, "$PYTHON"-config, yes)
+    if test x"$PYTHON_CONFIG_CHECK" != xyes; then
+        AC_MSG_FAILURE(["$PYTHON"-config not found])
+    fi
+
+    PYTHON_CFLAGS=`"$PYTHON"-config --cflags`
     AC_SUBST(PYTHON_CFLAGS)
-    PYTHON_LDFLAGS=`python-config --ldflags`
+    PYTHON_LDFLAGS=`"$PYTHON"-config --ldflags`
     AC_SUBST(PYTHON_LDFLAGS)
 fi
 
