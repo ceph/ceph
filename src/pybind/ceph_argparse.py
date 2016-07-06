@@ -9,6 +9,7 @@ Copyright (C) 2013 Inktank Storage, Inc.
 
 LGPL2.  See file COPYING.
 """
+from __future__ import print_function
 import copy
 import errno
 import json
@@ -19,8 +20,13 @@ import socket
 import stat
 import sys
 import threading
-import types
 import uuid
+
+
+try:
+    basestring
+except NameError:
+    basestring = str
 
 
 class ArgumentError(Exception):
@@ -134,11 +140,11 @@ class CephInt(CephArgtype):
             self.range = list()
         else:
             self.range = list(range.split('|'))
-            self.range = map(long, self.range)
+            self.range = [int(x) for x in self.range]
 
     def valid(self, s, partial=False):
         try:
-            val = long(s)
+            val = int(s)
         except ValueError:
             raise ArgumentValid("{0} doesn't represent an int".format(s))
         if len(self.range) == 2:
@@ -169,7 +175,7 @@ class CephFloat(CephArgtype):
             self.range = list()
         else:
             self.range = list(range.split('|'))
-            self.range = map(float, self.range)
+            self.range = [float(x) for x in self.range]
 
     def valid(self, s, partial=False):
         try:
@@ -287,7 +293,7 @@ class CephIPAddr(CephArgtype):
                 socket.inet_pton(socket.AF_INET6, a)
             except:
                 raise ArgumentValid('{0} not valid IPv6 address'.format(s))
-        if p is not None and long(p) > 65535:
+        if p is not None and int(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
         self.val = s
         self.addr = a
@@ -309,12 +315,12 @@ class CephEntityAddr(CephIPAddr):
             ip = s
         super(self.__class__, self).valid(ip)
         if nonce:
-            nonce_long = None
+            nonce_int = None
             try:
-                nonce_long = long(nonce)
+                nonce_int = int(nonce)
             except ValueError:
                 pass
-            if nonce_long is None or nonce_long < 0:
+            if nonce_int is None or nonce_int < 0:
                 raise ArgumentValid(
                     '{0}: invalid entity, nonce {1} not integer > 0'.
                     format(s, nonce)
@@ -350,6 +356,10 @@ class CephPgid(CephArgtype):
         if s.find('.') == -1:
             raise ArgumentFormat('pgid has no .')
         poolid, pgnum = s.split('.', 1)
+        try:
+            poolid = int(poolid)
+        except ValueError:
+            raise ArgumentFormat('pool {0} not integer'.format(poolid))
         if poolid < 0:
             raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
@@ -494,11 +504,11 @@ class CephFragment(CephArgtype):
         if not val.startswith('0x'):
             raise ArgumentFormat("{0} not a hex integer".format(val))
         try:
-            long(val)
+            int(val)
         except:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(val))
         try:
-            long(bits)
+            int(bits)
         except:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(bits))
         self.val = s
@@ -530,12 +540,14 @@ class CephPrefix(CephArgtype):
         self.prefix = prefix
 
     def valid(self, s, partial=False):
-        try:
-            # `prefix` can always be converted into unicode when being compared,
-            # but `s` could be anything passed by user.
-            s = unicode(s)
-        except UnicodeDecodeError:
-            raise ArgumentPrefix("no match for {0}".format(s))
+        s = str(s)
+        if isinstance(s, bytes):
+            try:
+                # `prefix` can always be converted into unicode when being compared,
+                # but `s` could be anything passed by user.
+                s = s.decode('ascii')
+            except UnicodeDecodeError:
+                raise ArgumentPrefix("no match for {0}".format(s))
 
         if partial:
             if self.prefix.startswith(s):
@@ -579,7 +591,7 @@ class argdesc(object):
     and will store the validated value in self.instance.val for extraction.
     """
     def __init__(self, t, name=None, n=1, req=True, **kwargs):
-        if isinstance(t, types.StringTypes):
+        if isinstance(t, basestring):
             self.t = CephPrefix
             self.typeargs = {'prefix': t}
             self.req = True
@@ -599,7 +611,7 @@ class argdesc(object):
     def __repr__(self):
         r = 'argdesc(' + str(self.t) + ', '
         internals = ['N', 'typeargs', 'instance', 't']
-        for (k, v) in self.__dict__.iteritems():
+        for (k, v) in self.__dict__.items():
             if k.startswith('__') or k in internals:
                 pass
             else:
@@ -607,7 +619,7 @@ class argdesc(object):
                 if k == 'n' and self.N:
                     v = 'N'
                 r += '{0}={1}, '.format(k, v)
-        for (k, v) in self.typeargs.iteritems():
+        for (k, v) in self.typeargs.items():
             r += '{0}={1}, '.format(k, v)
         return r[:-2] + ')'
 
@@ -650,12 +662,19 @@ def concise_sig(sig):
     return ' '.join([d.helpstr() for d in sig])
 
 
-def descsort(sh1, sh2):
+def descsort_key(sh):
     """
     sort descriptors by prefixes, defined as the concatenation of all simple
     strings in the descriptor; this works out to just the leading strings.
     """
-    return cmp(concise_sig(sh1['sig']), concise_sig(sh2['sig']))
+    return concise_sig(sh['sig'])
+
+
+def descsort(sh1, sh2):
+    """
+    Deprecated; use (key=descsort_key) instead of (cmp=descsort)
+    """
+    return cmp(descsort_key(sh1), descsort_key(sh2))
 
 
 def parse_funcsig(sig):
@@ -667,7 +686,7 @@ def parse_funcsig(sig):
     argnum = 0
     for desc in sig:
         argnum += 1
-        if isinstance(desc, types.StringTypes):
+        if isinstance(desc, basestring):
             t = CephPrefix
             desc = {'type': t, 'name': 'prefix', 'prefix': desc}
         else:
@@ -676,11 +695,11 @@ def parse_funcsig(sig):
                 s = 'JSON descriptor {0} has no type'.format(sig)
                 raise JsonFormat(s)
             # look up type string in our globals() dict; if it's an
-            # object of type types.TypeType, it must be a
+            # object of type `type`, it must be a
             # locally-defined class. otherwise, we haven't a clue.
             if desc['type'] in globals():
                 t = globals()[desc['type']]
-                if not isinstance(t, types.TypeType):
+                if not isinstance(t, type):
                     s = 'unknown type {0}'.format(desc['type'])
                     raise JsonFormat(s)
             else:
@@ -733,10 +752,10 @@ def parse_json_funcsigs(s, consumer):
     try:
         overall = json.loads(s)
     except Exception as e:
-        print >> sys.stderr, "Couldn't parse JSON {0}: {1}".format(s, e)
+        print("Couldn't parse JSON {0}: {1}".format(s, e), file=sys.stderr)
         raise e
     sigdict = {}
-    for cmdtag, cmd in overall.iteritems():
+    for cmdtag, cmd in overall.items():
         if 'sig' not in cmd:
             s = "JSON descriptor {0} has no 'sig'".format(cmdtag)
             raise JsonFormat(s)
@@ -925,19 +944,20 @@ def validate(args, signature, partial=False):
                 valid = True
             except ArgumentError as e:
                 valid = False
+                exc = e
             if not valid:
                 # argument mismatch
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    save_exception = [ myarg, e ]
+                    save_exception = [ myarg, exc ]
                     myargs.insert(0, myarg)
                     break
                 else:
                     # hm, it was required, so time to return/raise
                     if partial:
                         return d
-                    raise e
+                    raise exc
 
             # Whew, valid arg acquired.  Store in dict
             matchcnt += 1
@@ -951,7 +971,7 @@ def validate(args, signature, partial=False):
 
     if myargs and not partial:
         if save_exception:
-            print >> sys.stderr, save_exception[0], 'not valid: ', str(save_exception[1])
+            print(save_exception[0], 'not valid: ', save_exception[1], file=sys.stderr)
         raise ArgumentError("unused arguments: " + str(myargs))
 
     # Finally, success
@@ -961,7 +981,8 @@ def validate(args, signature, partial=False):
 def cmdsiglen(sig):
     sigdict = sig.values()
     assert len(sigdict) == 1
-    return len(sig.values()[0]['sig'])
+    some_value = next(iter(sig.values()))
+    return len(some_value['sig'])
 
 
 def validate_command(sigdict, args, verbose=False):
@@ -970,8 +991,7 @@ def validate_command(sigdict, args, verbose=False):
     validated against sigdict.
     """
     if verbose:
-        print >> sys.stderr, \
-            "validate_command: " + " ".join(args)
+        print("validate_command: " + " ".join(args), file=sys.stderr)
     found = []
     valid_dict = {}
     if args:
@@ -979,37 +999,34 @@ def validate_command(sigdict, args, verbose=False):
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
         bestcmds = []
-        for cmdtag, cmd in sigdict.iteritems():
+        for cmdtag, cmd in sigdict.items():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
             if matched > best_match_cnt:
                 if verbose:
-                    print >> sys.stderr, \
-                        "better match: {0} > {1}: {2}:{3} ".\
-                        format(matched, best_match_cnt, cmdtag,
-                               concise_sig(sig))
+                    print("better match: {0} > {1}: {2}:{3} ".format(
+                        matched, best_match_cnt, cmdtag, concise_sig(sig)
+                    ), file=sys.stderr)
                 best_match_cnt = matched
                 bestcmds = [{cmdtag: cmd}]
             elif matched == best_match_cnt:
                 if verbose:
-                    print >> sys.stderr, \
-                        "equal match: {0} > {1}: {2}:{3} ".\
-                        format(matched, best_match_cnt, cmdtag,
-                               concise_sig(sig))
+                    print("equal match: {0} > {1}: {2}:{3} ".format(
+                        matched, best_match_cnt, cmdtag, concise_sig(sig)
+                    ), file=sys.stderr)
                 bestcmds.append({cmdtag: cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
         # (relies on a cmdsig being key,val where val is a list of len 1)
-        bestcmds_sorted = sorted(bestcmds,
-                                 cmp=lambda x, y: cmp(cmdsiglen(x), cmdsiglen(y)))
+        bestcmds_sorted = sorted(bestcmds, key=cmdsiglen)
 
         if verbose:
-            print >> sys.stderr, "bestcmds_sorted: "
+            print("bestcmds_sorted: ", file=sys.stderr)
             pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
         # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds_sorted:
-            for cmd in cmdsig.itervalues():
+            for cmd in cmdsig.values():
                 sig = cmd['sig']
                 try:
                     valid_dict = validate(args, sig)
@@ -1025,23 +1042,23 @@ def validate_command(sigdict, args, verbose=False):
                     # cmdsigs we'll fall out unfound; if we're not, maybe
                     # the next one matches completely.  Whine, but pass.
                     if verbose:
-                        print >> sys.stderr, 'Not enough args supplied for ', \
-                            concise_sig(sig)
+                        print('Not enough args supplied for ',
+                              concise_sig(sig), file=sys.stderr)
                 except ArgumentError as e:
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
                     # some other input is invalid
-                    print >> sys.stderr, "Invalid command: ", str(e)
-                    print >> sys.stderr, concise_sig(sig), ': ', cmd['help']
+                    print("Invalid command: ", e, file=sys.stderr)
+                    print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
                     return {}
             if found:
                 break
 
         if not found:
-            print >> sys.stderr, 'no valid command found; 10 closest matches:'
+            print('no valid command found; 10 closest matches:', file=sys.stderr)
             for cmdsig in bestcmds[:10]:
-                for (cmdtag, cmd) in cmdsig.iteritems():
-                    print >> sys.stderr, concise_sig(cmd['sig'])
+                for (cmdtag, cmd) in cmdsig.items():
+                    print(concise_sig(cmd['sig']), file=sys.stderr)
             return None
 
         return valid_dict
@@ -1120,14 +1137,14 @@ class RadosThread(threading.Thread):
         self.args = args
         self.kwargs = kwargs
         self.target = target
-	self.exception = None
+        self.exception = None
         threading.Thread.__init__(self)
 
     def run(self):
         try:
-		self.retval = self.target(*self.args, **self.kwargs)
-	except Exception as e:
-		self.exception = e
+            self.retval = self.target(*self.args, **self.kwargs)
+        except Exception as e:
+            self.exception = e
 
 
 # time in seconds between each call to t.join() for child thread
@@ -1172,7 +1189,7 @@ def run_in_thread(target, *args, **kwargs):
     return t.retval
 
 
-def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
+def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
     """
     Send a command to a daemon using librados's
@@ -1191,8 +1208,8 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             osdid = target[1]
 
             if verbose:
-                print >> sys.stderr, 'submit {0} to osd.{1}'.\
-                    format(cmd, osdid)
+                print('submit {0} to osd.{1}'.format(cmd, osdid),
+                      file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
                 cluster.osd_command, osdid, cmd, inbuf, timeout)
 
@@ -1207,15 +1224,15 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                 cmddict = dict(pgid=pgid)
             cmd = [json.dumps(cmddict)]
             if verbose:
-                print >> sys.stderr, 'submit {0} for pgid {1}'.\
-                    format(cmd, pgid)
+                print('submit {0} for pgid {1}'.format(cmd, pgid),
+                      file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
                 cluster.pg_command, pgid, cmd, inbuf, timeout)
 
         elif target[0] == 'mon':
             if verbose:
-                print >> sys.stderr, '{0} to {1}'.\
-                    format(cmd, target[0])
+                print('{0} to {1}'.format(cmd, target[0]),
+                      file=sys.stderr)
             if target[1] == '':
                 ret, outbuf, outs = run_in_thread(
                     cluster.mon_command, cmd, inbuf, timeout)
@@ -1226,8 +1243,8 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             mds_spec = target[1]
 
             if verbose:
-                print >> sys.stderr, 'submit {0} to mds.{1}'.\
-                    format(cmd, mds_spec)
+                print('submit {0} to mds.{1}'.format(cmd, mds_spec),
+                      file=sys.stderr)
 
             try:
                 from cephfs import LibCephFS
@@ -1254,7 +1271,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
 
 
 def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
-                 inbuf='', timeout=0, verbose=False):
+                 inbuf=b'', timeout=0, verbose=False):
     """
     Format up a JSON command and send it with send_command() above.
     Prefix may be supplied separately or in argdict.  Any bulk input
