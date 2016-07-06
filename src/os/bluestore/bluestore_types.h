@@ -194,6 +194,33 @@ struct bluestore_blob_t {
     return -EINVAL;
   }
 
+  enum CompressionAlgorithm {
+    COMP_ALG_NONE = 0,
+    COMP_ALG_SNAPPY = 1,
+    COMP_ALG_ZLIB = 2,
+  };
+
+  static const char * get_comp_alg_name(int a) {
+    switch (a) {
+    case COMP_ALG_NONE: return "none";
+    case COMP_ALG_SNAPPY: return "snappy";
+    case COMP_ALG_ZLIB: return "zlib";
+    default: return "???";
+    }
+  }
+
+  static int get_comp_alg_type(const std::string &s) {
+    if (s == "none")
+      return COMP_ALG_NONE;
+    if (s == "snappy")
+      return COMP_ALG_SNAPPY;
+    if (s == "zlib")
+      return COMP_ALG_ZLIB;
+
+    assert(0 == "invalid compression algorithm");
+    return COMP_ALG_NONE;
+  }
+
   vector<bluestore_pextent_t> extents;///< raw data position on device
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
@@ -621,11 +648,11 @@ struct bluestore_wal_transaction_t {
 WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
-  std::string type;
+  uint8_t type = bluestore_blob_t::COMP_ALG_NONE;
   uint32_t length = 0;
 
   bluestore_compression_header_t() {}
-  bluestore_compression_header_t(const std::string& _type)
+  bluestore_compression_header_t(uint8_t _type)
     : type(_type) {}
 
   void encode(bufferlist& bl) const;
