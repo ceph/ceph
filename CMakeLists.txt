@@ -218,7 +218,7 @@ endif(${WITH_LEVELDB})
 
 option(WITH_EXPAT "EXPAT is here" ON)
 if(${WITH_EXPAT})
-find_package(expat REQUIRED)
+find_package(EXPAT REQUIRED)
 endif(${WITH_EXPAT})
 
 find_package(Cython REQUIRED)
