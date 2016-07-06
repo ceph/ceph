@@ -8,6 +8,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "global/global_context.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/ExclusiveLock.h"
@@ -288,8 +289,8 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
   }
   m_name = pool_name + "/" + m_global_image_id;
 
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+  m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                    this);
 }
 
 template <typename I>
@@ -462,8 +463,8 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
       }
     }
     if (!m_asok_hook) {
-      CephContext *cct = static_cast<CephContext *>(m_local->cct());
-      m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+      m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                        this);
     }
   }
 
@@ -1337,7 +1338,8 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
     }
 
     if (m_stopping_for_resync) {
-      m_image_deleter->schedule_image_delete(m_local_pool_id,
+      m_image_deleter->schedule_image_delete(m_local,
+                                             m_local_pool_id,
                                              m_local_image_id,
                                              m_local_image_name,
                                              m_global_image_id);
@@ -1359,8 +1361,6 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
     m_stop_requested = false;
     assert(m_state == STATE_STOPPING);
     m_state = STATE_STOPPED;
-    m_state_desc.clear();
-    m_last_r = 0;
   }
 
   if (on_start != nullptr) {
