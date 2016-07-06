@@ -380,7 +380,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_buckets_info", CLS_METHOD_RD | CLS_METHOD_WR,
                           cls_user_set_buckets_info, &h_user_set_buckets_info);
   cls_register_cxx_method(h_class, "complete_stats_sync", CLS_METHOD_RD | CLS_METHOD_WR,
-                          cls_user_complete_stats_sync, &h_user_set_buckets_info);
+                          cls_user_complete_stats_sync, &h_user_complete_stats_sync);
   cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);
   cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
