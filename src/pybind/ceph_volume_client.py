@@ -199,6 +199,15 @@ class CephFSVolumeClientError(Exception):
     pass
 
 
+CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
+
+    CephFSVolumeClient Version History:
+
+    * 1 - Initial version
+
+"""
+
+
 class CephFSVolumeClient(object):
     """
     Combine libcephfs and librados interfaces to implement a
@@ -217,6 +226,11 @@ class CephFSVolumeClient(object):
     In general, functions in this class are allowed raise rados.Error
     or cephfs.Error exceptions in unexpected situations.
     """
+
+    # Current version
+    version = 1
+    # Earliest compatible version
+    compat_version = 1
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
