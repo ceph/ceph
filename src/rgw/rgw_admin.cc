@@ -4852,7 +4852,11 @@ next:
     string user_str = user_id.to_str();
     int ret = store->cls_user_get_header(user_str, &header);
     if (ret < 0) {
-      cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
+      if (ret == -ENOENT) { /* in case of ENOENT */
+        cerr << "User has not been initialized or user does not exist" << std::endl;
+      } else {
+        cerr << "ERROR: can't read user: " << cpp_strerror(ret) << std::endl;
+      }
       return -ret;
     }
 
