@@ -708,10 +708,11 @@ install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/cep
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.fetch_config
 
-# firewall templates
+# firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-mon %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
+ln -sf %{buildroot}%{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
 
 # udev rules
@@ -758,6 +759,9 @@ rm -rf %{buildroot}
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
 %{_sbindir}/mount.ceph
+%if 0%{?suse_version}
+/sbin/mount.ceph
+%endif
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
