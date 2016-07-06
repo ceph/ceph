@@ -273,7 +273,10 @@ find_package(keyutils REQUIRED)
 
 find_package(libuuid REQUIRED)
 
-find_package(libcurl REQUIRED)
+find_package(CURL REQUIRED)
+set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
+set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
+CHECK_SYMBOL_EXISTS(curl_multi_wait "curl.h" HAVE_CURL_MULTI_WAIT)
 
 # nss or cryptopp?
 option(WITH_NSS "Use NSS crypto and SSL implementations" ON)
