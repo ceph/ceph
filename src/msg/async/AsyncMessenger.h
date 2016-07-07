@@ -222,8 +222,6 @@ public:
    * @{
    */
 
-  Connection *create_anon_connection();
-
   /**
    * @} // Inner classes
    */

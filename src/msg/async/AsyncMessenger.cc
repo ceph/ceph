@@ -815,12 +815,6 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
   lock.Unlock();
 }
 
-Connection *AsyncMessenger::create_anon_connection() {
-  Mutex::Locker l(lock);
-  Worker *w = pool->get_worker();
-  return new AsyncConnection(cct, this, &dispatch_queue, w);
-}
-
 int AsyncMessenger::get_proto_version(int peer_type, bool connect)
 {
   int my_type = my_inst.name.type();
