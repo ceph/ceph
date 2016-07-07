@@ -351,6 +351,8 @@ int main(int argc, const char **argv)
                set_logging(new RGWRESTMgr_SWIFT));
   }
 
+  rest.register_resource("info", set_logging(new RGWRESTMgr_SWIFT_Info));
+
   if (apis_map.count("swift_auth") > 0)
     rest.register_resource(g_conf->rgw_swift_auth_entry,
                set_logging(new RGWRESTMgr_SWIFT_Auth));
