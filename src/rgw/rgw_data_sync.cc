@@ -896,6 +896,15 @@ public:
 
       sync_status = retcode;
 
+      if (sync_status == -ENOENT) {
+        // this was added when 'tenant/' was added to datalog entries, because
+        // preexisting tenant buckets could never sync and would stay in the
+        // error_repo forever
+        ldout(sync_env->store->ctx(), 0) << "WARNING: skipping data log entry "
+            "for missing bucket " << raw_key << dendl;
+        sync_status = 0;
+      }
+
       if (sync_status < 0) {
         yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", raw_key,
                                                         -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
