@@ -777,12 +777,24 @@ class SyntheticDispatcher : public Dispatcher {
   }
 
   void ms_handle_fast_connect(Connection *con) {
-    lock.Lock();
+    Mutex::Locker l(lock);
+    list<uint64_t> c = conn_sent[con];
+    for (list<uint64_t>::iterator it = c.begin();
+         it != c.end(); ++it)
+      sent.erase(*it);
+    conn_sent.erase(con);
     got_connect = true;
     cond.Signal();
-    lock.Unlock();
   }
-  void ms_handle_fast_accept(Connection *con) { }
+  void ms_handle_fast_accept(Connection *con) {
+    Mutex::Locker l(lock);
+    list<uint64_t> c = conn_sent[con];
+    for (list<uint64_t>::iterator it = c.begin();
+         it != c.end(); ++it)
+      sent.erase(*it);
+    conn_sent.erase(con);
+    cond.Signal();
+  }
   bool ms_dispatch(Message *m) {
     assert(0);
   }
