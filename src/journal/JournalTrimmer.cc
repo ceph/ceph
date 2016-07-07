@@ -47,38 +47,6 @@ void JournalTrimmer::shut_down(Context *on_finish) {
   m_journal_metadata->flush_commit_position(on_finish);
 }
 
-int JournalTrimmer::remove_objects(bool force) {
-  ldout(m_cct, 20) << __func__ << dendl;
-  m_async_op_tracker.wait_for_ops();
-
-  C_SaferCond ctx;
-  {
-    Mutex::Locker locker(m_lock);
-
-    if (m_remove_set_pending) {
-      return -EBUSY;
-    }
-
-    if (!force) {
-      JournalMetadata::RegisteredClients registered_clients;
-      m_journal_metadata->get_registered_clients(&registered_clients);
-
-      if (registered_clients.size() == 0) {
-	return -EINVAL;
-      } else if (registered_clients.size() > 1) {
-	return -EBUSY;
-      }
-    }
-
-    m_remove_set = std::numeric_limits<uint64_t>::max();
-    m_remove_set_pending = true;
-    m_remove_set_ctx = &ctx;
-
-    remove_set(m_journal_metadata->get_minimum_set());
-  }
-  return ctx.wait();
-}
-
 void JournalTrimmer::remove_objects(bool force, Context *on_finish) {
   ldout(m_cct, 20) << __func__ << dendl;
 
