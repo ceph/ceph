@@ -3201,11 +3201,11 @@ public:
     wait_for_ready();
     ghobject_t new_obj = object_gen->create_object(rng);
     available_objects.erase(new_obj);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->touch(cid, new_obj);
+    ObjectStore::Transaction t;
+    t.touch(cid, new_obj);
     boost::uniform_int<> u(17, 22);
     boost::uniform_int<> v(12, 17);
-    t->set_alloc_hint(cid, new_obj,
+    t.set_alloc_hint(cid, new_obj,
 		      1ull << u(*rng),
 		      1ull << v(*rng),
 		      get_random_alloc_hints());
@@ -3213,8 +3213,7 @@ public:
     in_flight_objects.insert(new_obj);
     if (!contents.count(new_obj))
       contents[new_obj] = Object();
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, new_obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
     return status;
   }
 
@@ -3237,8 +3236,8 @@ public:
     new_obj.generation++;
     available_objects.erase(new_obj);
 
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->collection_move_rename(cid, old_obj, cid, new_obj);
+    ObjectStore::Transaction t;
+    t.collection_move_rename(cid, old_obj, cid, new_obj);
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
@@ -3249,9 +3248,8 @@ public:
 				  contents[old_obj].data.length());
     contents.erase(old_obj);
     int status = store->queue_transaction(
-      osr, std::move(*t),
+      osr, std::move(t),
       new C_SyntheticOnStash(this, old_obj, new_obj));
-    delete t;
     return status;
   }
 
@@ -3275,8 +3273,8 @@ public:
     new_obj.hobj.set_hash(old_obj.hobj.get_hash());
     available_objects.erase(new_obj);
 
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->clone(cid, old_obj, new_obj);
+    ObjectStore::Transaction t;
+    t.clone(cid, old_obj, new_obj);
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
@@ -3285,8 +3283,7 @@ public:
     contents[new_obj].data.clear();
     contents[new_obj].data.append(contents[old_obj].data.c_str(),
 				  contents[old_obj].data.length());
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnClone(this, old_obj, new_obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
     return status;
   }
 
@@ -3299,7 +3296,7 @@ public:
 
     ghobject_t obj = get_uniform_random_object();
     available_objects.erase(obj);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    ObjectStore::Transaction t;
 
     boost::uniform_int<> u0(1, max_attr_size);
     boost::uniform_int<> u1(4, max_attr_name_len);
@@ -3330,11 +3327,10 @@ public:
         contents[obj].attrs[name.c_str()] = value;
       }
     }
-    t->setattrs(cid, obj, attrs);
+    t.setattrs(cid, obj, attrs);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -3426,14 +3422,13 @@ public:
     }
 
     available_objects.erase(obj);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->rmattr(cid, obj, it->first);
+    ObjectStore::Transaction t;
+    t.rmattr(cid, obj, it->first);
 
     contents[obj].attrs.erase(it->first);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -3446,7 +3441,7 @@ public:
 
     ghobject_t new_obj = get_uniform_random_object();
     available_objects.erase(new_obj);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    ObjectStore::Transaction t;
 
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
@@ -3477,11 +3472,10 @@ public:
       value.swap(data);
     }
 
-    t->write(cid, new_obj, offset, len, bl);
+    t.write(cid, new_obj, offset, len, bl);
     ++in_flight;
     in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, new_obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
     return status;
   }
 
@@ -3536,7 +3530,7 @@ public:
 
     ghobject_t obj = get_uniform_random_object();
     available_objects.erase(obj);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    ObjectStore::Transaction t;
 
     boost::uniform_int<> choose(0, max_object_len);
     size_t len = choose(*rng);
@@ -3546,7 +3540,7 @@ public:
 
     bufferlist bl;
 
-    t->truncate(cid, obj, len);
+    t.truncate(cid, obj, len);
     ++in_flight;
     in_flight_objects.insert(obj);
     bufferlist& data = contents[obj].data;
@@ -3557,8 +3551,7 @@ public:
       bl.swap(data);
     }
 
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -3657,14 +3650,13 @@ public:
     if (!can_unlink())
       return -ENOENT;
     ghobject_t to_remove = get_uniform_random_object();
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->remove(cid, to_remove);
+    ObjectStore::Transaction t;
+    t.remove(cid, to_remove);
     ++in_flight;
     available_objects.erase(to_remove);
     in_flight_objects.insert(to_remove);
     contents.erase(to_remove);
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, to_remove));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, to_remove));
     return status;
   }
 
@@ -3677,7 +3669,7 @@ public:
 
     ghobject_t new_obj = get_uniform_random_object();
     available_objects.erase(new_obj);
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    ObjectStore::Transaction t;
 
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
@@ -3693,11 +3685,10 @@ public:
     }
     contents[new_obj].data.zero(offset, len);
 
-    t->zero(cid, new_obj, offset, len);
+    t.zero(cid, new_obj, offset, len);
     ++in_flight;
     in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(osr, std::move(*t), new C_SyntheticOnReadable(this, new_obj));
-    delete t;
+    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
     return status;
   }
 
