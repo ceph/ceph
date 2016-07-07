@@ -3261,8 +3261,9 @@ def activate(
                 init = init_get()
 
         LOG.debug('Marking with init system %s', init)
-        with file(os.path.join(path, init), 'w'):
-            pass
+        init_path = os.path.join(path, init)
+        with file(init_path, 'w'):
+            path_set_context(init_path)
 
     # remove markers for others, just in case.
     for other in INIT_SYSTEMS:
