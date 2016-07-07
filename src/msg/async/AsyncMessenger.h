@@ -30,7 +30,6 @@ using namespace std;
 #include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-#include "common/Throttle.h"
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
