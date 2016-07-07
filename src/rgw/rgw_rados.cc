@@ -8509,7 +8509,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
     } else {
       int ret = index_op.cancel();
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
+        ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
       }
     }
   }
