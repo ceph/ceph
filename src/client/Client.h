@@ -83,6 +83,14 @@ enum {
 };
 
 
+struct UserPerm
+{
+  int uid;
+  int gid;
+  UserPerm() : uid(-1), gid(-1) {}
+  UserPerm(int uid, int gid) : uid(uid), gid(gid) {}
+};
+
 struct CommandOp
 {
   ConnectionRef con;
