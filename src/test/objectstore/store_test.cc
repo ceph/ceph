@@ -3039,10 +3039,10 @@ public:
       ASSERT_TRUE(state->in_flight_objects.count(oid));
       ASSERT_EQ(r, 0);
       state->in_flight_objects.erase(oid);
-      if (state->contents.count(oid))
-        state->available_objects.insert(oid);
-      if (state->contents.count(noid))
-        state->available_objects.insert(noid);
+      assert(state->contents.count(oid));
+      state->available_objects.insert(oid);
+      assert(state->contents.count(noid));
+      state->available_objects.insert(noid);
       --(state->in_flight);
       bufferlist r2;
       r = state->store->read(state->cid, noid, 0, state->contents[noid].data.length(), r2);
