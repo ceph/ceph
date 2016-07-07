@@ -2641,8 +2641,10 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
   bufferlist bl;
   int r = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  if (r)
+  if (r) {
+    dout(1) << "Unable to load 'last_metadata'" << dendl;
     return r;
+  }
 
   bufferlist::iterator it = bl.begin();
   ::decode(m, it);
