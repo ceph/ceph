@@ -754,6 +754,15 @@ class CephFSVolumeClient(object):
             else:
                 return self._get_ancestor_xattr(os.path.split(path)[0], attr)
 
+    def _check_compat_version(self, compat_version):
+        if self.version < compat_version:
+            msg = ("The current version of CephFSVolumeClient, version {0} "
+                   "does not support the required feature. Need version {1} "
+                   "or greater".format(self.version, compat_version)
+                  )
+            log.error(msg)
+            raise CephFSVolumeClientError(msg)
+
     def _metadata_get(self, path):
         """
         Return a deserialized JSON object, or None
@@ -813,9 +822,35 @@ class CephFSVolumeClient(object):
         return self._lock(self._auth_metadata_path(auth_id))
 
     def _auth_metadata_get(self, auth_id):
-        return self._metadata_get(self._auth_metadata_path(auth_id))
+        """
+        Call me with the metadata locked!
+
+        Check whether a auth metadata structure can be decoded by the current
+        version of CephFSVolumeClient.
+
+        Return auth metadata that the current version of CephFSVolumeClient
+        can decode.
+        """
+        auth_metadata = self._metadata_get(self._auth_metadata_path(auth_id))
+
+        if auth_metadata:
+            self._check_compat_version(auth_metadata['compat_version'])
+
+        return auth_metadata
 
     def _auth_metadata_set(self, auth_id, data):
+        """
+        Call me with the metadata locked!
+
+        Fsync the auth metadata.
+
+        Add two version attributes to the auth metadata,
+        'compat_version', the minimum CephFSVolumeClient version that can
+        decode the metadata, and 'version', the CephFSVolumeClient version
+        that encoded the metadata.
+        """
+        data['compat_version'] = 1
+        data['version'] = 1
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
     def _volume_metadata_path(self, volume_path):
@@ -844,13 +879,31 @@ class CephFSVolumeClient(object):
     def _volume_metadata_get(self, volume_path):
         """
         Call me with the metadata locked!
+
+        Check whether a volume metadata structure can be decoded by the current
+        version of CephFSVolumeClient.
+
+        Return a volume_metadata structure that the current version of
+        CephFSVolumeClient can decode.
         """
-        return self._metadata_get(self._volume_metadata_path(volume_path))
+        volume_metadata = self._metadata_get(self._volume_metadata_path(volume_path))
+
+        if volume_metadata:
+            self._check_compat_version(volume_metadata['compat_version'])
+
+        return volume_metadata
 
     def _volume_metadata_set(self, volume_path, data):
         """
         Call me with the metadata locked!
+
+        Add two version attributes to the volume metadata,
+        'compat_version', the minimum CephFSVolumeClient version that can
+        decode the metadata and 'version', the CephFSVolumeClient version
+        that encoded the metadata.
         """
+        data['compat_version'] = 1
+        data['version'] = 1
         return self._metadata_set(self._volume_metadata_path(volume_path), data)
 
     def authorize(self, volume_path, auth_id, readonly=False, tenant_id=None):
