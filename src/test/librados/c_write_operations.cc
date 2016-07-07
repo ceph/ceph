@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include "include/rados/librados.h"
+#include "include/byteorder.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 
@@ -215,6 +216,68 @@ TEST(LibRadosCWriteOps, WriteSame) {
 		rados_read(ioctx, "test", hi,sizeof(hi), 0)));
   rados_release_write_op(op);
   ASSERT_EQ(0, memcmp("fourfourfourfour", hi, sizeof(hi)));
+
+  // cleanup
+  op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_remove(op);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosCWriteOps, CmpExt) {
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  // create an object, write to it using writesame
+  rados_write_op_t op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_create(op, LIBRADOS_CREATE_EXCLUSIVE, NULL);
+  rados_write_op_write(op, "four", 4, 0);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  rados_release_write_op(op);
+  char hi[4];
+  ASSERT_EQ(sizeof(hi), rados_read(ioctx, "test", hi, sizeof(hi), 0));
+  ASSERT_EQ(0, memcmp("four", hi, sizeof(hi)));
+
+  // compare and overwrite on (expected) match
+  int val = 0;
+  size_t mismatch_len = 0;
+  char mismatch_buf[sizeof(hi)];
+  uint64_t mismatch_off = 0;
+  memset(mismatch_buf, 0, sizeof(mismatch_buf));
+  op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_cmpext(op, "four", 4, 0, mismatch_buf, &mismatch_len,
+			&mismatch_off, &val);
+  rados_write_op_write(op, "five", 4, 0);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+  ASSERT_EQ(0, val);
+  rados_release_write_op(op);
+  ASSERT_EQ(sizeof(hi), rados_read(ioctx, "test", hi, sizeof(hi), 0));
+  ASSERT_EQ(0, memcmp("five", hi, sizeof(hi)));
+
+  // compare and bail before write due to mismatch
+  val = 0;
+  mismatch_len = 0;
+  mismatch_off = 0;
+  memset(mismatch_buf, 0, sizeof(mismatch_buf));
+  op = rados_create_write_op();
+  ASSERT_TRUE(op);
+  rados_write_op_cmpext(op, "four", 4, 0, mismatch_buf, &mismatch_len,
+			&mismatch_off, &val);
+  rados_write_op_write(op, "six ", 4, 0);
+  ASSERT_EQ(-EILSEQ, rados_write_op_operate(op, ioctx, "test", NULL, 0));
+
+  ASSERT_EQ(mismatch_len, strlen("five"));
+  ASSERT_EQ(mismatch_off, 1);	// "four" and "five" match at offset 0
+  ASSERT_EQ(0, memcmp(mismatch_buf, "five", mismatch_len));
+  ASSERT_EQ(-EILSEQ, val);
 
   // cleanup
   op = rados_create_write_op();
