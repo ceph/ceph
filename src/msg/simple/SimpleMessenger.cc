@@ -145,7 +145,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void SimpleMessenger::set_addr_unknowns(entity_addr_t &addr)
+void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
   if (my_inst.addr.is_blank_ip()) {
     int port = my_inst.addr.get_port();
