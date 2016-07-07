@@ -50,24 +50,7 @@ public:
   virtual bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) = 0;
 };
 
-/**
- * Encryption works in CTR mode. nonce + offset/block_size is used as IV for block starting at offset.
- */
-class AES_256_CTR_impl;
-class AES_256_CTR : public BlockCrypt {
-  AES_256_CTR_impl* pimpl;
-public:
-  static const size_t AES_256_KEYSIZE = 256 / 8;
-  AES_256_CTR(CephContext* cct);
-  virtual ~AES_256_CTR();
-  /**
-   * Sets key and nonce.
-   */
-  bool set_key(const uint8_t* key, size_t key_size);
-  virtual size_t get_block_size() override;
-  virtual bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) override;
-  virtual bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) override;
-};
+
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
 bool AES_256_ECB_encrypt(uint8_t* key, size_t key_size, uint8_t* data_in, uint8_t* data_out, size_t data_size);
