@@ -24,21 +24,7 @@ add_ceph_test(osd-markdown.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-markdown.sh)
 add_ceph_test(osd-reactivate.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reactivate.sh) 
 add_ceph_test(osd-reuse-id.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reuse-id.sh)
 add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
-
-#osd-copy-from.sh needs to be run out of ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-add_test(NAME osd-copy-from.sh COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
-add_dependencies(check osd-copy-from.sh)
-
-set_property(TEST 
-  osd-copy-from.sh
-  PROPERTY ENVIRONMENT 
-  CEPH_ROOT=${CMAKE_SOURCE_DIR}
-  CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-  CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-  CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
-  LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
-  PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
-  PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.linux-x86_64-2.7:${CMAKE_SOURCE_DIR}/src/pybind)
+add_ceph_test(osd-copy-from.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh)
 
 # unittest_osdmap
 add_executable(unittest_osdmap

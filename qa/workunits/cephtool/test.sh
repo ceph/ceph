@@ -32,11 +32,11 @@ function expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
-TMPDIR=/tmp/cephtool$$
-mkdir $TMPDIR
-trap "rm -fr $TMPDIR" 0
 
-TMPFILE=$TMPDIR/test_invalid.$$
+TEMP_DIR=$(mktemp -d cephtool.XXX)
+trap "rm -fr $TEMP_DIR" 0
+
+TMPFILE=$(mktemp -p $TEMP_DIR test_invalid.XXX)
 
 #
 # retry_eagain max cmd args ...
@@ -49,7 +49,7 @@ function retry_eagain()
     local max=$1
     shift
     local status
-    local tmpfile=$TMPDIR/retry_eagain.$$
+    local tmpfile=$TEMP_DIR/retry_eagain.$$
     local count
     for count in $(seq 1 $max) ; do
         status=0
@@ -77,7 +77,7 @@ function retry_eagain()
 function map_enxio_to_eagain()
 {
     local status=0
-    local tmpfile=$TMPDIR/map_enxio_to_eagain.$$
+    local tmpfile=$TEMP_DIR/map_enxio_to_eagain.$$
 
     "$@" > $tmpfile 2>&1 || status=$?
     if test $status != 0 &&
@@ -197,7 +197,7 @@ function test_mon_injectargs()
   check_response "osd_enable_op_tracker = 'true'"
   ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
   check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
-  expect_failure $TMPDIR "Option --osd_op_history_duration requires an argument" \
+  expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
                  ceph tell osd.0 injectargs -- '--osd_op_history_duration'
 
   ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
@@ -596,22 +596,22 @@ function test_auth_profiles()
 
 function test_mon_caps()
 {
-  ceph-authtool --create-keyring $TMPDIR/ceph.client.bug.keyring
-  chmod +r  $TMPDIR/ceph.client.bug.keyring
-  ceph-authtool  $TMPDIR/ceph.client.bug.keyring -n client.bug --gen-key
-  ceph auth add client.bug -i  $TMPDIR/ceph.client.bug.keyring
+  ceph-authtool --create-keyring $TEMP_DIR/ceph.client.bug.keyring
+  chmod +r  $TEMP_DIR/ceph.client.bug.keyring
+  ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
+  ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
 
-  rados lspools --keyring $TMPDIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
   check_response "Permission denied"
 
-  rm -rf $TMPDIR/ceph.client.bug.keyring
+  rm -rf $TEMP_DIR/ceph.client.bug.keyring
   ceph auth del client.bug
-  ceph-authtool --create-keyring $TMPDIR/ceph.client.bug.keyring
-  chmod +r  $TMPDIR/ceph.client.bug.keyring
-  ceph-authtool  $TMPDIR/ceph.client.bug.keyring -n client.bug --gen-key
-  ceph-authtool -n client.bug --cap mon '' $TMPDIR/ceph.client.bug.keyring
-  ceph auth add client.bug -i  $TMPDIR/ceph.client.bug.keyring
-  rados lspools --keyring $TMPDIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  ceph-authtool --create-keyring $TEMP_DIR/ceph.client.bug.keyring
+  chmod +r  $TEMP_DIR/ceph.client.bug.keyring
+  ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
+  ceph-authtool -n client.bug --cap mon '' $TEMP_DIR/ceph.client.bug.keyring
+  ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
+  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
   check_response "Permission denied"  
 }
 
@@ -818,7 +818,7 @@ function test_mon_mds()
   ceph mds metadata
 
   # XXX mds fail, but how do you undo it?
-  mdsmapfile=$TMPDIR/mdsmap.$$
+  mdsmapfile=$TEMP_DIR/mdsmap.$$
   current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
   [ -s $mdsmapfile ]
   rm $mdsmapfile
@@ -1035,8 +1035,8 @@ function test_mon_mon()
   ceph --help mon
   # no mon add/remove
   ceph mon dump
-  ceph mon getmap -o $TMPDIR/monmap.$$
-  [ -s $TMPDIR/monmap.$$ ]
+  ceph mon getmap -o $TEMP_DIR/monmap.$$
+  [ -s $TEMP_DIR/monmap.$$ ]
   # ceph mon tell
   ceph mon_status
 }
@@ -1143,7 +1143,7 @@ function test_mon_osd()
   ceph osd dump | grep 'osd.0.*in'
   ceph osd find 0
 
-  f=$TMPDIR/map.$$
+  f=$TEMP_DIR/map.$$
   ceph osd getcrushmap -o $f
   [ -s $f ]
   ceph osd setcrushmap -i $f
@@ -1374,8 +1374,8 @@ function test_mon_pg()
   ceph pg ls-by-pool rbd active stale
   # can't test this...
   # ceph pg force_create_pg
-  ceph pg getmap -o $TMPDIR/map.$$
-  [ -s $TMPDIR/map.$$ ]
+  ceph pg getmap -o $TEMP_DIR/map.$$
+  [ -s $TEMP_DIR/map.$$ ]
   ceph pg map 0.0 | grep acting
   ceph pg repair 0.0
   ceph pg scrub 0.0
@@ -1757,7 +1757,7 @@ function test_mon_tell()
 
 function test_mon_crushmap_validation()
 {
-  local map=$TMPDIR/map
+  local map=$TEMP_DIR/map
   ceph osd getcrushmap -o $map
 
   local crushtool_path="${TMPDIR}/crushtool"
