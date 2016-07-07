@@ -610,9 +610,7 @@ struct bluestore_wal_transaction_t {
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
-  int64_t _bytes;  ///< cached byte count
-
-  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
