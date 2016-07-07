@@ -98,7 +98,9 @@ class RGWThirdPartyAccountAuthApplier : public RGWDecoratingAuthApplier<T> {
   /* const */RGWRados * const store;
   const rgw_user acct_user_override;
 public:
-  /* FIXME: comment this. */
+  /* A value representing situations where there is no requested account
+   * override. In other words, acct_user_override will be equal to this
+   * constant where the request isn't a cross-tenant one. */
   static const rgw_user UNKNOWN_ACCT;
 
   template <typename U>
@@ -114,7 +116,8 @@ public:
   void load_acct_info(RGWUserInfo& user_info) const override;   /* out */
 };
 
-/* static declaration */
+/* static declaration: UNKNOWN_ACCT will be an empty rgw_user that is a result
+ * of the default construction. */
 template <typename T>
 const rgw_user RGWThirdPartyAccountAuthApplier<T>::UNKNOWN_ACCT;
 
