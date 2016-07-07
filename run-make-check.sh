@@ -64,12 +64,21 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
-    $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
-        CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
-    $DRY_RUN make $BUILD_MAKEOPTS || return 1
-    $DRY_RUN make $CHECK_MAKEOPTS check || return 1
-    $DRY_RUN make dist || return 1
+    export TMPDIR=$(mktemp -d --tmpdir ceph.XXX)
+    if test -x ./do_cmake.sh ; then
+        $DRY_RUN ./do_cmake.sh || return 1
+        cd build
+        export CTEST_OUTPUT_ON_FAILURE=1 CTEST_PARALLEL_LEVEL=$(get_processors)
+        $DRY_RUN make $BUILD_MAKEOPTS check || return 1
+    else
+        $DRY_RUN ./autogen.sh || return 1
+        $DRY_RUN ./configure "$@"  --with-librocksdb-static --disable-static --with-radosgw --with-debug --without-lttng \
+            CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
+        $DRY_RUN make $BUILD_MAKEOPTS || return 1
+        $DRY_RUN make $CHECK_MAKEOPTS check || return 1
+        $DRY_RUN make dist || return 1
+    fi
+    rm -rf $TMPDIR
 }
 
 function main() {
