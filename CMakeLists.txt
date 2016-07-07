@@ -198,9 +198,6 @@ endif(WITH_SPDK)
 
 find_package(blkid REQUIRED)
 
-# probably fuse etc need this -- how to check? XXX
-option(WITH_MDS "MDS is here" ON)
-
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
