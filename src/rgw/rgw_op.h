@@ -34,7 +34,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
-
+#include "rgw_multi_copy.h"
 #include "include/assert.h"
 
 using namespace std;
@@ -642,6 +642,7 @@ class RGWPutObj : public RGWOp {
   friend class RGWPutObjProcessor;
 
 protected:
+  RGWPutMultipartCopy multipartcp;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;

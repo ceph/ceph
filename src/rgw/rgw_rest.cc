@@ -1000,6 +1000,20 @@ int RGWPutObj_ObjStore::verify_params()
 
 int RGWPutObj_ObjStore::get_params()
 {
+  /* put multi part copy */
+  bool multipart = s->info.args.exists("uploadId");
+  bool partnumber = s->info.args.exists("partNumber");
+  const char *copy_source = NULL;
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  if (multipart && partnumber && copy_source)
+  {
+    int ret = multipartcp.get_params();
+    if (ret < 0)
+    {
+      return ret;
+    }
+  }
+
   supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;

@@ -1225,6 +1225,33 @@ static int get_success_retcode(int code)
 
 void RGWPutObj_ObjStore_S3::send_response()
 {
+  /* put multipart from source object response*/
+  if (multipartcp.get_permission()) {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    } else {
+      if (s->cct->_conf->rgw_s3_success_create_obj_status) {
+        op_ret = get_success_retcode(s->cct->_conf->rgw_s3_success_create_obj_status);
+        set_req_state_err(s, op_ret);
+      }
+      
+      if (op_ret == 0) { 
+        s->formatter->open_object_section_in_ns("CopyPartResult", XMLNS_AWS_S3);
+        dump_time(s, "LastModified", &mtime);
+        if (!etag.empty()) {
+          s->formatter->dump_string("ETag", etag);
+        }    
+        s->formatter->close_section();
+      }
+      dump_content_length(s, s->formatter->get_len());
+      dump_errno(s);
+      end_header(s, this);
+
+      rgw_flush_formatter(s, s->formatter);
+    }
+    return;
+  }
+
   if (op_ret) {
     set_req_state_err(s, op_ret);
   } else {
@@ -3070,6 +3097,19 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
     s->canned_acl = cacl;
 
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
+
+  /* args have HTTP_X_AMZ_COPY_SOURCE, uploadId, partNumber, this is upload part copy*/
+  bool multipart = s->info.args.exists("uploadId");
+  bool partnumber = s->info.args.exists("partNumber");
+  const char *source = NULL;
+  source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+
+  bool ismultipartcp = (multipart && partnumber && source);
+  if (ismultipartcp)
+  {
+    ldout(s->cct, 5) << "NOTICE: upload part copy" << dendl;
+    return RGWHandler_REST::init(store, s, cio);
+  }  
 
   const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
   if (copy_source) {

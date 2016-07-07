@@ -2394,6 +2394,129 @@ int RGWPutObj::verify_permission()
     return -EACCES;
   }
 
+  /*upload part copy need verify permission like copy object verify_permission*/
+  bool multipart = s->info.args.exists("uploadId");
+  bool partnumber = s->info.args.exists("partNumber");
+  const char *copy_source = NULL;
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  bool ismultipartcp = (multipart && partnumber && copy_source);
+  /* put object */
+  if (!ismultipartcp) {
+    return 0;
+  }
+  
+  ldout(s->cct, 5) << "NOTICE: upload part copy src= " << copy_source << dendl;
+
+  /* upload part copy */
+  multipartcp.init(s, store);
+
+  int op_ret = 0;
+  uint64_t olh_epoch;
+  string version_id;
+  RGWAccessControlPolicy src_policy(s->cct);
+  op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  map<string, bufferlist> src_attrs;
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+
+  string src_tenant_name;
+  string src_bucket_name;
+  rgw_bucket src_bucket;
+  rgw_obj_key src_object;
+
+  op_ret = multipartcp.get_source_bucket_info(src_tenant_name, src_bucket_name, src_object);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  RGWBucketInfo src_bucket_info;
+  if (s->bucket_instance_id.empty()) {
+    op_ret = store->get_bucket_info(obj_ctx, src_tenant_name, src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  } else {
+    /* will only happen in intra region sync where the source and dest bucket is the same */
+    op_ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs);
+  }
+  if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      op_ret = -ERR_NO_SUCH_BUCKET;
+    }
+    return op_ret;
+  }
+
+  src_bucket = src_bucket_info.bucket;
+  string source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+  /* get buckets info (source and dest) */
+  if (s->local_source &&  source_zone.empty()) {
+    rgw_obj src_obj(src_bucket, src_object);
+    store->set_atomic(s->obj_ctx, src_obj);
+    store->set_prefetch_data(s->obj_ctx, src_obj);
+
+    /* check source object permissions */
+    op_ret = read_policy(store, s, src_bucket_info, src_attrs, &src_policy, 
+      src_bucket, src_object);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+
+    /* admin request overrides permission checks */
+    if (!s->auth_identity->is_admin_of(src_policy.get_owner().get_id()) &&
+        !src_policy.verify_permission(*s->auth_identity, s->perm_mask, 
+          RGW_PERM_READ)) {
+      return -EACCES;
+    }
+  }
+
+  RGWAccessControlPolicy dest_bucket_policy(s->cct);
+  map<string, bufferlist> dest_attrs;
+  RGWBucketInfo dest_bucket_info;
+
+  string dest_tenant_name;
+  string dest_bucket_name;
+  rgw_bucket dest_bucket;
+  rgw_obj_key dest_object;
+
+  dest_tenant_name = s->bucket.tenant;
+  dest_bucket_name = s->bucket.name;
+  dest_object = s->object.name;
+
+  /* will only happen if s->local_source or intra region sync */
+  if (src_bucket_name.compare(dest_bucket_name) == 0) { 
+    dest_bucket_info = src_bucket_info;
+    dest_attrs = src_attrs;
+  } else {
+    op_ret = store->get_bucket_info(obj_ctx, dest_tenant_name, dest_bucket_name,
+      dest_bucket_info, nullptr, &dest_attrs);
+    if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        op_ret = -ERR_NO_SUCH_BUCKET;
+      }
+      return op_ret;
+    }
+  }
+
+  dest_bucket = dest_bucket_info.bucket;
+
+  rgw_obj dest_obj(dest_bucket, dest_object);
+  store->set_atomic(s->obj_ctx, dest_obj);
+
+  rgw_obj_key no_obj;
+
+  /* check dest bucket permissions */
+  op_ret = read_policy(store, s, dest_bucket_info, dest_attrs,
+    &dest_bucket_policy, dest_bucket, no_obj);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  /* admin request overrides permission checks */
+  if (!s->auth_identity->is_admin_of(policy.get_owner().get_id()) &&
+      !dest_bucket_policy.verify_permission(*s->auth_identity, s->perm_mask, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
   return 0;
 }
 
@@ -2580,7 +2703,7 @@ void RGWPutObj::execute()
   int len;
   map<string, string>::iterator iter;
   bool multipart;
-
+  bool upload_part_copy;
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
   perfcounter->inc(l_rgw_put);
@@ -2659,9 +2782,20 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  /* get put multipart from source object flag*/
+  upload_part_copy = multipartcp.get_permission();
+  
   do {
     bufferlist data_in;
-    len = get_data(data_in);
+    /* put multipart from source object */
+    if (upload_part_copy)
+    {
+      len = multipartcp.get_data(ofs, data_in);
+    }
+    else
+    {
+      len = get_data(data_in);
+    }
     if (len < 0) {
       op_ret = len;
       goto done;
@@ -2729,7 +2863,8 @@ void RGWPutObj::execute()
 
   if (!chunked_upload &&
       ofs != s->content_length &&
-      !s->aws4_auth_streaming_mode) {
+      !s->aws4_auth_streaming_mode &&
+      !upload_part_copy) {
     op_ret = -ERR_REQUEST_TIMEOUT;
     goto done;
   }
