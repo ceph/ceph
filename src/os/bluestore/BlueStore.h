@@ -80,7 +80,6 @@ public:
   void _set_compression();
 
   class TransContext;
-  class Blob;
 
   typedef map<uint64_t, bufferlist> ready_regions_t;
 
@@ -279,14 +278,18 @@ public:
 
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob : public boost::intrusive::set_base_hook<> {
+    std::atomic_int nref;  ///< reference count
     int64_t id = 0;          ///< id
     bluestore_blob_t blob;   ///< blob metadata
     BufferSpace bc;          ///< buffer cache
 
-    Blob(int64_t i, Cache *c) : id(i), bc(c) {}
+    Blob(int64_t i, Cache *c) : nref(0), id(i), bc(c) {}
     ~Blob() {
       assert(bc.empty());
     }
+
+    friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
+    friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
     // comparators for intrusive_set
     friend bool operator<(const Blob &a, const Blob &b) {
@@ -305,7 +308,16 @@ public:
 
     /// discard buffers for unallocated regions
     void discard_unallocated();
+
+    void get() {
+      ++nref;
+    }
+    void put() {
+      if (--nref == 0)
+	delete this;
+    }
   };
+  typedef boost::intrusive_ptr<Blob> BlobRef;
 
   /// a map of blobs, indexed by int64_t
   struct BlobMap {
@@ -320,7 +332,7 @@ public:
       return blob_map.empty();
     }
 
-    Blob *get(int64_t id) {
+    BlobRef get(int64_t id) {
       Blob dummy(id, nullptr);
       auto p = blob_map.find(dummy);
       if (p != blob_map.end()) {
@@ -329,22 +341,25 @@ public:
       return nullptr;
     }
 
-    Blob *new_blob(Cache *c) {
+    BlobRef new_blob(Cache *c) {
       int64_t id = get_new_id();
       Blob *b = new Blob(id, c);
+      b->get();
       blob_map.insert(*b);
       return b;
     }
 
-    void claim(Blob *b) {
+    void claim(BlobRef b) {
       assert(b->id == 0);
       b->id = get_new_id();
+      b->get();
       blob_map.insert(*b);
     }
 
-    void erase(Blob *b) {
+    void erase(BlobRef b) {
       blob_map.erase(*b);
       b->id = 0;
+      b->put();
     }
 
     int64_t get_new_id() {
@@ -357,7 +372,6 @@ public:
 	Blob *b = &*blob_map.begin();
 	b->bc._clear();
 	erase(b);
-	delete b;
       }
     }
 
@@ -475,7 +489,7 @@ public:
 	exists(false) {
     }
 
-    Blob *get_blob(int64_t id) {
+    BlobRef get_blob(int64_t id) {
       if (id < 0) {
 	assert(bnode);
 	return bnode->blob_map.get(-id);
@@ -703,7 +717,7 @@ public:
     OnodeRef get_onode(const ghobject_t& oid, bool create);
     BnodeRef get_bnode(uint32_t hash);
 
-    Blob *get_blob(OnodeRef& o, int64_t blob) {
+    BlobRef get_blob(OnodeRef& o, int64_t blob) {
       if (blob < 0) {
 	if (!o->bnode) {
 	  o->bnode = get_bnode(o->oid.hobj.get_hash());
@@ -1484,18 +1498,18 @@ private:
     vector<std::pair<uint64_t, bluestore_lextent_t> > lex_old; ///< must deref blobs
 
     struct write_item {
-      Blob *b;
+      BlobRef b;
       uint64_t blob_length;
       uint64_t b_off;
       bufferlist bl;
       bool mark_unused;
 
-      write_item(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused)
+      write_item(BlobRef b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused)
        : b(b), blob_length(blob_len), b_off(o), bl(bl), mark_unused(_mark_unused) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
-    void write(Blob *b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused) {
+    void write(BlobRef b, uint64_t blob_len, uint64_t o, bufferlist& bl, bool _mark_unused) {
       writes.emplace_back(write_item(b, blob_len, o, bl, _mark_unused));
     }
   };
