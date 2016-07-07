@@ -3561,6 +3561,30 @@ int BlueStore::read(
   return r;
 }
 
+// --------------------------------------------------------
+// intermediate data structures used while reading
+struct region_t {
+  uint64_t logical_offset;
+  uint64_t blob_xoffset;   //region offset within the blob
+  uint64_t length;
+
+  region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
+    : logical_offset(offset),
+    blob_xoffset(b_offs),
+    length(len) {}
+  region_t(const region_t& from)
+    : logical_offset(from.logical_offset),
+    blob_xoffset(from.blob_xoffset),
+    length(from.length) {}
+
+  friend ostream& operator<<(ostream& out, const region_t& r) {
+    return out << "0x" << std::hex << r.logical_offset << ":"
+      << r.blob_xoffset << "~" << r.length << std::dec;
+  }
+};
+typedef list<region_t> regions2read_t;
+typedef map<Blob*, regions2read_t> blobs2read_t;
+
 int BlueStore::_do_read(
   Collection *c,
   OnodeRef o,
