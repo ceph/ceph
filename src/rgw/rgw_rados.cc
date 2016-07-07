@@ -645,7 +645,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
 
   bucket = _b;
   manifest->set_tail_bucket(_b);
-  manifest->set_head(_h);
+  manifest->set_head(_h, 0);
   last_ofs = 0;
 
   if (manifest->get_prefix().empty()) {
@@ -4243,8 +4243,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       goto done_ret;
     }
 
-    pmanifest->set_head(dest_obj);
-    pmanifest->set_head_size(first_chunk.length());
+    pmanifest->set_head(dest_obj, first_chunk.length());
   }
 
   write_op.meta.data = &first_chunk;
