@@ -12,3 +12,9 @@
   $ cat kring
   [client.admin]
   \tkey = AQAK7yxNeF+nHBAA0SgSdbs8IkJrxroDeJ6SwQ== (esc)
+
+Test --add-key with empty argument
+
+  $ ceph-authtool kring -C --name=mon.* --add-key= --cap mon 'allow *'
+  Option --add-key requires an argument
+  [1]
