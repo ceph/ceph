@@ -332,8 +332,8 @@ COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \
 	"name=data,type=CephString " \
-	"name=force,type=CephChoices,strings=--force,req=false", \
-	"name=allow_overlay,type=CephChoices,strings=--allow-dangerous-metadata-overlay,req=false", \
+	"name=force,type=CephChoices,strings=--force,req=false " \
+	"name=sure,type=CephChoices,strings=--allow-dangerous-metadata-overlay,req=false", \
 	"make new filesystem using named pools <metadata> and <data>", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs rm " \

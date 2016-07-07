@@ -216,3 +216,62 @@ Note that this command acts as a normal CephFS client to find all the
 files in the filesystem and read their layouts, so the MDS must be
 up and running.
 
+Using an alternate metadata pool for recovery
+---------------------------------------------
+
+.. warning::
+
+   There has not been extensive testing of this procedure. It should be
+   undertaken with great care.
+
+If an existing filesystem is damaged and inoperative, it is possible to create
+a fresh metadata pool and attempt to reconstruct the filesystem metadata
+into this new pool, leaving the old metadata in place. This could be used to
+make a safer attempt at recovery since the existing metadata pool would not be
+overwritten.
+
+.. caution::
+
+   During this process, multiple metadata pools will contain data referring to
+   the same data pool. Extreme caution must be exercised to avoid changing the
+   data pool contents while this is the case. Once recovery is complete, the
+   damaged metadata pool should be deleted.
+
+To begin this process, first create the fresh metadata pool and initialize
+it with empty file system data structures:
+
+::
+
+    ceph fs flag set enable_multiple true --yes-i-really-mean-it
+    ceph osd pool create recovery <pg-num> replicated <crush-ruleset-name>
+    ceph fs new recovery-fs recovery <data pool> --allow-dangerous-metadata-overlay
+    cephfs-data-scan init --force-init --filesystem recovery-fs --alternate-pool recovery
+    ceph fs reset recovery-fs --yes-i-realy-mean-it
+    cephfs-table-tool recovery-fs:all reset session
+    cephfs-table-tool recovery-fs:all reset snap
+    cephfs-table-tool recovery-fs:all reset inode
+
+Next, run the recovery toolset using the --alternate-pool argument to output
+results to the alternate pool:
+
+::
+
+    cephfs-data-scan scan_extents --alternate-pool recovery --filesystem <original filesystem name>
+    cephfs-data-scan scan_inodes --alternate-pool recovery --filesystem <original filesystem name> --force-corrupt --force-init <original data pool name>
+
+If the damaged filesystem contains dirty journal data, it may be recovered next
+with:
+
+::
+
+    cephfs-journal-tool --rank=<original filesystem name>:0 event recover_dentries list --alternate-pool recovery
+    cephfs-journal-tool --rank recovery-fs:0 journal reset --force
+
+After recovery, some recovered directories will have incorrect link counts.
+Ensure the parameter mds_debug_scatterstat is set to false (the default) to
+prevent the MDS from checking the link counts, then run a forward scrub to
+repair them. Ensure you have an MDS running and issue:
+
+::
+
+    ceph daemon mds.a scrub_path / recursive repair
