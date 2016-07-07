@@ -3012,7 +3012,7 @@ public:
 
     void finish(int r) {
       Mutex::Locker locker(state->lock);
-      EnterExit ee("clone finish");
+      EnterExit ee("stash finish");
       ASSERT_TRUE(state->in_flight_objects.count(oid));
       ASSERT_EQ(r, 0);
       state->in_flight_objects.erase(oid);
