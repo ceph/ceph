@@ -2016,7 +2016,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
 {
-  if ( s->info.request_params == "delete" ) {
+  if (s->info.args.exists("delete")) {
     return new RGWDeleteMultiObj_ObjStore_S3;
   }
 
