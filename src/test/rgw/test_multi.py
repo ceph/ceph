@@ -491,7 +491,7 @@ class RGWMulti:
         realm = RGWRealm('earth', realm_credentials, self.clusters)
 
         if bootstrap:
-            log(1, 'bootstapping clusters')
+            log(1, 'bootstrapping clusters')
             self.clusters[0].start()
             realm.init_zone(self.clusters[0], 'us', 'us-1', self.base_port)
 
