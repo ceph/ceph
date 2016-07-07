@@ -274,7 +274,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
       // mds_info with the standbys to get a pre-jewel-style mon MDSMap.
       MDSMap full_mdsmap = fs->mds_map;
       full_mdsmap.epoch = epoch;
-      for (const auto p : standby_daemons) {
+      for (const auto &p : standby_daemons) {
         full_mdsmap.mds_info[p.first] = p.second;
       }
 
