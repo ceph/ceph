@@ -1744,18 +1744,38 @@ int BlueStore::_open_fm(bool create)
       dout(1) << __func__ << " pre-fragmenting freespace, using "
 	      << g_conf->bluestore_debug_prefill << " with max free extent "
 	      << g_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
+      uint64_t start = P2ROUNDUP(reserved, min_alloc_size);
       uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
       float r = g_conf->bluestore_debug_prefill;
-      while (start < end) {
+      r /= 1.0 - r;
+      bool stop = false;
+
+      while (!stop && start < end) {
 	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
-	if (start + l > end)
+	if (start + l > end) {
 	  l = end - start;
-	l = ROUND_UP_TO(l, min_alloc_size);
-	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
-	u = ROUND_UP_TO(u, min_alloc_size);
+          l = P2ALIGN(l, min_alloc_size);
+        }
+        assert(start + l <= end);
+
+	uint64_t u = 1 + (uint64_t)(r * (double)l);
+	u = P2ROUNDUP(u, min_alloc_size);
+        if (start + l + u > end) {
+          u = end - (start + l);
+          // trim to align so we don't overflow again
+          u = P2ALIGN(u, min_alloc_size);
+          stop = true;
+        }
+        assert(start + l + u <= end);
+
 	dout(20) << "  free 0x" << std::hex << start << "~" << l
 		 << " use 0x" << u << std::dec << dendl;
+
+        if (u == 0) {
+          // break if u has been trimmed to nothing
+          break;
+        }
+
 	fm->allocate(start + l, u, t);
 	start += l + u;
       }
@@ -2016,7 +2036,7 @@ int BlueStore::_open_db(bool create)
 			    g_conf->bluestore_bluefs_gift_ratio);
       initial = MAX(initial, g_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
-      initial = ROUND_UP_TO(initial, g_conf->bluefs_alloc_size);
+      initial = P2ROUNDUP(initial, g_conf->bluefs_alloc_size);
       initial += g_conf->bluefs_alloc_size - BLUEFS_START;
       bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
       bluefs_extents.insert(BLUEFS_START, initial);
@@ -2294,7 +2314,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
 
   if (gift) {
     // round up to alloc size
-    gift = ROUND_UP_TO(gift, min_alloc_size);
+    gift = P2ROUNDUP(gift, min_alloc_size);
 
     // hard cap to fit into 32 bits
     gift = MIN(gift, 1ull<<31);
@@ -2325,7 +2345,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    reclaim = ROUND_UP_TO(reclaim, min_alloc_size);
+    reclaim = P2ROUNDUP(reclaim, min_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = MIN(reclaim, 1ull<<31);
@@ -5684,6 +5704,7 @@ void BlueStore::_do_write_small(
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   assert(length < min_alloc_size);
+  uint64_t end = offset + length;
 
   bufferlist bl;
   blp.copy(length, bl);
@@ -5703,7 +5724,7 @@ void BlueStore::_do_write_small(
       break;
     }
     int64_t blob = ep->second.blob;
-    b = c->get_blob(o, ep->second.blob);
+    b = c->get_blob(o, blob);
     if (!b->blob.is_mutable() || b->blob.is_compressed()) {
       dout(20) << __func__ << " ignoring immutable " << blob << ": " << *b
 	       << dendl;
@@ -5722,15 +5743,16 @@ void BlueStore::_do_write_small(
 
     // can we pad our head/tail out with zeros?
     uint64_t chunk_size = b->blob.get_chunk_size(block_size);
-    uint64_t head_pad = offset % chunk_size;
+    uint64_t head_pad = P2PHASE(offset, chunk_size);
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
     }
-    uint64_t tail_pad =
-      ROUND_UP_TO(offset + length, chunk_size) - (offset + length);
-    if (tail_pad && o->onode.has_any_lextents(offset + length, tail_pad)) {
+
+    uint64_t tail_pad = P2NPHASE(end, chunk_size);
+    if (tail_pad && o->onode.has_any_lextents(end, tail_pad)) {
       tail_pad = 0;
     }
+
     bufferlist padded = bl;
     if (head_pad) {
       bufferlist z;
@@ -5784,9 +5806,8 @@ void BlueStore::_do_write_small(
     }
 
     // read some data to fill out the chunk?
-    uint64_t head_read = b_off % chunk_size;
-    uint64_t tail_read =
-      ROUND_UP_TO(b_off + b_len, chunk_size) - (b_off + b_len);
+    uint64_t head_read = P2PHASE(b_off, chunk_size);
+    uint64_t tail_read = P2NPHASE(b_off + b_len, chunk_size);
     if ((head_read || tail_read) &&
 	(b->blob.get_ondisk_length() >= b_off + b_len + tail_read) &&
 	head_read + tail_read < min_alloc_size) {
@@ -5863,12 +5884,12 @@ void BlueStore::_do_write_small(
   // new blob.
   b = o->blob_map.new_blob(c->cache);
   unsigned alloc_len = min_alloc_size;
-  uint64_t b_off = offset % alloc_len;
+  uint64_t b_off = P2PHASE(offset, alloc_len);
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
   o->onode.punch_hole(offset, length, &wctx->lex_old);
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-    bluestore_lextent_t(b->id, offset % min_alloc_size, length);
+    bluestore_lextent_t(b->id, P2PHASE(offset, alloc_len), length);
   b->blob.ref_map.get(lex.offset, lex.length);
   txc->statfs_delta.stored() += lex.length;
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
@@ -5958,10 +5979,10 @@ int BlueStore::_do_alloc_write(
       ::encode(chdr, compressed_bl);
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
-      uint64_t newlen = ROUND_UP_TO(rawlen, min_alloc_size);
+      uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
       uint64_t dstlen = final_length *
         g_conf->bluestore_compression_required_ratio;
-      dstlen = ROUND_UP_TO(dstlen, min_alloc_size);
+      dstlen = P2ROUNDUP(dstlen, min_alloc_size);
       if (newlen <= dstlen && newlen < final_length) {
         // Cool. We compressed at least as much as we were hoping to.
         // pad out to min_alloc_size
@@ -6161,28 +6182,27 @@ int BlueStore::_do_write(
     // we fall within the same block
     _do_write_small(txc, c, o, offset, length, p, &wctx);
   } else {
-    uint64_t head_offset = 0, head_length = 0;
-    uint64_t middle_offset = 0, middle_length = 0;
-    uint64_t tail_offset = 0, tail_length = 0;
-    if (offset % min_alloc_size) {
-      head_offset = offset;
-      head_length = min_alloc_size - (offset % min_alloc_size);
-      assert(head_length < length);
+    uint64_t head_offset, head_length;
+    uint64_t middle_offset, middle_length;
+    uint64_t tail_offset, tail_length;
+
+    head_offset = offset;
+    head_length = P2NPHASE(offset, min_alloc_size);
+
+    tail_offset = P2ALIGN(end, min_alloc_size);
+    tail_length = P2PHASE(end, min_alloc_size);
+
+    middle_offset = head_offset + head_length;
+    middle_length = length - head_length - tail_length;
+
+    if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, &wctx);
-      middle_offset = offset + head_length;
-      middle_length = length - head_length;
-    } else {
-      middle_offset = offset;
-      middle_length = length;
     }
-    if (end % min_alloc_size) {
-      tail_length = end % min_alloc_size;
-      tail_offset = end - tail_length;
-      middle_length -= tail_length;
-    }
+
     if (middle_length) {
       _do_write_big(txc, c, o, middle_offset, middle_length, p, &wctx);
     }
+
     if (tail_length) {
       _do_write_small(txc, c, o, tail_offset, tail_length, p, &wctx);
     }
