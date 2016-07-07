@@ -79,7 +79,7 @@ def mstart(cluster_id, is_new):
     cmd = mpath('mstart.sh', cluster_id)
     if is_new:
         cmd += ' -n'
-
+        cmd += ' --mds_num 0'
     bash(cmd)
 
 def mstop(cluster_id, entity = None):
