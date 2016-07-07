@@ -2246,6 +2246,11 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.mfa_ids_specified) {
     user_info.mfa_ids = op_state.mfa_ids;
   }
+  
+  if (op_state.has_default_placement_op()) {
+    user_info.default_placement = op_state.get_default_placement();
+  }
+  
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so

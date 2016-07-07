@@ -170,6 +170,7 @@ struct RGWUserAdminOpState {
   RGWObjVersionTracker objv;
   uint32_t op_mask;
   map<int, string> temp_url_keys;
+  std::string default_placement;
 
   // subuser attributes
   std::string subuser;
@@ -222,6 +223,8 @@ struct RGWUserAdminOpState {
 
   bool bucket_quota_specified;
   bool user_quota_specified;
+
+  bool default_placement_specified;
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
@@ -396,6 +399,11 @@ struct RGWUserAdminOpState {
     mfa_ids = ids;
     mfa_ids_specified = true;
   }
+ 
+ void set_default_placement(const string &placement) {
+    default_placement = placement;
+    default_placement_specified = true;
+  }
 
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
@@ -407,6 +415,7 @@ struct RGWUserAdminOpState {
   bool has_key_op() { return key_op; }
   bool has_caps_op() { return caps_specified; }
   bool has_suspension_op() { return suspension_op; }
+  bool has_default_placement_op() { return default_placement_specified; }
   bool has_subuser_perm() { return perm_specified; }
   bool has_op_mask() { return op_mask_specified; }
   bool will_gen_access() { return gen_access; }
@@ -442,6 +451,7 @@ struct RGWUserAdminOpState {
   std::string get_caps() { return caps; }
   std::string get_user_email() { return user_email; }
   std::string get_display_name() { return display_name; }
+  std::string get_default_placement() { return default_placement; }
   map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
 
   RGWUserInfo&  get_user_info() { return info; }
@@ -534,6 +544,7 @@ struct RGWUserAdminOpState {
     found_by_email = false;
     found_by_key = false;
     mfa_ids_specified = false;
+    default_placement_specified = false;
   }
 };
 

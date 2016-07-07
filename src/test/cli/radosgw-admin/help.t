@@ -10,6 +10,7 @@
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
     user list                  list users
+    user default-placement     set user default-placement
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
@@ -167,6 +168,8 @@
                                of read, write, readwrite, full
      --display-name=<name>     user's display name
      --max-buckets             max number of buckets for a user
+     --default-placement=<placement-rule>
+                               specify placement-rule for user default-placement
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.

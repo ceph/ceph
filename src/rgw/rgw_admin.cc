@@ -81,6 +81,7 @@ void usage()
   cout << "  user check                 check user info\n";
   cout << "  user stats                 show user stats as accounted by quota subsystem\n";
   cout << "  user list                  list users\n";
+  cout << "  user default-placement     set user default-placement\n";
   cout << "  caps add                   add user capabilities\n";
   cout << "  caps rm                    remove user capabilities\n";
   cout << "  subuser create             create a new subuser\n" ;
@@ -238,6 +239,8 @@ void usage()
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>     user's display name\n";
   cout << "   --max-buckets             max number of buckets for a user\n";
+  cout << "   --default-placement=<placement-rule>\n";
+  cout << "                             specify placement-rule for user default-placement\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>         Specify the bucket name. Also used by the quota command.\n";
@@ -372,6 +375,7 @@ enum {
   OPT_USER_CHECK,
   OPT_USER_STATS,
   OPT_USER_LIST,
+  OPT_USER_DEFAULT_PLACEMENT,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -604,6 +608,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USER_STATS;
     if (strcmp(cmd, "list") == 0)
       return OPT_USER_LIST;
+    if (strcmp(cmd, "default-placement") == 0)
+      return OPT_USER_DEFAULT_PLACEMENT;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -2624,6 +2630,8 @@ int main(int argc, const char **argv)
 
   rgw_user user_id;
   string tenant;
+  string default_placement;
+  bool default_placement_specified = false;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
@@ -3086,6 +3094,9 @@ int main(int argc, const char **argv)
       totp_window = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--trim-delay-ms", (char*)NULL)) {
       trim_delay_ms = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--default-placement", (char*)NULL)) {
+      default_placement = val;
+      default_placement_specified = true;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4800,6 +4811,14 @@ int main(int argc, const char **argv)
   else if (opt_cmd == OPT_USER_SUSPEND)
     user_op.set_suspension(true);
 
+  if (opt_cmd == OPT_USER_DEFAULT_PLACEMENT) {
+    if (default_placement_specified == false) {
+       cerr << "required specify default-placement with --default-placement=" << std::endl;
+       return EINVAL;
+    }
+    user_op.set_default_placement(default_placement);
+  }
+
   // RGWUser to use for user operations
   RGWUser user;
   int ret = 0;
@@ -4859,6 +4878,7 @@ int main(int argc, const char **argv)
   case OPT_USER_ENABLE:
   case OPT_USER_SUSPEND:
   case OPT_USER_MODIFY:
+  case OPT_USER_DEFAULT_PLACEMENT:
     ret = user.modify(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not modify user: " << err_msg << std::endl;
