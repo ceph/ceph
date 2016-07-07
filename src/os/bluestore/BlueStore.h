@@ -820,6 +820,8 @@ public:
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     set<BnodeRef> bnodes;     ///< these bnodes need to be updated/written
+    set<BlobRef> blobs;       ///< these blobs need to be updated on io completion
+
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
@@ -1272,6 +1274,15 @@ private:
     boost::dynamic_bitset<> &used_blocks,
     store_statfs_t& expected_statfs);
 
+  void _buffer_cache_write(
+    TransContext *txc,
+    BlobRef b,
+    uint64_t offset,
+    bufferlist& bl,
+    unsigned flags) {
+    b->bc.write(txc->seq, offset, bl, flags);
+    txc->blobs.insert(b);
+  }
 public:
   BlueStore(CephContext *cct, const string& path);
   ~BlueStore();
