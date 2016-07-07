@@ -963,6 +963,7 @@ public:
 public:
   void eval_remote(CDentry *dn);
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
+  uint64_t get_num_strays() const { return stray_manager.get_num_strays(); }
 
 protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());
