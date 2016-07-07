@@ -115,16 +115,6 @@ Journaler::~Journaler() {
   delete m_threads;
 }
 
-int Journaler::exists(bool *header_exists) const {
-  int r = m_header_ioctx.stat(m_header_oid, NULL, NULL);
-  if (r < 0 && r != -ENOENT) {
-    return r;
-  }
-
-  *header_exists = (r == 0);
-  return 0;
-}
-
 void Journaler::exists(Context *on_finish) const {
   librados::ObjectReadOperation op;
   op.stat(NULL, NULL, NULL);
@@ -213,25 +203,6 @@ void Journaler::get_mutable_metadata(uint64_t *minimum_set,
   m_metadata->get_mutable_metadata(minimum_set, active_set, clients, on_finish);
 }
 
-int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
-  if (order > 64 || order < 12) {
-    lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
-    return -EDOM;
-  }
-  if (splay_width == 0) {
-    return -EINVAL;
-  }
-
-  ldout(m_cct, 5) << "creating new journal: " << m_header_oid << dendl;
-  int r = client::create(m_header_ioctx, m_header_oid, order, splay_width,
-			 pool_id);
-  if (r < 0) {
-    lderr(m_cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
-}
-
 void Journaler::create(uint8_t order, uint8_t splay_width,
                       int64_t pool_id, Context *on_finish) {
   if (order > 64 || order < 12) {
@@ -254,28 +225,6 @@ void Journaler::create(uint8_t order, uint8_t splay_width,
   int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op);
   assert(r == 0);
   comp->release();
-}
-
-int Journaler::remove(bool force) {
-  C_SaferCond ctx;
-  m_metadata->shut_down(&ctx);
-  ctx.wait();
-
-  ldout(m_cct, 5) << "removing journal: " << m_header_oid << dendl;
-  int r = m_trimmer->remove_objects(force);
-  if (r < 0) {
-    lderr(m_cct) << "failed to remove journal objects: " << cpp_strerror(r)
-                 << dendl;
-    return r;
-  }
-
-  r = m_header_ioctx.remove(m_header_oid);
-  if (r < 0) {
-    lderr(m_cct) << "failed to remove journal header: " << cpp_strerror(r)
-                 << dendl;
-    return r;
-  }
-  return 0;
 }
 
 void Journaler::remove(bool force, Context *on_finish) {

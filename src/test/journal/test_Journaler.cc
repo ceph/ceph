@@ -31,7 +31,9 @@ public:
   }
 
   int create_journal(uint8_t order, uint8_t splay_width) {
-    return m_journaler->create(order, splay_width, -1);
+    C_SaferCond cond;
+    m_journaler->create(order, splay_width, -1, &cond);
+    return cond.wait();
   }
 
   int init_journaler() {
