@@ -400,8 +400,14 @@ public:
     return (obj_size > head_size);
   }
 
-  void set_head(const rgw_obj& _o) {
+  void set_head(const rgw_obj& _o, uint64_t _s) {
     head_obj = _o;
+    head_size = _s;
+
+    if (explicit_objs && head_size > 0) {
+      objs[0].loc = head_obj;
+      objs[0].size = head_size;
+    }
   }
 
   const rgw_obj& get_head() {
