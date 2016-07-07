@@ -39,8 +39,8 @@ class TestClientLimits(CephFSTestCase):
         :param use_subdir: whether to put test files in a subdir or use root
         """
 
-        cache_size = 200
-        open_files = 250
+        cache_size = 100
+        open_files = 200
 
         self.set_conf('mds', 'mds cache size', cache_size)
         self.fs.mds_fail_restart()
@@ -62,7 +62,13 @@ class TestClientLimits(CephFSTestCase):
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
         mds_recall_state_timeout = int(self.fs.get_config("mds_recall_state_timeout"))
-        self.wait_for_health("failing to respond to cache pressure", mds_recall_state_timeout + 10)
+        self.wait_for_health("failing to respond to cache pressure",
+                mds_recall_state_timeout + 10)
+
+        # We can also test that the MDS health warning for oversized
+        # cache is functioning as intended.
+        self.wait_for_health("Too many inodes in cache",
+                mds_recall_state_timeout + 10)
 
         # When the client closes the files, it should retain only as many caps as allowed
         # under the SESSION_RECALL policy
