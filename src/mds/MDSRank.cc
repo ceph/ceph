@@ -1069,11 +1069,9 @@ void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 
 inline void MDSRank::standby_replay_restart()
 {
-  dout(1) << "standby_replay_restart"
-	  << (standby_replaying ? " (as standby)":" (final takeover pass)")
-	  << dendl;
   if (standby_replaying) {
     /* Go around for another pass of replaying in standby */
+    dout(4) << "standby_replay_restart (as standby)" << dendl;
     mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(
         this,
@@ -1081,6 +1079,7 @@ inline void MDSRank::standby_replay_restart()
   } else {
     /* We are transitioning out of standby: wait for OSD map update
        before making final pass */
+    dout(1) << "standby_replay_restart (final takeover pass)" << dendl;
     Context *fin = new C_OnFinisher(new C_IO_Wrapper(this,
           new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG)),
       finisher);
