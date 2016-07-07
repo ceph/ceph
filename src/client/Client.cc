@@ -2831,9 +2831,6 @@ void Client::put_inode(Inode *in, int n)
     if (use_faked_inos())
       _release_faked_ino(in);
 
-    in->cap_item.remove_myself();
-    in->snaprealm_item.remove_myself();
-    in->snapdir_parent.reset();
     if (in == root) {
       root = 0;
       root_ancestor = 0;
@@ -2841,14 +2838,6 @@ void Client::put_inode(Inode *in, int n)
         root_parents.erase(root_parents.begin());
     }
 
-    if (!in->oset.objects.empty()) {
-      ldout(cct, 0) << __func__ << ": leftover objects on inode 0x"
-        << std::hex << in->ino << std::dec << dendl;
-      assert(in->oset.objects.empty());
-    }
-
-    delete in->fcntl_locks;
-    delete in->flock_locks;
     delete in;
   }
 }
