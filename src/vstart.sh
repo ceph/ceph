@@ -299,6 +299,16 @@ fi
 
 ARGS="-c $conf_fn"
 
+prunb() {
+    echo "$* &"
+    "$@" &
+}
+
+prun() {
+    echo "$*"
+    "$@"
+}
+
 run() {
     type=$1
     shift
@@ -306,17 +316,14 @@ run() {
     [ -z "$valg" ] && valg="$valgrind"
 
     if [ -n "$valg" ]; then
-	echo "valgrind --tool=$valg $* -f &"
-	valgrind --tool=$valg $* -f &
-	sleep 1
+        prunb valgrind --tool="$valg" "$@" -f
+        sleep 1
     else
-	if [ "$nodaemon" -eq 0 ]; then
-	    echo "$*"
-	    $*
-	else
-	    echo "ceph-run $* -f &"
-	    ./ceph-run $* -f &
-	fi
+        if [ "$nodaemon" -eq 0 ]; then
+            prun "$@"
+        else
+            prunb ./ceph-run "$@" -f
+        fi
     fi
 }
 
@@ -386,7 +393,7 @@ test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 if [ "$start_all" -eq 1 ]; then
     $SUDO $INIT_CEPH stop
 fi
-$SUDO rm -f core*
+prun $SUDO rm -f core*
 
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
 test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
@@ -418,11 +425,13 @@ echo "port $CEPH_PORT"
 
 [ -z $CEPH_ADM ] && CEPH_ADM=$CEPH_BIN/ceph
 
-if [ "$cephx" -eq 1 ]; then
-    CEPH_ADM="$CEPH_ADM -c $conf_fn -k $keyring_fn"
-else
-    CEPH_ADM="$CEPH_ADM -c $conf_fn"
-fi
+ceph_adm() {
+    if [ "$cephx" -eq 1 ]; then
+        prun $SUDO "$CEPH_ADM" -c "$conf_fn" -k "$keyring_fn" "$@"
+    else
+        prun $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
+    fi
+}
 
 MONS=""
 count=0
@@ -568,19 +577,19 @@ EOF
 			echo
 		fi
 
-	        $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mon. $keyring_fn --cap mon 'allow *'
-	        $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
-		    --cap mon 'allow *' \
-		    --cap osd 'allow *' \
-		    --cap mds 'allow *' \
-		    $keyring_fn
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin --set-uid=0 \
+			--cap mon 'allow *' \
+			--cap osd 'allow *' \
+			--cap mds 'allow *' \
+			"$keyring_fn"
 
 		# build a fresh fs monmap, mon fs
-		str="$CEPH_BIN/monmaptool --create --clobber"
+		str=""
 		count=0
 		for f in $MONS
 		do
-			str=$str" --add $f $IP:$(($CEPH_PORT+$count))"
+			str="$str --add $f $IP:$(($CEPH_PORT+$count))"
 			if [ $overwrite_conf -eq 1 ]; then
 				cat <<EOF >> $conf_fn
 [mon.$f]
@@ -591,25 +600,16 @@ EOF
 			fi
 			count=$(($count + 1))
 		done
-		str=$str" --print $monmap_fn"
-		echo $str
-		$str
+		prun "$CEPH_BIN/monmaptool" --create --clobber $str --print "$monmap_fn"
 
 		for f in $MONS
 		do
-		    cmd="rm -rf $CEPH_DEV_DIR/mon.$f"
-		    echo $cmd
-		    $cmd
-                    cmd="mkdir -p $CEPH_DEV_DIR/mon.$f"
-                    echo $cmd
-                    $cmd
-		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf_fn -i $f --monmap=$monmap_fn"
-		    cmd="$cmd --keyring=$keyring_fn"
-		    echo $cmd
-		    $cmd
+			prun rm -rf -- "$CEPH_DEV_DIR/mon.$f"
+			prun mkdir -p "$CEPH_DEV_DIR/mon.$f"
+			prun "$CEPH_BIN/ceph-mon" --mkfs -c "$conf_fn" -i "$f" --monmap="$monmap_fn" --keyring="$keyring_fn"
 		done
 
-		rm $monmap_fn
+		prun rm -- "$monmap_fn"
 	fi
 
 	# start monitors
@@ -639,13 +639,13 @@ EOF
 
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"
-	    $SUDO $CEPH_ADM osd create $uuid
-	    $SUDO $CEPH_ADM osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
+	    ceph_adm osd create $uuid
+	    ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
 	    key_fn=$CEPH_DEV_DIR/osd$osd/keyring
 	    echo adding osd$osd key to auth repository
-	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow profile osd"
+	    ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd"
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
@@ -663,20 +663,15 @@ fi
 
 if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
     if [ "$CEPH_NUM_FS" -gt "1" ] ; then
-        $CEPH_ADM fs flag set enable_multiple true --yes-i-really-mean-it
+        ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
     fi
 
     fs=0
     for name in a b c d e f g h i j k l m n o p
     do
-        cmd="$CEPH_ADM osd pool create cephfs_data_${name} 8"
-        $cmd
-
-        cmd="$CEPH_ADM osd pool create cephfs_metadata_${name} 8"
-        $cmd
-
-        cmd="$CEPH_ADM fs new cephfs_${name} cephfs_metadata_${name} cephfs_data_${name}"
-        $cmd
+        ceph_adm osd pool create "cephfs_data_${name}" 8
+        ceph_adm osd pool create "cephfs_metadata_${name}" 8
+        ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
         fs=$(($fs + 1))
         [ $fs -eq $CEPH_NUM_FS ] && break
     done
@@ -685,7 +680,7 @@ if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
     for name in a b c d e f g h i j k l m n o p
     do
 	if [ "$new" -eq 1 ]; then
-	    mkdir -p $CEPH_DEV_DIR/mds.$name
+	    prun mkdir -p "$CEPH_DEV_DIR/mds.$name"
 	    key_fn=$CEPH_DEV_DIR/mds.$name/keyring
 	    if [ $overwrite_conf -eq 1 ]; then
 	    cat <<EOF >> $conf_fn
@@ -702,13 +697,13 @@ EOF
 EOF
 		fi
 	    fi
-	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.$name $key_fn
-	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow profile mds' osd 'allow *' mds 'allow'
+	    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
+	    ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
-		    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.${name}s \
-			$CEPH_DEV_DIR/mds.${name}s/keyring
-                    $SUDO $CEPH_ADM -i $CEPH_DEV_DIR/mds.${name}s/keyring auth add mds.${name}s \
-			mon 'allow *' osd 'allow *' mds 'allow'
+			prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
+				"$CEPH_DEV_DIR/mds.${name}s/keyring"
+			ceph_adm -i "$CEPH_DEV_DIR/mds.${name}s/keyring" auth add "mds.${name}s" \
+				mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 
 	fi
@@ -723,12 +718,12 @@ EOF
 
 #valgrind --tool=massif $CEPH_BIN/ceph-mds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_ADM mds set max_mds 2
+#ceph_adm mds set max_mds 2
     done
 fi
 
 if [ "$ec" -eq 1 ]; then
-    $SUDO $CEPH_ADM <<EOF
+    ceph_adm <<EOF
 osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec 8 8 erasure ec-profile
 EOF
@@ -739,7 +734,7 @@ do_cache() {
 	p="$1"
 	shift
 	echo "creating cache for pool $p ..."
-	$SUDO $CEPH_ADM <<EOF
+	ceph_adm <<EOF
 osd pool create ${p}-cache 8
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
@@ -756,7 +751,7 @@ do_hitsets() {
 	shift
 	shift
 	echo "setting hit_set on pool $pool type $type ..."
-	$CEPH_ADM <<EOF
+	ceph_adm <<EOF
 osd pool set $pool hit_set_type $type
 osd pool set $pool hit_set_count 8
 osd pool set $pool hit_set_period 30
