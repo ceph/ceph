@@ -310,6 +310,7 @@ struct bluestore_blob_t {
     }
     b_len += b_off;
     while (b_len) {
+      assert(p != extents.end());
       if (!p->is_valid()) {
 	return false;
       }
@@ -388,6 +389,7 @@ struct bluestore_blob_t {
       assert(p != extents.end());
     }
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       f(p->offset + x_off, l);
       x_off = 0;
@@ -408,6 +410,7 @@ struct bluestore_blob_t {
     bufferlist::iterator it = bl.begin();
     uint64_t x_len = bl.length();
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
@@ -636,9 +639,7 @@ struct bluestore_wal_transaction_t {
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
-  int64_t _bytes;  ///< cached byte count
-
-  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
