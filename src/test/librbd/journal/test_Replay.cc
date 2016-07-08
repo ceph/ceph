@@ -452,7 +452,8 @@ TEST_F(TestJournalReplay, SnapRename) {
   get_journal_commit_position(ictx, &initial_tag, &initial_entry);
 
   // inject snapshot ops into journal
-  inject_into_journal(ictx, librbd::journal::SnapRenameEvent(1, snap_id, "snap2"));
+  inject_into_journal(ictx, librbd::journal::SnapRenameEvent(1, snap_id, "snap",
+                                                             "snap2"));
   inject_into_journal(ictx, librbd::journal::OpFinishEvent(1, 0));
   close_image(ictx);
 
