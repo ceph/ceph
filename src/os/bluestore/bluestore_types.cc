@@ -941,7 +941,7 @@ void bluestore_onode_t::punch_hole(
       p->second.blob,
       p->second.offset + p->second.length - keep,
       keep);
-    extent_map.erase(p++);
+    extent_map.erase(p);
     break;
   }
 }
