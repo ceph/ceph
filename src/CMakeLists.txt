@@ -952,56 +952,54 @@ endif(${HAVE_LIBFUSE})
 install(TARGETS ceph-osd DESTINATION bin)
 
 # MDS
-if(${WITH_MDS})
-  set(mds_srcs
-    mds/Capability.cc
-    mds/MDSDaemon.cc
-    mds/MDSRank.cc
-    mds/Beacon.cc
-    mds/flock.cc
-    mds/locks.c
-    mds/journal.cc
-    mds/Server.cc
-    mds/Mutation.cc
-    mds/MDCache.cc
-    mds/RecoveryQueue.cc
-    mds/StrayManager.cc
-    mds/Locker.cc
-    mds/Migrator.cc
-    mds/MDBalancer.cc
-    mds/CDentry.cc
-    mds/CDir.cc
-    mds/CInode.cc
-    mds/LogEvent.cc
-    mds/MDSTable.cc
-    mds/InoTable.cc
-    mds/JournalPointer.cc
-    mds/MDSTableClient.cc
-    mds/MDSTableServer.cc
-    mds/ScrubStack.cc
-    mds/DamageTable.cc
-    mds/SimpleLock.cc
-    mds/SnapRealm.cc
-    mds/SnapServer.cc
-    mds/snap.cc
-    mds/SessionMap.cc
-    mds/MDSContext.cc
-    mds/MDSAuthCaps.cc
-    mds/MDLog.cc
-    ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
-    ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
-  add_library(mds STATIC ${mds_srcs}
-    $<TARGET_OBJECTS:heap_profiler_objs>
-    $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(mds ${ALLOC_LIBS} osdc common)
-  set(ceph_mds_srcs
-    ceph_mds.cc)
-  add_executable(ceph-mds ${ceph_mds_srcs}
-    $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
-    ${Boost_THREAD_LIBRARY})
-  install(TARGETS ceph-mds DESTINATION bin)
-endif(${WITH_MDS})
+set(mds_srcs
+  mds/Capability.cc
+  mds/MDSDaemon.cc
+  mds/MDSRank.cc
+  mds/Beacon.cc
+  mds/flock.cc
+  mds/locks.c
+  mds/journal.cc
+  mds/Server.cc
+  mds/Mutation.cc
+  mds/MDCache.cc
+  mds/RecoveryQueue.cc
+  mds/StrayManager.cc
+  mds/Locker.cc
+  mds/Migrator.cc
+  mds/MDBalancer.cc
+  mds/CDentry.cc
+  mds/CDir.cc
+  mds/CInode.cc
+  mds/LogEvent.cc
+  mds/MDSTable.cc
+  mds/InoTable.cc
+  mds/JournalPointer.cc
+  mds/MDSTableClient.cc
+  mds/MDSTableServer.cc
+  mds/ScrubStack.cc
+  mds/DamageTable.cc
+  mds/SimpleLock.cc
+  mds/SnapRealm.cc
+  mds/SnapServer.cc
+  mds/snap.cc
+  mds/SessionMap.cc
+  mds/MDSContext.cc
+  mds/MDSAuthCaps.cc
+  mds/MDLog.cc
+  ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
+  ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
+add_library(mds STATIC ${mds_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>)
+target_link_libraries(mds ${ALLOC_LIBS} osdc common)
+set(ceph_mds_srcs
+  ceph_mds.cc)
+add_executable(ceph-mds ${ceph_mds_srcs}
+  $<TARGET_OBJECTS:common_util_obj>)
+target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global
+  ${Boost_THREAD_LIBRARY})
+install(TARGETS ceph-mds DESTINATION bin)
 
 add_subdirectory(erasure-code)
 
