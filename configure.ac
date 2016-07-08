@@ -1382,11 +1382,6 @@ AS_IF([test "x$with_thread_safe_res_query" != xno],
 #AC_FUNC_UTIME_NULL
 #AC_CHECK_FUNCS([bzero fchdir fdatasync floor ftruncate getcwd gethostbyname gethostname gettimeofday inet_ntoa localtime_r memmove memset mkdir munmap pow rmdir select socket sqrt strcasecmp strchr strerror strstr utime])
 
-# check for return type (and presence) if strerror_r in C++ mode
-AC_LANG_PUSH([C++])
-AC_FUNC_STRERROR_R
-AC_LANG_POP([C++])
-
 AM_CONDITIONAL(WITH_BUILD_TESTS, test "$WITH_BUILD_TESTS" = "1")
 
 AM_PATH_PYTHON([2.4],
