@@ -66,11 +66,13 @@ function(distutils_install_cython_module name)
        COMMAND env
            CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
            CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+           CC=${CMAKE_C_COMPILER}
            CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
            ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --build-base ${CYTHON_MODULE_DIR} --verbose
-           install \${options} --verbose
-           --single-version-externally-managed --record /dev/null
+           install \${options} --single-version-externally-managed --record /dev/null
+           egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
+           --verbose
        WORKING_DIRECTORY \"${CMAKE_CURRENT_SOURCE_DIR}\"
        RESULT_VARIABLE install_res)
     if(NOT \"\${install_res}\" STREQUAL 0)
