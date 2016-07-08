@@ -161,12 +161,15 @@ struct SnapRenameEvent : public SnapEventBase {
   static const EventType TYPE = EVENT_TYPE_SNAP_RENAME;
 
   uint64_t snap_id;
+  std::string src_snap_name;
 
   SnapRenameEvent() : snap_id(CEPH_NOSNAP) {
   }
   SnapRenameEvent(uint64_t op_tid, uint64_t src_snap_id,
+                  const std::string &src_snap_name,
                   const std::string &dest_snap_name)
-    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id) {
+    : SnapEventBase(op_tid, dest_snap_name), snap_id(src_snap_id),
+      src_snap_name(src_snap_name) {
   }
 
   void encode(bufferlist& bl) const;
