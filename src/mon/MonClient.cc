@@ -91,7 +91,7 @@ int MonClient::get_monmap()
   
   _sub_want("monmap", 0, 0);
   if (cur_mon.empty())
-    _reopen_session();
+    _multiple_reopen_session();
 
   while (want_monmap)
     map_cond.Wait(monc_lock);
@@ -266,16 +266,37 @@ bool MonClient::ms_dispatch(Message *m)
   Mutex::Locker lock(monc_lock);
 
   // ignore any messages outside our current session except some auth replies
-  if (m->get_connection() != cur_con) { // && m->get_type() != CEPH_MSG_AUTH_REPLY) {
+  if ((m->get_connection() != cur_con) && (m->get_type() != CEPH_MSG_AUTH_REPLY)) {
     ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
     m->put();
     return true;
-  } //else if (m->get_type() == CEPH_MSG_AUTH_REPLY) {
+  }
+
+  if (m->get_type() == CEPH_MSG_AUTH_REPLY && !hunting) {
+    if (_check_state(m->get_connection()->get_peer_addr(), MC_STATE_NONE)) {
+      ldout(cct, 10) << "discarding stray auth reply message " << *m << dendl;
+      m->put();
+      return true;
+    }
+  }
+
+  //SO
+  // if we get here either
+  // // the message connection IS cur_con
+  // // OR
+  // // the message type IS an MAuthReply
+
+//else if (m->get_type() == CEPH_MSG_AUTH_REPLY) {
     //if (_check_state(cur_con, MC_STATE_HAVE_SESSION)) {
       //ldout(cct, 10) << "discarding stray auth reply message " << *m << dendl;
       //m->put();
       //return true;
     //}
+  //}
+
+  //if (m->get_type() == CEPH_MSG_AUTH_REPLY && !hunting) {
+    //m->put();
+    //return true;
   //}
 
   switch (m->get_type()) {
@@ -343,7 +364,7 @@ void MonClient::handle_monmap(MMonMap *m)
 
   if (!monmap.get_addr_name(cur_con->get_peer_addr(), cur_mon)) {
     ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
-    _reopen_session();  // can't find the mon we were talking to (above)
+    _multiple_reopen_session();  // can't find the mon we were talking to (above)
   }
 
   map_cond.Signal();
@@ -453,7 +474,7 @@ int MonClient::authenticate(double timeout)
 
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
   if (cur_mon.empty())
-    _reopen_session();
+    _multiple_reopen_session();
 
   utime_t until = ceph_clock_now(cct);
   until += timeout;
@@ -482,51 +503,64 @@ int MonClient::authenticate(double timeout)
   return authenticate_err;
 }
 
+//ldout(cct, 10) << "[handle_auth] : " << dendl;
 void MonClient::handle_auth(MAuthReply *m)
 {
   int COMPILER_WARNING; //note: just to know when the code has been compiled successfully
   Context *cb = NULL;
   bufferlist::iterator p = m->result_bl.begin();
 
-  //string mon = monmap.get_name(m->get_source_inst().addr);
-  ldout(cct, 10) << "have auth from mon " << cur_mon << dendl;
+  string mon = monmap.get_name(m->get_connection()->get_peer_addr());
+  ldout(cct, 10) << "[handle_auth] : from mon named [" << mon << "] at addr ["
+    << m->get_connection()->get_peer_addr() << "]" << dendl;
 
   if (_check_state(m->get_connection()->get_peer_addr(), MC_STATE_NEGOTIATING)) { //WORKREF
+    ldout(cct, 10) << "[handle_auth] : _check_state = NEGOTIATING" << dendl;
     if (!auth || (int)m->protocol != auth->get_protocol()) {
+      ldout(cct, 10) << "[handle_auth] : auth must be remade" << dendl;
       delete auth;
       auth = get_auth_client_handler(cct, m->protocol, rotating_secrets);
       if (!auth) {
-        ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
+        ldout(cct, 10) << "[handle_auth] : no handler for protocol " << m->protocol << dendl;
         if (m->result == -ENOTSUP) {
-          ldout(cct, 10) << "none of our auth protocols are supported by the server"
+          ldout(cct, 10) << "[handle_auth] : none of our auth protocols are supported by the server"
 		   << dendl;
           authenticate_err = m->result;
+	  ldout(cct, 10) << "[handle_auth] : autherr [" << authenticate_err << "]" << dendl;
 	  auth_cond.SignalAll();
 	}
 	m->put();
+	ldout(cct, 10) << "[handle_auth] : exiting early (1)" << dendl;
 	return;
       }
       auth->set_want_keys(want_keys);
       auth->init(entity_name);
       auth->set_global_id(global_id);
+      ldout(cct, 10) << "[handle_auth] : auth set up" << dendl;
     } else {
+      ldout(cct, 10) << "[handle_auth] : auth to be reset" << dendl;
       auth->reset();
     }
 
     //set_default_state(MC_STATE_AUTHENTICATING); //WORKREF
     _set_state(m->get_connection()->get_peer_addr(), MC_STATE_AUTHENTICATING, true);
+    ldout(cct, 10) << "_set_state on " << m->get_connection()->get_peer_addr()
+	<< " to AUTHENTICATING." << dendl;
   }
   assert(auth); //FAILREF
   if (m->global_id && m->global_id != global_id) {
     global_id = m->global_id;
     auth->set_global_id(global_id);
-    ldout(cct, 10) << "my global_id is " << m->global_id << dendl;
+    ldout(cct, 10) << "[handle_auth] : my global_id is " << m->global_id << dendl;
   }
 
   int ret = auth->handle_response(m->result, p);
   m->put();
 
+  ldout(cct, 10) << "[handle_auth] : auth->handle_response returns err val [" << ret << "]" << dendl;
+
   if (ret == -EAGAIN) {
+    ldout(cct, 10) << "[handle_auth] : ret = -EAGAIN" << dendl;
     MAuth *ma = new MAuth;
     ma->protocol = auth->get_protocol();
     auth->prepare_build_request();
@@ -535,6 +569,9 @@ void MonClient::handle_auth(MAuthReply *m)
     return;
   }
 
+  assert(monmap.contains(m->get_connection()->get_peer_addr()));
+  cur_mon = monmap.get_name(m->get_connection()->get_peer_addr());
+  cur_con = m->get_connection();
   _finish_hunting();
 
   authenticate_err = ret;
@@ -542,6 +579,14 @@ void MonClient::handle_auth(MAuthReply *m)
     if (!_check_state(m->get_connection()->get_peer_addr(), MC_STATE_HAVE_SESSION)) { //WORKREF
       //set_default_state(MC_STATE_HAVE_SESSION); //WORKREF
       _set_state(m->get_connection()->get_peer_addr(), MC_STATE_HAVE_SESSION, true);
+      ldout(cct, 10) << "_set_state on " << m->get_connection()->get_peer_addr()
+	<< " to HAVE_SESSION." << dendl;
+
+      ldout(cct, 10) << "[handle_auth] : HAVE_SESSION details -- cur_mon: [" << cur_mon <<
+	"]; cur_con->addr: [" << cur_con->get_peer_addr() << "]" << dendl;
+
+      assert(!cur_mon.empty());
+      assert(cur_con);
 
       last_rotating_renew_sent = utime_t();
       while (!waiting_for_session.empty()) {
@@ -562,6 +607,7 @@ void MonClient::handle_auth(MAuthReply *m)
     }
     _check_auth_tickets();
   }
+  ldout(cct, 10) << "[handle_auth] : Signalling all on auth_cond" << dendl;
   auth_cond.SignalAll();
   if (cb) {
     monc_lock.Unlock();
@@ -601,7 +647,7 @@ void MonClient::_send_mon_message(Message *m, ConnectionRef con, bool force)
   assert(monc_lock.is_locked());
   if (force || _check_state(con->get_peer_addr(), MC_STATE_HAVE_SESSION)) {
     assert(con);
-    ldout(cct, 10) << "_send_mon_message to mon over con at "
+    ldout(cct, 10) << "_send_mon_message (alt) to mon over con at "
 		   << con->get_peer_addr() << dendl;
     con->send_message(m);
   }
@@ -626,6 +672,102 @@ string MonClient::_pick_random_mon()
       n++;
     return monmap.get_name(n);
   }
+}
+
+//ldout(cct, 10) << "[_multiple_reopen_session] : " << dendl;
+void MonClient::_multiple_reopen_session(int rank, string name)
+{
+  assert(monc_lock.is_locked());
+  ldout(cct, 10) << "[_multiple_reopen_session] : on rank [" << rank << "] name [" << name << "]" << dendl;
+
+  // get the initial mon if one is selected based on inputs
+  string mon;
+  if (rank < 0 && name.length() == 0) {
+    mon = _pick_random_mon();
+  } else if (name.length()) {
+    mon = name;
+  } else {
+    mon = monmap.get_name(rank);
+  }
+
+  int attempt = 1; //FIXREF
+
+  if (cur_con) {
+    cur_con->mark_down();
+  }
+
+  // create and fill the connection vector
+  vector<ConnectionRef> con_vec;
+  con_vec.push_back(messenger->get_connection(monmap.get_inst(mon)));
+  for (int j = 1; j < attempt; j++) {
+    con_vec.push_back(messenger->get_connection(monmap.get_inst(_pick_random_mon())));
+  }
+  ldout(cct, 10) << "[_multiple_reopen_session] : connection vector filled" << dendl;
+
+  // throw out old queued messages
+  while (!waiting_for_session.empty()) {
+    waiting_for_session.front()->put();
+    waiting_for_session.pop_front();
+  }
+
+  // throw out version check requests
+  while (!version_requests.empty()) {
+    finisher.queue(version_requests.begin()->second->context, -EAGAIN);
+    delete version_requests.begin()->second;
+    version_requests.erase(version_requests.begin());
+  }
+
+  // adjust timeouts if necessary
+  if (had_a_connection) {
+    reopen_interval_multiplier *= cct->_conf->mon_client_hunt_interval_backoff;
+    if (reopen_interval_multiplier >
+          cct->_conf->mon_client_hunt_interval_max_multiple)
+      reopen_interval_multiplier =
+          cct->_conf->mon_client_hunt_interval_max_multiple;
+  }
+
+  // restart authentication handshake
+  for (int j = 0; j < attempt; j++) {
+    _set_state(con_vec[j]->get_peer_addr(), MC_STATE_NEGOTIATING, true);
+    ldout(cct, 10) << "_set_state on " << con_vec[j]->get_peer_addr()
+	<< " to NEGOTIATING." << dendl;
+  }
+  hunting = true;
+
+  // send an initial keepalive to ensure our timestamp is valid by the
+  // time we are in an OPENED state (by sequencing this before
+  // authentication).
+  for (int j = 0; j < attempt; j++) {
+    ldout(cct, 10) << "[_multiple_reopen_session] : sending keepalive to [" << con_vec[j]->get_peer_addr() << "]" << dendl;
+    con_vec[j]->send_keepalive();
+
+    MAuth *m = new MAuth;
+    m->protocol = 0;
+    m->monmap_epoch = monmap.get_epoch();
+    __u8 struct_v = 1;
+    ::encode(struct_v, m->auth_payload);
+    ::encode(auth_supported->get_supported_set(), m->auth_payload);
+    ::encode(entity_name, m->auth_payload);
+    ::encode(global_id, m->auth_payload);
+
+    ldout(cct, 10) << "[_multiple_reopen_session] : sending MAuth to [" << con_vec[j]->get_peer_addr() << "]" << dendl;
+    _send_mon_message(m, con_vec[j], true);
+  }
+
+  // for current compatibility issues, save the initial (mon, con) set
+  ldout(cct, 10) << "[_multiple_reopen_session] : cur_mon gets [" << mon << "] and cur_con->addr gets ["
+    << con_vec[0]->get_peer_addr() << "]" << dendl;
+  cur_mon = mon;
+  cur_con = con_vec[0];
+
+  for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
+       p != sub_sent.end();
+       ++p) {
+    if (sub_new.count(p->first) == 0)
+      sub_new[p->first] = p->second;
+  }
+  if (!sub_new.empty())
+    _renew_subs();
 }
 
 void MonClient::_reopen_session(int rank, string name)
@@ -675,6 +817,9 @@ void MonClient::_reopen_session(int rank, string name)
   // restart authentication handshake
   //set_default_state(MC_STATE_NEGOTIATING); //WORKREF
   _set_state(cur_con->get_peer_addr(), MC_STATE_NEGOTIATING, true);
+  ldout(cct, 10) << "_set_state on " << cur_con->get_peer_addr()
+	<< " to NEGOTIATING." << dendl;
+
   hunting = true;
 
   assert(state_map.count(cur_con->get_peer_addr()) != 0);
@@ -721,7 +866,7 @@ bool MonClient::ms_handle_reset(Connection *con)
 	return true;
       
       ldout(cct, 0) << "hunting for new mon" << dendl;
-      _reopen_session();
+      _multiple_reopen_session();
     }
   }
   return false;
@@ -731,7 +876,7 @@ void MonClient::_finish_hunting()
 {
   assert(monc_lock.is_locked());
   if (hunting) {
-    ldout(cct, 1) << "found mon." << cur_mon << dendl; 
+    ldout(cct, 1) << "[finish_hunting] : found mon." << cur_mon << dendl;
     hunting = false;
     had_a_connection = true;
     reopen_interval_multiplier /= 2.0;
@@ -748,7 +893,7 @@ void MonClient::tick()
   
   if (hunting) {
     ldout(cct, 1) << "continuing hunt" << dendl;
-    _reopen_session();
+    _multiple_reopen_session();
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
@@ -771,7 +916,7 @@ void MonClient::tick()
 	if (interval > cct->_conf->mon_client_ping_timeout) {
 	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 			<< " seconds), reconnecting" << dendl;
-	  _reopen_session();
+	  _multiple_reopen_session();
 	}
       }
 
@@ -803,7 +948,7 @@ void MonClient::_renew_subs()
 
   ldout(cct, 10) << "renew_subs" << dendl;
   if (cur_mon.empty())
-    _reopen_session();
+    _multiple_reopen_session();
   else {
     if (sub_renew_sent == utime_t())
       sub_renew_sent = ceph_clock_now(cct);

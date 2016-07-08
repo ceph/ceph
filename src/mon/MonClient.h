@@ -26,7 +26,6 @@
 #include "auth/RotatingKeyRing.h"
 #include "common/SimpleRNG.h"
 
-
 class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
@@ -183,7 +182,11 @@ private:
 
   string _pick_random_mon();
   void _finish_hunting();
+  void _multiple_reopen_session(int rank, string name);
   void _reopen_session(int rank, string name);
+  void _multiple_reopen_session() {
+    _multiple_reopen_session(-1, string());
+  }
   void _reopen_session() {
     _reopen_session(-1, string());
   }
