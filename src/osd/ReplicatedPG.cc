@@ -10004,6 +10004,7 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
 
   // adjust info to backfill
   info.set_last_backfill(hobject_t(), true);
+  pg_log.reset_backfill();
   dirty_info = true;
 
 
