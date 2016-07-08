@@ -10619,8 +10619,6 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
     return 0;
   }
 
-  bufferlist bl;
-
   RGWBucketEntryPoint entry_point;
   real_time ep_mtime;
   RGWObjVersionTracker ot;
@@ -10726,8 +10724,6 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point)
 {
-  bufferlist bl;
-
   bool create_head = !info.has_instance_obj || create_entry_point;
 
   int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs);
