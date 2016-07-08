@@ -283,6 +283,7 @@ struct bluestore_blob_t {
     }
     b_len += b_off;
     while (b_len) {
+      assert(p != extents.end());
       if (!p->is_valid()) {
 	return false;
       }
