@@ -362,6 +362,7 @@ struct bluestore_blob_t {
       assert(p != extents.end());
     }
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       f(p->offset + x_off, l);
       x_off = 0;
@@ -382,6 +383,7 @@ struct bluestore_blob_t {
     bufferlist::iterator it = bl.begin();
     uint64_t x_len = bl.length();
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
