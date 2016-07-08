@@ -65,6 +65,7 @@ using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Return;
 using ::testing::SaveArg;
+using ::testing::StrEq;
 using ::testing::WithArgs;
 
 MATCHER_P(CStrEq, str, "") {
@@ -131,7 +132,7 @@ public:
 
   void expect_rename(MockReplayImageCtx &mock_image_ctx, Context **on_finish,
                      const char *image_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_rename(CStrEq(image_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_rename(StrEq(image_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
@@ -146,7 +147,7 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(CStrEq(snap_name), _,
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _,
                                                                 op_tid, false))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
@@ -154,7 +155,7 @@ public:
 
   void expect_snap_remove(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
@@ -162,28 +163,28 @@ public:
   void expect_snap_rename(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, uint64_t snap_id,
                           const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rename(snap_id, CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rename(snap_id, StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_protect(MockReplayImageCtx &mock_image_ctx,
                            Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_unprotect(MockReplayImageCtx &mock_image_ctx,
                              Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(CStrEq(snap_name), _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(StrEq(snap_name), _))
                   .WillOnce(DoAll(SaveArg<1>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_rollback(MockReplayImageCtx &mock_image_ctx,
                             Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(CStrEq(snap_name), _, _))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(StrEq(snap_name), _, _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
