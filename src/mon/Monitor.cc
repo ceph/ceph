@@ -1828,8 +1828,6 @@ void Monitor::start_election()
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
 
-  cancel_probe_timeout();
-
   clog->info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
 }
