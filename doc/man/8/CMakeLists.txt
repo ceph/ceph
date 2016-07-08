@@ -32,12 +32,8 @@ list(APPEND man_srcs
   ${server_srcs}
   ${osd_srcs}
   ${mon_srcs}
+  ceph-mds.rst
   librados-config.rst)
-
-if(WITH_MDS)
-  list(APPEND man_srcs
-    ceph-mds.rst)
-endif()
 
 if(WITH_CEPHFS)
   list(APPEND man_srcs
