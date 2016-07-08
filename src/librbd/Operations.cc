@@ -527,15 +527,24 @@ int Operations<I>::rename(const char *dstname) {
 }
 
 template <typename I>
-void Operations<I>::execute_rename(const char *dstname, Context *on_finish) {
+void Operations<I>::execute_rename(const std::string &dest_name,
+                                   Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     assert(m_image_ctx.exclusive_lock == nullptr ||
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
 
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.name == dest_name) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EEXIST);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
+
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": dest_name=" << dstname
+  ldout(cct, 5) << this << " " << __func__ << ": dest_name=" << dest_name
                 << dendl;
 
   if (m_image_ctx.old_format) {
@@ -544,16 +553,16 @@ void Operations<I>::execute_rename(const char *dstname, Context *on_finish) {
     on_finish = new FunctionContext([this, on_finish](int r) {
 	m_image_ctx.image_watcher->register_watch(on_finish);
       });
-    on_finish = new FunctionContext([this, dstname, on_finish](int r) {
+    on_finish = new FunctionContext([this, dest_name, on_finish](int r) {
 	operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
-	  m_image_ctx, on_finish, dstname);
+	  m_image_ctx, on_finish, dest_name);
 	req->send();
       });
     m_image_ctx.image_watcher->unregister_watch(on_finish);
     return;
   }
   operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
-    m_image_ctx, on_finish, dstname);
+    m_image_ctx, on_finish, dest_name);
   req->send();
 }
 
@@ -677,7 +686,7 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
 }
 
 template <typename I>
-void Operations<I>::execute_snap_create(const char *snap_name,
+void Operations<I>::execute_snap_create(const std::string &snap_name,
                                         Context *on_finish,
                                         uint64_t journal_op_tid,
                                         bool skip_object_map) {
@@ -755,7 +764,7 @@ int Operations<I>::snap_rollback(const char *snap_name,
 }
 
 template <typename I>
-void Operations<I>::execute_snap_rollback(const char *snap_name,
+void Operations<I>::execute_snap_rollback(const std::string &snap_name,
                                           ProgressContext& prog_ctx,
                                           Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
@@ -817,6 +826,7 @@ void Operations<I>::snap_remove(const char *snap_name, Context *on_finish) {
     return;
   }
 
+  // quickly filter out duplicate ops
   m_image_ctx.snap_lock.get_read();
   if (m_image_ctx.get_snap_id(snap_name) == CEPH_NOSNAP) {
     m_image_ctx.snap_lock.put_read();
@@ -843,7 +853,7 @@ void Operations<I>::snap_remove(const char *snap_name, Context *on_finish) {
 }
 
 template <typename I>
-void Operations<I>::execute_snap_remove(const char *snap_name,
+void Operations<I>::execute_snap_remove(const std::string &snap_name,
                                         Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   {
@@ -941,7 +951,7 @@ int Operations<I>::snap_rename(const char *srcname, const char *dstname) {
 
 template <typename I>
 void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
-                                        const char *dst_name,
+                                        const std::string &dest_snap_name,
                                         Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   if ((m_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
@@ -949,15 +959,23 @@ void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
 
+  m_image_ctx.snap_lock.get_read();
+  if (m_image_ctx.get_snap_id(dest_snap_name) != CEPH_NOSNAP) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EEXIST);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
+
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": "
                 << "snap_id=" << src_snap_id << ", "
-                << "new_snap_name=" << dst_name << dendl;
+                << "new_snap_name=" << dest_snap_name << dendl;
 
   operation::SnapshotRenameRequest<I> *req =
     new operation::SnapshotRenameRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), src_snap_id,
-      dst_name);
+      dest_snap_name);
   req->send();
 }
 
@@ -1014,13 +1032,28 @@ int Operations<I>::snap_protect(const char *snap_name) {
 }
 
 template <typename I>
-void Operations<I>::execute_snap_protect(const char *snap_name,
+void Operations<I>::execute_snap_protect(const std::string &snap_name,
                                          Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     assert(m_image_ctx.exclusive_lock == nullptr ||
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
+
+  m_image_ctx.snap_lock.get_read();
+  bool is_protected;
+  int r = m_image_ctx.is_snap_protected(m_image_ctx.get_snap_id(snap_name),
+                                        &is_protected);
+  if (r < 0) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(r);
+    return;
+  } else if (is_protected) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EBUSY);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -1085,13 +1118,28 @@ int Operations<I>::snap_unprotect(const char *snap_name) {
 }
 
 template <typename I>
-void Operations<I>::execute_snap_unprotect(const char *snap_name,
+void Operations<I>::execute_snap_unprotect(const std::string &snap_name,
                                            Context *on_finish) {
   assert(m_image_ctx.owner_lock.is_locked());
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     assert(m_image_ctx.exclusive_lock == nullptr ||
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
+
+  m_image_ctx.snap_lock.get_read();
+  bool is_unprotected;
+  int r = m_image_ctx.is_snap_unprotected(m_image_ctx.get_snap_id(snap_name),
+                                          &is_unprotected);
+  if (r < 0) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(r);
+    return;
+  } else if (is_unprotected) {
+    m_image_ctx.snap_lock.put_read();
+    on_finish->complete(-EINVAL);
+    return;
+  }
+  m_image_ctx.snap_lock.put_read();
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
