@@ -190,7 +190,7 @@ It matters because there can be multiple entries per job such as::
           count: 3
           size: 200 # GB
 
-When a job is composed with these, theuthology aggregates them as::
+When a job is composed with these, teuthology aggregates them as::
 
     openstack:
       - machine:
