@@ -152,22 +152,23 @@ Replay<I>::~Replay() {
 }
 
 template <typename I>
-void Replay<I>::process(bufferlist::iterator *it, Context *on_ready,
-                        Context *on_safe) {
+int Replay<I>::decode(bufferlist::iterator *it, EventEntry *event_entry) {
+  try {
+    ::decode(*event_entry, *it);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+template <typename I>
+void Replay<I>::process(const EventEntry &event_entry,
+                        Context *on_ready, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "on_ready=" << on_ready << ", on_safe=" << on_safe << dendl;
 
   on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
-
-  journal::EventEntry event_entry;
-  try {
-    ::decode(event_entry, *it);
-  } catch (const buffer::error &err) {
-    lderr(cct) << "failed to decode event entry: " << err.what() << dendl;
-    on_ready->complete(-EINVAL);
-    return;
-  }
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   boost::apply_visitor(EventVisitor(this, on_ready, on_safe),

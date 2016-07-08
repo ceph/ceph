@@ -33,7 +33,9 @@ public:
   Replay(ImageCtxT &image_ctx);
   ~Replay();
 
-  void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
+  int decode(bufferlist::iterator *it, EventEntry *event_entry);
+  void process(const EventEntry &event_entry,
+               Context *on_ready, Context *on_safe);
 
   void shut_down(bool cancel_ops, Context *on_finish);
   void flush(Context *on_finish);
