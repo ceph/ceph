@@ -10892,8 +10892,7 @@ int RGWRados::distribute(const string& key, bufferlist& bl)
   pick_control_oid(key, notify_oid);
 
   ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
-  int r = control_pool_ctx.notify2(notify_oid, bl, 0, NULL);
-  return r;
+  return control_pool_ctx.notify2(notify_oid, bl, 0, NULL);
 }
 
 int RGWRados::pool_iterate_begin(rgw_bucket& bucket, RGWPoolIterCtx& ctx)
