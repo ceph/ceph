@@ -1934,7 +1934,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv,
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
-  ldout(s->cct, 0) << "sending create_bucket request to master zonegroup" << dendl;
+  ldout(s->cct, 0) << "sending request to master zonegroup" << dendl;
   bufferlist response;
   string uid_str = s->user->user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
