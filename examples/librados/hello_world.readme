@@ -1,6 +1,10 @@
 This simple librados program can be built by running "make" (and cleaned up
 with "make clean"), assuming you have librados-dev already installed.
 
+By default, the makefile will build against the librados headers and library in your
+build tree (ie. using relative paths). If you would like to build the examples against
+your system librados and headers, use "make all-system".
+
 And executed using
 ./librados_hello_world -c ../../src/ceph.conf
 (or whatever path to a ceph.conf is appropriate to you, or
