@@ -7071,6 +7071,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     }
 
     pmanifest->set_head(dest_obj, first_chunk.length());
+  } else {
+    pmanifest->set_head(dest_obj, 0);
   }
 
   write_op.meta.data = &first_chunk;
@@ -8015,6 +8017,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
     try {
       ::decode(s->manifest, miter);
       s->has_manifest = true;
+      s->manifest.set_head(obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
+                                             broken due to old bugs */
       s->size = s->manifest.get_obj_size();
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
