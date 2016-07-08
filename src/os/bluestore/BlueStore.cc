@@ -1144,11 +1144,27 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 void BlueStore::Blob::discard_unallocated()
 {
   size_t pos = 0;
-  for (auto e : blob.extents) {
-    if (!e.is_valid()) {
-      bc.discard(pos, e.length);
+  if (blob.is_compressed()) {
+    bool discard = false;
+    bool all_invalid = true;
+    for (auto e : blob.extents) {
+      if (!e.is_valid()) {
+        discard = true;
+      } else {
+        all_invalid = false;
+      }
     }
-    pos += e.length;
+    assert(discard == all_invalid); //in case of compressed blob all or none pextents are invalid.
+    if(discard) {
+      bc.discard(0, blob.get_compressed_payload_original_length());
+    }
+  } else {
+    for (auto e : blob.extents) {
+      if (!e.is_valid()) {
+        bc.discard(pos, e.length);
+      }
+      pos += e.length;
+    }
   }
 }
 
