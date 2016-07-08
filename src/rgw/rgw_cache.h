@@ -526,8 +526,7 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_obj& obj, Objec
   info.obj = obj;
   bufferlist bl;
   ::encode(info, bl);
-  int ret = T::distribute(normal_name, bl);
-  return ret;
+  return T::distribute(normal_name, bl);
 }
 
 template <class T>
