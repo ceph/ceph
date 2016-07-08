@@ -529,6 +529,17 @@ remove_snapshot()
     rbd --cluster ${cluster} -p ${pool} snap rm ${image}@${snap}
 }
 
+rename_snapshot()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local snap=$4
+    local new_snap=$5
+
+    rbd --cluster ${cluster} -p ${pool} snap rename ${image}@${snap} ${image}@${new_snap}
+}
+
 purge_snapshots()
 {
     local cluster=$1

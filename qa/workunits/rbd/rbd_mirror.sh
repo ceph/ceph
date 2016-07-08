@@ -188,6 +188,14 @@ for i in ${image2} ${image4}; do
   compare_images ${POOL} ${i}
 done
 
+testlog "TEST: snapshot rename"
+snap_name='snap_rename'
+create_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_0"
+for i in `seq 1 20`; do
+  rename_snapshot ${CLUSTER2} ${POOL} ${image2} "${snap_name}_$(expr ${i} - 1)" "${snap_name}_${i}"
+done
+wait_for_snap_present ${CLUSTER1} ${POOL} ${image2} "${snap_name}_${i}"
+
 testlog "TEST: disable mirror while daemon is stopped"
 stop_mirror ${CLUSTER1}
 stop_mirror ${CLUSTER2}
