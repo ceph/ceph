@@ -109,7 +109,7 @@ def check_sanity():
 
     try:
         compiler.link_executable(
-            compiler.compile([tmp_file]),
+            compiler.compile([tmp_file], tmp_dir),
             os.path.join(tmp_dir, 'rados_dummy'),
             libraries=['rados'],
             output_dir=tmp_dir,
