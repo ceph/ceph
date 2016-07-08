@@ -3839,11 +3839,29 @@ def split_dev_base_partnum(dev):
 
 
 def get_partition_type(part):
-    return get_blkid_partition_info(part, 'ID_PART_ENTRY_TYPE')
+    return get_raw_partition_info(part, 'Partition GUID code')
 
 
 def get_partition_uuid(part):
-    return get_blkid_partition_info(part, 'ID_PART_ENTRY_UUID')
+    return get_raw_partition_info(part, 'Partition unique GUID')
+
+
+def get_raw_partition_info(part, what=None):
+    (base, partnum) = split_dev_base_partnum(part)
+    out, _, _ = command(
+        [
+            'sgdisk',
+            '-i',
+            str(partnum),
+            base,
+        ]
+    )
+    for line in out.splitlines():
+        line_list = line.split(": ")
+        if what in line_list:
+            v = line_list[1].split(" ")[0]
+            return v.rstrip().lower()
+    return None
 
 
 def get_blkid_partition_info(dev, what=None):
