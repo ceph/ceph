@@ -8758,6 +8758,7 @@ void ReplicatedPG::check_blacklisted_watchers()
 
 void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
 {
+  assert(!obc->watchers.empty());
   dout(20) << "ReplicatedPG::check_blacklisted_obc_watchers for obc " << obc->obs.oi.soid << dendl;
   for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator k =
 	 obc->watchers.begin();
