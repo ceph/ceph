@@ -212,7 +212,11 @@ public:
   void when_process(MockJournalReplay &mock_journal_replay,
                     bufferlist::iterator *it, Context *on_ready,
                     Context *on_safe) {
-    mock_journal_replay.process(it, on_ready, on_safe);
+    EventEntry event_entry;
+    int r = mock_journal_replay.decode(it, &event_entry);
+    ASSERT_EQ(0, r);
+
+    mock_journal_replay.process(event_entry, on_ready, on_safe);
   }
 
   void when_complete(MockReplayImageCtx &mock_image_ctx, AioCompletion *aio_comp,

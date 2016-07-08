@@ -989,10 +989,18 @@ void ImageReplayer<I>::process_entry() {
   bufferlist data = m_replay_entry.get_data();
   bufferlist::iterator it = data.begin();
 
+  librbd::journal::EventEntry event_entry;
+  int r = m_local_replay->decode(&it, &event_entry);
+  if (r < 0) {
+    derr << "failed to decode journal event" << dendl;
+    handle_replay_complete(r, "failed to decode journal event");
+    return;
+  }
+
   Context *on_ready = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
   Context *on_commit = new C_ReplayCommitted(this, std::move(m_replay_entry));
-  m_local_replay->process(&it, on_ready, on_commit);
+  m_local_replay->process(event_entry, on_ready, on_commit);
 }
 
 template <typename I>
