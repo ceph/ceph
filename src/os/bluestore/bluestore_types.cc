@@ -1054,7 +1054,7 @@ void bluestore_compression_header_t::decode(bufferlist::iterator& p)
 
 void bluestore_compression_header_t::dump(Formatter *f) const
 {
-  f->dump_string("type", type);
+  f->dump_unsigned("type", type);
   f->dump_unsigned("length", length);
 }
 
@@ -1062,6 +1062,6 @@ void bluestore_compression_header_t::generate_test_instances(
   list<bluestore_compression_header_t*>& o)
 {
   o.push_back(new bluestore_compression_header_t);
-  o.push_back(new bluestore_compression_header_t("some_header"));
+  o.push_back(new bluestore_compression_header_t(1));
   o.back()->length = 1234;
 }
