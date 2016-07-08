@@ -42,9 +42,7 @@ public:
   SnapshotRenameRequest(ImageCtxT &image_ctx, Context *on_finish,
                         uint64_t snap_id, const std::string &snap_name);
 
-  virtual journal::Event create_event(uint64_t op_tid) const {
-    return journal::SnapRenameEvent(op_tid, m_snap_id, m_snap_name);
-  }
+  virtual journal::Event create_event(uint64_t op_tid) const;
 
 protected:
   virtual void send_op();
