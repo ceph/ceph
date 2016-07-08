@@ -829,7 +829,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEvent) {
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
   when_process(mock_journal_replay,
-               EventEntry{SnapRenameEvent(123, 234, "snap")},
+               EventEntry{SnapRenameEvent(123, 234, "snap1", "snap")},
                &on_start_ready, &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
@@ -862,7 +862,7 @@ TEST_F(TestMockJournalReplay, SnapRenameEventExists) {
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
   when_process(mock_journal_replay,
-               EventEntry{SnapRenameEvent(123, 234, "snap")},
+               EventEntry{SnapRenameEvent(123, 234, "snap1", "snap")},
                &on_start_ready, &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
