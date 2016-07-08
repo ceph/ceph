@@ -1332,6 +1332,7 @@ void Journal<I>::handle_get_tags(int r) {
 
 template <typename I>
 void Journal<I>::handle_replay_ready() {
+  CephContext *cct = m_image_ctx.cct;
   ReplayEntry replay_entry;
   {
     Mutex::Locker locker(m_lock);
@@ -1339,7 +1340,6 @@ void Journal<I>::handle_replay_ready() {
       return;
     }
 
-    CephContext *cct = m_image_ctx.cct;
     ldout(cct, 20) << this << " " << __func__ << dendl;
     if (!m_journaler->try_pop_front(&replay_entry)) {
       return;
@@ -1352,11 +1352,20 @@ void Journal<I>::handle_replay_ready() {
 
   bufferlist data = replay_entry.get_data();
   bufferlist::iterator it = data.begin();
+
+  journal::EventEntry event_entry;
+  int r = m_journal_replay->decode(&it, &event_entry);
+  if (r < 0) {
+    lderr(cct) << this << " " << __func__
+               << ": failed to decode journal event entry" << dendl;
+    handle_replay_process_safe(replay_entry, r);
+    return;
+  }
+
   Context *on_ready = create_context_callback<
     Journal<I>, &Journal<I>::handle_replay_process_ready>(this);
   Context *on_commit = new C_ReplayProcessSafe(this, std::move(replay_entry));
-
-  m_journal_replay->process(&it, on_ready, on_commit);
+  m_journal_replay->process(event_entry, on_ready, on_commit);
 }
 
 template <typename I>

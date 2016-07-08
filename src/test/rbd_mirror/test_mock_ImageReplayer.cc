@@ -34,7 +34,8 @@ namespace journal {
 
 template<>
 struct Replay<MockTestImageCtx> {
-  MOCK_METHOD3(process, void(bufferlist::iterator *, Context *, Context *));
+  MOCK_METHOD2(decode, int(bufferlist::iterator *, EventEntry *));
+  MOCK_METHOD3(process, void(const EventEntry &, Context *, Context *));
   MOCK_METHOD1(flush, void(Context*));
   MOCK_METHOD2(shut_down, void(bool, Context*));
 };
