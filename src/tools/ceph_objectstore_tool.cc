@@ -2210,7 +2210,7 @@ int main(int argc, char **argv)
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
-     "path to journal, mandatory for filestore type")
+     "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
