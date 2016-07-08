@@ -9334,11 +9334,11 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
       if (!(oid.is_head() && !oid_existed))
 	r = pgbackend->objects_get_attr(oid.get_head(), SS_ATTR, &bv);
       if (r < 0) {
-	// try _snapset
-      if (!(oid.is_snapdir() && !oid_existed))
-	r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
-      if (r < 0 && !can_create)
-	return NULL;
+        // try _snapset
+        if (!(oid.is_snapdir() && !oid_existed))
+          r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
+        if (r < 0 && !can_create)
+          return NULL;
       }
     } else {
       assert(attrs->count(SS_ATTR));
