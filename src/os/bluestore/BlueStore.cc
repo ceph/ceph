@@ -6670,6 +6670,7 @@ int BlueStore::_clone(TransContext *txc,
 	  p.second.blob = -moved_blobs[p.second.blob];
 	}
 	newo->onode.extent_map[p.first] = p.second;
+        assert(p.second.blob < 0);
 	newo->bnode->blob_map.get(-p.second.blob)->blob.ref_map.get(
 	  p.second.offset,
 	  p.second.length);
