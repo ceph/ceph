@@ -8791,6 +8791,13 @@ void ReplicatedPG::submit_log_entries(
   assert(r == 0);
 }
 
+void ReplicatedPG::cancel_log_updates()
+{
+  // get rid of all the LogUpdateCtx so their references to repops are
+  // dropped
+  log_entry_update_waiting_on.clear();
+}
+
 // -------------------------------------------------------
 
 void ReplicatedPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
@@ -10027,6 +10034,7 @@ void ReplicatedPG::on_shutdown()
   cancel_flush_ops(false);
   cancel_proxy_ops(false);
   apply_and_flush_repops(false);
+  cancel_log_updates();
 
   pgbackend->on_change();
 
