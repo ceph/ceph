@@ -129,7 +129,7 @@ BuildRequires:	gperftools-devel
 BuildRequires:  btrfsprogs
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
-BuildRequires:	libatomic-ops-devel
+BuildRequires:	libatomic_ops-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
