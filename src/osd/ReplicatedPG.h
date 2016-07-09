@@ -915,6 +915,7 @@ protected:
     boost::intrusive_ptr<RepGather> repop;
     set<pg_shard_t> waiting_on;
   };
+  void cancel_log_updates();
   map<ceph_tid_t, LogUpdateCtx> log_entry_update_waiting_on;
 
 
