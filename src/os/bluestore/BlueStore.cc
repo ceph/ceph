@@ -188,8 +188,10 @@ static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
   } else {
     unsigned shard;
     int r = sscanf(key, "%x", &shard);
-    if (r < 1)
+    if (r < 1) {
+      assert(0 == "invalid shard of key");
       return NULL;
+    }
     *pshard = shard_id_t(shard);
   }
   return key + 2;
@@ -3480,6 +3482,15 @@ int BlueStore::_do_read(
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
   int r = 0;
 
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+           << " size 0x" << o->onode.size << " (" << std::dec
+           << o->onode.size << ")" << dendl;
+  bl.clear();
+
+  if (offset >= o->onode.size) {
+    return r;
+  }
+
   // generally, don't buffer anything, unless the client explicitly requests
   // it.
   bool buffered = false;
@@ -3491,15 +3502,6 @@ int BlueStore::_do_read(
 			  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
     dout(20) << __func__ << " defaulting to buffered read" << dendl;
     buffered = true;
-  }
-
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size 0x" << o->onode.size << " (" << std::dec
-	   << o->onode.size << ")" << dendl;
-  bl.clear();
-
-  if (offset >= o->onode.size) {
-    return r;
   }
 
   if (offset + length > o->onode.size) {
@@ -3530,8 +3532,8 @@ int BlueStore::_do_read(
     Blob *bptr = c->get_blob(o, lp->second.blob);
     if (bptr == nullptr) {
       dout(20) << __func__ << "  missed blob " << lp->second.blob << dendl;
+      assert(bptr != nullptr);
     }
-    assert(bptr != nullptr);
     unsigned l_off = pos - lp->first;
     unsigned b_off = l_off + lp->second.offset;
     unsigned b_len = std::min(left, lp->second.length - l_off);
@@ -3620,7 +3622,7 @@ int BlueStore::_do_read(
 	dout(20) << __func__ << "    region 0x" << std::hex
 		 << reg.logical_offset
 		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
-		 << " reading 0x" << r_off << "~" << r_len
+		 << " reading 0x" << r_off << "~" << r_len << std::dec
 		 << dendl;
 
 	// read it
@@ -3634,7 +3636,7 @@ int BlueStore::_do_read(
 	  });
 	int r = _verify_csum(o, &bptr->blob, r_off, bl);
 	if (r < 0) {
-	  return r;
+	  return -EIO;
 	}
 	if (buffered) {
 	  bptr->bc.did_read(r_off, bl);
@@ -6556,7 +6558,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   __u32 num;
 
   if (!o->onode.omap_head) {
-    r = 0;
     goto out;
   }
   ::decode(num, p);
@@ -6569,7 +6570,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
 	     << " <- " << key << dendl;
     txc->t->rmkey(PREFIX_OMAP, final_key);
   }
-  r = 0;
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -6602,7 +6602,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
     it->next();
   }
-  r = 0;
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -6688,6 +6687,7 @@ int BlueStore::_clone(TransContext *txc,
 	  p.second.blob = -moved_blobs[p.second.blob];
 	}
 	newo->onode.extent_map[p.first] = p.second;
+        assert(p.second.blob < 0);
 	newo->bnode->blob_map.get(-p.second.blob)->blob.ref_map.get(
 	  p.second.offset,
 	  p.second.length);
