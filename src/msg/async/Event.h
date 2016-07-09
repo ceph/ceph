@@ -151,7 +151,7 @@ class EventCenter {
 
   int init(int nevent, unsigned idx);
   void set_owner();
-  unsigned get_id() { return idx; }
+  unsigned get_id() const { return idx; }
 
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
