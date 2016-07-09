@@ -3614,7 +3614,7 @@ int BlueStore::_do_read(
 	dout(20) << __func__ << "    region 0x" << std::hex
 		 << reg.logical_offset
 		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
-		 << " reading 0x" << r_off << "~" << r_len
+		 << " reading 0x" << r_off << "~" << r_len << std::dec
 		 << dendl;
 
 	// read it
