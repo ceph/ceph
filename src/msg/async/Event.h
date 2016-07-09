@@ -183,8 +183,9 @@ class EventCenter {
       lock.lock();
       cond.notify_all();
       done = true;
+      bool del = nonwait;
       lock.unlock();
-      if (nonwait)
+      if (del)
         delete this;
     }
     void wait() {
