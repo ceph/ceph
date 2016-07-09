@@ -981,8 +981,8 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 		      << location_constraint << dendl;
   }
 
-  int pos = location_constraint.find(':');
-  if (pos >= 0) {
+  size_t pos = location_constraint.find(':');
+  if (pos != string::npos) {
     placement_rule = location_constraint.substr(pos + 1);
     location_constraint = location_constraint.substr(0, pos);
   }
