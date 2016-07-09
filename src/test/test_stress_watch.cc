@@ -52,9 +52,8 @@ struct WatcherUnwatcher : public Thread {
       uint64_t handle;
       WatchNotifyTestCtx watch_ctx;
       int r = ioctx.watch("foo", 0, &handle, &watch_ctx);
-      bufferlist bl;
       if (r == 0)
-	ioctx.unwatch("foo", handle);
+        ioctx.unwatch("foo", handle);
       ioctx.close();
     }
     return NULL;
