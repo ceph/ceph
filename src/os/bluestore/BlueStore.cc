@@ -4589,11 +4589,19 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
       // FIXME: use a per-txc dirty blob list?
+      
+      if (txc->first_collection) {
+        (txc->first_collection)->lock.get_read();
+      }
       for (auto& o : txc->onodes) {
-	for (auto& p : o->blob_map.blob_map) {
-	  p.bc.finish_write(txc->seq);
+        for (auto& p : o->blob_map.blob_map) {
+	    p.bc.finish_write(txc->seq);
 	}
       }
+      if (txc->first_collection) {
+        (txc->first_collection)->lock.put_read();
+      }
+      
       if (!g_conf->bluestore_sync_transaction) {
 	if (g_conf->bluestore_sync_submit_transaction) {
 	  _txc_finalize_kv(txc, txc->t);
@@ -5160,7 +5168,6 @@ int BlueStore::queue_transactions(
   }
 
   _txc_write_nodes(txc, txc->t);
-
   // journal wal items
   if (txc->wal_txn) {
     // move releases to after wal
