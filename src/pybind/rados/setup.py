@@ -130,8 +130,11 @@ def check_sanity():
 if not check_sanity():
     sys.exit(1)
 
+cmdclass = {}
 try:
     from Cython.Build import cythonize
+    from Cython.Distutils import build_ext
+    cmdclass = {'build_ext': build_ext}
 except ImportError:
     print("WARNING: Cython is not installed.")
 
@@ -141,8 +144,6 @@ except ImportError:
     else:
         def cythonize(x, **kwargs):
             return x
-
-
         source = "rados.c"
 else:
     source = "rados.pyx"
@@ -169,6 +170,7 @@ setup(
     ),
     url='https://github.com/ceph/ceph/tree/master/src/pybind/rados',
     license='LGPLv2+',
+    platforms='Linux',
     ext_modules=cythonize(
         [
             Extension(
@@ -191,4 +193,5 @@ setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5'
     ],
+    cmdclass=cmdclass,
 )

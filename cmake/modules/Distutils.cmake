@@ -70,6 +70,7 @@ function(distutils_install_cython_module name)
            CFLAGS=\"-iquote ${CMAKE_SOURCE_DIR}/src/include\"
            ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --build-base ${CYTHON_MODULE_DIR} --verbose
+           build_ext --cython-c-in-temp --build-temp ${CMAKE_CURRENT_BINARY_DIR} --cython-include-dirs ${PROJECT_SOURCE_DIR}/src/pybind/rados
            install \${options} --single-version-externally-managed --record /dev/null
            egg_info --egg-base ${CMAKE_CURRENT_BINARY_DIR}
            --verbose
