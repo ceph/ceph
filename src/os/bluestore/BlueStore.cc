@@ -3628,7 +3628,7 @@ int BlueStore::_do_read(
 	  });
 	int r = _verify_csum(o, &bptr->blob, r_off, bl);
 	if (r < 0) {
-	  return r;
+	  return -EIO;
 	}
 	if (buffered) {
 	  bptr->bc.did_read(r_off, bl);
