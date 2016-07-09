@@ -6,6 +6,8 @@ from setuptools.command.egg_info import egg_info
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
+from Cython.Distutils import build_ext
+
 
 def get_version():
     try:
@@ -48,6 +50,7 @@ setup(
         os.path.join(os.path.dirname(__file__), "..", "rados")]
     ),
     cmdclass={
+        "build_ext": build_ext,
         "egg_info": EggInfoCommand,
     },
 )
