@@ -136,16 +136,12 @@ class EventCenter {
   }
 
  public:
-  atomic_t already_wakeup;
-
   explicit EventCenter(CephContext *c):
     cct(c), nevent(0),
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c),
-    notify_handler(NULL),
-    already_wakeup(0) {
-  }
+    notify_handler(NULL) { }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
