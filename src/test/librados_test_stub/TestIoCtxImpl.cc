@@ -82,9 +82,8 @@ std::string TestIoCtxImpl::get_pool_name() {
   return m_pool_name;
 }
 
-int TestIoCtxImpl::aio_flush() {
+void TestIoCtxImpl::aio_flush() {
   m_client->flush_aio_operations();
-  return 0;
 }
 
 void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
