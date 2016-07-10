@@ -713,6 +713,20 @@ def get_partition_base_mpath(dev):
     return os.path.join('/dev/mapper', name)
 
 
+def is_bcache(dev_name):
+    """
+    Check if dev_name is a bcache
+    """
+    if not dev_name.startswith('bcache'):
+        return False
+    if not os.path.exists(os.path.join('/sys/block', dev_name, 'bcache')):
+        return False
+    if os.path.exists(os.path.join('/sys/block', dev_name,
+                                   'bcache/cache_mode')):
+        return True
+    return False
+
+
 def is_partition(dev):
     """
     Check whether a given device path is a partition or a full disk.
@@ -726,6 +740,8 @@ def is_partition(dev):
         raise Error('not a block device', dev)
 
     name = get_dev_name(dev)
+    if is_bcache(name):
+        return True
     if os.path.exists(os.path.join('/sys/block', name)):
         return False
 
