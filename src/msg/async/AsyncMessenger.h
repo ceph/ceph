@@ -123,7 +123,7 @@ class Processor {
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
-  int start(Worker *w);
+  void start(Worker *w);
   void accept();
 };
 
