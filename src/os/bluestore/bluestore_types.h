@@ -91,6 +91,41 @@ ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 void small_encode(const vector<bluestore_pextent_t>& v, bufferlist& bl);
 void small_decode(vector<bluestore_pextent_t>& v, bufferlist::iterator& p);
 
+/// blob id: positive = local, negative = shared bnode
+typedef int64_t bluestore_blob_id_t;
+
+
+/// lextent: logical data block back by the extent
+struct bluestore_lextent_t {
+  bluestore_blob_id_t blob;  ///< blob
+  uint32_t offset;           ///< relative offset within the blob
+  uint32_t length;           ///< length within the blob
+
+  bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
+		      uint32_t o = 0,
+		      uint32_t l = 0)
+    : blob(_blob),
+      offset(o),
+      length(l) {}
+
+  uint64_t end() const {
+    return offset + length;
+  }
+
+  bool is_shared() const {
+    return blob < 0;
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<bluestore_lextent_t*>& o);
+};
+WRITE_CLASS_ENCODER(bluestore_lextent_t)
+
+ostream& operator<<(ostream& out, const bluestore_lextent_t& o);
+
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {
   struct record_t {
@@ -121,7 +156,7 @@ struct bluestore_extent_ref_map_t {
   }
 
   void get(uint32_t offset, uint32_t len);
-  void put(uint32_t offset, uint32_t len, vector<bluestore_pextent_t> *release);
+  void put(uint32_t offset, uint32_t len, vector<bluestore_lextent_t> *release);
 
   bool contains(uint32_t offset, uint32_t len) const;
   bool intersects(uint32_t offset, uint32_t len) const;
@@ -494,42 +529,6 @@ struct bluestore_blob_t {
 WRITE_CLASS_ENCODER(bluestore_blob_t)
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
-
-
-/// blob id: positive = local, negative = shared bnode
-typedef int64_t bluestore_blob_id_t;
-
-
-/// lextent: logical data block back by the extent
-struct bluestore_lextent_t {
-  bluestore_blob_id_t blob;  ///< blob
-  uint32_t offset;           ///< relative offset within the blob
-  uint32_t length;           ///< length within the blob
-
-  bluestore_lextent_t(bluestore_blob_id_t _blob = 0,
-		      uint32_t o = 0,
-		      uint32_t l = 0)
-    : blob(_blob),
-      offset(o),
-      length(l) {}
-
-  uint64_t end() const {
-    return offset + length;
-  }
-
-  bool is_shared() const {
-    return blob < 0;
-  }
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_lextent_t*>& o);
-};
-WRITE_CLASS_ENCODER(bluestore_lextent_t)
-
-ostream& operator<<(ostream& out, const bluestore_lextent_t& o);
 
 typedef map<bluestore_blob_id_t, bluestore_blob_t> bluestore_blob_map_t;
 
