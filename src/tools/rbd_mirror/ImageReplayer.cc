@@ -23,6 +23,7 @@
 #include "Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
+#include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
 #include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -296,6 +297,7 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
 template <typename I>
 ImageReplayer<I>::~ImageReplayer()
 {
+  assert(m_event_preprocessor == nullptr);
   assert(m_replay_status_formatter == nullptr);
   assert(m_local_image_ctx == nullptr);
   assert(m_local_replay == nullptr);
@@ -539,6 +541,9 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     std::swap(m_on_start_finish, on_finish);
   }
 
+  m_event_preprocessor = EventPreprocessor<I>::create(
+    *m_local_image_ctx, *m_remote_journaler, m_local_mirror_uuid,
+    &m_client_meta, m_threads->work_queue);
   m_replay_status_formatter =
     ReplayStatusFormatter<I>::create(m_remote_journaler, m_local_mirror_uuid);
 
@@ -703,7 +708,7 @@ void ImageReplayer<I>::handle_replay_ready()
   }
 
   if (m_replay_tag_valid && m_replay_tag.tid == m_replay_tag_tid) {
-    process_entry();
+    preprocess_entry();
     return;
   }
 
@@ -978,6 +983,43 @@ void ImageReplayer<I>::handle_allocate_local_tag(int r) {
     return;
   }
 
+  preprocess_entry();
+}
+
+template <typename I>
+void ImageReplayer<I>::preprocess_entry() {
+  dout(20) << "preprocessing entry tid=" << m_replay_entry.get_commit_tid()
+           << dendl;
+
+  bufferlist data = m_replay_entry.get_data();
+  bufferlist::iterator it = data.begin();
+  int r = m_local_replay->decode(&it, &m_event_entry);
+  if (r < 0) {
+    derr << "failed to decode journal event" << dendl;
+    handle_replay_complete(r, "failed to decode journal event");
+    return;
+  }
+
+  if (!m_event_preprocessor->is_required(m_event_entry)) {
+    process_entry();
+    return;
+  }
+
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_preprocess_entry>(this);
+  m_event_preprocessor->preprocess(&m_event_entry, ctx);
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_preprocess_entry(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to preprocess journal event" << dendl;
+    handle_replay_complete(r, "failed to preprocess journal event");
+    return;
+  }
+
   process_entry();
 }
 
@@ -986,21 +1028,11 @@ void ImageReplayer<I>::process_entry() {
   dout(20) << "processing entry tid=" << m_replay_entry.get_commit_tid()
            << dendl;
 
-  bufferlist data = m_replay_entry.get_data();
-  bufferlist::iterator it = data.begin();
-
-  librbd::journal::EventEntry event_entry;
-  int r = m_local_replay->decode(&it, &event_entry);
-  if (r < 0) {
-    derr << "failed to decode journal event" << dendl;
-    handle_replay_complete(r, "failed to decode journal event");
-    return;
-  }
-
   Context *on_ready = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_process_entry_ready>(this);
   Context *on_commit = new C_ReplayCommitted(this, std::move(m_replay_entry));
-  m_local_replay->process(event_entry, on_ready, on_commit);
+  m_local_replay->process(m_event_entry, on_ready, on_commit);
+  m_event_entry = {};
 }
 
 template <typename I>
@@ -1305,6 +1337,10 @@ void ImageReplayer<I>::shut_down(int r, Context *on_start) {
         m_local_journal->stop_external_replay();
         m_local_journal = nullptr;
         m_local_replay = nullptr;
+
+        delete m_event_preprocessor;
+        m_event_preprocessor = nullptr;
+
         ctx->complete(0);
       });
     ctx = new FunctionContext([this, ctx](int r) {
