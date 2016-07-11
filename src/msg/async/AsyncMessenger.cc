@@ -237,7 +237,7 @@ int Processor::rebind(const set<int>& avoid_ports)
   return bind(addr, new_avoid);
 }
 
-int Processor::start(Worker *w)
+void Processor::start(Worker *w)
 {
   ldout(msgr->cct, 1) << __func__ << " " << dendl;
 
@@ -246,8 +246,6 @@ int Processor::start(Worker *w)
     worker = w;
     w->center.create_file_event(listen_sd, EVENT_READABLE, listen_handler);
   }
-
-  return 0;
 }
 
 void Processor::accept()
