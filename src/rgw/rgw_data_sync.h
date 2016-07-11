@@ -208,14 +208,14 @@ struct RGWDataSyncEnv {
   RGWHTTPManager *http_manager;
   RGWSyncErrorLogger *error_logger;
   string source_zone;
-  RGWDataSyncModuleRef sync_module;
+  RGWSyncModuleInstanceRef sync_module;
 
   RGWDataSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL), error_logger(NULL), sync_module(NULL) {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, const string& _source_zone,
-            RGWDataSyncModuleRef& _sync_module) {
+            RGWSyncModuleInstanceRef& _sync_module) {
     cct = _cct;
     store = _store;
     conn = _conn;
@@ -249,7 +249,7 @@ public:
       http_manager(store->ctx(), completion_mgr),
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
-  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger, RGWDataSyncModuleRef& module);
+  int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger, RGWSyncModuleInstanceRef& module);
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
@@ -270,7 +270,7 @@ class RGWDataSyncStatusManager {
   string source_zone;
   RGWRESTConn *conn;
   RGWSyncErrorLogger *error_logger;
-  RGWDataSyncModuleRef sync_module;
+  RGWSyncModuleInstanceRef sync_module;
 
   RGWRemoteDataLog source_log;
 
@@ -461,7 +461,7 @@ public:
   int init(const string& _source_zone, RGWRESTConn *_conn,
            const rgw_bucket& bucket, int shard_id,
            RGWSyncErrorLogger *_error_logger,
-           RGWDataSyncModuleRef& _sync_module);
+           RGWSyncModuleInstanceRef& _sync_module);
   void finish();
 
   RGWCoroutine *read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status);
@@ -483,7 +483,7 @@ class RGWBucketSyncStatusManager {
   string source_zone;
   RGWRESTConn *conn;
   RGWSyncErrorLogger *error_logger;
-  RGWDataSyncModuleRef sync_module;
+  RGWSyncModuleInstanceRef sync_module;
 
   rgw_bucket bucket;
 
@@ -519,6 +519,12 @@ public:
 
   int read_sync_status();
   int run();
+};
+
+class RGWDefaultSyncModule : public RGWSyncModule {
+public:
+  RGWDefaultSyncModule() {}
+  int create_instance(map<string, string>& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
 
