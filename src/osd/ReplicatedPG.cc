@@ -4935,6 +4935,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           ctx->mod_desc.create();
           t->touch(soid);
 	}
+	oi.expected_object_size = op.alloc_hint.expected_object_size;
+	oi.expected_write_size = op.alloc_hint.expected_write_size;
+	oi.alloc_hint_flags = op.alloc_hint.flags;
         t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
                           op.alloc_hint.expected_write_size,
 			  op.alloc_hint.flags);
