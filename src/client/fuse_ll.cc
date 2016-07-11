@@ -377,8 +377,9 @@ static void fuse_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
+  UserPerm perm(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_unlink(in, name, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_unlink(in, name, perm);
   fuse_reply_err(req, -r);
 
   cfuse->iput(in); // iput required
