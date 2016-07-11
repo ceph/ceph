@@ -137,7 +137,7 @@ public:
     out->swap(_old_inode);
   }
   void set_other_inode(Inode *in) {
-    _old_inode = in;
+    _other_inode = in;
   }
   Inode *other_inode() {
     return _other_inode.get();
