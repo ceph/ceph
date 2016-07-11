@@ -34,8 +34,12 @@ extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferli
                                  real_time mtime);
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
+extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
+                                       rgw_bucket* bucket, int *shard_id);
 
 extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
+extern void rgw_bucket_instance_key_to_oid(string& key);
+extern void rgw_bucket_instance_oid_to_key(string& oid);
 
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
                                         const string& tenant_name,
@@ -490,7 +494,7 @@ public:
   int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
                list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
 
-  void mark_modified(int shard_id, rgw_bucket_shard& bs);
+  void mark_modified(int shard_id, const rgw_bucket_shard& bs);
   void read_clear_modified(map<int, set<string> > &modified);
 
   bool going_down();
