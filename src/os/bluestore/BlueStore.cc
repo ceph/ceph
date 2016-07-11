@@ -3314,6 +3314,8 @@ void BlueStore::_reap_collections()
     removed_colls.swap(removed_collections);
   }
 
+  bool all_reaped = true;
+
   for (list<CollectionRef>::iterator p = removed_colls.begin();
        p != removed_colls.end();
        ++p) {
@@ -3328,13 +3330,16 @@ void BlueStore::_reap_collections()
 	  }
 	  return true;
 	})) {
-      return;
+      all_reaped = false;
+      continue;
     }
     c->onode_map.clear();
     dout(10) << __func__ << " " << c->cid << " done" << dendl;
   }
 
-  dout(10) << __func__ << " all reaped" << dendl;
+  if (all_reaped) {
+    dout(10) << __func__ << " all reaped" << dendl;
+  }
 }
 
 // ---------------
