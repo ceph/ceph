@@ -432,6 +432,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   // Ignore beacons if filesystem is disabled
   if (!mdsmap.get_enabled()) {
     dout(1) << "warning, MDS " << m->get_orig_source_inst() << " up but filesystem disabled" << dendl;
+    m->put();
     return false;
   }
 
@@ -501,6 +502,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
       dout(0) << "got beacon for MDS in STATE_STOPPING, ignoring requested state change"
 	       << dendl;
       _note_beacon(m);
+      m->put();
       return true;
     }
 
