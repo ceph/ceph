@@ -274,7 +274,6 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 	baseurl=http://download.ceph.com/rpm/el6/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -312,7 +311,6 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 	baseurl=http://download.ceph.com/rpm-emperor/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -438,7 +436,6 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 	baseurl=http://download.ceph.com/rpm-firefly/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -511,7 +508,6 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 	baseurl=http://download.ceph.com/rpm/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
