@@ -315,7 +315,7 @@ if(USE_NSS)
 else(USE_NSS)
   #openssl
   find_package(OpenSSL REQUIRED)
-  set(HAVE_OPENSSL ON)
+  set(USE_OPENSSL ON)
   set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
   message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
 endif(USE_NSS)
@@ -340,6 +340,47 @@ if(WITH_RADOSGW)
 endif(WITH_RADOSGW)
 
 option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
+
+if (WITH_RADOSGW)
+  if (NOT DEFINED OPENSSL_FOUND)
+    message(STATUS "Looking for openssl anyways, because radosgw selected")
+    find_package(OpenSSL)
+  endif()
+  if (OPENSSL_FOUND)
+    execute_process(
+      COMMAND
+	"sh" "-c"
+	"objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+      OUTPUT_VARIABLE LIBSSL_SONAME
+      ERROR_VARIABLE OBJDUMP_ERRORS
+      RESULT_VARIABLE OBJDUMP_RESULTS
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (OBJDUMP_RESULTS)
+      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+    endif()
+    if (NOT OBJDUMP_ERRORS STREQUAL "")
+      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+    endif()
+    execute_process(
+      COMMAND
+	"sh" "-c"
+	"objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+      OUTPUT_VARIABLE LIBCRYPTO_SONAME
+      ERROR_VARIABLE OBJDUMP_ERRORS
+      RESULT_VARIABLE OBJDUMP_RESULTS
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (OBJDUMP_RESULTS)
+      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+    endif()
+    if (NOT OBJDUMP_ERRORS STREQUAL "")
+      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+    endif()
+    message(STATUS "ssl soname: ${LIBSSL_SONAME}")
+    message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
+  else()
+    message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
+  endif()
+endif (WITH_RADOSGW)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)

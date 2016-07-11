@@ -909,13 +909,21 @@ if(WITH_RADOSGW)
 	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
   set_property(TARGET civetweb_common_objs
     APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
-  if(HAVE_SSL)
+  if(USE_OPENSSL)
     set_property(TARGET civetweb_common_objs
       APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
-    target_include_directories(civetweb_common_objs PUBLIC
+    target_include_directories(civetweb_common_objs PRIVATE
       "${SSL_INCLUDE_DIR}")
-  endif(HAVE_SSL)
+  endif(USE_OPENSSL)
+  if (LIBSSL_SONAME)
+    set_property(TARGET civetweb_common_objs
+      APPEND PROPERTY COMPILE_DEFINITIONS SSL_LIB="${LIBSSL_SONAME}")
+    set_property(TARGET civetweb_common_objs
+      APPEND PROPERTY COMPILE_DEFINITIONS CRYPTO_LIB="${LIBCRYPTO_SONAME}")
+  endif()
+
   add_subdirectory(rgw)
+
 endif(WITH_RADOSGW)
 
 install(FILES
