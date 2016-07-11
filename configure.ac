@@ -1166,6 +1166,7 @@ LIBS="$PTHREAD_LIBS $LIBS"
 CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
 AC_CHECK_FUNC([pthread_spin_init],
   [AC_DEFINE(HAVE_PTHREAD_SPINLOCK, 1, [Define if you have pthread_spin_init])])
+AC_CHECK_FUNCS([pthread_getname_np pthread_setname_np pthread_set_name_np])
 LIBS="$saved_LIBS"
 CFLAGS="$saved_CFLAGS"
 
