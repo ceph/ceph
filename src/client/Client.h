@@ -787,7 +787,7 @@ private:
 
   int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
 	    InodeRef *inp = 0);
-  int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, int uid=-1, int gid=-1);
   int _mkdir(Inode *dir, const char *name, mode_t mode, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
@@ -1026,7 +1026,7 @@ public:
   void seekdir(dir_result_t *dirp, loff_t offset);
 
   int link(const char *existing, const char *newname, const UserPerm& perm);
-  int unlink(const char *path);
+  int unlink(const char *path, const UserPerm& perm);
   int rename(const char *from, const char *to);
 
   // dirs
@@ -1159,7 +1159,7 @@ public:
 	       Inode **out, int uid = -1, int gid = -1);
   int ll_symlink(Inode *in, const char *name, const char *value,
 		 struct stat *attr, Inode **out, int uid = -1, int gid = -1);
-  int ll_unlink(Inode *in, const char *name, int uid = -1, int gid = -1);
+  int ll_unlink(Inode *in, const char *name, const UserPerm& perm);
   int ll_rmdir(Inode *in, const char *name, int uid = -1, int gid = -1);
   int ll_rename(Inode *parent, const char *name, Inode *newparent,
 		const char *newname, int uid = -1, int gid = -1);

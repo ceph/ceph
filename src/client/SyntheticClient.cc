@@ -1075,7 +1075,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       client->link(a, b, perms);
     } else if (strcmp(op, "unlink") == 0) {
       const char *a = t.get_string(buf, p);
-      client->unlink(a);
+      client->unlink(a, perms);
     } else if (strcmp(op, "rename") == 0) {
       const char *a = t.get_string(buf, p);
       const char *b = t.get_string(buf2, p);
@@ -1311,7 +1311,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *n = t.get_string(buf, p);
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	client->ll_unlink(i1, n);
+	client->ll_unlink(i1, n, perms);
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_rmdir") == 0) {
@@ -1584,7 +1584,7 @@ int SyntheticClient::clean_dir(string& basedir)
       clean_dir(file);
       client->rmdir(file.c_str());
     } else {
-      client->unlink(file.c_str());
+      client->unlink(file.c_str(), perms);
     }
   }
 
@@ -1842,6 +1842,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
 {
   int whoami = client->get_nodeid().v;
   char d[255];
+  UserPerm perms = client->pick_my_perms();
 
   if (priv) {
     for (int c=0; c<count; c++) {
@@ -1872,7 +1873,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
       if (more) {
         client->lstat(d, &st);
         int fd = client->open(d, O_RDONLY);
-        client->unlink(d);
+        client->unlink(d, perms);
         client->close(fd);
       }
 
@@ -1941,6 +1942,7 @@ int SyntheticClient::open_shared(int num, int count)
 {
   // files
   char d[255];
+  UserPerm perms = client->pick_my_perms();
   for (int c=0; c<count; c++) {
     // open
     list<int> fds;
@@ -1953,7 +1955,7 @@ int SyntheticClient::open_shared(int num, int count)
     if (false && client->get_nodeid() == 0)
       for (int n=0; n<num; n++) {
 	snprintf(d, sizeof(d), "test/file.%d", n);
-	client->unlink(d);
+	client->unlink(d, perms);
       }
 
     while (!fds.empty()) {
@@ -2016,7 +2018,8 @@ int SyntheticClient::check_first_primary(int fh)
 
 int SyntheticClient::rm_file(string& fn)
 {
-  return client->unlink(fn.c_str());
+  UserPerm perms = client->pick_my_perms();
+  return client->unlink(fn.c_str(), perms);
 }
 
 int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size is in MB, wrsize in bytes
@@ -2687,7 +2690,7 @@ int SyntheticClient::random_walk(int num_req)
       if (contents.empty())
         op = CEPH_MDS_OP_READDIR;
       else 
-        r = client->unlink( get_random_sub() );   // will fail on dirs
+        r = client->unlink(get_random_sub(), perms);   // will fail on dirs
     }
      
     if (op == CEPH_MDS_OP_RENAME) {
@@ -2888,7 +2891,7 @@ void SyntheticClient::foo()
       }
       for (int i=0; i<10; i++) {
 	snprintf(b, sizeof(b), "/b/%d", i);
-	client->unlink(b);
+	client->unlink(b, perms);
       }
     }
     return;
@@ -2897,7 +2900,7 @@ void SyntheticClient::foo()
     // bug1.cpp
     const char *fn = "blah";
     char buffer[8192]; 
-    client->unlink(fn);
+    client->unlink(fn, perms);
     int handle = client->open(fn,O_CREAT|O_RDWR,S_IRWXU);
     assert(handle>=0);
     int r=client->write(handle,buffer,8192);
@@ -2993,7 +2996,7 @@ void SyntheticClient::foo()
       char dst[80];
       snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
-      client->unlink(dst);
+      client->unlink(dst, perms);
     }
 
     
@@ -3010,12 +3013,12 @@ void SyntheticClient::foo()
   
   // unlink fun
   client->mknod("a", 0644);
-  client->unlink("a");
+  client->unlink("a", perms);
   client->mknod("b", 0644);
   client->link("b", "c", perms);
-  client->unlink("c");
+  client->unlink("c", perms);
   client->mkdir("d", 0755);
-  client->unlink("d");
+  client->unlink("d", perms);
   client->rmdir("d");
 
   // rename fun
@@ -3136,11 +3139,11 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	break;
       case 1: 
 	client->mknod(src.c_str(), 0755); 
-	client->unlink(dst.c_str());
+	client->unlink(dst.c_str(), perms);
 	client->link(src.c_str(), dst.c_str(), perms); 
 	break;
-      case 2: client->unlink(src.c_str()); break;
-      case 3: client->unlink(dst.c_str()); break;
+      case 2: client->unlink(src.c_str(), perms); break;
+      case 3: client->unlink(dst.c_str(), perms); break;
 	//case 4: client->mknod(src.c_str(), 0755); break;
 	//case 5: client->mknod(dst.c_str(), 0755); break;
       }

@@ -553,7 +553,8 @@ extern "C" int ceph_unlink(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->unlink(path);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->unlink(path, perms);
 }
 
 extern "C" int ceph_rename(struct ceph_mount_info *cmount, const char *from,
@@ -1585,7 +1586,8 @@ extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount,
 			      Inode *in, const char *name,
 			      int uid, int gid)
 {
-  return (cmount->get_client()->ll_unlink(in, name, uid, gid));
+  UserPerm perms(uid, gid);
+  return (cmount->get_client()->ll_unlink(in, name, perms));
 }
 
 extern "C" int ceph_ll_statfs(class ceph_mount_info *cmount,
