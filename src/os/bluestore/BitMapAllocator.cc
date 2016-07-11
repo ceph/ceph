@@ -23,7 +23,23 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   : m_num_uncommitted(0),
     m_num_committing(0)
 {
-  int64_t zone_size_blks = 1024; // Change it later
+  int64_t zone_size_blks = g_conf->bluestore_bitmapallocator_blocks_per_zone;
+  assert((zone_size_blks & (zone_size_blks - 1)) == 0);
+  if (zone_size_blks & (zone_size_blks - 1)) {
+    derr << __func__ << " zone_size " << zone_size_blks
+         << " not power of 2 aligned!"
+         << dendl;
+    return;
+  }
+
+  int64_t span_size = g_conf->bluestore_bitmapallocator_span_size;
+  assert((span_size & (span_size - 1)) == 0);
+  if (span_size & (span_size - 1)) {
+    derr << __func__ << " span_size " << span_size
+         << " not power of 2 aligned!"
+         << dendl;
+    return;
+  }
 
   m_block_size = block_size;
   m_bit_alloc = new BitAllocator(device_size / block_size,
@@ -89,6 +105,8 @@ int BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
+  if (want_size == 0)
+    return 0;
 
   assert(!(alloc_unit % m_block_size));
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
@@ -136,6 +154,7 @@ int BitMapAllocator::release(
 
 uint64_t BitMapAllocator::get_free()
 {
+  assert(m_bit_alloc->size() >= m_bit_alloc->get_used_blocks());
   return ((
     m_bit_alloc->size() - m_bit_alloc->get_used_blocks()) *
     m_block_size);
