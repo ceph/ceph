@@ -1,3 +1,2 @@
 include rados.pyx
 include rados.pxd
-include rados.c
