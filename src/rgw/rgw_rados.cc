@@ -3355,6 +3355,17 @@ int RGWRados::replace_region_with_zonegroup()
       zoneparams.metadata_heap = ".rgw.meta";
       return zoneparams.update();
     }
+    /* update master zone */
+    RGWZoneGroup default_zg(default_zonegroup_name);
+    ret = default_zg.init(cct, this);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << __func__ << ": error in initializing default zonegroup: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    if (ret != -ENOENT && default_zg.master_zone.empty()) {
+      default_zg.master_zone = zoneparams.get_id();
+      return default_zg.update();
+    }
     return 0;
   }
 
