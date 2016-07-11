@@ -315,8 +315,8 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
   r = ::bind(listen_sd, sa.get_sockaddr(), sa.get_sockaddr_len());
   if (r < 0) {
     r = -errno;
-    lderr(cct) << __func__ << " unable to bind to " << sa.get_sockaddr()
-               << ": " << cpp_strerror(r) << dendl;
+    ldout(cct, 10) << __func__ << " unable to bind to " << sa.get_sockaddr()
+                   << ": " << cpp_strerror(r) << dendl;
     ::close(listen_sd);
     return r;
   }
