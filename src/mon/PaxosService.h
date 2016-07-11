@@ -576,10 +576,7 @@ public:
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return
-      !is_proposing() &&
-      is_write_ready() &&
-      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
+    return is_write_ready(); 
   }
 
   /**
