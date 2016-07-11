@@ -571,7 +571,7 @@ void MonClient::handle_auth(MAuthReply *m)
     ldout(cct, 10) << "_set_state on " << m->get_connection()->get_peer_addr()
 	<< " to AUTHENTICATING." << dendl;
   }
-  assert(auth); //FAILREF
+  assert(auth);
   if (m->global_id && m->global_id != global_id) {
     global_id = m->global_id;
     auth->set_global_id(global_id);

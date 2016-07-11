@@ -190,12 +190,6 @@ private:
   void _reopen_session() {
     _reopen_session(-1, string());
   }
-  /*void set_default_state(MonClientState new_state) {
-    state__ = new_state;
-  }*/
-  /*bool check_default_state(MonClientState compare_state) {
-    return compare_state == state__;
-  }*/
   void _mark_down_all() {
     //state_map.clear(); //this wasn't really done before...
     if (cur_con) {
