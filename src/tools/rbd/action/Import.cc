@@ -74,8 +74,9 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   assert(imgname);
 
   uint64_t order;
-  r = opts.get(RBD_IMAGE_OPTION_ORDER, &order);
-  assert(r == 0);
+  if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
+    order = g_conf->rbd_default_order;
+  }
 
   // try to fill whole imgblklen blocks for sparsification
   uint64_t image_pos = 0;
