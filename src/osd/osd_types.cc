@@ -4706,7 +4706,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(15, 8, bl);
+  ENCODE_START(16, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4734,13 +4734,16 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(local_mtime, bl);
   ::encode(data_digest, bl);
   ::encode(omap_digest, bl);
+  ::encode(expected_object_size, bl);
+  ::encode(expected_write_size, bl);
+  ::encode(alloc_hint_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(15, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -4813,6 +4816,15 @@ void object_info_t::decode(bufferlist::iterator& bl)
     clear_flag(FLAG_DATA_DIGEST);
     clear_flag(FLAG_OMAP_DIGEST);
   }
+  if (struct_v >= 16) {
+    ::decode(expected_object_size, bl);
+    ::decode(expected_write_size, bl);
+    ::decode(alloc_hint_flags, bl);
+  } else {
+    expected_object_size = 0;
+    expected_write_size = 0;
+    alloc_hint_flags = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4838,6 +4850,9 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("truncate_size", truncate_size);
   f->dump_unsigned("data_digest", data_digest);
   f->dump_unsigned("omap_digest", omap_digest);
+  f->dump_unsigned("expected_object_size", expected_object_size);
+  f->dump_unsigned("expected_write_size", expected_write_size);
+  f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
@@ -4872,6 +4887,9 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " dd " << std::hex << oi.data_digest << std::dec;
   if (oi.is_omap_digest())
     out << " od " << std::hex << oi.omap_digest << std::dec;
+  out << " alloc_hint [" << oi.expected_object_size
+      << " " << oi.expected_write_size
+      << " " << oi.alloc_hint_flags << "]";
 
   out << ")";
   return out;
