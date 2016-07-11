@@ -22,6 +22,7 @@
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
 #include "rgw_period_puller.h"
+#include "rgw_sync_module.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -1889,6 +1890,8 @@ protected:
   
   RGWCoroutinesManagerRegistry *cr_registry;
 
+  RGWSyncModulesManager *sync_modules_manager{nullptr};
+
   RGWZoneGroup zonegroup;
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
   RGWZoneParams zone_params; /* internal zone params, e.g., rados pools */
@@ -2030,6 +2033,9 @@ public:
     return obj_tombstone_cache;
   }
 
+  RGWSyncModulesManager *get_sync_modules_manager() {
+    return sync_modules_manager;
+  }
   int get_required_alignment(rgw_bucket& bucket, uint64_t *alignment);
   int get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size);
 
