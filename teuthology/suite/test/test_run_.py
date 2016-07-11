@@ -18,6 +18,7 @@ class TestRun(object):
             suite_branch='suite_branch',
             ceph_branch='ceph_branch',
             ceph_sha1='ceph_sha1',
+            email='address@example.com',
             teuthology_branch='teuthology_branch',
             kernel_branch=None,
             kernel_flavor='kernel_flavor',
@@ -26,6 +27,20 @@ class TestRun(object):
             base_yaml_paths=list(),
         )
         self.args = YamlConfig.from_dict(self.args_dict)
+
+    @patch('teuthology.suite.run.util.git_ls_remote')
+    @patch('teuthology.suite.run.Run.choose_ceph_version')
+    @patch('teuthology.suite.run.util.git_validate_sha1')
+    def test_email_addr(self, m_git_validate_sha1, m_choose_ceph_version, m_git_ls_remote):
+        # neuter choose_X_branch
+        m_git_validate_sha1.return_value = self.args_dict['ceph_sha1']
+        m_choose_ceph_version.return_value = self.args_dict['ceph_sha1']
+        self.args_dict['teuthology_branch'] = 'master'
+        self.args_dict['suite_branch'] = 'master'
+        m_git_ls_remote.return_value = 'suite_sha1'
+
+        runobj = self.klass(self.args)
+        assert runobj.base_config.email == self.args_dict['email']
 
     @patch('teuthology.suite.run.util.fetch_repos')
     def test_name(self, m_fetch_repos):
