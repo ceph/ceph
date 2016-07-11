@@ -461,7 +461,7 @@ public:
 
   version_t get_committing() const
   {
-    return committed;
+    return committing;
   }
 
   // sessions
