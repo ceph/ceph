@@ -378,6 +378,13 @@ protected:
 		   //MClientRequest *req, int uid, int gid,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
+
+  int make_request(MetaRequest *req, const UserPerm& perm,
+		   InodeRef *ptarget = 0, bool *pcreated = 0,
+		   int use_mds=-1, bufferlist *pdirbl=0) {
+    return make_request(req, perm.uid(), perm.gid(), ptarget, pcreated,
+			use_mds, pdirbl);
+  }
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
@@ -773,6 +780,10 @@ private:
   //   call these with client_lock held!
   int _do_lookup(Inode *dir, const string& name, int mask, InodeRef *target, int uid, int gid);
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target, int uid, int gid);
+  int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
+	      const UserPerm& perm) {
+    return _lookup(dir, dname, mask, target, perm.uid(), perm.gid());
+  }
 
   int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
 	    InodeRef *inp = 0);
