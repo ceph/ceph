@@ -3656,6 +3656,7 @@ int BlueStore::_do_read(
     } else {
       uint64_t l = length - pos;
       if (pr != pr_end) {
+        assert(pr->first > pos + offset);
 	l = pr->first - (pos + offset);
       }
       dout(30) << __func__ << " assemble 0x" << std::hex << pos
