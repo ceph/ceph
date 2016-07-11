@@ -5353,12 +5353,21 @@ bool MDCache::process_imported_caps()
   return false;
 }
 
-void MDCache::check_realm_past_parents(SnapRealm *realm)
+void MDCache::check_realm_past_parents(SnapRealm *realm, bool reconnect)
 {
   // are this realm's parents fully open?
   if (realm->have_past_parents_open()) {
     dout(10) << " have past snap parents for realm " << *realm 
 	     << " on " << *realm->inode << dendl;
+    if (reconnect) {
+      // finish off client snaprealm reconnects?
+      auto p = reconnected_snaprealms.find(realm->inode->ino());
+      if (p != reconnected_snaprealms.end()) {
+	for (auto q = p->second.begin(); q != p->second.end(); ++q)
+	  finish_snaprealm_reconnect(q->first, realm, q->second);
+	reconnected_snaprealms.erase(p);
+      }
+    }
   } else {
     if (!missing_snap_parents.count(realm->inode)) {
       dout(10) << " MISSING past snap parents for realm " << *realm
@@ -5440,7 +5449,7 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 
     SnapRealm *realm = in->find_snaprealm();
 
-    check_realm_past_parents(realm);
+    check_realm_past_parents(realm, realm == in->snaprealm);
 
     if (p != reconnected_caps.end()) {
       bool missing_snap_parent = false;
@@ -6123,10 +6132,6 @@ void MDCache::identify_files_to_recover()
       in->auth_pin(&in->filelock);
       in->filelock.set_state(LOCK_PRE_SCAN);
       rejoin_recover_q.push_back(in);
-
-      // make sure past parents are open/get opened
-      SnapRealm *realm = in->find_snaprealm();
-      check_realm_past_parents(realm);
     } else {
       rejoin_check_q.push_back(in);
     }
