@@ -663,7 +663,7 @@ protected:
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
-  void _try_to_trim_inode(Inode *in);
+  void _try_to_trim_inode(Inode *in, bool sched_inval);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len);
   void _invalidate_inode_cache(Inode *in);

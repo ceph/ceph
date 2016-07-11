@@ -1799,8 +1799,10 @@ void Client::put_request(MetaRequest *request)
 
     if (other_in) {
       if (other_in->dir &&
-	  (op == CEPH_MDS_OP_RMDIR || op == CEPH_MDS_OP_RENAME))
-	_try_to_trim_inode(other_in.get());
+	  (op == CEPH_MDS_OP_RMDIR ||
+	   op == CEPH_MDS_OP_RENAME ||
+	   op == CEPH_MDS_OP_RMSNAP))
+	_try_to_trim_inode(other_in.get(), false);
     }
   }
 }
@@ -4794,7 +4796,7 @@ void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
     async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn, del));
 }
 
-void Client::_try_to_trim_inode(Inode *in)
+void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
 {
   int ref = in->get_num_ref();
 
@@ -4803,22 +4805,31 @@ void Client::_try_to_trim_inode(Inode *in)
 	 p != in->dir->dentries.end(); ) {
       Dentry *dn = p->second;
       ++p;
-      if (dn->lru_is_expireable())
-	unlink(dn, false, false);  // close dir, drop dentry
-    }
-    --ref;
-  }
-  // make sure inode was not freed when closing dir
-  if (ref == 0)
-    return;
+      /* rmsnap removes whole subtree, need trim inodes recursively.
+       * we don't need to invalidate dentries recursively. because
+       * invalidating a directory dentry effectively invalidate
+       * whole subtree */
+      if (in->snapid != CEPH_NOSNAP && dn->inode && dn->inode->is_dir())
+	_try_to_trim_inode(dn->inode.get(), false);
 
-  set<Dentry*>::iterator q = in->dn_set.begin();
-  while (q != in->dn_set.end()) {
-    Dentry *dn = *q++;
-    // FIXME: we play lots of unlink/link tricks when handling MDS replies,
-    //        so in->dn_set doesn't always reflect the state of kernel's dcache.
-    _schedule_invalidate_dentry_callback(dn, true);
-    unlink(dn, true, true);
+      if (dn->lru_is_expireable())
+	unlink(dn, true, false);  // keep dir, drop dentry
+    }
+    if (in->dir->dentries.empty()) {
+      close_dir(in->dir);
+      --ref;
+    }
+  }
+
+  if (ref > 0 && in->ll_ref > 0 && sched_inval) {
+    set<Dentry*>::iterator q = in->dn_set.begin();
+    while (q != in->dn_set.end()) {
+      Dentry *dn = *q++;
+      // FIXME: we play lots of unlink/link tricks when handling MDS replies,
+      //        so in->dn_set doesn't always reflect the state of kernel's dcache.
+      _schedule_invalidate_dentry_callback(dn, true);
+      unlink(dn, true, true);
+    }
   }
 }
 
@@ -4929,7 +4940,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
   // may drop inode's last ref
   if (deleted_inode)
-    _try_to_trim_inode(in);
+    _try_to_trim_inode(in, true);
 
   m->put();
 }
@@ -10812,6 +10823,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
     req->set_other_inode(in.get());
   } else {
     unlink(de, true, true);
+    req->set_other_inode(in.get());
   }
 
   res = make_request(req, uid, gid);
