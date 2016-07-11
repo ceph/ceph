@@ -374,7 +374,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
     if (locator.size())
         src_name += "(@" + locator + ")";
     cout << src_pool << ":" << src_name  << " => "
-      << target_pool << ":" << target_name << std::endl;
+         << target_pool << ":" << target_name << std::endl;
 
     src_ctx.locator_set_key(locator);
     src_ctx.set_namespace(nspace);

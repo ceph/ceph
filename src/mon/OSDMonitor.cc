@@ -1833,7 +1833,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   if (m->if_osd_failed()) {
     // add a report
     mon->clog->debug() << m->get_target() << " reported failed by "
-		      << m->get_orig_source_inst() << "\n";
+                       << m->get_orig_source_inst() << "\n";
     failure_info_t& fi = failure_info[target_osd];
     MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
     if (old_op) {
