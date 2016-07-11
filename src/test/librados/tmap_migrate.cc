@@ -44,12 +44,6 @@ TEST_F(TmapMigratePP, DataScan) {
   omap_kvs.insert({"tasty", omap_val});
   ASSERT_EQ(0, ioctx.omap_set("10000000001.00000000", omap_kvs));
 
-  DataScan ds;
-  ASSERT_EQ(0, ds.init());
-  int r = ds.main({"tmap_upgrade", pool_name.c_str()});
-  ASSERT_EQ(r, 0);
-  ds.shutdown();
-
   // Check that the TMAP object is now an omap object
   std::map<std::string, bufferlist> read_vals;
   ASSERT_EQ(0, ioctx.omap_get_vals("10000000000.00000000", "", 1, &read_vals));
