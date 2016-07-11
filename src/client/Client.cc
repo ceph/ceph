@@ -1777,12 +1777,11 @@ void Client::put_request(MetaRequest *request)
     request->take_other_inode(&other_in);
     delete request;
 
-    if (other_in) {
-      if (other_in->dir &&
-	  (op == CEPH_MDS_OP_RMDIR ||
-	   op == CEPH_MDS_OP_RENAME ||
-	   op == CEPH_MDS_OP_RMSNAP))
-	_try_to_trim_inode(other_in.get(), false);
+    if (other_in &&
+	(op == CEPH_MDS_OP_RMDIR ||
+	 op == CEPH_MDS_OP_RENAME ||
+	 op == CEPH_MDS_OP_RMSNAP)) {
+      _try_to_trim_inode(other_in.get(), false);
     }
   }
 }
@@ -4822,6 +4821,12 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
       close_dir(in->dir);
       --ref;
     }
+  }
+
+  if (ref > 0 && (in->flags & I_SNAPDIR_OPEN)) {
+    InodeRef snapdir = open_snapdir(in);
+    _try_to_trim_inode(snapdir.get(), false);
+    --ref;
   }
 
   if (ref > 0 && in->ll_ref > 0 && sched_inval) {
@@ -9487,6 +9492,7 @@ Inode *Client::open_snapdir(Inode *diri)
 
     in->dirfragtree.clear();
     in->snapdir_parent = diri;
+    diri->flags |= I_SNAPDIR_OPEN;
     inode_map[vino] = in;
     if (use_faked_inos())
       _assign_faked_ino(in);
