@@ -215,8 +215,8 @@ class Run(object):
         job_config = JobConfig.from_dict(conf_dict)
         job_config.name = self.name
         job_config.priority = self.args.priority
-        if self.args.results_email:
-            job_config.email = self.args.results_email
+        if self.args.email:
+            job_config.email = self.args.email
         if self.args.owner:
             job_config.owner = self.args.owner
         return job_config
