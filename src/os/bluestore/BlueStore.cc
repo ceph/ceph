@@ -3474,6 +3474,15 @@ int BlueStore::_do_read(
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
   int r = 0;
 
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+           << " size 0x" << o->onode.size << " (" << std::dec
+           << o->onode.size << ")" << dendl;
+  bl.clear();
+
+  if (offset >= o->onode.size) {
+    return r;
+  }
+
   // generally, don't buffer anything, unless the client explicitly requests
   // it.
   bool buffered = false;
@@ -3485,15 +3494,6 @@ int BlueStore::_do_read(
 			  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
     dout(20) << __func__ << " defaulting to buffered read" << dendl;
     buffered = true;
-  }
-
-  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size 0x" << o->onode.size << " (" << std::dec
-	   << o->onode.size << ")" << dendl;
-  bl.clear();
-
-  if (offset >= o->onode.size) {
-    return r;
   }
 
   if (offset + length > o->onode.size) {
@@ -3524,8 +3524,8 @@ int BlueStore::_do_read(
     Blob *bptr = c->get_blob(o, lp->second.blob);
     if (bptr == nullptr) {
       dout(20) << __func__ << "  missed blob " << lp->second.blob << dendl;
+      assert(bptr != nullptr);
     }
-    assert(bptr != nullptr);
     unsigned l_off = pos - lp->first;
     unsigned b_off = l_off + lp->second.offset;
     unsigned b_len = std::min(left, lp->second.length - l_off);
