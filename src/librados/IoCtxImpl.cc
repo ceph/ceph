@@ -225,8 +225,8 @@ int librados::IoCtxImpl::set_snap_write_context(snapid_t seq, vector<snapid_t>& 
   return 0;
 }
 
-int librados::IoCtxImpl::get_object_hash_position(
-    const std::string& oid, uint32_t *hash_position)
+int librados::IoCtxImpl::get_object_hash_position(const std::string& oid, 
+                                                  uint32_t *hash_position)
 {
   int64_t r = objecter->get_object_hash_position(poolid, oid, oloc.nspace);
   if (r < 0)
@@ -235,8 +235,8 @@ int librados::IoCtxImpl::get_object_hash_position(
   return 0;
 }
 
-int librados::IoCtxImpl::get_object_pg_hash_position(
-    const std::string& oid, uint32_t *pg_hash_position)
+int librados::IoCtxImpl::get_object_pg_hash_position(const std::string& oid, 
+                                                     uint32_t *pg_hash_position)
 {
   int64_t r = objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
   if (r < 0)
@@ -463,7 +463,7 @@ int librados::IoCtxImpl::pool_change_auid(unsigned long long auid)
 }
 
 int librados::IoCtxImpl::pool_change_auid_async(unsigned long long auid,
-						  PoolAsyncCompletionImpl *c)
+                                                PoolAsyncCompletionImpl *c)
 {
   objecter->change_pool_auid(poolid,
 			     new C_PoolAsync_Safe(c),
@@ -530,7 +530,7 @@ int librados::IoCtxImpl::nlist(Objecter::NListContext *context, int max_entries)
 }
 
 uint32_t librados::IoCtxImpl::nlist_seek(Objecter::NListContext *context,
-					uint32_t pos)
+                                         uint32_t pos)
 {
   context->list.clear();
   return objecter->list_nobjects_seek(context, pos);
@@ -697,7 +697,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
     cond.Wait(mylock);
   mylock.Unlock();
   ldout(client->cct, 10) << "Objecter returned from "
-	<< ceph_osd_op_name(op) << " r=" << r << dendl;
+                         << ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
 
@@ -721,10 +721,12 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   int op = o->ops[0].op.op;
-  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid 
+                         << " nspace=" << oloc.nspace << dendl;
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
-	                                      *o, snap_seq, pbl, flags,
-	                                      onack, &ver);
+                                                        *o, snap_seq, 
+                                                        pbl, flags,
+                                                        onack, &ver);
   objecter->op_submit(objecter_op);
 
   mylock.Lock();
@@ -732,7 +734,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
     cond.Wait(mylock);
   mylock.Unlock();
   ldout(client->cct, 10) << "Objecter returned from "
-	<< ceph_osd_op_name(op) << " r=" << r << dendl;
+                         << ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
 
@@ -862,11 +864,12 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 }
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
-				   const bufferlist& bl, size_t len,
-				   uint64_t off)
+                                   const bufferlist& bl, size_t len,
+                                   uint64_t off)
 {
   auto ut = ceph::real_clock::now(client->cct);
-  ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
+  ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len 
+                         << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
 
   if (len > UINT_MAX/2)
     return -E2BIG;
@@ -1014,7 +1017,7 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
 }
 
 int librados::IoCtxImpl::aio_stat2(const object_t& oid, AioCompletionImpl *c,
-				  uint64_t *psize, struct timespec *pts)
+                                   uint64_t *psize, struct timespec *pts)
 {
   C_aio_stat2_Ack *onack = new C_aio_stat2_Ack(c, pts);
 
@@ -1035,7 +1038,7 @@ int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
 
 
 int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
-			      std::list< std::pair<time_t, time_t> > *pls)
+                                      std::list< std::pair<time_t, time_t> > *pls)
 {
   Context *onack = new C_aio_Ack(c);
   c->is_read = true;
@@ -1208,7 +1211,7 @@ int librados::IoCtxImpl::read(const object_t& oid,
 
   if (bl.length() < len) {
     ldout(client->cct, 10) << "Returned length " << bl.length()
-	     << " less than original length "<< len << dendl;
+                           << " less than original length "<< len << dendl;
   }
 
   return bl.length();
@@ -1329,7 +1332,7 @@ int librados::IoCtxImpl::rmxattr(const object_t& oid, const char *name)
 }
 
 int librados::IoCtxImpl::setxattr(const object_t& oid,
-				    const char *name, bufferlist& bl)
+                                  const char *name, bufferlist& bl)
 {
   ::ObjectOperation op;
   prepare_assert_ops(&op);
@@ -1338,7 +1341,7 @@ int librados::IoCtxImpl::setxattr(const object_t& oid,
 }
 
 int librados::IoCtxImpl::getxattrs(const object_t& oid,
-				     map<std::string, bufferlist>& attrset)
+                                   map<std::string, bufferlist>& attrset)
 {
   map<string, bufferlist> aset;
 
@@ -1475,11 +1478,10 @@ int librados::IoCtxImpl::aio_watch(const object_t& oid,
 }
 
 
-int librados::IoCtxImpl::notify_ack(
-  const object_t& oid,
-  uint64_t notify_id,
-  uint64_t cookie,
-  bufferlist& bl)
+int librados::IoCtxImpl::notify_ack(const object_t& oid,
+                                    uint64_t notify_id,
+                                    uint64_t cookie,
+                                    bufferlist& bl)
 {
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
@@ -1724,7 +1726,7 @@ void librados::IoCtxImpl::C_aio_stat_Ack::finish(int r)
 ///////////////////////////// C_aio_stat2_Ack ////////////////////////////
 
 librados::IoCtxImpl::C_aio_stat2_Ack::C_aio_stat2_Ack(AioCompletionImpl *_c,
-						     struct timespec *pt)
+                                                      struct timespec *pt)
    : c(_c), pts(pt)
 {
   assert(!c->io);
@@ -1775,13 +1777,12 @@ void librados::IoCtxImpl::C_aio_Safe::finish(int r)
   c->put_unlock();
 }
 
-void librados::IoCtxImpl::object_list_slice(
-  const hobject_t start,
-  const hobject_t finish,
-  const size_t n,
-  const size_t m,
-  hobject_t *split_start,
-  hobject_t *split_finish)
+void librados::IoCtxImpl::object_list_slice(const hobject_t start,
+                                            const hobject_t finish,
+                                            const size_t n,
+                                            const size_t m,
+                                            hobject_t *split_start,
+                                            hobject_t *split_finish)
 {
   if (start.is_max()) {
     *split_start = hobject_t::get_max();
