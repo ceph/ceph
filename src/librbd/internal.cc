@@ -865,7 +865,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
-  int flatten_children(ImageCtx *ictx, const char* snap_name)
+  int flatten_children(ImageCtx *ictx, const char* snap_name, ProgressContext& pctx)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "children flatten " << ictx->name << dendl;
@@ -880,6 +880,11 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return r;
     }
 
+    size_t size = image_info.size();
+    if (size == 0)
+      return 0;
+
+    size_t i = 0;
     Rados rados(ictx->md_ctx);
     for ( auto &info : image_info){
       string pool = info.first.second;
@@ -923,6 +928,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	}
 	imctx->state->close();
       }
+      pctx.update_progress(++i, size);
+      assert(i <= size);
     }
     
     return 0;
@@ -2327,7 +2334,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
-  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags)
+  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx)
   {
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
 
@@ -2338,16 +2345,33 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return r;
 
     if (flags & RBD_SNAP_REMOVE_FLATTEN) {
-	r = flatten_children(ictx, snap_name);
+	r = flatten_children(ictx, snap_name, pctx);
 	if (r < 0) {
 	  return r;
 	}
     }
 
-    if (flags & RBD_SNAP_REMOVE_UNPROTECT) {
+    bool is_protected;
+    r = snap_is_protected(ictx, snap_name, &is_protected);
+    if (r < 0) {
+      return r;
+    }
+
+    if (is_protected && flags & RBD_SNAP_REMOVE_UNPROTECT) {
       r = ictx->operations->snap_unprotect(snap_name);
-      if (r < 0)
+      if (r < 0) {
+	lderr(ictx->cct) << "failed to unprotect snapshot: " << snap_name << dendl;
 	return r;
+      }
+
+      r = snap_is_protected(ictx, snap_name, &is_protected);
+      if (r < 0) {
+	return r;
+      }
+      if (is_protected) {
+	lderr(ictx->cct) << "snapshot is still protected after unprotection" << dendl;
+	assert(0);
+      }
     }
 
     C_SaferCond ctx;
