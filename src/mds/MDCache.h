@@ -607,7 +607,7 @@ public:
   void do_delayed_cap_imports();
   void rebuild_need_snapflush(CInode *head_in, SnapRealm *realm, client_t client,
 			      snapid_t snap_follows);
-  void check_realm_past_parents(SnapRealm *realm);
+  void check_realm_past_parents(SnapRealm *realm, bool reconnect);
   void open_snap_parents();
 
   bool open_undef_inodes_dirfrags();
