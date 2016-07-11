@@ -51,7 +51,7 @@ struct PGLog : DoutPrefixProvider {
     virtual void remove(
       const hobject_t &hoid) = 0;
     virtual void try_stash(
-      const hobject_t &entry,
+      const hobject_t &hoid,
       version_t v) = 0;
     virtual void trim(
       const pg_log_entry_t &entry) = 0;
@@ -229,13 +229,6 @@ struct PGLog : DoutPrefixProvider {
       }
     }
     
-    void reset_riter() {
-      rollback_info_trimmed_to_riter = log.rbegin();
-      while (rollback_info_trimmed_to_riter != log.rend() &&
-        rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to)
-        ++rollback_info_trimmed_to_riter;
-    }
-
     void reset_rollback_info_trimmed_to_riter() {
       rollback_info_trimmed_to_riter = log.rbegin();
       while (rollback_info_trimmed_to_riter != log.rend() &&
@@ -267,7 +260,6 @@ struct PGLog : DoutPrefixProvider {
         }
       }
         
-      reset_riter();
       indexed_data = PGLOG_INDEXED_ALL;
       reset_rollback_info_trimmed_to_riter();
     }
