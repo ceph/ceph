@@ -216,7 +216,8 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
     int rbd_snap_create(rbd_image_t image, const char *snapname)
     int rbd_snap_remove(rbd_image_t image, const char *snapname)
-    int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags)
+    int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags,
+			 librbd_progress_fn_t cb, void *cbdata)
     int rbd_snap_rollback(rbd_image_t image, const char *snapname)
     int rbd_snap_rename(rbd_image_t image, const char *snapname,
                         const char* dstsnapsname)
@@ -1544,8 +1545,9 @@ cdef class Image(object):
         cdef:
             char *_name = name
             uint32_t _flags = flags
+            librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:
-            ret = rbd_snap_remove2(self.image, _name, _flags)
+            ret = rbd_snap_remove2(self.image, _name, _flags, prog_cb, NULL)
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s with flags %llx' % (name, self.name, flags))
 

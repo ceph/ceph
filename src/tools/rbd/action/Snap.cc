@@ -70,13 +70,20 @@ int do_add_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-int do_remove_snap(librbd::Image& image, const char *snapname, bool force)
+int do_remove_snap(librbd::Image& image, const char *snapname, bool force,
+		   bool no_progress)
 {
   uint32_t flags = force? RBD_SNAP_REMOVE_FORCE : 0;
-  int r = image.snap_remove2(snapname, flags);
-  if (r < 0)
+  int r = 0;
+  utils::ProgressContext pc("Removing snap", no_progress);
+  
+  r = image.snap_remove2(snapname, flags, pc);
+  if (r < 0) {
+    pc.fail();
     return r;
+  }
 
+  pc.finish();
   return 0;
 }
 
@@ -239,6 +246,7 @@ int execute_create(const po::variables_map &vm) {
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_no_progress_option(options);
   
   options->add_options()
     ("force", po::bool_switch(), "flatten children and unprotect snapshot if needed.");
@@ -266,7 +274,7 @@ int execute_remove(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_remove_snap(image, snap_name.c_str(), force);
+  r = do_remove_snap(image, snap_name.c_str(), force, vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     if (r == -EBUSY) {
       std::cerr << "rbd: snapshot '" << snap_name << "' "
