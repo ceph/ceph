@@ -6538,7 +6538,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   __u32 num;
 
   if (!o->onode.omap_head) {
-    r = 0;
     goto out;
   }
   ::decode(num, p);
@@ -6551,7 +6550,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
 	     << " <- " << key << dendl;
     txc->t->rmkey(PREFIX_OMAP, final_key);
   }
-  r = 0;
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -6584,7 +6582,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
     it->next();
   }
-  r = 0;
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
