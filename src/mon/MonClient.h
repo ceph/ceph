@@ -196,6 +196,14 @@ private:
   /*bool check_default_state(MonClientState compare_state) {
     return compare_state == state__;
   }*/
+  void _mark_down_all() {
+    //state_map.clear(); //this wasn't really done before...
+    if (cur_con) {
+      cur_con->mark_down();
+    }
+    messenger->mark_down_all(); //if this doesn't work, I guess we could just loop here manually using
+				//state_map entries (entity_addr_t elements)
+  }
   void _set_state(entity_addr_t addr, MonClientState new_state, bool force=false) {
     if (force) {
       state_map[addr] = new_state;

@@ -264,40 +264,41 @@ bool MonClient::ms_dispatch(Message *m)
   }
 
   Mutex::Locker lock(monc_lock);
+  ldout(cct, 10) << "[ms_dispatch] : incoming msg [" << *m << "] from addr ["
+    << m->get_connection()->get_peer_addr() << "]" << dendl;
 
   // ignore any messages outside our current session except some auth replies
-  if ((m->get_connection() != cur_con) && (m->get_type() != CEPH_MSG_AUTH_REPLY)) {
-    ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
+  if ((m->get_connection() != cur_con) && (m->get_type() == CEPH_MSG_MON_MAP)) {
+    if (state_map.find(m->get_connection()->get_peer_addr()) == state_map.end()) {
+      //this is not a monmap magic we are prepared to receive
+      ldout(cct, 10) << "[ms_dispatch] : disposing of monmap magic" << dendl;
+      return true;
+    }
+    ldout(cct, 10) << "[ms_dispatch] : accepting monmap magic" << dendl;
+  }
+
+  if ((m->get_connection() != cur_con) && (m->get_type() != CEPH_MSG_AUTH_REPLY || m->get_type() != CEPH_MSG_MON_MAP)) {
+    ldout(cct, 10) << "[ms_dispatch] : discarding stray monitor message [" << *m << "] from ["
+      << m->get_connection()->get_peer_addr() << "]" << dendl;
     m->put();
     return true;
   }
+  ldout(cct, 10) << "[ms_dispatch] : msg [" << *m << "] not stray" << dendl;
 
   if (m->get_type() == CEPH_MSG_AUTH_REPLY && !hunting) {
+    ldout(cct, 10) << "[ms_dispatch] : msg is auth reply but not hunting" << dendl;
     if (_check_state(m->get_connection()->get_peer_addr(), MC_STATE_NONE)) {
-      ldout(cct, 10) << "discarding stray auth reply message " << *m << dendl;
+      ldout(cct, 10) << "[ms_dispatch] : discarding stray auth reply message " << *m << dendl;
       m->put();
       return true;
     }
-  }
 
-  //SO
-  // if we get here either
-  // // the message connection IS cur_con
-  // // OR
-  // // the message type IS an MAuthReply
-
-//else if (m->get_type() == CEPH_MSG_AUTH_REPLY) {
-    //if (_check_state(cur_con, MC_STATE_HAVE_SESSION)) {
-      //ldout(cct, 10) << "discarding stray auth reply message " << *m << dendl;
+    //if (cur_con && _check_state(cur_con->get_peer_addr(), MC_STATE_HAVE_SESSION)) {
+      //ldout(cct, 10) << "[ms_dispatch] : cur_con is HAVE_SESSION, and NOT trying auth_reply" << dendl;
       //m->put();
       //return true;
     //}
-  //}
-
-  //if (m->get_type() == CEPH_MSG_AUTH_REPLY && !hunting) {
-    //m->put();
-    //return true;
-  //}
+  }
 
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
@@ -447,8 +448,9 @@ void MonClient::shutdown()
     waiting_for_session.pop_front();
   }
 
-  if (cur_con)
-    cur_con->mark_down();
+  _mark_down_all();
+  //if (cur_con)
+    //cur_con->mark_down();
   cur_con.reset(NULL);
   cur_mon.clear();
 
@@ -514,6 +516,28 @@ void MonClient::handle_auth(MAuthReply *m)
   ldout(cct, 10) << "[handle_auth] : from mon named [" << mon << "] at addr ["
     << m->get_connection()->get_peer_addr() << "]" << dendl;
 
+  if (cur_con) {
+    ldout(cct, 10) << "[handle_auth] : CURRENT ADDR, cur_con->addr [" << cur_con->get_peer_addr()
+      << "]" << dendl;
+
+    if (!_check_state(cur_con->get_peer_addr(), MC_STATE_NONE)) {
+      switch (state_map[cur_con->get_peer_addr()]) {
+      case MC_STATE_NEGOTIATING:
+	ldout(cct, 10) << "[handle_auth] : CURRENT STATE, cur_con state [NEGOTIATING]" << dendl;
+	break;
+      case MC_STATE_AUTHENTICATING:
+	ldout(cct, 10) << "[handle_auth] : CURRENT STATE, cur_con state [AUTHENTICATING]" << dendl;
+	break;
+      case MC_STATE_HAVE_SESSION:
+	ldout(cct, 10) << "[handle_auth] : CURRENT STATE, cur_con state [HAVE_SESSION]" << dendl;
+	break;
+      default:
+	ldout(cct, 10) << "[handle_auth] : CURRENT STATE, cur_con state [UNKNOWN]" << dendl;
+	break;
+      }
+    }
+  }
+
   if (_check_state(m->get_connection()->get_peer_addr(), MC_STATE_NEGOTIATING)) { //WORKREF
     ldout(cct, 10) << "[handle_auth] : _check_state = NEGOTIATING" << dendl;
     if (!auth || (int)m->protocol != auth->get_protocol()) {
@@ -559,8 +583,14 @@ void MonClient::handle_auth(MAuthReply *m)
 
   ldout(cct, 10) << "[handle_auth] : auth->handle_response returns err val [" << ret << "]" << dendl;
 
-  if (ret == -EAGAIN) {
+  if (ret == -EINVAL) {
+    ldout(cct, 10) << "[handle_auth] : ret = -EINVAL" << dendl;
+  } else if (ret == -EAGAIN) {
     ldout(cct, 10) << "[handle_auth] : ret = -EAGAIN" << dendl;
+  }
+
+
+  if (ret == -EAGAIN) {
     MAuth *ma = new MAuth;
     ma->protocol = auth->get_protocol();
     auth->prepare_build_request();
@@ -683,24 +713,24 @@ void MonClient::_multiple_reopen_session(int rank, string name)
   // get the initial mon if one is selected based on inputs
   string mon;
   if (rank < 0 && name.length() == 0) {
-    mon = _pick_random_mon();
+    //mon = _pick_random_mon();
+    mon = monmap.get_name(0);
   } else if (name.length()) {
     mon = name;
   } else {
     mon = monmap.get_name(rank);
   }
 
-  int attempt = 1; //FIXREF
+  int attempt = monmap.size(); //FIXREF
 
-  if (cur_con) {
-    cur_con->mark_down();
-  }
+  //mark down all connections, reset the state_map
+  _mark_down_all();
 
   // create and fill the connection vector
   vector<ConnectionRef> con_vec;
   con_vec.push_back(messenger->get_connection(monmap.get_inst(mon)));
   for (int j = 1; j < attempt; j++) {
-    con_vec.push_back(messenger->get_connection(monmap.get_inst(_pick_random_mon())));
+    con_vec.push_back(messenger->get_connection(monmap.get_inst(monmap.get_name(j))));
   }
   ldout(cct, 10) << "[_multiple_reopen_session] : connection vector filled" << dendl;
 
@@ -783,9 +813,10 @@ void MonClient::_reopen_session(int rank, string name)
     cur_mon = monmap.get_name(rank);
   }
 
-  if (cur_con) {
-    cur_con->mark_down();
-  }
+  _mark_down_all();
+  //if (cur_con) {
+    //cur_con->mark_down();
+  ///}
   cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
 
   ldout(cct, 10) << "picked mon." << cur_mon << " con " << cur_con
