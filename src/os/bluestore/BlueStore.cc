@@ -6274,6 +6274,7 @@ int BlueStore::_do_zero(TransContext *txc,
 	   << dendl;
   int r = 0;
   o->exists = true;
+  _assign_nid(txc, o);
 
   _dump_onode(o);
 
