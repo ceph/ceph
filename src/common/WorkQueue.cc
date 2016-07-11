@@ -12,6 +12,8 @@
  * 
  */
 
+#include "include/compat.h"
+
 #include <sstream>
 
 #include "include/types.h"
@@ -95,9 +97,7 @@ void ThreadPool::worker(WorkThread *wt)
   
   std::stringstream ss;
   char name[16] = {0};
-#if !defined(__FreeBSD__)
   pthread_getname_np(pthread_self(), name, sizeof(name));
-#endif
   ss << name << " thread " << name;
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
@@ -302,9 +302,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 
   std::stringstream ss;
   char name[16] = {0};
-#if !defined(__FreeBSD__)
   pthread_getname_np(pthread_self(), name, sizeof(name));
-#endif
   ss << name << " thread " << name;
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
