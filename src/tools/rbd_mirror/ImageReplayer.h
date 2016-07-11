@@ -45,6 +45,7 @@ namespace mirror {
 struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
+namespace image_replayer { template <typename> class EventPreprocessor; }
 namespace image_replayer { template <typename> class ReplayStatusFormatter; }
 
 /**
@@ -165,6 +166,9 @@ protected:
    *    |                     ALLOCATE_LOCAL_TAG  * * * * * *
    *    |                         |                     |   *
    *    |                         v                 (error) *
+   *    |                     PREPROCESS_ENTRY  * * * * * * *
+   *    |                         |                     |   *
+   *    |                         v                 (error) *
    *    |                     PROCESS_ENTRY * * * * * * * * *
    *    |                         |                     |   *
    *    |                         \---------------------/   *
@@ -228,6 +232,7 @@ private:
   int m_last_r = 0;
   std::string m_state_desc;
   BootstrapProgressContext m_progress_cxt;
+  image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
   librados::IoCtx m_local_ioctx, m_remote_ioctx;
@@ -263,6 +268,7 @@ private:
   uint64_t m_replay_tag_tid = 0;
   cls::journal::Tag m_replay_tag;
   librbd::journal::TagData m_replay_tag_data;
+  librbd::journal::EventEntry m_event_entry;
 
   struct C_ReplayCommitted : public Context {
     ImageReplayer *replayer;
@@ -321,6 +327,9 @@ private:
 
   void allocate_local_tag();
   void handle_allocate_local_tag(int r);
+
+  void preprocess_entry();
+  void handle_preprocess_entry(int r);
 
   void process_entry();
   void handle_process_entry_ready(int r);
