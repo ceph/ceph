@@ -817,7 +817,7 @@ public:
 
 private:
   /// throttle promotion attempts
-  atomic_t promote_probability_millis; ///< probability thousands. one word.
+  std::atomic_uint promote_probability_millis{1000}; ///< probability thousands. one word.
   PromoteCounter promote_counter;
   utime_t last_recalibrate;
   unsigned long promote_max_objects, promote_max_bytes;
@@ -826,13 +826,13 @@ public:
   bool promote_throttle() {
     // NOTE: lockless!  we rely on the probability being a single word.
     promote_counter.attempt();
-    if ((unsigned)rand() % 1000 > promote_probability_millis.read())
+    if ((unsigned)rand() % 1000 > promote_probability_millis)
       return true;  // yes throttle (no promote)
     if (promote_max_objects &&
-	promote_counter.objects.read() > promote_max_objects)
+	promote_counter.objects > promote_max_objects)
       return true;  // yes throttle
     if (promote_max_bytes &&
-	promote_counter.bytes.read() > promote_max_bytes)
+	promote_counter.bytes > promote_max_bytes)
       return true;  // yes throttle
     return false;   //  no throttle (promote)
   }
@@ -861,9 +861,9 @@ public:
 
   // -- tids --
   // for ops i issue
-  atomic_t last_tid;
+  std::atomic_uint last_tid{0};
   ceph_tid_t get_tid() {
-    return (ceph_tid_t)last_tid.inc();
+    return (ceph_tid_t)last_tid++;
   }
 
   // -- backfill_reservation --
@@ -1124,18 +1124,18 @@ public:
     NOT_STOPPING,
     PREPARING_TO_STOP,
     STOPPING };
-  atomic_t state;
+  std::atomic_int state{NOT_STOPPING};
   int get_state() {
-    return state.read();
+    return state;
   }
   void set_state(int s) {
-    state.set(s);
+    state = s;
   }
   bool is_stopping() {
-    return get_state() == STOPPING;
+    return state == STOPPING;
   }
   bool is_preparing_to_stop() {
-    return get_state() == PREPARING_TO_STOP;
+    return state == PREPARING_TO_STOP;
   }
   bool prepare_to_stop();
   void got_stop_ack();
@@ -1337,32 +1337,32 @@ public:
   }
 
 private:
-  atomic_t state;
+  std::atomic_int state{STATE_INITIALIZING};
 
 public:
   int get_state() {
-    return state.read();
+    return state;
   }
   void set_state(int s) {
-    state.set(s);
+    state = s;
   }
   bool is_initializing() {
-    return get_state() == STATE_INITIALIZING;
+    return state == STATE_INITIALIZING;
   }
   bool is_preboot() {
-    return get_state() == STATE_PREBOOT;
+    return state == STATE_PREBOOT;
   }
   bool is_booting() {
-    return get_state() == STATE_BOOTING;
+    return state == STATE_BOOTING;
   }
   bool is_active() {
-    return get_state() == STATE_ACTIVE;
+    return state == STATE_ACTIVE;
   }
   bool is_stopping() {
-    return get_state() == STATE_STOPPING;
+    return state == STATE_STOPPING;
   }
   bool is_waiting_for_healthy() {
-    return get_state() == STATE_WAITING_FOR_HEALTHY;
+    return state == STATE_WAITING_FOR_HEALTHY;
   }
 
 private:
