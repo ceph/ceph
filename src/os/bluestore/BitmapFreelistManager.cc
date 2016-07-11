@@ -56,8 +56,9 @@ BitmapFreelistManager::BitmapFreelistManager(KeyValueDB *db,
 
 int BitmapFreelistManager::create(uint64_t new_size, KeyValueDB::Transaction txn)
 {
-  size = new_size;
   bytes_per_block = g_conf->bdev_block_size;
+  assert(ISP2(bytes_per_block));
+  size = P2ALIGN(new_size, bytes_per_block);
   blocks_per_key = g_conf->bluestore_freelist_blocks_per_key;
 
   _init_misc();

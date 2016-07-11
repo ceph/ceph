@@ -3322,6 +3322,8 @@ void BlueStore::_reap_collections()
     removed_colls.swap(removed_collections);
   }
 
+  bool all_reaped = true;
+
   for (list<CollectionRef>::iterator p = removed_colls.begin();
        p != removed_colls.end();
        ++p) {
@@ -3336,13 +3338,16 @@ void BlueStore::_reap_collections()
 	  }
 	  return true;
 	})) {
-      return;
+      all_reaped = false;
+      continue;
     }
     c->onode_map.clear();
     dout(10) << __func__ << " " << c->cid << " done" << dendl;
   }
 
-  dout(10) << __func__ << " all reaped" << dendl;
+  if (all_reaped) {
+    dout(10) << __func__ << " all reaped" << dendl;
+  }
 }
 
 // ---------------
@@ -3664,6 +3669,7 @@ int BlueStore::_do_read(
     } else {
       uint64_t l = length - pos;
       if (pr != pr_end) {
+        assert(pr->first > pos + offset);
 	l = pr->first - (pos + offset);
       }
       dout(30) << __func__ << " assemble 0x" << std::hex << pos
@@ -6294,6 +6300,7 @@ int BlueStore::_do_zero(TransContext *txc,
 	   << dendl;
   int r = 0;
   o->exists = true;
+  _assign_nid(txc, o);
 
   _dump_onode(o);
 
