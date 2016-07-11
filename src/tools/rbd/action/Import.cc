@@ -131,28 +131,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
   }
 
-  uint64_t format;
-  r = opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
-  assert(r == 0);
-  if (format == 1) {
-    uint64_t stripe_unit, stripe_count;
-    r = opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    assert(r == 0);
-    r = opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
-    assert(r == 0);
-
-    // weird striping not allowed with format 1!
-    if ((stripe_unit || stripe_count) &&
-        (stripe_unit != (1ull << order) && stripe_count != 1)) {
-      std::cerr << "non-default striping not allowed with format 1; "
-                << "use --image-format 2" << std::endl;
-      return -EINVAL;
-    }
-    int order_ = order;
-    r = rbd.create(io_ctx, imgname, size, &order_);
-  } else {
-    r = rbd.create4(io_ctx, imgname, size, opts);
-  }
+  r = rbd.create4(io_ctx, imgname, size, opts);
   if (r < 0) {
     std::cerr << "rbd: image creation failed" << std::endl;
     goto done;
