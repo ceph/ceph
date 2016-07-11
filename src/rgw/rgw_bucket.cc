@@ -6,6 +6,8 @@
 #include <string>
 #include <map>
 
+#include <boost/utility/string_ref.hpp>
+
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "rgw_rados.h"
@@ -293,6 +295,33 @@ int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersi
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
 
+// 'tenant/' is used in bucket instance keys for sync to avoid parsing ambiguity
+// with the existing instance[:shard] format. once we parse the shard, the / is
+// replaced with a : to match the [tenant:]instance format
+void rgw_bucket_instance_key_to_oid(string& key)
+{
+  // replace tenant/ with tenant:
+  auto c = key.find('/');
+  if (c != string::npos) {
+    key[c] = ':';
+  }
+}
+
+// convert bucket instance oids back to the tenant/ format for metadata keys.
+// it's safe to parse 'tenant:' only for oids, because they won't contain the
+// optional :shard at the end
+void rgw_bucket_instance_oid_to_key(string& oid)
+{
+  // find first : (could be tenant:bucket or bucket:instance)
+  auto c = oid.find(':');
+  if (c != string::npos) {
+    // if we find another :, the first one was for tenant
+    if (oid.find(':', c + 1) != string::npos) {
+      oid[c] = '/';
+    }
+  }
+}
+
 int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id)
 {
   ssize_t pos = bucket_instance.rfind(':');
@@ -319,6 +348,53 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *targ
   return 0;
 }
 
+// parse key in format: [tenant/]name:instance[:shard_id]
+int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
+                                rgw_bucket *bucket, int *shard_id)
+{
+  boost::string_ref name{key};
+  boost::string_ref instance;
+
+  // split tenant/name
+  auto pos = name.find('/');
+  if (pos != boost::string_ref::npos) {
+    auto tenant = name.substr(0, pos);
+    bucket->tenant.assign(tenant.begin(), tenant.end());
+    name = name.substr(pos + 1);
+  }
+
+  // split name:instance
+  pos = name.find(':');
+  if (pos != boost::string_ref::npos) {
+    instance = name.substr(pos + 1);
+    name = name.substr(0, pos);
+  }
+  bucket->name.assign(name.begin(), name.end());
+
+  // split instance:shard
+  pos = instance.find(':');
+  if (pos == boost::string_ref::npos) {
+    bucket->bucket_id.assign(instance.begin(), instance.end());
+    *shard_id = -1;
+    return 0;
+  }
+
+  // parse shard id
+  auto shard = instance.substr(pos + 1);
+  string err;
+  auto id = strict_strtol(shard.data(), 10, &err);
+  if (!err.empty()) {
+    ldout(cct, 0) << "ERROR: failed to parse bucket shard '"
+        << instance.data() << "': " << err << dendl;
+    return -EINVAL;
+  }
+
+  *shard_id = id;
+  instance = instance.substr(0, pos);
+  bucket->bucket_id.assign(instance.begin(), instance.end());
+  return 0;
+}
+
 int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
                          RGWObjVersionTracker *objv_tracker)
@@ -334,13 +410,9 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
       return ret;
     }
   }
-  string oid;
-  store->get_bucket_meta_oid(bucket, oid);
-  rgw_obj obj(store->get_zone_params().domain_root, oid);
 
-  string key;
-  store->get_bucket_instance_entry(bucket, key); /* we want the bucket instance name without
-						    the oid prefix cruft */
+  /* we want the bucket instance name without the oid prefix cruft */
+  string key = bucket.get_key();
   bufferlist bl;
 
   ::encode(bucket_info, bl);
@@ -663,8 +735,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
 
   if (!store->is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    string entry;
-    store->get_bucket_instance_entry(bucket, entry);
+    string entry = bucket.get_key();
     ret = rgw_bucket_instance_remove_entry(store, entry, &objv_tracker);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: could not remove bucket instance entry" << bucket.name << "with ret as " << ret << dendl;
@@ -1491,8 +1562,6 @@ int RGWDataChangesLog::renew_entries()
   real_time ut = real_clock::now();
   for (iter = entries.begin(); iter != entries.end(); ++iter) {
     const rgw_bucket_shard& bs = iter->first;
-    const rgw_bucket& bucket = bs.bucket;
-    int shard_id = bs.shard_id;
 
     int index = choose_oid(bs);
 
@@ -1501,19 +1570,14 @@ int RGWDataChangesLog::renew_entries()
     rgw_data_change change;
     bufferlist bl;
     change.entity_type = ENTITY_TYPE_BUCKET;
-    change.key = bucket.name + ":" + bucket.bucket_id;
-    if (shard_id >= 0) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), ":%d", shard_id);
-      change.key += buf;
-    }
+    change.key = bs.get_key();
     change.timestamp = ut;
     ::encode(change, bl);
 
-    store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
+    store->time_log_prepare_entry(entry, ut, section, change.key, bl);
 
     m[index].first.push_back(bs);
-    m[index].second.push_back(entry);
+    m[index].second.emplace_back(std::move(entry));
   }
 
   map<int, pair<list<rgw_bucket_shard>, list<cls_log_entry> > >::iterator miter;
@@ -1641,12 +1705,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
     bufferlist bl;
     rgw_data_change change;
     change.entity_type = ENTITY_TYPE_BUCKET;
-    change.key = bucket.name + ":" + bucket.bucket_id;
-    if (shard_id >= 0) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), ":%d", shard_id);
-      change.key += buf;
-    }
+    change.key = bs.get_key();
     change.timestamp = now;
     ::encode(change, bl);
     string section;
@@ -1823,12 +1882,9 @@ void RGWDataChangesLog::ChangesRenewThread::stop()
   cond.Signal();
 }
 
-void RGWDataChangesLog::mark_modified(int shard_id, rgw_bucket_shard& bs)
+void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
 {
-  string key = bs.bucket.name + ":" + bs.bucket.bucket_id;
-  char buf[16];
-  snprintf(buf, sizeof(buf), ":%d", bs.shard_id);
-  key.append(buf);
+  auto key = bs.get_key();
   modified_lock.get_read();
   map<int, set<string> >::iterator iter = modified_shards.find(shard_id);
   if (iter != modified_shards.end()) {
@@ -2062,9 +2118,11 @@ public:
 
     if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
+      auto key{entry};
+      rgw_bucket_instance_oid_to_key(key);
       string tenant_name;
       string bucket_name;
-      parse_bucket(entry, tenant_name, bucket_name);
+      parse_bucket(key, tenant_name, bucket_name);
 
       rgw_bucket bucket;
       RGWZonePlacementInfo rule_info;
@@ -2074,6 +2132,7 @@ public:
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
       }
+      bci.info.bucket.tenant = bucket.tenant;
       bci.info.bucket.data_pool = bucket.data_pool;
       bci.info.bucket.index_pool = bucket.index_pool;
       bci.info.index_type = rule_info.index_type;
@@ -2127,6 +2186,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
+    rgw_bucket_instance_key_to_oid(oid);
     bucket = store->get_zone_params().domain_root;
   }
 
@@ -2162,14 +2222,16 @@ public:
       return 0;
     }
 
-    int prefix_size = sizeof(RGW_BUCKET_INSTANCE_MD_PREFIX) - 1;
+    constexpr int prefix_size = sizeof(RGW_BUCKET_INSTANCE_MD_PREFIX) - 1;
     // now filter in the relevant entries
     list<string>::iterator iter;
     for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
       string& k = *iter;
 
       if (k.compare(0, prefix_size, RGW_BUCKET_INSTANCE_MD_PREFIX) == 0) {
-        keys.push_back(k.substr(prefix_size));
+        auto oid = k.substr(prefix_size);
+        rgw_bucket_instance_oid_to_key(oid);
+        keys.emplace_back(std::move(oid));
       }
     }
 
