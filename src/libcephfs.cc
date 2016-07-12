@@ -562,7 +562,8 @@ extern "C" int ceph_rename(struct ceph_mount_info *cmount, const char *from,
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->rename(from, to);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->rename(from, to, perms);
 }
 
 // dirs
@@ -1578,8 +1579,9 @@ extern "C" int ceph_ll_rename(class ceph_mount_info *cmount,
 			      Inode *newparent, const char *newname,
 			      int uid, int gid)
 {
-  return (cmount->get_client()->ll_rename(parent, name, newparent, newname,
-					uid, gid));
+  UserPerm perms(uid, gid);
+  return (cmount->get_client()->ll_rename(parent, name,
+					  newparent, newname, perms));
 }
 
 extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount,
