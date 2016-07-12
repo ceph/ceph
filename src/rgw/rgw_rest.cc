@@ -1214,7 +1214,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
     }
     data = (char *)malloc(cl + 1);
     if (!data) {
-       return -ENOMEM;
+      return -ENOMEM;
     }
     int ret = STREAM_IO(s)->read(data, cl, &len, s->aws4_auth_needs_complete);
     if (ret < 0) {
@@ -1797,7 +1797,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
       s->info.domain = domain;
     }
 
-   ldout(s->cct, 20)
+    ldout(s->cct, 20)
       << "final domain/bucket"
       << " subdomain=" << subdomain
       << " domain=" << domain
