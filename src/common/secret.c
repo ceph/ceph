@@ -66,8 +66,8 @@ int set_kernel_secret(const char *secret, const char *key_name)
   ret = ceph_unarmor(payload, payload+sizeof(payload), secret, secret+secret_len);
   if (ret < 0) {
     char error_buf[80];
-    fprintf(stderr, "secret is not valid base64: %s.\n",
-	    strerror_r(-ret, error_buf, sizeof(error_buf)));
+    strerror_r(-ret, error_buf, sizeof(error_buf));
+    fprintf(stderr, "secret is not valid base64: %s.\n", error_buf);
     return ret;
   }
 
@@ -108,15 +108,15 @@ int get_secret_option(const char *secret, const char *key_name,
     ret = set_kernel_secret(secret, key_name);
     if (ret < 0) {
       if (ret == -ENODEV || ret == -ENOSYS) {
-	/* running against older kernel; fall back to secret= in options */
-	snprintf(option, olen, "secret=%s", secret);
-	ret = 0;
-	use_key = 0;
+        /* running against older kernel; fall back to secret= in options */
+        snprintf(option, olen, "secret=%s", secret);
+        ret = 0;
+        use_key = 0;
       } else {
         char error_buf[80];
-	fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n",
-		strerror_r(-ret, error_buf, sizeof(error_buf)));
-	return ret;
+        strerror_r(-ret, error_buf, sizeof(error_buf));
+        fprintf(stderr, "adding ceph secret key to kernel failed: %s.\n", error_buf);
+        return ret;
       }
     }
   }
