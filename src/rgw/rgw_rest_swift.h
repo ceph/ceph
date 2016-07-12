@@ -240,14 +240,6 @@ public:
   virtual ~RGWHandler_REST_Service_SWIFT() {}
 };
 
-class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
-protected:
-  RGWOp *op_get();
-public:
-  RGWHandler_REST_SWIFT_Info() = default;
-  virtual ~RGWHandler_REST_SWIFT_Info() = default;
-};
-
 class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   bool is_obj_update_op() {
@@ -297,6 +289,38 @@ public:
                                           const std::string& uri,
                                           std::string* out_uri) override {
     return this->get_resource_mgr(s, uri, out_uri);
+  }
+};
+
+class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
+public:
+  RGWHandler_REST_SWIFT_Info() = default;
+  ~RGWHandler_REST_SWIFT_Info() = default;
+
+  RGWOp *op_get() override {
+    return new RGWInfo_ObjStore_SWIFT();
+  }
+
+  int init(RGWRados* const store,
+           struct req_state* const state,
+           RGWClientIO* const cio) override {
+    state->dialect = "swift";
+    state->formatter = new JSONFormatter;
+    state->format = RGW_FORMAT_JSON;
+
+    return RGWHandler::init(store, state, cio);
+  }
+
+  int authorize() override {
+    return 0;
+  }
+
+  int postauth_init() override {
+    return 0;
+  }
+
+  int read_permissions(RGWOp *) override {
+    return 0;
   }
 };
 
