@@ -254,6 +254,10 @@ class Worker {
     init_cond.notify_all();
     init_lock.unlock();
   }
+  bool is_init() {
+    std::lock_guard<std::mutex> l(init_lock);
+    return init;
+  }
   void wait_for_init() {
     std::unique_lock<std::mutex> l(init_lock);
     while (!init)
@@ -270,16 +274,15 @@ class Worker {
 
 class NetworkStack {
   std::string type;
-  std::atomic_bool started;
   unsigned num_workers = 0;
   Spinlock pool_spin;
+  bool started = false;
 
-  void add_thread(unsigned i);
+  void add_thread(unsigned i, std::function<void ()> &ts);
 
  protected:
   CephContext *cct;
   vector<Worker*> workers;
-  std::vector<std::function<void ()>> threads;
   // Used to indicate whether thread started
 
   explicit NetworkStack(CephContext *c, const string &t);
@@ -316,8 +319,8 @@ class NetworkStack {
   }
 
   // direct is used in tests only
-  virtual void spawn_workers(std::vector<std::function<void ()>> &) = 0;
-  virtual void join_workers() = 0;
+  virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
+  virtual void join_worker(unsigned i) = 0;
 
  private:
   NetworkStack(const NetworkStack &);

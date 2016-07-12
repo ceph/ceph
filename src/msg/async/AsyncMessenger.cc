@@ -300,6 +300,7 @@ void AsyncMessenger::ready()
 {
   ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
 
+  stack->start();
   Mutex::Locker l(lock);
   for (auto &&p : processors)
     p->start();
