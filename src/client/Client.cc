@@ -6174,7 +6174,7 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
   return _unlink(dir.get(), name.c_str(), perm);
 }
 
-int Client::rename(const char *relfrom, const char *relto)
+int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "rename" << std::endl;
@@ -6189,22 +6189,22 @@ int Client::rename(const char *relfrom, const char *relto)
   to.pop_dentry();
 
   InodeRef fromdir, todir;
-  int r = path_walk(from, &fromdir);
+  int r = path_walk(from, &fromdir, perm);
   if (r < 0)
     goto out;
-  r = path_walk(to, &todir);
+  r = path_walk(to, &todir, perm);
   if (r < 0)
     goto out;
 
   if (cct->_conf->client_permissions) {
-    int r = may_delete(fromdir.get(), fromname.c_str());
+    int r = may_delete(fromdir.get(), fromname.c_str(), perm);
     if (r < 0)
       return r;
-    r = may_delete(todir.get(), toname.c_str());
+    r = may_delete(todir.get(), toname.c_str(), perm);
     if (r < 0 && r != -ENOENT)
       return r;
   }
-  r = _rename(fromdir.get(), fromname.c_str(), todir.get(), toname.c_str());
+  r = _rename(fromdir.get(), fromname.c_str(), todir.get(), toname.c_str(), perm);
 out:
   return r;
 }
@@ -10955,10 +10955,12 @@ int Client::ll_rmdir(Inode *in, const char *name, int uid, int gid)
   return _rmdir(in, name, uid, gid);
 }
 
-int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
+int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, const UserPerm& perm)
 {
-  ldout(cct, 3) << "_rename(" << fromdir->ino << " " << fromname << " to " << todir->ino << " " << toname
-	  << " uid " << uid << " gid " << gid << ")" << dendl;
+  ldout(cct, 3) << "_rename(" << fromdir->ino << " " << fromname << " to "
+		<< todir->ino << " " << toname
+		<< " uid " << perm.uid() << " gid " << perm.gid() << ")"
+		<< dendl;
 
   if (fromdir->snapid != todir->snapid)
     return -EXDEV;
@@ -11009,13 +11011,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, 0, &oldin, uid, gid);
+    res = _lookup(fromdir, fromname, 0, &oldin, perm);
     if (res < 0)
       goto fail;
     req->set_old_inode(oldin.get());
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
-    res = _lookup(todir, toname, 0, &otherin, uid, gid);
+    res = _lookup(todir, toname, 0, &otherin, perm);
     if (res != 0 && res != -ENOENT) {
       goto fail;
     } else if (res == 0) {
@@ -11031,7 +11033,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     unlink(de, true, true);
   }
 
-  res = make_request(req, uid, gid, &target);
+  res = make_request(req, perm, &target);
   ldout(cct, 10) << "rename result is " << res << dendl;
 
   // renamed item from our cache
@@ -11046,7 +11048,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 }
 
 int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
-		      const char *newname, int uid, int gid)
+		      const char *newname, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
 
@@ -11062,15 +11064,15 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   tout(cct) << newname << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_delete(parent, name, uid, gid);
+    int r = may_delete(parent, name, perm);
     if (r < 0)
       return r;
-    r = may_delete(newparent, newname, uid, gid);
+    r = may_delete(newparent, newname, perm);
     if (r < 0 && r != -ENOENT)
       return r;
   }
 
-  return _rename(parent, name, newparent, newname, uid, gid);
+  return _rename(parent, name, newparent, newname, perm);
 }
 
 int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& perm, InodeRef *inp)

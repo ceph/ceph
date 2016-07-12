@@ -429,8 +429,9 @@ static void fuse_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(parent);
   Inode *nin = cfuse->iget(newparent);
+  UserPerm perm(ctx->uid, ctx->gid);
 
-  int r = cfuse->client->ll_rename(in, name, nin, newname, ctx->uid, ctx->gid);
+  int r = cfuse->client->ll_rename(in, name, nin, newname, perm);
   fuse_reply_err(req, -r);
 
   cfuse->iput(in); // iputs required

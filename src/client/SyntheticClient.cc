@@ -1079,7 +1079,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "rename") == 0) {
       const char *a = t.get_string(buf, p);
       const char *b = t.get_string(buf2, p);
-      client->rename(a,b);      
+      client->rename(a,b, perms);
     } else if (strcmp(op, "mkdir") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
@@ -1331,7 +1331,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 	  ll_inos.count(ni)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
 	i2 = client->ll_get_inode(vinodeno_t(ll_inos[ni],CEPH_NOSNAP));
-	client->ll_rename(i1, n, i2, nn);
+	client->ll_rename(i1, n, i2, nn, perms);
 	client->ll_put(i1);
 	client->ll_put(i2);
       }
@@ -2697,7 +2697,7 @@ int SyntheticClient::random_walk(int num_req)
       if (contents.empty())
         op = CEPH_MDS_OP_READDIR;
       else {
-        r = client->rename( get_random_sub(), make_sub("ren") );
+        r = client->rename(get_random_sub(), make_sub("ren"), perms);
       }
     }
     
@@ -2961,7 +2961,7 @@ void SyntheticClient::foo()
       char dst[80];
       snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/file.%d", d, e, f);
-      client->rename(src, dst);
+      client->rename(src, dst, perms);
     }
     return;
   }
@@ -3024,32 +3024,32 @@ void SyntheticClient::foo()
   // rename fun
   client->mknod("p1", 0644);
   client->mknod("p2", 0644);
-  client->rename("p1","p2");
+  client->rename("p1","p2", perms);
   client->mknod("p3", 0644);
-  client->rename("p3","p4");
+  client->rename("p3","p4", perms);
 
   // check dest dir ambiguity thing
   client->mkdir("dir1", 0755);
   client->mkdir("dir2", 0755);
-  client->rename("p2","dir1/p2");
-  client->rename("dir1/p2","dir2/p2");
-  client->rename("dir2/p2","/p2");
+  client->rename("p2", "dir1/p2", perms);
+  client->rename("dir1/p2", "dir2/p2", perms);
+  client->rename("dir2/p2", "/p2", perms);
   
   // check primary+remote link merging
   client->link("p2","p2.l", perms);
   client->link("p4","p4.l", perms);
-  client->rename("p2.l","p2");
-  client->rename("p4","p4.l");
+  client->rename("p2.l", "p2", perms);
+  client->rename("p4", "p4.l", perms);
 
   // check anchor updates
   client->mknod("dir1/a", 0644);
   client->link("dir1/a", "da1", perms);
   client->link("dir1/a", "da2", perms);
   client->link("da2","da3", perms);
-  client->rename("dir1/a","dir2/a");
-  client->rename("dir2/a","da2");
-  client->rename("da1","da2");
-  client->rename("da2","da3");
+  client->rename("dir1/a", "dir2/a", perms);
+  client->rename("dir2/a", "da2", perms);
+  client->rename("da1", "da2", perms);
+  client->rename("da2", "da3", perms);
 
   // check directory renames
   client->mkdir("dir3", 0755);
@@ -3057,8 +3057,8 @@ void SyntheticClient::foo()
   client->mkdir("dir4", 0755);
   client->mkdir("dir5", 0755);
   client->mknod("dir5/asdf", 0644);
-  client->rename("dir3","dir4"); // ok
-  client->rename("dir4","dir5"); // fail
+  client->rename("dir3", "dir4", perms); // ok
+  client->rename("dir4", "dir5", perms); // fail
 }
 
 int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int depth, int n)
@@ -3098,9 +3098,9 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	  }
 	}
 	
-	if (client->rename(dst.c_str(), "/tmp") == 0) {
-	  client->rename(src.c_str(), dst.c_str());
-	  client->rename("/tmp", src.c_str());
+	if (client->rename(dst.c_str(), "/tmp", perms) == 0) {
+	  client->rename(src.c_str(), dst.c_str(), perms);
+	  client->rename("/tmp", src.c_str(), perms);
 	}
 	continue;
       } 
@@ -3135,7 +3135,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       switch (o) {
       case 0: 
 	client->mknod(src.c_str(), 0755); 
-	if (renames) client->rename(src.c_str(), dst.c_str()); 
+	if (renames) client->rename(src.c_str(), dst.c_str(), perms);
 	break;
       case 1: 
 	client->mknod(src.c_str(), 0755); 
