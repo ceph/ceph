@@ -437,7 +437,7 @@ int ObjBencher::write_bench(int secondsToRun,
   pthread_t print_thread;
 
   pthread_create(&print_thread, NULL, ObjBencher::status_printer, (void *)this);
-  pthread_setname_np(print_thread, "write_stat");
+  ceph_pthread_setname(print_thread, "write_stat");
   lock.Lock();
   data.finished = 0;
   data.start_time = ceph_clock_now(cct);
@@ -673,7 +673,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
-  pthread_setname_np(print_thread, "seq_read_stat");
+  ceph_pthread_setname(print_thread, "seq_read_stat");
 
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads
@@ -902,7 +902,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   pthread_t print_thread;
   pthread_create(&print_thread, NULL, status_printer, (void *)this);
-  pthread_setname_np(print_thread, "rand_read_stat");
+  ceph_pthread_setname(print_thread, "rand_read_stat");
 
   utime_t finish_time = data.start_time + time_to_run;
   //start initial reads

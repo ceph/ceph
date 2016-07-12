@@ -116,25 +116,29 @@
 
 #if defined(HAVE_PTHREAD_SETNAME_NP)
   #if defined(__APPLE__)
-    #define pthread_setname_np(thread, name) ({ \
+    #define ceph_pthread_setname(thread, name) ({ \
       int __result = 0;                         \
       if (thread == pthread_self())             \
-        __result = pthread_setname_np(name)     \
+        __result = pthread_setname_np(name);    \
       __result; })
+  #else
+    #define ceph_pthread_setname pthread_setname_np
   #endif
 #elif defined(HAVE_PTHREAD_SET_NAME_NP)
   /* Fix a small name diff */
-  #define pthread_setname_np pthread_set_name_np
+  #define ceph_pthread_setname pthread_set_name_np
 #else
   /* compiler warning free success noop */
-  #define pthread_setname_np(thread, name) ({ \
+  #define ceph_pthread_setname(thread, name) ({ \
     int __i = 0;                              \
     __i; })
 #endif
 
-#if !defined(HAVE_PTHREAD_GETNAME_NP)
+#if defined(HAVE_PTHREAD_GETNAME_NP)
+  #define ceph_pthread_getname pthread_getname_np
+#else
   /* compiler warning free success noop */
-  #define pthread_getname_np(thread, name, len) ({ \
+  #define ceph_pthread_getname(thread, name, len) ({ \
     if (name != NULL)                              \
       *name = '\0';                                \
     0; })
