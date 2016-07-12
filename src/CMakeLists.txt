@@ -1163,7 +1163,7 @@ if(WITH_LIBCEPHFS)
       ceph_fuse.cc
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse ${FUSE_LIBRARIES} client global)
+    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES} client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
