@@ -56,8 +56,6 @@ void LogMonitor::tick()
 
   dout(10) << *this << dendl;
 
-  if (!mon->is_leader()) return; 
-
 }
 
 void LogMonitor::create_initial()
