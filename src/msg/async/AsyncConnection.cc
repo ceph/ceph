@@ -28,7 +28,7 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
-  int fd = cs ? cs.fd() : -1;
+  int fd = (cs && state != STATE_CLOSED) ? cs.fd() : -1;
   return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
                 << " sd=" << fd << " :" << port
                 << " s=" << get_state_name(state)
