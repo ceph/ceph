@@ -789,7 +789,8 @@ private:
 	    InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm);
-  int _mkdir(Inode *dir, const char *name, mode_t mode, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
+	     InodeRef *inp = 0);
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
@@ -1030,7 +1031,7 @@ public:
   int rename(const char *from, const char *to, const UserPerm& perm);
 
   // dirs
-  int mkdir(const char *path, mode_t mode);
+  int mkdir(const char *path, mode_t mode, const UserPerm& perm);
   int mkdirs(const char *path, mode_t mode);
   int rmdir(const char *path);
 
@@ -1115,7 +1116,7 @@ public:
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 
-  int mksnap(const char *path, const char *name);
+  int mksnap(const char *path, const char *name, const UserPerm& perm);
   int rmsnap(const char *path, const char *name);
 
   // expose caps
@@ -1156,7 +1157,7 @@ public:
   int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev,
 	       struct stat *attr, Inode **out, int uid = -1, int gid = -1);
   int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr,
-	       Inode **out, int uid = -1, int gid = -1);
+	       Inode **out, const UserPerm& perm);
   int ll_symlink(Inode *in, const char *name, const char *value,
 		 struct stat *attr, Inode **out, int uid = -1, int gid = -1);
   int ll_unlink(Inode *in, const char *name, const UserPerm& perm);
