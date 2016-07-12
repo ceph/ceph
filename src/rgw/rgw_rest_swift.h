@@ -261,7 +261,7 @@ public:
   RGWRESTMgr_SWIFT() {}
   virtual ~RGWRESTMgr_SWIFT() {}
 
-  virtual RGWHandler_REST *get_handler(struct req_state *s);
+  RGWHandler_REST *get_handler(struct req_state *s) override;
 
   RGWRESTMgr* get_resource_mgr_as_default(struct req_state* s,
                                           const std::string& uri,
