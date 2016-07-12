@@ -118,20 +118,20 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_gentoo(self):
         with mock.patch.multiple('ceph_detect_init.gentoo',
-                is_systemd=(lambda: True),
-                is_openrc=(lambda: True)):
+                                 is_systemd=(lambda: True),
+                                 is_openrc=(lambda: True)):
             self.assertEqual('openrc', gentoo.choose_init())
         with mock.patch.multiple('ceph_detect_init.gentoo',
-                is_systemd=(lambda: True),
-                is_openrc=(lambda: False)):
+                                 is_systemd=(lambda: True),
+                                 is_openrc=(lambda: False)):
             self.assertEqual('systemd', gentoo.choose_init())
         with mock.patch.multiple('ceph_detect_init.gentoo',
-                is_systemd=(lambda: False),
-                is_openrc=(lambda: True)):
+                                 is_systemd=(lambda: False),
+                                 is_openrc=(lambda: True)):
             self.assertEqual('openrc', gentoo.choose_init())
         with mock.patch.multiple('ceph_detect_init.gentoo',
-                is_systemd=(lambda: False),
-                is_openrc=(lambda: False)):
+                                 is_systemd=(lambda: False),
+                                 is_openrc=(lambda: False)):
             self.assertEqual('unknown', gentoo.choose_init())
 
     def test_get(self):
