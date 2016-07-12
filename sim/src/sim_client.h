@@ -36,7 +36,7 @@ namespace crimson {
       union {
 	std::chrono::milliseconds wait_time;
 	struct {
-	  uint16_t count;
+	  uint32_t count;
 	  std::chrono::microseconds time_bw_reqs;
 	  uint16_t max_outstanding;
 	} req_params;
@@ -52,7 +52,7 @@ namespace crimson {
       }
 
       CliInst(req_op_t,
-	      uint16_t count, double ops_per_sec, uint16_t max_outstanding) :
+	      uint32_t count, double ops_per_sec, uint16_t max_outstanding) :
 	op(CliOp::req)
       {
 	args.req_params.count = count;
