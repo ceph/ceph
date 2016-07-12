@@ -255,6 +255,7 @@ void EventCenter::delete_time_event(uint64_t id)
   }
 
   time_events.erase(it->second);
+  event_map.erase(it);
 }
 
 void EventCenter::wakeup()
