@@ -104,8 +104,19 @@ class AsyncConnection : public Connection {
     return !out_q.empty() || outcoming_bl.length();
   }
   void shutdown_socket() {
-    if (sd >= 0)
+    for (auto &&t : register_time_events)
+      center->delete_time_event(t);
+    register_time_events.clear();
+    if (last_tick_id) {
+      center->delete_time_event(last_tick_id);
+      last_tick_id = 0;
+    }
+    if (sd >= 0) {
+      center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
       ::shutdown(sd, SHUT_RDWR);
+      ::close(sd);
+      sd = -1;
+    }
   }
   Message *_get_next_outgoing(bufferlist *bl) {
     assert(write_lock.is_locked());
@@ -156,6 +167,7 @@ class AsyncConnection : public Connection {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
     }
+    void set_center(EventCenter *c) { center = c; }
     void do_request(int id) override;
     void queue(double delay_period, utime_t release, Message *m) {
       Mutex::Locker l(delay_lock);
@@ -304,6 +316,7 @@ class AsyncConnection : public Connection {
   Mutex write_lock;
   enum class WriteStatus {
     NOWRITE,
+    REPLACING,
     CANWRITE,
     CLOSED
   };
@@ -383,16 +396,13 @@ class AsyncConnection : public Connection {
   void stop(bool queue_reset) {
     lock.Lock();
     bool need_queue_reset = (state != STATE_CLOSED) && queue_reset;
+    _stop();
     lock.Unlock();
-    mark_down();
     if (need_queue_reset)
       dispatch_queue->queue_reset(this);
   }
-  void cleanup_handler() {
-    for (auto &&t : register_time_events)
-      center->delete_time_event(t);
-    register_time_events.clear();
-    center->delete_time_event(last_tick_id);
+  void cleanup() {
+    shutdown_socket();
     delete read_handler;
     delete write_handler;
     delete wakeup_handler;

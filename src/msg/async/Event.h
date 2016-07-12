@@ -114,7 +114,7 @@ class EventCenter {
   int nevent;
   // Used only to external event
   pthread_t owner;
-  std::mutex external_lock, file_lock;;
+  std::mutex external_lock;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
   vector<FileEvent> file_events;

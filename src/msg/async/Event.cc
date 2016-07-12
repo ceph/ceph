@@ -106,10 +106,6 @@ int EventCenter::init(int n, unsigned i)
 
   file_events.resize(n);
   nevent = n;
-  notify_handler = new C_handle_notify(this, cct),
-  r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-  if (r < 0)
-    return r;
   return 0;
 }
 
@@ -126,15 +122,14 @@ EventCenter::~EventCenter()
   }
   assert(time_events.empty());
 
-  if (notify_receive_fd >= 0) {
-    delete_file_event(notify_receive_fd, EVENT_READABLE);
+  if (notify_receive_fd >= 0)
     ::close(notify_receive_fd);
-  }
   if (notify_send_fd >= 0)
     ::close(notify_send_fd);
 
   delete driver;
-  delete notify_handler;
+  if (notify_handler)
+    delete notify_handler;
 }
 
 
@@ -146,12 +141,16 @@ void EventCenter::set_owner()
   global_centers->centers[idx] = this;
   owner = pthread_self();
   ldout(cct, 1) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
+
+  notify_handler = new C_handle_notify(this, cct);
+  int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+  assert(r == 0);
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
+  assert(in_thread());
   int r = 0;
-  std::lock_guard<std::mutex> l(file_lock);
   if (fd >= nevent) {
     int new_size = nevent << 2;
     while (fd > new_size)
@@ -195,8 +194,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 
 void EventCenter::delete_file_event(int fd, int mask)
 {
-  assert(fd >= 0);
-  std::lock_guard<std::mutex> l(file_lock);
+  assert(in_thread() && fd >= 0);
   if (fd >= nevent) {
     ldout(cct, 1) << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
                   << "mask=" << mask << dendl;
@@ -247,7 +245,7 @@ void EventCenter::delete_time_event(uint64_t id)
 {
   assert(in_thread());
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
-  if (id >= time_event_next_id)
+  if (id >= time_event_next_id || id == 0)
     return ;
 
   auto it = event_map.find(id);
@@ -257,6 +255,7 @@ void EventCenter::delete_time_event(uint64_t id)
   }
 
   time_events.erase(it->second);
+  event_map.erase(it);
 }
 
 void EventCenter::wakeup()
@@ -332,38 +331,30 @@ int EventCenter::process_events(int timeout_microseconds)
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
-  file_lock.lock();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
     EventCallbackRef cb;
     event = _get_file_event(fired_events[j].fd);
 
-    // FIXME: Actually we need to pick up some ways to reduce potential
-    // file_lock contention here.
     /* note the event->mask & mask & ... code: maybe an already processed
     * event removed an element that fired and we still didn't
     * processed, so we check if the event is still valid. */
     if (event->mask & fired_events[j].mask & EVENT_READABLE) {
       rfired = 1;
       cb = event->read_cb;
-      file_lock.unlock();
       cb->do_request(fired_events[j].fd);
-      file_lock.lock();
     }
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
       if (!rfired || event->read_cb != event->write_cb) {
         cb = event->write_cb;
-        file_lock.unlock();
         cb->do_request(fired_events[j].fd);
-        file_lock.lock();
       }
     }
 
     ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
-  file_lock.unlock();
 
   if (trigger_time)
     numevents += process_time_events();
