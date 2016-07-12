@@ -571,7 +571,8 @@ extern "C" int ceph_mkdir(struct ceph_mount_info *cmount, const char *path, mode
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->mkdir(path, mode);
+  UserPerm perms = cmount->get_client()->pick_my_perms();
+  return cmount->get_client()->mkdir(path, mode, perms);
 }
 
 extern "C" int ceph_mkdirs(struct ceph_mount_info *cmount, const char *path, mode_t mode)
@@ -1533,8 +1534,8 @@ extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount,
 			     mode_t mode, struct stat *attr, Inode **out,
 			     int uid, int gid)
 {
-  return (cmount->get_client()->ll_mkdir(parent, name, mode, attr, out, uid,
-					 gid));
+  UserPerm perms(uid, gid);
+  return (cmount->get_client()->ll_mkdir(parent, name, mode, attr, out, perms));
 }
 
 extern "C" int ceph_ll_link(class ceph_mount_info *cmount,

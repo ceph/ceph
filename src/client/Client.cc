@@ -6211,7 +6211,7 @@ out:
 
 // dirs
 
-int Client::mkdir(const char *relpath, mode_t mode)
+int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
   tout(cct) << "mkdir" << std::endl;
@@ -6223,15 +6223,15 @@ int Client::mkdir(const char *relpath, mode_t mode)
   string name = path.last_dentry();
   path.pop_dentry();
   InodeRef dir;
-  int r = path_walk(path, &dir);
+  int r = path_walk(path, &dir, perm);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    r = may_create(dir.get());
+    r = may_create(dir.get(), perm);
     if (r < 0)
       return r;
   }
-  return _mkdir(dir.get(), name.c_str(), mode);
+  return _mkdir(dir.get(), name.c_str(), mode, perm);
 }
 
 int Client::mkdirs(const char *relpath, mode_t mode)
@@ -6242,8 +6242,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
-  uid_t uid = get_uid();
-  gid_t gid = get_gid();
+  UserPerm perms = pick_my_perms();
 
   //get through existing parts of path
   filepath path(relpath);
@@ -6253,12 +6252,12 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
     if (cct->_conf->client_permissions) {
-      r = may_lookup(cur.get(), uid, gid);
+      r = may_lookup(cur.get(), perms);
       if (r < 0)
 	break;
       caps = CEPH_CAP_AUTH_SHARED;
     }
-    r = _lookup(cur.get(), path[i].c_str(), caps, &next, uid, gid);
+    r = _lookup(cur.get(), path[i].c_str(), caps, &next, perms);
     if (r < 0)
       break;
     cur.swap(next);
@@ -6270,12 +6269,12 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   //make new directory at each level
   for (; i<path.depth(); ++i) {
     if (cct->_conf->client_permissions) {
-      r = may_create(cur.get(), uid, gid);
+      r = may_create(cur.get(), perms);
       if (r < 0)
 	return r;
     }
     //make new dir
-    r = _mkdir(cur.get(), path[i].c_str(), mode, uid, gid, &next);
+    r = _mkdir(cur.get(), path[i].c_str(), mode, perms, &next);
     //check proper creation/existence
     if (r < 0) return r;
     //move to new dir and continue
@@ -9417,21 +9416,21 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
 // =============================
 // snaps
 
-int Client::mksnap(const char *relpath, const char *name)
+int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm)
 {
   Mutex::Locker l(client_lock);
   filepath path(relpath);
   InodeRef in;
-  int r = path_walk(path, &in);
+  int r = path_walk(path, &in, perm);
   if (r < 0)
     return r;
   if (cct->_conf->client_permissions) {
-    r = may_create(in.get());
+    r = may_create(in.get(), perm);
     if (r < 0)
       return r;
   }
   Inode *snapdir = open_snapdir(in.get());
-  return _mkdir(snapdir, name, 0);
+  return _mkdir(snapdir, name, 0, perm);
 }
 int Client::rmsnap(const char *relpath, const char *name)
 {
@@ -10656,12 +10655,12 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 }
 
 
-int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
+int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
 		   InodeRef *inp)
 {
   ldout(cct, 3) << "_mkdir(" << dir->ino << " " << name << ", 0" << oct
-		<< mode << dec << ", uid " << uid << ", gid " << gid << ")"
-		<< dendl;
+		<< mode << dec << ", uid " << perm.uid()
+		<< ", gid " << perm.gid() << ")" << dendl;
 
   if (strlen(name) > NAME_MAX)
     return -ENAMETOOLONG;
@@ -10685,7 +10684,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
 
   mode |= S_IFDIR;
   bufferlist xattrs_bl;
-  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, perm.uid(), perm.gid());
   if (res < 0)
     goto fail;
   req->head.args.mkdir.mode = mode;
@@ -10699,7 +10698,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   req->set_dentry(de);
   
   ldout(cct, 10) << "_mkdir: making request" << dendl;
-  res = make_request(req, uid, gid, inp);
+  res = make_request(req, perm, inp);
   ldout(cct, 10) << "_mkdir result is " << res << dendl;
 
   trim_cache();
@@ -10713,7 +10712,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
 }
 
 int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
-		     struct stat *attr, Inode **out, int uid, int gid)
+		     struct stat *attr, Inode **out, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10726,13 +10725,13 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   tout(cct) << mode << std::endl;
 
   if (!cct->_conf->fuse_default_permissions) {
-    int r = may_create(parent, uid, gid);
+    int r = may_create(parent, perm);
     if (r < 0)
       return r;
   }
 
   InodeRef in;
-  int r = _mkdir(parent, name, mode, uid, gid, &in);
+  int r = _mkdir(parent, name, mode, perm, &in);
   if (r == 0) {
     fill_stat(in, attr);
     _ll_get(in.get());

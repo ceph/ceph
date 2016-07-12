@@ -334,7 +334,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
 
   memset(&fe, 0, sizeof(fe));
-
+  UserPerm perm(ctx->uid, ctx->gid);
 #ifdef HAVE_SYS_SYNCFS
   if (cfuse->fino_snap(parent) == CEPH_SNAPDIR &&
       cfuse->client->cct->_conf->fuse_multithreaded &&
@@ -357,8 +357,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 #endif
 
   i1 = cfuse->iget(parent);
-  int r = cfuse->client->ll_mkdir(i1, name, mode, &fe.attr, &i2, ctx->uid,
-				  ctx->gid);
+  int r = cfuse->client->ll_mkdir(i1, name, mode, &fe.attr, &i2, perm);
   if (r == 0) {
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
     fe.attr.st_rdev = new_encode_dev(fe.attr.st_rdev);
