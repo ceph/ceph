@@ -187,6 +187,7 @@ void Processor::accept()
   SocketOptions opts;
   opts.nodelay = msgr->cct->_conf->ms_tcp_nodelay;
   opts.rcbuf_size = msgr->cct->_conf->ms_tcp_rcvbuf;
+  opts.priority = msgr->get_socket_priority();
   while (true) {
     entity_addr_t addr;
     ConnectedSocket cli_socket;
