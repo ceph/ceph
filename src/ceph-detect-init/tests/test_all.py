@@ -103,16 +103,22 @@ class TestCephDetectInit(testtools.TestCase):
             self.assertEqual(gentoo.is_openrc(), False)
 
     def test_gentoo_is_systemd(self):
+        import sys
+        if sys.version_info >= (3, 0):
+            mocked_fn = 'builtins.open'
+        else:
+            mocked_fn = '__builtin__.open'
+
         f = mock.mock_open(read_data='systemd')
-        with mock.patch('__main__.file', f, create=True) as m:
+        with mock.patch(mocked_fn, f, create=True) as m:
             self.assertEqual(gentoo.is_systemd(), True)
             m.assert_called_once_with('/proc/1/comm')
         f = mock.mock_open(read_data='init')
-        with mock.patch('__main__.file', f, create=True) as m:
+        with mock.patch(mocked_fn, f, create=True) as m:
             self.assertEqual(gentoo.is_systemd(), False)
             m.assert_called_once_with('/proc/1/comm')
         f = mock.mock_open(read_data='upstart')
-        with mock.patch('__main__.file', f, create=True) as m:
+        with mock.patch(mocked_fn, f, create=True) as m:
             self.assertEqual(gentoo.is_systemd(), False)
             m.assert_called_once_with('/proc/1/comm')
 
