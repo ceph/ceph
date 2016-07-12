@@ -231,6 +231,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
     static constexpr uint32_t FLAG_DELETED = 0x0080;
+    static constexpr uint32_t FLAG_UNLINK_THIS = 0x0100;
 
 #define CREATE_FLAGS(x) \
     ((x) & ~(RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_LOCK))
@@ -903,7 +904,8 @@ namespace rgw {
     MkObjResult mkdir2(RGWFileHandle* parent, const char *name, struct stat *st,
 		      uint32_t mask, uint32_t flags);
 
-    int unlink(RGWFileHandle* parent, const char *name);
+    int unlink(RGWFileHandle* rgw_fh, const char *name,
+	       uint32_t flags = FLAG_NONE);
 
     /* find existing RGWFileHandle */
     RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
