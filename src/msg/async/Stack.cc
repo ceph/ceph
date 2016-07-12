@@ -73,6 +73,7 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
     Worker *w = create_worker(cct, type, i);
     workers.push_back(w);
   }
+  cct->register_fork_watcher(this);
 }
 
 void NetworkStack::start()
