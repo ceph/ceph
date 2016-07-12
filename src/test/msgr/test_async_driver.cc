@@ -256,6 +256,7 @@ TEST(EventCenterTest, FileEventExpansion) {
   vector<int> sds;
   EventCenter center(g_ceph_context);
   center.init(100, 0);
+  center.set_owner();
   EventCallbackRef e(new FakeEvent());
   for (int i = 0; i < 300; i++) {
     int sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -305,7 +306,7 @@ class CountEvent: public EventCallback {
 };
 
 TEST(EventCenterTest, DispatchTest) {
-  Worker worker1(g_ceph_context, 0), worker2(g_ceph_context, 1);
+  Worker worker1(g_ceph_context, 1), worker2(g_ceph_context, 2);
   atomic_t count(0);
   Mutex lock("DispatchTest::lock");
   Cond cond;
@@ -322,6 +323,8 @@ TEST(EventCenterTest, DispatchTest) {
   }
   worker1.stop();
   worker2.stop();
+  worker1.join();
+  worker2.join();
 }
 
 INSTANTIATE_TEST_CASE_P(
