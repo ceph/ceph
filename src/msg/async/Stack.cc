@@ -25,11 +25,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
 
-void NetworkStack::add_thread(unsigned i)
+void NetworkStack::add_thread(unsigned i, std::function<void ()> &thread)
 {
-  assert(threads.size() <= i);
   Worker *w = workers[i];
-  threads.emplace_back(
+  thread = std::move(
     [this, w]() {
       const uint64_t InitEventNumber = 5000;
       const uint64_t EventMaxWaitUs = 30000000;
@@ -69,11 +68,11 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
 
 NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(false), cct(c)
 {
-  for (unsigned i = 0; i < cct->_conf->ms_async_max_op_threads; ++i) {
+  num_workers = cct->_conf->ms_async_op_threads;
+  for (unsigned i = 0; i < num_workers; ++i) {
     Worker *w = create_worker(cct, type, i);
     workers.push_back(w);
   }
-  num_workers = cct->_conf->ms_async_op_threads;
 }
 
 void NetworkStack::start()
@@ -83,9 +82,17 @@ void NetworkStack::start()
     pool_spin.unlock();
     return ;
   }
-  for (unsigned i = 0; i < num_workers; ++i)
-    add_thread(i);
-  spawn_workers(threads);
+
+  if (started) {
+    return ;
+  }
+  for (unsigned i = 0; i < num_workers; ++i) {
+    if (workers[i]->is_init())
+      continue;
+    std::function<void ()> thread;
+    add_thread(i, thread);
+    spawn_worker(i, std::move(thread));
+  }
   started = true;
   pool_spin.unlock();
 
@@ -125,9 +132,8 @@ void NetworkStack::stop()
   for (unsigned i = 0; i < num_workers; ++i) {
     workers[i]->done = true;
     workers[i]->center.wakeup();
+    join_worker(i);
   }
-  join_workers();
-  threads.clear();
   started = false;
 }
 

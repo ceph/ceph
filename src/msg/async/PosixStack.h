@@ -48,14 +48,13 @@ class PosixNetworkStack : public NetworkStack {
       return -1;
     return coreids[id % coreids.size()];
   }
-  virtual void spawn_workers(std::vector<std::function<void ()>> &funcs) override {
-    for (unsigned i = threads.size(); i < funcs.size(); ++i)
-      threads.emplace_back(std::thread(std::move(funcs[i])));
+  virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override {
+    threads.resize(i+1);
+    threads[i] = std::move(std::thread(func));
   }
-  virtual void join_workers() override {
-    for (auto &&t : threads)
-      t.join();
-    threads.clear();
+  virtual void join_worker(unsigned i) override {
+    assert(threads.size() > i && threads[i].joinable());
+    threads[i].join();
   }
 };
 
