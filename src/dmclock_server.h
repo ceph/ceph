@@ -383,12 +383,7 @@ namespace crimson {
       enum class NextReqType { returning, future, none };
 
       // specifies which queue next request will get popped from
-      enum class HeapId { reservation, ready
-#if USE_PROP_HEAP
-	  , proportional
-#endif
-	  };
-
+      enum class HeapId { reservation, ready };
 
       // this is returned from next_req to tell the caller the situation
       struct NextReq {
@@ -450,7 +445,7 @@ namespace crimson {
 	    limit_heap.adjust(*i.second);
 	    ready_heap.adjust(*i.second);
 #if USE_PROP_HEAP
-	    resv_heap.adjust(*i.second);
+	    prop_heap.adjust(*i.second);
 #endif
 	    any_removed = true;
 	  }
@@ -490,7 +485,7 @@ namespace crimson {
 	limit_heap.adjust(*i->second);
 	ready_heap.adjust(*i->second);
 #if USE_PROP_HEAP
-	resv_heap.adjust(*i->second);
+	prop_heap.adjust(*i->second);
 #endif
       }
 
@@ -1182,25 +1177,14 @@ namespace crimson {
 	  ++this->reserv_sched_count;
 	  break;
 	case super::HeapId::ready:
-	{
 	  super::pop_process_request(this->ready_heap,
 				     process_f(result, PhaseType::priority));
-	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	  super::reduce_reservation_tags(retn.client);
+	  { // need to use retn temporarily
+	    auto& retn = boost::get<typename PullReq::Retn>(result.data);
+	    super::reduce_reservation_tags(retn.client);
+	  }
 	  ++this->prop_sched_count;
-	}
-	break;
-#if USE_PROP_HEAP
-	case super::HeapId::proportional:
-	{
-	  super::pop_process_request(this->prop_heap,
-				     process_f(result, PhaseType::priority));
-	  auto& retn = boost::get<typename PullReq::Retn>(result.data);
-	  super::reduce_reservation_tags(retn.client);
-	  ++this->limit_break_sched_count;
-	}
-	break;
-#endif
+	  break;
 	default:
 	  assert(false);
 	}
@@ -1409,13 +1393,6 @@ namespace crimson {
 	  super::reduce_reservation_tags(client);
 	  ++this->prop_sched_count;
 	  break;
-#if USE_PROP_HEAP
-	case super::HeapId::proportional:
-	  client = submit_top_request(this->prop_heap, PhaseType::priority);
-	  super::reduce_reservation_tags(client);
-	  ++this->limit_break_sched_count;
-	  break;
-#endif
 	default:
 	  assert(false);
 	}
