@@ -366,8 +366,8 @@ int main(int argc, const char **argv)
     swift_resource->register_resource("healthcheck",
                           set_logging(new RGWRESTMgr_SWIFT_HealthCheck));
 
-    RGWRESTMgr* const swift_info_resource = new RGWRESTMgr_SWIFT_Info;
-    rest.register_resource("info", set_logging(swift_info_resource));
+    swift_resource->register_resource("info",
+                          set_logging(new RGWRESTMgr_SWIFT_Info));
 
     if (! swift_at_root) {
       rest.register_resource(g_conf->rgw_swift_url_prefix,

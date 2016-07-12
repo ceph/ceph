@@ -1531,11 +1531,6 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
   return NULL;
 }
 
-RGWOp* RGWHandler_REST_SWIFT_Info::op_get() {
-
-  return new RGWInfo_ObjStore_SWIFT;
-}
-
 RGWOp *RGWHandler_REST_Bucket_SWIFT::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
@@ -1918,22 +1913,12 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
                    g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
   }
 
-  string uri = "/info";
-  if ((s->decoded_uri[0] != '/' ||
-    s->decoded_uri.compare(0, blen, buf) !=  0) &&
-    s->decoded_uri.compare(uri) != 0) {
-        return -ENOENT;
+  if (s->decoded_uri[0] != '/' ||
+    s->decoded_uri.compare(0, blen, buf) !=  0) {
+    return -ENOENT;
   }
 
-  int ret;
-  //Set the formatter to JSON by default for /info api
-  if (s->decoded_uri.compare(uri) == 0) {
-    ret = allocate_formatter(s, RGW_FORMAT_JSON, false);
-  }
-  else {
-    ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
-  }
-
+  int ret = allocate_formatter(s, RGW_FORMAT_PLAIN, true);
   if (ret < 0)
     return ret;
 
@@ -2042,10 +2027,6 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_REST_SWIFT::init_from_header(s);
-  if (ret < 0) {
-    return nullptr;
-  }
-
+  s->prot_flags |= RGW_REST_SWIFT;
   return new RGWHandler_REST_SWIFT_Info;
 }
