@@ -97,8 +97,8 @@ public:
   void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
     history.set_size_and_duration(new_size, new_duration);
   }
-  void dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
-  void dump_historic_ops(Formatter *f);
+  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
+  bool dump_historic_ops(Formatter *f);
   void register_inflight_op(xlist<TrackedOp*>::item *i);
   void unregister_inflight_op(TrackedOp *i);
 
