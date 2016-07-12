@@ -34,7 +34,6 @@
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 
-#include "messages/MOSDFailure.h"
 #include "messages/MMonCommand.h"
 
 #include "messages/MCommand.h"
