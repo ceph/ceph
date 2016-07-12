@@ -81,7 +81,8 @@ struct ImageSyncThrottler<librbd::MockTestImageCtx> {
                                  librbd::journal::MirrorPeerClientMeta *client_meta,
                                  ContextWQ *work_queue, Context *on_finish,
                                  ProgressContext *progress_ctx));
-  MOCK_METHOD1(cancel_sync, void(const std::string& mirror_uuid));
+  MOCK_METHOD2(cancel_sync, void(librados::IoCtx &local_io_ctx,
+                                 const std::string& mirror_uuid));
 };
 
 namespace image_replayer {
