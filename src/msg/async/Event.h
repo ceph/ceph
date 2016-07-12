@@ -127,7 +127,7 @@ class EventCenter {
   NetHandler net;
   EventCallbackRef notify_handler;
   unsigned idx = 10000;
-  AssociatedCenters *global_centers;
+  AssociatedCenters *global_centers = nullptr;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -147,6 +147,7 @@ class EventCenter {
 
   int init(int nevent, unsigned idx);
   void set_owner();
+  pthread_t get_owner() const { return owner; }
   unsigned get_id() const { return idx; }
 
   // Used by internal thread
