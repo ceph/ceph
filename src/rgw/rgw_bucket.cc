@@ -1948,7 +1948,7 @@ public:
 
     if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
-      auto key{entry};
+      auto key(entry);
       rgw_bucket_instance_oid_to_key(key);
       string tenant_name;
       string bucket_name;
