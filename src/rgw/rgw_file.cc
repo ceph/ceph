@@ -633,6 +633,7 @@ namespace rgw {
 			   void *buffer)
   {
     using std::get;
+
     lock_guard guard(mtx);
 
     int rc = 0;
@@ -642,14 +643,34 @@ namespace rgw {
       return -EISDIR;
 
     if (! f->write_req) {
+      /* guard--we do not support (e.g., COW-backed) partial writes */
+      if (off != 0) {
+	lsubdout(fs->get_context(), rgw, 5)
+	  << __func__
+	  << object_name()
+	  << " non-0 initial write position " << off
+	  << dendl;
+	return -EIO;
+      }
+
       /* start */
       std::string object_name = relative_object_name();
       f->write_req =
 	new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
 			    bucket_name(), object_name);
       rc = rgwlib.get_fe()->start_req(f->write_req);
-      if (rc < 0)
+      if (rc < 0) {
+	lsubdout(fs->get_context(), rgw, 5)
+	  << __func__
+	  << this->object_name()
+	  << " write start failed " << off
+	  << " (" << rc << ")"
+	  << dendl;
+	/* zap failed write transaction */
+	delete f->write_req;
+	f->write_req = nullptr;
         return -EIO;
+      }
     }
 
     buffer::list bl;
@@ -665,9 +686,23 @@ namespace rgw {
     f->write_req->put_data(off, bl);
     rc = f->write_req->exec_continue();
 
-    size_t min_size = off + len;
-    if (min_size > get_size())
-      set_size(min_size);
+    if (rc == 0) {
+      size_t min_size = off + len;
+      if (min_size > get_size())
+	set_size(min_size);
+    } else {
+      /* continuation failed (e.g., non-contiguous write position) */
+      lsubdout(fs->get_context(), rgw, 5)
+	<< __func__
+	<< object_name()
+	<< " failed write at position " << off
+	<< " (fails write transaction) "
+	<< dendl;
+      /* zap failed write transaction */
+      delete f->write_req;
+      f->write_req = nullptr;
+      rc = -EIO;
+    }
 
     *bytes_written = (rc == 0) ? len : 0;
     return rc;
@@ -738,10 +773,10 @@ namespace rgw {
     struct req_state* s = get_state();
     op_ret = 0;
 
-#if 0 // TODO: check offsets
-    if (next_off != last_off)
+    /* check guards (e.g., contig write) */
+    if (eio)
       return -EIO;
-#endif
+
     size_t len = data.length();
     if (! len)
       return 0;
