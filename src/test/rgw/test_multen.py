@@ -3,8 +3,6 @@
 import json
 import sys
 
-from StringIO import StringIO
-
 from boto.s3.connection import S3Connection, OrdinaryCallingFormat
 
 # XXX once we're done, break out the common code into a library module
@@ -32,7 +30,7 @@ def test2(cluster):
         raise TestException("failed command: user create --uid %s" % uid)
 
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: user create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -63,7 +61,7 @@ def test3(cluster):
         raise TestException("failed command: user create --uid %s" % uid)
 
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: user create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -101,7 +99,7 @@ def test4(cluster):
         raise TestException("failed command: user create --uid %s" % uid)
 
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: user create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -125,7 +123,7 @@ def test4(cluster):
         raise TestException("failed command: key create --uid %s" % uid)
 
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: key create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -163,7 +161,7 @@ def test5_add_s3_key(cluster, tid, uid):
         raise TestException("failed command: key create --uid %s" % uid)
 
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: key create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -195,7 +193,7 @@ def test5_add_swift_key(cluster, tid, uid, subid):
         raise TestException("failed command: key create --uid %s" % uid)
 
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: key create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -238,7 +236,7 @@ def test5_make_user(cluster, tid, uid, subid):
     if ret != 0:
         raise TestException("failed command: user create --uid %s" % uid)
     try:
-        outj = json.loads(out)
+        outj = json.loads(out.decode('utf-8'))
     except ValueError:
         raise TestException("invalid json after: user create --uid %s" % uid)
     if not isinstance(outj, dict):
@@ -282,7 +280,7 @@ def test5_poke_s3(cluster):
 
     key = bucket.new_key(objname)
     headers = { "Content-Type": "text/plain" }
-    key.set_contents_from_string("Test5A\n", headers)
+    key.set_contents_from_string(b"Test5A\n", headers)
     key.set_acl('public-read')
 
     #
@@ -302,7 +300,7 @@ def test5_poke_s3(cluster):
 
     key = bucket.new_key(objname)
     headers = { "Content-Type": "text/plain" }
-    key.set_contents_from_string("Test5B\n", headers)
+    key.set_contents_from_string(b"Test5B\n", headers)
     key.set_acl('public-read')
 
     #
@@ -324,14 +322,14 @@ def test5_poke_s3(cluster):
 
     key = bucket.get_key(objname)
     body = key.get_contents_as_string()
-    if body != "Test5A\n":
+    if body != b"Test5A\n":
         raise TestException("failed body check, bucket %s object %s" %
                             (bucketname, objname))
 
     bucket = c.get_bucket("test5b:"+bucketname)
     key = bucket.get_key(objname)
     body = key.get_contents_as_string()
-    if body != "Test5B\n":
+    if body != b"Test5B\n":
         raise TestException(
             "failed body check, tenant %s bucket %s object %s" %
             ("test5b", bucketname, objname))
