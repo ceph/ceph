@@ -30,13 +30,6 @@ namespace ceph {
 struct BackTrace;
 #endif
 
-
-#ifdef HAVE_STATIC_CAST
-# define __CEPH_ASSERT_VOID_CAST static_cast<void>
-#else
-# define __CEPH_ASSERT_VOID_CAST (void)
-#endif
-
 /*
  * For GNU, test specific version features. Otherwise (e.g. LLVM) we'll use
  * the defaults selected below.
@@ -79,7 +72,7 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 
 #define assert_warn(expr)							\
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 #ifdef __cplusplus
@@ -122,34 +115,34 @@ using namespace ceph;
 
 #define assert(expr)							\
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 #define ceph_assert(expr)							\
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 // this variant will *never* get compiled out to NDEBUG in the future.
 // (ceph_assert currently doesn't either, but in the future it might.)
 #define ceph_assert_always(expr)							\
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 // Named by analogy with printf.  Along with an expression, takes a format
 // string and parameters which are printed if the assertion fails.
 #define assertf(expr, ...)                  \
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 #define ceph_assertf(expr, ...)                  \
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 
 // this variant will *never* get compiled out to NDEBUG in the future.
 // (ceph_assertf currently doesn't either, but in the future it might.)
 #define ceph_assertf_always(expr, ...)                  \
   ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   ? static_cast<void> (0)				\
    : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
