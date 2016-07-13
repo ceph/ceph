@@ -399,7 +399,8 @@ int main(int argc, const char **argv)
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
     RGWFrontend *fe;
-    if (framework == "asio") {
+    if ((framework == "asio") &&
+	cct->check_experimental_feature_enabled("rgw-asio-frontend")) {
       int port;
       config->get_val("port", 80, &port);
       RGWProcessEnv env{ store, &rest, olog, port };
