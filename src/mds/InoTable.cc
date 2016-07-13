@@ -190,3 +190,26 @@ void InoTable::generate_test_instances(list<InoTable*>& ls)
 {
   ls.push_back(new InoTable());
 }
+
+
+bool InoTable::is_marked_free(inodeno_t id) const
+{
+  return free.contains(id) || projected_free.contains(id);
+}
+
+
+bool InoTable::repair(inodeno_t id)
+{
+  if (projected_version != version) {
+    // Can't do the repair while other things are in flight
+    return false;
+  }
+
+  assert(is_marked_free(id));
+  dout(10) << "repair: before status. ino = 0x" << std::hex << id << " pver =" << projected_version << " ver= " << version << dendl;
+  free.erase(id);
+  projected_free.erase(id);
+  projected_version = ++version;
+  dout(10) << "repair: after status. ino = 0x" << std::hex <<id << " pver =" << projected_version << " ver= " << version << dendl;
+  return true;
+}

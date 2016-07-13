@@ -46,6 +46,7 @@
 #include "include/assert.h"
 
 #include "mds/MDSContinuation.h"
+#include "mds/InoTable.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -3837,6 +3838,37 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         }
       }
 next:
+      // If the inode's number was free in the InoTable, fix that
+      // (#15619)
+      {
+        const inode_t& inode = in->inode;
+        MDCache *mdcache = in->mdcache;
+        InoTable *inotable = mdcache->mds->inotable;
+
+        dout(10) << "scrub: inotable ino = 0x" << std::hex << inode.ino << dendl;
+        dout(10) << "scrub: inotable free says "
+          << inotable->is_marked_free(inode.ino) << dendl;
+
+        if (inotable->is_marked_free(inode.ino)) {
+          LogChannelRef clog = in->mdcache->mds->clog;
+          clog->error() << "scrub: inode wrongly marked free: 0x" << std::hex
+            << inode.ino;
+
+          if (in->scrub_infop->header && in->scrub_infop->header->repair) {
+            bool repaired = inotable->repair(inode.ino);
+            if (repaired) {
+              clog->error() << "inode table repaired for inode: 0x" << std::hex
+                << inode.ino;
+
+              inotable->save();
+            } else {
+              clog->error() << "Cannot repair inotable while other operations"
+                " are in progress";
+            }
+          }
+        }
+      }
+
       // quit if we're a file, or kick off directory checks otherwise
       // TODO: validate on-disk inode for non-base directories
       if (!in->is_dir()) {
