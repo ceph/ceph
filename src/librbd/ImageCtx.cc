@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/WorkQueue.h"
+#include "common/Timer.h"
 
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioCompletion.h"
@@ -59,6 +60,21 @@ public:
   }
   virtual ~ThreadPoolSingleton() {
     stop();
+  }
+};
+
+class SafeTimerSingleton : public SafeTimer {
+public:
+  Mutex lock;
+
+  explicit SafeTimerSingleton(CephContext *cct)
+      : SafeTimer(cct, lock, true),
+        lock("librbd::Journal::SafeTimerSingleton::lock") {
+    init();
+  }
+  virtual ~SafeTimerSingleton() {
+    Mutex::Locker locker(lock);
+    shutdown();
   }
 };
 
@@ -1048,5 +1064,14 @@ struct C_InvalidateCache : public Context {
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
     return thread_pool_singleton;
+  }
+
+  void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
+                                    Mutex **timer_lock) {
+    SafeTimerSingleton *safe_timer_singleton;
+    cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
+      safe_timer_singleton, "librbd::journal::safe_timer");
+    *timer = safe_timer_singleton;
+    *timer_lock = &safe_timer_singleton->lock;
   }
 }
