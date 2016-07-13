@@ -418,7 +418,7 @@ endif(ENABLE_SHARED)
 add_library(common STATIC ${libcommon_files}
   $<TARGET_OBJECTS:mon_common_objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>)
-target_link_libraries(common ${CMAKE_DL_LIBS})
+target_link_libraries(common ${CRYPTO_LIBS} ${CMAKE_DL_LIBS})
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc
@@ -453,8 +453,7 @@ set(global_common_files
 add_library(global_common_objs OBJECT ${global_common_files})
 add_library(global STATIC ${libglobal_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
-target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
-  ${EXTRALIBS})
+target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${EXTRALIBS})
 
 # rados object classes
 add_subdirectory(cls)
@@ -1341,7 +1340,8 @@ if(${WITH_RADOSGW})
   target_include_directories(rgw_a PUBLIC ${FCGI_INCLUDE_DIR})
   target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
-    cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS})
+    cls_replica_log_client cls_user_client curl global expat ${OPENLDAP_LIBS}
+    ${CRYPTO_LIBS})
 
   set(radosgw_srcs
     rgw/rgw_fcgi_process.cc
