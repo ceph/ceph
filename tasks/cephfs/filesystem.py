@@ -283,6 +283,9 @@ class Filesystem(MDSCluster):
         osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
         return pg_warn_min_per_osd * osd_count
 
+    def get_all_mds_info(self):
+        return self.get_mds_info()
+
     def create(self):
         log.info("Creating filesystem '{0}'".format(self.name))
 
@@ -442,6 +445,15 @@ class Filesystem(MDSCluster):
         """
         return self.get_daemon_names("up:active")
 
+    def get_all_mds_rank(self):
+        status = self.get_mds_map()
+        result = []
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+            if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
+                result.append(mds_status['rank'])
+
+        return result
+
     def get_rank_names(self):
         """
         Return MDS daemon names of those daemons holding a rank,
@@ -496,6 +508,28 @@ class Filesystem(MDSCluster):
         log.info("Creating new filesystem")
         self.delete_all_filesystems()
         self.create()
+
+    def put_metadata_object_raw(self, object_id, infile):
+        """
+        Save an object to the metadata pool
+        """
+        temp_bin_path = infile
+        self.client_remote.run(args=[
+            'sudo', os.path.join(self._prefix, 'rados'), '-p', self.metadata_pool_name, 'put', object_id, temp_bin_path
+        ])
+
+    def get_metadata_object_raw(self, object_id):
+        """
+        Retrieve an object from the metadata pool and store it in a file.
+        """
+        temp_bin_path = '/tmp/' + object_id + '.bin'
+        object_type = "InoTable"
+
+        self.client_remote.run(args=[
+            'sudo', os.path.join(self._prefix, 'rados'), '-p', self.metadata_pool_name, 'get', object_id, temp_bin_path
+        ])
+
+        return temp_bin_path
 
     def get_metadata_object(self, object_type, object_id):
         """

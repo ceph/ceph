@@ -348,7 +348,7 @@ class CephFSTestCase(unittest.TestCase):
         else:
             raise AssertionError("MDS daemon '{0}' did not crash as expected".format(daemon_id))
 
-    def assert_cluster_log(self, expected_pattern):
+    def assert_cluster_log(self, expected_pattern, invert_match=False):
         """
         Context manager.  Assert that during execution, or up to 5 seconds later,
         the Ceph cluster log emits a message matching the expected pattern.
@@ -360,7 +360,11 @@ class CephFSTestCase(unittest.TestCase):
 
         class ContextManager(object):
             def match(self):
-                return expected_pattern in self.watcher_process.stdout.getvalue()
+                found = expected_pattern in self.watcher_process.stdout.getvalue()
+                if invert_match:
+                    return not found
+
+                return found
 
             def __enter__(self):
                 self.watcher_process = ceph_manager.run_ceph_w()
@@ -402,7 +406,7 @@ class CephFSTestCase(unittest.TestCase):
                 for ss in summary_strings:
                     if pattern in ss:
                          return True
-                
+
             log.debug("Not found expected summary strings yet ({0})".format(summary_strings))
             return False
 

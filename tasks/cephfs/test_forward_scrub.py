@@ -194,3 +194,71 @@ class TestForwardScrub(CephFSTestCase):
         self.fs.wait_for_daemons()
         self.mount_a.mount()
         self._validate_linkage(inos)
+
+    def _stash_inotable(self):
+        # Get all active ranks
+        ranks = self.fs.get_all_mds_rank()
+
+        inotable_dict = {}
+        for rank in ranks:
+            inotable_oid = "mds{rank:d}_".format(rank=rank) + "inotable"
+            print "Trying to fetch inotable object: " + inotable_oid
+
+            #self.fs.get_metadata_object("InoTable", "mds0_inotable")
+            inotable_raw = self.fs.get_metadata_object_raw(inotable_oid)
+            inotable_dict[inotable_oid] = inotable_raw
+        return inotable_dict
+
+    def test_inotable_sync(self):
+        self.mount_a.write_n_mb("file1_sixmegs", 6)
+
+        # Flush journal
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(["flush", "journal"])
+
+        inotable_copy = self._stash_inotable()
+
+        self.mount_a.mount()
+
+        self.mount_a.write_n_mb("file2_sixmegs", 6)
+        self.mount_a.write_n_mb("file3_sixmegs", 6)
+
+        inos = self._get_paths_to_ino()
+
+        # Flush journal
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(["flush", "journal"])
+
+        self.mount_a.umount_wait()
+
+        with self.assert_cluster_log("inode table repaired", invert_match=True):
+            self.fs.mds_asok(["scrub_path", "/", "repair", "recursive"])
+
+        self.mds_cluster.mds_stop()
+        self.mds_cluster.mds_fail()
+
+        # Truncate the journal (to ensure the inotable on disk
+        # is all that will be in the InoTable in memory)
+
+        self.fs.journal_tool(["event", "splice",
+            "--inode={0}".format(inos["./file2_sixmegs"]), "summary"])
+
+        self.fs.journal_tool(["event", "splice",
+            "--inode={0}".format(inos["./file3_sixmegs"]), "summary"])
+
+        # Revert to old inotable.
+        for key, value in inotable_copy.iteritems():
+           self.fs.put_metadata_object_raw(key, value)
+
+        self.mds_cluster.mds_restart()
+        self.fs.wait_for_daemons()
+
+        with self.assert_cluster_log("inode table repaired"):
+            self.fs.mds_asok(["scrub_path", "/", "repair", "recursive"])
+
+        self.mds_cluster.mds_stop()
+        table_text = self.fs.table_tool(["0", "show", "inode"])
+        table = json.loads(table_text)
+        self.assertGreater(
+                table['0']['data']['inotable']['free'][0]['start'],
+                inos['./file3_sixmegs'])
