@@ -44,14 +44,16 @@ public:
   ImageDeleter& operator=(const ImageDeleter&) = delete;
 
   void schedule_image_delete(RadosRef local_rados,
-                             uint64_t local_pool_id,
+                             int64_t local_pool_id,
                              const std::string& local_image_id,
                              const std::string& local_image_name,
                              const std::string& global_image_id);
-  void wait_for_scheduled_deletion(const std::string& image_name,
+  void wait_for_scheduled_deletion(int64_t local_pool_id,
+                                   const std::string &global_image_id,
                                    Context *ctx,
                                    bool notify_on_failed_retry=true);
-  void cancel_waiter(const std::string& image_name);
+  void cancel_waiter(int64_t local_pool_id,
+                     const std::string &global_image_id);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
@@ -75,7 +77,7 @@ private:
 
   struct DeleteInfo {
     RadosRef local_rados;
-    uint64_t local_pool_id;
+    int64_t local_pool_id;
     std::string local_image_id;
     std::string local_image_name;
     std::string global_image_id;
@@ -84,7 +86,7 @@ private:
     bool notify_on_failed_retry;
     Context *on_delete;
 
-    DeleteInfo(RadosRef local_rados, uint64_t local_pool_id,
+    DeleteInfo(RadosRef local_rados, int64_t local_pool_id,
                const std::string& local_image_id,
                const std::string& local_image_name,
                const std::string& global_image_id) :
@@ -94,8 +96,9 @@ private:
       notify_on_failed_retry(true), on_delete(nullptr) {
     }
 
-    bool match(const std::string& image_name) {
-      return local_image_name == image_name;
+    bool match(int64_t local_pool_id, const std::string &global_image_id) {
+      return (this->local_pool_id == local_pool_id &&
+              this->global_image_id == global_image_id);
     }
     void notify(int r);
     void to_string(std::stringstream& ss);
@@ -133,7 +136,9 @@ private:
   void enqueue_failed_delete(int error_code);
   void retry_failed_deletions();
 
-  unique_ptr<DeleteInfo> const* find_delete_info(const std::string& image_name);
+  unique_ptr<DeleteInfo> const*
+  find_delete_info(int64_t local_pool_id, const std::string &global_image_id);
+
 };
 
 } // namespace mirror
