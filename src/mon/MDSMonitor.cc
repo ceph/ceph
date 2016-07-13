@@ -2204,7 +2204,7 @@ int MDSMonitor::filesystem_command(
 	 << ") to deactivate";
     } else if (fs->mds_map.get_num_in_mds() <= size_t(fs->mds_map.get_max_mds())) {
       r = -EBUSY;
-      ss << "must decrease max_mds or else MDS will immediately reactivate";
+      ss << "must decrease max_mds ("<< pending_mdsmap.get_max_mds() << ") or else MDS will immediately reactivate";
     } else {
       r = 0;
       mds_gid_t gid = fs->mds_map.up.at(role.rank);
