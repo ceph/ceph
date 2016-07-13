@@ -141,59 +141,8 @@ class AsyncConnection : public Connection {
   }
   void reset_recv_state();
 
-   /**
-   * The DelayedDelivery is for injecting delays into Message delivery off
-   * the socket. It is only enabled if delays are requested, and if they
-   * are then it pulls Messages off the DelayQueue and puts them into the
-   * AsyncMessenger event queue.
-   */
-  class DelayedDelivery : public EventCallback {
-    std::set<uint64_t> register_time_events; // need to delete it if stop
-    std::deque<std::pair<utime_t, Message*> > delay_queue;
-    Mutex delay_lock;
-    AsyncMessenger *msgr;
-    EventCenter *center;
-    DispatchQueue *dispatch_queue;
-    uint64_t conn_id;
-    std::atomic_bool stop_dispatch;
-
-   public:
-    explicit DelayedDelivery(AsyncMessenger *omsgr, EventCenter *c,
-                             DispatchQueue *q, uint64_t cid)
-      : delay_lock("AsyncConnection::DelayedDelivery::delay_lock"),
-        msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
-        stop_dispatch(false) { }
-    ~DelayedDelivery() {
-      assert(register_time_events.empty());
-      assert(delay_queue.empty());
-    }
-    void set_center(EventCenter *c) { center = c; }
-    void do_request(int id) override;
-    void queue(double delay_period, utime_t release, Message *m) {
-      Mutex::Locker l(delay_lock);
-      delay_queue.push_back(std::make_pair(release, m));
-      register_time_events.insert(center->create_time_event(delay_period*1000000, this));
-    }
-    void discard() {
-      stop_dispatch = true;
-      center->submit_to(center->get_id(), [this] () mutable {
-        Mutex::Locker l(delay_lock);
-        while (!delay_queue.empty()) {
-          Message *m = delay_queue.front().second;
-          dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
-          m->put();
-          delay_queue.pop_front();
-        }
-        for (auto i : register_time_events)
-          center->delete_time_event(i);
-        register_time_events.clear();
-        stop_dispatch = false;
-      }, true);
-    }
-    bool ready() const { return !stop_dispatch && delay_queue.empty() && register_time_events.empty(); }
-    void flush();
-  } *delay_state;
-
+  class DelayedDelivery;
+  DelayedDelivery *delay_state;
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
   ~AsyncConnection();
