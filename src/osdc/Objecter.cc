@@ -3215,6 +3215,24 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		<< dendl;
   Op *op = iter->second;
 
+  if (retry_writes_after_first_reply && op->attempts == 1 &&
+      (op->target.flags & CEPH_OSD_FLAG_WRITE)) {
+    ldout(cct, 7) << "retrying write after first reply: " << tid << dendl;
+    if (op->onack) {
+      num_unacked.dec();
+    }
+    if (op->oncommit || op->oncommit_sync) {
+      num_uncommitted.dec();
+    }
+    _session_op_remove(s, op);
+    sl.unlock();
+    put_session(s);
+
+    _op_submit(op, sul, NULL);
+    m->put();
+    return;
+  }
+
   if (m->get_retry_attempt() >= 0) {
     if (m->get_retry_attempt() != (op->attempts - 1)) {
       ldout(cct, 7) << " ignoring reply from attempt "

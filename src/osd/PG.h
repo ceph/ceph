@@ -2274,7 +2274,7 @@ public:
   void share_pg_info();
 
 
-  void append_log_entries_update_missing(
+  bool append_log_entries_update_missing(
     const list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t);
 
