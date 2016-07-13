@@ -128,14 +128,14 @@ unittests:: $(check_PROGRAMS)
 
 UNITTEST_CXXFLAGS = \
 	$(AM_CXXFLAGS) \
-	-I$(top_srcdir)/src/gmock/include \
-	-I$(top_builddir)/src/gmock/include \
-	-I$(top_srcdir)/src/gmock/gtest/include \
-	-I$(top_builddir)/src/gmock/gtest/include
+	-I$(top_srcdir)/src/googletest/googlemock/include \
+	-I$(top_builddir)/src/googletest/googlemock/include \
+	-I$(top_srcdir)/src/googletest/googletest/include \
+	-I$(top_builddir)/src/googletest/googletest/include
 UNITTEST_LDADD = \
-	$(top_builddir)/src/gmock/lib/libgmock_main.la \
-	$(top_builddir)/src/gmock/lib/libgmock.la \
-	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
+	$(top_builddir)/src/googletest/googlemock/lib/libgmock_main.la \
+	$(top_builddir)/src/googletest/googlemock/lib/libgmock.la \
+	$(top_builddir)/src/googletest/googletest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
 
 if SOLARIS
