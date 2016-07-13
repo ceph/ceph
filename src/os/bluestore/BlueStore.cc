@@ -2331,20 +2331,24 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
     int r = alloc->reserve(gift);
     assert(r == 0);
 
-    uint64_t eoffset;
-    uint32_t elength;
-    r = alloc->allocate(gift, min_alloc_size, 0, &eoffset, &elength);
-    if (r < 0) {
-      assert(0 == "allocate failed, wtf");
-      return r;
-    }
-    if (elength < gift) {
-      alloc->unreserve(gift - elength);
-    }
+    uint64_t hint = 0;
+    while (gift > 0) {
+      uint64_t eoffset;
+      uint32_t elength;
+      r = alloc->allocate(gift, min_alloc_size, hint, &eoffset, &elength);
+      if (r < 0) {
+        assert(0 == "allocate failed, wtf");
+        return r;
+      }
 
-    bluestore_pextent_t e(eoffset, elength);
-    dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-    extents->push_back(e);
+      bluestore_pextent_t e(eoffset, elength);
+      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      extents->push_back(e);
+      gift -= e.length;
+      hint = e.end();
+    }
+    assert(gift == 0); // otherwise there is a reservation leak
+
     ret = 1;
   }
 
