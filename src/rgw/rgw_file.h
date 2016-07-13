@@ -1882,12 +1882,13 @@ public:
   off_t next_off;
   size_t bytes_written;
   bool multipart;
+  bool eio;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), processor(nullptr), last_off(0), next_off(0),
-      bytes_written(0), multipart(false) {
+      bytes_written(0), multipart(false), eio(false) {
 
     int ret = header_init();
     if (ret == 0) {
@@ -1960,6 +1961,8 @@ public:
   }
 
   void put_data(off_t off, buffer::list& _bl) {
+    if (off && (off != (ofs+1)))
+      eio = true;
     ofs = off;
     data.claim(_bl);
   }
