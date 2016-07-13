@@ -14,10 +14,20 @@ monkey.patch_all()
 
 import logging
 import os
+import subprocess
 
+__version__ = '1.0.0'
 
-__version__ = '0.1.0'
+# do our best, but if it fails, continue with above
 
+try:
+    __version__ += '-' + subprocess.check_output(
+        'git rev-parse --short HEAD'.split(),
+        cwd=os.path.dirname(os.path.realpath(__file__))
+    ).strip()
+except Exception as e:
+    # before logging; should be unusual
+    print >>sys.stderr, 'Can\'t get version from git rev-parse', e
 
 # If we are running inside a virtualenv, ensure we have its 'bin' directory in
 # our PATH. This doesn't happen automatically if scripts are called without
@@ -38,6 +48,8 @@ logging.basicConfig(
     format='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s')
 log = logging.getLogger(__name__)
 
+log.debug('teuthology version: %s', __version__)
+
 
 def setup_log_file(log_path):
     root_logger = logging.getLogger()
@@ -54,3 +66,4 @@ def setup_log_file(log_path):
     handler = logging.FileHandler(filename=log_path)
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
+    root_logger.info('teuthology version: %s', __version__)
