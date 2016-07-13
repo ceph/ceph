@@ -471,7 +471,7 @@ public:
           spawn(new RGWReadRemoteDataLogShardInfoCR(sync_env, i, &shards_info[i]), true);
 	}
       }
-      while (collect(&ret)) {
+      while (collect(&ret, NULL)) {
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
 	}
@@ -496,7 +496,7 @@ public:
 	call(new RGWSimpleRadosUnlockCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
 			             lock_name, cookie));
       }
-      while (collect(&ret)) {
+      while (collect(&ret, NULL)) {
 	if (ret < 0) {
 	  return set_state(RGWCoroutine_Error);
 	}
@@ -723,7 +723,7 @@ public:
           yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data.init", "",
                                                           EIO, string("failed to build bucket instances map")));
       }
-      while (collect(&ret)) {
+      while (collect(&ret, NULL)) {
 	if (ret < 0) {
           yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data.init", "",
                                                           -ret, string("failed to store sync status: ") + cpp_strerror(-ret)));
@@ -985,6 +985,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   set<string> spawned_keys;
 
   RGWContinuousLeaseCR *lease_cr;
+  RGWCoroutinesStack *lease_stack;
   string status_oid;
 
 
@@ -1012,7 +1013,7 @@ public:
 						      sync_marker(_marker),
                                                       marker_tracker(NULL), truncated(false), inc_lock("RGWDataSyncShardCR::inc_lock"),
                                                       total_entries(0), spawn_window(BUCKET_SHARD_SYNC_SPAWN_WINDOW), reset_backoff(NULL),
-                                                      lease_cr(NULL), error_repo(nullptr), max_error_entries(DATA_SYNC_MAX_ERR_ENTRIES),
+                                                      lease_cr(nullptr), lease_stack(nullptr), error_repo(nullptr), max_error_entries(DATA_SYNC_MAX_ERR_ENTRIES),
                                                       retry_backoff_secs(RETRY_BACKOFF_SECS_DEFAULT) {
     set_description() << "data sync shard source_zone=" << sync_env->source_zone << " shard_id=" << shard_id;
     status_oid = RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id);
@@ -1079,7 +1080,7 @@ public:
     lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, status_oid,
                                         lock_name, lock_duration, this);
     lease_cr->get();
-    spawn(lease_cr, false);
+    lease_stack = spawn(lease_cr, false);
   }
 
   int full_sync() {
@@ -1251,7 +1252,7 @@ public:
             set_status() << "num_spawned() > spawn_window";
             yield wait_for_child();
             int ret;
-            while (collect(&ret)) {
+            while (collect(&ret, lease_stack)) {
               if (ret < 0) {
                 ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
                 /* we have reported this error */
@@ -2191,6 +2192,7 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   int total_entries;
 
   RGWContinuousLeaseCR *lease_cr;
+  RGWCoroutinesStack *lease_stack;
 
   string status_oid;
 
@@ -2204,7 +2206,7 @@ public:
                                                                             full_marker(_full_marker), marker_tracker(NULL),
                                                                             spawn_window(BUCKET_SYNC_SPAWN_WINDOW), entry(NULL),
                                                                             op(CLS_RGW_OP_ADD),
-                                                                            total_entries(0), lease_cr(NULL) {
+                                                                            total_entries(0), lease_cr(nullptr), lease_stack(nullptr) {
     status_oid = RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs);
     logger.init(sync_env, "BucketFull", bs.get_key());
   }
@@ -2231,7 +2233,7 @@ int RGWBucketShardFullSyncCR::operate()
       lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, status_oid,
                                           lock_name, lock_duration, this);
       lease_cr->get();
-      spawn(lease_cr, false);
+      lease_stack = spawn(lease_cr, false);
     }
     while (!lease_cr->is_locked()) {
       if (lease_cr->is_done()) {
@@ -2280,7 +2282,7 @@ int RGWBucketShardFullSyncCR::operate()
         }
         while ((int)num_spawned() > spawn_window) {
           yield wait_for_child();
-          while (collect(&ret)) {
+          while (collect(&ret, lease_stack)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
               /* we have reported this error */
@@ -2291,7 +2293,7 @@ int RGWBucketShardFullSyncCR::operate()
     } while (list_result.is_truncated);
     set_status("done iterating over all objects");
     /* wait for all operations to complete */
-    drain_all_but(1); /* still need to hold lease cr */
+    drain_all_but_stack(lease_stack); /* still need to hold lease cr */
     /* update sync state to incremental */
     yield {
       rgw_bucket_shard_sync_info sync_status;
@@ -2329,6 +2331,7 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   const int spawn_window{BUCKET_SYNC_SPAWN_WINDOW};
   bool updated_status{false};
   RGWContinuousLeaseCR *lease_cr{nullptr};
+  RGWCoroutinesStack *lease_stack{nullptr};
   const string status_oid;
 
   string name;
@@ -2375,7 +2378,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, status_oid,
                                           lock_name, lock_duration, this);
       lease_cr->get();
-      spawn(lease_cr, false);
+      lease_stack = spawn(lease_cr, false);
     }
     while (!lease_cr->is_locked()) {
       if (lease_cr->is_done()) {
@@ -2396,7 +2399,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
                                              &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
-        drain_all_but(1);
+        drain_all_but_stack(lease_stack);
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
@@ -2476,7 +2479,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           }
           ldout(sync_env->cct, 5) << *this << ": [inc sync] can't do op on key=" << key << " need to wait for conflicting operation to complete" << dendl;
           yield wait_for_child();
-          while (collect(&ret)) {
+          while (collect(&ret, lease_stack)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a child operation returned error (ret=" << ret << ")" << dendl;
               /* we have reported this error */
@@ -2508,7 +2511,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         while ((int)num_spawned() > spawn_window) {
           set_status() << "num_spawned() > spawn_window";
           yield wait_for_child();
-          while (collect(&ret)) {
+          while (collect(&ret, lease_stack)) {
             if (ret < 0) {
               ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
               /* we have reported this error */
@@ -2524,13 +2527,13 @@ int RGWBucketShardIncrementalSyncCR::operate()
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "ERROR: marker_tracker->flush() returned retcode=" << retcode << dendl;
-      drain_all_but(1);
+      drain_all_but_stack(lease_stack);
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
     }
 
-    drain_all_but(1);
+    drain_all_but_stack(lease_stack);
     lease_cr->go_down();
     /* wait for all operations to complete */
     drain_all();

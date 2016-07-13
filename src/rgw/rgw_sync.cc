@@ -591,12 +591,13 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
   rgw_meta_sync_info status;
   vector<RGWMetadataLogInfo> shards_info;
   RGWContinuousLeaseCR *lease_cr;
+  RGWCoroutinesStack *lease_stack;
 public:
   RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
                              const rgw_meta_sync_info &status)
     : RGWCoroutine(_sync_env->store->ctx()), sync_env(_sync_env),
       status(status), shards_info(status.num_shards),
-      lease_cr(NULL) {}
+      lease_cr(nullptr), lease_stack(nullptr) {}
 
   ~RGWInitSyncStatusCoroutine() {
     if (lease_cr) {
@@ -616,7 +617,7 @@ public:
 	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_env->status_oid(),
                                             lock_name, lock_duration, this);
         lease_cr->get();
-        spawn(lease_cr, false);
+        lease_stack = spawn(lease_cr, false);
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
@@ -649,7 +650,7 @@ public:
 	}
       }
 
-      drain_all_but(1); /* the lease cr still needs to run */
+      drain_all_but_stack(lease_stack); /* the lease cr still needs to run */
 
       yield {
         set_status("updating sync status");
@@ -672,7 +673,7 @@ public:
       }
       set_status("drop lock lease");
       yield lease_cr->go_down();
-      while (collect(&ret)) {
+      while (collect(&ret, NULL)) {
 	if (ret < 0) {
 	  return set_cr_error(ret);
 	}
@@ -735,6 +736,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
   RGWShardedOmapCRManager *entries_index;
 
   RGWContinuousLeaseCR *lease_cr;
+  RGWCoroutinesStack *lease_stack;
   bool lost_lock;
   bool failed;
 
@@ -744,7 +746,8 @@ public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
                     map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
-						      ret_status(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), failed(false), markers(_markers) {
+						      ret_status(0), entries_index(NULL), lease_cr(nullptr), lease_stack(nullptr),
+                                                      lost_lock(false), failed(false), markers(_markers) {
   }
 
   ~RGWFetchAllMetaCR() {
@@ -789,7 +792,7 @@ public:
 	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
                                             lock_name, lock_duration, this);
         lease_cr->get();
-        spawn(lease_cr, false);
+        lease_stack = spawn(lease_cr, false);
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
@@ -868,12 +871,12 @@ public:
         }
       }
 
-      drain_all_but(1); /* the lease cr still needs to run */
+      drain_all_but_stack(lease_stack); /* the lease cr still needs to run */
 
       yield lease_cr->go_down();
 
       int ret;
-      while (collect(&ret)) {
+      while (collect(&ret, NULL)) {
 	if (ret < 0) {
 	  return set_cr_error(ret);
 	}
@@ -1250,6 +1253,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   boost::asio::coroutine full_cr;
 
   RGWContinuousLeaseCR *lease_cr = nullptr;
+  RGWCoroutinesStack *lease_stack = nullptr;
   bool lost_lock = false;
 
   bool *reset_backoff;
@@ -1380,7 +1384,7 @@ public:
                                             sync_env->shard_obj_name(shard_id),
                                             lock_name, lock_duration, this);
         lease_cr->get();
-        spawn(lease_cr, false);
+        lease_stack = spawn(lease_cr, false);
         lost_lock = false;
       }
       while (!lease_cr->is_locked()) {
@@ -1502,7 +1506,7 @@ public:
                                               sync_env->shard_obj_name(shard_id),
                                               lock_name, lock_duration, this);
           lease_cr->get();
-          spawn(lease_cr, false);
+          lease_stack = spawn(lease_cr, false);
           lost_lock = false;
         }
         while (!lease_cr->is_locked()) {
@@ -1725,7 +1729,7 @@ public:
           }
         }
         // wait for each shard to complete
-        collect(&ret);
+        collect(&ret, NULL);
         drain_all();
         {
           // drop shard cr refs under lock
