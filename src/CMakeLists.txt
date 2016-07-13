@@ -684,6 +684,12 @@ add_subdirectory(ceph-disk)
 add_subdirectory(ceph-detect-init)
 
 ## dencoder
+CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
+if(HAS_VTA)
+  set_source_files_properties(test/encoding/ceph_dencoder.cc
+    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+
 set(dencoder_srcs
   test/encoding/ceph_dencoder.cc
   $<TARGET_OBJECTS:krbd_objs>
