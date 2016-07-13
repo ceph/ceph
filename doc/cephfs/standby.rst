@@ -166,12 +166,12 @@ of the other.
 ::
 
     [mds.a]
-    standby replay = true
-    standby for rank = 0
+    mds standby replay = true
+    mds standby for rank = 0
 
     [mds.b]
-    standby replay = true
-    standby for rank = 0
+    mds standby replay = true
+    mds standby for rank = 0
 
 Floating standby
 ~~~~~~~~~~~~~~~~
@@ -195,14 +195,14 @@ for the other filesystem.
 ::
 
     [mds.a]
-    standby for fscid = 1
+    mds standby for fscid = 1
 
     [mds.b]
-    standby for fscid = 1
+    mds standby for fscid = 1
 
     [mds.c]
-    standby for fscid = 2
+    mds standby for fscid = 2
 
     [mds.d]
-    standby for fscid = 2
+    mds standby for fscid = 2
 
