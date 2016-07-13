@@ -2483,12 +2483,11 @@ int BlueStore::_setup_block_symlink_or_file(
 	if (g_conf->bluestore_block_preallocate_file) {
 #ifdef HAVE_POSIX_FALLOCATE
 	  r = ::posix_fallocate(fd, 0, size);
-	  if (r < 0) {
-	    r = -errno;
+	  if (r) {
 	    derr << __func__ << " failed to prefallocate " << name << " file to "
 	      << size << ": " << cpp_strerror(r) << dendl;
 	    VOID_TEMP_FAILURE_RETRY(::close(fd));
-	    return r;
+	    return -r;
 	  }
 #else
 	  char data[1024*128];
