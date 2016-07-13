@@ -1,8 +1,5 @@
 add_executable(ceph_rgw_jsonparser
-  rgw_jsonparser.cc
-  rgw_common.cc
-  rgw_env.cc
-  rgw_json_enc.cc)
+  rgw_jsonparser.cc)
 target_link_libraries(ceph_rgw_jsonparser
   rgw_a
   global)
