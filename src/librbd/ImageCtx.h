@@ -33,6 +33,7 @@ class ContextWQ;
 class Finisher;
 class PerfCounters;
 class ThreadPool;
+class SafeTimer;
 
 namespace librbd {
 
@@ -303,6 +304,8 @@ namespace librbd {
     void set_journal_policy(journal::Policy *policy);
 
     static ThreadPool *get_thread_pool_instance(CephContext *cct);
+    static void get_timer_instance(CephContext *cct, SafeTimer **timer,
+                                   Mutex **timer_lock);
   };
 }
 

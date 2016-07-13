@@ -155,21 +155,6 @@ public:
   }
 };
 
-class SafeTimerSingleton : public SafeTimer {
-public:
-  Mutex lock;
-
-  explicit SafeTimerSingleton(CephContext *cct)
-      : SafeTimer(cct, lock, true),
-        lock("librbd::Journal::SafeTimerSingleton::lock") {
-    init();
-  }
-  virtual ~SafeTimerSingleton() {
-    Mutex::Locker locker(lock);
-    shutdown();
-  }
-};
-
 template <typename J>
 int open_journaler(CephContext *cct, J *journaler,
                    cls::journal::Client *client,
@@ -324,12 +309,7 @@ Journal<I>::Journal(I &image_ctx)
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
                                cct->_conf->rbd_op_thread_timeout,
                                thread_pool_singleton);
-
-  SafeTimerSingleton *safe_timer_singleton;
-  cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-    safe_timer_singleton, "librbd::journal::safe_timer");
-  m_timer = safe_timer_singleton;
-  m_timer_lock = &safe_timer_singleton->lock;
+  ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 }
 
 template <typename I>
