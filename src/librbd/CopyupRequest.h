@@ -53,7 +53,8 @@ namespace librbd {
      */
     enum State {
       STATE_READ_FROM_PARENT,
-      STATE_OBJECT_MAP,
+      STATE_OBJECT_MAP_HEAD,
+      STATE_OBJECT_MAP_SNAP,
       STATE_COPYUP
     };
 
@@ -76,8 +77,10 @@ namespace librbd {
 
     void remove_from_list();
 
-    bool send_object_map();
+    bool send_object_map_head();
+    bool send_object_map_snap();
     bool send_copyup();
+    bool is_nop();
   };
 }
 
