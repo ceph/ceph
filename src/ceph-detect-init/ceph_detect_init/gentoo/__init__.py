@@ -10,11 +10,8 @@ def is_systemd():
     Detect whether systemd is running;
     WARNING: not mutually exclusive with openrc
     """
-    with open('/proc/1/comm', 'rb') as i:
-        for line in i:
-            if 'systemd' in line:
-                return True
-    return False
+    with open('/proc/1/comm') as i:
+        return 'systemd' in i.read()
 
 
 def is_openrc():
