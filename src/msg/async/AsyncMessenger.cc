@@ -495,6 +495,16 @@ void WorkerPool::barrier()
   ldout(cct, 10) << __func__ << " end." << dendl;
 }
 
+class C_handle_reap : public EventCallback {
+  AsyncMessenger *msgr;
+
+  public:
+  explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
+  void do_request(int id) {
+    // judge whether is a time event
+    msgr->reap_dead();
+  }
+};
 
 /*******************
  * AsyncMessenger
