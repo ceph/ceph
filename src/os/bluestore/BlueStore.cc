@@ -2362,18 +2362,23 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
 
-    uint64_t offset = 0;
-    uint32_t length = 0;
+    while (reclaim > 0) {
+      uint64_t offset = 0;
+      uint32_t length = 0;
 
-    // NOTE: this will block and do IO.
-    int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
+      // NOTE: this will block and do IO.
+      int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
 				   &offset, &length);
-    assert(r >= 0);
+      assert(r >= 0);
 
-    bluefs_extents.erase(offset, length);
+      bluefs_extents.erase(offset, length);
 
-    fm->release(offset, length, t);
-    alloc->release(offset, length);
+      fm->release(offset, length, t);
+      alloc->release(offset, length);
+
+      reclaim -= length;
+    }
+
     ret = 1;
   }
 
