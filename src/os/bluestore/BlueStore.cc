@@ -188,8 +188,10 @@ static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
   } else {
     unsigned shard;
     int r = sscanf(key, "%x", &shard);
-    if (r < 1)
+    if (r < 1) {
+      assert(0 == "invalid shard of key");
       return NULL;
+    }
     *pshard = shard_id_t(shard);
   }
   return key + 2;
