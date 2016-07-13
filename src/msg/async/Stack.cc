@@ -16,6 +16,7 @@
 
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "PosixStack.h"
 
 #include "common/dout.h"
 #include "include/assert.h"
@@ -53,11 +54,16 @@ void NetworkStack::add_thread(unsigned i)
 
 std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
 {
+  if (t == "posix")
+    return std::make_shared<PosixNetworkStack>(c, t);
+
   return nullptr;
 }
 
 Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned i)
 {
+  if (type == "posix")
+    return new PosixWorker(c, i);
   return nullptr;
 }
 
