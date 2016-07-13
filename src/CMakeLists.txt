@@ -277,13 +277,6 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-# Python stuff
-find_package(PythonInterp 2 QUIET)
-if(NOT PYTHONINTERP_FOUND)
-  message(FATAL_ERROR "Python 2 interpreter not found.")
-endif(NOT PYTHONINTERP_FOUND)
-find_package(PythonLibs REQUIRED)
-
 if(HAVE_XIO)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
   list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread rt)
