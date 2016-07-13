@@ -2047,6 +2047,100 @@ TEST_F(PGLogTest, filter_log_1) {
   }
 }
 
+TEST_F(PGLogTest, get_request) {
+  clear();
+
+  // make sure writes, deletes, and errors are found
+  vector<pg_log_entry_t> entries;
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
+  entries.push_back(
+    pg_log_entry_t(pg_log_entry_t::ERROR, oid, eversion_t(6,2), eversion_t(3,4),
+		   1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 1),
+		   utime_t(0,1), -ENOENT));
+  entries.push_back(
+    pg_log_entry_t(pg_log_entry_t::MODIFY, oid, eversion_t(6,3), eversion_t(3,4),
+		   2, osd_reqid_t(entity_name_t::CLIENT(777), 8, 2),
+		   utime_t(1,2), 0));
+  entries.push_back(
+    pg_log_entry_t(pg_log_entry_t::DELETE, oid, eversion_t(7,4), eversion_t(7,4),
+		   3, osd_reqid_t(entity_name_t::CLIENT(777), 8, 3),
+		   utime_t(10,2), 0));
+  entries.push_back(
+    pg_log_entry_t(pg_log_entry_t::ERROR, oid, eversion_t(7,5), eversion_t(7,4),
+		   3, osd_reqid_t(entity_name_t::CLIENT(777), 8, 4),
+		   utime_t(20,1), -ENOENT));
+
+  for (auto &entry : entries) {
+    log.add(entry);
+  }
+
+  for (auto &entry : entries) {
+    eversion_t replay_version;
+    version_t user_version;
+    int return_code = 0;
+    bool got = log.get_request(
+      entry.reqid, &replay_version, &user_version, &return_code);
+    EXPECT_TRUE(got);
+    EXPECT_EQ(entry.return_code, return_code);
+    EXPECT_EQ(entry.version, replay_version);
+    EXPECT_EQ(entry.user_version, user_version);
+  }
+}
+
+TEST_F(PGLogTest, ErrorNotIndexedByObject) {
+  clear();
+
+  // make sure writes, deletes, and errors are found
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
+  log.add(
+    pg_log_entry_t(pg_log_entry_t::ERROR, oid, eversion_t(6,2), eversion_t(3,4),
+		   1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 1),
+		   utime_t(0,1), -ENOENT));
+
+  EXPECT_FALSE(log.logged_object(oid));
+
+  pg_log_entry_t modify(pg_log_entry_t::MODIFY, oid, eversion_t(6,3),
+			eversion_t(3,4), 2,
+			osd_reqid_t(entity_name_t::CLIENT(777), 8, 2),
+			utime_t(1,2), 0);
+  log.add(modify);
+
+  EXPECT_TRUE(log.logged_object(oid));
+  pg_log_entry_t *entry = log.objects[oid];
+  EXPECT_EQ(modify.op, entry->op);
+  EXPECT_EQ(modify.version, entry->version);
+  EXPECT_EQ(modify.prior_version, entry->prior_version);
+  EXPECT_EQ(modify.user_version, entry->user_version);
+  EXPECT_EQ(modify.reqid, entry->reqid);
+
+  pg_log_entry_t del(pg_log_entry_t::DELETE, oid, eversion_t(7,4),
+		     eversion_t(7,4), 3,
+		     osd_reqid_t(entity_name_t::CLIENT(777), 8, 3),
+		     utime_t(10,2), 0);
+  log.add(del);
+
+  EXPECT_TRUE(log.logged_object(oid));
+  entry = log.objects[oid];
+  EXPECT_EQ(del.op, entry->op);
+  EXPECT_EQ(del.version, entry->version);
+  EXPECT_EQ(del.prior_version, entry->prior_version);
+  EXPECT_EQ(del.user_version, entry->user_version);
+  EXPECT_EQ(del.reqid, entry->reqid);
+
+  log.add(
+    pg_log_entry_t(pg_log_entry_t::ERROR, oid, eversion_t(7,5), eversion_t(7,4),
+		   3, osd_reqid_t(entity_name_t::CLIENT(777), 8, 4),
+		   utime_t(20,1), -ENOENT));
+
+  EXPECT_TRUE(log.logged_object(oid));
+  entry = log.objects[oid];
+  EXPECT_EQ(del.op, entry->op);
+  EXPECT_EQ(del.version, entry->version);
+  EXPECT_EQ(del.prior_version, entry->prior_version);
+  EXPECT_EQ(del.user_version, entry->user_version);
+  EXPECT_EQ(del.reqid, entry->reqid);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);

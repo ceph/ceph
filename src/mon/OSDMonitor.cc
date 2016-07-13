@@ -126,8 +126,9 @@ void OSDMonitor::create_initial()
   // new clusters should sort bitwise by default.
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
-  // new cluster should require jewel by default
+  // new cluster should require jewel and kraken by default
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
+  newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
@@ -1976,6 +1977,16 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << " because the osdmap requires"
 		      << " CEPH_FEATURE_SERVER_JEWEL"
 		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL\n";
+    goto ignore;
+  }
+
+  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN) &&
+      !(m->osd_features & CEPH_FEATURE_SERVER_KRAKEN)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because the osdmap requires"
+		      << " CEPH_FEATURE_SERVER_KRAKEN"
+		      << " but the osd lacks CEPH_FEATURE_SERVER_KRAKEN\n";
     goto ignore;
   }
 
@@ -6331,6 +6342,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
+	err = -EPERM;
+      }
+    } else if (key == "require_kraken_osds") {
+      if (osdmap.get_up_osd_features() & CEPH_FEATURE_SERVER_KRAKEN) {
+	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
+      } else {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
 	err = -EPERM;
       }
     } else {

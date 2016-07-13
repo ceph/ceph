@@ -809,7 +809,7 @@ TEST(pg_missing_t, add_next_event)
   eversion_t prior_version(3,4);
   pg_log_entry_t sample_e(pg_log_entry_t::DELETE, oid, version, prior_version,
 			  0, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-			  utime_t(8,9));
+			  utime_t(8,9), 0);
 
   // new object (MODIFY)
   {
@@ -819,6 +819,8 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::MODIFY;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -842,6 +844,8 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::CLONE;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_clone());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -865,6 +869,8 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::MODIFY;
     e.prior_version = eversion_t();
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -889,6 +895,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::MODIFY;
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -906,6 +914,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::BACKLOG;
     EXPECT_TRUE(e.is_backlog());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     EXPECT_DEATH(missing.add_next_event(e), "");
   }
@@ -917,6 +927,8 @@ TEST(pg_missing_t, add_next_event)
 
     e.op = pg_log_entry_t::MODIFY;
     EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
@@ -925,6 +937,43 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.is_delete());
     missing.add_next_event(e);
     EXPECT_FALSE(missing.have_missing());
+  }
+
+  // ERROR op should only be used for dup detection
+  {
+    pg_missing_t missing;
+    pg_log_entry_t e = sample_e;
+
+    e.op = pg_log_entry_t::ERROR;
+    e.return_code = -ENOENT;
+    EXPECT_FALSE(e.is_update());
+    EXPECT_FALSE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(e);
+    EXPECT_FALSE(missing.is_missing(oid));
+    EXPECT_FALSE(e.object_is_indexed());
+    EXPECT_TRUE(e.reqid_is_indexed());
+  }
+
+  // ERROR op should not affect previous entries
+  {
+    pg_missing_t missing;
+    pg_log_entry_t modify = sample_e;
+
+    modify.op = pg_log_entry_t::MODIFY;
+    EXPECT_FALSE(missing.is_missing(oid));
+    missing.add_next_event(modify);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_EQ(missing.missing[oid].need, version);
+
+    pg_log_entry_t error = sample_e;
+    error.op = pg_log_entry_t::ERROR;
+    error.return_code = -ENOENT;
+    error.version = eversion_t(11, 5);
+    missing.add_next_event(error);
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_EQ(missing.missing[oid].need, version);
   }
 }
 

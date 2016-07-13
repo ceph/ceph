@@ -166,9 +166,11 @@ struct PGLog : DoutPrefixProvider {
     bool get_request(
       const osd_reqid_t &r,
       eversion_t *replay_version,
-      version_t *user_version) const {
+      version_t *user_version,
+      int *return_code) const {
       assert(replay_version);
       assert(user_version);
+      assert(return_code);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
       if (!(indexed_data & PGLOG_INDEXED_CALLER_OPS)) {
         index_caller_ops();
@@ -177,6 +179,7 @@ struct PGLog : DoutPrefixProvider {
       if (p != caller_ops.end()) {
 	*replay_version = p->second->version;
 	*user_version = p->second->user_version;
+	*return_code = p->second->return_code;
 	return true;
       }
 
@@ -194,6 +197,7 @@ struct PGLog : DoutPrefixProvider {
 	  if (i->first == r) {
 	    *replay_version = p->second->version;
 	    *user_version = i->second;
+	    *return_code = p->second->return_code;
 	    return true;
 	  }
 	}
@@ -244,9 +248,10 @@ struct PGLog : DoutPrefixProvider {
       for (list<pg_log_entry_t>::iterator i = log.begin();
              i != log.end();
              ++i) {
-               
-        objects[i->soid] = &(*i);
-        
+	if (i->object_is_indexed()) {
+	  objects[i->soid] = &(*i);
+	}
+
         if (i->reqid_is_indexed()) {
         //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
           caller_ops[i->reqid] = &(*i);
@@ -269,7 +274,9 @@ struct PGLog : DoutPrefixProvider {
       for (list<pg_log_entry_t>::const_iterator i = log.begin();
             i != log.end();
             ++i) {
-         objects[i->soid] = const_cast<pg_log_entry_t*>(&(*i));
+	if (i->object_is_indexed()) {
+	  objects[i->soid] = const_cast<pg_log_entry_t*>(&(*i));
+	}
        }
  
       indexed_data |= PGLOG_INDEXED_OBJECTS;
@@ -308,8 +315,8 @@ struct PGLog : DoutPrefixProvider {
     }
 
     void index(pg_log_entry_t& e) {
-      if (indexed_data & PGLOG_INDEXED_OBJECTS) {
-        if (objects.count(e.soid) == 0 || 
+      if ((indexed_data & PGLOG_INDEXED_OBJECTS) && e.object_is_indexed()) {
+        if (objects.count(e.soid) == 0 ||
             objects[e.soid]->version < e.version)
           objects[e.soid] = &e;
       }
@@ -385,7 +392,7 @@ struct PGLog : DoutPrefixProvider {
       head = e.version;
 
       // to our index
-      if (indexed_data & PGLOG_INDEXED_OBJECTS) {
+      if ((indexed_data & PGLOG_INDEXED_OBJECTS) && e.object_is_indexed()) {
         objects[e.soid] = &(log.back());
       }
       if (indexed_data & PGLOG_INDEXED_CALLER_OPS) {
@@ -768,7 +775,7 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
-  static void append_log_entries_update_missing(
+  static bool append_log_entries_update_missing(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
     const list<pg_log_entry_t> &entries,
@@ -776,12 +783,12 @@ public:
     pg_missing_t &missing,
     LogEntryHandler *rollbacker,
     const DoutPrefixProvider *dpp);
-  void append_new_log_entries(
+  bool append_new_log_entries(
     const hobject_t &last_backfill,
     bool last_backfill_bitwise,
     const list<pg_log_entry_t> &entries,
     LogEntryHandler *rollbacker) {
-    append_log_entries_update_missing(
+    bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
       last_backfill_bitwise,
       entries,
@@ -792,6 +799,7 @@ public:
     if (!entries.empty()) {
       mark_writeout_from(entries.begin()->version);
     }
+    return invalidate_stats;
   }
 
   void write_log(ObjectStore::Transaction& t,
