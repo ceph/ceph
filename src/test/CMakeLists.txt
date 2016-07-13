@@ -357,7 +357,7 @@ add_executable(ceph_perf_local
   perf_local.cc
   perf_helper.cc)
 #INTEL_SSE & INTEL_SSE2 flags
-set(PERF_LOCAL_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2") 
+set(PERF_LOCAL_FLAGS "-msse -msse2")
 set_target_properties(ceph_perf_local PROPERTIES COMPILE_FLAGS
   ${PERF_LOCAL_FLAGS})
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
