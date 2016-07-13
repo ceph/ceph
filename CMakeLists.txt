@@ -141,9 +141,6 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
-CHECK_CXX_SOURCE_COMPILES("
-  int main() { float f = 12.3; int n = static_cast<int>(f); return 0; }
-  " HAVE_STATIC_CAST)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
