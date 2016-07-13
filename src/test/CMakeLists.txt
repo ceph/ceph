@@ -479,7 +479,7 @@ target_link_libraries(ceph_test_get_blkdev_size
 #make check starts here
 
 #following dependencies are run inside make check unit tests
-add_dependencies(check 
+add_dependencies(tests
   ceph-mon
   ceph
   ceph-authtool
