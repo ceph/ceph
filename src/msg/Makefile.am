@@ -23,6 +23,7 @@ libmsg_la_SOURCES += \
 	msg/async/Event.cc \
 	msg/async/net_handler.cc \
 	msg/async/Stack.cc \
+	msg/async/PosixStack.cc \
 	msg/async/EventSelect.cc
 
 if LINUX
@@ -49,6 +50,7 @@ noinst_HEADERS += \
 	msg/async/EventEpoll.h \
 	msg/async/EventSelect.h \
 	msg/async/Stack.h \
+	msg/async/PosixStack.h \
 	msg/async/net_handler.h
 
 if LINUX
