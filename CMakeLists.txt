@@ -135,18 +135,12 @@ CHECK_CXX_SOURCE_COMPILES("
   #include <string.h>
   int main() { char x = *strerror_r(0, &x, sizeof(x)); return 0; }
   " STRERROR_R_CHAR_P)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <sys/stat.h>
-  #include <stdio.h>
-  int main() { struct stat foo = {}; foo.st_mtim.tv_nsec = 0;
-  return 0; } 
-  " HAVE_STAT_ST_MTIM_TV_NSEC)
-CHECK_CXX_SOURCE_COMPILES("
-  #include <sys/stat.h>
-  #include <stdio.h>
-  int main() { struct stat foo = {}; foo.st_mtimespec.tv_nsec = 0;
-  return 0; } 
-  " HAVE_STAT_ST_MTIMESPEC_TV_NSEC)
+
+include(CheckStructHasMember)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
+CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
+  HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 CHECK_CXX_SOURCE_COMPILES("
   int main() { float f = 12.3; int n = static_cast<int>(f); return 0; }
   " HAVE_STATIC_CAST)
