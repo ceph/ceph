@@ -170,6 +170,8 @@ class StrayManager
 
   bool eval_stray(CDentry *dn, bool delay=false);
 
+  uint64_t get_num_strays() const { return num_strays; }
+
   /**
    * Where eval_stray was previously invoked with delay=true, call
    * eval_stray again for any dentries that were put on the
