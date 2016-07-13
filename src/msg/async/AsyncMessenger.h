@@ -156,7 +156,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(entity_addr_t& addr);
+  void set_addr_unknowns(const entity_addr_t &addr) override;
 
   int get_dispatch_queue_len() {
     return dispatch_queue.get_queue_len();

@@ -762,7 +762,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void AsyncMessenger::set_addr_unknowns(entity_addr_t &addr)
+void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
   Mutex::Locker l(lock);
   if (my_inst.addr.is_blank_ip()) {
