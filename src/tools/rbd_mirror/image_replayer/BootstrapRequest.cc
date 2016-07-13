@@ -82,7 +82,7 @@ void BootstrapRequest<I>::cancel() {
   Mutex::Locker locker(m_lock);
   m_canceled = true;
 
-  m_image_sync_throttler->cancel_sync(m_local_image_id);
+  m_image_sync_throttler->cancel_sync(m_local_io_ctx, m_local_image_id);
 }
 
 template <typename I>
