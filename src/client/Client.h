@@ -524,6 +524,12 @@ protected:
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
   }
+
+  int fill_statx(Inode *in, struct statx *stx, frag_info_t *dirstat=0);
+  int fill_statx(InodeRef& in, struct statx *stx, frag_info_t *dirstat=0) {
+    return fill_statx(in.get(), stx, dirstat);
+  }
+
   void touch_dn(Dentry *dn);
 
   // trim cache.
@@ -695,8 +701,8 @@ protected:
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
-			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
-			      version_t inline_version, bufferlist& inline_data,
+			      uint64_t time_warp_seq, utime_t ctime, utime_t btime, utime_t mtime,
+			      utime_t atime, version_t inline_version, bufferlist& inline_data,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
@@ -908,6 +914,8 @@ private:
 
   mds_rank_t _get_random_up_mds() const;
 
+  int _ll_getattr(Inode *in, int uid, int gid);
+
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
@@ -978,6 +986,7 @@ public:
 
   // inode stuff
   int stat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int statx(const char *path, unsigned int flags, struct statx *stx, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
@@ -1077,6 +1086,7 @@ public:
   bool ll_forget(Inode *in, int count);
   bool ll_put(Inode *in);
   int ll_getattr(Inode *in, struct stat *st, int uid = -1, int gid = -1);
+  int ll_getattrx(Inode *in, unsigned int flags, struct statx *st, int uid = -1, int gid = -1);
   int ll_setattr(Inode *in, struct stat *st, int mask, int uid = -1,
 		 int gid = -1);
   int ll_getxattr(Inode *in, const char *name, void *value, size_t size,

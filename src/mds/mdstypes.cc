@@ -238,7 +238,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
  */
 void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(13, 6, bl);
+  ENCODE_START(14, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -285,12 +285,14 @@ void inode_t::encode(bufferlist &bl, uint64_t features) const
   ::encode(last_scrub_version, bl);
   ::encode(last_scrub_stamp, bl);
 
+  ::encode(btime, bl);
+
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(13, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -363,6 +365,11 @@ void inode_t::decode(bufferlist::iterator &p)
     ::decode(last_scrub_version, p);
     ::decode(last_scrub_stamp, p);
   }
+  if (struct_v >= 14) {
+    ::decode(btime, p);
+  } else {
+    btime = utime_t();
+  }
 
   DECODE_FINISH(p);
 }
@@ -372,6 +379,7 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("ino", ino);
   f->dump_unsigned("rdev", rdev);
   f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
   f->dump_unsigned("mode", mode);
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
@@ -443,6 +451,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
   if (version == other.version) {
     if (rdev != other.rdev ||
         ctime != other.ctime ||
+        btime != other.btime ||
         mode != other.mode ||
         uid != other.uid ||
         gid != other.gid ||

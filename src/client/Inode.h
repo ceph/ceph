@@ -51,7 +51,7 @@ struct CapSnap {
   int issued, dirty;
 
   uint64_t size;
-  utime_t ctime, mtime, atime;
+  utime_t ctime, btime, mtime, atime;
   version_t time_warp_seq;
   uint32_t   mode;
   uid_t      uid;
@@ -93,6 +93,7 @@ struct Inode {
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
+  utime_t    btime;   // birth time
 
   // perm (namespace permissions)
   uint32_t   mode;
