@@ -344,6 +344,8 @@ private:
   void handle_watch_error(int err);
   void handle_notified(int r);
 
+  Context *schedule_laggy_clients_disconnect(Context *on_finish);
+
   friend std::ostream &operator<<(std::ostream &os,
 				  const JournalMetadata &journal_metadata);
 };

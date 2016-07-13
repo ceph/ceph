@@ -142,8 +142,11 @@ void JournalTrimmer::handle_metadata_updated() {
   uint64_t minimum_commit_set = active_set;
   std::string minimum_client_id;
 
-  // TODO: add support for trimming past "laggy" clients
   for (auto &client : registered_clients) {
+    if (client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+      continue;
+    }
+
     if (client.commit_position.object_positions.empty()) {
       // client hasn't recorded any commits
       minimum_commit_set = minimum_set;
