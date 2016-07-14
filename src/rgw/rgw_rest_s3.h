@@ -12,6 +12,7 @@
 #include "rgw_http_errors.h"
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
+#include "rgw_lc_s3.h"
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
@@ -255,6 +256,17 @@ public:
   int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss);
   void send_response();
   int get_params();
+};
+
+class RGWGetLC_ObjStore_S3 : public RGWGetLC_ObjStore {
+protected:
+  RGWLifecycleConfiguration_S3  config;
+public:
+  RGWGetLC_ObjStore_S3() {}
+  ~RGWGetLC_ObjStore_S3() {}
+  virtual void execute();
+
+ void send_response();
 };
 
 class RGWPutLC_ObjStore_S3 : public RGWPutLC_ObjStore {

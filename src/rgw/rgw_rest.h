@@ -278,6 +278,12 @@ public:
   virtual int get_params();
 };
 
+class RGWGetLC_ObjStore : public RGWGetLC {
+public:
+  RGWGetLC_ObjStore() {}
+  ~RGWGetLC_ObjStore() {}
+};
+
 class RGWPutLC_ObjStore : public RGWPutLC {
 public:
   RGWPutLC_ObjStore() {}

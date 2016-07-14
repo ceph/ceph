@@ -40,19 +40,7 @@ void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 
 void RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 {
-  string prefix;
-  LCExpiration expiration;
-  int days;
-  if (!rule->get_prefix(prefix)) {
-    ldout(cct, 5) << "ERROR: rule->get_prefix() failed" << dendl;
-  }
-  if (!rule->get_expiration(expiration)) {
-    ldout(cct, 5) << "ERROR: rule->get_expiration() failed" << dendl;
-  }
-  if (!expiration.get_days(&days)) {
-    ldout(cct, 5) << "ERROR: expiration->get_days() failed" << dendl;
-  }
-  prefix_map[prefix] = days;
+  prefix_map[rule->get_prefix()] = rule->get_expiration().get_days();
 }
 
 void *RGWLC::LCWorker::entry() {
@@ -481,7 +469,7 @@ exit:
 void RGWLC::start_processor()
 {
   worker = new LCWorker(cct, this);
-  worker->create("lifecycle_thread");
+  worker->create("lifecycle_thr");
 }
 
 void RGWLC::stop_processor()

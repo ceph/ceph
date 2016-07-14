@@ -53,7 +53,7 @@ public:
   void dump(Formatter *f) const;
 //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const string& _days) { days = _days; }
-  bool get_days(int* _days) {*_days = atoi(days.c_str()); return true; }
+  int get_days() {return atoi(days.c_str()); }
 };
 WRITE_CLASS_ENCODER(LCExpiration)
 
@@ -75,19 +75,16 @@ public:
       return true;
   }
 
-  bool get_status(string& _status) {
-      _status = status;
-      return true;
+  string& get_status() {
+      return status;
   }
   
-  bool get_prefix(string& _prefix) {
-      _prefix = prefix;
-      return true;
+  string& get_prefix() {
+      return prefix;
   }
 
-  bool get_expiration(LCExpiration& _expriation) {
-    _expriation = expiration;
-    return true;
+  LCExpiration& get_expiration() {
+    return expiration;
   }
 
   void set_id(string*_id) {
