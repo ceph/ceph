@@ -1924,6 +1924,32 @@ void PG::queue_op(OpRequestRef& op)
   }
 }
 
+void PG::queue_op_with_op_lock(OpRequestRef& op)
+{
+  Mutex::Locker l(map_lock);
+  if (!waiting_for_map.empty()) {
+    // preserve ordering
+    waiting_for_map.push_back(op);
+    op->mark_delayed("waiting_for_map not empty");
+    return;
+  }
+  if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), op)) {
+    waiting_for_map.push_back(op);
+    op->mark_delayed("op must wait for map");
+    return;
+  }
+  op->mark_queued_for_pg();
+  osd->_queue_op_with_op_lock(this, op, false);
+  {
+    // after queue() to include any locking costs
+#ifdef WITH_LTTNG
+    osd_reqid_t reqid = op->get_reqid();
+#endif
+    tracepoint(pg, queue_op, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc, op->rmw_flags);
+  }
+}
+
 void PG::replay_queued_ops()
 {
   assert(is_replay());
@@ -2982,7 +3008,8 @@ void PG::append_log(
   eversion_t trim_to,
   eversion_t trim_rollback_to,
   ObjectStore::Transaction &t,
-  bool transaction_applied)
+  bool transaction_applied,
+  CompletionItem * comp_item)
 {
   if (transaction_applied)
     update_snap_map(logv, t);
@@ -3003,23 +3030,44 @@ void PG::append_log(
     add_log_entry(*p);
   }
 
+  assert(comp_item);
   PGLogEntryHandler handler;
   if (!transaction_applied) {
     pg_log.clear_can_rollback_to(&handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	info.last_update));
+    epoch_t e = get_osdmap()->get_epoch();
+    eversion_t v = info.last_update;
+    PGRef pg(this);
+    comp_item->register_on_applied_with_pg_lock(
+      [this, e, v, pg]() {
+	if (!pg->pg_has_reset_since(e)) {
+	  if (pg->last_rollback_info_trimmed_to_applied > v) {
+	    generic_dout(0) << __func__ << " passed last_rollback_info_trimmed_to_applied " <<
+		  pg->last_rollback_info_trimmed_to_applied << dendl;
+	    assert(0);
+	  } else {
+	    pg->last_rollback_info_trimmed_to_applied = v;
+	  }
+	}
+    });
   } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
     pg_log.trim_rollback_info(
       trim_rollback_to,
       &handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	trim_rollback_to));
+    epoch_t e = get_osdmap()->get_epoch();
+    eversion_t v = trim_rollback_to;
+    PGRef pg(this);
+    comp_item->register_on_applied_with_pg_lock(
+      [this, e, v, pg]() {
+	if (!pg->pg_has_reset_since(e)) {
+	  if (pg->last_rollback_info_trimmed_to_applied > v) {
+	    generic_dout(0) << __func__ << " passed last_rollback_info_trimmed_to_applied " <<
+		  pg->last_rollback_info_trimmed_to_applied << dendl;
+	    assert(0);
+	  } else {
+	    pg->last_rollback_info_trimmed_to_applied = v;
+	  }
+	}
+    });
   }
 
   pg_log.trim(&handler, trim_to, info);

@@ -219,6 +219,8 @@ class CephContext;
 typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 class MOSDOp;
 
+class CompletionItem;
+
 class DeletingState {
   Mutex lock;
   Cond cond;
@@ -384,23 +386,29 @@ public:
   OpQueueItem &operator=(const OpQueueItem &) = delete;
 
   OrderLocker::Ref get_order_locker() {
+    assert(qitem);
     return qitem->get_order_locker();
   }
 
   uint32_t get_queue_token() const {
+    assert(qitem);
     return qitem->get_queue_token();
   }
   void *get_ordering_token() const {
+    assert(qitem);
     return qitem->get_ordering_token();
   }
 
   boost::optional<OpRequestRef> maybe_get_op() const {
+    assert(qitem);
     return qitem->maybe_get_op();
   }
   uint64_t get_reserved_pushes() const {
+    assert(qitem);
     return qitem->get_reserved_pushes();
   }
   void run(OSD *osd, ThreadPool::TPHandle &handle) {
+    assert(qitem);
     qitem->run(osd, handle);
   }
   unsigned get_priority() const { return priority; }
@@ -880,6 +888,9 @@ public:
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg);
   void _queue_op(PG *pg, OpRequestRef op, bool front);
+  void _queue_for_completion(PG *pg, OpRequestRef op, bool front, Context *cb);
+  void _queue_op_with_op_lock(PG *pg, OpRequestRef op, bool front);
+
   void queue_op(PG *pg, OpRequestRef op) {
     _queue_op(pg, op, false);
   };
@@ -901,19 +912,6 @@ private:
 #endif
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
-  void _queue_for_recovery(
-    pair<epoch_t, PGRef> p, uint64_t reserved_pushes) {
-    assert(recovery_lock.is_locked_by_me());
-    pair<PGRef, OpQueueItem> to_queue = make_pair(
-      p.second,
-      OpQueueItem(
-	PGRecovery(p.first, reserved_pushes),
-	cct->_conf->osd_recovery_cost,
-	cct->_conf->osd_recovery_priority,
-	ceph_clock_now(cct),
-	entity_inst_t()));
-    op_wq.queue(to_queue);
-  }
 public:
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
@@ -1158,7 +1156,6 @@ public:
     }
   }
 #endif
-
   explicit OSDService(OSD *osd);
   ~OSDService();
 };
@@ -1774,13 +1771,13 @@ private:
 	snprintf(
 	  order_lock_name, sizeof(order_lock_name),
 	  "%s.%d", "OSD:ShardedOpWQ:order:", i);
-	shard_list[i].reset(
-	  new ShardData(
+	shard_list.emplace_back(
+	  unique_ptr<ShardData>(new ShardData(
 	    queue_lock_name, order_lock_name,
 	    osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
 	    osd->cct->_conf->osd_op_pq_min_cost,
 	    osd->cct,
-	    osd->op_queue));
+	    osd->op_queue)));
       }
     }
     

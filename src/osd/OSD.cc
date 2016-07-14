@@ -486,6 +486,7 @@ void OSDService::init()
 
   if (cct->_conf->osd_recovery_delay_start)
     defer_recovery(cct->_conf->osd_recovery_delay_start);
+  
 }
 
 void OSDService::final_init()
@@ -1477,6 +1478,47 @@ public:
   }
 };
 
+class PGOpQueueableOpLock : public OpQueueItem::OpQueueable {
+  PGRef pg;
+protected:
+  spg_t get_pgid() const {
+    return pg->get_pgid();
+  }
+public:
+  PGOpQueueableOpLock(PGRef pg) : pg(pg) {}
+  virtual uint32_t get_queue_token() const override final {
+    return pg->get_pgid().ps();
+  }
+
+  virtual void *get_ordering_token() const override final {
+    return (pg.get()+1);
+  }
+
+  virtual OpQueueItem::OrderLocker::Ref get_order_locker() override final {
+    class Locker : public OpQueueItem::OrderLocker {
+      PGRef pg;
+    public:
+      Locker(PGRef pg) : pg(pg) {}
+      virtual void lock_suspend_timeout(
+	ThreadPool::TPHandle &handle) override final {
+	pg->repop_queue_lock(handle);
+	return;
+      }
+      virtual void unlock() override final {
+	pg->repop_queue_unlock();
+	return;
+      }
+    };
+    return OpQueueItem::OrderLocker::Ref(
+      new Locker(pg));
+  }
+
+  virtual void run_with_pg(OSD *osd, PGRef pg, ThreadPool::TPHandle &handle) = 0;
+  virtual void run(OSD *osd, ThreadPool::TPHandle &handle) override final {
+    run_with_pg(osd, pg, handle);
+  }
+};
+
 void OSDService::queue_for_snap_trim(PG *pg)
 {
   class PGSnapTrim : public PGOpQueueable {
@@ -1609,6 +1651,90 @@ void OSDService::_queue_op(
       OpQueueItem(
 	unique_ptr<OpQueueItem::OpQueueable>(
 	  new PGOpItem(pg, op)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source_inst()));
+  }
+}
+
+void OSDService::_queue_op_with_op_lock(
+  PG *pg,
+  OpRequestRef op,
+  bool front)
+{
+  class PGOpItemOpLock : public PGOpQueueableOpLock {
+    OpRequestRef op;
+  public:
+    PGOpItemOpLock(PGRef pg, OpRequestRef op) : PGOpQueueableOpLock(pg), op(op) {}
+    virtual ostream &print(ostream &rhs) const override final {
+      return rhs << "PGOpItemOpLock(op=" << *(op->get_req()) << ")";
+    }
+    boost::optional<OpRequestRef> maybe_get_op() const override final {
+      return op;
+    }
+    virtual void run_with_pg(
+      OSD *osd, PGRef pg, ThreadPool::TPHandle &handle) override final {
+      osd->dequeue_op(pg, op, handle);
+    }
+  };
+  if (front) {
+    op_wq.queue_front(
+      OpQueueItem(
+	unique_ptr<OpQueueItem::OpQueueable>(
+	  new PGOpItemOpLock(pg, op)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source_inst()));
+  } else {
+    op_wq.queue(
+      OpQueueItem(
+	unique_ptr<OpQueueItem::OpQueueable>(
+	  new PGOpItemOpLock(pg, op)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source_inst()));
+  }
+}
+
+void OSDService::_queue_for_completion(
+  PG *pg,
+  OpRequestRef op,
+  bool front,
+  Context *cb)
+{
+  class PGOpItem : public PGOpQueueable {
+    OpRequestRef op;
+    Context *cb;
+  public:
+    PGOpItem(PGRef pg, OpRequestRef op, Context *cb) : PGOpQueueable(pg), op(op), cb(cb) {}
+    virtual ostream &print(ostream &rhs) const override final {
+      return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
+    }
+    boost::optional<OpRequestRef> maybe_get_op() const override final {
+      return op;
+    }
+    virtual void run_with_pg(
+      OSD *osd, PGRef pg, ThreadPool::TPHandle &handle) override final {
+      cb->complete(0);
+    }
+  };
+  if (front) {
+    op_wq.queue_front(
+      OpQueueItem(
+	unique_ptr<OpQueueItem::OpQueueable>(
+	  new PGOpItem(pg, op, cb)),
+	op->get_req()->get_cost(),
+	op->get_req()->get_priority(),
+	op->get_req()->get_recv_stamp(),
+	op->get_req()->get_source_inst()));
+  } else {
+    op_wq.queue(
+      OpQueueItem(
+	unique_ptr<OpQueueItem::OpQueueable>(
+	  new PGOpItem(pg, op, cb)),
 	op->get_req()->get_cost(),
 	op->get_req()->get_priority(),
 	op->get_req()->get_recv_stamp(),
@@ -8876,7 +9002,11 @@ void OSD::enqueue_op(PGRef pg, OpRequestRef& op)
 	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
 	   << " " << *(op->get_req()) << dendl;
-  pg->queue_op(op);
+  if (pg->can_op_lock(op)) {
+    pg->queue_op_with_op_lock(op);
+  } else {
+    pg->queue_op(op);
+  }
 }
 
 void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) {

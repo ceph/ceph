@@ -67,6 +67,10 @@ public:
   bool handle_message(
     OpRequestRef op
     );
+  bool handle_message_op_lock(
+    OpRequestRef op
+    );
+  bool can_op_lock(OpRequestRef op);
 
   void on_change();
   void clear_recovery_state();
@@ -328,11 +332,14 @@ private:
     Context *on_applied;
     OpRequestRef op;
     eversion_t v;
+    CompletionItem * comp_item;
+    pg_shard_t shard; 
+
     InProgressOp(
       ceph_tid_t tid, Context *on_commit, Context *on_applied,
       OpRequestRef op, eversion_t v)
       : tid(tid), on_commit(on_commit), on_applied(on_applied),
-	op(op), v(v) {}
+	op(op), v(v) {comp_item = NULL;}
     bool done() const {
       return waiting_for_commit.empty() &&
 	waiting_for_applied.empty();
@@ -356,8 +363,10 @@ public:
     Context *on_all_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
-    OpRequestRef op
+    OpRequestRef op,
+    CompletionItem *comp_item
     );
+  void erase_inprogress_op(ceph_tid_t tid);
 
 private:
   Message * generate_subop(
@@ -389,8 +398,12 @@ private:
     ObjectStore::Transaction &op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
+  void check_committed_completion(InProgressOp * op);
+  void check_applied_completion(InProgressOp * op);
+  bool check_all_completion(InProgressOp * op);
   void sub_op_modify_reply(OpRequestRef op);
   void sub_op_modify(OpRequestRef op);
+private:
 
   struct RepModify {
     OpRequestRef op;
@@ -400,9 +413,10 @@ private:
     epoch_t epoch_started;
 
     ObjectStore::Transaction opt, localt;
-    
+    CompletionItem * comp_item;
+    pg_shard_t shard;
     RepModify() : applied(false), committed(false), ackerosd(-1),
-		  epoch_started(0) {}
+		  epoch_started(0), comp_item(NULL) {}
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 
