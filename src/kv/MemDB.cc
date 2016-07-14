@@ -24,6 +24,7 @@
 #include "include/assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_memdb
 #undef dout_prefix
@@ -82,7 +83,7 @@ void MemDB::_save()
     iter++;
   }
 
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
 void MemDB::_load()
@@ -124,7 +125,7 @@ void MemDB::_load()
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_btree[key] = datap;
   }
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
 int MemDB::_init(bool create)
