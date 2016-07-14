@@ -14,7 +14,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-using std::string;
 #include "common/perf_counters.h"
 #include "common/debug.h"
 #include "include/str_list.h"
