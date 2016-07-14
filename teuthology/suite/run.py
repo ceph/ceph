@@ -153,14 +153,13 @@ class Run(object):
         if config.suite_verify_ceph_hash and not self.args.newest:
             # don't bother if newest; we'll search for an older one
             # Get the ceph package version
-            ceph_version = util.package_version_for_hash(
-                ceph_hash, self.args.kernel_flavor, self.args.distro,
-                self.args.machine_type,
-            )
-            if not ceph_version:
-                util.schedule_fail(
-                    "Packages for ceph hash '{ver}' not found".format(
-                        ver=ceph_hash), self.name)
+            try:
+                ceph_version = util.package_version_for_hash(
+                    ceph_hash, self.args.kernel_flavor, self.args.distro,
+                    self.args.machine_type,
+                )
+            except Exception as exc:
+                util.schedule_fail(str(exc), self.name)
             log.info("ceph version: {ver}".format(ver=ceph_version))
             return ceph_version
         else:
