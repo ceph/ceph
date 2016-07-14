@@ -101,6 +101,7 @@ void MDSMonitor::create_new_fs(FSMap &fsm, const std::string &name,
   fs->mds_map.session_timeout = g_conf->mds_session_timeout;
   fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
+  fs->mds_map.fsid = mon->monmap->fsid;
   if (mon->get_quorum_features() & CEPH_FEATURE_SERVER_JEWEL) {
     fs->fscid = fsm.next_filesystem_id++;
     // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
