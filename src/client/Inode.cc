@@ -9,6 +9,24 @@
 #include "ClientSnapRealm.h"
 #include "UserGroups.h"
 
+#include "mds/flock.h"
+
+Inode::~Inode()
+{
+  cap_item.remove_myself();
+  snaprealm_item.remove_myself();
+  snapdir_parent.reset();
+
+  if (!oset.objects.empty()) {
+    lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
+      << std::hex << ino << std::dec << dendl;
+    assert(oset.objects.empty());
+  }
+
+  delete fcntl_locks;
+  delete flock_locks;
+}
+
 ostream& operator<<(ostream &out, const Inode &in)
 {
   out << in.vino() << "("
