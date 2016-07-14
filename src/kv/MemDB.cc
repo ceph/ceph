@@ -400,7 +400,6 @@ void
 MemDB::MDBWholeSpaceIteratorImpl::free_last()
 {
   m_key_value.first.clear();
-  assert(m_key_value.first.empty());
   m_key_value.second.clear();
 }
 
