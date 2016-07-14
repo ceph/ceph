@@ -2260,6 +2260,44 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+void RGWGetLC_ObjStore_S3::execute()
+{
+  map<string, bufferlist> bucket_attrs;
+
+  config.set_ctx(s->cct);
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name, s->bucket_info, NULL, &bucket_attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "LC:get_bucket_info failed" << s->bucket_name << dendl;
+    return;
+  }
+
+  map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
+  if (aiter == bucket_attrs.end())
+    return;
+
+  bufferlist::iterator iter(&aiter->second);
+  try {
+      config.decode(iter);
+    } catch (const buffer::error& e) {
+      ldout(s->cct, 0) << __func__ <<  "decode life cycle config failed" << dendl;
+      return;
+    }
+}
+
+void RGWGetLC_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  config.dump_xml(s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 void RGWPutLC_ObjStore_S3::send_response()
 {
   if (ret)
@@ -2833,6 +2871,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetRequestPayment_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
+  } else if(is_lc_op()) {
+    return new RGWGetLC_ObjStore_S3;
   }
   return get_obj_op(true);
 }

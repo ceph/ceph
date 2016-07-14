@@ -5,6 +5,7 @@
 
 #include "include/types.h"
 
+#include "rgw_user.h"
 #include "rgw_lc_s3.h"
 
 
@@ -41,7 +42,7 @@ bool LCRule_S3::xml_end(const char *el) {
   id.clear();
   prefix.clear();
   status.clear();
-  
+
   lc_id = static_cast<LCID_S3 *>(find_first("ID"));
   if (!lc_id)
     return false;
@@ -56,7 +57,7 @@ bool LCRule_S3::xml_end(const char *el) {
   if (!lc_status)
     return false;
   status = lc_status->get_data();
-  
+
   lc_expiration = static_cast<LCExpiration_S3 *>(find_first("Expiration"));
   if (!lc_expiration)
     return false;
@@ -87,7 +88,19 @@ int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfigura
     }
   }
 
-  return 0; 
+  return 0;
+}
+
+void RGWLifecycleConfiguration_S3::dump_xml(Formatter *f) const
+{
+	f->open_object_section_in_ns("LifecycleConfiguration", XMLNS_AWS_S3);
+
+    for (auto iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
+		const LCRule_S3& rule = static_cast<const LCRule_S3&>(iter->second);
+		rule.dump_xml(f);
+	}
+
+	f->close_section(); // Lifecycle
 }
 
 XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
