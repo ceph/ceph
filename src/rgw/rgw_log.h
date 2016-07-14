@@ -127,6 +127,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter);
+string rgw_render_ops_log_object_name(const string& format,struct tm *dt, string& bucket_id, const string& bucket_name);
 
 #endif
 

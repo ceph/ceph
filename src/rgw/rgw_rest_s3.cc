@@ -629,6 +629,35 @@ void RGWListBucket_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWGetBucketOplog_ObjStore_S3::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+  dump_start(s);
+
+  if (http_ret < 0)
+    return;
+
+  s->formatter->open_object_section("log_entries");
+  s->formatter->dump_string("marker", last_marker);
+  s->formatter->dump_bool("truncated", is_truncated);
+
+  {
+    s->formatter->open_array_section("entries");
+    vector<rgw_log_entry>::iterator iter;
+    for (iter = entries.begin(); iter != entries.end(); ++iter) {
+      rgw_format_ops_log_entry(*iter, s->formatter);
+      rgw_flush_formatter(s, s->formatter);
+
+    }
+    s->formatter->close_section();
+  }
+
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 void RGWGetBucketLogging_ObjStore_S3::send_response()
 {
   dump_errno(s);
@@ -2803,6 +2832,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     }
     return new RGWGetBucketWebsite_ObjStore_S3;
   }
+
+  if (s->info.args.sub_resource_exists("oplog"))
+    return new RGWGetBucketOplog_ObjStore_S3;
 
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;

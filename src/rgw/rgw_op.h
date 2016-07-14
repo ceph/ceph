@@ -402,6 +402,26 @@ public:
   virtual bool need_container_stats() { return false; }
 };
 
+class RGWGetBucketOplog : public RGWOp {
+protected:
+  int http_ret;
+  vector<rgw_log_entry> entries;
+
+  uint32_t default_max;
+  bool is_truncated;
+  string last_marker;
+
+public:
+  RGWGetBucketOplog() : default_max(1000), is_truncated(false) {}
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_oplog"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_OPLOG; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
 class RGWGetBucketLogging : public RGWOp {
 public:
   RGWGetBucketLogging() {}
