@@ -244,7 +244,7 @@ struct Inode {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
   }
-  ~Inode() { }
+  ~Inode();
 
   vinodeno_t vino() const { return vinodeno_t(ino, snapid); }
 
