@@ -377,7 +377,7 @@ int RGWCache<T>::system_obj_set_attrs(void *ctx, rgw_obj& obj,
     if (r < 0)
       mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
-   cache.remove(name);
+    cache.remove(name);
   }
 
   return ret;
@@ -447,7 +447,7 @@ int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, 
       if (r < 0)
         mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
     } else {
-     cache.remove(name);
+      cache.remove(name);
     }
   }
 
