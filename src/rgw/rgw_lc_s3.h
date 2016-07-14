@@ -16,17 +16,6 @@
 
 using namespace std;
 
-class LCRule_S3 : public LCRule, public XMLObj
-{
-public:
-  LCRule_S3() {}
-  ~LCRule_S3() {}
-
-  void to_xml(CephContext *cct, ostream& out);
-  bool xml_end(const char *el);
-  bool xml_start(const char *el, const char **attr);
-};
-
 class LCID_S3 : public XMLObj
 {
 public:
@@ -69,6 +58,32 @@ public:
   void to_xml(ostream& out) {
     out << "<Expiration>" << "<Days>" << days << "</Days>"<< "</Expiration>";
   }
+  void dump_xml(Formatter *f) const {
+	  f->open_object_section("Expiration");
+	  encode_xml("Days", days, f);
+	  f->close_section(); // Expiration
+  }
+};
+
+class LCRule_S3 : public LCRule, public XMLObj
+{
+public:
+  LCRule_S3() {}
+  ~LCRule_S3() {}
+
+  void to_xml(CephContext *cct, ostream& out);
+  bool xml_end(const char *el);
+  bool xml_start(const char *el, const char **attr);
+  void dump_xml(Formatter *f) const {
+	  const LCExpiration_S3& expir = static_cast<const LCExpiration_S3&>(expiration);
+
+	  f->open_object_section("Rule");
+	  encode_xml("ID", id, f);
+	  encode_xml("Prefix", prefix, f);
+	  encode_xml("Status", status, f);
+	  expir.dump_xml(f);
+	  f->close_section(); // Rule
+  }
 };
 
 class RGWLCXMLParser_S3 : public RGWXMLParser
@@ -84,6 +99,7 @@ class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration, public XM
 {
 public:
   RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
+  RGWLifecycleConfiguration_S3() : RGWLifecycleConfiguration(NULL) {}
   ~RGWLifecycleConfiguration_S3() {}
 
   bool xml_end(const char *el);
@@ -98,6 +114,7 @@ public:
     out << "</LifecycleConfiguration>";
   }
   int rebuild(RGWRados *store, RGWLifecycleConfiguration& dest);
+  void dump_xml(Formatter *f) const;
 };
 
 

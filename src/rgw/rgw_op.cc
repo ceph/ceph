@@ -3669,6 +3669,16 @@ int RGWPutACLs::verify_permission()
   return 0;
 }
 
+int RGWGetLC::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
 int RGWPutLC::verify_permission()
 {
   bool perm;
@@ -3690,6 +3700,11 @@ int RGWDeleteLC::verify_permission()
 }
 
 void RGWPutACLs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetLC::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
 }
@@ -3806,6 +3821,7 @@ static void get_lc_oid(struct req_state *s, string& oid)
   oid.append(buf);
   return;
 }
+
 void RGWPutLC::execute()
 {
   bufferlist bl;
