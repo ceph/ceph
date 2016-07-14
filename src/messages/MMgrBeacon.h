@@ -28,21 +28,27 @@ class MMgrBeacon : public PaxosServiceMessage {
 protected:
   uint64_t gid;
   entity_addr_t server_addr;
+  bool available;
+  std::string name;
 
 public:
   MMgrBeacon()
-    : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION)
+    : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+      gid(0), available(false)
   {
   }
 
-  MMgrBeacon(uint64_t gid_, entity_addr_t server_addr_)
+  MMgrBeacon(uint64_t gid_, const std::string &name_,
+             entity_addr_t server_addr_, bool available_)
     : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
-      gid(gid_), server_addr(server_addr_)
+      gid(gid_), server_addr(server_addr_), available(available_), name(name_)
   {
   }
 
   uint64_t get_gid() const { return gid; }
   entity_addr_t get_server_addr() const { return server_addr; }
+  bool get_available() const { return available; }
+  const std::string& get_name() const { return name; }
 
 private:
   ~MMgrBeacon() {}
@@ -52,17 +58,24 @@ public:
   const char *get_type_name() const { return "mgrbeacon"; }
 
   void print(ostream& out) const {
-    out << get_type_name() << "(" << gid << ", " << server_addr << ")";
+    out << get_type_name() << " mgr." << name << "(" << gid << ", "
+        << server_addr << ", " << available << ")";
   }
 
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(server_addr, payload, features);
+    ::encode(gid, payload);
+    ::encode(available, payload);
+    ::encode(name, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(server_addr, p);
+    ::decode(gid, p);
+    ::decode(available, p);
+    ::decode(name, p);
   }
 };
 

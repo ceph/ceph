@@ -63,7 +63,8 @@ protected:
 
   void wait_on_list(list<Cond*>& ls);
   void signal_cond_list(list<Cond*>& ls);
-  list<Cond*> waiting_for_map;
+
+  list<Cond*> waiting_for_session;
 
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);

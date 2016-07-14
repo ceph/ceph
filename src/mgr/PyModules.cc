@@ -312,12 +312,12 @@ public:
 
 void PyModules::start()
 {
-  {
-    Mutex::Locker l(lock);
-    for (auto &i : modules) {
-      auto thread = new ServeThread(i.second);
-      serve_threads[i.first] = thread;
-    }
+  Mutex::Locker l(lock);
+
+  dout(1) << "Creating threads for " << modules.size() << " modules" << dendl;
+  for (auto &i : modules) {
+    auto thread = new ServeThread(i.second);
+    serve_threads[i.first] = thread;
   }
 
   for (auto &i : serve_threads) {

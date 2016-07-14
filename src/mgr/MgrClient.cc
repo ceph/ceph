@@ -44,14 +44,6 @@ void MgrClient::init()
   assert(msgr != nullptr);
 
   timer.init();
-
-#if 0
-  if (map.epoch == 0) {
-    ldout(cct, 4) << "no map yet, waiting..." << dendl;
-    wait_on_list(waiting_for_map);
-  }
-  ldout(cct, 4) << "proceeding with map " << map.epoch << dendl;
-#endif
 }
 
 void MgrClient::shutdown()
@@ -98,37 +90,49 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
   if (session == nullptr || 
       session->con->get_peer_addr() != map.get_active_addr()) {
 
-    entity_inst_t inst;
-    inst.addr = map.get_active_addr();
-    inst.name = entity_name_t::MGR(map.get_active_gid());
+    if (session) {
+      ldout(cct, 4) << "Terminating session with "
+                    << session->con->get_peer_addr() << dendl;
+      delete session;
+      session = nullptr;
 
-    delete session;
-    session = new MgrSessionState();
-    session->con = msgr->get_connection(inst);
-
-    // Don't send an open if we're just a client (i.e. doing
-    // command-sending, not stats etc)
-    if (g_conf && !g_conf->name.is_client()) {
-      auto open = new MMgrOpen();
-      open->daemon_name = g_conf->name.get_id();
-      session->con->send_message(open);
-    }
-
-    std::vector<ceph_tid_t> erase_cmds;
-    auto commands = command_table.get_commands();
-    for (const auto &i : commands) {
-      // FIXME be nicer, retarget command on new mgr?
-      if (i.second->on_finish != nullptr) {
-        i.second->on_finish->complete(-ETIMEDOUT);
+      std::vector<ceph_tid_t> erase_cmds;
+      auto commands = command_table.get_commands();
+      for (const auto &i : commands) {
+        // FIXME be nicer, retarget command on new mgr?
+        if (i.second->on_finish != nullptr) {
+          i.second->on_finish->complete(-ETIMEDOUT);
+        }
+        erase_cmds.push_back(i.first);
       }
-      erase_cmds.push_back(i.first);
+      for (const auto &tid : erase_cmds) {
+        command_table.erase(tid);
+      }
     }
-    for (const auto &tid : erase_cmds) {
-      command_table.erase(tid);
+
+    if (map.get_available()) {
+      ldout(cct, 4) << "Starting new session with " << map.get_active_addr()
+                    << dendl;
+      entity_inst_t inst;
+      inst.addr = map.get_active_addr();
+      inst.name = entity_name_t::MGR(map.get_active_gid());
+
+      session = new MgrSessionState();
+      session->con = msgr->get_connection(inst);
+
+      // Don't send an open if we're just a client (i.e. doing
+      // command-sending, not stats etc)
+      if (g_conf && !g_conf->name.is_client()) {
+        auto open = new MMgrOpen();
+        open->daemon_name = g_conf->name.get_id();
+        session->con->send_message(open);
+      }
+
+      signal_cond_list(waiting_for_session);
+    } else {
+      ldout(cct, 4) << "No active mgr available yet" << dendl;
     }
   }
-
-  signal_cond_list(waiting_for_map);
 
   return true;
 }
@@ -262,15 +266,12 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
-  assert(map.epoch > 0);
-
-
-
   if (session == nullptr) {
-    derr << "no session" << dendl;
-    // FIXME: be nicer: maybe block until a mgr is available?
-    return -ENOENT;
+    derr << "no session, waiting" << dendl;
+    wait_on_list(waiting_for_session);
   }
+
+  assert(map.epoch > 0);
 
   MgrCommand *op = command_table.start_command();
   op->cmd = cmd;
