@@ -149,6 +149,11 @@ void RGWRemoteAuthApplier::create_account(const rgw_user& acct_user,
 {
   rgw_user new_acct_user = acct_user;
 
+  if (info.acct_type) {
+    //ldap/keystone for s3 users
+    user_info.type = info.acct_type;
+  }
+
   /* Administrator may enforce creating new accounts within their own tenants.
    * The config parameter name is kept due to legacy. */
   if (new_acct_user.tenant.empty() && g_conf->rgw_keystone_implicit_tenants) {
