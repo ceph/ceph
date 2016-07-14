@@ -155,6 +155,7 @@ SUBSYS(bdev, 1, 3)
 SUBSYS(kstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
+SUBSYS(memdb, 4, 5)
 SUBSYS(kinetic, 1, 5)
 SUBSYS(fuse, 1, 5)
 
