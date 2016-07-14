@@ -134,8 +134,10 @@ int MemDB::_init(bool create)
   if (create) {
     int r = ::mkdir(m_db_path.c_str(), 0700);
     if (r < 0) {
-      if (r != EEXIST) {
+      r = -errno;
+      if (r != -EEXIST) {
         derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
+        return r;
       }
     }
  } else {
