@@ -33,23 +33,21 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-Mgr::Mgr() :
-  Dispatcher(g_ceph_context),
+Mgr::Mgr(MonClient *monc_, Messenger *clientm_) :
+  monc(monc_),
   objecter(NULL),
-  monc(new MonClient(g_ceph_context)),
+  client_messenger(clientm_),
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
   waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, py_modules)
+  server(monc, daemon_state, py_modules),
+  initialized(false),
+  initializing(false)
 {
-  client_messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
-
-  // FIXME: using objecter as convenience to handle incremental
-  // OSD maps, but that's overkill.  We don't really need an objecter.
-  // Could we separate out the part of Objecter that we really need?
+  // Using Objecter to handle incremental decode of OSDMap
   objecter = new Objecter(g_ceph_context, client_messenger, monc, NULL, 0, 0);
 
   cluster_state.set_objecter(objecter);
@@ -59,9 +57,7 @@ Mgr::Mgr() :
 Mgr::~Mgr()
 {
   delete objecter;
-  delete monc;
-  delete client_messenger;
-  assert(waiting_for_fs_map == NULL);
+  assert(waiting_for_fs_map == nullptr);
 }
 
 
@@ -123,58 +119,35 @@ public:
 };
 
 
-
-int Mgr::init()
+void Mgr::background_init()
 {
   Mutex::Locker l(lock);
+  assert(!initializing);
+  assert(!initialized);
+  initializing = true;
 
-  // Initialize Messenger
-  int r = client_messenger->bind(g_conf->public_addr);
-  if (r < 0)
-    return r;
+  finisher.start();
 
-  client_messenger->start();
+  finisher.queue(new C_StdFunction([this](){
+    init();
+  }));
+}
+
+void Mgr::init()
+{
+  Mutex::Locker l(lock);
+  assert(initializing);
+  assert(!initialized);
 
   objecter->set_client_incarnation(0);
   objecter->init();
 
-  // Connect dispatchers before starting objecter
-  client_messenger->add_dispatcher_tail(objecter);
-  client_messenger->add_dispatcher_tail(this);
-
-  // Initialize MonClient
-  if (monc->build_initial_monmap() < 0) {
-    objecter->shutdown();
-    client_messenger->shutdown();
-    client_messenger->wait();
-    return -1;
-  }
-
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD
-      |CEPH_ENTITY_TYPE_MDS|CEPH_ENTITY_TYPE_MGR);
-  monc->set_messenger(client_messenger);
-  monc->init();
-  r = monc->authenticate();
-  if (r < 0) {
-    derr << "Authentication failed, did you specify a mgr ID with a valid keyring?" << dendl;
-    monc->shutdown();
-    objecter->shutdown();
-    client_messenger->shutdown();
-    client_messenger->wait();
-    return r;
-  }
-
-  client_t whoami = monc->get_global_id();
-  client_messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+  // Dispatcher before starting objecter
+  client_messenger->add_dispatcher_head(objecter);
 
   // Start communicating with daemons to learn statistics etc
   server.init(monc->get_global_id(), client_messenger->get_myaddr());
-
   dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
-  // TODO: send the beacon periodically
-  MMgrBeacon *m = new MMgrBeacon(monc->get_global_id(),
-                                 server.get_myaddr());
-  monc->send_mon_message(m);
 
   // Preload all daemon metadata (will subsequently keep this
   // up to date by watching maps, so do the initial load before
@@ -189,8 +162,9 @@ int Mgr::init()
 
   // Start Objecter and wait for OSD map
   objecter->start();
+  lock.Unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
   objecter->wait_for_osd_map();
-  timer.init();
+  lock.Lock();
 
   monc->sub_want("mgrdigest", 0, 0);
 
@@ -212,12 +186,14 @@ int Mgr::init()
   // Wait for MgrDigest...?
   // TODO
 
-  finisher.start();
+  // assume finisher already initialized in background_init
 
   py_modules.init();
+  py_modules.start();
 
   dout(4) << "Complete." << dendl;
-  return 0;
+  initializing = false;
+  initialized = true;
 }
 
 void Mgr::load_all_metadata()
@@ -342,15 +318,12 @@ void Mgr::load_config()
   py_modules.insert_config(loaded);
 }
 
-void Mgr::handle_signal(int signum)
-{
-  Mutex::Locker l(lock);
-  assert(signum == SIGINT || signum == SIGTERM);
-  shutdown();
-}
-
 void Mgr::shutdown()
 {
+  // FIXME: pre-empt init() if it is currently running, so that it will
+  // give up the lock for us.
+  Mutex::Locker l(lock);
+
   // First stop the server so that we're not taking any more incoming requests
   server.shutdown();
 
@@ -358,13 +331,7 @@ void Mgr::shutdown()
   // to touch references to the things we're about to tear down
   finisher.stop();
 
-  //lock.Lock();
-  timer.shutdown();
   objecter->shutdown();
-  //lock.Unlock();
-
-  monc->shutdown();
-  client_messenger->shutdown();
 }
 
 void Mgr::handle_osd_map()
@@ -535,51 +502,6 @@ void Mgr::handle_fs_map(MFSMap* m)
       assert(r == 0);  // start_mon_command defined to not fail
     }
   }
-}
-
-
-bool Mgr::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  if (force_new) {
-    if (monc->wait_auth_rotating(10) < 0)
-      return false;
-  }
-
-  *authorizer = monc->auth->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
-// A reference for use by the signal handler
-Mgr *signal_mgr = nullptr;
-
-static void handle_mgr_signal(int signum)
-{
-  if (signal_mgr) {
-    signal_mgr->handle_signal(signum);
-  }
-}
-
-int Mgr::main(vector<const char *> args)
-{
-  py_modules.start();
-
-  // Enable signal handlers
-  signal_mgr = this;
-  init_async_signal_handler();
-  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
-
-  client_messenger->wait();
-
-  // Disable signal handlers
-  unregister_async_signal_handler(SIGINT, handle_mgr_signal);
-  unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
-  shutdown_async_signal_handler();
-  signal_mgr = nullptr;
 }
 
 
