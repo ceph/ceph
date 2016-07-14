@@ -1016,24 +1016,32 @@ void BlueStore::BufferSpace::read(
 void BlueStore::BufferSpace::finish_write(uint64_t seq)
 {
   std::lock_guard<std::mutex> l(cache->lock);
-  auto i = writing.begin();
-  while (i != writing.end()) {
-    Buffer *b = &*i;
-    dout(20) << __func__ << " " << *b << dendl;
-    assert(b->is_writing());
-    if (b->seq <= seq) {
+
+  auto i = writing_map.begin();
+  while (i != writing_map.end()) {
+    if (i->first > seq)
+      break;
+
+    auto l = i->second.begin();
+    while (l != i->second.end()) {
+      Buffer *b = &*l;
+      dout(20) << __func__ << " " << *b << dendl;
+      assert(b->is_writing());
+
       if (b->flags & Buffer::FLAG_NOCACHE) {
-	++i;
-	_rm_buffer(b);
+        i->second.erase(l++);
+        buffer_map.erase(b->offset);
       } else {
-	b->state = Buffer::STATE_CLEAN;
-	writing.erase(i++);
-	cache->_add_buffer(b, 1, nullptr);
+        b->state = Buffer::STATE_CLEAN;
+        i->second.erase(l++);
+        cache->_add_buffer(b, 1, nullptr);
       }
-    } else {
-      ++i;
     }
+
+    assert(i->second.empty());
+    writing_map.erase(i++);
   }
+
   cache->_audit("finish_write end");
 }
 
