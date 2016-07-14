@@ -85,7 +85,7 @@ struct Inode {
   Client *client;
 
   // -- the actual inode --
-  inodeno_t ino;
+  inodeno_t ino; // ORDER DEPENDENCY: oset
   snapid_t  snapid;
   ino_t faked_ino;
 
@@ -179,7 +179,7 @@ struct Inode {
   map<int,int> open_by_mode;
   map<int,int> cap_refs;
 
-  ObjectCacher::ObjectSet oset;
+  ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
   uint64_t     reported_size, wanted_max_size, requested_max_size;
 
@@ -235,7 +235,7 @@ struct Inode {
       snap_caps(0), snap_cap_refs(0),
       cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
-      oset((void *)this, newlayout->pool_id, ino),
+      oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dn_set(),
       fcntl_locks(NULL), flock_locks(NULL),
