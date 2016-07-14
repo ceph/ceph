@@ -71,7 +71,7 @@ namespace rgw {
 
     virtual uint32_t version() const { return 1; };
 
-    bool valid() {
+    bool valid() const{
       return ((type != TOKEN_NONE) &&
 	      (! id.empty()) &&
 	      (! key.empty()));

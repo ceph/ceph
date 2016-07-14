@@ -427,6 +427,26 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
   encode_json("temp_url_keys", temp_url_keys, f);
+
+  string user_source_type;
+  switch ((RGWUserSourceType)type) {
+  case TYPE_RGW:
+    user_source_type = "rgw";
+    break;
+  case TYPE_KEYSTONE:
+    user_source_type = "keystone";
+    break;
+  case TYPE_LDAP:
+    user_source_type = "ldap";
+    break;
+  case TYPE_NONE:
+    user_source_type = "none";
+    break;
+  default:
+    user_source_type = "none";
+    break;
+  }
+  encode_json("type", user_source_type, f);
 }
 
 
@@ -484,6 +504,18 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
   JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
+
+  string user_source_type;
+  JSONDecoder::decode_json("type", user_source_type, obj);
+  if (user_source_type == "rgw") {
+    type = TYPE_RGW;
+  } else if (user_source_type == "keystone") {
+    type = TYPE_KEYSTONE;
+  } else if (user_source_type == "ldap") {
+    type = TYPE_LDAP;
+  } else if (user_source_type == "none") {
+    type = TYPE_NONE;
+  }
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
