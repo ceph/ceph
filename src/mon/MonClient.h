@@ -105,9 +105,7 @@ class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
-  //MonClientState state__; //deprecated
-  //string DEFAULT__mon = "com.redhat.sdieffen.mon/default-mon/str_23062016@13:15:02";
-  map<entity_addr_t, MonClientState> state_map; //REFNEW
+  map<entity_addr_t, MonClientState> state_map;
 
   Messenger *messenger;
 
@@ -182,21 +180,16 @@ private:
 
   string _pick_random_mon();
   void _finish_hunting();
-  void _multiple_reopen_session(int rank, string name);
   void _reopen_session(int rank, string name);
-  void _multiple_reopen_session() {
-    _multiple_reopen_session(-1, string());
-  }
   void _reopen_session() {
     _reopen_session(-1, string());
   }
   void _mark_down_all() {
-    //state_map.clear(); //this wasn't really done before...
+    //TODO state_map.clear(); //this wasn't really done before...
     if (cur_con) {
       cur_con->mark_down();
     }
-    messenger->mark_down_all(); //if this doesn't work, I guess we could just loop here manually using
-				//state_map entries (entity_addr_t elements)
+    messenger->mark_down_all();
   }
   void _set_state(entity_addr_t addr, MonClientState new_state, bool force=false) {
     if (force) {
@@ -212,6 +205,14 @@ private:
       return compare_state == state_map[addr];
     }
   }
+  /*bool _check_state(ConnectionRef con, MonClientState compare_state) {
+    if (con) {
+      if (state_map.count(con->get_peer_addr()) == 0) {
+	return compare_state == state_map[con->get_peer_addr()];
+      }
+    }
+    return compare_state == MC_STATE_NONE;
+  }*/
   void _send_mon_message(Message *m, bool force=false);
   void _send_mon_message(Message *m, ConnectionRef con, bool force=false);
 
