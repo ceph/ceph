@@ -829,7 +829,8 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set TCP_NODELAY: "
+                         << cpp_strerror(r) << dendl;
     }
   }
   if (msgr->cct->_conf->ms_tcp_rcvbuf) {
@@ -837,7 +838,8 @@ void Pipe::set_socket_options()
     int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
+      ldout(msgr->cct,0) << "couldn't set SO_RCVBUF to " << size
+                         << ": " << cpp_strerror(r) << dendl;
     }
   }
 
@@ -847,7 +849,8 @@ void Pipe::set_socket_options()
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
     r = -errno;
-    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
+    ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: "
+                       << cpp_strerror(r) << dendl;
   }
 #endif
 
@@ -858,8 +861,9 @@ void Pipe::set_socket_options()
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
     if (r < 0) {
+      r = -errno;
       ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                         << ": " << cpp_strerror(errno) << dendl;
+                         << ": " << cpp_strerror(r) << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 
@@ -870,8 +874,9 @@ void Pipe::set_socket_options()
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
 #endif
     if (r < 0) {
+      r = -errno;
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
-                         << ": " << cpp_strerror(errno) << dendl;
+                         << ": " << cpp_strerror(r) << dendl;
     }
 #endif
   }
