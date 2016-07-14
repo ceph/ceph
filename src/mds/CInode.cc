@@ -493,6 +493,7 @@ __u32 InodeStoreBase::hash_dentry_name(const string &dn)
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
     which = CEPH_STR_HASH_LINUX;
+  assert(ceph_str_hash_valid(which));
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
