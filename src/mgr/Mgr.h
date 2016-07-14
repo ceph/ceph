@@ -11,8 +11,8 @@
  * Foundation.  See file COPYING.
  */
 
-#ifndef CEPH_PYFOO_H_
-#define CEPH_PYFOO_H_
+#ifndef CEPH_MGR_H_
+#define CEPH_MGR_H_
 
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include "Python.h"
@@ -26,7 +26,6 @@
 #include "osdc/Objecter.h"
 #include "mds/FSMap.h"
 #include "messages/MFSMap.h"
-#include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "auth/Auth.h"
 #include "common/Finisher.h"
@@ -44,10 +43,10 @@ class MMgrDigest;
 
 class MgrPyModule;
 
-class Mgr : public Dispatcher {
+class Mgr {
 protected:
-  Objecter  *objecter;
   MonClient *monc;
+  Objecter  *objecter;
   Messenger *client_messenger;
 
   Mutex lock;
@@ -64,24 +63,27 @@ protected:
 
   void load_config();
   void load_all_metadata();
+  void init();
+
+  bool initialized;
+  bool initializing;
 
 public:
-  Mgr();
+  Mgr(MonClient *monc_, Messenger *clientm_);
   ~Mgr();
+
+  bool is_initialized() const {return initialized;}
+  entity_addr_t get_server_addr() const { return server.get_myaddr(); }
 
   void handle_mgr_digest(MMgrDigest* m);
   void handle_fs_map(MFSMap* m);
   void handle_osd_map();
+
   bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new);
-  int init();
+
+  void background_init();
   void shutdown();
-  void usage() {}
   int main(vector<const char *> args);
-  void handle_signal(int signum);
 };
 
-#endif /* MDS_UTILITY_H_ */
+#endif

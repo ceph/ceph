@@ -842,3 +842,10 @@ COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
 COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")
+
+
+/*
+ * mon/MgrMonitor.cc
+ */
+COMMAND("mgr fail name=who,type=CephString", \
+	"treat the named manager daemon as failed", "mgr", "rw", "cli,rest")

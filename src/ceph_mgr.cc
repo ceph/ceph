@@ -14,7 +14,6 @@
  *
  */
 
-#include "mgr/Mgr.h"
 
 #include "include/types.h"
 #include "common/config.h"
@@ -22,9 +21,13 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 
+#include "mgr/MgrStandby.h"
 
 
-
+/**
+ * A short main() which just instantiates a MgrStandby and
+ * hands over control to that.
+ */
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -33,13 +36,12 @@ int main(int argc, const char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_MGR, CODE_ENVIRONMENT_DAEMON, 0,
               "mgr_data");
-  common_init_finish(g_ceph_context);
   // For consumption by KeyRing::from_ceph_context in MonClient
   g_conf->set_val("keyring", "$mgr_data/keyring", false);
 
-  Mgr mgr;
+  MgrStandby mgr;
 
-  // Handle --help before calling init() so we don't depend on network.
+  // Handle --help
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
     mgr.usage();
     return 0;
@@ -49,14 +51,12 @@ int main(int argc, const char **argv)
   global_init_chdir(g_ceph_context);
   common_init_finish(g_ceph_context);
 
-  // Connect to mon cluster, download MDS map etc
   int rc = mgr.init();
   if (rc != 0) {
       std::cerr << "Error in initialization: " << cpp_strerror(rc) << std::endl;
       return rc;
   }
 
-  // Finally, execute the user's commands
   return mgr.main(args);
 }
 
