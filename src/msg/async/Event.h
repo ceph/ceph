@@ -113,7 +113,7 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
-  pthread_t owner;
+  pthread_t owner = 0;
   std::mutex external_lock;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
