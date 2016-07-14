@@ -1661,8 +1661,13 @@ class RGWMetaSyncCR : public RGWCoroutine {
 
   std::mutex mutex; //< protect access to shard_crs
 
+  // TODO: it should be enough to hold a reference on the stack only, as calling
+  // RGWCoroutinesStack::wakeup() doesn't refer to the RGWCoroutine if it has
+  // already completed
   using ControlCRRef = boost::intrusive_ptr<RGWMetaSyncShardControlCR>;
-  map<int, ControlCRRef> shard_crs;
+  using StackRef = boost::intrusive_ptr<RGWCoroutinesStack>;
+  using RefPair = std::pair<ControlCRRef, StackRef>;
+  map<int, RefPair> shard_crs;
 
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
@@ -1720,8 +1725,8 @@ public:
             auto cr = new RGWMetaSyncShardControlCR(sync_env, pool, period_id,
                                                     mdlog, shard_id, marker,
                                                     std::move(period_marker));
-            shard_crs[shard_id] = cr;
-            spawn(cr, false);
+            auto stack = spawn(cr, false);
+            shard_crs[shard_id] = RefPair{cr, stack};
           }
         }
         // wait for each shard to complete
@@ -1757,7 +1762,7 @@ public:
     if (iter == shard_crs.end()) {
       return;
     }
-    iter->second->wakeup();
+    iter->second.first->wakeup();
   }
 };
 
