@@ -4482,8 +4482,7 @@ int RGWRados::time_log_add(const string& oid, const real_time& ut, const string&
   utime_t t(ut);
   cls_log_add(op, t, section, key, bl);
 
-  r = io_ctx.operate(oid, &op);
-  return r;
+  return io_ctx.operate(oid, &op);
 }
 
 int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries,
