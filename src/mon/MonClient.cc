@@ -121,14 +121,16 @@ int MonClient::get_monmap_privately()
 
   ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
 
+  string mon;
+  ConnectionRef con;
   while (monmap.fsid.is_zero()) {
-    cur_mon = _pick_random_mon();
+    mon = _pick_random_mon();
 
-    cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
-    if (cur_con) {
-      ldout(cct, 10) << "querying mon." << cur_mon << " "
-		     << cur_con->get_peer_addr() << dendl;
-      cur_con->send_message(new MMonGetMap);
+    con = messenger->get_connection(monmap.get_inst(mon));
+    if (con) {
+      ldout(cct, 10) << "querying mon." << mon << " "
+		     << con->get_peer_addr() << dendl;
+      con->send_message(new MMonGetMap);
     }
 
     if (--attempt == 0)
@@ -138,16 +140,16 @@ int MonClient::get_monmap_privately()
     interval.set_from_double(cct->_conf->mon_client_hunt_interval);
     map_cond.WaitInterval(cct, monc_lock, interval);
 
-    if (monmap.fsid.is_zero() && cur_con) {
-      cur_con->mark_down();  // nope, clean that connection up
+    if (monmap.fsid.is_zero() && con) {
+      con->mark_down();  // nope, clean that connection up
     }
   }
 
   if (temp_msgr) {
-    if (cur_con) {
-      cur_con->mark_down();
-      cur_con.reset(NULL);
-      cur_mon.clear();
+    if (con) {
+      con->mark_down();
+      con.reset(NULL);
+      mon.clear();
     }
     monc_lock.Unlock();
     messenger->shutdown();
@@ -159,8 +161,8 @@ int MonClient::get_monmap_privately()
   }
 
   hunting = true;  // reset this to true!
-  cur_mon.clear();
-  cur_con.reset(NULL);
+  mon.clear();
+  con.reset(NULL);
 
   if (!monmap.fsid.is_zero())
     return 0;
@@ -349,9 +351,12 @@ void MonClient::handle_monmap(MMonMap *m)
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
 
-  assert(!cur_mon.empty());
+  entity_addr_t addr = m->get_connection()->get_peer_addr();
+  string mon = monmap.get_name(addr);
+
+  assert(!mon.empty());
   ldout(cct, 10) << " got monmap " << monmap.epoch
-		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
+		 << ", mon." << mon << " is now rank " << monmap.get_rank(mon)
 		 << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
@@ -359,8 +364,9 @@ void MonClient::handle_monmap(MMonMap *m)
 
   _sub_got("monmap", monmap.get_epoch());
 
-  if (!monmap.get_addr_name(cur_con->get_peer_addr(), cur_mon)) {
-    ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
+  //not sure if this is necessary if we're not talking about cur_con anymore
+  if (!monmap.get_addr_name(addr, mon)) {
+    ldout(cct, 10) << "mon." << mon << " went away" << dendl;
     _reopen_session();  // can't find the mon we were talking to (above)
   }
 
