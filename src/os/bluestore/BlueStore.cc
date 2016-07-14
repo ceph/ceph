@@ -3096,18 +3096,12 @@ int BlueStore::fsck()
   it = db->get_iterator(PREFIX_OBJ);
   if (it) {
     CollectionRef c;
-    bool expecting_objects = false;
     shard_id_t expecting_shard;
     int64_t expecting_pool;
     uint32_t expecting_hash;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       ghobject_t oid;
       if (is_bnode_key(it->key())) {
-	if (expecting_objects) {
-	  dout(30) << __func__ << "  had bnode but no objects for 0x"
-		   << std::hex << expecting_hash << std::dec << dendl;
-	  ++errors;
-	}
 	int r = get_key_bnode(it->key(), &expecting_shard, &expecting_pool,
 		      &expecting_hash);
         if (r < 0) {
@@ -3117,6 +3111,7 @@ int BlueStore::fsck()
         }
 	continue;
       }
+
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
 	dout(30) << __func__ << "  bad object key "
@@ -3124,14 +3119,7 @@ int BlueStore::fsck()
 	++errors;
 	continue;
       }
-      if (expecting_objects) {
-	if (oid.hobj.get_bitwise_key_u32() != expecting_hash) {
-	  dout(30) << __func__ << "  had bnode but no objects for 0x"
-		   << std::hex << expecting_hash << std::dec << dendl;
-	  ++errors;
-	}
-	expecting_objects = false;
-      }
+
       if (!c || !c->contains(oid)) {
 	c = NULL;
 	for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
@@ -3150,12 +3138,6 @@ int BlueStore::fsck()
 	  continue;
 	}
       }
-    }
-    if (expecting_objects) {
-      dout(30) << __func__ << "  had bnode but no objects for 0x"
-	       << std::hex << expecting_hash << std::dec << dendl;
-      ++errors;
-      expecting_objects = false;
     }
   }
 
