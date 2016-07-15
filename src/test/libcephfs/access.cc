@@ -19,7 +19,7 @@
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
