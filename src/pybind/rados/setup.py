@@ -95,7 +95,7 @@ def check_sanity():
     compiler = new_compiler()
     customize_compiler(compiler)
 
-    if set(['MAKEFLAGS', 'MFLAGS', 'MAKELEVEL']).issubset(set(os.environ.keys())):
+    if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
         CEPH_SRC_DIR = os.path.join(
@@ -104,7 +104,7 @@ def check_sanity():
             '..'
         )
 
-        compiler.add_include_dir(os.path.join(CEPH_SRC_DIR, 'include'))
+        compiler.set_include_dirs(os.path.join(CEPH_SRC_DIR, 'include'))
         compiler.add_library_dir(os.environ.get('CEPH_LIBDIR'))
 
     try:
@@ -160,9 +160,9 @@ flags = get_python_flags()
 setup(
     name='rados',
     version=__version__,
-    description="Python libraries for the Ceph librados library",
+    description="Python bindings for the Ceph librados library",
     long_description=(
-        "This package contains Python libraries for interacting with Ceph's "
+        "This package contains Python bindings for interacting with Ceph's "
         "RADOS library. RADOS is a reliable, autonomic distributed object "
         "storage cluster developed as part of the Ceph distributed storage "
         "system. This is a shared library allowing applications to access "
