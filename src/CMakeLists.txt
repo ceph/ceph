@@ -298,7 +298,7 @@ elseif(ALLOCATOR STREQUAL "jemalloc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 elseif(ALLOCATOR STREQUAL "libc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-endif()
+endif(ALLOCATOR STREQUAL "tcmalloc")
 
 # tcmalloc heap profiler
 set(heap_profiler_files ${TCMALLOC_srcs})
@@ -492,7 +492,7 @@ set(libcommon_files
   common/dns_resolve.cc
   common/armor.c
   common/safe_io.c
-  common/addr_parsing.c)
+  common/addr_parsing.c
   ${arch_files}
   ${auth_files}
   $<TARGET_OBJECTS:compressor_objs>
@@ -923,9 +923,14 @@ endif(WITH_SPDK)
 if(NOT ALLOCATOR STREQUAL "jemalloc")
   set(disable_jemalloc "DISABLE_JEMALLOC=1")
 endif()
+set(EXTRA_CXXFLAGS -fPIC -Wno-unused-variable)
+if(FREEBSD)
+  set(EXTRA_CXXFLAGS ${EXTRA_CXXFLAGS} -Irocksdb/include -I/usr/local/include)
+  set(MAKEFLAGS ${MAKEFLAGS})
+endif(FREEBSD)
 add_custom_target(build_rocksdb
     COMMAND
-    PORTABLE=1 ${disable_jemalloc} $(MAKE) static_lib EXTRA_CXXFLAGS='-fPIC -Wno-unused-variable'
+    PORTABLE=1 ${disable_jemalloc} $(MAKE) ${MAKEFLAGS} static_lib EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS}"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
     COMMENT "rocksdb building")
 
