@@ -49,21 +49,22 @@ run() {
     do_run "$@"
 }
 
-DNAME="`dirname $0`"
-DNAME="`readlink -f $DNAME`"
-RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
-if ! test -f $RADOS_TOOL ; then
-    RADOS_TOOL=$(which rados)
+if [ -n "$CEPH_BIN" ] ; then
+   # CMake env
+   RADOS_TOOL="$CEPH_BIN/rados"
+   CEPH_TOOL="$CEPH_BIN/ceph"
+else
+   # executables should be installed by the QA env 
+   RADOS_TOOL=$(which rados)
+   CEPH_TOOL=$(which ceph)
 fi
-CEPH_TOOL="`readlink -f \"$DNAME/../ceph\"`"
-if ! test -f $CEPH_TOOL ; then
-    CEPH_TOOL=$(which ceph)
-fi
+
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
 
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
+[ -x "$CEPH_TOOL" ] || die "couldn't find $CEPH_TOOL binary to test"
 
 while getopts  "c:hkp:" flag; do
     case $flag in
@@ -304,7 +305,7 @@ test_xattr() {
     $RADOS_TOOL -p $POOL listxattr $OBJ > $V1
     grep -q foo $V1
     grep -q bar $V1
-    wc -l $V1 | grep -q "^2 "
+    [ `cat $V1 | wc -l` -eq 2 ]
     rm $V1 $V2
     cleanup
 }
@@ -345,18 +346,18 @@ test_ls() {
 	done
     done
     CHECK=$("$RADOS_TOOL" -p $p ls 2> /dev/null | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if [ "$OBJS" -ne "$CHECK" ];
     then
         die "Created $OBJS objects in default namespace but saw $CHECK"
     fi
     TESTNS=NS${NS}
     CHECK=$("$RADOS_TOOL" -p $p -N $TESTNS ls 2> /dev/null | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if [ "$OBJS" -ne "$CHECK" ];
     then
         die "Created $OBJS objects in $TESTNS namespace but saw $CHECK"
     fi
     CHECK=$("$RADOS_TOOL" -p $p --all ls 2> /dev/null | wc -l)
-    if test "$TOTAL" != "$CHECK";
+    if [ "$TOTAL" -ne "$CHECK" ];
     then
         die "Created $TOTAL objects but saw $CHECK"
     fi
@@ -399,7 +400,7 @@ test_cleanup() {
     $RADOS_TOOL -p $p -N NS3 cleanup 2> /dev/null
     #echo "Check NS3 after specific cleanup"
     CHECK=$($RADOS_TOOL -p $p -N NS3 ls | wc -l)
-    if test "$OBJS" != "$CHECK";
+    if [ "$OBJS" -ne "$CHECK" ] ;
     then
         die "Expected $OBJS objects in NS3 but saw $CHECK"
     fi
@@ -409,7 +410,7 @@ test_cleanup() {
     #echo "Check all namespaces"
     $RADOS_TOOL -p $p --all ls > $TDIR/after.ls.out 2> /dev/null
     CHECK=$(cat $TDIR/after.ls.out | wc -l)
-    if test "$TOTAL" != "$CHECK";
+    if [ "$TOTAL" -ne "$CHECK" ];
     then
         die "Expected $TOTAL objects but saw $CHECK"
     fi
