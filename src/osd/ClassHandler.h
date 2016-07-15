@@ -106,7 +106,7 @@ private:
   ClassData *_get_class(const string& cname, bool check_allowed);
   int _load_class(ClassData *cls);
 
-  bool in_class_list(const std::string& cname,
+  static bool in_class_list(const std::string& cname,
       const std::string& list);
 
 public:
