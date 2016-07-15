@@ -3613,7 +3613,7 @@ int BlueStore::_do_read(
     } else {
       for (auto reg : b2r_it->second) {
 	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->blob.get_chunk_size(block_size);
+	uint64_t chunk_size = bptr->blob.get_chunk_size(csum_type != bluestore_blob_t::CSUM_NONE, block_size);
 	uint64_t r_off = reg.blob_xoffset;
 	uint64_t r_len = reg.length;
 	unsigned front = r_off % chunk_size;
@@ -3692,7 +3692,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 			    const bufferlist& bl) const
 {
   int bad;
-  int r = blob->verify_csum(blob_xoffset, bl, &bad);
+  int r = csum_type != bluestore_blob_t::CSUM_NONE ? blob->verify_csum(blob_xoffset, bl, &bad)  :0;
   if (r < 0) {
     if (r == -1) {
       vector<bluestore_pextent_t> pex;
@@ -5768,7 +5768,7 @@ void BlueStore::_do_write_small(
 	     << " bstart 0x" << std::hex << bstart << std::dec << dendl;
 
     // can we pad our head/tail out with zeros?
-    uint64_t chunk_size = b->blob.get_chunk_size(block_size);
+    uint64_t chunk_size = b->blob.get_chunk_size(b->blob.has_csum(), block_size); //blob csum settings to be applied hence ignoring current config settings for csum enable/disable
     uint64_t head_pad = P2PHASE(offset, chunk_size);
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
