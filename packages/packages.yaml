@@ -9,6 +9,7 @@ ceph:
   - radosgw
   - python-ceph
   - libcephfs1
+  - libcephfs-dev
   - libcephfs-java
   - libcephfs-jni
   - librados2
@@ -37,6 +38,7 @@ ceph:
   - cephfs-java
   - libcephfs_jni1
   - libcephfs1
+  - libcephfs1-devel
   - librados2
   - librbd1
   - python-rados
