@@ -65,6 +65,7 @@ protected:
   void signal_cond_list(list<Cond*>& ls);
 
   list<Cond*> waiting_for_session;
+  Context *report_callback;
 
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);

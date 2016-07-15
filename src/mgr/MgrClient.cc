@@ -32,7 +32,8 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
       session(nullptr),
       lock("mgrc"),
-      timer(cct_, lock)
+      timer(cct_, lock),
+      report_callback(nullptr)
 {
   assert(cct != nullptr);
 }
@@ -95,6 +96,10 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
                     << session->con->get_peer_addr() << dendl;
       delete session;
       session = nullptr;
+      if (report_callback != nullptr) {
+        timer.cancel_event(report_callback);
+        report_callback = nullptr;
+      }
 
       std::vector<ceph_tid_t> erase_cmds;
       auto commands = command_table.get_commands();
@@ -166,6 +171,7 @@ void MgrClient::send_report()
 {
   assert(lock.is_locked_by_me());
   assert(session);
+  report_callback = nullptr;
 
   auto report = new MMgrReport();
   auto pcc = cct->get_perfcounters_collection();
@@ -221,14 +227,20 @@ void MgrClient::send_report()
   session->con->send_message(report);
 
   if (stats_period != 0) {
-    auto c = new C_StdFunction([this](){send_report();});
-    timer.add_event_after(stats_period, c);
+    report_callback = new C_StdFunction([this](){send_report();});
+    timer.add_event_after(stats_period, report_callback);
   }
 }
 
 bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
 {
   assert(lock.is_locked_by_me());
+
+  if (session == nullptr) {
+    lderr(cct) << "dropping unexpected configure message" << dendl;
+    m->put();
+    return true;
+  }
 
   ldout(cct, 4) << "stats_period=" << m->stats_period << dendl;
 
