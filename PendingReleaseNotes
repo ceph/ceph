@@ -6,6 +6,17 @@
   is defined in the "mon_dns_srv_name" config option, which defaults to
   "ceph-mon".
 
+* The 'osd class load list' config option is a list of object class names that
+  the OSD is permitted to load (or '*' for all classes). By default it
+  contains all existing in-tree classes for backwards compatibility.
+
+* The 'osd class default list' config option is a list of object class names
+  (or '*' for all classes) that clients may invoke having only the '*', 'x',
+  'class-read', or 'class-write' capabilities. By default it contains all
+  existing in-tree classes for backwards compatibility. Invoking classes not
+  listed in 'osd class default list' requires a capability naming the class
+  (e.g. 'allow class foo').
+
 11.0.0
 ------
 
