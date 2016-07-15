@@ -82,7 +82,7 @@ else(no_yasm)
     COMMAND uname -m
     OUTPUT_VARIABLE arch
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-  if(arch STREQUAL "x86_64")
+  if(arch MATCHES "x86_64|amd64")
     message(STATUS " we are x84_64")
     set(save_quiet ${CMAKE_REQUIRED_QUIET})
     set(CMAKE_REQUIRED_QUIET true)
@@ -110,9 +110,9 @@ else(no_yasm)
     else(not_arch_x32)
       message(STATUS " we are x32; no yasm for you")
     endif(not_arch_x32)
-  else(arch STREQUAL "x86_64")
+  else(arch MATCHES "x86_64|amd64")
     message(STATUS " we are not x86_64 && !x32")
-  endif(arch STREQUAL "x86_64")
+  endif(arch MATCHES "x86_64|amd64")
 endif(no_yasm)
 
 
@@ -169,12 +169,15 @@ try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
   COMPILE_DEFINITIONS "-msse4.1")
 try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
   COMPILE_DEFINITIONS "-msse4.2")
-try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-mfpu=neon")
-try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-march=armv8-a+simd")
-try_compile(ARM_CRC ${CMAKE_BINARY_DIR} ${sse_srcs}
-  COMPILE_DEFINITIONS "-march=armv8-a+crc")
+
+if(NOT arch MATCHES "x84_64|amd64")
+  try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
+    COMPILE_DEFINITIONS "-mfpu=neon")
+  try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+    COMPILE_DEFINITIONS "-march=armv8-a+simd")
+  try_compile(ARM_CRC ${CMAKE_BINARY_DIR} ${sse_srcs}
+    COMPILE_DEFINITIONS "-march=armv8-a+crc")
+if(NOT arch MATCHES "x84_64|amd64")
 
 # clean up tmp file
 file(REMOVE ${sse_srcs})
