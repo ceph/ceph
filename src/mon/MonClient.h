@@ -205,14 +205,14 @@ private:
       return compare_state == state_map[addr];
     }
   }
-  /*bool _check_state(ConnectionRef con, MonClientState compare_state) {
+  bool _check_state(ConnectionRef con, MonClientState compare_state) {
     if (con) {
-      if (state_map.count(con->get_peer_addr()) == 0) {
+      if (state_map.count(con->get_peer_addr()) != 0) {
 	return compare_state == state_map[con->get_peer_addr()];
       }
     }
     return compare_state == MC_STATE_NONE;
-  }*/
+  }
   void _send_mon_message(Message *m, bool force=false);
   void _send_mon_message(Message *m, ConnectionRef con, bool force=false);
 

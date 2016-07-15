@@ -483,7 +483,7 @@ int MonClient::authenticate(double timeout)
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
 
-  while (!_check_state(cur_con->get_peer_addr(), MC_STATE_HAVE_SESSION)
+  while (!_check_state(cur_con, MC_STATE_HAVE_SESSION)
       && !authenticate_err) {
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
@@ -496,7 +496,7 @@ int MonClient::authenticate(double timeout)
     }
   }
 
-  if (_check_state(cur_con->get_peer_addr(), MC_STATE_HAVE_SESSION)) {
+  if (_check_state(cur_con, MC_STATE_HAVE_SESSION)) {
     ldout(cct, 5) << "authenticate success, global_id " << global_id << dendl;
   }
 
