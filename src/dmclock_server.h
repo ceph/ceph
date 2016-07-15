@@ -101,7 +101,9 @@ namespace crimson {
       double proportion;
       double limit;
       bool   ready; // true when within limit
+#ifndef DO_NOT_DELAY_TAG_CALC
       Time   arrival;
+#endif
 
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
@@ -124,6 +126,9 @@ namespace crimson {
 		       req_params.delta,
 		       false)),
 	ready(false)
+#ifndef DO_NOT_DELAY_TAG_CALC
+	, arrival(time)
+#endif
       {
 	assert(reservation < max_tag || proportion < max_tag);
       }
@@ -132,8 +137,10 @@ namespace crimson {
 	reservation(_res),
 	proportion(_prop),
 	limit(_lim),
-	ready(false),
-	arrival(_arrival)
+	ready(false)
+#ifndef DO_NOT_DELAY_TAG_CALC
+	, arrival(_arrival)
+#endif
       {
 	assert(reservation < max_tag || proportion < max_tag);
       }
@@ -142,8 +149,10 @@ namespace crimson {
 	reservation(other.reservation),
 	proportion(other.proportion),
 	limit(other.limit),
-	ready(other.ready),
-	arrival(other.arrival)
+	ready(other.ready)
+#ifndef DO_NOT_DELAY_TAG_CALC
+	, arrival(other.arrival)
+#endif
       {
 	// empty
       }
