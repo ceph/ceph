@@ -145,8 +145,8 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
 }
 
 bool RGWObjectExpirer::process_single_shard(const string& shard,
-                                         const utime_t& last_run,
-                                         const utime_t& round_start)
+                                            const utime_t& last_run,
+                                            const utime_t& round_start)
 {
   string marker;
   string out_marker;
@@ -170,16 +170,18 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     dout(5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
   }
+
   do {
     real_time rt_last = last_run.to_real_time();
     real_time rt_start = round_start.to_real_time();
 
     list<cls_timeindex_entry> entries;
     ret = store->objexp_hint_list(shard, rt_last, rt_start,
-                                      num_entries, marker, entries,
-                                      &out_marker, &truncated);
+                                  num_entries, marker, entries,
+                                  &out_marker, &truncated);
     if (ret < 0) {
-      ldout(cct, 10) << "cannot get removal hints from shard: " << shard << dendl;
+      ldout(cct, 10) << "cannot get removal hints from shard: " << shard
+                     << dendl;
       continue;
     }
 
@@ -204,11 +206,10 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
 }
 
 /* Returns true if all shards have been processed successfully. */
-bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
+bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
+                                          const utime_t& round_start)
 {
-  utime_t shard_marker;
-
-  CephContext *cct = store->ctx();
+  CephContext * const cct = store->ctx();
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
   bool all_done = true;
 
