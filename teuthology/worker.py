@@ -23,10 +23,10 @@ start_time = datetime.utcnow()
 restart_file_path = '/tmp/teuthology-restart-workers'
 
 
-def need_restart():
+def sentinel(path):
     if not os.path.exists(restart_file_path):
         return False
-    file_mtime = datetime.utcfromtimestamp(os.path.getmtime(restart_file_path))
+    file_mtime = datetime.utcfromtimestamp(os.path.getmtime(path))
     if file_mtime > start_time:
         return True
     else:
@@ -92,7 +92,7 @@ def main(ctx):
                       result_proc.returncode)
             result_proc = None
 
-        if need_restart():
+        if sentinel(restart_file_path):
             restart()
 
         job = connection.reserve(timeout=60)
