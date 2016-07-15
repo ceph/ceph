@@ -12,6 +12,30 @@ from .exceptions import BootstrapError, BranchNotFoundError, GitError
 log = logging.getLogger(__name__)
 
 
+# Repos must not have been fetched in the last X seconds to get fetched again.
+# Similar for teuthology's bootstrap
+FRESHNESS_INTERVAL = 60
+
+
+def touch_file(path):
+    out = subprocess.check_output(('touch', path))
+    if out:
+        log.info(out)
+
+
+def is_fresh(path):
+    """
+    Has this file been modified in the last FRESHNESS_INTERVAL seconds?
+
+    Returns False if the file does not exist
+    """
+    if not os.path.exists(path):
+        return False
+    elif time.time() - os.stat(path).st_mtime < FRESHNESS_INTERVAL:
+        return True
+    return False
+
+
 def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
     """
     Use git to either clone or update a given repo, forcing it to switch to the
@@ -25,18 +49,16 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
                       GitError for other errors
     """
     validate_branch(branch)
+    sentinel = os.path.join(dest_path, '.fetched')
     try:
         if not os.path.isdir(dest_path):
             clone_repo(repo_url, dest_path, branch)
-        elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
-            # only do this at most once per minute
+        elif not is_fresh(sentinel):
             set_remote(dest_path, repo_url)
             fetch(dest_path)
-            out = subprocess.check_output(('touch', dest_path))
-            if out:
-                log.info(out)
+            touch_file(sentinel)
         else:
-            log.info("%s was just updated; assuming it is current", branch)
+            log.info("%s was just updated; assuming it is current", dest_path)
 
         reset_repo(repo_url, dest_path, branch)
         # remove_pyc_files(dest_path)
@@ -239,6 +261,13 @@ def fetch_teuthology(branch, lock=True):
 
 
 def bootstrap_teuthology(dest_path):
+        sentinel = os.path.join(dest_path, '.bootstrapped')
+        if is_fresh(sentinel):
+            log.info(
+                "Skipping bootstrap as it was already done in the last %ss",
+                FRESHNESS_INTERVAL,
+            )
+            return
         log.info("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
         # existing virtualenv. But the branch's bootstrap needs to actually
@@ -258,6 +287,7 @@ def bootstrap_teuthology(dest_path):
             log.info("Removing %s", venv_path)
             shutil.rmtree(venv_path, ignore_errors=True)
             raise BootstrapError("Bootstrap failed!")
+        touch_file(sentinel)
 
 
 class FileLock(object):
