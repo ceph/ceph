@@ -21,6 +21,7 @@ from .repo_utils import fetch_qa_suite, fetch_teuthology
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
 restart_file_path = '/tmp/teuthology-restart-workers'
+stop_file_path = '/tmp/teuthology-stop-workers'
 
 
 def sentinel(path):
@@ -38,6 +39,11 @@ def restart():
     args = sys.argv[:]
     args.insert(0, sys.executable)
     os.execv(sys.executable, args)
+
+
+def stop():
+    log.info('Stopping...')
+    sys.exit(0)
 
 
 def install_except_hook():
@@ -94,6 +100,8 @@ def main(ctx):
 
         if sentinel(restart_file_path):
             restart()
+        elif sentinel(stop_file_path):
+            stop()
 
         job = connection.reserve(timeout=60)
         if job is None:
