@@ -3203,20 +3203,21 @@ void Monitor::resend_routed_requests()
       dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
       req->set_connection(rr->con);
       retry.push_back(new C_RetryMessage(this, req));
-      delete rr;
     } else {
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
       MForward *forward = new MForward(rr->tid, req, rr->con_features,
 				       rr->session->caps);
       forward->client = rr->client_inst;
       forward->set_priority(req->get_priority());
+      forward->entity_name = rr->session->entity_name;
       messenger->send_message(forward, monmap->get_inst(mon));
     }
+    delete rr;
   }
-  if (mon == rank) {
-    routed_requests.clear();
+  routed_requests.clear();
+
+  if (mon == rank)
     finish_contexts(g_ceph_context, retry);
-  }
 }
 
 void Monitor::remove_session(MonSession *s)
