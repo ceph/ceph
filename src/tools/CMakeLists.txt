@@ -1,6 +1,8 @@
-add_executable(ceph-client-debug ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs librados global common)
-install(TARGETS ceph-client-debug DESTINATION bin)
+if(WITH_LIBCEPHFS)
+  add_executable(ceph-client-debug tools/ceph-client-debug.cc)
+  target_link_libraries(ceph-client-debug cephfs librados global common)
+  install(TARGETS ceph-client-debug DESTINATION bin)
+endif(WITH_LIBCEPHFS)
 
 add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})

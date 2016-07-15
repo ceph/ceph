@@ -869,7 +869,7 @@ set(libos_srcs
   os/kstore/kstore_types.cc
   os/fs/FS.cc
   ${libos_xfs_srcs})
-if(${WITH_AIO})
+if(HAVE_LIBAIO)
   list(APPEND libos_srcs
     os/bluestore/kv.cc
     os/bluestore/Allocator.cc
@@ -891,7 +891,7 @@ else()
   list(APPEND libos_srcs
     os/kstore/kv.cc
   )
-endif(${WITH_AIO})
+endif(HAVE_LIBAIO)
 if(${HAVE_LIBFUSE})
   list(APPEND libos_srcs
     os/FuseStore.cc)

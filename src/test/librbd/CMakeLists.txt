@@ -1,3 +1,4 @@
+if(WITH_RBD)
 set(librbd_test
   test_fixture.cc
   test_support.cc
@@ -148,3 +149,4 @@ install(TARGETS
   ceph_test_librbd_api
   ceph_test_librbd_fsx
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif(WITH_RBD)
