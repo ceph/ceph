@@ -9202,7 +9202,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  derr << "class " << cname << " open got " << cpp_strerror(r) << dendl;
 	  if (r == -ENOENT)
 	    r = -EOPNOTSUPP;
-	  else
+	  else if (r != -EPERM) // propgate permission errors
 	    r = -EIO;
 	  return r;
 	}
@@ -9229,6 +9229,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  op->set_class_write();
         if (is_promote)
           op->set_promote();
+        op->add_class(cname, is_read, is_write, cls->whitelisted);
 	break;
       }
 
