@@ -89,8 +89,12 @@ bool OpRequest::check_rmw(int flag) {
   assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
-bool OpRequest::may_read() { return need_read_cap() || need_class_read_cap(); }
-bool OpRequest::may_write() { return need_write_cap() || need_class_write_cap(); }
+bool OpRequest::may_read() {
+  return need_read_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
+}
+bool OpRequest::may_write() {
+  return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
+}
 bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
 bool OpRequest::need_read_cap() {
@@ -98,12 +102,6 @@ bool OpRequest::need_read_cap() {
 }
 bool OpRequest::need_write_cap() {
   return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
-}
-bool OpRequest::need_class_read_cap() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
-}
-bool OpRequest::need_class_write_cap() {
-  return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
 bool OpRequest::need_promote() {
   return check_rmw(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE);
@@ -146,4 +144,11 @@ void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
   tracepoint(oprequest, mark_flag_point, reqid.name._type,
 	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
 	     flag, s.c_str(), old_flags, hit_flag_points);
+}
+
+ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)
+{
+  out << "class " << i.name << " rd " << i.read
+    << " wr " << i.write << " wl " << i.whitelisted;
+  return out;
 }

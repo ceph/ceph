@@ -63,8 +63,6 @@ struct OpRequest : public TrackedOp {
   bool includes_pg_op();
   bool need_read_cap();
   bool need_write_cap();
-  bool need_class_read_cap();
-  bool need_class_write_cap();
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
@@ -77,6 +75,24 @@ struct OpRequest : public TrackedOp {
   void set_promote();
   void set_skip_handle_cache();
   void set_skip_promote();
+
+  struct ClassInfo {
+    ClassInfo(const std::string& name, bool read, bool write,
+        bool whitelisted) :
+      name(name), read(read), write(write), whitelisted(whitelisted)
+    {}
+    const std::string name;
+    const bool read, write, whitelisted;
+  };
+
+  void add_class(const std::string& name, bool read, bool write,
+      bool whitelisted) {
+    classes_.emplace_back(name, read, write, whitelisted);
+  }
+
+  std::vector<ClassInfo> classes() const {
+    return classes_;
+  }
 
   void _dump(utime_t now, Formatter *f) const;
 
@@ -96,6 +112,8 @@ private:
   static const uint8_t flag_started =     1 << 3;
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
+
+  std::vector<ClassInfo> classes_;
 
   OpRequest(Message *req, OpTracker *tracker);
 
@@ -175,5 +193,7 @@ private:
 };
 
 typedef OpRequest::Ref OpRequestRef;
+
+ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i);
 
 #endif /* OPREQUEST_H_ */

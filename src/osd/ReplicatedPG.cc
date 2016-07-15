@@ -629,7 +629,9 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
     if (r != 0) {
       derr << "Error opening class '" << class_name << "': "
            << cpp_strerror(r) << dendl;
-      return -EINVAL;
+      if (r != -EPERM) // propogate permission error
+        r = -EINVAL;
+      return r;
     } else {
       assert(cls);
     }
