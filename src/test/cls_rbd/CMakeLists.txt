@@ -1,4 +1,5 @@
 # cls_test_cls_rbd
+if(WITH_RBD)
 add_executable(ceph_test_cls_rbd
   test_cls_rbd.cc
   $<TARGET_OBJECTS:common_texttable_obj>
@@ -24,3 +25,4 @@ target_link_libraries(ceph_test_cls_rbd
 install(TARGETS
   ceph_test_cls_rbd
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif(WITH_RBD)

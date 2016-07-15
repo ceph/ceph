@@ -1,3 +1,4 @@
+if(WITH_RBD)
 set(rbd_mirror_test_srcs
   test_ClusterWatcher.cc
   test_PoolWatcher.cc
@@ -88,3 +89,4 @@ install(TARGETS
   ceph_test_rbd_mirror
   ceph_test_rbd_mirror_random_write
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif(WITH_RBD)
