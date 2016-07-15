@@ -218,6 +218,9 @@ namespace buffer CEPH_BUFFER_API {
     const char& operator[](unsigned n) const;
     char& operator[](unsigned n);
 
+    char *push_back(unsigned len); // assert out if not enough storage
+    void pop_back(unsigned len);
+
     const char *raw_c_str() const;
     unsigned raw_length() const;
     int raw_nref() const;
@@ -566,6 +569,15 @@ namespace buffer CEPH_BUFFER_API {
     void append(const list& bl);
     void append(std::istream& in);
     void append_zero(unsigned len);
+
+    //
+    // Push onto back contiguous chunk of memory, returned pointer is to start of memory block
+    //
+    char *push_back(unsigned len);
+    //
+    // Drop the last "len" bytes
+    //
+    void pop_back(unsigned len);
     
     /*
      * get a char
