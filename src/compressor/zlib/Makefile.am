@@ -1,12 +1,12 @@
 # zlib plugin
 noinst_HEADERS += \
-  compressor/zlib/CompressionZlib.h
+  compressor/zlib/ZlibCompressor.h
 
 zlib_sources = \
   common/buffer.cc \
   compressor/Compressor.cc \
   compressor/zlib/CompressionPluginZlib.cc \
-  compressor/zlib/CompressionZlib.cc
+  compressor/zlib/ZlibCompressor.cc
 
 compressor/zlib/CompressionPluginZlib.cc: ./ceph_ver.h
 
