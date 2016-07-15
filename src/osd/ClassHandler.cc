@@ -102,10 +102,7 @@ bool ClassHandler::in_class_list(const std::string& cname,
   auto it = std::find_first_of(begin, end,
       targets.begin(), targets.end());
 
-  if (it == end)
-    return false;
-
-  return true;
+  return it != end;
 }
 
 ClassHandler::ClassData *ClassHandler::_get_class(const string& cname,
