@@ -144,13 +144,14 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
   return;
 }
 
-void RGWObjectExpirer::process_single_shard(const string& shard,
+bool RGWObjectExpirer::process_single_shard(const string& shard,
                                          const utime_t& last_run,
                                          const utime_t& round_start)
 {
   string marker;
   string out_marker;
   bool truncated = false;
+  bool done = true;
 
   CephContext *cct = store->ctx();
   int num_entries = cct->_conf->rgw_objexp_chunk_size;
@@ -167,7 +168,7 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
   int ret = l.lock_exclusive(&store->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
     dout(5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
-    return;
+    return false;
   }
   do {
     real_time rt_last = last_run.to_real_time();
@@ -191,6 +192,7 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
 
     utime_t now = ceph_clock_now(g_ceph_context);
     if (now >= end) {
+      done = false;
       break;
     }
 
@@ -198,15 +200,17 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
   } while (truncated);
 
   l.unlock(&store->objexp_pool_ctx, shard);
-  return;
+  return done;
 }
 
-void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
+/* Returns true if all shards have been processed successfully. */
+bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t& round_start)
 {
   utime_t shard_marker;
 
   CephContext *cct = store->ctx();
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
+  bool all_done = true;
 
   for (int i = 0; i < num_shards; i++) {
     string shard;
@@ -214,10 +218,12 @@ void RGWObjectExpirer::inspect_all_shards(const utime_t& last_run, const utime_t
 
     ldout(store->ctx(), 20) << "proceeding shard = " << shard << dendl;
 
-    process_single_shard(shard, last_run, round_start);
+    if (! process_single_shard(shard, last_run, round_start)) {
+      all_done = false;
+    }
   }
 
-  return;
+  return all_done;
 }
 
 bool RGWObjectExpirer::going_down()
@@ -247,10 +253,13 @@ void *RGWObjectExpirer::OEWorker::entry() {
   do {
     utime_t start = ceph_clock_now(cct);
     ldout(cct, 2) << "object expiration: start" << dendl;
-    oe->inspect_all_shards(last_run, start);
+    if (oe->inspect_all_shards(last_run, start)) {
+      /* All shards have been processed properly. Next time we can start
+       * from this moment. */
+      last_run = start;
+    }
     ldout(cct, 2) << "object expiration: stop" << dendl;
 
-    last_run = start;
 
     if (oe->going_down())
       break;

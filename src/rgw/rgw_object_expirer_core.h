@@ -77,11 +77,11 @@ public:
                   const string& from_marker,
                   const string& to_marker);
 
-  void process_single_shard(const string& shard,
+  bool process_single_shard(const std::string& shard,
                             const utime_t& last_run,
                             const utime_t& round_start);
 
-  void inspect_all_shards(const utime_t& last_run,
+  bool inspect_all_shards(const utime_t& last_run,
                           const utime_t& round_start);
 
   bool going_down();
