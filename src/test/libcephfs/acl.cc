@@ -17,7 +17,7 @@
 #include "include/ceph_fs.h"
 #include "client/posix_acl.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
