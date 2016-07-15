@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "common/snap_types.h"
+#include "common/zipkin_trace.h"
 #include "osd/osd_types.h"
 #include "librbd/AioCompletion.h"
 #include <list>
@@ -32,7 +33,8 @@ public:
   static void aio_read(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                        size_t len, char *buf, bufferlist *pbl, int op_flags);
   static void aio_write(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                        size_t len, const char *buf, int op_flags);
+                        size_t len, const char *buf, int op_flags,
+                        const blkin_trace_info *trace_info = nullptr);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                           uint64_t len);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
@@ -53,9 +55,11 @@ protected:
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
+  const blkin_trace_info *m_trace_info;
 
-  AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp)
-    : m_image_ctx(image_ctx), m_aio_comp(aio_comp) {}
+  AioImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
+    const blkin_trace_info *trace_info = nullptr)
+    : m_image_ctx(image_ctx), m_aio_comp(aio_comp), m_trace_info(trace_info) {}
 
   virtual void send_request() = 0;
   virtual aio_type_t get_aio_type() const = 0;
@@ -117,8 +121,9 @@ protected:
   const size_t m_len;
 
   AbstractAioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-                        uint64_t off, size_t len)
-    : AioImageRequest<ImageCtxT>(image_ctx, aio_comp), m_off(off), m_len(len),
+                        uint64_t off, size_t len,
+                        const blkin_trace_info *trace_info = nullptr)
+    : AioImageRequest(image_ctx, aio_comp, trace_info), m_off(off), m_len(len),
       m_synchronous(false) {
   }
 
@@ -151,9 +156,9 @@ template <typename ImageCtxT = ImageCtx>
 class AioImageWrite : public AbstractAioImageWrite<ImageCtxT> {
 public:
   AioImageWrite(ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off,
-                size_t len, const char *buf, int op_flags)
-    : AbstractAioImageWrite<ImageCtxT>(image_ctx, aio_comp, off, len),
-      m_buf(buf), m_op_flags(op_flags) {
+                size_t len, const char *buf, int op_flags,
+                const blkin_trace_info *trace_info = nullptr)
+    : AbstractAioImageWrite(image_ctx, aio_comp, off, len, trace_info), m_buf(buf),
   }
 
 protected:

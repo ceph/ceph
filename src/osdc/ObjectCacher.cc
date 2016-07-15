@@ -342,7 +342,7 @@ void ObjectCacher::Object::audit_buffers()
  * other dirty data to left and/or right.
  */
 ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
-    ceph_tid_t tid)
+    ceph_tid_t tid, const blkin_trace_info *trace_info)
 {
   assert(oc->lock.is_locked());
   BufferHead *final = 0;
@@ -360,7 +360,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     // at end ?
     if (p == data.end()) {
       if (final == NULL) {
-        final = new BufferHead(this);
+        final = new BufferHead(this, trace_info);
         replace_journal_tid(final, tid);
         final->set_start( cur );
         final->set_length( max );
@@ -436,7 +436,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         final->set_length(final->length() + glen);
         oc->bh_stat_add(final);
       } else {
-        final = new BufferHead(this);
+        final = new BufferHead(this, trace_info);
 	replace_journal_tid(final, tid);
         final->set_start( cur );
         final->set_length( glen );
@@ -1012,7 +1012,8 @@ void ObjectCacher::bh_write(BufferHead *bh)
 					   bh->snapc, bh->bl, bh->last_write,
 					   bh->ob->truncate_size,
 					   bh->ob->truncate_seq,
-					   bh->journal_tid, oncommit);
+					   bh->journal_tid, oncommit,
+             bh->b_trace_info);
   ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
 
   // set bh last_write_tid
@@ -1563,7 +1564,8 @@ void ObjectCacher::retry_waiting_reads()
   waitfor_read.splice(waitfor_read.end(), ls);
 }
 
-int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
+int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
+          const blkin_trace_info *trace_info)
 {
   assert(lock.is_locked());
   ceph::real_time now = ceph::real_clock::now();
@@ -1581,7 +1583,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
 			   ex_it->truncate_size, oset->truncate_seq);
 
     // map it all into a single bufferhead.
-    BufferHead *bh = o->map_write(*ex_it, wr->journal_tid);
+    BufferHead *bh = o->map_write(*ex_it, wr->journal_tid, trace_info);
     bool missing = bh->is_missing();
     bh->snapc = wr->snapc;
     

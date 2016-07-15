@@ -255,7 +255,7 @@ namespace librbd {
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
-				    Context *oncommit)
+				    Context *oncommit, const blkin_trace_info *trace_info)
   {
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
@@ -274,7 +274,7 @@ namespace librbd {
 					      journal_tid));
     } else {
       AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
-					       off, bl, snapc, req_comp, 0);
+					       off, bl, snapc, req_comp, 0, trace_info);
       req->send();
     }
     return ++m_tid;

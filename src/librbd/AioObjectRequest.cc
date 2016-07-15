@@ -73,10 +73,11 @@ template <typename I>
 AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
                                       uint64_t objectno, uint64_t off,
                                       uint64_t len, librados::snap_t snap_id,
-                                      Context *completion, bool hide_enoent)
+                                     Context *completion, bool hide_enoent,
+                                     const blkin_trace_info *trace_info)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-    m_hide_enoent(hide_enoent) {
+      m_hide_enoent(hide_enoent), m_trace_info(trace_info) {
 
   Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                           0, m_ictx->layout.object_size, m_parent_extents);
@@ -355,9 +356,10 @@ AbstractAioObjectWrite::AbstractAioObjectWrite(ImageCtx *ictx,
                                                uint64_t len,
                                                const ::SnapContext &snapc,
                                                Context *completion,
-                                               bool hide_enoent)
+                                                 bool hide_enoent,
+                                                 const blkin_trace_info *trace_info)
   : AioObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                     completion, hide_enoent),
+                       completion, hide_enoent, trace_info),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());

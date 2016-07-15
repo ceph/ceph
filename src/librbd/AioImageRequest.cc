@@ -168,8 +168,8 @@ void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
 template <typename I>
 void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
                                    uint64_t off, size_t len, const char *buf,
-                                   int op_flags) {
-  AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags);
+                                   int op_flags, const blkin_trace_info *trace_info) {
+  AioImageWrite<I> req(*ictx, c, off, len, buf, op_flags, trace_info);
   req.send();
 }
 
@@ -429,7 +429,7 @@ void AioImageWrite<I>::send_cache_requests(const ObjectExtents &object_extents,
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.write_to_cache(object_extent.oid, bl, object_extent.length,
                              object_extent.offset, req_comp, m_op_flags,
-                               journal_tid);
+                               journal_tid, m_trace_info);
   }
 }
 

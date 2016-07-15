@@ -34,7 +34,7 @@ class ObjecterWriteback : public WritebackHandler {
 			   const SnapContext& snapc, const bufferlist &bl,
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
-			   Context *oncommit) {
+			   Context *oncommit, const blkin_trace_info *trace_info = nullptr) {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
 				   trunc_size, trunc_seq, NULL,
 				   new C_OnFinisher(new C_Lock(m_lock,

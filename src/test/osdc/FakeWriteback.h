@@ -27,7 +27,7 @@ public:
 			   const SnapContext& snapc, const bufferlist &bl,
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
-			   Context *oncommit);
+			   Context *oncommit, const blkin_trace_info *trace_info = nullptr);
 
   using WritebackHandler::write;
 

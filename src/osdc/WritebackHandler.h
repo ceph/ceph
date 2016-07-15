@@ -3,6 +3,7 @@
 #ifndef CEPH_OSDC_WRITEBACKHANDLER_H
 #define CEPH_OSDC_WRITEBACKHANDLER_H
 
+#include "common/zipkin_trace.h"
 #include "include/Context.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
@@ -34,7 +35,8 @@ class WritebackHandler {
 			   const SnapContext& snapc,
 			   const bufferlist &bl, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
-                           ceph_tid_t journal_tid, Context *oncommit) = 0;
+                           ceph_tid_t journal_tid, Context *oncommit,
+                           const blkin_trace_info *trace_info = nullptr) = 0;
 
   virtual void overwrite_extent(const object_t& oid, uint64_t off, uint64_t len,
                                 ceph_tid_t original_journal_tid,
