@@ -140,7 +140,7 @@ void EventCenter::set_owner()
   if (!global_centers) {
     cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
         global_centers, "AsyncMessenger::EventCenter::global_center");
-    assert(global_centers && !global_centers->centers[idx]);
+    assert(global_centers);
     global_centers->centers[idx] = this;
     notify_handler = new C_handle_notify(this, cct);
     int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
