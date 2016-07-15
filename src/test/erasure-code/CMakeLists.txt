@@ -241,6 +241,11 @@ target_link_libraries(unittest_erasure_code_jerasure
   common
   ec_jerasure_generic
   )
+if(ARM_NEON OR ARM_NEON2)
+  target_link_libraries(unittest_erasure_code_jerasure
+    ec_shec_neon
+  )
+endif(ARM_NEON OR ARM_NEON2)
 
 include_directories(${CMAKE_SOURCE_DIR}/src/erasure-code/jerasure)
 include_directories(${CMAKE_SOURCE_DIR}/src/erasure-code/shec)
@@ -257,6 +262,11 @@ target_link_libraries(unittest_erasure_code_shec
   common
   ec_shec_generic
   )
+if(ARM_NEON OR ARM_NEON2)
+  target_link_libraries(unittest_erasure_code_shec
+    ec_shec_neon
+  )
+endif(ARM_NEON OR ARM_NEON2)
 
 # unittest_erasure_code_shec_all
 add_executable(unittest_erasure_code_shec_all
@@ -270,6 +280,11 @@ target_link_libraries(unittest_erasure_code_shec_all
   common
   ec_shec_generic
   )
+if(ARM_NEON OR ARM_NEON2)
+  target_link_libraries(unittest_erasure_code_shec_all
+    ec_shec_neon
+  )
+endif(ARM_NEON OR ARM_NEON2)
 
 # unittest_erasure_code_shec_thread
 add_executable(unittest_erasure_code_shec_thread
@@ -283,6 +298,11 @@ target_link_libraries(unittest_erasure_code_shec_thread
   common
   ec_shec_generic
   )
+if(ARM_NEON OR ARM_NEON2)
+  target_link_libraries(unittest_erasure_code_shec_thread
+    ec_shec_neon
+  )
+endif(ARM_NEON OR ARM_NEON2)
 
 
 # unittest_erasure_code_shec_arguments
@@ -297,3 +317,8 @@ target_link_libraries(unittest_erasure_code_shec_arguments
   common
   ec_shec_generic
   )
+if(ARM_NEON OR ARM_NEON2)
+  target_link_libraries(unittest_erasure_code_shec_arguments
+    ec_shec_neon
+  )
+endif(ARM_NEON OR ARM_NEON2)
