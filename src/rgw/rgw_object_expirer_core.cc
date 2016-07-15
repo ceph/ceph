@@ -124,15 +124,19 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
 }
 
 void RGWObjectExpirer::trim_chunk(const string& shard,
-                               const utime_t& from,
-                               const utime_t& to)
+                                  const utime_t& from,
+                                  const utime_t& to,
+                                  const string& from_marker,
+                                  const string& to_marker)
 {
-  ldout(store->ctx(), 20) << "trying to trim removal hints to  " << to << dendl;
+  ldout(store->ctx(), 20) << "trying to trim removal hints to=" << to
+                          << ", to_marker=" << to_marker << dendl;
 
   real_time rt_from = from.to_real_time();
   real_time rt_to = to.to_real_time();
 
-  int ret = store->objexp_hint_trim(shard, rt_from, rt_to);
+  int ret = store->objexp_hint_trim(shard, rt_from, rt_to,
+                                    from_marker, to_marker);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR during trim: " << ret << dendl;
   }
@@ -182,7 +186,7 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
     garbage_chunk(entries, need_trim);
 
     if (need_trim) {
-      trim_chunk(shard, last_run, round_start);
+      trim_chunk(shard, last_run, round_start, marker, out_marker);
     }
 
     utime_t now = ceph_clock_now(g_ceph_context);

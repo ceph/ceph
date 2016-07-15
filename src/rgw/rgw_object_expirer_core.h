@@ -73,7 +73,9 @@ public:
 
   void trim_chunk(const string& shard,
                   const utime_t& from,
-                  const utime_t& to);
+                  const utime_t& to,
+                  const string& from_marker,
+                  const string& to_marker);
 
   void process_single_shard(const string& shard,
                             const utime_t& last_run,
