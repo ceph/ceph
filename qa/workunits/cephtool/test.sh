@@ -36,7 +36,7 @@ function expect_false()
 TEMP_DIR=$(mktemp -d cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
 
-TMPFILE=$(mktemp -p $TEMP_DIR test_invalid.XXX)
+TMPFILE=$(mktemp $TEMP_DIR/test_invalid.XXX)
 
 #
 # retry_eagain max cmd args ...
