@@ -311,7 +311,9 @@ public:
       std::function<void(MDSMap::mds_info_t *info)> fn)
   {
     if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
-      fn(&standby_daemons.at(who));
+      auto &info = standby_daemons.at(who);
+      fn(&info);
+      assert(info.state == MDSMap::STATE_STANDBY);
       standby_epochs[who] = epoch;
     } else {
       auto fs = filesystems[mds_roles.at(who)];
