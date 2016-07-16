@@ -430,9 +430,7 @@ void FSMap::decode(bufferlist::iterator& p)
           p.second.rank = p.second.standby_for_rank;
         }
         if (p.second.rank == MDS_RANK_NONE) {
-          standby_daemons[p.first] = p.second;
-          standby_epochs[p.first] = epoch;
-          mds_roles[p.first] = FS_CLUSTER_ID_NONE;
+          insert(p.second); // into standby_daemons
         } else {
           mds_roles[p.first] = migrate_fs->fscid;
         }
