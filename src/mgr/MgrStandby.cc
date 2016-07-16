@@ -38,11 +38,13 @@ MgrStandby::MgrStandby() :
   active_mgr(nullptr)
 {
   client_messenger = Messenger::create_client_messenger(g_ceph_context, "mgr");
+  objecter = new Objecter(g_ceph_context, client_messenger, monc, NULL, 0, 0);
 }
 
 
 MgrStandby::~MgrStandby()
 {
+  delete objecter;
   delete monc;
   delete client_messenger;
   delete active_mgr;
@@ -81,6 +83,11 @@ int MgrStandby::init()
 
   client_t whoami = monc->get_global_id();
   client_messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+
+  objecter->set_client_incarnation(0);
+  objecter->init();
+  client_messenger->add_dispatcher_head(objecter);
+  objecter->start();
 
   timer.init();
   send_beacon();
@@ -127,10 +134,38 @@ void MgrStandby::shutdown()
     active_mgr->shutdown();
   }
 
+  objecter->shutdown();
+
   timer.shutdown();
 
   monc->shutdown();
   client_messenger->shutdown();
+}
+
+void MgrStandby::handle_mgr_map(MMgrMap* mmap)
+{
+  auto map = mmap->get_map();
+  dout(4) << "received map epoch " << map.get_epoch() << dendl;
+  const bool active_in_map = map.active_gid == monc->get_global_id();
+  dout(4) << "active in map: " << active_in_map
+          << " active is " << map.active_gid << dendl;
+  if (active_in_map) {
+    if (active_mgr == nullptr) {
+      dout(1) << "Activating!" << dendl;
+      active_mgr = new Mgr(monc, client_messenger, objecter);
+      active_mgr->background_init();
+      dout(1) << "I am now active" << dendl;
+    } else {
+      dout(10) << "I was already active" << dendl;
+    }
+  } else {
+    if (active_mgr != nullptr) {
+      derr << "I was active but no longer am" << dendl;
+      active_mgr->shutdown();
+      delete active_mgr;
+      active_mgr = nullptr;
+    }
+  }
 }
 
 bool MgrStandby::ms_dispatch(Message *m)
@@ -140,31 +175,7 @@ bool MgrStandby::ms_dispatch(Message *m)
 
   switch (m->get_type()) {
     case MSG_MGR_MAP:
-      {
-        auto mmap = static_cast<MMgrMap*>(m);
-        auto map = mmap->get_map();
-        dout(4) << "received map epoch " << map.get_epoch() << dendl;
-        const bool active_in_map = map.active_gid == monc->get_global_id();
-        dout(4) << "active in map: " << active_in_map
-                << " active is " << map.active_gid << dendl;
-        if (active_in_map) {
-          if (active_mgr == nullptr) {
-            dout(1) << "Activating!" << dendl;
-            active_mgr = new Mgr(monc, client_messenger);
-            active_mgr->background_init();
-            dout(1) << "I am now active" << dendl;
-          } else {
-            dout(10) << "I was already active" << dendl;
-          }
-        } else {
-          if (active_mgr != nullptr) {
-            derr << "I was active but no longer am" << dendl;
-            shutdown();
-            // FIXME: should politely go back to standby (or respawn
-            // process) instead of stopping entirely.
-          }
-        }
-      }
+      handle_mgr_map(static_cast<MMgrMap*>(m));
       break;
 
     default:
@@ -174,6 +185,8 @@ bool MgrStandby::ms_dispatch(Message *m)
         return false;
       }
   }
+
+  m->put();
   return true;
 }
 

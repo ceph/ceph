@@ -23,7 +23,6 @@
 #undef _POSIX_C_SOURCE
 #undef _XOPEN_SOURCE
 
-#include "osdc/Objecter.h"
 #include "mds/FSMap.h"
 #include "messages/MFSMap.h"
 #include "msg/Messenger.h"
@@ -39,6 +38,7 @@
 
 class MCommand;
 class MMgrDigest;
+class Objecter;
 
 
 class MgrPyModule;
@@ -69,7 +69,7 @@ protected:
   bool initializing;
 
 public:
-  Mgr(MonClient *monc_, Messenger *clientm_);
+  Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_);
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
