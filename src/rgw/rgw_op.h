@@ -446,6 +446,7 @@ public:
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   bool enable_versioning;
+  bufferlist in_data;
 public:
   RGWSetBucketVersioning() : enable_versioning(false) {}
 
@@ -1518,5 +1519,28 @@ static inline void complete_etag(MD5& hash, string *etag)
 
   *etag = etag_buf_str;
 } /* complete_etag */
+
+class RGWSetAttrs : public RGWOp {
+protected:
+  map<string, buffer::list> attrs;
+
+public:
+  RGWSetAttrs() {}
+  virtual ~RGWSetAttrs() {}
+
+  void emplace_attr(std::string&& key, buffer::list&& bl) {
+    attrs.emplace(std::move(key), std::move(bl));
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_attrs"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_ATTRS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
 
 #endif /* CEPH_RGW_OP_H */

@@ -839,7 +839,7 @@ std::string pg_state_string(int state)
     oss << "repair+";
   if ((state & PG_STATE_BACKFILL_WAIT) &&
       !(state &PG_STATE_BACKFILL))
-    oss << "wait_backfill+";
+    oss << "backfill_wait+";
   if (state & PG_STATE_BACKFILL)
     oss << "backfilling+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
@@ -3433,7 +3433,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(10, 4, bl);
+  ENCODE_START(11, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -3458,12 +3458,14 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(user_version, bl);
   ::encode(mod_desc, bl);
   ::encode(extra_reqids, bl);
+  if (op == ERROR)
+    ::encode(return_code, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -3512,7 +3514,8 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     mod_desc.mark_unrollbackable();
   if (struct_v >= 10)
     ::decode(extra_reqids, bl);
-
+  if (struct_v >= 11 && op == ERROR)
+    ::decode(return_code, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3535,6 +3538,7 @@ void pg_log_entry_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_stream("mtime") << mtime;
+  f->dump_int("return_code", return_code);
   if (snaps.length() > 0) {
     vector<snapid_t> v;
     bufferlist c = snaps;
@@ -3562,13 +3566,17 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   o.push_back(new pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
 				 1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-				 utime_t(8,9)));
+				 utime_t(8,9), 0));
+  o.push_back(new pg_log_entry_t(ERROR, oid, eversion_t(1,2), eversion_t(3,4),
+				 1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+				 utime_t(8,9), -ENOENT));
 }
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
   out << e.version << " (" << e.prior_version << ") "
-      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
+      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime
+      << " " << e.return_code;
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
     bufferlist c = e.snaps;
@@ -3913,8 +3921,9 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
       missing[e.soid] = item(e.version, e.prior_version);
     }
     rmissing[e.version.version] = e.soid;
-  } else
+  } else if (e.is_delete()) {
     rm(e.soid, e.version);
+  }
 }
 
 void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
@@ -4706,7 +4715,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(15, 8, bl);
+  ENCODE_START(16, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4734,13 +4743,16 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(local_mtime, bl);
   ::encode(data_digest, bl);
   ::encode(omap_digest, bl);
+  ::encode(expected_object_size, bl);
+  ::encode(expected_write_size, bl);
+  ::encode(alloc_hint_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(15, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -4813,6 +4825,15 @@ void object_info_t::decode(bufferlist::iterator& bl)
     clear_flag(FLAG_DATA_DIGEST);
     clear_flag(FLAG_OMAP_DIGEST);
   }
+  if (struct_v >= 16) {
+    ::decode(expected_object_size, bl);
+    ::decode(expected_write_size, bl);
+    ::decode(alloc_hint_flags, bl);
+  } else {
+    expected_object_size = 0;
+    expected_write_size = 0;
+    alloc_hint_flags = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4838,6 +4859,9 @@ void object_info_t::dump(Formatter *f) const
   f->dump_unsigned("truncate_size", truncate_size);
   f->dump_unsigned("data_digest", data_digest);
   f->dump_unsigned("omap_digest", omap_digest);
+  f->dump_unsigned("expected_object_size", expected_object_size);
+  f->dump_unsigned("expected_write_size", expected_write_size);
+  f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
@@ -4872,6 +4896,9 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " dd " << std::hex << oi.data_digest << std::dec;
   if (oi.is_omap_digest())
     out << " od " << std::hex << oi.omap_digest << std::dec;
+  out << " alloc_hint [" << oi.expected_object_size
+      << " " << oi.expected_write_size
+      << " " << oi.alloc_hint_flags << "]";
 
   out << ")";
   return out;

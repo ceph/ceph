@@ -5,11 +5,7 @@
 #define CEPH_RGW_FCGI_H
 
 #include "acconfig.h"
-#ifdef FASTCGI_INCLUDE_DIR
-# include "fastcgi/fcgiapp.h"
-#else
-# include "fcgiapp.h"
-#endif
+#include <fcgiapp.h>
 
 #include "rgw_client_io.h"
 

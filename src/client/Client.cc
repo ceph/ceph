@@ -360,6 +360,7 @@ void Client::tear_down_cache()
 
 inodeno_t Client::get_root_ino()
 {
+  Mutex::Locker l(client_lock);
   if (use_faked_inos())
     return root->faked_ino;
   else
@@ -368,6 +369,7 @@ inodeno_t Client::get_root_ino()
 
 Inode *Client::get_root()
 {
+  Mutex::Locker l(client_lock);
   root->ll_get();
   return root;
 }
@@ -1614,7 +1616,7 @@ int Client::make_request(MetaRequest *request,
 
   // make note
   mds_requests[tid] = request->get();
-  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)\
+  if (oldest_tid == 0 && request->get_op() != CEPH_MDS_OP_SETFILELOCK)
     oldest_tid = tid;
 
   if (uid < 0)
@@ -1706,10 +1708,11 @@ int Client::make_request(MetaRequest *request,
   if (!request->reply) {
     assert(request->aborted());
     assert(!request->got_unsafe);
+    r = request->get_abort_code();
     request->item.remove_myself();
     unregister_request(request);
     put_request(request); // ours
-    return request->get_abort_code();
+    return r;
   }
 
   // got it!
@@ -2506,9 +2509,10 @@ void Client::handle_fs_map_user(MFSMapUser *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
-  if (m->get_epoch() < mdsmap->get_epoch()) {
-    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
-	    << mdsmap->get_epoch() << dendl;
+  if (m->get_epoch() <= mdsmap->get_epoch()) {
+    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch()
+                  << " is identical to or older than our "
+                  << mdsmap->get_epoch() << dendl;
     m->put();
     return;
   }  
@@ -2827,9 +2831,6 @@ void Client::put_inode(Inode *in, int n)
     if (use_faked_inos())
       _release_faked_ino(in);
 
-    in->cap_item.remove_myself();
-    in->snaprealm_item.remove_myself();
-    in->snapdir_parent.reset();
     if (in == root) {
       root = 0;
       root_ancestor = 0;
@@ -2837,14 +2838,6 @@ void Client::put_inode(Inode *in, int n)
         root_parents.erase(root_parents.begin());
     }
 
-    if (!in->oset.objects.empty()) {
-      ldout(cct, 0) << __func__ << ": leftover objects on inode 0x"
-        << std::hex << in->ino << std::dec << dendl;
-      assert(in->oset.objects.empty());
-    }
-
-    delete in->fcntl_locks;
-    delete in->flock_locks;
     delete in;
   }
 }
@@ -7043,7 +7036,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
     fg = frag_t(dirp->offset_high());
   
   ldout(cct, 10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg
-		 << " offset " << hex << dirp->offset << dendl;
+		 << " offset " << hex << dirp->offset << dec << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
@@ -7226,7 +7219,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
   }
 
   // can we read from our cache?
-  ldout(cct, 10) << "offset " << hex << dirp->offset
+  ldout(cct, 10) << "offset " << hex << dirp->offset << dec
 	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
@@ -8583,13 +8576,10 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
-    r = filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+    filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 			   offset, size, bl, ceph::real_clock::now(cct), 0,
 			   in->truncate_size, in->truncate_seq,
 			   onfinish, new C_OnFinisher(onsafe, &objecter_finisher));
-    if (r < 0)
-      goto done;
-
     client_lock.Unlock();
     flock.Lock();
 
@@ -8794,7 +8784,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 int Client::fstat(int fd, struct stat *stbuf, int mask)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fstat mask " << hex << mask << std::endl;
+  tout(cct) << "fstat mask " << hex << mask << dec << std::endl;
   tout(cct) << fd << std::endl;
 
   Fh *f = get_filehandle(fd);
@@ -8881,6 +8871,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   client_lock.Unlock();
   int rval = cond.wait();
   client_lock.Lock();
+
+  if (rval < 0) {
+    ldout(cct, 1) << "underlying call to statfs returned error: "
+                  << cpp_strerror(rval)
+                  << dendl;
+    return rval;
+  }
 
   memset(stbuf, 0, sizeof(*stbuf));
 
@@ -11656,15 +11653,12 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
       _invalidate_inode_cache(in, offset, length);
-      r = filer->zero(in->ino, &in->layout,
+      filer->zero(in->ino, &in->layout,
 		      in->snaprealm->get_snap_context(),
 		      offset, length,
 		      ceph::real_clock::now(cct),
 		      0, true, onfinish,
 		      new C_OnFinisher(onsafe, &objecter_finisher));
-      if (r < 0)
-	goto done;
-
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
@@ -11691,8 +11685,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       }
     }
   }
-
-done:
 
   if (onuninline) {
     client_lock.Unlock();

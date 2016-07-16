@@ -567,7 +567,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   dirty_big_info = true;
 }
 
-void PGLog::append_log_entries_update_missing(
+bool PGLog::append_log_entries_update_missing(
   const hobject_t &last_backfill,
   bool last_backfill_bitwise,
   const list<pg_log_entry_t> &entries,
@@ -576,6 +576,7 @@ void PGLog::append_log_entries_update_missing(
   LogEntryHandler *rollbacker,
   const DoutPrefixProvider *dpp)
 {
+  bool invalidate_stats = false;
   if (log && !entries.empty()) {
     assert(log->head < entries.begin()->version);
     log->head = entries.rbegin()->version;
@@ -583,13 +584,15 @@ void PGLog::append_log_entries_update_missing(
   for (list<pg_log_entry_t>::const_iterator p = entries.begin();
        p != entries.end();
        ++p) {
+    invalidate_stats = invalidate_stats || !p->is_error();
     if (log) {
       log->log.push_back(*p);
       pg_log_entry_t &ne = log->log.back();
       ldpp_dout(dpp, 20) << "update missing, append " << ne << dendl;
       log->index(ne);
     }
-    if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0) {
+    if (cmp(p->soid, last_backfill, last_backfill_bitwise) <= 0 &&
+	!p->is_error()) {
       missing.add_next_event(*p);
       if (rollbacker) {
 	// hack to match PG::mark_all_unfound_lost
@@ -603,6 +606,7 @@ void PGLog::append_log_entries_update_missing(
   }
   if (log)
     log->reset_rollback_info_trimmed_to_riter();
+  return invalidate_stats;
 }
 
 void PGLog::merge_log(ObjectStore::Transaction& t,
@@ -977,7 +981,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     }
   }
   log.head = info.last_update;
-  log.reset_riter();
+  log.reset_rollback_info_trimmed_to_riter();
 
   // build missing
   if (info.last_complete < info.last_update) {
@@ -991,6 +995,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 ++i) {
       if (i->version <= info.last_complete) break;
       if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
+      if (i->is_error())
 	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);

@@ -42,6 +42,7 @@ compare_image_snaps()
     rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
     rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
     cmp ${rmt_export} ${loc_export}
+    rm -f ${rmt_export} ${loc_export}
 }
 
 wait_for_pool_images()

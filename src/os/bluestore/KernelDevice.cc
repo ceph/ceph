@@ -385,10 +385,10 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if (!buffered && bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
+      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;

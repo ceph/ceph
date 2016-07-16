@@ -187,13 +187,17 @@ protected:
   bool handle_core_message(Message *m);
   
   // special message types
+  friend class C_MDS_Send_Command_Reply;
+  static void send_command_reply(MCommand *m, MDSRank* mds_rank, int r,
+				 bufferlist outbl, const std::string& outs);
   int _handle_command_legacy(std::vector<std::string> args);
   int _handle_command(
       const cmdmap_t &cmdmap,
-      bufferlist const &inbl,
+      MCommand *m,
       bufferlist *outbl,
       std::string *outs,
-      Context **run_later);
+      Context **run_later,
+      bool *need_reply);
   void handle_command(class MMonCommand *m);
   void handle_command(class MCommand *m);
   void handle_mds_map(class MMDSMap *m);

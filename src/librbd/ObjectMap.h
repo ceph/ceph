@@ -5,13 +5,15 @@
 
 #include "include/int_types.h"
 #include "include/fs_types.h"
-#include "include/rados/librados.hpp"
 #include "include/rbd/object_map_types.h"
 #include "common/bit_vector.hpp"
 #include <boost/optional.hpp>
 
 class Context;
 class RWLock;
+namespace librados {
+  class IoCtx;
+}
 
 namespace librbd {
 

@@ -12,6 +12,8 @@
 #ifndef CEPH_COMPAT_H
 #define CEPH_COMPAT_H
 
+#include "acconfig.h"
+
 #if defined(__FreeBSD__)
 
 /* Make sure that ENODATA is defined in the correct way */
@@ -58,8 +60,6 @@
 #endif
 #endif
 
-/* Fix a small name diff */
-#define pthread_setname_np pthread_set_name_np
 /* And include the extra required include file */
 #include <pthread_np.h>
 
@@ -110,6 +110,32 @@
 
 #if defined(_AIX)
 #define MSG_DONTWAIT MSG_NONBLOCK
+#endif
+
+#if defined(HAVE_PTHREAD_SETNAME_NP)
+  #if defined(__APPLE__)
+    #define pthread_setname_np(thread, name) ({ \
+      int __result = 0;                         \
+      if (thread == pthread_self())             \
+        __result = pthread_setname_np(name)     \
+      __result; })
+  #endif
+#elif defined(HAVE_PTHREAD_SET_NAME_NP)
+  /* Fix a small name diff */
+  #define pthread_setname_np pthread_set_name_np
+#else
+  /* compiler warning free success noop */
+  #define pthread_setname_np(thread, name) ({ \
+    int __i = 0;                              \
+    __i; })
+#endif
+
+#if !defined(HAVE_PTHREAD_GETNAME_NP)
+  /* compiler warning free success noop */
+  #define pthread_getname_np(thread, name, len) ({ \
+    if (name != NULL)                              \
+      *name = '\0';                                \
+    0; })
 #endif
 
 #endif /* !CEPH_COMPAT_H */

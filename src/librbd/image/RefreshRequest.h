@@ -6,7 +6,6 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "include/rbd_types.h"
 #include "common/snap_types.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/ImageCtx.h"

@@ -826,6 +826,7 @@ public:
                                   version_t dpv, MDSInternalContextBase *fin);
 
   void open_foreign_mdsdir(inodeno_t ino, MDSInternalContextBase *c);
+  CDir *get_stray_dir(CInode *in);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
   MDSInternalContextBase *_get_waiter(MDRequestRef& mdr, Message *req, MDSInternalContextBase *fin);
@@ -962,6 +963,7 @@ public:
 public:
   void eval_remote(CDentry *dn);
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
+  uint64_t get_num_strays() const { return stray_manager.get_num_strays(); }
 
 protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());

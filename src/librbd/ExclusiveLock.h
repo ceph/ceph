@@ -8,7 +8,6 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
-#include "common/RWLock.h"
 #include <list>
 #include <string>
 #include <utility>

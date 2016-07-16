@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_RENAME_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include <iosfwd>
 #include <string>
 
 class Context;

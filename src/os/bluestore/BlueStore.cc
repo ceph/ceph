@@ -273,7 +273,7 @@ static int get_key_bnode(const string& key, shard_id_t *shard,
     return -1;
   p = _key_decode_shard(p, shard);
   p = _key_decode_u64(p, (uint64_t*)pool);
-  pool -= 0x8000000000000000ull;
+  *pool -= 0x8000000000000000ull;
   p = _key_decode_u32(p, hash);
   return 0;
 }
@@ -507,20 +507,17 @@ void BlueStore::LRUCache::trim(uint64_t onode_max, uint64_t buffer_max)
   _audit("trim start");
 
   // buffers
-  auto i = buffer_lru.end();
-  if (buffer_size) {
-    assert(i != buffer_lru.begin());
-    --i;
-  }
   while (buffer_size > buffer_max) {
+    auto i = buffer_lru.rbegin();
+    if (i == buffer_lru.rend()) {
+      // stop if buffer_lru is now empty
+      break;
+    }
+
     Buffer *b = &*i;
     assert(b->is_clean());
-    auto p = b->space->buffer_map.find(b->offset);
-    if (i != buffer_lru.begin()) {
-      --i;
-    }
     dout(20) << __func__ << " rm " << *b << dendl;
-    b->space->_rm_buffer(p);
+    b->space->_rm_buffer(b);
   }
 
   // onodes
@@ -654,6 +651,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
   }
   if (!b->is_empty()) {
     buffer_bytes += b->length;
+    buffer_list_bytes[b->cache_private] += b->length;
   }
 }
 
@@ -663,6 +661,8 @@ void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
  if (!b->is_empty()) {
     assert(buffer_bytes >= b->length);
     buffer_bytes -= b->length;
+    assert(buffer_list_bytes[b->cache_private] >= b->length);
+    buffer_list_bytes[b->cache_private] -= b->length;
   }
   switch (b->cache_private) {
   case BUFFER_WARM_IN:
@@ -685,6 +685,8 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
   if (!b->is_empty()) {
     assert((int64_t)buffer_bytes + delta >= 0);
     buffer_bytes += delta;
+    assert((int64_t)buffer_list_bytes[b->cache_private] + delta >= 0);
+    buffer_list_bytes[b->cache_private] += delta;
   }
 }
 
@@ -699,42 +701,86 @@ void BlueStore::TwoQCache::trim(uint64_t onode_max, uint64_t buffer_max)
   _audit("trim start");
 
   // buffers
-  uint64_t num_buffers = buffer_hot.size() + buffer_warm_in.size();
-  if (num_buffers) {
-    // for simplicity, we assume buffer sizes are uniform across hot
-    // and warm_in.  FIXME?
-    uint64_t avg_buffer_size = buffer_bytes / num_buffers;
-    uint64_t kin = buffer_max / avg_buffer_size / 2;
+  if (buffer_bytes > buffer_max) {
+    uint64_t kin = buffer_max / 2;
     uint64_t khot = kin;
-    uint64_t kout = buffer_max / avg_buffer_size;
-    // if hot is small, give slack to warm_in.
-    if (buffer_hot.size() < kin) {
-      kin += kin - buffer_hot.size();
+
+    // pre-calculate kout based on average buffer size too,
+    // which is typical(the warm_in and hot lists may change later)
+    uint64_t kout = 0;
+    uint64_t buffer_num = buffer_hot.size() + buffer_warm_in.size();
+    if (buffer_num) {
+      uint64_t buffer_avg_size = buffer_bytes / buffer_num;
+      assert(buffer_avg_size);
+      kout = buffer_max / buffer_avg_size;
     }
-    dout(20) << __func__ << " num_buffers " << num_buffers
-	     << " (hot " << buffer_hot.size()
-	     << " + warm_in " << buffer_warm_in.size() << ")"
-	     << " avg size " << avg_buffer_size
-	     << " warm_out " << buffer_warm_out.size()
-	     << " khot " << khot << " kin " << kin << " kout " << kout
-	     << dendl;
-    while (buffer_hot.size() > khot) {
-      Buffer *b = &*buffer_hot.rbegin();
-      assert(b->is_clean());
-      dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
-      b->space->_rm_buffer(b);
+
+    if (buffer_list_bytes[BUFFER_HOT] < khot) {
+      // hot is small, give slack to warm_in
+      kin += khot - buffer_list_bytes[BUFFER_HOT];
+    } else if (buffer_list_bytes[BUFFER_WARM_IN] < kin) {
+      // warm_in is small, give slack to hot
+      khot += kin - buffer_list_bytes[BUFFER_WARM_IN];
     }
-    while (buffer_warm_in.size() > kin) {
-      Buffer *b = &*buffer_warm_in.rbegin();
+
+    // adjust warm_in list
+    int64_t to_evict_bytes = buffer_list_bytes[BUFFER_WARM_IN] - kin;
+    uint64_t evicted = 0;
+
+    while (to_evict_bytes > 0) {
+      auto p = buffer_warm_in.rbegin();
+      if (p == buffer_warm_in.rend()) {
+        // stop if warm_in list is now empty
+        break;
+      }
+
+      Buffer *b = &*p;
       assert(b->is_clean());
       dout(20) << __func__ << " buffer_warm_in -> out " << *b << dendl;
       buffer_bytes -= b->length;
+      buffer_list_bytes[BUFFER_WARM_IN] -= b->length;
+      to_evict_bytes -= b->length;
+      evicted += b->length;
       b->state = Buffer::STATE_EMPTY;
       b->data.clear();
       buffer_warm_in.erase(buffer_warm_in.iterator_to(*b));
       buffer_warm_out.push_front(*b);
       b->cache_private = BUFFER_WARM_OUT;
     }
+
+    if (evicted > 0) {
+      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+               << " from warm_in list, done evicting warm_in buffers"
+               << dendl;
+    }
+
+    // adjust hot list
+    to_evict_bytes = buffer_list_bytes[BUFFER_HOT] - khot;
+    evicted = 0;
+
+    while (to_evict_bytes > 0) {
+      auto p = buffer_hot.rbegin();
+      if (p == buffer_hot.rend()) {
+        // stop if hot list is now empty
+        break;
+      }
+
+      Buffer *b = &*p;
+      assert(b->is_clean());
+      dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
+      // adjust evict size before buffer goes invalid
+      to_evict_bytes -= b->length;
+      evicted += b->length;
+      b->space->_rm_buffer(b);
+    }
+
+    if (evicted > 0) {
+      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+               << " from hot list, done evicting hot buffers"
+               << dendl;
+    }
+
+    // adjust warm out list too, if necessary
     while (buffer_warm_out.size() > kout) {
       Buffer *b = &*buffer_warm_out.rbegin();
       assert(b->is_empty());
@@ -783,20 +829,43 @@ void BlueStore::TwoQCache::_audit(const char *when)
     for (auto i = buffer_hot.begin(); i != buffer_hot.end(); ++i) {
       s += i->length;
     }
+
+    uint64_t hot_bytes = s;
+    if (hot_bytes != buffer_list_bytes[BUFFER_HOT]) {
+      derr << __func__ << " hot_list_bytes "
+           << buffer_list_bytes[BUFFER_HOT]
+           << " != actual " << hot_bytes
+           << dendl;
+      assert(hot_bytes == buffer_list_bytes[BUFFER_HOT]);
+    }
+
     for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
       s += i->length;
     }
+
+    uint64_t warm_in_bytes = s - hot_bytes;
+    if (warm_in_bytes != buffer_list_bytes[BUFFER_WARM_IN]) {
+      derr << __func__ << " warm_in_list_bytes "
+           << buffer_list_bytes[BUFFER_WARM_IN]
+           << " != actual " << warm_in_bytes
+           << dendl;
+      assert(warm_in_bytes == buffer_list_bytes[BUFFER_WARM_IN]);
+    }
+
     if (s != buffer_bytes) {
       derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
 	   << dendl;
       assert(s == buffer_bytes);
     }
+
     dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
 	     << " ok" << dendl;
   }
+
   if (false) {
     uint64_t lc = 0, oc = 0;
     set<OnodeSpace*> spaces;
+
     for (auto i = onode_lru.begin(); i != onode_lru.end(); ++i) {
       assert(i->space->onode_map.count(i->oid));
       if (spaces.count(i->space) == 0) {
@@ -805,6 +874,7 @@ void BlueStore::TwoQCache::_audit(const char *when)
       }
       ++lc;
     }
+
     if (lc != oc) {
       derr << " lc " << lc << " oc " << oc << dendl;
     }
@@ -882,11 +952,10 @@ int BlueStore::BufferSpace::_discard(uint64_t offset, uint64_t length)
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
       _add_buffer(new Buffer(this, b->state, b->seq, end, bl), 0, b);
-      _rm_buffer(i);
     } else {
       _add_buffer(new Buffer(this, b->state, b->seq, end, keep), 0, b);
-      _rm_buffer(i);
     }
+    _rm_buffer(i);
     cache->_audit("discard end 2");
     break;
   }
@@ -1319,6 +1388,7 @@ BlueStore::~BlueStore()
   assert(db == NULL);
   assert(bluefs == NULL);
   assert(fsid_fd < 0);
+  assert(path_fd < 0);
   for (auto i : cache_shards) {
     delete i;
   }
@@ -1359,42 +1429,48 @@ void BlueStore::_set_compression()
   comp_min_blob_size = g_conf->bluestore_compression_min_blob_size;
   comp_max_blob_size = g_conf->bluestore_compression_max_blob_size;
 
-  const char *alg = 0;
-  if (g_conf->bluestore_compression_algorithm == "snappy") {
-    alg = "snappy";
-  } else if (g_conf->bluestore_compression_algorithm == "zlib") {
-    alg = "zlib";
-  } else if (g_conf->bluestore_compression_algorithm.length()) {
-    derr << __func__ << " unrecognized compression algorithm '"
-	 << g_conf->bluestore_compression_algorithm << "'" << dendl;
-  }
-  if (alg) {
-    compressor = Compressor::create(cct, alg);
-    if (!compressor) {
-      derr << __func__ << " unable to initialize " << alg << " compressor"
-	   << dendl;
-    }
+  if (g_conf->bluestore_compression == "force") {
+    comp_mode = COMP_FORCE;
+  } else if (g_conf->bluestore_compression == "aggressive") {
+    comp_mode = COMP_AGGRESSIVE;
+  } else if (g_conf->bluestore_compression == "passive") {
+    comp_mode = COMP_PASSIVE;
+  } else if (g_conf->bluestore_compression == "none") {
+    comp_mode = COMP_NONE;
   } else {
-    compressor = nullptr;
+    derr << __func__ << " unrecognized value '"
+         << g_conf->bluestore_compression
+         << "' for bluestore_compression, reverting to 'none'"
+         << dendl;
+    comp_mode = COMP_NONE;
   }
-  CompressionMode m = COMP_NONE;
-  if (compressor) {
-    if (g_conf->bluestore_compression == "force") {
-      m = COMP_FORCE;
-    } else if (g_conf->bluestore_compression == "aggressive") {
-      m = COMP_AGGRESSIVE;
-    } else if (g_conf->bluestore_compression == "passive") {
-      m = COMP_PASSIVE;
-    } else if (g_conf->bluestore_compression == "none") {
-      m = COMP_NONE;
-    } else {
-      derr << __func__ << " unrecognized value '"
-	   << g_conf->bluestore_compression
-	   << "' for bluestore_compression, reverting to 'none'" << dendl;
-      m = COMP_NONE;
+
+  compressor = nullptr;
+  if (comp_mode != COMP_NONE) {    
+    const char *alg = 0;
+    if (g_conf->bluestore_compression_algorithm == "snappy") {
+      alg = "snappy";
+    } else if (g_conf->bluestore_compression_algorithm == "zlib") {
+      alg = "zlib";
+    } else if (g_conf->bluestore_compression_algorithm.length()) {
+      derr << __func__ << " unrecognized compression algorithm '"
+	   << g_conf->bluestore_compression_algorithm << "'"
+           << ", reverting compression mode to 'none'"
+           << dendl;
+      comp_mode = COMP_NONE;
+    }
+
+    if (alg) {
+      compressor = Compressor::create(cct, alg);
+      if (!compressor) {
+        derr << __func__ << " unable to initialize " << alg << " compressor"
+             << ", reverting compression mode to 'none'" 
+	     << dendl;
+        comp_mode = COMP_NONE;
+      }
     }
   }
-  comp_mode = m;
+ 
   dout(10) << __func__ << " mode " << get_comp_mode_name(comp_mode)
 	   << " alg " << (compressor ? compressor->get_type() : "(none)")
 	   << dendl;
@@ -1618,7 +1694,6 @@ int BlueStore::_open_bdev(bool create)
   assert(block_size == 1u << block_size_order);
 
   _set_alloc_sizes();
-  max_alloc_size = g_conf->bluestore_max_alloc_size;
   return 0;
 
  fail_close:
@@ -1675,18 +1750,38 @@ int BlueStore::_open_fm(bool create)
       dout(1) << __func__ << " pre-fragmenting freespace, using "
 	      << g_conf->bluestore_debug_prefill << " with max free extent "
 	      << g_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t start = ROUND_UP_TO(reserved, min_alloc_size);
+      uint64_t start = P2ROUNDUP(reserved, min_alloc_size);
       uint64_t max_b = g_conf->bluestore_debug_prefragment_max / min_alloc_size;
       float r = g_conf->bluestore_debug_prefill;
-      while (start < end) {
+      r /= 1.0 - r;
+      bool stop = false;
+
+      while (!stop && start < end) {
 	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
-	if (start + l > end)
+	if (start + l > end) {
 	  l = end - start;
-	l = ROUND_UP_TO(l, min_alloc_size);
-	uint64_t u = 1 + (uint64_t)(r * (double)l / (1.0 - r));
-	u = ROUND_UP_TO(u, min_alloc_size);
+          l = P2ALIGN(l, min_alloc_size);
+        }
+        assert(start + l <= end);
+
+	uint64_t u = 1 + (uint64_t)(r * (double)l);
+	u = P2ROUNDUP(u, min_alloc_size);
+        if (start + l + u > end) {
+          u = end - (start + l);
+          // trim to align so we don't overflow again
+          u = P2ALIGN(u, min_alloc_size);
+          stop = true;
+        }
+        assert(start + l + u <= end);
+
 	dout(20) << "  free 0x" << std::hex << start << "~" << l
 		 << " use 0x" << u << std::dec << dendl;
+
+        if (u == 0) {
+          // break if u has been trimmed to nothing
+          break;
+        }
+
 	fm->allocate(start + l, u, t);
 	start += l + u;
       }
@@ -1947,7 +2042,7 @@ int BlueStore::_open_db(bool create)
 			    g_conf->bluestore_bluefs_gift_ratio);
       initial = MAX(initial, g_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
-      initial = ROUND_UP_TO(initial, g_conf->bluefs_alloc_size);
+      initial = P2ROUNDUP(initial, g_conf->bluefs_alloc_size);
       initial += g_conf->bluefs_alloc_size - BLUEFS_START;
       bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
       bluefs_extents.insert(BLUEFS_START, initial);
@@ -2225,7 +2320,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
 
   if (gift) {
     // round up to alloc size
-    gift = ROUND_UP_TO(gift, min_alloc_size);
+    gift = P2ROUNDUP(gift, min_alloc_size);
 
     // hard cap to fit into 32 bits
     gift = MIN(gift, 1ull<<31);
@@ -2256,7 +2351,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_pextent_t> *extents,
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    reclaim = ROUND_UP_TO(reclaim, min_alloc_size);
+    reclaim = P2ROUNDUP(reclaim, min_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = MIN(reclaim, 1ull<<31);
@@ -2738,6 +2833,7 @@ int BlueStore::_fsck_verify_blob_map(
       derr << " " << what << " blob " << b.id
 	   << " has no lextent refs" << dendl;
       ++errors;
+      continue;
     }
     if (pv->second != b.blob.ref_map) {
       derr << " " << what << " blob " << b.id
@@ -3271,6 +3367,9 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
     return false;
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   if (!o || !o->exists)
     return false;
   return true;
@@ -3306,6 +3405,9 @@ int BlueStore::stat(
   st->st_blksize = 4096;
   st->st_blocks = (st->st_size + st->st_blksize - 1) / st->st_blksize;
   st->st_nlink = 1;
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   return 0;
 }
 
@@ -3358,6 +3460,9 @@ int BlueStore::read(
   r = _do_read(c, o, offset, length, bl, op_flags);
 
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -3421,7 +3526,6 @@ int BlueStore::_do_read(
 	       << std::dec << dendl;
       pos += hole;
       left -= hole;
-      continue;
     }
     Blob *bptr = c->get_blob(o, lp->second.blob);
     if (bptr == nullptr) {
@@ -3609,7 +3713,8 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
-  CompressorRef compressor = Compressor::create(cct, chdr.type);
+  string name = bluestore_blob_t::get_comp_alg_name(chdr.type);
+  CompressorRef compressor = Compressor::create(cct, name);
   if (!compressor.get()) {
     // if compressor isn't available - error, because cannot return
     // decompressed data?
@@ -3661,7 +3766,7 @@ int BlueStore::fiemap(
 	   << " size 0x" << o->onode.size << std::dec << dendl;
 
   map<uint64_t,bluestore_lextent_t>::iterator ep, eend;
- if (offset > o->onode.size)
+  if (offset > o->onode.size)
     goto out;
 
   if (offset + length > o->onode.size) {
@@ -3703,6 +3808,9 @@ int BlueStore::fiemap(
   }
 
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << " size = 0 (" << m << ")" << std::dec << dendl;
@@ -3748,6 +3856,9 @@ int BlueStore::getattr(
   value = o->onode.attrs[k];
   r = 0;
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << c->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
@@ -3785,6 +3896,9 @@ int BlueStore::getattrs(
   aset = o->onode.attrs;
   r = 0;
  out:
+  c->cache->trim(
+    g_conf->bluestore_onode_cache_size,
+    g_conf->bluestore_buffer_cache_size);
   dout(10) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
@@ -5597,6 +5711,7 @@ void BlueStore::_do_write_small(
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   assert(length < min_alloc_size);
+  uint64_t end = offset + length;
 
   bufferlist bl;
   blp.copy(length, bl);
@@ -5616,7 +5731,7 @@ void BlueStore::_do_write_small(
       break;
     }
     int64_t blob = ep->second.blob;
-    b = c->get_blob(o, ep->second.blob);
+    b = c->get_blob(o, blob);
     if (!b->blob.is_mutable() || b->blob.is_compressed()) {
       dout(20) << __func__ << " ignoring immutable " << blob << ": " << *b
 	       << dendl;
@@ -5635,15 +5750,16 @@ void BlueStore::_do_write_small(
 
     // can we pad our head/tail out with zeros?
     uint64_t chunk_size = b->blob.get_chunk_size(block_size);
-    uint64_t head_pad = offset % chunk_size;
+    uint64_t head_pad = P2PHASE(offset, chunk_size);
     if (head_pad && o->onode.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
     }
-    uint64_t tail_pad =
-      ROUND_UP_TO(offset + length, chunk_size) - (offset + length);
-    if (o->onode.has_any_lextents(offset + length, tail_pad)) {
+
+    uint64_t tail_pad = P2NPHASE(end, chunk_size);
+    if (tail_pad && o->onode.has_any_lextents(end, tail_pad)) {
       tail_pad = 0;
     }
+
     bufferlist padded = bl;
     if (head_pad) {
       bufferlist z;
@@ -5697,9 +5813,8 @@ void BlueStore::_do_write_small(
     }
 
     // read some data to fill out the chunk?
-    uint64_t head_read = b_off % chunk_size;
-    uint64_t tail_read =
-      ROUND_UP_TO(b_off + b_len, chunk_size) - (b_off + b_len);
+    uint64_t head_read = P2PHASE(b_off, chunk_size);
+    uint64_t tail_read = P2NPHASE(b_off + b_len, chunk_size);
     if ((head_read || tail_read) &&
 	(b->blob.get_ondisk_length() >= b_off + b_len + tail_read) &&
 	head_read + tail_read < min_alloc_size) {
@@ -5776,12 +5891,12 @@ void BlueStore::_do_write_small(
   // new blob.
   b = o->blob_map.new_blob(c->cache);
   unsigned alloc_len = min_alloc_size;
-  uint64_t b_off = offset % alloc_len;
+  uint64_t b_off = P2PHASE(offset, alloc_len);
   b->bc.write(txc->seq, b_off, bl, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off, block_size);
   o->onode.punch_hole(offset, length, &wctx->lex_old);
   bluestore_lextent_t& lex = o->onode.extent_map[offset] =
-    bluestore_lextent_t(b->id, offset % min_alloc_size, length);
+    bluestore_lextent_t(b->id, P2PHASE(offset, alloc_len), length);
   b->blob.ref_map.get(lex.offset, lex.length);
   txc->statfs_delta.stored() += lex.length;
   dout(20) << __func__ << "  lex 0x" << std::hex << offset << std::dec
@@ -5863,7 +5978,7 @@ int BlueStore::_do_alloc_write(
       assert(b_off == 0);
       assert(wi.blob_length == l->length());
       bluestore_compression_header_t chdr;
-      chdr.type = c->get_type();
+      chdr.type = bluestore_blob_t::get_comp_alg_type(c->get_type());
       // FIXME: memory alignment here is bad
       bufferlist t;
       c->compress(*l, t);
@@ -5871,9 +5986,13 @@ int BlueStore::_do_alloc_write(
       ::encode(chdr, compressed_bl);
       compressed_bl.claim_append(t);
       uint64_t rawlen = compressed_bl.length();
-      uint64_t newlen = ROUND_UP_TO(rawlen, min_alloc_size);
-      if (newlen < final_length) {
-	// pad out to min_alloc_size
+      uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
+      uint64_t dstlen = final_length *
+        g_conf->bluestore_compression_required_ratio;
+      dstlen = P2ROUNDUP(dstlen, min_alloc_size);
+      if (newlen <= dstlen && newlen < final_length) {
+        // Cool. We compressed at least as much as we were hoping to.
+        // pad out to min_alloc_size
 	compressed_bl.append_zero(newlen - rawlen);
 	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
 	dout(20) << __func__ << hex << "  compressed 0x" << wi.blob_length
@@ -5891,9 +6010,10 @@ int BlueStore::_do_alloc_write(
 	compressed = true;
       } else {
 	dout(20) << __func__ << hex << "  compressed 0x" << l->length()
-		 << " -> 0x" << rawlen << " with " << chdr.type
-		 << ", leaving uncompressed"
-		 << dec << dendl;
+                 << " -> 0x" << rawlen << " with " << chdr.type
+                 << ", which is more than required 0x" << dstlen
+                 << ", leaving uncompressed"
+                 << dec << dendl;
       }
     }
     if (!compressed) {
@@ -6069,28 +6189,27 @@ int BlueStore::_do_write(
     // we fall within the same block
     _do_write_small(txc, c, o, offset, length, p, &wctx);
   } else {
-    uint64_t head_offset = 0, head_length = 0;
-    uint64_t middle_offset = 0, middle_length = 0;
-    uint64_t tail_offset = 0, tail_length = 0;
-    if (offset % min_alloc_size) {
-      head_offset = offset;
-      head_length = min_alloc_size - (offset % min_alloc_size);
-      assert(head_length < length);
+    uint64_t head_offset, head_length;
+    uint64_t middle_offset, middle_length;
+    uint64_t tail_offset, tail_length;
+
+    head_offset = offset;
+    head_length = P2NPHASE(offset, min_alloc_size);
+
+    tail_offset = P2ALIGN(end, min_alloc_size);
+    tail_length = P2PHASE(end, min_alloc_size);
+
+    middle_offset = head_offset + head_length;
+    middle_length = length - head_length - tail_length;
+
+    if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, &wctx);
-      middle_offset = offset + head_length;
-      middle_length = length - head_length;
-    } else {
-      middle_offset = offset;
-      middle_length = length;
     }
-    if (end % min_alloc_size) {
-      tail_length = end % min_alloc_size;
-      tail_offset = end - tail_length;
-      middle_length -= tail_length;
-    }
+
     if (middle_length) {
       _do_write_big(txc, c, o, middle_offset, middle_length, p, &wctx);
     }
+
     if (tail_length) {
       _do_write_small(txc, c, o, tail_offset, tail_length, p, &wctx);
     }

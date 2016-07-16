@@ -115,17 +115,13 @@ private:
 
   /**
    * check latest osdmap for new pgs to register
-   *
-   * @return true if we updated pending_inc (and should propose)
    */
-  bool register_new_pgs();
+  void register_new_pgs();
 
   /**
    * recalculate creating pg mappings
-   *
-   * @return true if we updated pending_inc
    */
-  bool map_pg_creates();
+  void map_pg_creates();
 
   void send_pg_creates();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
@@ -136,9 +132,8 @@ private:
    * clears need_check_down_pgs
    * clears need_check_down_pg_osds
    *
-   * @return true if we updated pending_inc (and should propose)
    */
-  bool check_down_pgs();
+  void check_down_pgs();
   void _try_mark_pg_stale(const OSDMap *osdmap, pg_t pgid,
 			  const pg_stat_t& cur_stat);
 

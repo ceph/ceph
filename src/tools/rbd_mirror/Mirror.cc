@@ -9,6 +9,7 @@
 #include "common/errno.h"
 #include "Mirror.h"
 #include "Threads.h"
+#include "ImageSync.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -217,8 +218,11 @@ int Mirror::init()
   // TODO: make interval configurable
   m_local_cluster_watcher.reset(new ClusterWatcher(m_local, m_lock));
 
-  m_image_deleter.reset(new ImageDeleter(m_local, m_threads->timer,
+  m_image_deleter.reset(new ImageDeleter(m_threads->work_queue,
+                                         m_threads->timer,
                                          &m_threads->timer_lock));
+
+  m_image_sync_throttler.reset(new ImageSyncThrottler<>());
 
   return r;
 }
@@ -264,6 +268,13 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
   }
 
   m_image_deleter->print_status(f, ss);
+
+  if (f) {
+    f->close_section();
+    f->open_object_section("sync_throttler");
+  }
+
+  m_image_sync_throttler->print_status(f, ss);
 
   if (f) {
     f->close_section();
@@ -347,8 +358,12 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
   for (auto it = m_replayers.begin(); it != m_replayers.end();) {
     auto &peer = it->first.second;
     auto pool_peer_it = pool_peers.find(it->first.first);
-    if (pool_peer_it == pool_peers.end() ||
-        pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
+    if (it->second->is_blacklisted()) {
+      derr << "removing blacklisted replayer for " << peer << dendl;
+      // TODO: make async
+      it = m_replayers.erase(it);
+    } else if (pool_peer_it == pool_peers.end() ||
+               pool_peer_it->second.find(peer) == pool_peer_it->second.end()) {
       dout(20) << "removing replayer for " << peer << dendl;
       // TODO: make async
       it = m_replayers.erase(it);
@@ -363,8 +378,8 @@ void Mirror::update_replayers(const PoolPeers &pool_peers)
       if (m_replayers.find(pool_peer) == m_replayers.end()) {
         dout(20) << "starting replayer for " << peer << dendl;
         unique_ptr<Replayer> replayer(new Replayer(m_threads, m_image_deleter,
-                                                   m_local, kv.first, peer,
-                                                   m_args));
+                                                   m_image_sync_throttler,
+                                                   kv.first, peer, m_args));
         // TODO: make async, and retry connecting within replayer
         int r = replayer->init();
         if (r < 0) {

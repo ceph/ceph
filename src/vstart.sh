@@ -12,8 +12,8 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_LIB=$SRC_PATH/.libs
 
   if [ -e CMakeCache.txt ]; then
-      CEPH_BIN=$VSTART_DEST/../../bin
-      CEPH_LIB=$VSTART_DEST/../../lib
+      CEPH_BIN=${PWD}/bin
+      CEPH_LIB=${PWD}/lib
   fi
 
   CEPH_CONF_PATH=$VSTART_DEST
@@ -524,6 +524,8 @@ $DAEMONOPTS
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
+        osd class load list = *
+        osd class default list = *
         osd scrub load threshold = 2000.0
         osd debug op order = true
         filestore wbthrottle xfs ios start flusher = 10

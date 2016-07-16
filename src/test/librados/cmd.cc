@@ -48,6 +48,41 @@ TEST(LibRadosCmd, MonDescribe) {
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
+  cmd[0] = (char *)"";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "{}", 2, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"abc\":\"something\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"    \"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\";;;,,,;;,,\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  cmd[0] = (char *)"{\"prefix\":\"extra command\"}";
+  ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
   cmd[0] = (char *)"{\"prefix\":\"mon_status\"}";
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   ASSERT_LT(0u, buflen);

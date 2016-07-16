@@ -8,6 +8,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "global/global_context.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayHandler.h"
 #include "librbd/ExclusiveLock.h"
@@ -93,7 +94,7 @@ public:
   explicit StartCommand(ImageReplayer<I> *replayer) : replayer(replayer) {}
 
   bool call(Formatter *f, stringstream *ss) {
-    replayer->start(nullptr, nullptr, true);
+    replayer->start(nullptr, true);
     return true;
   }
 
@@ -250,6 +251,7 @@ void ImageReplayer<I>::BootstrapProgressContext::update_progress(
 template <typename I>
 ImageReplayer<I>::ImageReplayer(Threads *threads,
                              shared_ptr<ImageDeleter> image_deleter,
+                             ImageSyncThrottlerRef<I> image_sync_throttler,
                              RadosRef local, RadosRef remote,
 			     const std::string &local_mirror_uuid,
 			     const std::string &remote_mirror_uuid,
@@ -259,6 +261,7 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
                              const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
+  m_image_sync_throttler(image_sync_throttler),
   m_local(local),
   m_remote(remote),
   m_local_mirror_uuid(local_mirror_uuid),
@@ -286,8 +289,8 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
   }
   m_name = pool_name + "/" + m_global_image_id;
 
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+  m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                    this);
 }
 
 template <typename I>
@@ -317,9 +320,7 @@ void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
 }
 
 template <typename I>
-void ImageReplayer<I>::start(Context *on_finish,
-			     const BootstrapParams *bootstrap_params,
-			     bool manual)
+void ImageReplayer<I>::start(Context *on_finish, bool manual)
 {
   assert(m_on_start_finish == nullptr);
   assert(m_on_stop_finish == nullptr);
@@ -360,10 +361,6 @@ void ImageReplayer<I>::start(Context *on_finish,
     return;
   }
 
-  if (bootstrap_params != nullptr && !bootstrap_params->empty()) {
-    m_local_image_name = bootstrap_params->local_image_name;
-  }
-
   r = m_local->ioctx_create2(m_local_pool_id, m_local_ioctx);
   if (r < 0) {
     derr << "error opening ioctx for local pool " << m_local_pool_id
@@ -391,11 +388,11 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
-    m_local_ioctx, m_remote_ioctx, &m_local_image_ctx,
-    m_local_image_name, m_remote_image_id, m_global_image_id,
-    m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-    m_local_mirror_uuid, m_remote_mirror_uuid, m_remote_journaler,
-    &m_client_meta, ctx, &m_progress_cxt);
+    m_local_ioctx, m_remote_ioctx, m_image_sync_throttler,
+    &m_local_image_ctx, m_local_image_name, m_remote_image_id,
+    m_global_image_id, m_threads->work_queue, m_threads->timer,
+    &m_threads->timer_lock, m_local_mirror_uuid, m_remote_mirror_uuid,
+    m_remote_journaler, &m_client_meta, ctx, &m_progress_cxt);
 
   {
     Mutex::Locker locker(m_lock);
@@ -466,8 +463,8 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
       }
     }
     if (!m_asok_hook) {
-      CephContext *cct = static_cast<CephContext *>(m_local->cct());
-      m_asok_hook = new ImageReplayerAdminSocketHook<I>(cct, m_name, this);
+      m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
+                                                        this);
     }
   }
 
@@ -721,7 +718,7 @@ void ImageReplayer<I>::restart(Context *on_finish)
       if (r < 0) {
 	// Try start anyway.
       }
-      start(on_finish, nullptr, true);
+      start(on_finish, true);
     });
   stop(ctx);
 }
@@ -1325,7 +1322,6 @@ template <typename I>
 void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
   reschedule_update_status_task(-1);
 
-  Context *on_stop = nullptr;
   {
     Mutex::Locker locker(m_lock);
 
@@ -1342,36 +1338,30 @@ void ImageReplayer<I>::handle_shut_down(int r, Context *on_start) {
     }
 
     if (m_stopping_for_resync) {
-      m_image_deleter->schedule_image_delete(m_local_pool_id,
+      m_image_deleter->schedule_image_delete(m_local,
+                                             m_local_pool_id,
                                              m_local_image_id,
                                              m_local_image_name,
                                              m_global_image_id);
       m_stopping_for_resync = false;
-
-      FunctionContext *ctx = new FunctionContext(
-          [this, r, on_start] (int r) {
-            handle_shut_down(r, on_start);
-          }
-      );
-      m_image_deleter->wait_for_scheduled_deletion(m_local_image_name,
-                                                   ctx, false);
-      return;
     }
-
-    std::swap(on_stop, m_on_stop_finish);
-    m_stop_requested = false;
-    assert(m_state == STATE_STOPPING);
-    m_state = STATE_STOPPED;
-    m_state_desc.clear();
-    m_last_r = 0;
   }
-  dout(20) << "stop complete" << dendl;
 
+  dout(20) << "stop complete" << dendl;
   m_local_ioctx.close();
   m_remote_ioctx.close();
 
   delete m_replay_status_formatter;
   m_replay_status_formatter = nullptr;
+
+  Context *on_stop = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
+    std::swap(on_stop, m_on_stop_finish);
+    m_stop_requested = false;
+    assert(m_state == STATE_STOPPING);
+    m_state = STATE_STOPPED;
+  }
 
   if (on_start != nullptr) {
     dout(20) << "on start finish complete, r=" << r << dendl;

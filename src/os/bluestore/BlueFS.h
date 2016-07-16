@@ -54,7 +54,7 @@ public:
   struct File : public RefCountedObject {
     bluefs_fnode_t fnode;
     int refs;
-    bool dirty;
+    uint64_t dirty_seq;
     bool locked;
     bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
@@ -65,7 +65,7 @@ public:
     File()
       : RefCountedObject(NULL, 0),
 	refs(0),
-	dirty(false),
+	dirty_seq(0),
 	locked(false),
 	deleted(false),
 	num_readers(0),
@@ -201,8 +201,11 @@ private:
   bluefs_super_t super;       ///< latest superblock (as last written)
   uint64_t ino_last;          ///< last assigned ino (this one is in use)
   uint64_t log_seq;           ///< last used log seq (by current pending log_t)
+  uint64_t log_seq_stable;    ///< last stable/synced log seq
   FileWriter *log_writer;     ///< writer for the log
   bluefs_transaction_t log_t; ///< pending, unwritten log transaction
+  bool log_flushing = false;  ///< true while flushing the log
+  std::condition_variable log_cond;
 
   /*
    * There are up to 3 block devices:
@@ -232,17 +235,18 @@ private:
   int _allocate(unsigned bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
-  void _flush_wait(FileWriter *h);
-  void _fsync(FileWriter *h);
+  void wait_for_aio(FileWriter *h);  // safe to call without a lock
+  int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
 
-  int _flush_log();
+  int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
+			  uint64_t want_seq = 0);
   uint64_t _estimate_log_size();
   void _maybe_compact_log();
   void _compact_log();
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev();
+  void flush_bdev();  // this is safe to call without a lock
 
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
@@ -355,9 +359,9 @@ public:
     std::lock_guard<std::mutex> l(lock);
     _flush_range(h, offset, length);
   }
-  void fsync(FileWriter *h) {
-    std::lock_guard<std::mutex> l(lock);
-    _fsync(h);
+  int fsync(FileWriter *h) {
+    std::unique_lock<std::mutex> l(lock);
+    return _fsync(h, l);
   }
   int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
 	   bufferlist *outbl, char *out) {

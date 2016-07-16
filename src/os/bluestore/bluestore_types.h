@@ -194,6 +194,33 @@ struct bluestore_blob_t {
     return -EINVAL;
   }
 
+  enum CompressionAlgorithm {
+    COMP_ALG_NONE = 0,
+    COMP_ALG_SNAPPY = 1,
+    COMP_ALG_ZLIB = 2,
+  };
+
+  static const char * get_comp_alg_name(int a) {
+    switch (a) {
+    case COMP_ALG_NONE: return "none";
+    case COMP_ALG_SNAPPY: return "snappy";
+    case COMP_ALG_ZLIB: return "zlib";
+    default: return "???";
+    }
+  }
+
+  static int get_comp_alg_type(const std::string &s) {
+    if (s == "none")
+      return COMP_ALG_NONE;
+    if (s == "snappy")
+      return COMP_ALG_SNAPPY;
+    if (s == "zlib")
+      return COMP_ALG_ZLIB;
+
+    assert(0 == "invalid compression algorithm");
+    return COMP_ALG_NONE;
+  }
+
   vector<bluestore_pextent_t> extents;///< raw data position on device
   uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
@@ -283,6 +310,7 @@ struct bluestore_blob_t {
     }
     b_len += b_off;
     while (b_len) {
+      assert(p != extents.end());
       if (!p->is_valid()) {
 	return false;
       }
@@ -361,6 +389,7 @@ struct bluestore_blob_t {
       assert(p != extents.end());
     }
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       f(p->offset + x_off, l);
       x_off = 0;
@@ -381,6 +410,7 @@ struct bluestore_blob_t {
     bufferlist::iterator it = bl.begin();
     uint64_t x_len = bl.length();
     while (x_len > 0) {
+      assert(p != extents.end());
       uint64_t l = MIN(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
@@ -491,16 +521,9 @@ struct bluestore_lextent_t {
     return blob < 0;
   }
 
-  void encode(bufferlist& bl) const {
-    ::encode(blob, bl);
-    ::encode(offset, bl);
-    ::encode(length, bl);
-  }
-  void decode(bufferlist::iterator& p) {
-    ::decode(blob, p);
-    ::decode(offset, p);
-    ::decode(length, p);
-  }
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_lextent_t*>& o);
 };
@@ -616,9 +639,7 @@ struct bluestore_wal_transaction_t {
   list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
-  int64_t _bytes;  ///< cached byte count
-
-  bluestore_wal_transaction_t() : seq(0), _bytes(-1) {}
+  bluestore_wal_transaction_t() : seq(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -628,11 +649,11 @@ struct bluestore_wal_transaction_t {
 WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 struct bluestore_compression_header_t {
-  std::string type;
+  uint8_t type = bluestore_blob_t::COMP_ALG_NONE;
   uint32_t length = 0;
 
   bluestore_compression_header_t() {}
-  bluestore_compression_header_t(const std::string& _type)
+  bluestore_compression_header_t(uint8_t _type)
     : type(_type) {}
 
   void encode(bufferlist& bl) const;

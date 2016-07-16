@@ -51,4 +51,8 @@ libkv_a_LIBADD += -lkinetic_client -lprotobuf -lglog -lgflags libcrypto.a
 noinst_HEADERS += kv/KineticStore.h
 endif
 
+libkv_a_SOURCES += kv/MemDB.cc
+noinst_HEADERS += kv/MemDB.h
+
+
 endif # ENABLE_SERVER

@@ -292,7 +292,7 @@ int RGWCoroutinesStack::unwind(int retcode)
 }
 
 
-bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if needs to be called again */
+bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
 {
   rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
   *ret = 0;
@@ -300,7 +300,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
 
   for (vector<RGWCoroutinesStack *>::iterator iter = s->entries.begin(); iter != s->entries.end(); ++iter) {
     RGWCoroutinesStack *stack = *iter;
-    if (!stack->is_done()) {
+    if (stack == skip_stack || !stack->is_done()) {
       new_list.push_back(stack);
       ldout(cct, 20) << "collect(): s=" << (void *)this << " stack=" << (void *)stack << " is still running" << dendl;
       continue;
@@ -349,9 +349,9 @@ bool RGWCoroutinesStack::collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesS
   return false;
 }
 
-bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called again */
+bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
 {
-  return collect(NULL, ret);
+  return collect(NULL, ret, skip_stack);
 }
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
@@ -712,9 +712,9 @@ RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
   return stack->spawn(this, op, wait);
 }
 
-bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again */
+bool RGWCoroutine::collect(int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
 {
-  return stack->collect(this, ret);
+  return stack->collect(this, ret, skip_stack);
 }
 
 bool RGWCoroutine::collect_next(int *ret, RGWCoroutinesStack **collected_stack) /* returns true if found a stack to collect */
@@ -752,14 +752,18 @@ ostream& operator<<(ostream& out, const RGWCoroutine& cr)
   return out;
 }
 
-bool RGWCoroutine::drain_children(int num_cr_left)
+bool RGWCoroutine::drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack)
 {
   bool done = false;
+  assert(num_cr_left >= 0);
+  if (num_cr_left == 0 && skip_stack) {
+    num_cr_left = 1;
+  }
   reenter(&drain_cr) {
     while (num_spawned() > (size_t)num_cr_left) {
       yield wait_for_child();
       int ret;
-      while (collect(&ret)) {
+      while (collect(&ret, skip_stack)) {
         if (ret < 0) {
           ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
           /* we should have reported this error */

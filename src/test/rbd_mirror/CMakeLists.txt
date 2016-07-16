@@ -15,6 +15,7 @@ add_executable(unittest_rbd_mirror
   test_mock_fixture.cc
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
+  test_mock_ImageSyncThrottler.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc
   image_sync/test_mock_ImageCopyRequest.cc
@@ -28,6 +29,10 @@ add_executable(unittest_rbd_mirror
 add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
 set_target_properties(unittest_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+add_dependencies(unittest_rbd_mirror
+  cls_journal
+  cls_lock
+  cls_rbd)
 target_link_libraries(unittest_rbd_mirror
   rbd_mirror
   rados_test_stub
@@ -55,7 +60,6 @@ set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rbd_mirror
   rbd_mirror
-  rados_test_stub
   rbd_mirror_internal
   rbd_internal
   rbd_api
@@ -79,31 +83,6 @@ set_target_properties(ceph_test_rbd_mirror_random_write PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rbd_mirror_random_write
   librbd librados global keyutils
   )
-
-add_executable(ceph_test_rbd_mirror_image_replay
-  image_replay.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
-  $<TARGET_OBJECTS:parse_secret_objs>)
-set_target_properties(ceph_test_rbd_mirror_image_replay PROPERTIES
-  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_test_rbd_mirror_image_replay
-  rbd_mirror
-  rados_test_stub
-  rbd_mirror_internal
-  rbd_internal
-  rbd_api
-  journal
-  cls_rbd_client
-  cls_lock_client
-  cls_journal_client
-  rbd_types
-  librados
-  librbd
-  osdc
-  global
-  keyutils
-  radostest
-  ${UNITTEST_LIBS})
 
 install(TARGETS
   ceph_test_rbd_mirror

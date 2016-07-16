@@ -14,8 +14,10 @@
  *
  */
 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
@@ -71,10 +73,26 @@ int NetHandler::set_nonblock(int sd)
   return 0;
 }
 
-void NetHandler::set_socket_options(int sd)
+void NetHandler::set_close_on_exec(int sd)
+{
+  int flags = fcntl(sd, F_GETFD, 0);
+  if (flags < 0) {
+    int r = errno;
+    lderr(cct) << __func__ << " fcntl(F_GETFD): "
+	       << cpp_strerror(r) << dendl;
+    return;
+  }
+  if (fcntl(sd, F_SETFD, flags | FD_CLOEXEC)) {
+    int r = errno;
+    lderr(cct) << __func__ << " fcntl(F_SETFD): "
+	       << cpp_strerror(r) << dendl;
+  }
+}
+
+void NetHandler::set_socket_options(int sd, bool nodelay, int size)
 {
   // disable Nagle algorithm?
-  if (cct->_conf->ms_tcp_nodelay) {
+  if (nodelay) {
     int flag = 1;
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
@@ -82,8 +100,7 @@ void NetHandler::set_socket_options(int sd)
       ldout(cct, 0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
     }
   }
-  if (cct->_conf->ms_tcp_rcvbuf) {
-    int size = cct->_conf->ms_tcp_rcvbuf;
+  if (size) {
     int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
@@ -102,6 +119,33 @@ void NetHandler::set_socket_options(int sd)
 #endif
 }
 
+void NetHandler::set_priority(int sd, int prio)
+{
+  if (prio >= 0) {
+    int r = -1;
+#ifdef IPTOS_CLASS_CS6
+    int iptos = IPTOS_CLASS_CS6;
+    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " couldn't set IP_TOS to " << iptos
+                    << ": " << cpp_strerror(errno) << dendl;
+    }
+#endif
+#if defined(SO_PRIORITY) 
+    // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
+    // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
+    // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
+    r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+#endif
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << " couldn't set SO_PRIORITY to " << prio
+                    << ": " << cpp_strerror(errno) << dendl;
+    }
+#endif
+  }
+}
+
 int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 {
   int ret;
@@ -117,7 +161,8 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
     }
   }
 
-  set_socket_options(s);
+  set_socket_options(s, cct->_conf->ms_tcp_nodelay, cct->_conf->ms_tcp_rcvbuf);
+
 
   ret = ::connect(s, addr.get_sockaddr(), addr.get_sockaddr_len());
   if (ret < 0) {

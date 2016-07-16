@@ -12,6 +12,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "global/global_context.h"
 #include "librbd/ObjectWatcher.h"
 #include "librbd/internal.h"
 #include "Replayer.h"
@@ -229,15 +230,15 @@ private:
 };
 
 Replayer::Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
-                   RadosRef local_cluster, int64_t local_pool_id,
-                   const peer_t &peer, const std::vector<const char*> &args) :
+                   ImageSyncThrottlerRef<> image_sync_throttler,
+                   int64_t local_pool_id, const peer_t &peer,
+                   const std::vector<const char*> &args) :
   m_threads(threads),
   m_image_deleter(image_deleter),
+  m_image_sync_throttler(image_sync_throttler),
   m_lock(stringify("rbd::mirror::Replayer ") + stringify(peer)),
   m_peer(peer),
   m_args(args),
-  m_local(local_cluster),
-  m_remote(new librados::Rados),
   m_local_pool_id(local_pool_id),
   m_asok_hook(nullptr),
   m_replayer_thread(this)
@@ -258,82 +259,38 @@ Replayer::~Replayer()
   }
 }
 
+bool Replayer::is_blacklisted() const {
+  Mutex::Locker locker(m_lock);
+  return m_blacklisted;
+}
+
 int Replayer::init()
 {
   dout(20) << "replaying for " << m_peer << dendl;
 
-  int r = m_local->ioctx_create2(m_local_pool_id, m_local_io_ctx);
+  int r = init_rados(g_ceph_context->_conf->cluster,
+                     g_ceph_context->_conf->name.to_str(),
+                     "local cluster", &m_local_rados);
+  if (r < 0) {
+    return r;
+  }
+
+  r = init_rados(m_peer.cluster_name, m_peer.client_name,
+                 std::string("remote peer ") + stringify(m_peer),
+                 &m_remote_rados);
+  if (r < 0) {
+    return r;
+  }
+
+  r = m_local_rados->ioctx_create2(m_local_pool_id, m_local_io_ctx);
   if (r < 0) {
     derr << "error accessing local pool " << m_local_pool_id << ": "
          << cpp_strerror(r) << dendl;
     return r;
   }
 
-  // NOTE: manually bootstrap a CephContext here instead of via
-  // the librados API to avoid mixing global singletons between
-  // the librados shared library and the daemon
-  // TODO: eliminate intermingling of global singletons within Ceph APIs
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
-  if (m_peer.client_name.empty() ||
-      !iparams.name.from_str(m_peer.client_name)) {
-    derr << "error initializing remote cluster handle for " << m_peer << dendl;
-    return -EINVAL;
-  }
-
-  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY,
-                                    CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  cct->_conf->cluster = m_peer.cluster_name;
-
-  // librados::Rados::conf_read_file
-  r = cct->_conf->parse_config_files(nullptr, nullptr, 0);
-  if (r < 0) {
-    derr << "could not read ceph conf for " << m_peer << ": "
-	 << cpp_strerror(r) << dendl;
-    cct->put();
-    return r;
-  }
-  cct->_conf->parse_env();
-
-  // librados::Rados::conf_parse_env
-  std::vector<const char*> args;
-  env_to_vec(args, nullptr);
-  r = cct->_conf->parse_argv(args);
-  if (r < 0) {
-    derr << "could not parse environment for " << m_peer << ":"
-         << cpp_strerror(r) << dendl;
-    cct->put();
-    return r;
-  }
-
-  if (!m_args.empty()) {
-    // librados::Rados::conf_parse_argv
-    r = cct->_conf->parse_argv(m_args);
-    if (r < 0) {
-      derr << "could not parse command line args for " << m_peer << ": "
-	   << cpp_strerror(r) << dendl;
-      cct->put();
-      return r;
-    }
-  }
-
-  // disable unnecessary librbd cache
-  cct->_conf->set_val_or_die("rbd_cache", "false");
-  cct->_conf->apply_changes(nullptr);
-  cct->_conf->complain_about_parse_errors(cct);
-
-  r = m_remote->init_with_context(cct);
-  assert(r == 0);
-  cct->put();
-
-  r = m_remote->connect();
-  if (r < 0) {
-    derr << "error connecting to remote cluster " << m_peer
-	 << " : " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  r = m_remote->ioctx_create(m_local_io_ctx.get_pool_name().c_str(),
-                             m_remote_io_ctx);
+  r = m_remote_rados->ioctx_create(m_local_io_ctx.get_pool_name().c_str(),
+                                   m_remote_io_ctx);
   if (r < 0) {
     derr << "error accessing remote pool " << m_local_io_ctx.get_pool_name()
          << ": " << cpp_strerror(r) << dendl;
@@ -351,6 +308,77 @@ int Replayer::init()
   m_pool_watcher->refresh_images();
 
   m_replayer_thread.create("replayer");
+
+  return 0;
+}
+
+int Replayer::init_rados(const std::string &cluster_name,
+                         const std::string &client_name,
+                         const std::string &description, RadosRef *rados_ref) {
+  rados_ref->reset(new librados::Rados());
+
+  // NOTE: manually bootstrap a CephContext here instead of via
+  // the librados API to avoid mixing global singletons between
+  // the librados shared library and the daemon
+  // TODO: eliminate intermingling of global singletons within Ceph APIs
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (client_name.empty() || !iparams.name.from_str(client_name)) {
+    derr << "error initializing cluster handle for " << description << dendl;
+    return -EINVAL;
+  }
+
+  CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY,
+                                    CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  cct->_conf->cluster = cluster_name;
+
+  // librados::Rados::conf_read_file
+  int r = cct->_conf->parse_config_files(nullptr, nullptr, 0);
+  if (r < 0) {
+    derr << "could not read ceph conf for " << description << ": "
+	 << cpp_strerror(r) << dendl;
+    cct->put();
+    return r;
+  }
+  cct->_conf->parse_env();
+
+  // librados::Rados::conf_parse_env
+  std::vector<const char*> args;
+  env_to_vec(args, nullptr);
+  r = cct->_conf->parse_argv(args);
+  if (r < 0) {
+    derr << "could not parse environment for " << description << ":"
+         << cpp_strerror(r) << dendl;
+    cct->put();
+    return r;
+  }
+
+  if (!m_args.empty()) {
+    // librados::Rados::conf_parse_argv
+    args = m_args;
+    r = cct->_conf->parse_argv(args);
+    if (r < 0) {
+      derr << "could not parse command line args for " << description << ": "
+	   << cpp_strerror(r) << dendl;
+      cct->put();
+      return r;
+    }
+  }
+
+  // disable unnecessary librbd cache
+  cct->_conf->set_val_or_die("rbd_cache", "false");
+  cct->_conf->apply_changes(nullptr);
+  cct->_conf->complain_about_parse_errors(cct);
+
+  r = (*rados_ref)->init_with_context(cct);
+  assert(r == 0);
+  cct->put();
+
+  r = (*rados_ref)->connect();
+  if (r < 0) {
+    derr << "error connecting to " << description << ": "
+	 << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   return 0;
 }
@@ -413,18 +441,23 @@ void Replayer::run()
       m_asok_hook_name = asok_hook_name;
       delete m_asok_hook;
 
-      CephContext *cct = static_cast<CephContext *>(m_local->cct());
-      m_asok_hook = new ReplayerAdminSocketHook(cct, m_asok_hook_name, this);
+      m_asok_hook = new ReplayerAdminSocketHook(g_ceph_context,
+                                                m_asok_hook_name, this);
     }
 
-    Mutex::Locker l(m_lock);
-    if (!m_manual_stop) {
+    Mutex::Locker locker(m_lock);
+    if (m_pool_watcher->is_blacklisted()) {
+      m_blacklisted = true;
+      m_stopping.set(1);
+    } else if (!m_manual_stop) {
       set_sources(m_pool_watcher->get_images());
+    }
+
+    if (m_blacklisted) {
+      break;
     }
     m_cond.WaitInterval(g_ceph_context, m_lock, seconds(30));
   }
-
-  m_image_deleter.reset();
 
   ImageIds empty_sources;
   while (true) {
@@ -476,7 +509,7 @@ void Replayer::start()
 
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
-    image_replayer->start(nullptr, nullptr, true);
+    image_replayer->start(nullptr, true);
   }
 }
 
@@ -551,8 +584,9 @@ void Replayer::set_sources(const ImageIds &image_ids)
     for (auto &image : m_init_images) {
       dout(20) << "scheduling the deletion of init image: "
                << image.name << dendl;
-      m_image_deleter->schedule_image_delete(m_local_pool_id, image.id,
-                                             image.name, image.global_id);
+      m_image_deleter->schedule_image_delete(m_local_rados, m_local_pool_id,
+                                             image.id, image.name,
+                                             image.global_id);
     }
     m_init_images.clear();
   }
@@ -611,9 +645,9 @@ void Replayer::set_sources(const ImageIds &image_ids)
     auto it = m_image_replayers.find(image_id.id);
     if (it == m_image_replayers.end()) {
       unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
-        m_threads, m_image_deleter, m_local, m_remote, local_mirror_uuid,
-        remote_mirror_uuid, m_local_pool_id, m_remote_pool_id, image_id.id,
-        image_id.global_id));
+        m_threads, m_image_deleter, m_image_sync_throttler, m_local_rados,
+        m_remote_rados, local_mirror_uuid, remote_mirror_uuid, m_local_pool_id,
+        m_remote_pool_id, image_id.id, image_id.global_id));
       it = m_image_replayers.insert(
         std::make_pair(image_id.id, std::move(image_replayer))).first;
     }
@@ -621,7 +655,7 @@ void Replayer::set_sources(const ImageIds &image_ids)
       dout(20) << "starting image replayer for "
                << it->second->get_global_image_id() << dendl;
     }
-    start_image_replayer(it->second, image_id.name);
+    start_image_replayer(it->second, image_id.id, image_id.name);
   }
 }
 
@@ -667,22 +701,40 @@ void Replayer::mirror_image_status_shut_down() {
 }
 
 void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
+                                    const std::string &image_id,
                                     const boost::optional<std::string>& image_name)
 {
+  assert(m_lock.is_locked());
   dout(20) << "global_image_id=" << image_replayer->get_global_image_id()
            << dendl;
 
   if (!image_replayer->is_stopped()) {
     return;
+  } else if (image_replayer->is_blacklisted()) {
+    derr << "blacklisted detected during image replay" << dendl;
+    m_blacklisted = true;
+    m_stopping.set(1);
+    return;
   }
 
   if (image_name) {
     FunctionContext *ctx = new FunctionContext(
-        [&] (int r) {
+        [this, image_id, image_name] (int r) {
+          if (r == -ESTALE || r == -ECANCELED) {
+            return;
+          }
+
+          Mutex::Locker locker(m_lock);
+          auto it = m_image_replayers.find(image_id);
+          if (it == m_image_replayers.end()) {
+            return;
+          }
+
+          auto &image_replayer = it->second;
           if (r >= 0) {
             image_replayer->start();
           } else {
-            start_image_replayer(image_replayer, image_name);
+            start_image_replayer(image_replayer, image_id, image_name);
           }
        }
     );
@@ -692,39 +744,40 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer
 
 bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
+  assert(m_lock.is_locked());
   dout(20) << "global_image_id=" << image_replayer->get_global_image_id()
            << dendl;
 
+  // TODO: check how long it is stopping and alert if it is too long.
   if (image_replayer->is_stopped()) {
-    if (m_image_deleter) {
+    m_image_deleter->cancel_waiter(image_replayer->get_local_image_name());
+    if (!m_stopping.read()) {
       dout(20) << "scheduling delete" << dendl;
       m_image_deleter->schedule_image_delete(
+        m_local_rados,
         image_replayer->get_local_pool_id(),
         image_replayer->get_local_image_id(),
         image_replayer->get_local_image_name(),
         image_replayer->get_global_image_id());
     }
     return true;
-  }
-
-  if (image_replayer->is_running()) {
-    if (m_image_deleter) {
+  } else {
+    if (!m_stopping.read()) {
       dout(20) << "scheduling delete after image replayer stopped" << dendl;
     }
     FunctionContext *ctx = new FunctionContext(
         [&image_replayer, this] (int r) {
-          if (m_image_deleter) {
+          if (!m_stopping.read()) {
             m_image_deleter->schedule_image_delete(
-                          image_replayer->get_local_pool_id(),
-                          image_replayer->get_local_image_id(),
-                          image_replayer->get_local_image_name(),
-                          image_replayer->get_global_image_id());
+              m_local_rados,
+              image_replayer->get_local_pool_id(),
+              image_replayer->get_local_image_id(),
+              image_replayer->get_local_image_name(),
+              image_replayer->get_global_image_id());
           }
         }
     );
     image_replayer->stop(ctx);
-  } else {
-    // TODO: checkhow long it is stopping and alert if it is too long.
   }
 
   return false;

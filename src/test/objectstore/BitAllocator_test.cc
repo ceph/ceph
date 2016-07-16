@@ -5,10 +5,14 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 
+#include "include/Context.h"
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
 #include "os/bluestore/BitAllocator.h"
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
+#include <sstream>
 #include <gtest/gtest.h>
 
 #define bmap_test_assert(x) EXPECT_EQ(true, (x))
@@ -84,7 +88,6 @@ TEST(BitAllocator, test_bmap_iter)
   bmap_test_assert(count == num_items + 1);
 
   delete arr;
-  //delete list;
 
   num_items = 4;
   off = num_items - 1;
@@ -93,7 +96,6 @@ TEST(BitAllocator, test_bmap_iter)
   for (i = 0; i < num_items; i++) {
     (*arr)[i].init(i);
   }
-//  list = new BitMapList<BmapEntityTmp>(arr, num_items, 0);
   iter = BitMapEntityIter<BmapEntityTmp>(arr, off, true);
   i = off;
   last_idx = off;
@@ -108,6 +110,8 @@ TEST(BitAllocator, test_bmap_iter)
   }
   bmap_test_assert(i == (off + 1)%num_items);
   bmap_test_assert(count == num_items + 1);
+
+  delete arr;
 
   /*
    * BitMapArea Iter tests.
@@ -136,7 +140,6 @@ TEST(BitAllocator, test_bmap_iter)
   bmap_test_assert(i == off);
   bmap_test_assert(count == num_items);
 
-  // offset 0
   off = 0;
   area_iter = BmapEntityListIter(area_list, off, true);
   i = off;
@@ -152,6 +155,12 @@ TEST(BitAllocator, test_bmap_iter)
   }
   bmap_test_assert(i == (off + 1)%num_items);
   bmap_test_assert(count == num_items + 1);
+
+  for (i = 0; i < num_items; i++)
+    delete children[i];
+
+  delete children;
+  delete area_list;
 }
 
 TEST(BitAllocator, test_bmap_entry)
@@ -232,6 +241,7 @@ TEST(BitAllocator, test_bmap_entry)
   bmap_test_assert(!bmap->is_allocated(0, 4));
   bmap->set_bits(0, 4);
   bmap_test_assert(bmap->is_allocated(0, BmapEntry::size()));
+  delete bmap;
 }
 
 TEST(BitAllocator, test_zone_alloc)
@@ -335,137 +345,161 @@ TEST(BitAllocator, test_zone_alloc)
 
 TEST(BitAllocator, test_bmap_alloc)
 {
-  int64_t total_blocks = 1024 * 4;
-  int64_t zone_size = 1024;
-  int64_t allocated = 0;
-  int64_t start_block = 0;
+  const int max_iter = 2;
 
-  BitAllocator *alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
+  for (int round = 0; round < 3; round++) {
+    // Test zone of different sizes: 512, 1024, 2048
+    int64_t zone_size = 512ull << round;
+    ostringstream val;
+    val << zone_size;
+    g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone", val.str());
 
-  for (int64_t iter = 0; iter < 4; iter++) {
-    for (int64_t i = 0; i < total_blocks; i++) {
-      allocated = alloc->alloc_blocks(1, &start_block);
-      bmap_test_assert(allocated == 1);
-      bmap_test_assert(start_block == i);
+    // choose randomized span_size
+    int64_t span_size = 512ull << (rand() % 4);
+    val.str("");
+    val << span_size;
+    g_conf->set_val("bluestore_bitmapallocator_span_size", val.str());
+    g_ceph_context->_conf->apply_changes(NULL);
+
+    int64_t total_blocks = zone_size * 4;
+    int64_t allocated = 0;
+    int64_t start_block = 0;
+
+    BitAllocator *alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
+
+    for (int64_t iter = 0; iter < max_iter; iter++) {
+      for (int64_t i = 0; i < total_blocks; i++) {
+        allocated = alloc->alloc_blocks(1, &start_block);
+        bmap_test_assert(allocated == 1);
+        bmap_test_assert(start_block == i);
+      }
+
+      for (int64_t i = 0; i < total_blocks; i++) {
+        alloc->free_blocks(i, 1);
+      }
     }
 
-    for (int64_t i = 0; i < total_blocks; i++) {
-      alloc->free_blocks(i, 1);
+    for (int64_t iter = 0; iter < max_iter; iter++) {
+      for (int64_t i = 0; i < total_blocks / zone_size; i++) {
+        allocated = alloc->alloc_blocks(zone_size, &start_block);
+        bmap_test_assert(allocated == zone_size);
+        bmap_test_assert(start_block == i * zone_size);
+      }
+
+      for (int64_t i = 0; i < total_blocks / zone_size; i++) {
+        alloc->free_blocks(i * zone_size, zone_size);
+      }
     }
-  }
 
-  for (int64_t iter = 0; iter < 4; iter++) {
-    for (int64_t i = 0; i < total_blocks / zone_size; i++) {
-      allocated = alloc->alloc_blocks(zone_size, &start_block);
-      bmap_test_assert(allocated == zone_size);
-      bmap_test_assert(start_block == i * zone_size);
-    }
-
-    for (int64_t i = 0; i < total_blocks / zone_size; i++) {
-      alloc->free_blocks(i * zone_size, zone_size);
-    }
-  }
-
-  allocated = alloc->alloc_blocks(1, &start_block);
-  bmap_test_assert(allocated == 1);
-
-  allocated = alloc->alloc_blocks(zone_size - 1, &start_block);
-  bmap_test_assert(allocated == zone_size - 1);
-  bmap_test_assert(start_block == 1);
-
-  allocated = alloc->alloc_blocks(1, &start_block);
-  bmap_test_assert(allocated == 1);
-
-  allocated = alloc->alloc_blocks(zone_size, &start_block);
-  bmap_test_assert(allocated == zone_size);
-  bmap_test_assert(start_block == zone_size * 2);
-
-  // Dis contiguous blocks allocations
-  delete alloc;
-  alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
-
-  int64_t blocks[2048] = {0};
-  for (int64_t i = 0; i < alloc->size(); i++) {
     allocated = alloc->alloc_blocks(1, &start_block);
     bmap_test_assert(allocated == 1);
-  }
-  for (int i = 0; i < alloc->size(); i += 2) {
-    alloc->free_blocks(i, 1);
-  }
 
-  allocated = alloc->alloc_blocks_dis(alloc->size()/2, blocks);
-  bmap_test_assert(allocated == alloc->size() / 2);
+    allocated = alloc->alloc_blocks(zone_size - 1, &start_block);
+    bmap_test_assert(allocated == zone_size - 1);
+    bmap_test_assert(start_block == 1);
 
-  allocated = alloc->alloc_blocks_dis(1, blocks);
-  bmap_test_assert(allocated == 0);
+    allocated = alloc->alloc_blocks(1, &start_block);
+    bmap_test_assert(allocated == 1);
 
-  alloc->free_blocks(alloc->size()/2, 1);
-  allocated = alloc->alloc_blocks_dis(1, blocks);
+    allocated = alloc->alloc_blocks(zone_size, &start_block);
+    bmap_test_assert(allocated == zone_size);
+    bmap_test_assert(start_block == zone_size * 2);
 
-  bmap_test_assert(allocated == 1);
-  bmap_test_assert(blocks[0] == alloc->size()/2);
+    // Dis contiguous blocks allocations
+    delete alloc;
+    alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
 
-  alloc->free_blocks(0, alloc->size());
-  delete alloc;
-
-  // unaligned zones
-  total_blocks = 1024 * 2 + 11;
-  alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
-
-  for (int64_t iter = 0; iter < 4; iter++) {
-    for (int64_t i = 0; i < total_blocks; i++) {
+    for (int64_t i = 0; i < alloc->size(); i++) {
       allocated = alloc->alloc_blocks(1, &start_block);
       bmap_test_assert(allocated == 1);
-      bmap_test_assert(start_block == i);
     }
-
-    for (int64_t i = 0; i < total_blocks; i++) {
+    for (int i = 0; i < alloc->size(); i += 2) {
       alloc->free_blocks(i, 1);
     }
+
+    int64_t blocks[alloc->size() / 2];
+    memset(blocks, 0, sizeof(blocks));
+    allocated = alloc->alloc_blocks_dis(alloc->size()/2, blocks);
+    bmap_test_assert(allocated == alloc->size() / 2);
+
+    allocated = alloc->alloc_blocks_dis(1, blocks);
+    bmap_test_assert(allocated == 0);
+
+    alloc->free_blocks(alloc->size()/2, 1);
+    allocated = alloc->alloc_blocks_dis(1, blocks);
+
+    bmap_test_assert(allocated == 1);
+    bmap_test_assert(blocks[0] == alloc->size()/2);
+
+    alloc->free_blocks(0, alloc->size());
+    delete alloc;
+
+    // unaligned zones
+    total_blocks = zone_size * 2 + 11;
+    alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT);
+
+    for (int64_t iter = 0; iter < max_iter; iter++) {
+      for (int64_t i = 0; i < total_blocks; i++) {
+        allocated = alloc->alloc_blocks(1, &start_block);
+        bmap_test_assert(allocated == 1);
+        bmap_test_assert(start_block == i);
+      }
+
+      for (int64_t i = 0; i < total_blocks; i++) {
+        alloc->free_blocks(i, 1);
+      }
+    }
+    delete alloc;
+
+    // Make three > 3 levels tree and check allocations and dealloc
+    // in a loop
+    int64_t alloc_size = 64ull << round;
+    total_blocks = BitMapArea::get_level_factor(2) * 4;
+    alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT, false);
+    for (int64_t iter = 0; iter < max_iter; iter++) {
+      for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
+        allocated = alloc->alloc_blocks(alloc_size, &start_block);
+        bmap_test_assert(allocated == alloc_size);
+        bmap_test_assert(start_block == i * alloc_size);
+      }
+
+      for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
+        alloc->free_blocks(i * alloc_size, alloc_size);
+      }
+    }
+
+    delete alloc;
+    alloc = new BitAllocator(1024, zone_size, CONCURRENT, true);
+
+    alloc->free_blocks(1, 1023);
+    allocated = alloc->alloc_blocks(16, &start_block);
+    bmap_test_assert(allocated == 16);
+    bmap_test_assert(start_block == 1);
+    delete alloc;
+
+    total_blocks = BitMapArea::get_level_factor(2) * 4;
+    alloc_size = 64ull << round;
+    alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT, false);
+    for (int64_t iter = 0; iter < max_iter; iter++) {
+      for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
+        bmap_test_assert(alloc->reserve_blocks(alloc_size));
+        allocated = alloc->alloc_blocks_res(alloc_size, &start_block);
+        bmap_test_assert(allocated == alloc_size);
+        bmap_test_assert(start_block == i * alloc_size);
+      }
+
+      for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
+        alloc->free_blocks(i * alloc_size, alloc_size);
+      }
+    }
+
+    delete alloc;
   }
-  delete alloc;
 
-  // Make three > 3 levels tree and check allocations and dealloc
-  // in a loop
-  int64_t alloc_size = 16;
-  total_blocks = pow(BITMAP_SPAN_SIZE, 2) * 4;
-  alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT, false);
-  for (int64_t iter = 0; iter < 3; iter++) {
-    for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
-      allocated = alloc->alloc_blocks(alloc_size, &start_block);
-      bmap_test_assert(allocated == alloc_size);
-      bmap_test_assert(start_block == i * alloc_size);
-    }
-
-    for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
-      alloc->free_blocks(i * alloc_size, alloc_size);
-    }
-  }
-
-  delete alloc;
-  alloc = new BitAllocator(1024, zone_size, CONCURRENT, true);
-
-  alloc->free_blocks(1, 1023);
-  alloc->alloc_blocks(16, &start_block);
-  delete alloc;
-
-  total_blocks = pow(BITMAP_SPAN_SIZE, 2) * 4;
-  alloc_size = 16;
-  alloc = new BitAllocator(total_blocks, zone_size, CONCURRENT, false);
-  for (int64_t iter = 0; iter < 3; iter++) {
-    for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
-      bmap_test_assert(alloc->reserve_blocks(alloc_size));
-      allocated = alloc->alloc_blocks_res(alloc_size, &start_block);
-      bmap_test_assert(allocated == alloc_size);
-      bmap_test_assert(start_block == i * alloc_size);
-    }
-
-    for (int64_t i = 0; i < total_blocks / alloc_size; i++) {
-      alloc->free_blocks(i * alloc_size, alloc_size);
-    }
-  }
-
-  delete alloc;
+  // restore to typical value
+  g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone", "1024");
+  g_conf->set_val("bluestore_bitmapallocator_span_size", "1024");
+  g_ceph_context->_conf->apply_changes(NULL);
 }
 
 void
@@ -553,6 +587,15 @@ TEST(BitAllocator, test_bmap_alloc_concurrent)
 
 int main(int argc, char **argv)
 {
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
   ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  int r = RUN_ALL_TESTS();
+  g_ceph_context->put();
+  return r;
 }

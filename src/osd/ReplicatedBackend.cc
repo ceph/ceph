@@ -1684,6 +1684,13 @@ void ReplicatedBackend::submit_push_data(
     t->touch(coll, ghobject_t(target_oid));
     t->truncate(coll, ghobject_t(target_oid), recovery_info.size);
     t->omap_setheader(coll, ghobject_t(target_oid), omap_header);
+
+    bufferlist bv = attrs[OI_ATTR];
+    object_info_t oi(bv);
+    t->set_alloc_hint(coll, ghobject_t(target_oid),
+		      oi.expected_object_size,
+		      oi.expected_write_size,
+		      oi.alloc_hint_flags);
   }
   uint64_t off = 0;
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
@@ -1832,7 +1839,11 @@ bool ReplicatedBackend::handle_pull_response(
 		   pop.omap_entries,
 		   t);
 
+  pi.stat.num_keys_recovered += pop.omap_entries.size();
+  pi.stat.num_bytes_recovered += data.length();
+
   if (complete) {
+    pi.stat.num_objects_recovered++;
     to_continue->push_back(hoid);
     get_parent()->on_local_recover(
       hoid, pi.recovery_info, pi.obc, t);
@@ -1961,8 +1972,16 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
           << dendl;
 
   if (progress.first) {
-    store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
-    store->getattrs(ch, ghobject_t(recovery_info.soid), out_op->attrset);
+    int r = store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
+    if(r < 0) {
+      dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl; 
+      return r;
+    }
+    r = store->getattrs(ch, ghobject_t(recovery_info.soid), out_op->attrset);
+    if(r < 0) {
+      dout(1) << __func__ << " getattrs failed: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
 
     // Debug
     bufferlist bv = out_op->attrset[OI_ATTR];

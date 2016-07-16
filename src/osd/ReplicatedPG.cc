@@ -629,7 +629,9 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
     if (r != 0) {
       derr << "Error opening class '" << class_name << "': "
            << cpp_strerror(r) << dendl;
-      return -EINVAL;
+      if (r != -EPERM) // propogate permission error
+        r = -EINVAL;
+      return r;
     } else {
       assert(cls);
     }
@@ -1787,13 +1789,14 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // purposes here it doesn't matter which one we get.
     eversion_t replay_version;
     version_t user_version;
+    int return_code = 0;
     bool got = pg_log.get_log().get_request(
-      m->get_reqid(), &replay_version, &user_version);
+      m->get_reqid(), &replay_version, &user_version, &return_code);
     if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " was " << replay_version << dendl;
-      if (already_complete(replay_version)) {
-	osd->reply_op_error(op, 0, replay_version, user_version);
+      if (return_code < 0 || already_complete(replay_version)) {
+	osd->reply_op_error(op, return_code, replay_version, user_version);
       } else {
 	if (m->wants_ack()) {
 	  if (already_ack(replay_version)) {
@@ -1913,7 +1916,12 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       return;
     }
     dout(20) << __func__ << "find_object_context got error " << r << dendl;
-    osd->reply_op_error(op, r);
+    if (op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      record_write_error(op, oid, nullptr, r);
+    } else {
+      osd->reply_op_error(op, r);
+    }
     return;
   }
 
@@ -2084,7 +2092,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   if (r) {
     dout(20) << __func__ << " returned an error: " << r << dendl;
-    reply_ctx(ctx, r);
+    close_op_ctx(ctx);
+    if (op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      record_write_error(op, oid, nullptr, r);
+    } else {
+      osd->reply_op_error(op, r);
+    }
     return;
   }
 
@@ -2133,6 +2147,37 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
   }
+}
+
+void ReplicatedPG::record_write_error(OpRequestRef op, const hobject_t &soid,
+				      MOSDOpReply *orig_reply, int r)
+{
+  dout(20) << __func__ << " r=" << r << dendl;
+  assert(op->may_write());
+  const osd_reqid_t &reqid = static_cast<MOSDOp*>(op->get_req())->get_reqid();
+  ObjectContextRef obc;
+  list<pg_log_entry_t> entries;
+  entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR, soid,
+				   get_next_version(), eversion_t(), 0,
+				   reqid, utime_t(), r));
+  ObcLockManager lock_manager;
+  submit_log_entries(
+    entries,
+    std::move(lock_manager),
+    boost::optional<std::function<void(void)> >(
+      [=]() {
+	dout(20) << "finished " << __func__ << " r=" << r << dendl;
+	int flags = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
+	MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+	MOSDOpReply *reply = orig_reply;
+	if (reply == nullptr) {
+	  reply = new MOSDOpReply(m, r, get_osdmap()->get_epoch(),
+				  flags, true);
+	}
+	dout(10) << " sending commit on " << *m << " " << reply << dendl;
+	osd->send_message_osd_client(reply, m->get_connection());
+      }
+      ));
 }
 
 ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
@@ -2843,6 +2888,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 {
   dout(10) << __func__ << " " << ctx << dendl;
   ctx->reset_obs(ctx->obc);
+  ctx->update_log_only = false; // reset in case finish_copyfrom() is re-running execute_ctx
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   ObjectContextRef obc = ctx->obc;
@@ -2959,7 +3005,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   ctx->reply->set_result(result);
 
   // read or error?
-  if (ctx->op_t->empty() || result < 0) {
+  if ((ctx->op_t->empty() || result < 0) && !ctx->update_log_only) {
     // finish side-effects
     if (result >= 0)
       do_osd_op_effects(ctx, m->get_connection());
@@ -2999,6 +3045,26 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       }
       p->second = t;
     }
+  }
+
+  if (ctx->update_log_only) {
+    dout(20) << __func__ << " update_log_only -- result=" << result << dendl;
+    assert(result < 0);
+    // save just what we need from ctx
+    MOSDOpReply *reply = ctx->reply;
+    ctx->reply = nullptr;
+    reply->claim_op_out_data(ctx->ops);
+    reply->get_header().data_off = ctx->data_off;
+    close_op_ctx(ctx);
+
+    if (result == -ENOENT) {
+      reply->set_enoent_reply_versions(info.last_update,
+				       info.last_user_version);
+    }
+    reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+    // append to pg log for dup detection - don't save buffers for now
+    record_write_error(op, soid, reply, result);
+    return;
   }
 
   // no need to capture PG ref, repop cancel will handle that
@@ -3455,7 +3521,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 	ctx->obs->oi.version,
 	0,
 	osd_reqid_t(),
-	ctx->mtime)
+	ctx->mtime,
+	0)
       );
     if (pool.info.require_rollback()) {
       set<snapid_t> snaps(
@@ -3492,7 +3559,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 	coi.prior_version,
 	0,
 	osd_reqid_t(),
-	ctx->mtime)
+	ctx->mtime,
+	0)
       );
     if (pool.info.require_rollback()) {
       set<string> changing;
@@ -3523,7 +3591,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 	ctx->snapset_obc->obs.oi.version,
 	0,
 	osd_reqid_t(),
-	ctx->mtime)
+	ctx->mtime,
+	0)
       );
 
     ctx->snapset_obc->obs.exists = false;
@@ -3551,7 +3620,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 	ctx->snapset_obc->obs.oi.version,
 	0,
 	osd_reqid_t(),
-	ctx->mtime)
+	ctx->mtime,
+	0)
       );
 
     ctx->snapset_obc->obs.oi.prior_version =
@@ -4935,6 +5005,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           ctx->mod_desc.create();
           t->touch(soid);
 	}
+	oi.expected_object_size = op.alloc_hint.expected_object_size;
+	oi.expected_write_size = op.alloc_hint.expected_write_size;
+	oi.alloc_hint_flags = op.alloc_hint.flags;
         t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
                           op.alloc_hint.expected_write_size,
 			  op.alloc_hint.flags);
@@ -6395,7 +6468,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::CLONE, coid, ctx->at_version,
 				      ctx->obs->oi.version,
 				      ctx->obs->oi.user_version,
-				      osd_reqid_t(), ctx->new_obs.oi.mtime));
+				      osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
     ::encode(snaps, ctx->log.back().snaps);
     ctx->log.back().mod_desc.create();
 
@@ -6593,8 +6666,15 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops);
-  if (result < 0)
+  if (result < 0) {
+    if (ctx->op->may_write() &&
+	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      // need to save the error code in the pg log, to detect dup ops,
+      // but do nothing else
+      ctx->update_log_only = true;
+    }
     return result;
+  }
 
   // read-op?  done?
   if (ctx->op_t->empty() && !ctx->modify) {
@@ -6657,7 +6737,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
 	      ctx->at_version,
 	      ctx->snapset_obc->obs.oi.version,
-	      0, osd_reqid_t(), ctx->mtime));
+	      0, osd_reqid_t(), ctx->mtime, 0));
 	  if (pool.info.require_rollback()) {
 	    if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	      ctx->op_t->stash(snapoid, ctx->at_version.version);
@@ -6686,7 +6766,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
 	                                eversion_t(),
-					0, osd_reqid_t(), ctx->mtime));
+					0, osd_reqid_t(), ctx->mtime, 0));
 
       if (!ctx->snapset_obc)
 	ctx->snapset_obc = get_object_context(snapoid, true);
@@ -6795,7 +6875,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   ctx->log.push_back(pg_log_entry_t(log_op_type, soid, ctx->at_version,
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
-				    ctx->mtime));
+				    ctx->mtime, 0));
   if (soid.snap < CEPH_NOSNAP) {
     switch (log_op_type) {
     case pg_log_entry_t::MODIFY:
@@ -8710,8 +8790,17 @@ void ReplicatedPG::submit_log_entries(
 	  });
     }
   }
+  t.register_on_applied(
+    new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
   int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
   assert(r == 0);
+}
+
+void ReplicatedPG::cancel_log_updates()
+{
+  // get rid of all the LogUpdateCtx so their references to repops are
+  // dropped
+  log_entry_update_waiting_on.clear();
 }
 
 // -------------------------------------------------------
@@ -8860,7 +8949,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 				    ctx->at_version,
 				    oi.version,
 				    0,
-				    osd_reqid_t(), ctx->mtime));
+				    osd_reqid_t(), ctx->mtime, 0));
 
   oi.prior_version = obc->obs.oi.version;
   oi.version = ctx->at_version;
@@ -9641,42 +9730,6 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   return v;
 }
 
-
-/* Mark an object as lost
- */
-ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
-							    const hobject_t &oid, eversion_t version,
-							    utime_t mtime, int what)
-{
-  // Wake anyone waiting for this object. Now that it's been marked as lost,
-  // we will just return an error code.
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator wmo =
-    waiting_for_unreadable_object.find(oid);
-  if (wmo != waiting_for_unreadable_object.end()) {
-    requeue_ops(wmo->second);
-  }
-
-  // Add log entry
-  ++info.last_update.version;
-  pg_log_entry_t e(what, oid, info.last_update, version, 0, osd_reqid_t(), mtime);
-  pg_log.add(e);
-  
-  ObjectContextRef obc = get_object_context(oid, true);
-
-  obc->ondisk_write_lock();
-
-  obc->obs.oi.set_flag(object_info_t::FLAG_LOST);
-  obc->obs.oi.version = info.last_update;
-  obc->obs.oi.prior_version = version;
-
-  bufferlist b2;
-  obc->obs.oi.encode(b2, get_osdmap()->get_up_osd_features());
-  assert(!pool.info.require_rollback());
-  t->setattr(coll, ghobject_t(oid), OI_ATTR, b2);
-
-  return obc;
-}
-
 void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
 {
   MOSDPGUpdateLogMissing *m = static_cast<MOSDPGUpdateLogMissing*>(
@@ -9686,7 +9739,7 @@ void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
   append_log_entries_update_missing(m->entries, t);
   // TODO FIX
 
-  Context *c = new FunctionContext(
+  Context *complete = new FunctionContext(
       [=](int) {
 	MOSDPGUpdateLogMissing *msg =
 	  static_cast<MOSDPGUpdateLogMissing*>(
@@ -9704,10 +9757,12 @@ void ReplicatedPG::do_update_log_missing(OpRequestRef &op)
   /* Hack to work around the fact that ReplicatedBackend sends
    * ack+commit if commit happens first */
   if (pool.info.ec_pool()) {
-    t.register_on_complete(c);
+    t.register_on_complete(complete);
   } else {
-    t.register_on_commit(c);
+    t.register_on_commit(complete);
   }
+  t.register_on_applied(
+    new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
   int tr = osd->store->queue_transaction(
     osr.get(),
     std::move(t),
@@ -9794,7 +9849,7 @@ void ReplicatedPG::mark_all_unfound_lost(
 	++v.version;
 	pg_log_entry_t e(
 	  pg_log_entry_t::LOST_REVERT, oid, v,
-	  m->second.need, 0, osd_reqid_t(), mtime);
+	  m->second.need, 0, osd_reqid_t(), mtime, 0);
 	e.reverting_to = prev;
 	e.mod_desc.mark_unrollbackable();
 	log_entries.push_back(e);
@@ -9809,7 +9864,7 @@ void ReplicatedPG::mark_all_unfound_lost(
       {
 	++v.version;
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, v, m->second.need,
-		     0, osd_reqid_t(), mtime);
+			 0, osd_reqid_t(), mtime, 0);
 	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
 	  if (pool.info.require_rollback()) {
 	    e.mod_desc.try_rmobject(v.version);
@@ -9827,30 +9882,10 @@ void ReplicatedPG::mark_all_unfound_lost(
     default:
       assert(0);
     }
-
-    if (obc) {
-      bool got = manager.get_lock_type(
-	ObjectContext::RWState::RWEXCL,
-	oid,
-	obc,
-	OpRequestRef());
-      if (!got) {
-	assert(0 == "Couldn't lock unfound object?");
-      }
-    }
   }
 
   info.stats.stats_invalid = true;
 
-  struct OnComplete {
-    ReplicatedPG *pg;
-    std::function<void(void)> on_complete;
-    void operator()() {
-      pg->requeue_ops(pg->waiting_for_all_missing);
-      pg->waiting_for_all_missing.clear();
-      pg->queue_recovery();
-    }
-  };
   submit_log_entries(
     log_entries,
     std::move(manager),
@@ -10004,6 +10039,7 @@ void ReplicatedPG::on_shutdown()
   cancel_flush_ops(false);
   cancel_proxy_ops(false);
   apply_and_flush_repops(false);
+  cancel_log_updates();
 
   pgbackend->on_change();
 
@@ -11707,7 +11743,8 @@ void ReplicatedPG::hit_set_persist()
       eversion_t(),
       0,
       osd_reqid_t(),
-      ctx->mtime)
+      ctx->mtime,
+      0)
     );
   if (pool.info.require_rollback()) {
     ctx->log.back().mod_desc.create();
@@ -11742,7 +11779,8 @@ void ReplicatedPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
 		       p->version,
 		       0,
 		       osd_reqid_t(),
-		       ctx->mtime));
+		       ctx->mtime,
+		       0));
     if (pool.info.require_rollback()) {
       if (ctx->log.back().mod_desc.rmobject(
 	  ctx->at_version.version)) {

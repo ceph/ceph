@@ -4,6 +4,7 @@
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/ImageSync.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/CreateImageRequest.h"
@@ -69,6 +70,20 @@ struct ImageSync<librbd::MockTestImageCtx> {
 };
 
 ImageSync<librbd::MockTestImageCtx>* ImageSync<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+template<>
+struct ImageSyncThrottler<librbd::MockTestImageCtx> {
+  MOCK_METHOD10(start_sync, void(librbd::MockTestImageCtx *local_image_ctx,
+                                 librbd::MockTestImageCtx *remote_image_ctx,
+                                 SafeTimer *timer, Mutex *timer_lock,
+                                 const std::string &mirror_uuid,
+                                 ::journal::MockJournaler *journaler,
+                                 librbd::journal::MirrorPeerClientMeta *client_meta,
+                                 ContextWQ *work_queue, Context *on_finish,
+                                 ProgressContext *progress_ctx));
+  MOCK_METHOD2(cancel_sync, void(librados::IoCtx &local_io_ctx,
+                                 const std::string& mirror_uuid));
+};
 
 namespace image_replayer {
 

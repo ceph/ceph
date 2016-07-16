@@ -15,7 +15,7 @@
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include <errno.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -1127,7 +1127,7 @@ TEST(LibCephFS, UseUnmounted) {
   EXPECT_EQ(-ENOTCONN, ceph_closedir(cmount, dirp));
 
   ceph_readdir(cmount, dirp);
-  EXPECT_EQ(-ENOTCONN, errno);
+  EXPECT_EQ(ENOTCONN, errno);
 
   struct dirent rdent;
   EXPECT_EQ(-ENOTCONN, ceph_readdir_r(cmount, dirp, &rdent));

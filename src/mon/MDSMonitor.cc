@@ -2641,8 +2641,10 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
   bufferlist bl;
   int r = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
-  if (r)
+  if (r) {
+    dout(1) << "Unable to load 'last_metadata'" << dendl;
     return r;
+  }
 
   bufferlist::iterator it = bl.begin();
   ::decode(m, it);
@@ -2840,11 +2842,9 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> fs)
 	do_propose = true;
       }
     }
-  }
-
-  // There were no failures to replace, so try using any available standbys
-  // as standby-replay daemons.
-  if (failed.empty()) {
+  } else {
+    // There were no failures to replace, so try using any available standbys
+    // as standby-replay daemons.
     for (const auto &j : pending_fsmap.standby_daemons) {
       const auto &gid = j.first;
       const auto &info = j.second;

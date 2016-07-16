@@ -52,12 +52,12 @@ public:
     if (len < 6)
       return false;
 
-    int pos = name.find(MP_META_SUFFIX, len - 5);
-    if (pos <= 0)
+    size_t pos = name.find(MP_META_SUFFIX, len - 5);
+    if (pos == string::npos)
       return false;
 
     pos = name.rfind('.', pos - 1);
-    if (pos < 0)
+    if (pos == string::npos)
       return false;
 
     key = name.substr(0, pos);
@@ -77,8 +77,8 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
 
   *partial_content = false;
 
-  int pos = s.find("bytes=");
-  if (pos < 0) {
+  size_t pos = s.find("bytes=");
+  if (pos == string::npos) {
     pos = 0;
     while (isspace(s[pos]))
       pos++;
@@ -96,7 +96,7 @@ static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_
     s = s.substr(pos + 6); /* size of("bytes=")  */
   }
   pos = s.find('-');
-  if (pos < 0)
+  if (pos == string::npos)
     goto done;
 
   *partial_content = true;
@@ -1019,8 +1019,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   ldout(s->cct, 2) << "RGWGetObj::handle_user_manifest() prefix=" << prefix << dendl;
 
   string prefix_str = prefix;
-  int pos = prefix_str.find('/');
-  if (pos < 0)
+  size_t pos = prefix_str.find('/');
+  if (pos == string::npos)
     return -EINVAL;
 
   string bucket_name_raw, bucket_name;
@@ -1651,20 +1651,17 @@ void RGWSetBucketVersioning::pre_exec()
 
 void RGWSetBucketVersioning::execute()
 {
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
   if (!store->is_meta_master()) {
-    bufferlist in_data;
-    JSONParser jp;
-    op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     }
     return;
   }
-  
-  op_ret = get_params();
-
-  if (op_ret < 0)
-    return;
 
   if (enable_versioning) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
@@ -3377,8 +3374,8 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
   string name_str;
   string params_str;
 
-  int pos = url_src.find('?');
-  if (pos < 0) {
+  size_t pos = url_src.find('?');
+  if (pos == string::npos) {
     name_str = url_src;
   } else {
     name_str = url_src.substr(0, pos);
@@ -3395,7 +3392,7 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
   string str(src);
 
   pos = str.find('/');
-  if (pos <= 0)
+  if (pos ==string::npos)
     return false;
 
   bucket_name = str.substr(0, pos);
@@ -3650,8 +3647,6 @@ void RGWGetACLs::execute()
   s3policy->to_xml(ss);
   acls = ss.str();
 }
-
-
 
 int RGWPutACLs::verify_permission()
 {
@@ -4836,6 +4831,46 @@ void RGWBulkDelete::execute()
   } while (!op_ret && is_truncated);
 
   return;
+}
+
+int RGWSetAttrs::verify_permission()
+{
+  bool perm;
+  if (!s->object.empty()) {
+    perm = verify_object_permission(s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission(s, RGW_PERM_WRITE);
+  }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetAttrs::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  rgw_obj obj(s->bucket, s->object);
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  if (!s->object.empty()) {
+    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &attrs);
+  } else {
+    for (auto& iter : attrs) {
+      s->bucket_attrs[iter.first] = std::move(iter.second);
+    }
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
+				  &s->bucket_info.objv_tracker);
+  }
 }
 
 RGWHandler::~RGWHandler()

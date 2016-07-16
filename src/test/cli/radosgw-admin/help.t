@@ -9,6 +9,7 @@
     user enable                re-enable user after suspension
     user check                 check user info
     user stats                 show user stats as accounted by quota subsystem
+    user list                  list users
     caps add                   add user capabilities
     caps rm                    remove user capabilities
     subuser create             create a new subuser
@@ -141,6 +142,7 @@
      --period=<id>             period id
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
+     --staging                 get staging period info
      --master                  set as master
      --master-url              master url
      --master-zonegroup=<id>   master zonegroup id

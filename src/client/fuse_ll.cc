@@ -340,11 +340,11 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     int err = 0;
     int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
     if (fd < 0) {
-      err = -errno;
+      err = errno;
     } else {
       int r = ::syncfs(fd);
       if (r < 0)
-	err = -errno;
+	err = errno;
       ::close(fd);
     }
     if (err) {

@@ -20,6 +20,7 @@
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/ProgressContext.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
@@ -35,23 +36,26 @@ using librbd::util::create_rados_ack_callback;
 using librbd::util::unique_lock_name;
 
 template <typename I>
-BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
-                                      librados::IoCtx &remote_io_ctx,
-                                      I **local_image_ctx,
-                                      const std::string &local_image_name,
-                                      const std::string &remote_image_id,
-                                      const std::string &global_image_id,
-                                      ContextWQ *work_queue, SafeTimer *timer,
-                                      Mutex *timer_lock,
-                                      const std::string &local_mirror_uuid,
-                                      const std::string &remote_mirror_uuid,
-                                      Journaler *journaler,
-                                      MirrorPeerClientMeta *client_meta,
-                                      Context *on_finish,
-				      rbd::mirror::ProgressContext *progress_ctx)
+BootstrapRequest<I>::BootstrapRequest(
+        librados::IoCtx &local_io_ctx,
+        librados::IoCtx &remote_io_ctx,
+        std::shared_ptr<ImageSyncThrottler<I>> image_sync_throttler,
+        I **local_image_ctx,
+        const std::string &local_image_name,
+        const std::string &remote_image_id,
+        const std::string &global_image_id,
+        ContextWQ *work_queue, SafeTimer *timer,
+        Mutex *timer_lock,
+        const std::string &local_mirror_uuid,
+        const std::string &remote_mirror_uuid,
+        Journaler *journaler,
+        MirrorPeerClientMeta *client_meta,
+        Context *on_finish,
+        rbd::mirror::ProgressContext *progress_ctx)
   : BaseRequest("rbd::mirror::image_replayer::BootstrapRequest",
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
     m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
+    m_image_sync_throttler(image_sync_throttler),
     m_local_image_ctx(local_image_ctx), m_local_image_name(local_image_name),
     m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
     m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
@@ -63,7 +67,6 @@ BootstrapRequest<I>::BootstrapRequest(librados::IoCtx &local_io_ctx,
 
 template <typename I>
 BootstrapRequest<I>::~BootstrapRequest() {
-  assert(m_image_sync_request == nullptr);
   assert(m_remote_image_ctx == nullptr);
 }
 
@@ -79,9 +82,7 @@ void BootstrapRequest<I>::cancel() {
   Mutex::Locker locker(m_lock);
   m_canceled = true;
 
-  if (m_image_sync_request) {
-    m_image_sync_request->cancel();
-  }
+  m_image_sync_throttler->cancel_sync(m_local_io_ctx, m_local_image_id);
 }
 
 template <typename I>
@@ -547,30 +548,18 @@ void BootstrapRequest<I>::image_sync() {
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(
       this);
-  ImageSync<I> *request = ImageSync<I>::create(*m_local_image_ctx,
-                                               m_remote_image_ctx, m_timer,
-                                               m_timer_lock,
-                                               m_local_mirror_uuid, m_journaler,
-                                               m_client_meta, m_work_queue, ctx,
-					       m_progress_ctx);
-  {
-    Mutex::Locker locker(m_lock);
-    request->get();
-    m_image_sync_request = request;
-  }
 
-  request->send();
+  m_image_sync_throttler->start_sync(*m_local_image_ctx,
+                                     m_remote_image_ctx, m_timer,
+                                     m_timer_lock,
+                                     m_local_mirror_uuid, m_journaler,
+                                     m_client_meta, m_work_queue, ctx,
+                                     m_progress_ctx);
 }
 
 template <typename I>
 void BootstrapRequest<I>::handle_image_sync(int r) {
   dout(20) << ": r=" << r << dendl;
-
-  {
-    Mutex::Locker locker(m_lock);
-    m_image_sync_request->put();
-    m_image_sync_request = nullptr;
-  }
 
   if (m_canceled) {
     dout(10) << ": request canceled" << dendl;

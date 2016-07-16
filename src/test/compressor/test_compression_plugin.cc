@@ -56,14 +56,6 @@ int main(int argc, char **argv) {
 
   const char* env = getenv("CEPH_LIB");
   string directory(env ? env : ".libs");
-  string mkdir_compressor = "mkdir -p " + directory + "/compressor";
-  int r = system(mkdir_compressor.c_str());
-  (void)r;
-
-  string cp_libceph_example = "cp " + directory + "/libceph_example.so* " + directory + "/compressor/";
-  r = system(cp_libceph_example.c_str());
-  (void)r;
-
   g_conf->set_val("plugin_dir", directory, false, false);
 
   ::testing::InitGoogleTest(&argc, argv);

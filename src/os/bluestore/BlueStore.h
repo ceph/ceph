@@ -114,14 +114,12 @@ public:
       STATE_EMPTY,     ///< empty buffer -- used for cache history
       STATE_CLEAN,     ///< clean data that is up to date
       STATE_WRITING,   ///< data that is being written (io not yet complete)
-      STATE_READING,
     };
     static const char *get_state_name(int s) {
       switch (s) {
       case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
       case STATE_WRITING: return "writing";
-      case STATE_READING: return "reading";
       default: return "???";
       }
     }
@@ -163,9 +161,6 @@ public:
     }
     bool is_writing() const {
       return state == STATE_WRITING;
-    }
-    bool is_reading() const {
-      return state == STATE_READING;
     }
 
     uint64_t end() const {
@@ -633,14 +628,17 @@ public:
     buffer_list_t buffer_hot;      //< "Am" hot buffers
     buffer_list_t buffer_warm_in;  //< "A1in" newly warm buffers
     buffer_list_t buffer_warm_out; //< "A1out" empty buffers we've evicted
-    uint64_t buffer_bytes = 0;        //< bytes
+    uint64_t buffer_bytes = 0;     //< bytes
 
     enum {
       BUFFER_NEW = 0,
       BUFFER_WARM_IN,   ///< in buffer_warm_in
       BUFFER_WARM_OUT,  ///< in buffer_warm_out
       BUFFER_HOT,       ///< in buffer_hot
+      BUFFER_TYPE_MAX
     };
+
+    uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
 
   public:
     void _add_onode(OnodeRef& o, int level) override {

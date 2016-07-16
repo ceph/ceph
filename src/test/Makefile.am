@@ -128,14 +128,14 @@ unittests:: $(check_PROGRAMS)
 
 UNITTEST_CXXFLAGS = \
 	$(AM_CXXFLAGS) \
-	-I$(top_srcdir)/src/gmock/include \
-	-I$(top_builddir)/src/gmock/include \
-	-I$(top_srcdir)/src/gmock/gtest/include \
-	-I$(top_builddir)/src/gmock/gtest/include
+	-I$(top_srcdir)/src/googletest/googlemock/include \
+	-I$(top_builddir)/src/googletest/googlemock/include \
+	-I$(top_srcdir)/src/googletest/googletest/include \
+	-I$(top_builddir)/src/googletest/googletest/include
 UNITTEST_LDADD = \
-	$(top_builddir)/src/gmock/lib/libgmock_main.la \
-	$(top_builddir)/src/gmock/lib/libgmock.la \
-	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
+	$(top_builddir)/src/googletest/googlemock/lib/libgmock_main.la \
+	$(top_builddir)/src/googletest/googlemock/lib/libgmock.la \
+	$(top_builddir)/src/googletest/googletest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
 
 if SOLARIS
@@ -473,7 +473,8 @@ endif
 
 ceph_test_objectcacher_stress_SOURCES = \
 	test/osdc/object_cacher_stress.cc \
-	test/osdc/FakeWriteback.cc
+	test/osdc/FakeWriteback.cc \
+	test/osdc/MemWriteback.cc
 ceph_test_objectcacher_stress_LDADD = $(LIBOSDC) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 
@@ -510,6 +511,7 @@ noinst_HEADERS += \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
+	test/osdc/MemWriteback.h \
 	test/osd/Object.h \
 	test/osd/RadosModel.h \
 	test/osd/TestOpStat.h \
