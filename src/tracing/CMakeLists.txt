@@ -30,7 +30,7 @@ function(add_tracing_library name tracings version)
       ${header_dir}/${tp}.c)
   endforeach()
   add_library(${name} SHARED ${srcs})
-  target_link_libraries(${name} ${LTTNG_LIBRARIES} dl)
+  target_link_libraries(${name} ${LTTNG_LIBRARIES} ${CMAKE_DL_LIBS})
   string(REGEX MATCH "^[0-9]+" soversion ${version})
   set_target_properties(${name} PROPERTIES
     OUTPUT_NAME ${name}

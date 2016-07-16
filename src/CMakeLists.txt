@@ -124,7 +124,80 @@ if(COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=${DIAGNOSTICS_COLOR}")
 endif()
 
-set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
+## detect sse support
+
+# create a tmp file with an empty main()
+set(sse_srcs "${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/tmp_sse.c")
+file(WRITE ${sse_srcs} "void main() {}")
+
+# try each -msse flag
+try_compile(INTEL_SSE ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse")
+try_compile(INTEL_SSE2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse2")
+try_compile(INTEL_SSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse3")
+try_compile(INTEL_SSSE3 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-mssse3")
+try_compile(INTEL_SSE4_1 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse4.1")
+try_compile(INTEL_SSE4_2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-msse4.2")
+try_compile(ARM_NEON ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-mfpu=neon")
+try_compile(ARM_NEON2 ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-march=armv8-a+simd")
+try_compile(ARM_CRC ${CMAKE_BINARY_DIR} ${sse_srcs}
+  COMPILE_DEFINITIONS "-march=armv8-a+crc")
+
+# clean up tmp file
+file(REMOVE ${sse_srcs})
+
+if(ARM_CRC)
+  set(HAVE_ARMV8_CRC 1)
+  set(ARM_CRC_FLAGS "-march=armv8-a+crc -DARCH_AARCH64")
+endif(ARM_CRC)
+
+if(ARM_NEON OR ARM_NEON2)
+  set(HAVE_NEON 1)
+  if(ARM_NEON)
+    set(ARM_NEON_FLAGS "-mfpu=neon -DARM_NEON")
+  else(ARM_NEON)
+    set(ARM_NEON_FLAGS "-march=armv8-a+simd -DARCH_AARCH64 -DARM_NEON")
+  endif(ARM_NEON)
+else(ARM_NEON OR ARM_NEON2)
+  message(STATUS "Skipping target ec_jerasure_neon & ec_shec_neon: Architecture not ARM")
+endif(ARM_NEON OR ARM_NEON2)
+
+if(INTEL_SSE)
+  set(HAVE_SSE 1)
+  set(SSE3_FLAGS "-msse")
+  if (INTEL_SSE2)
+    set(HAVE_SSE2 1)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -msse2")
+  endif (INTEL_SSE2)
+  if (INTEL_SSE3)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -msse3")
+  endif (INTEL_SSE3)
+  if (INTEL_SSSE3)
+    set(SSE3_FLAGS "${SSE3_FLAGS} -mssse3")
+  endif (INTEL_SSSE3)
+else(INTEL_SSE)
+  message(STATUS "Skipping target ec_jerasure_sse3 & ec_shec_sse3: -msse not supported")
+endif(INTEL_SSE)
+
+if(INTEL_SSE4_1)
+  set(SSE4_FLAGS "${SSE3_FLAGS} -msse4.1")
+  if (INTEL_SSE4_2)
+    set(SSE4_FLAGS "${SSE4_FLAGS} -msse4.2")
+  endif (INTEL_SSE4_2)
+else(INTEL_SSE4_1)
+  message(STATUS "Skipping target ec_jerasure_sse4 & ec_shec_sse4: -msse4.1 not supported")
+endif(INTEL_SSE4_1)
+
+
+set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
+>>>>>>> Cmake: fix using CMAKE_DL_LIBS instead of dl
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -542,7 +615,7 @@ add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
+target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse ${CMAKE_DL_LIBS})
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -872,7 +945,7 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(osd dl leveldb ${ALLOC_LIBS})
+target_link_libraries(osd ${CMAKE_DL_LIBS} leveldb ${ALLOC_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp)
 endif()

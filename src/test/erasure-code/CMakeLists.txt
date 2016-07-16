@@ -2,15 +2,15 @@
 add_executable(ceph_erasure_code_benchmark 
   ${CMAKE_SOURCE_DIR}/src/erasure-code/ErasureCode.cc
   ceph_erasure_code_benchmark.cc)
-target_link_libraries(ceph_erasure_code_benchmark osd common ${Boost_PROGRAM_OPTIONS_LIBRARY} global dl)
+target_link_libraries(ceph_erasure_code_benchmark osd common ${Boost_PROGRAM_OPTIONS_LIBRARY} global ${CMAKE_DL_LIBS})
 install(TARGETS ceph_erasure_code_benchmark
   DESTINATION bin)
 
 add_executable(ceph_erasure_code_non_regression ceph_erasure_code_non_regression.cc)
-target_link_libraries(ceph_erasure_code_non_regression osd common ${Boost_PROGRAM_OPTIONS_LIBRARY} global dl)
+target_link_libraries(ceph_erasure_code_non_regression osd common ${Boost_PROGRAM_OPTIONS_LIBRARY} global ${CMAKE_DL_LIBS})
 
 add_executable(ceph_erasure_code ceph_erasure_code.cc)
-target_link_libraries(ceph_erasure_code osd common ${Boost_PROGRAM_OPTIONS_LIBRARY} global dl)
+target_link_libraries(ceph_erasure_code osd common ${Boost_PROGRAM_OPTIONS_LIBRARY} global ${CMAKE_DL_LIBS})
 install(TARGETS ceph_erasure_code
   DESTINATION bin)
 
@@ -49,7 +49,7 @@ add_ceph_unittest(unittest_erasure_code_plugin ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
 target_link_libraries(unittest_erasure_code_plugin
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   ec_example
   common
   )
@@ -136,7 +136,7 @@ target_link_libraries(unittest_erasure_code_plugin_isa
   common
   ec_isa
   crush
-  dl
+  ${CMAKE_DL_LIBS}
   erasure_code
   )
 endif(HAVE_BETTER_YASM_ELF64)
@@ -150,7 +150,7 @@ add_ceph_unittest(unittest_erasure_code_lrc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/un
 target_link_libraries(unittest_erasure_code_lrc
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   ec_lrc
   common
   )
@@ -169,7 +169,7 @@ add_dependencies(unittest_erasure_code_plugin_lrc
 target_link_libraries(unittest_erasure_code_plugin_lrc
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   ec_lrc
   ec_jerasure_generic
   common)
@@ -198,7 +198,7 @@ add_ceph_unittest(unittest_erasure_code_plugin_shec ${CMAKE_RUNTIME_OUTPUT_DIREC
 target_link_libraries(unittest_erasure_code_plugin_shec
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   common
   ec_shec_generic)
 add_dependencies(unittest_erasure_code_plugin_shec 
@@ -220,7 +220,7 @@ add_ceph_unittest(unittest_erasure_code_example ${CMAKE_RUNTIME_OUTPUT_DIRECTORY
 target_link_libraries(unittest_erasure_code_example
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   common
   erasure_code
   ${UNITTEST_LIBS}
@@ -259,7 +259,7 @@ add_ceph_unittest(unittest_erasure_code_shec ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/u
 target_link_libraries(unittest_erasure_code_shec
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   common
   ec_shec_generic
   )
@@ -277,7 +277,7 @@ add_ceph_unittest(unittest_erasure_code_shec_all ${CMAKE_RUNTIME_OUTPUT_DIRECTOR
 target_link_libraries(unittest_erasure_code_shec_all
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   common
   ec_shec_generic
   )
@@ -295,7 +295,7 @@ add_ceph_unittest(unittest_erasure_code_shec_thread ${CMAKE_RUNTIME_OUTPUT_DIREC
 target_link_libraries(unittest_erasure_code_shec_thread
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   common
   ec_shec_generic
   )
@@ -314,7 +314,7 @@ add_ceph_unittest(unittest_erasure_code_shec_arguments ${CMAKE_RUNTIME_OUTPUT_DI
 target_link_libraries(unittest_erasure_code_shec_arguments
   global
   osd
-  dl
+  ${CMAKE_DL_LIBS}
   common
   ec_shec_generic
   )
