@@ -787,6 +787,8 @@ bool FSMap::undamaged(const fs_cluster_id_t fscid, const mds_rank_t rank)
 
 void FSMap::insert(const MDSMap::mds_info_t &new_info)
 {
+  assert(new_info.state == MDSMap::STATE_STANDBY);
+  assert(new_info.rank == MDS_RANK_NONE);
   mds_roles[new_info.global_id] = FS_CLUSTER_ID_NONE;
   standby_daemons[new_info.global_id] = new_info;
   standby_epochs[new_info.global_id] = epoch;
