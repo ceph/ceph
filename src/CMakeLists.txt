@@ -197,7 +197,7 @@ else(INTEL_SSE4_1)
 endif(INTEL_SSE4_1)
 
 
-set(EXTRALIBS uuid rt dl ${ATOMIC_OPS_LIBRARIES})
+set(EXTRALIBS uuid rt ${CMAKE_DL_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -615,7 +615,7 @@ add_executable(ceph-objectstore-tool
   tools/ceph_objectstore_tool.cc
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
+target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse ${CMAKE_DL_LIBS})
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -945,7 +945,7 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:global_common_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(osd dl leveldb ${ALLOC_LIBS})
+target_link_libraries(osd ${CMAKE_DL_LIBS} leveldb ${ALLOC_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp)
 endif()
