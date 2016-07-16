@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  */
 
+#include "osdc/Objecter.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
@@ -33,9 +34,9 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-Mgr::Mgr(MonClient *monc_, Messenger *clientm_) :
+Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
   monc(monc_),
-  objecter(NULL),
+  objecter(objecter_),
   client_messenger(clientm_),
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
@@ -47,16 +48,12 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_) :
   initialized(false),
   initializing(false)
 {
-  // Using Objecter to handle incremental decode of OSDMap
-  objecter = new Objecter(g_ceph_context, client_messenger, monc, NULL, 0, 0);
-
   cluster_state.set_objecter(objecter);
 }
 
 
 Mgr::~Mgr()
 {
-  delete objecter;
   assert(waiting_for_fs_map == nullptr);
 }
 
@@ -139,12 +136,6 @@ void Mgr::init()
   assert(initializing);
   assert(!initialized);
 
-  objecter->set_client_incarnation(0);
-  objecter->init();
-
-  // Dispatcher before starting objecter
-  client_messenger->add_dispatcher_head(objecter);
-
   // Start communicating with daemons to learn statistics etc
   server.init(monc->get_global_id(), client_messenger->get_myaddr());
   dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
@@ -161,7 +152,6 @@ void Mgr::init()
   load_config();
 
   // Start Objecter and wait for OSD map
-  objecter->start();
   lock.Unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
   objecter->wait_for_osd_map();
   lock.Lock();
@@ -330,8 +320,6 @@ void Mgr::shutdown()
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
   finisher.stop();
-
-  objecter->shutdown();
 }
 
 void Mgr::handle_osd_map()

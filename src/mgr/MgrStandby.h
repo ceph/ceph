@@ -25,11 +25,13 @@
 #include "DaemonState.h"
 #include "ClusterState.h"
 
+class MMgrMap;
 class Mgr;
 
 class MgrStandby : public Dispatcher {
 protected:
   MonClient *monc;
+  Objecter *objecter;
   Messenger *client_messenger;
 
   Mutex lock;
@@ -38,6 +40,8 @@ protected:
   Mgr *active_mgr;
 
   std::string state_str();
+
+  void handle_mgr_map(MMgrMap *m);
 
 public:
   MgrStandby();
