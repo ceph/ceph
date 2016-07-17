@@ -656,7 +656,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: librados2 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 Description: Python libraries for the Ceph librados library
@@ -670,7 +670,7 @@ Description: Python libraries for the Ceph librados library
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 Description: Python libraries for the Ceph librbd library
@@ -684,7 +684,7 @@ Description: Python libraries for the Ceph librbd library
 Package: python-cephfs
 Architecture: linux-any
 Section: python
-Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}
+Depends: libcephfs1 (= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 Description: Python libraries for the Ceph libcephfs library
