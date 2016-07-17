@@ -89,9 +89,7 @@ Depends: binutils,
          grep,
          logrotate,
          lsb-release,
-         python,
-         python-argparse | libpython2.7-stdlib,
-         python-pkg-resources,
+         ${python:Depends},
          sdparm | hdparm,
          xfsprogs,
          ${misc:Depends},
@@ -179,6 +177,7 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          parted,
          ${misc:Depends},
+         ${python:Depends},
          ${shlibs:Depends}
 Recommends: ceph-common (= ${binary:Version})
 Replaces: ceph (<< 10)
@@ -319,6 +318,7 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-rados (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
+         ${python:Depends},
 	 python-requests
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
