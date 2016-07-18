@@ -191,6 +191,7 @@ public:
   int aio_close(RBD::AioCompletion *c);
 
   int resize(uint64_t size);
+  int resize2(uint64_t size, bool allow_shrink, ProgressContext& pctx);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);
   int parent_info(std::string *parent_poolname, std::string *parent_name,

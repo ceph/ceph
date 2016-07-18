@@ -32,8 +32,9 @@ struct ResizeRequest<MockOperationImageCtx> {
   Context *on_finish = nullptr;
 
   static ResizeRequest* create(MockOperationImageCtx &image_ctx, Context *on_finish,
-                               uint64_t new_size, ProgressContext &prog_ctx,
-                               uint64_t journal_op_tid, bool disable_journal) {
+                               uint64_t new_size, bool allow_shrink,
+                               ProgressContext &prog_ctx, uint64_t journal_op_tid,
+                               bool disable_journal) {
     assert(s_instance != nullptr);
     assert(journal_op_tid == 0);
     assert(disable_journal);
