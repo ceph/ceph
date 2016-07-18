@@ -731,6 +731,9 @@ rm -rf %{buildroot}
 %{_bindir}/ceph-detect-init
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs
+%{_bindir}/cephfs-data-scan
+%{_bindir}/cephfs-journal-tool
+%{_bindir}/cephfs-table-tool
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
@@ -817,9 +820,6 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-crush-location
-%{_bindir}/cephfs-data-scan
-%{_bindir}/cephfs-journal-tool
-%{_bindir}/cephfs-table-tool
 %{_bindir}/rados
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
@@ -828,8 +828,8 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
-%{_bindir}/ceph-post-file
-%{_bindir}/ceph-brag
+%exclude %{_bindir}/ceph-post-file
+%exclude %{_bindir}/ceph-brag
 %{_tmpfilesdir}/ceph-common.conf
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
