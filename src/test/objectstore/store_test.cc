@@ -4913,6 +4913,206 @@ TEST_P(StoreTest, TryMoveRename) {
   ASSERT_EQ(store->stat(cid, hoid2, &st), 0);
 }
 
+TEST_P(StoreTest, BluestoreOnOffCSumTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  g_conf->set_val("bluestore_csum", "true");
+  g_conf->set_val("bluestore_csum_type", "crc32c");
+  g_conf->apply_changes(NULL);
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 5, in);
+    ASSERT_EQ(-ENOENT, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    //write with csum enabled followed by read with csum disabled
+    size_t block_size = 64*1024;
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    bl.append(std::string(block_size, 'a'));
+    orig = bl;
+    t.remove(cid, hoid);
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*8, 0);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Remove then create" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    g_conf->set_val("bluestore_csum", "false");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    bufferlist in;
+    r = store->read(cid, hoid, 0, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+
+  }
+  {
+    //write with csum disabled followed by read with csum enabled
+    g_conf->set_val("bluestore_csum", "false");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    size_t block_size = 64*1024;
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    bl.append(std::string(block_size, 'a'));
+    orig = bl;
+    t.remove(cid, hoid);
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*8, 0);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Remove then create" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    g_conf->set_val("bluestore_csum", "true");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    bufferlist in;
+    r = store->read(cid, hoid, 0, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+  }
+  {
+    //'mixed' non-overlapping writes to the same blob 
+    g_conf->set_val("bluestore_csum", "true");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    size_t block_size = 8000;
+    bl.append(std::string(block_size, 'a'));
+    orig = bl;
+    t.remove(cid, hoid);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Remove then create" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    g_conf->set_val("bluestore_csum", "false");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    ObjectStore::Transaction t2;
+    t2.write(cid, hoid, block_size*2, bl.length(), bl);
+    cerr << "Append 'unprotected'" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in;
+    r = store->read(cid, hoid, 0, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+    in.clear();
+    r = store->read(cid, hoid, block_size*2, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+
+    g_conf->set_val("bluestore_csum", "true");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+    in.clear();
+    r = store->read(cid, hoid, 0, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+    in.clear();
+    r = store->read(cid, hoid, block_size*2, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+  }
+  {
+    //partially blob overwrite under a different csum enablement mode
+    g_conf->set_val("bluestore_csum", "true");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    ObjectStore::Transaction t;
+    bufferlist bl, orig, orig2;
+    size_t block_size0 = 0x10000;
+    size_t block_size = 9000;
+    size_t block_size2 = 5000;
+    bl.append(std::string(block_size0, 'a'));
+    t.remove(cid, hoid);
+    t.set_alloc_hint(cid, hoid, 4*1024*1024, 1024*8, 0);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Remove then create" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    g_conf->set_val("bluestore_csum", "false");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    ObjectStore::Transaction t2;
+    bl.clear();
+    bl.append(std::string(block_size, 'b'));
+    t2.write(cid, hoid, 0, bl.length(), bl);
+    t2.write(cid, hoid, block_size0, bl.length(), bl);
+    cerr << "Overwrite with unprotected data" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t2));
+    ASSERT_EQ(r, 0);
+
+    orig = bl;
+    orig2 = bl;
+    orig.append( std::string(block_size0 - block_size, 'a'));
+
+    bufferlist in;
+    r = store->read(cid, hoid, 0, block_size0, in);
+    ASSERT_EQ((int)block_size0, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+
+    r = store->read(cid, hoid, block_size0, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig2, in));
+
+    g_conf->set_val("bluestore_csum", "true");
+    g_conf->set_val("bluestore_csum_type", "crc32c");
+    g_conf->apply_changes(NULL);
+
+    ObjectStore::Transaction t3;
+    bl.clear();
+    bl.append(std::string(block_size2, 'c'));
+    t3.write(cid, hoid, block_size0, bl.length(), bl);
+    cerr << "Overwrite with protected data" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t3));
+    ASSERT_EQ(r, 0);
+
+    in.clear();
+    orig = bl;
+    orig.append( std::string(block_size - block_size2, 'b'));
+    r = store->read(cid, hoid, block_size0, block_size, in);
+    ASSERT_EQ((int)block_size, r);
+    ASSERT_TRUE(bl_eq(orig, in));
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_csum", "true");
+  g_conf->set_val("bluestore_csum_type", "crc32c");
+  g_conf->apply_changes(NULL);
+}
+
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
