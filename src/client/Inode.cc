@@ -15,7 +15,11 @@ Inode::~Inode()
 {
   cap_item.remove_myself();
   snaprealm_item.remove_myself();
-  snapdir_parent.reset();
+
+  if (snapdir_parent) {
+    snapdir_parent->flags &= ~I_SNAPDIR_OPEN;
+    snapdir_parent.reset();
+  }
 
   if (!oset.objects.empty()) {
     lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
