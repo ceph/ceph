@@ -728,6 +728,7 @@ rm -rf %{buildroot}
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
 %{_bindir}/ceph-run
+%{_bindir}/ceph-dencoder
 %{_bindir}/ceph-detect-init
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs
@@ -816,7 +817,6 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_bindir}/ceph
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
-%{_bindir}/ceph-dencoder
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-crush-location
