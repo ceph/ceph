@@ -145,7 +145,7 @@ TYPED_TEST(TestObjectPlayer, FetchEmpty) {
 
   journal::ObjectPlayerPtr object = this->create_object(oid, 14);
 
-  ASSERT_EQ(-ENOENT, this->fetch(object));
+  ASSERT_EQ(0, this->fetch(object));
   ASSERT_TRUE(object->empty());
 }
 

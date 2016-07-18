@@ -115,8 +115,11 @@ private:
 
   PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
-  uint64_t m_commit_object;
+
+  bool m_commit_position_valid = false;
+  ObjectPosition m_commit_position;
   SplayedObjectPositions m_commit_positions;
+  uint64_t m_active_set;
 
   boost::optional<uint64_t> m_active_tag_tid = boost::none;
   boost::optional<uint64_t> m_prune_tag_tid = boost::none;
@@ -137,9 +140,11 @@ private:
   int process_playback(uint64_t object_number);
 
   void fetch(uint64_t object_num);
+  void fetch(const ObjectPlayerPtr &object_player);
   void handle_fetched(uint64_t object_num, int r);
+  void refetch(bool immediate);
 
-  void schedule_watch();
+  void schedule_watch(bool immediate);
   void handle_watch(uint64_t object_num, int r);
   void handle_watch_assert_active(int r);
 
