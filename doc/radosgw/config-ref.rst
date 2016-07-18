@@ -1054,6 +1054,7 @@ Keystone Settings
 
 
 ``rgw keystone admin user``
+
 :Description: The name of OpenStack user with admin privilege for Keystone
               authentication (Service User) when OpenStack Identity API v2
 :Type: String
@@ -1061,6 +1062,7 @@ Keystone Settings
 
 
 ``rgw keystone admin password``
+
 :Description: The password for OpenStack admin user when using OpenStack
               Identity API v2
 :Type: String
