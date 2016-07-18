@@ -11,6 +11,7 @@
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Settings.h"
 #include <list>
 #include <boost/variant.hpp>
 
@@ -66,7 +67,7 @@ public:
 
   journal::Journaler *create_journaler(librbd::ImageCtx *ictx) {
     journal::Journaler *journaler = new journal::Journaler(
-      ictx->md_ctx, ictx->id, "dummy client", 1);
+      ictx->md_ctx, ictx->id, "dummy client", {});
 
     int r = journaler->register_client(bufferlist());
     if (r < 0) {

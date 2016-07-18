@@ -5,6 +5,7 @@
 #include "cls/journal/cls_journal_client.h"
 #include "include/stringify.h"
 #include "common/WorkQueue.h"
+#include "journal/Settings.h"
 
 RadosTestFixture::RadosTestFixture()
   : m_timer_lock("m_timer_lock"), m_timer(NULL), m_listener(this) {
@@ -67,10 +68,12 @@ int RadosTestFixture::create(const std::string &oid, uint8_t order,
 
 journal::JournalMetadataPtr RadosTestFixture::create_metadata(
     const std::string &oid, const std::string &client_id,
-    double commit_internal) {
+    double commit_interval) {
+  journal::Settings settings;
+  settings.commit_interval = commit_interval;
+
   journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id,
-    commit_internal));
+    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings));
   m_metadatas.push_back(metadata);
   return metadata;
 }

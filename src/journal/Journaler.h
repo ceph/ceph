@@ -28,6 +28,7 @@ class JournalRecorder;
 class JournalTrimmer;
 class ReplayEntry;
 class ReplayHandler;
+class Settings;
 
 class Journaler {
 public:
@@ -51,10 +52,10 @@ public:
 				       const std::string &journal_id);
 
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
-	    const std::string &client_id, double commit_interval);
+	    const std::string &client_id, const Settings &settings);
   Journaler(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
             librados::IoCtx &header_ioctx, const std::string &journal_id,
-	    const std::string &client_id, double commit_interval);
+	    const std::string &client_id, const Settings &settings);
   ~Journaler();
 
   int exists(bool *header_exists) const;
@@ -145,7 +146,7 @@ private:
 
   void set_up(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
               librados::IoCtx &header_ioctx, const std::string &journal_id,
-              double commit_interval);
+              const Settings &settings);
 
   int init_complete();
   void create_player(ReplayHandler *replay_handler);

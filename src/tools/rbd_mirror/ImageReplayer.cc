@@ -11,6 +11,7 @@
 #include "global/global_context.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Settings.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -372,12 +373,14 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
   }
 
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  double commit_interval = cct->_conf->rbd_journal_commit_age;
+  journal::Settings settings;
+  settings.commit_interval = cct->_conf->rbd_journal_commit_age;
+
   m_remote_journaler = new Journaler(m_threads->work_queue,
                                      m_threads->timer,
 				     &m_threads->timer_lock, m_remote_ioctx,
 				     m_remote_image_id, m_local_mirror_uuid,
-                                     commit_interval);
+                                     settings);
   bootstrap();
 }
 
