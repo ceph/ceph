@@ -62,6 +62,7 @@ if WITH_FUSE
 ceph_fuse_SOURCES = ceph_fuse.cc
 ceph_fuse_LDADD = $(LIBCLIENT_FUSE) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-fuse
+sbin_SCRIPTS += mount.fuse.ceph
 
 if WITH_RBD
 rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.cc
@@ -76,6 +77,12 @@ if WITH_CEPHFS
 cephfs_SOURCES = cephfs.cc
 cephfs_LDADD = $(LIBCOMMON)
 bin_PROGRAMS += cephfs
+
+mount_ceph_SOURCES = mount/mount.ceph.c
+mount_ceph_LDADD = $(LIBSECRET) $(LIBCOMMON)
+if LINUX
+sbin_PROGRAMS += mount.ceph
+endif # LINUX
 
 python_PYTHON += pybind/ceph_volume_client.py
 
