@@ -749,10 +749,6 @@ rm -rf %{buildroot}
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-%{_sbindir}/mount.ceph
-%if 0%{?suse_version}
-/sbin/mount.ceph
-%endif
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -787,7 +783,6 @@ rm -rf %{buildroot}
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/cephfs.8*
-%{_mandir}/man8/mount.ceph.8*
 #set up placeholder directories
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
@@ -843,6 +838,10 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
+%{_sbindir}/mount.ceph
+%if 0%{?suse_version}
+/sbin/mount.ceph
+%endif
 %if %{with lttng}
 %{_bindir}/rbd-replay-prep
 %endif
@@ -856,6 +855,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph.8*
+%{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/rbdmap.8*
