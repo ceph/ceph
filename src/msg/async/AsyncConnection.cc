@@ -2006,8 +2006,8 @@ void AsyncConnection::fault()
   }
 
   write_lock.lock();
-  shutdown_socket();
   can_write = WriteStatus::NOWRITE;
+  shutdown_socket();
   open_write = false;
 
   // queue delayed items immediately
