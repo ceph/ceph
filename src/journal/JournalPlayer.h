@@ -42,8 +42,7 @@ public:
 
 private:
   typedef std::set<uint8_t> PrefetchSplayOffsets;
-  typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
-  typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
+  typedef std::map<uint8_t, ObjectPlayerPtr> SplayedObjectPlayers;
   typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
   typedef std::set<uint64_t> ObjectNumbers;
 
@@ -129,10 +128,8 @@ private:
   void prune_tag(uint64_t tag_tid);
   void prune_active_tag(const boost::optional<uint64_t>& tag_tid);
 
-  const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;
   ObjectPlayerPtr get_object_player(uint64_t object_number) const;
-  ObjectPlayerPtr get_next_set_object_player() const;
   bool remove_empty_object_player(const ObjectPlayerPtr &object_player);
 
   void process_state(uint64_t object_number, int r);
