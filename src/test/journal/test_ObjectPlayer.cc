@@ -10,13 +10,50 @@
 #include "test/librados/test.h"
 #include "test/journal/RadosTestFixture.h"
 
+template <typename T>
 class TestObjectPlayer : public RadosTestFixture {
 public:
+  static const uint32_t max_fetch_bytes = T::max_fetch_bytes;
+
   journal::ObjectPlayerPtr create_object(const std::string &oid,
                                          uint8_t order) {
     journal::ObjectPlayerPtr object(new journal::ObjectPlayer(
-      m_ioctx, oid + ".", 0, *m_timer, m_timer_lock, order));
+      m_ioctx, oid + ".", 0, *m_timer, m_timer_lock, order,
+      max_fetch_bytes));
     return object;
+  }
+
+  int fetch(journal::ObjectPlayerPtr object_player) {
+    while (true) {
+      C_SaferCond ctx;
+      object_player->clear_refetch_required();
+      object_player->fetch(&ctx);
+      int r = ctx.wait();
+      if (r < 0 || !object_player->refetch_required()) {
+        return r;
+      }
+    }
+    return 0;
+  }
+
+  int watch_and_wait_for_entries(journal::ObjectPlayerPtr object_player,
+                                 journal::ObjectPlayer::Entries *entries,
+                                 size_t count) {
+    for (size_t i = 0; i < 50; ++i) {
+      object_player->get_entries(entries);
+      if (entries->size() == count) {
+        break;
+      }
+
+      C_SaferCond ctx;
+      object_player->watch(&ctx, 0.1);
+
+      int r = ctx.wait();
+      if (r < 0) {
+        return r;
+      }
+    }
+    return 0;
   }
 
   std::string get_object_name(const std::string &oid) {
@@ -24,22 +61,28 @@ public:
   }
 };
 
-TEST_F(TestObjectPlayer, Fetch) {
-  std::string oid = get_temp_oid();
+template <uint32_t _max_fetch_bytes>
+struct TestObjectPlayerParams {
+  static const uint32_t max_fetch_bytes = _max_fetch_bytes;
+};
 
-  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 124, create_payload(std::string(24, '1')));
+typedef ::testing::Types<TestObjectPlayerParams<0>,
+                         TestObjectPlayerParams<10> > TestObjectPlayerTypes;
+TYPED_TEST_CASE(TestObjectPlayer, TestObjectPlayerTypes);
+
+TYPED_TEST(TestObjectPlayer, Fetch) {
+  std::string oid = this->get_temp_oid();
+
+  journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, this->create_payload(std::string(24, '1')));
 
   bufferlist bl;
   ::encode(entry1, bl);
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
-
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_LE(0, cond.wait());
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
+  ASSERT_LE(0, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -49,48 +92,42 @@ TEST_F(TestObjectPlayer, Fetch) {
   ASSERT_EQ(expected_entries, entries);
 }
 
-TEST_F(TestObjectPlayer, FetchLarge) {
-  std::string oid = get_temp_oid();
+TYPED_TEST(TestObjectPlayer, FetchLarge) {
+  std::string oid = this->get_temp_oid();
 
   journal::Entry entry1(234, 123,
-                        create_payload(std::string(8192 - 33, '1')));
-  journal::Entry entry2(234, 124, create_payload(""));
+                        this->create_payload(std::string(8192 - 32, '1')));
+  journal::Entry entry2(234, 124, this->create_payload(""));
 
   bufferlist bl;
   ::encode(entry1, bl);
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 12);
-
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_LE(0, cond.wait());
+  journal::ObjectPlayerPtr object = this->create_object(oid, 12);
+  ASSERT_LE(0, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
-  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(2U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = {entry1};
+  journal::ObjectPlayer::Entries expected_entries = {entry1, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
-TEST_F(TestObjectPlayer, FetchDeDup) {
-  std::string oid = get_temp_oid();
+TYPED_TEST(TestObjectPlayer, FetchDeDup) {
+  std::string oid = this->get_temp_oid();
 
-  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 123, create_payload(std::string(24, '2')));
+  journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 123, this->create_payload(std::string(24, '2')));
 
   bufferlist bl;
   ::encode(entry1, bl);
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
-
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_LE(0, cond.wait());
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
+  ASSERT_LE(0, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -100,48 +137,32 @@ TEST_F(TestObjectPlayer, FetchDeDup) {
   ASSERT_EQ(expected_entries, entries);
 }
 
-TEST_F(TestObjectPlayer, FetchEmpty) {
-  std::string oid = get_temp_oid();
+TYPED_TEST(TestObjectPlayer, FetchEmpty) {
+  std::string oid = this->get_temp_oid();
 
   bufferlist bl;
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
 
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_EQ(-ENOENT, cond.wait());
+  ASSERT_EQ(-ENOENT, this->fetch(object));
   ASSERT_TRUE(object->empty());
 }
 
-TEST_F(TestObjectPlayer, FetchError) {
-  std::string oid = get_temp_oid();
+TYPED_TEST(TestObjectPlayer, FetchCorrupt) {
+  std::string oid = this->get_temp_oid();
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
-
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_EQ(-ENOENT, cond.wait());
-  ASSERT_TRUE(object->empty());
-}
-
-TEST_F(TestObjectPlayer, FetchCorrupt) {
-  std::string oid = get_temp_oid();
-
-  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 124, create_payload(std::string(24, '2')));
+  journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, this->create_payload(std::string(24, '2')));
 
   bufferlist bl;
   ::encode(entry1, bl);
-  ::encode(create_payload("corruption"), bl);
+  ::encode(this->create_payload("corruption"), bl);
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
-
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_EQ(-EBADMSG, cond.wait());
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
+  ASSERT_EQ(-EBADMSG, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -151,21 +172,18 @@ TEST_F(TestObjectPlayer, FetchCorrupt) {
   ASSERT_EQ(expected_entries, entries);
 }
 
-TEST_F(TestObjectPlayer, FetchAppend) {
-  std::string oid = get_temp_oid();
+TYPED_TEST(TestObjectPlayer, FetchAppend) {
+  std::string oid = this->get_temp_oid();
 
-  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 124, create_payload(std::string(24, '2')));
+  journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, this->create_payload(std::string(24, '2')));
 
   bufferlist bl;
   ::encode(entry1, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
-
-  C_SaferCond cond1;
-  object->fetch(&cond1);
-  ASSERT_LE(0, cond1.wait());
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
+  ASSERT_LE(0, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -176,11 +194,8 @@ TEST_F(TestObjectPlayer, FetchAppend) {
 
   bl.clear();
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
-
-  C_SaferCond cond2;
-  object->fetch(&cond2);
-  ASSERT_LE(0, cond2.wait());
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
+  ASSERT_LE(0, this->fetch(object));
 
   object->get_entries(&entries);
   ASSERT_EQ(2U, entries.size());
@@ -189,22 +204,19 @@ TEST_F(TestObjectPlayer, FetchAppend) {
   ASSERT_EQ(expected_entries, entries);
 }
 
-TEST_F(TestObjectPlayer, PopEntry) {
-  std::string oid = get_temp_oid();
+TYPED_TEST(TestObjectPlayer, PopEntry) {
+  std::string oid = this->get_temp_oid();
 
-  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 124, create_payload(std::string(24, '1')));
+  journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, this->create_payload(std::string(24, '1')));
 
   bufferlist bl;
   ::encode(entry1, bl);
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
-
-  C_SaferCond cond;
-  object->fetch(&cond);
-  ASSERT_LE(0, cond.wait());
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
+  ASSERT_LE(0, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
@@ -220,23 +232,23 @@ TEST_F(TestObjectPlayer, PopEntry) {
   ASSERT_TRUE(object->empty());
 }
 
-TEST_F(TestObjectPlayer, Watch) {
-  std::string oid = get_temp_oid();
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
+TYPED_TEST(TestObjectPlayer, Watch) {
+  std::string oid = this->get_temp_oid();
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
 
   C_SaferCond cond1;
   object->watch(&cond1, 0.1);
 
-  journal::Entry entry1(234, 123, create_payload(std::string(24, '1')));
-  journal::Entry entry2(234, 124, create_payload(std::string(24, '1')));
+  journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
+  journal::Entry entry2(234, 124, this->create_payload(std::string(24, '1')));
 
   bufferlist bl;
   ::encode(entry1, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
   ASSERT_LE(0, cond1.wait());
 
   journal::ObjectPlayer::Entries entries;
-  object->get_entries(&entries);
+  ASSERT_EQ(0, this->watch_and_wait_for_entries(object, &entries, 1U));
   ASSERT_EQ(1U, entries.size());
 
   journal::ObjectPlayer::Entries expected_entries;
@@ -248,19 +260,19 @@ TEST_F(TestObjectPlayer, Watch) {
 
   bl.clear();
   ::encode(entry2, bl);
-  ASSERT_EQ(0, append(get_object_name(oid), bl));
+  ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
   ASSERT_LE(0, cond2.wait());
 
-  object->get_entries(&entries);
+  ASSERT_EQ(0, this->watch_and_wait_for_entries(object, &entries, 2U));
   ASSERT_EQ(2U, entries.size());
 
   expected_entries = {entry1, entry2};
   ASSERT_EQ(expected_entries, entries);
 }
 
-TEST_F(TestObjectPlayer, Unwatch) {
-  std::string oid = get_temp_oid();
-  journal::ObjectPlayerPtr object = create_object(oid, 14);
+TYPED_TEST(TestObjectPlayer, Unwatch) {
+  std::string oid = this->get_temp_oid();
+  journal::ObjectPlayerPtr object = this->create_object(oid, 14);
 
   C_SaferCond watch_ctx;
   object->watch(&watch_ctx, 600);
