@@ -65,6 +65,9 @@ public:
   inline bool refetch_required() const {
     return m_refetch_required;
   }
+  inline void set_refetch_required() {
+    m_refetch_required = true;
+  }
   inline void clear_refetch_required() {
     m_refetch_required = false;
   }

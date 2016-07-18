@@ -110,17 +110,19 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
                    << bl.length() << dendl;
 
   *refetch = false;
-  if (r < 0) {
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
     return r;
-  }
-  if (bl.length() == 0) {
-    return -ENOENT;
+  } else if (bl.length() == 0) {
+    return 0;
   }
 
   Mutex::Locker locker(m_lock);
   assert(m_fetch_in_progress);
   m_read_off += bl.length();
   m_read_bl.append(bl);
+  m_refetch_required = true;
 
   bool full_fetch = (m_max_fetch_bytes == 2U << m_order);
   bool partial_entry = false;
@@ -268,11 +270,6 @@ void ObjectPlayer::handle_watch_fetched(int r) {
   Context *watch_ctx = nullptr;
   {
     Mutex::Locker timer_locker(m_timer_lock);
-    if (r == -ENOENT) {
-      r = 0;
-    } else {
-      m_refetch_required = true;
-    }
     std::swap(watch_ctx, m_watch_ctx);
 
     if (m_unwatched) {
