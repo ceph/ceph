@@ -624,7 +624,8 @@ void JournalPlayer::fetch(uint64_t object_num) {
   C_Fetch *fetch_ctx = new C_Fetch(this, object_num);
   ObjectPlayerPtr object_player(new ObjectPlayer(
     m_ioctx, m_object_oid_prefix, object_num, m_journal_metadata->get_timer(),
-    m_journal_metadata->get_timer_lock(), m_journal_metadata->get_order()));
+    m_journal_metadata->get_timer_lock(), m_journal_metadata->get_order(),
+    m_journal_metadata->get_settings().max_fetch_bytes));
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
   m_object_players[object_num % splay_width][object_num] = object_player;
