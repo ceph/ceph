@@ -388,7 +388,7 @@ public:
       byte_throttler->put(data.length());
     bl.claim(data, flags);
   }
-  off_t get_data_len() { return data.length(); }
+  off_t get_data_len() const { return data.length(); }
 
   void set_recv_stamp(utime_t t) { recv_stamp = t; }
   const utime_t& get_recv_stamp() const { return recv_stamp; }
