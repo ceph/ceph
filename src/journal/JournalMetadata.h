@@ -74,6 +74,9 @@ public:
   void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 
+  inline const Settings &get_settings() const {
+    return m_settings;
+  }
   inline const std::string &get_client_id() const {
     return m_client_id;
   }

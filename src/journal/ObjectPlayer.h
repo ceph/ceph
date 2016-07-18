@@ -32,7 +32,7 @@ public:
 
   ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
                uint64_t object_num, SafeTimer &timer, Mutex &timer_lock,
-               uint8_t order);
+               uint8_t order, uint64_t max_fetch_bytes);
   ~ObjectPlayer();
 
   inline const std::string &get_oid() const {
@@ -77,8 +77,7 @@ private:
     ObjectPlayerPtr object_player;
     Context *on_finish;
     bufferlist read_bl;
-    C_Fetch(ObjectPlayer *o, Context *ctx)
-      : object_player(o), on_finish(ctx) {
+    C_Fetch(ObjectPlayer *o, Context *ctx) : object_player(o), on_finish(ctx) {
     }
     virtual void finish(int r);
   };
@@ -104,6 +103,7 @@ private:
   Mutex &m_timer_lock;
 
   uint8_t m_order;
+  uint64_t m_max_fetch_bytes;
 
   double m_watch_interval;
   Context *m_watch_task;
@@ -111,7 +111,8 @@ private:
   mutable Mutex m_lock;
   bool m_fetch_in_progress;
   bufferlist m_read_bl;
-  uint32_t m_read_off;
+  uint32_t m_read_off = 0;
+  uint32_t m_read_bl_off = 0;
 
   Entries m_entries;
   EntryKeys m_entry_keys;
@@ -122,7 +123,9 @@ private:
   bool m_unwatched = false;
   bool m_refetch_required = true;
 
-  int handle_fetch_complete(int r, const bufferlist &bl);
+  int handle_fetch_complete(int r, const bufferlist &bl, bool *refetch);
+
+  void clear_invalid_range(uint32_t off, uint32_t len);
 
   void schedule_watch();
   bool cancel_watch();
