@@ -1902,6 +1902,33 @@ CEPH_RADOS_API int rados_aio_write(rados_ioctx_t io, const char *oid,
 		                   const char *buf, size_t len, uint64_t off);
 
 /**
+ * Write data to an object asynchronously
+ * 
+ * Passes blkin trace information as one of the parameters
+ *
+ * Queues the write and returns. The return value of the completion
+ * will be 0 on success, negative error code on failure.
+ *
+ * @param io the context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the write is safe and complete
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @param off byte offset in the object to begin writing at
+ * @param info blkin trace information
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBRADOS_SNAP_HEAD
+ */
+ struct blkin_trace_info;
+CEPH_RADOS_API int rados_aio_write_traced(rados_ioctx_t io,
+					  const char *oid,
+					  rados_completion_t completion,
+					  const char *buf,
+					  size_t len,
+					  uint64_t off,
+					  struct blkin_trace_info *info);
+
+/**
  * Asychronously append data to an object
  *
  * Queues the append and returns.
@@ -2005,6 +2032,34 @@ CEPH_RADOS_API int rados_aio_remove(rados_ioctx_t io, const char *oid,
 CEPH_RADOS_API int rados_aio_read(rados_ioctx_t io, const char *oid,
 		                  rados_completion_t completion,
 		                  char *buf, size_t len, uint64_t off);
+
+/**
+ * Asychronously read data from an object
+ *
+ * The io context determines the snapshot to read from, if any was set
+ * by rados_ioctx_snap_set_read().
+ *
+ * The return value of the completion will be number of bytes read on
+ * success, negative error code on failure.
+ *
+ * @note only the 'complete' callback of the completion will be called.
+ *
+ * @param io the context in which to perform the read
+ * @param oid the name of the object to read from
+ * @param completion what to do when the read is complete
+ * @param buf where to store the results
+ * @param len the number of bytes to read
+ * @param off the offset to start reading from in the object
+ * @param info blkin trace information
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_aio_read_traced(rados_ioctx_t io,
+					 const char *oid,
+					 rados_completion_t completion,
+					 char *buf,
+					 size_t len,
+					 uint64_t off,
+					 struct blkin_trace_info *info);
 
 /**
  * Block until all pending writes in an io context are safe
