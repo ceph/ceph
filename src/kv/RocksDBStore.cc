@@ -475,21 +475,20 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
   }
 }
 
+//gets will bypass RocksDB row cache, since it uses iterator
 int RocksDBStore::get(
     const string &prefix,
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
   utime_t start = ceph_clock_now(g_ceph_context);
-  KeyValueDB::Iterator it = get_iterator(prefix);
   for (std::set<string>::const_iterator i = keys.begin();
-       i != keys.end();
-       ++i) {
-    it->lower_bound(*i);
-    if (it->valid() && it->key() == *i) {
-      out->insert(make_pair(*i, it->value()));
-    } else if (!it->valid())
-      break;
+       i != keys.end(); ++i) {
+    std::string value;
+    std::string bound = combine_strings(prefix, *i);
+    auto status = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(bound), &value);
+    if (status.ok())
+      (*out)[*i].append(value);
   }
   utime_t lat = ceph_clock_now(g_ceph_context) - start;
   logger->inc(l_rocksdb_gets);
@@ -505,10 +504,12 @@ int RocksDBStore::get(
   assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
-  KeyValueDB::Iterator it = get_iterator(prefix);
-  it->lower_bound(key);
-  if (it->valid() && it->key() == key) {
-    out->append(it->value_as_ptr());
+  string value, k;
+  rocksdb::Status s;
+  k = combine_strings(prefix, key);
+  s = db->Get(rocksdb::ReadOptions(), rocksdb::Slice(k), &value);
+  if (s.ok()) {
+    out->append(value);
   } else {
     r = -ENOENT;
   }
