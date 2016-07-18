@@ -68,25 +68,26 @@ Journaler::Threads::~Threads() {
 
 Journaler::Journaler(librados::IoCtx &header_ioctx,
                      const std::string &journal_id,
-                     const std::string &client_id, double commit_interval)
+                     const std::string &client_id, const Settings &settings)
     : m_threads(new Threads(reinterpret_cast<CephContext*>(header_ioctx.cct()))),
       m_client_id(client_id) {
   set_up(m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-         header_ioctx, journal_id, commit_interval);
+         header_ioctx, journal_id, settings);
 }
 
 Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
                      Mutex *timer_lock, librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
-		     const std::string &client_id, double commit_interval)
+		     const std::string &client_id, const Settings &settings)
     : m_client_id(client_id) {
   set_up(work_queue, timer, timer_lock, header_ioctx, journal_id,
-         commit_interval);
+         settings);
 }
 
 void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
                        Mutex *timer_lock, librados::IoCtx &header_ioctx,
-                       const std::string &journal_id, double commit_interval) {
+                       const std::string &journal_id,
+                       const Settings &settings) {
   m_header_ioctx.dup(header_ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
@@ -95,7 +96,7 @@ void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
 
   m_metadata = new JournalMetadata(work_queue, timer, timer_lock,
                                    m_header_ioctx, m_header_oid, m_client_id,
-                                   commit_interval);
+                                   settings);
   m_metadata->get();
 }
 

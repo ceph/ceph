@@ -5,6 +5,7 @@
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
 #include "journal/Journaler.h"
+#include "journal/Settings.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -54,7 +55,7 @@ public:
 
     m_remote_journaler = new ::journal::Journaler(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-      m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", 5);
+      m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {});
 
     m_client_meta = {"image-id"};
 

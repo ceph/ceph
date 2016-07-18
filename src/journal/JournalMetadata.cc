@@ -402,9 +402,9 @@ JournalMetadata::JournalMetadata(ContextWQ *work_queue, SafeTimer *timer,
                                  Mutex *timer_lock, librados::IoCtx &ioctx,
                                  const std::string &oid,
                                  const std::string &client_id,
-                                 double commit_interval)
+                                 const Settings &settings)
     : RefCountedObject(NULL, 0), m_cct(NULL), m_oid(oid),
-      m_client_id(client_id), m_commit_interval(commit_interval), m_order(0),
+      m_client_id(client_id), m_settings(settings), m_order(0),
       m_splay_width(0), m_pool_id(-1), m_initialized(false),
       m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
       m_lock("JournalMetadata::m_lock"), m_commit_tid(0), m_watch_ctx(this),
@@ -795,7 +795,8 @@ void JournalMetadata::schedule_commit_task() {
   assert(m_commit_position_ctx != nullptr);
   if (m_commit_position_task_ctx == NULL) {
     m_commit_position_task_ctx = new C_CommitPositionTask(this);
-    m_timer->add_event_after(m_commit_interval, m_commit_position_task_ctx);
+    m_timer->add_event_after(m_settings.commit_interval,
+                             m_commit_position_task_ctx);
   }
 }
 
@@ -1045,7 +1046,7 @@ std::ostream &operator<<(std::ostream &os,
      << "active_set=" << jm.m_active_set << ", "
      << "client_id=" << jm.m_client_id << ", "
      << "commit_tid=" << jm.m_commit_tid << ", "
-     << "commit_interval=" << jm.m_commit_interval << ", "
+     << "commit_interval=" << jm.m_settings.commit_interval << ", "
      << "commit_position=" << jm.m_commit_position << ", "
      << "registered_clients=" << jm.m_registered_clients << "]";
   return os;
