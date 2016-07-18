@@ -5,6 +5,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 
+#include "include/compat.h"
 #include <set>
 #include <map>
 #include <string>
